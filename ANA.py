@@ -1612,6 +1612,7 @@ def AbrirUltimoReporte(tab_inicial=0):
         resultado_base=res,
         resultado_mc=ultimo_reporte.get("resultado_mc"),
         on_open_excel=AbrirExcelExterno,
+        on_save_as=GuardarExcelComo,
         tab_inicial=tab_inicial,
     )
 
@@ -1619,6 +1620,32 @@ def AbrirUltimoReporte(tab_inicial=0):
 def AbrirUltimoReporteSensitivity():
     """Atajo al Dashboard, tab Sensitivity."""
     AbrirUltimoReporte(tab_inicial=4)
+
+
+def GuardarExcelComo():
+    """Copia el Excel temporal a la ruta que elija el user.
+    Botón 'Save Excel as…' del header del Dashboard."""
+
+    src = ultimo_reporte.get("path")
+    if not src or not os.path.exists(src):
+        messagebox.showwarning("No report", "Run Solve first.")
+        return
+
+    dst = filedialog.asksaveasfilename(
+        title="Save Economic Analysis Report",
+        defaultextension=".xlsx",
+        initialfile="Economic_Analysis.xlsx",
+        filetypes=[("Excel files", "*.xlsx")],
+    )
+    if not dst:
+        return
+
+    try:
+        import shutil
+        shutil.copy(src, dst)
+        messagebox.showinfo("Saved", f"Excel saved to:\n{dst}")
+    except OSError as e:
+        messagebox.showerror("Save error", str(e))
 
 
 def AbrirExcelExterno():
@@ -1709,16 +1736,15 @@ def EjecutarAnalisis():
         )
         return
 
-    # 3) destino
-    archivo = filedialog.asksaveasfilename(
-        title="Save Economic Analysis Report",
-        defaultextension=".xlsx",
-        initialfile="Economic_Analysis.xlsx",
-        filetypes=[("Excel files", "*.xlsx")],
+    # 3) destino — archivo TEMPORAL automático.  El usuario
+    # puede después guardarlo con "Save Excel as..." desde
+    # el header del Dashboard.  Evita la fricción de pedir
+    # filedialog cada Solve.
+    import tempfile
+    archivo = os.path.join(
+        tempfile.gettempdir(),
+        f"ANA_report_{os.getpid()}.xlsx",
     )
-
-    if not archivo:
-        return
 
     # 4) corre pipeline
     try:
@@ -1755,6 +1781,7 @@ def EjecutarAnalisis():
             resultado_base=resultado,
             resultado_mc=None,
             on_open_excel=AbrirExcelExterno,
+        on_save_as=GuardarExcelComo,
             tab_inicial=0,
         )
 
@@ -1775,7 +1802,9 @@ def _consola_resumen_base(r, archivo):
     ConsolaResultados.insert(END,
         f"  NPV {npv:.2f} MM USD   ·   IRR {irr_txt}   ·   PBP {pbs_txt}\n"
     )
-    ConsolaResultados.insert(END, f"  Excel: {os.path.basename(archivo)}\n")
+    ConsolaResultados.insert(END,
+        "  Excel report ready in dashboard (Save Excel as…).\n"
+    )
     ConsolaResultados.config(state="disabled")
 
 
@@ -1847,6 +1876,7 @@ def LanzarMonteCarlo(inputs, archivo_excel):
             resultado_base=ultimo_reporte["resultado"],
             resultado_mc=resultado,
             on_open_excel=AbrirExcelExterno,
+        on_save_as=GuardarExcelComo,
             tab_inicial=4,
         )
 
@@ -2432,8 +2462,10 @@ adjuntar_tooltips({
         "Típico: 15 a 20 años en industria química."
     ),
     EntryTaxeRate: (
-        "Tasa impositiva sobre el ingreso operativo gravable.\n"
-        "Ingresá como fracción.  Ej: 0.30  (= 30%).\n\n"
+        "Tasa impositiva sobre el ingreso operativo gravable.\n\n"
+        "Aceptamos ambas convenciones:\n"
+        "   0.30   → 30%\n"
+        "   30     → 30%\n\n"
         "Los taxes se pagan con desfase de 1 año (Turton §10)."
     ),
     EntryCEPCIBasis: (
@@ -2448,8 +2480,10 @@ adjuntar_tooltips({
     ),
     EntryDiscountRate: (
         "Tasa de descuento para el NPV.\n"
-        "Suele ser el WACC del proyecto o la tasa de retorno requerida.\n"
-        "Ingresá como fracción.  Ej: 0.15  (= 15%)."
+        "Suele ser el WACC del proyecto o la tasa de retorno requerida.\n\n"
+        "Aceptamos ambas convenciones:\n"
+        "   0.15   → 15%\n"
+        "   15     → 15%"
     ),
     EntryDLineal: (
         "Años para depreciar el FCI en forma lineal.\n"

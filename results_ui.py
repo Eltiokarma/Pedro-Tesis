@@ -90,6 +90,7 @@ def AbrirDashboard(
         resultado_base,
         resultado_mc=None,
         on_open_excel=None,
+        on_save_as=None,
         tab_inicial=0,
 ):
     """Abre el dashboard de resultados.
@@ -132,10 +133,18 @@ def AbrirDashboard(
     if on_open_excel is not None:
         ttk.Button(
             header,
-            text="Open Excel report",
+            text="Open Excel",
             style="Header.TButton",
             command=on_open_excel,
-        ).pack(side=RIGHT, padx=10, pady=6)
+        ).pack(side=RIGHT, padx=(4, 10), pady=6)
+
+    if on_save_as is not None:
+        ttk.Button(
+            header,
+            text="Save Excel as…",
+            style="Header.TButton",
+            command=on_save_as,
+        ).pack(side=RIGHT, padx=4, pady=6)
 
     # ---- notebook ----
     notebook = ttk.Notebook(ventana)
@@ -777,8 +786,8 @@ def _kpi_card(parent, titulo, valor, unidad, color_valor):
     Label(
         frame, text=titulo.upper(),
         font=FONT_KPI_L, bg=COLOR_CARD, fg=COLOR_SUBTLE,
-        padx=14, pady=(10, 2), anchor="w",
-    ).pack(fill=X)
+        padx=14, anchor="w",
+    ).pack(fill=X, pady=(10, 2))
 
     valor_frame = Frame(frame, bg=COLOR_CARD)
     valor_frame.pack(fill=X, padx=14, pady=(0, 12))
@@ -807,8 +816,8 @@ def _section_card(parent, titulo):
     Label(
         frame, text=titulo,
         font=FONT_H1, bg=COLOR_CARD, fg=COLOR_HEADER,
-        padx=14, pady=(10, 6), anchor="w",
-    ).pack(fill=X)
+        padx=14, anchor="w",
+    ).pack(fill=X, pady=(10, 6))
     return frame
 
 
