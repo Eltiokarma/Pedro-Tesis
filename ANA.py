@@ -32,29 +32,36 @@ from pipeline import ejecutar_analisis
 # ======================================================
 
 class ModelEngine:
+    """Single source of truth para el dataset variable.
+
+    Mantiene dos vistas sincronizadas:
+        df_variable  — formato visible al usuario (unidades
+                       arbitrarias por fila).
+        df_internal  — todo normalizado a base SI por año
+                       (Flowrate SI, Price SI, Time SI).
+
+    load() reemplaza el dataset; update() modifica una
+    celda; ambas disparan recalculate() que reconstruye
+    df_internal desde df_variable usando units.NormalizarX.
+    """
 
     def __init__(self):
         self.df_variable = pd.DataFrame()
         self.df_internal = pd.DataFrame()
 
-    # --------------------------------------------------
-    # CARGAR DATASET
-    # --------------------------------------------------
     def load(self, df):
+        """Reemplaza el dataset y recalcula df_internal."""
         self.df_variable = df.copy()
         self.recalculate()
 
-    # --------------------------------------------------
-    # ACTUALIZAR CELDA
-    # --------------------------------------------------
     def update(self, idx, col, value):
+        """Modifica una celda y recalcula df_internal."""
         self.df_variable.at[idx, col] = value
         self.recalculate()
 
-    # --------------------------------------------------
-    # RECALCULAR WORKSPACE
-    # --------------------------------------------------
     def recalculate(self):
+        """Reconstruye df_internal a partir de df_variable
+        normalizando flowrates, precios y time basis."""
 
         flowrates = []
         prices = []
@@ -142,6 +149,16 @@ def VentanaAbout():
 # ======================================================
 
 def ImportarProyecto():
+    """Importa un Excel de proyecto con 3 secciones:
+        Capital Costs           (cols A,B,C)
+        Fixed Operating Costs   (cols E,F,G)
+        Variable Operating Costs (cols I..N)
+
+    Valida unidades en Variable Costs; si hay errores,
+    muestra messagebox detallado y aborta el load del
+    engine.  Migra streams en formato letra (A..F) a
+    nombres legibles (Key Products, etc.).
+    """
 
     global df_capital
     global df_fixed
@@ -454,6 +471,16 @@ def ImportarProyecto():
 # ======================================================
 
 def VentanaVisualizarData():
+    """Abre Toplevel con 3 tabs (Capital, Fixed, Variable).
+
+    Variable Costs es la única tab con edición inline:
+    doble-click abre combobox (units / time basis / stream)
+    o entry numérico (price).  Cada edición pasa por
+    engine.update/engine.load para mantener df_internal
+    sincronizado.  Cambiar units o time basis preserva el
+    flowrate SI: se convierte el valor visible para reflejar
+    la nueva unidad sin alterar la cantidad física.
+    """
 
     editor_activo = None
 
@@ -1324,6 +1351,8 @@ def VentanaVisualizarData():
 # ======================================================
 
 def ActualizarDepreciacion():
+    """Habilita el entry de período (lineal) o los radios
+    de MACRS según la opción seleccionada."""
 
     if opcionDepre.get() == 0:
 
@@ -1352,6 +1381,8 @@ ultimo_reporte = {"path": None}
 # ======================================================
 
 def AbrirUltimoReporte():
+    """Abre el último .xlsx generado con la app por
+    defecto del sistema (xdg-open / open / startfile)."""
 
     ruta = ultimo_reporte.get("path")
 
@@ -1407,6 +1438,14 @@ def _recolectar_inputs():
 # ======================================================
 
 def EjecutarAnalisis():
+    """Botón Solve.  Pipeline completo:
+        1) lee inputs económicos de la UI
+        2) valida que haya proyecto importado
+        3) pide ruta de archivo de reporte
+        4) corre pipeline.ejecutar_analisis (CostModel +
+           CashFlowModel + ReportGenerator)
+        5) muestra FCI/WC/NPV/IRR en la consola
+    """
 
     ConsolaResultados.config(state="normal")
     ConsolaResultados.delete(1.0, END)

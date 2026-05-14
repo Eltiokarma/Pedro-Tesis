@@ -6,11 +6,27 @@ from openpyxl.styles import Font
 # LECTOR DE INPUTS
 # =========================
 class InputReader:
+    """Lee inputs del Excel legacy (data_entrada.xlsx).
+
+    Asume layout fijo con celdas hardcodeadas:
+        C3..C7  capital (ISBL, OSBL%, ENG%, CONT%, WC%)
+        G3..G11 inputs de FCOP (labor + 8 porcentajes)
+        I..N    streams desde fila 3
+                (concept, unit, coef, flow, price, tipo)
+                tipo: A=key product, B/C=byproduct/waste,
+                      D=raw material, E=consumable, F=utility
+
+    Usado solo por flujoflujo.py (script standalone).
+    La GUI ANA.py no usa esta clase: arma el dict de
+    inputs vía pipeline._construir_data, partiendo de los
+    DataFrames editables del Treeview.
+    """
 
     def __init__(self, ruta):
         self.ruta = ruta
 
     def leer(self):
+        """Devuelve un dict consumible por CostModel."""
         wb = load_workbook(self.ruta, data_only=True)
         ws = wb.active
 
@@ -79,11 +95,41 @@ class InputReader:
 # CASH FLOW
 # =========================
 class CostModel:
+    """Calcula costos de capital y de producción a partir
+    del dict data (formato InputReader o pipeline).
+
+    Salidas en MM USD (asume que los inputs ya están en
+    esa escala, salvo labor que pipeline.py convierte
+    desde USD/yr).
+
+    Fórmulas:
+        ISBL = data["ISBL"]
+        OSBL = OSBL% × ISBL
+        ENG  = ENG% × (ISBL + OSBL)
+        CONT = CONT% × (ISBL + OSBL)
+        FCI  = ISBL + OSBL + ENG + CONT
+        WC   = WC% × FCI
+        REV  = Σ(flow × price) sobre key_products  /1e6
+        BP   = Σ(flow × price) sobre byproducts    /1e6
+        RM   = Σ(flow × price) sobre raw_materials /1e6
+        CONS = Σ(coef × price × production)        /1e6
+        UTS  = Σ(coef × price × production)        /1e6
+        VCOP = RM − BP + CONS + UTS
+        FCOP = (ver calcular_fcop_detallado)
+
+    production = key_products[0]["flow"] o 1 si vacío.
+    Limitación conocida: para plantas multi-producto solo
+    se usa el primer key product como base de producción.
+    """
 
     def __init__(self, data):
         self.data = data
 
     def calcular(self):
+        """Ejecuta todos los cálculos.  Devuelve dict con
+        ISBL, OSBL, ENG, CONT, FCI, WC, Revenue, Byproducts,
+        RawMaterials, Consumables, Utilities, FCOP,
+        FCOP_detalle, VCOP."""
 
         ISBL = self.data["ISBL"]
         OSBL = self.data["OSBL_pct"] * ISBL
@@ -124,6 +170,14 @@ class CostModel:
             "VCOP": VCOP
         }
     def calcular_fcop_detallado(self, ISBL, OSBL, FCI, WC):
+        """Desglose del Fixed Cost of Production.
+
+        BUG conocido: este método mezcla escalas si labor
+        viene en USD/yr crudo (lo demás está en MMUSD).
+        El pipeline GUI corrige esto dividiendo labor por
+        1e6 antes de llegar acá; el script flujoflujo.py
+        original NO lo corrige.
+        """
 
         f = self.data["FCOP_inputs"]
 
@@ -163,12 +217,32 @@ class CostModel:
 
 
 class CashFlowModel:
+    """Construye el cash flow anual del proyecto.
+
+    Parámetros esperados en params:
+        vida           — años totales del análisis
+        tasa_impuesto  — fracción (ej 0.35)
+        metodo_dep     — 0=lineal, 1=MACRS
+        periodo_dep    — años (solo si metodo_dep=0)
+        tipo_macrs     — 0=MACRS5, 1=MACRS7, 2=MACRS15
+        tasa_interes   — descuento para NPV
+        schedule       — dict con FC, VCOP, FCOP, WL,
+                         t_start, steady_start, cutoff,
+                         años_display (ver
+                         ReportGenerator.construir_schedule)
+
+    Convenciones del modelo:
+      - Royalties (versión activa): Revenue_base × pct
+        cuando opera (NO escala con ramp-up VCOP).
+      - Impuestos: se acumulan al cierre de cada año y se
+        pagan con desfase de 1 año.
+      - FCOP solo se carga cuando arranca operación
+        (i ≥ t_start).
+      - WC se invierte en t_start y se recupera en el
+        último año.
+    """
 
     def __init__(self, costos, params):
-        """
-        costos: salida de CostModel.calcular()
-        params: diccionario con parámetros económicos
-        """
         self.costos = costos
         self.params = params
 
@@ -176,6 +250,15 @@ class CashFlowModel:
     # DEPRECIACIÓN
     # =========================
     def calcular_depreciacion(self):
+        """Devuelve lista de depreciación anual (MM USD).
+
+        Si metodo_dep=0: D constante = FCI / periodo_dep
+        repetida periodo_dep veces.
+
+        Si metodo_dep=1: tabla MACRS según tipo_macrs
+        (MACRS 5/7/15).  Devuelve una lista del largo de
+        la tabla; calcular() la alinea contra t_start.
+        """
 
         FCI = self.costos["FCI"]
         metodo = self.params["metodo_dep"]
@@ -215,6 +298,12 @@ class CashFlowModel:
     # CASH FLOW
     # =========================
     def calcular(self):
+        """Loop principal de cash flow.
+
+        Devuelve dict con listas paralelas (largo = vida):
+            años, CapEx, Revenue, CCOP, GP, Dep, TI,
+            Taxes, CF.
+        """
 
         schedule = self.params["schedule"]
 
@@ -371,8 +460,20 @@ class CashFlowModel:
 # REPORTE EXCEL
 # =========================
 class ReportGenerator:
+    """Genera el reporte Excel (2 hojas: Detailed Costs +
+    Cash Flow) y, en su método construir_schedule, también
+    arma el dict schedule completo a partir del input
+    crudo {FC: [...], VCOP: [...]}.
+
+    Limitación: exportar_cashflow contiene cálculos de
+    presentación (royalties, salary_overheads agrupados,
+    fcop_total recalculado) que mezclan presentación con
+    lógica — un refactor futuro debería moverlos a
+    CostModel.
+    """
 
     def exportar_costos_detallado(self, wb, data, costos):
+        """Escribe la hoja 'Detailed Costs' en wb."""
 
         from openpyxl.styles import Font, Alignment, PatternFill, Border, Side
 
@@ -660,6 +761,9 @@ class ReportGenerator:
                 c.border = border
 
     def exportar_cashflow(self, nombre_archivo, cf, params, costos, data):
+        """Genera el .xlsx completo con dos hojas (Detailed
+        Costs + Cash Flow), NPV acumulado e IRR (fórmula
+        Excel)."""
 
         from openpyxl import Workbook
         from openpyxl.styles import Font
@@ -1035,11 +1139,27 @@ class ReportGenerator:
         wb.save(nombre_archivo)
 
     def construir_schedule(self, schedule, vida_operacion):
-        """
-        vida_operacion:
-        años reales de operación de planta
+        """Arma el schedule completo del proyecto.
 
-        La construcción NO cuenta dentro de vida_operacion.
+        Args:
+            schedule: dict con FC (lista de fracciones de
+                CapEx por año de construcción) y VCOP
+                (lista de fracciones de capacidad por año
+                de operación durante el ramp-up).
+                Convención FC=[0]: planta instantánea
+                (0 años de construcción, opera desde el
+                año 1).
+            vida_operacion: años de operación de planta
+                (la construcción NO cuenta).
+
+        Devuelve dict:
+            FC, VCOP, FCOP, WL: listas de largo `vida`
+                (vida = construcción + operación).
+            t_start: índice del primer año de operación.
+            steady_start: primer índice estacionario
+                (sin cambios hasta el final).
+            cutoff: corte para reporte (steady_start + 3).
+            años_display: etiquetas de año para reporte.
         """
 
         # =========================
