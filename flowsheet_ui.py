@@ -118,13 +118,14 @@ class Block:
 @dataclass
 class Stream:
     id:        int
-    name:      str               # ej "S-1"
-    src:       int               # id del bloque origen
-    dst:       int               # id del bloque destino
-    mass_flow: float = 0.0       # tm/year (signo +)
-    role:      str = "internal"  # "internal" | "feed" | "product"
-    src_port:  str = ""          # nombre del puerto en src; "" = autoselect
-    dst_port:  str = ""          # nombre del puerto en dst; "" = autoselect
+    name:      str                  # ej "S-1"
+    src:       int                  # id del bloque origen
+    dst:       int                  # id del bloque destino
+    mass_flow: float = 0.0          # tm/year (signo +)
+    role:      str = "internal"     # "internal" | "feed" | "product"
+    src_port:  str = ""             # nombre del puerto en src; "" = autoselect
+    dst_port:  str = ""             # nombre del puerto en dst; "" = autoselect
+    price_usd_per_tm: float = 0.0   # USD/tm — sólo relevante si role∈{feed,product}
 
     canvas_line:    Optional[int] = field(default=None, repr=False)
     canvas_label:   Optional[int] = field(default=None, repr=False)
@@ -289,66 +290,85 @@ class StreamEditDialog:
             row=1, column=0, columnspan=2, sticky=W, pady=2)
 
         # ---- flujo másico ----
-        ttk.Label(frm, text="Flujo másico (tm/año):").grid(row=2, column=0, sticky=W, pady=8)
+        ttk.Label(frm, text="Flujo másico (tm/año):").grid(row=2, column=0, sticky=W, pady=6)
         self.entry_m = ttk.Entry(frm, justify="right", width=14)
         self.entry_m.insert(0, f"{stream.mass_flow:g}")
-        self.entry_m.grid(row=2, column=1, sticky=W, pady=8)
+        self.entry_m.grid(row=2, column=1, sticky=W, pady=6)
 
         # ---- rol ----
-        ttk.Label(frm, text="Rol:").grid(row=3, column=0, sticky=W, pady=8)
+        ttk.Label(frm, text="Rol:").grid(row=3, column=0, sticky=W, pady=6)
         self.role_var = StringVar(value=stream.role)
         self.role_combo = ttk.Combobox(
             frm, textvariable=self.role_var,
             values=["internal", "feed", "product"],
             state="readonly", width=12,
         )
-        self.role_combo.grid(row=3, column=1, sticky=W, pady=8)
+        self.role_combo.grid(row=3, column=1, sticky=W, pady=6)
+        self.role_combo.bind("<<ComboboxSelected>>", lambda e: self._toggle_price())
 
         ttk.Label(
             frm,
-            text="feed:     materia prima externa (alimenta costos variables)\n"
-                 "product:  producto final (alimenta producción anual)\n"
+            text="feed:     materia prima externa (entra a costos variables)\n"
+                 "product:  producto final (entra a producción anual)\n"
                  "internal: corriente entre bloques (balance de masa)",
             foreground="#888", font=("Segoe UI", 8), justify="left",
-        ).grid(row=4, column=0, columnspan=2, sticky=W, pady=(0, 6))
+        ).grid(row=4, column=0, columnspan=2, sticky=W, pady=(0, 4))
+
+        # ---- precio (solo si feed o product) ----
+        self.lbl_price = ttk.Label(frm, text="Precio (USD/tm):")
+        self.entry_price = ttk.Entry(frm, justify="right", width=14)
+        self.entry_price.insert(0, f"{stream.price_usd_per_tm:g}")
+        self.lbl_price.grid(row=5, column=0, sticky=W, pady=6)
+        self.entry_price.grid(row=5, column=1, sticky=W, pady=6)
+        self._toggle_price()  # mostrar/ocultar según role inicial
 
         # ---- puertos ISA ----
         ttk.Separator(frm, orient=HORIZONTAL).grid(
-            row=5, column=0, columnspan=2, sticky="ew", pady=8)
+            row=6, column=0, columnspan=2, sticky="ew", pady=8)
 
-        ttk.Label(frm, text=f"Puerto en {b_src.name}:").grid(row=6, column=0, sticky=W, pady=4)
+        ttk.Label(frm, text=f"Puerto en {b_src.name}:").grid(row=7, column=0, sticky=W, pady=4)
         self.src_port_var = StringVar(value=stream.src_port or (ports_src[0] if ports_src else ""))
         self.src_port_combo = ttk.Combobox(
             frm, textvariable=self.src_port_var,
             values=ports_src, state="readonly", width=22,
         )
-        self.src_port_combo.grid(row=6, column=1, sticky=W, pady=4)
+        self.src_port_combo.grid(row=7, column=1, sticky=W, pady=4)
 
-        ttk.Label(frm, text=f"Puerto en {b_dst.name}:").grid(row=7, column=0, sticky=W, pady=4)
+        ttk.Label(frm, text=f"Puerto en {b_dst.name}:").grid(row=8, column=0, sticky=W, pady=4)
         self.dst_port_var = StringVar(value=stream.dst_port or (ports_dst[0] if ports_dst else ""))
         self.dst_port_combo = ttk.Combobox(
             frm, textvariable=self.dst_port_var,
             values=ports_dst, state="readonly", width=22,
         )
-        self.dst_port_combo.grid(row=7, column=1, sticky=W, pady=4)
+        self.dst_port_combo.grid(row=8, column=1, sticky=W, pady=4)
 
         # ---- nombre ----
         ttk.Separator(frm, orient=HORIZONTAL).grid(
-            row=8, column=0, columnspan=2, sticky="ew", pady=8)
+            row=9, column=0, columnspan=2, sticky="ew", pady=8)
 
-        ttk.Label(frm, text="Nombre:").grid(row=9, column=0, sticky=W, pady=4)
+        ttk.Label(frm, text="Nombre:").grid(row=10, column=0, sticky=W, pady=4)
         self.entry_name = ttk.Entry(frm, width=22)
         self.entry_name.insert(0, stream.name)
-        self.entry_name.grid(row=9, column=1, sticky=W, pady=4)
+        self.entry_name.grid(row=10, column=1, sticky=W, pady=4)
 
         # ---- botones ----
         btns = ttk.Frame(frm)
-        btns.grid(row=10, column=0, columnspan=2, pady=(14, 0), sticky=E)
+        btns.grid(row=11, column=0, columnspan=2, pady=(14, 0), sticky=E)
         ttk.Button(btns, text="Cancelar", command=dlg.destroy).pack(side=LEFT, padx=4)
         ttk.Button(btns, text="OK",       command=self._ok).pack(side=LEFT)
 
         self.entry_m.focus()
         dlg.wait_window()
+
+    def _toggle_price(self):
+        """Muestra/oculta el campo Precio según role."""
+        role = self.role_var.get()
+        if role in ("feed", "product"):
+            self.lbl_price.grid()
+            self.entry_price.grid()
+        else:
+            self.lbl_price.grid_remove()
+            self.entry_price.grid_remove()
 
     def _ok(self):
         try:
@@ -358,8 +378,20 @@ class StreamEditDialog:
         except ValueError:
             messagebox.showerror("Inválido", "Flujo másico ≥ 0 requerido.")
             return
+        role = self.role_var.get() or "internal"
+        # precio solo aplica si feed/product
+        price = 0.0
+        if role in ("feed", "product"):
+            try:
+                price = float(self.entry_price.get())
+                if price < 0:
+                    raise ValueError
+            except ValueError:
+                messagebox.showerror("Inválido", "Precio ≥ 0 requerido.")
+                return
         self.stream.mass_flow = m
-        self.stream.role = self.role_var.get() or "internal"
+        self.stream.role = role
+        self.stream.price_usd_per_tm = price
         self.stream.src_port = self.src_port_var.get() or ""
         self.stream.dst_port = self.dst_port_var.get() or ""
         nombre = self.entry_name.get().strip() or self.stream.name
@@ -820,12 +852,14 @@ class FlowsheetEditor:
         return bid
 
     def _add_example_stream(self, src, dst, name, mass_flow=0.0,
-                            role="internal", src_port="", dst_port=""):
+                            role="internal", src_port="", dst_port="",
+                            price=0.0):
         sid = self.fs.new_id()
         s = Stream(
             id=sid, name=name, src=src, dst=dst,
             mass_flow=mass_flow, role=role,
             src_port=src_port, dst_port=dst_port,
+            price_usd_per_tm=price,
         )
         self.fs.streams[sid] = s
         return sid
@@ -855,8 +889,11 @@ class FlowsheetEditor:
         tk2  = self._add_example_block("TK-102","Storage tank — cone roof",     100.0, cx[5], y_top)
 
         # corrientes (puertos específicos por tipo de equipo)
+        # Precios USD/tm (referencia mercado 2024):
+        #   tolueno feed  ~650, benceno ~1050, H2 ~2000
         self._add_example_stream(p101, e101, "S-1",  11000, role="feed",
-                                 src_port="descarga",  dst_port="tube_in")
+                                 src_port="descarga",  dst_port="tube_in",
+                                 price=650.0)
         self._add_example_stream(e101, f101, "S-2",
                                  src_port="tube_out",  dst_port="proceso_in")
         self._add_example_stream(f101, r101, "S-3",
@@ -874,9 +911,11 @@ class FlowsheetEditor:
         self._add_example_stream(e103, p101, "S-9-recic",   # reciclo
                                  src_port="shell_out", dst_port="succion")
         self._add_example_stream(e103, tk1,  "S-benceno", 8500, role="product",
-                                 src_port="tube_out",  dst_port="entrada")
+                                 src_port="tube_out",  dst_port="entrada",
+                                 price=1050.0)
         self._add_example_stream(v101, tk2,  "S-purga-H2", 350, role="product",
-                                 src_port="vapor",     dst_port="entrada")
+                                 src_port="vapor",     dst_port="entrada",
+                                 price=2000.0)
 
     def _example_methanol(self):
         """Síntesis de metanol simplificada.
@@ -905,8 +944,11 @@ class FlowsheetEditor:
         e104 = self._add_example_block("E-104", "Heat exch. — kettle reboiler",  130.0, cx[3], y_bot)
         tk2  = self._add_example_block("TK-102","Storage tank — cone roof",       50.0, cx[4], y_bot)
 
+        # Precios USD/tm (referencia mercado 2024):
+        #   syngas ~150, metanol ~430, agua de proceso ~5
         self._add_example_stream(k101, e101, "S-1", 14000, role="feed",
-                                 src_port="descarga", dst_port="tube_in")
+                                 src_port="descarga", dst_port="tube_in",
+                                 price=150.0)
         self._add_example_stream(e101, r101, "S-2",
                                  src_port="tube_out", dst_port="alimentacion")
         self._add_example_stream(r101, e102, "S-3",
@@ -919,12 +961,14 @@ class FlowsheetEditor:
         self._add_example_stream(t101, e103, "S-vap-tope",
                                  src_port="vapor_tope", dst_port="shell_in")
         self._add_example_stream(e103, tk1,  "S-MeOH", 9500, role="product",
-                                 src_port="shell_out", dst_port="entrada")
+                                 src_port="shell_out", dst_port="entrada",
+                                 price=430.0)
         # fondo de T-101 → reboiler E-104 → tanque agua (der)
         self._add_example_stream(t101, e104, "S-fondo",
                                  src_port="liquido_fondo", dst_port="liq_in")
         self._add_example_stream(e104, tk2,  "S-agua", 600, role="product",
-                                 src_port="cond_out", dst_port="entrada")
+                                 src_port="cond_out", dst_port="entrada",
+                                 price=5.0)
 
     def _example_distillation(self):
         """Destilación binaria benceno/tolueno (50/50).
@@ -945,8 +989,11 @@ class FlowsheetEditor:
         tk1  = self._add_example_block("TK-102","Storage tank — cone roof",  150.0, cx[4], y_top)
         tk2  = self._add_example_block("TK-103","Storage tank — cone roof",  150.0, cx[4], y_bot)
 
+        # Precios USD/tm (referencia mercado 2024):
+        #   mezcla bz/tol ~850, benceno ~1050, tolueno ~700
         self._add_example_stream(tk0,  p101, "S-1", 10000, role="feed",
-                                 src_port="salida",   dst_port="succion")
+                                 src_port="salida",   dst_port="succion",
+                                 price=850.0)
         self._add_example_stream(p101, e101, "S-2",
                                  src_port="descarga", dst_port="tube_in")
         self._add_example_stream(e101, t101, "S-3",
@@ -956,9 +1003,11 @@ class FlowsheetEditor:
         self._add_example_stream(t101, e103, "S-5",
                                  src_port="liquido_fondo",  dst_port="liq_in")
         self._add_example_stream(e102, tk1,  "S-benceno", 5000, role="product",
-                                 src_port="tube_out", dst_port="entrada")
+                                 src_port="tube_out", dst_port="entrada",
+                                 price=1050.0)
         self._add_example_stream(e103, tk2,  "S-tolueno", 5000, role="product",
-                                 src_port="vap_out",  dst_port="entrada")
+                                 src_port="vap_out",  dst_port="entrada",
+                                 price=700.0)
 
     def open_json(self):
         path = filedialog.askopenfilename(
@@ -1763,13 +1812,22 @@ class FlowsheetEditor:
             dst = self.fs.blocks[s.dst].name
             sp = s.src_port or "(auto)"
             dp = s.dst_port or "(auto)"
-            self.prop_var.set(
+            txt = (
                 f"CORRIENTE  {s.name}\n"
                 f"Desde      {src}  ({sp})\n"
                 f"Hacia      {dst}  ({dp})\n"
                 f"Rol        {s.role}\n"
                 f"Flujo      {s.mass_flow:g} tm/año"
             )
+            if s.role in ("feed", "product"):
+                price = s.price_usd_per_tm
+                total_usd = price * s.mass_flow
+                label = "Ingreso" if s.role == "product" else "Costo MP"
+                txt += (
+                    f"\nPrecio     {price:g} USD/tm"
+                    f"\n{label:10s} $ {total_usd:>12,.0f}/año"
+                )
+            self.prop_var.set(txt)
             return
 
         self.prop_var.set(
@@ -1889,6 +1947,20 @@ class FlowsheetEditor:
                                  f"({len(feeds)} corriente{'s' if len(feeds)>1 else ''})")
                 for s in feeds:
                     out_lines.append(f"  · {s.name}: {s.mass_flow:g} tm/año")
+
+            # Ingresos / costos materia prima a partir de precios USD/tm
+            revenue = sum(s.mass_flow * s.price_usd_per_tm for s in products)
+            raw_mp  = sum(s.mass_flow * s.price_usd_per_tm for s in feeds)
+            if revenue or raw_mp:
+                out_lines.append("")
+                out_lines.append("─ Economía aproximada (USD/año) ─")
+                if revenue:
+                    out_lines.append(f"Ingresos:         $ {revenue:>14,.0f}")
+                if raw_mp:
+                    out_lines.append(f"Materia prima:    $ {raw_mp:>14,.0f}")
+                if revenue and raw_mp:
+                    margin = revenue - raw_mp
+                    out_lines.append(f"Margen bruto:     $ {margin:>14,.0f}")
 
         if res["warnings"]:
             out_lines.append("")
@@ -2057,7 +2129,7 @@ class FlowsheetEditor:
                 r"\(PFD\)", regex=True, na=False)
             df_variable = df_variable[~mask].reset_index(drop=True)
 
-        # append filas del PFD
+        # append filas del PFD (con precio del propio stream)
         new_rows = []
         for s in products:
             new_rows.append({
@@ -2065,7 +2137,7 @@ class FlowsheetEditor:
                 "units":              "tm",
                 "time basis":         "year",
                 "flowrate":           float(s.mass_flow),
-                "price usd/units":    0.0,
+                "price usd/units":    float(getattr(s, "price_usd_per_tm", 0.0)),
                 "stream":             "Key Products",
             })
         for s in feeds:
@@ -2074,7 +2146,7 @@ class FlowsheetEditor:
                 "units":              "tm",
                 "time basis":         "year",
                 "flowrate":           float(s.mass_flow),
-                "price usd/units":    0.0,
+                "price usd/units":    float(getattr(s, "price_usd_per_tm", 0.0)),
                 "stream":             "Raw Materials",
             })
         if new_rows:
