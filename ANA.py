@@ -31,6 +31,8 @@ from mc_ui import AbrirVentanaConfigMC
 
 from capital_ui import AbrirVentanaEstimateISBL
 
+from flowsheet_ui import AbrirVentanaFlowsheet
+
 from results_ui import AbrirDashboard
 
 from tooltip import Tooltip, adjuntar_tooltips
@@ -2028,11 +2030,36 @@ def LanzarEstimateISBL():
     )
 
 
+def LanzarFlowsheet():
+    """Abre el editor de flowsheet (block diagram).
+    Funciona con o sin proyecto cargado.  Si hay proyecto,
+    'Apply ISBL' actualiza el df_capital del análisis."""
+
+    def OnApply():
+        ConsolaResultados.config(state="normal")
+        ConsolaResultados.insert(
+            END,
+            f"\nISBL updated from flowsheet: "
+            f"{float(df_capital.iat[0, 2]):.2f} MM USD\n"
+        )
+        ConsolaResultados.config(state="disabled")
+
+    AbrirVentanaFlowsheet(
+        raiz,
+        df_capital if not df_capital.empty else None,
+        on_apply=OnApply,
+    )
+
+
 menuTools = Menu(menubar, tearoff=0)
 menubar.add_cascade(label='Tools', menu=menuTools)
 menuTools.add_command(
     label='Estimate Capital from Equipment List (Turton / Lang)…',
     command=LanzarEstimateISBL,
+)
+menuTools.add_command(
+    label='Estimate Capital from PFD (block diagram)…',
+    command=LanzarFlowsheet,
 )
 
 menuHelp = Menu(
