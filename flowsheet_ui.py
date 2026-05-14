@@ -2283,7 +2283,8 @@ class FlowsheetEditor:
                 cost = ex.get("flowrate", 0.0) * ex.get("price_usd_per_unit", 0.0)
                 extras_by_cat[cat] = extras_by_cat.get(cat, 0.0) + cost
             # sumar utilities auto-calculadas desde duties
-            _u_rows, u_summary = self._compute_utilities_from_duties()
+            import flowsheet_export as _fexp
+            _u_rows, u_summary = _fexp.compute_utilities_from_duties(self.fs)
             auto_util_cost = sum(cost for _, _, _, _, cost in u_summary)
             if auto_util_cost:
                 extras_by_cat["Utilities"] = extras_by_cat.get("Utilities", 0.0) + auto_util_cost
@@ -2382,7 +2383,8 @@ class FlowsheetEditor:
             out_lines.append(f"  Cooling Q_calc total: {total_cooling:>7.0f} kW")
 
         # ---- utilities auto-calculadas desde duties declarados ----
-        _util_rows, util_summary = self._compute_utilities_from_duties()
+        import flowsheet_export as _fexp
+        _util_rows, util_summary = _fexp.compute_utilities_from_duties(self.fs)
         if util_summary:
             out_lines.append("")
             out_lines.append("─ Utilities derivadas de duties (USD/año) ─")
@@ -2487,71 +2489,9 @@ class FlowsheetEditor:
         # H [kW] = m [kg/s] × Cp [kJ/kg·K] × dT [K]
         return m_kg_s * s.cp * dT
 
-    def _block_avg_temperature(self, b):
-        """T promedio (°C) entre entradas y salidas del bloque, para
-        autoselect de la utility.  Si no hay streams con T, devuelve
-        25°C como default."""
-        ts = []
-        for s in self.fs.streams.values():
-            if (s.src == b.id or s.dst == b.id) and s.cp > 0:
-                ts.append(s.temperature)
-        if not ts:
-            return 25.0
-        return sum(ts) / len(ts)
-
-    def _compute_utilities_from_duties(self):
-        """Recorre todos los bloques con duty != 0 y genera la lista
-        de filas opex (utilities consumidas) para inyectar en df_variable.
-
-        Cada fila tiene la misma estructura que self.fs.opex_extras
-        pero se marca aparte (sin sufijo PFD) — el dedupe del xlsx
-        las distingue por la columna 'stream' = 'Utilities' y el
-        sufijo '(PFD-util)' en el nombre.
-
-        Returns:
-            (rows, summary)  donde summary es lista de tuplas
-            (block_name, util_key, units, consumo_anual, costo_anual)
-            para reportar en compute() output.
-        """
-        rows = []
-        summary = []
-        agg = {}  # acumula consumos por util_key  → (consumo, costo)
-
-        for b in self.fs.blocks.values():
-            if b.duty == 0:
-                continue
-            T_avg = self._block_avg_temperature(b)
-            util_key = b.heat_source or ep.autoselect_heat_source(
-                b.eq_type, b.duty, T_avg
-            )
-            if not util_key or util_key not in ep.UTILITIES:
-                continue
-            util = ep.UTILITIES[util_key]
-            consumption = ep.utility_consumption(util_key, b.duty)
-            cost        = consumption * util["price"]
-            summary.append((b.name, util_key, util["units"],
-                            consumption, cost))
-            # agregamos por utility (varios bloques pueden compartir)
-            if util_key in agg:
-                agg[util_key] = (
-                    agg[util_key][0] + consumption,
-                    agg[util_key][1] + cost,
-                )
-            else:
-                agg[util_key] = (consumption, cost)
-
-        for util_key, (cons, _cost) in agg.items():
-            util = ep.UTILITIES[util_key]
-            rows.append({
-                "name":               f"{util['name']} (PFD-util)",
-                "units":              util["units"],
-                "time_basis":         "year",
-                "flowrate":           float(cons),
-                "price_usd_per_unit": float(util["price"]),
-                "stream":             "Utilities",
-            })
-
-        return rows, summary
+    # NOTA: _block_avg_temperature y _compute_utilities_from_duties
+    # se movieron a flowsheet_export.py (funciones puras sin self).
+    # Los callers de este editor las llaman via flowsheet_export.
 
     def _block_energy_balance(self, b):
         """Balance de energía sobre un bloque.
@@ -2733,7 +2673,8 @@ class FlowsheetEditor:
         try:
             tmp_dir = tempfile.gettempdir()
             tmp_path = os.path.join(tmp_dir, f"ANA_from_PFD_{os.getpid()}.xlsx")
-            self._write_project_xlsx(tmp_path, isbl, feeds, products, base_xlsx)
+            import flowsheet_export as _fexp
+            _fexp.write_project_xlsx(tmp_path, self.fs, isbl, feeds, products, base_xlsx)
         except Exception as e:
             messagebox.showerror(
                 "Falló la generación del xlsx",
@@ -2752,208 +2693,13 @@ class FlowsheetEditor:
                                  f"{type(e).__name__}: {e}")
 
     # ==================================================
-    # GENERACIÓN DEL XLSX PARA EL ANÁLISIS ECONÓMICO
+    # GENERACIÓN DEL XLSX (delega a flowsheet_export)
     # ==================================================
-
-    def _write_project_xlsx(self, path, isbl, feeds, products, base_xlsx=None):
-        """Escribe un xlsx con las 3 secciones que ANA.ImportarProyecto
-        espera (Capital cols A-C, Fixed cols E-G, Variable cols I-N).
-
-        Si base_xlsx es None → templates Turton + filas del PFD.
-        Si base_xlsx existe → reusa ese xlsx, override ISBL, mantiene
-        sus filas variables y APENDE las del PFD (marcadas con sufijo
-        ' (PFD)' para distinguirlas; si reabrís el análisis varias
-        veces, las del PFD se reemplazan, no se duplican)."""
-        import pandas as pd
-        import templates as tmpl
-
-        if base_xlsx:
-            df_capital, df_fixed, df_variable = self._read_project_xlsx(base_xlsx)
-        else:
-            df_capital  = tmpl.template_capital()
-            df_fixed    = tmpl.template_fixed()
-            df_variable = pd.DataFrame(columns=[
-                "variable operating costs", "units", "time basis",
-                "flowrate", "price usd/units", "stream",
-            ])
-
-        # inyectar ISBL
-        if isbl is not None and not df_capital.empty:
-            df_capital.iat[0, 2] = float(isbl)
-
-        # aplicar fixed_overrides al df_fixed (match exacto por Concept)
-        if (not df_fixed.empty and "Concept" in df_fixed.columns
-            and self.fs.fixed_overrides):
-            for concept, value in self.fs.fixed_overrides.items():
-                mask = df_fixed["Concept"].astype(str).str.strip() == concept
-                if mask.any():
-                    df_fixed.loc[mask, "Value"] = float(value)
-
-        # auto-labor con Turton §8.3 si el user no especificó override
-        if (not df_fixed.empty and "Concept" in df_fixed.columns
-            and "Labor" not in self.fs.fixed_overrides
-            and self.fs.blocks):
-            labor_info = ep.turton_labor_cost(self.fs.blocks.values())
-            mask = df_fixed["Concept"].astype(str).str.strip() == "Labor"
-            if mask.any():
-                df_fixed.loc[mask, "Value"] = float(labor_info["labor_usd_yr"])
-
-        # dedupe: borrar filas previas marcadas '(PFD)' o '(PFD-util)'
-        if "variable operating costs" in df_variable.columns:
-            mask = df_variable["variable operating costs"].astype(str).str.contains(
-                r"\(PFD(?:-util)?\)", regex=True, na=False)
-            df_variable = df_variable[~mask].reset_index(drop=True)
-
-        # append filas del PFD (con precio del propio stream)
-        new_rows = []
-        for s in products:
-            new_rows.append({
-                "variable operating costs": f"{s.name} (PFD)",
-                "units":              "tm",
-                "time basis":         "year",
-                "flowrate":           float(s.mass_flow),
-                "price usd/units":    float(getattr(s, "price_usd_per_tm", 0.0)),
-                "stream":             "Key Products",
-            })
-        for s in feeds:
-            new_rows.append({
-                "variable operating costs": f"{s.name} (PFD)",
-                "units":              "tm",
-                "time basis":         "year",
-                "flowrate":           float(s.mass_flow),
-                "price usd/units":    float(getattr(s, "price_usd_per_tm", 0.0)),
-                "stream":             "Raw Materials",
-            })
-        # opex_extras manuales: raw materials adicionales, consumibles
-        # (catalizadores) — utilities manuales también van acá.
-        # Sufijo (PFD) los distingue de las auto-utility.
-        for ex in self.fs.opex_extras:
-            new_rows.append({
-                "variable operating costs": f"{ex.get('name','?')} (PFD)",
-                "units":              ex.get("units", "tm"),
-                "time basis":         ex.get("time_basis", "year"),
-                "flowrate":           float(ex.get("flowrate", 0.0)),
-                "price usd/units":    float(ex.get("price_usd_per_unit", 0.0)),
-                "stream":             ex.get("stream", "Utilities"),
-            })
-        # utilities AUTO-CALCULADAS desde duties de los bloques.
-        # Sufijo (PFD-util) las distingue de las opex_extras manuales,
-        # así el editor no las muestra y el dedupe las regenera siempre.
-        auto_rows, _summary = self._compute_utilities_from_duties()
-        for ex in auto_rows:
-            new_rows.append({
-                "variable operating costs": ex["name"],
-                "units":              ex["units"],
-                "time basis":         ex["time_basis"],
-                "flowrate":           ex["flowrate"],
-                "price usd/units":    ex["price_usd_per_unit"],
-                "stream":             ex["stream"],
-            })
-        if new_rows:
-            df_variable = pd.concat(
-                [df_variable, pd.DataFrame(new_rows)],
-                ignore_index=True,
-            )
-
-        # escribir xlsx con las 3 secciones lado a lado +
-        # pestaña adicional con la lista de equipos del PFD
-        equipment_rows = self._collect_equipment_rows()
-        self._write_3sections_xlsx(path, df_capital, df_fixed,
-                                   df_variable, equipment=equipment_rows)
-
-    def _collect_equipment_rows(self):
-        """Lista de dicts con la info de cada bloque del PFD,
-        para escribir como pestaña 'Equipment' en el xlsx."""
-        import equipment_costs as eq_mod
-        rows = []
-        for b in sorted(self.fs.blocks.values(), key=lambda b: b.name):
-            spec = eq_mod.EQUIPMENT_DATA.get(b.eq_type, {})
-            rows.append({
-                "Tag":        b.name,
-                "Type":       b.eq_type,
-                "Category":   spec.get("categoria", ""),
-                "Size S":     float(b.S),
-                "Unit":       spec.get("S_unit", ""),
-                "N° units":   int(b.n),
-            })
-        return rows
-
-    @staticmethod
-    def _read_project_xlsx(path):
-        """Lee un xlsx del análisis económico y devuelve los 3 dfs
-        (capital, fixed, variable) replicando la lógica de
-        ANA.ImportarProyecto."""
-        import pandas as pd
-        df_raw = pd.read_excel(path, header=None)
-
-        def _section(cols):
-            df = df_raw.iloc[:, cols].copy()
-            df = df.dropna(how="all")
-            if df.empty:
-                return df
-            df.columns = df.iloc[0].tolist()
-            df = df.iloc[1:].reset_index(drop=True)
-            df = df[df.iloc[:, 0].notna()].reset_index(drop=True)
-            return df
-
-        df_capital  = _section([0, 1, 2])
-        df_fixed    = _section([4, 5, 6])
-        df_variable = _section([8, 9, 10, 11, 12, 13])
-        return df_capital, df_fixed, df_variable
-
-    @staticmethod
-    def _write_3sections_xlsx(path, df_capital, df_fixed, df_variable,
-                              equipment=None):
-        """Escribe un xlsx con:
-          Hoja 'Project':
-            cols A-C  → Capital Costs
-            col  D    → vacía
-            cols E-G  → Fixed Operating Costs
-            col  H    → vacía
-            cols I-N  → Variable Operating Costs
-          Hoja 'Equipment' (opcional):
-            lista de equipos del diagrama de bloques
-        Formato compatible con ANA.ImportarProyecto."""
-        import openpyxl
-        wb = openpyxl.Workbook()
-        ws = wb.active
-        ws.title = "Project"
-
-        def _write_block(df, col_start):
-            if df is None or df.empty:
-                return
-            # header
-            for j, name in enumerate(df.columns):
-                ws.cell(row=1, column=col_start + j, value=str(name))
-            # rows
-            for i in range(len(df)):
-                for j in range(len(df.columns)):
-                    v = df.iat[i, j]
-                    try:
-                        if v is None:
-                            continue
-                        import math
-                        if isinstance(v, float) and math.isnan(v):
-                            continue
-                    except Exception:
-                        pass
-                    ws.cell(row=2 + i, column=col_start + j, value=v)
-
-        _write_block(df_capital,  1)
-        _write_block(df_fixed,    5)
-        _write_block(df_variable, 9)
-
-        # pestaña Equipment con la lista de bloques del PFD
-        if equipment:
-            ws_eq = wb.create_sheet("Equipment")
-            cols = ["Tag", "Type", "Category", "Size S", "Unit", "N° units"]
-            for j, name in enumerate(cols):
-                ws_eq.cell(row=1, column=j + 1, value=name)
-            for i, row in enumerate(equipment):
-                for j, key in enumerate(cols):
-                    ws_eq.cell(row=2 + i, column=j + 1, value=row.get(key, ""))
-
-        wb.save(path)
+    # Las funciones write_project_xlsx, read_project_xlsx,
+    # collect_equipment_rows, write_3sections_xlsx viven en
+    # flowsheet_export.py para ser reusadas por el editor Qt.
+    # Acá en flowsheet_ui se llaman vía import inline (ver
+    # launch_analysis y compute()).
 
 
 # ======================================================
