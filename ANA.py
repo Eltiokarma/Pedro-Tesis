@@ -126,7 +126,7 @@ df_variable = pd.DataFrame()
 raiz = Tk()
 
 raiz.title("ANA")
-raiz.geometry('720x540+210+20')
+raiz.geometry('720x620+210+20')
 raiz.resizable(0, 0)
 
 # ======================================================
@@ -1962,6 +1962,57 @@ menuHelp.add_command(
 raiz.config(menu=menubar)
 
 # ======================================================
+# QUICK-ACTIONS TOOLBAR (top of window)
+# ======================================================
+# Botones grandes con los pasos del flujo:
+#   1) New / 2) Import / 3) View / 4) Equipment / 5) Solve
+# ======================================================
+
+ToolbarFrame = ttk.LabelFrame(raiz, text="Workflow")
+ToolbarFrame.place(x=15, y=10, width=690, height=60)
+
+BtnTbNew = ttk.Button(
+    ToolbarFrame,
+    text="📄  New project",
+    width=18,
+    command=lambda: NuevoProyecto(),
+)
+BtnTbNew.place(x=10, y=8)
+
+BtnTbImport = ttk.Button(
+    ToolbarFrame,
+    text="📂  Import Excel",
+    width=18,
+    command=lambda: ImportarProyecto(),
+)
+BtnTbImport.place(x=150, y=8)
+
+BtnTbViewData = ttk.Button(
+    ToolbarFrame,
+    text="📊  View / edit data",
+    width=20,
+    command=lambda: VentanaVisualizarData(),
+)
+BtnTbViewData.place(x=290, y=8)
+
+BtnTbEquipment = ttk.Button(
+    ToolbarFrame,
+    text="🔧  Estimate capital",
+    width=20,
+    command=lambda: LanzarEstimateISBL(),
+)
+BtnTbEquipment.place(x=445, y=8)
+
+BtnTbSolve = ttk.Button(
+    ToolbarFrame,
+    text="▶  Solve",
+    width=12,
+    command=lambda: EjecutarAnalisis(),
+)
+BtnTbSolve.place(x=595, y=8)
+
+
+# ======================================================
 # INPUT FRAME
 # ======================================================
 
@@ -1972,7 +2023,7 @@ ContornoDatos = ttk.LabelFrame(
 
 ContornoDatos.place(
     x=15,
-    y=10,
+    y=80,
     width=690,
     height=260
 )
@@ -2248,7 +2299,7 @@ ContornoResultados = ttk.LabelFrame(
 
 ContornoResultados.place(
     x=15,
-    y=285,
+    y=365,
     width=690,
     height=170
 )
@@ -2318,7 +2369,7 @@ BotonResolver = ttk.Button(
 
 BotonResolver.place(
     x=285,
-    y=480
+    y=555
 )
 
 # ======================================================
@@ -2331,13 +2382,41 @@ LeyendaObligatorios = ttk.Label(
     foreground="#c62828",
     font=("Segoe UI", 8),
 )
-LeyendaObligatorios.place(x=20, y=272)
+LeyendaObligatorios.place(x=20, y=345)
 
 # ======================================================
 # TOOLTIPS — burbujas informativas sobre los inputs
 # ======================================================
 
 adjuntar_tooltips({
+
+    # ---- Toolbar (workflow) ----
+    BtnTbNew: (
+        "Step 1 — crea un proyecto vacío con valores típicos de Turton.\n"
+        "Después editás todo desde 'View / edit data'."
+    ),
+    BtnTbImport: (
+        "Step 1 (alternative) — importa un Excel con 3 secciones:\n"
+        "Capital Costs · Fixed Operating · Variable Operating Costs.\n\n"
+        "Tolerancia: el parser detecta filas por nombre, así que el\n"
+        "orden y el número de filas pueden variar dentro de lo razonable."
+    ),
+    BtnTbViewData: (
+        "Step 2 — abre la tabla del proyecto para editar:\n"
+        "• Capital (5 filas fijas)\n"
+        "• Fixed Operating (9 filas fijas)\n"
+        "• Variable Operating (agregás/eliminás filas)"
+    ),
+    BtnTbEquipment: (
+        "Bonus — estima ISBL desde una lista de equipos.\n"
+        "Cp° de Turton Apx A + Lang factor.  Reemplaza el ISBL\n"
+        "del proyecto si lo confirmás."
+    ),
+    BtnTbSolve: (
+        "Step 3 — corre el análisis completo y abre el Dashboard\n"
+        "(NPV, IRR/DCFROR, Payback, ROI, sensitivity)."
+    ),
+
     EntryFC: (
         "Construction schedule — fracción del CapEx invertido cada año.\n\n"
         "Ej: '0.3,0.7'  → 30% año 1, 70% año 2.\n"

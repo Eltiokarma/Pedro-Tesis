@@ -56,11 +56,89 @@ def _valor_fixed(df_fixed, fila):
     return float(df_fixed.iloc[fila, 2])
 
 
+# ======================================================
+# PARSERS POR NOMBRE (más robustos que por posición)
+# ======================================================
+
+_CAPITAL_KEYS = {
+    "ISBL":     ["isbl", "battery limit"],
+    "OSBL_pct": ["osbl", "off-site", "offsite"],
+    "ENG_pct":  ["engineering", "eng cost", "eng "],
+    "CONT_pct": ["contingency", "cont"],
+    "WC_pct":   ["working capital", "working cap", "wc"],
+}
+
+_FIXED_KEYS = {
+    "labor":                ["labor"],
+    "supervision_pct":      ["supervision"],
+    "salary_overhead_pct":  ["salary overhead", "direct salary", "salary o"],
+    "maintenance_pct":      ["maintenance"],
+    "plant_overhead_pct":   ["plant overhead"],
+    "tax_insurance_pct":    ["tax & insurance", "tax and ins", "tax ins", "insurance"],
+    "interest_pct":         ["interest"],
+    "general_expenses_pct": ["general expense", "general "],
+    "royalties_pct":        ["royalties", "royalty", "royal"],
+}
+
+
+def _parse_seccion_por_nombre(df, mapeo, fallback_zero=True):
+    """Parsea una sección (capital o fixed) por keywords en
+    la primera columna.  Tolera orden arbitrario y filas
+    faltantes.  Si una key no se encuentra y fallback_zero=
+    True, devuelve 0 para esa entry.
+
+    df: DataFrame con [concept, units/basis, value] en cols 0/1/2.
+    mapeo: dict {key_modelo: [patrones lowercase]}.
+    """
+    result = {}
+
+    # Pre-procesar concepts en lowercase
+    concepts = [str(df.iloc[i, 0]).strip().lower() for i in range(len(df))]
+    valores  = [df.iloc[i, 2] for i in range(len(df))]
+
+    used = set()  # índices ya usados (evita asignar la misma fila a 2 keys)
+
+    for key, patterns in mapeo.items():
+        match_idx = None
+        # Buscar fila por patrones, prefiere el match más temprano
+        for i, c in enumerate(concepts):
+            if i in used:
+                continue
+            if any(p in c for p in patterns):
+                match_idx = i
+                break
+
+        if match_idx is None:
+            if fallback_zero:
+                result[key] = 0.0
+            else:
+                raise ValueError(
+                    f"No row found for '{key}' (patterns: {patterns})"
+                )
+        else:
+            v = valores[match_idx]
+            if pd.isna(v):
+                result[key] = 0.0
+            else:
+                result[key] = float(v)
+            used.add(match_idx)
+
+    return result
+
+
 def _pct(valor):
-    """Convierte 30 (porcentaje) a 0.30.  Si ya viene como
-    fracción <= 1.0, lo devuelve tal cual."""
-    valor = float(valor)
-    return valor / 100.0 if valor > 1.0 else valor
+    """Convierte porcentaje a fracción: SIEMPRE /100.
+
+    Convención: el Excel y los DataFrames de la GUI usan
+    escala 0-100 para todos los porcentajes (OSBL %, ENG %,
+    Maintenance %, etc., incluso si son chicos como
+    Royalties = 0.5%).
+
+    Antes esta función chequeaba 'si valor <= 1, ya es
+    fracción' — pero ese heurístico interpretaba mal el
+    caso real (Royalties 0.5% interpretado como 50% →
+    inflaba CCOP en ~ Revenue/2)."""
+    return float(valor) / 100.0
 
 
 def _construir_data(
@@ -97,27 +175,36 @@ def _construir_data(
     data = {}
 
     # CAPITAL
-    data["ISBL"]     = _valor_capital(df_capital, 0) * factor_cepci
-    data["OSBL_pct"] = _pct(_valor_capital(df_capital, 1))
-    data["ENG_pct"]  = _pct(_valor_capital(df_capital, 2))
-    data["CONT_pct"] = _pct(_valor_capital(df_capital, 3))
-    data["WC_pct"]   = _pct(_valor_capital(df_capital, 4))
+    # CAPITAL — parseo por nombre (más robusto que orden fijo)
+    cap = _parse_seccion_por_nombre(df_capital, _CAPITAL_KEYS)
+    data["ISBL"]     = cap["ISBL"] * factor_cepci
+    data["OSBL_pct"] = _pct(cap["OSBL_pct"])
+    data["ENG_pct"]  = _pct(cap["ENG_pct"])
+    data["CONT_pct"] = _pct(cap["CONT_pct"])
+    data["WC_pct"]   = _pct(cap["WC_pct"])
 
-    # FCOP inputs
-    # IMPORTANTE: el modelo trabaja en MMUSD/yr.  labor en
-    # el Excel viene en USD/yr, así que dividimos por 1e6
-    # para que la suma con maintenance (% de FCI, ya en
-    # MMUSD) tenga sentido dimensional.
+    # FCOP — también por nombre.  Tolera la convención del
+    # Excel real (8 filas: sin General Expenses) y la
+    # convención Turton estricta (9 filas).
+    # labor está en USD/yr crudo; lo convertimos a MMUSD/yr
+    # para que sume coherente con maintenance (% de FCI).
+    fixed = _parse_seccion_por_nombre(df_fixed, _FIXED_KEYS)
+
+    # labor: si el valor es muy pequeño (<1000) asumimos
+    # que ya está en MMUSD/yr; si es grande lo dividimos.
+    labor_raw = fixed["labor"]
+    labor_mm = labor_raw if labor_raw <= 1000 else labor_raw / 1e6
+
     data["FCOP_inputs"] = {
-        "labor":                _valor_fixed(df_fixed, 0) / 1e6,
-        "supervision_pct":      _pct(_valor_fixed(df_fixed, 1)),
-        "salary_overhead_pct":  _pct(_valor_fixed(df_fixed, 2)),
-        "maintenance_pct":      _pct(_valor_fixed(df_fixed, 3)),
-        "plant_overhead_pct":   _pct(_valor_fixed(df_fixed, 4)),
-        "tax_insurance_pct":    _pct(_valor_fixed(df_fixed, 5)),
-        "interest_pct":         _pct(_valor_fixed(df_fixed, 6)),
-        "general_expenses_pct": _pct(_valor_fixed(df_fixed, 7)),
-        "royalties_pct":        _pct(_valor_fixed(df_fixed, 8)),
+        "labor":                labor_mm,
+        "supervision_pct":      _pct(fixed["supervision_pct"]),
+        "salary_overhead_pct":  _pct(fixed["salary_overhead_pct"]),
+        "maintenance_pct":      _pct(fixed["maintenance_pct"]),
+        "plant_overhead_pct":   _pct(fixed["plant_overhead_pct"]),
+        "tax_insurance_pct":    _pct(fixed["tax_insurance_pct"]),
+        "interest_pct":         _pct(fixed["interest_pct"]),
+        "general_expenses_pct": _pct(fixed["general_expenses_pct"]),
+        "royalties_pct":        _pct(fixed["royalties_pct"]),
     }
 
     # STREAMS (todos valuados como flow_SI * price_SI)
