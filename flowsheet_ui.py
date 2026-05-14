@@ -128,9 +128,13 @@ class Block:
     #   < 0  → el equipo extrae calor del proceso (cooler, condenser,
     #           reactor exotérmico)
     #   = 0  → adiabático o sin balance de energía declarado
-    # Valor declarativo: si los streams tienen T y Cp, el balance
-    # de energía se calcula y se compara con este número.
     duty:      float = 0.0       # kW
+
+    # utility que provee/recibe el duty.  Vacío → autoselect según
+    # eq_type, signo de duty y T promedio.  Override manual válido:
+    # 'steam_LP', 'steam_MP', 'steam_HP', 'fuel_gas',
+    # 'cooling_water', 'refrigeration', 'electricity'.
+    heat_source: str = ""
 
     # caches del canvas (no se serializan)
     canvas_rect: Optional[int] = field(default=None, repr=False)
@@ -234,7 +238,7 @@ class BlockEditDialog:
 
         dlg = Toplevel(parent)
         dlg.title(f"Editar equipo — {block.name}")
-        dlg.geometry("420x440+300+180")
+        dlg.geometry("460x520+300+140")
         dlg.transient(parent)
         dlg.grab_set()
         self.dlg = dlg
@@ -289,12 +293,30 @@ class BlockEditDialog:
             text="> 0  = el equipo entrega calor al proceso (heater, reboiler)\n"
                  "< 0  = el equipo extrae calor del proceso (cooler, condenser)\n"
                  "= 0  = adiabático / sin balance declarado\n"
-                 "Si los streams tienen T y Cp, el balance se compara con este número.",
+                 "Para bombas/compresores: duty = potencia eléctrica al eje (kW).",
             foreground="#888", font=("Segoe UI", 8), justify="left",
         ).grid(row=8, column=0, columnspan=2, sticky=W, pady=(0, 4))
 
+        # ---- utility (heat source) ----
+        ttk.Label(frm, text="Utility:").grid(row=9, column=0, sticky=W, pady=4)
+        self.heat_var = StringVar(value=block.heat_source or "(auto)")
+        import equipment_ports as ep_mod
+        util_opts = ["(auto)"] + list(ep_mod.UTILITIES.keys())
+        self.heat_combo = ttk.Combobox(
+            frm, textvariable=self.heat_var,
+            values=util_opts, state="readonly", width=22,
+        )
+        self.heat_combo.grid(row=9, column=1, sticky=W, pady=4)
+
+        ttk.Label(
+            frm,
+            text="(auto) elige según signo de duty y T promedio.\n"
+                 "Override útil para forzar fuel_gas vs steam HP, etc.",
+            foreground="#888", font=("Segoe UI", 8), justify="left",
+        ).grid(row=10, column=0, columnspan=2, sticky=W, pady=(0, 4))
+
         btns = ttk.Frame(frm)
-        btns.grid(row=9, column=0, columnspan=2, pady=(10, 0), sticky=E)
+        btns.grid(row=11, column=0, columnspan=2, pady=(10, 0), sticky=E)
         ttk.Button(btns, text="Cancelar", command=dlg.destroy).pack(side=LEFT, padx=4)
         ttk.Button(btns, text="OK",       command=self._ok).pack(side=LEFT)
 
@@ -313,10 +335,14 @@ class BlockEditDialog:
                                  "Se requiere S > 0, n ≥ 1 y duty numérico.")
             return
         nombre = self.entry_name.get().strip() or self.block.name
+        heat = self.heat_var.get()
+        if heat == "(auto)":
+            heat = ""
         self.block.S = S
         self.block.n = n
         self.block.name = nombre
         self.block.duty = duty
+        self.block.heat_source = heat
         self.result = "ok"
         self.dlg.destroy()
 
@@ -1265,31 +1291,28 @@ class FlowsheetEditor:
                                  src_port="vapor",     dst_port="entrada",
                                  price=2000.0, T=50, cp=14.5)  # H2 puro Cp alto
 
-        # Nota: NO declaramos duty por bloque.  Q_calc se reporta
-        # desde los streams (T, Cp).  Los Q reales en HDA incluyen
-        # ΔH de reacción, ΔH de vaporización y son varias veces los
-        # Q_calc del modelo simplificado.  Si el user quiere validar
-        # con duty riguroso, lo carga manualmente desde el dialog
-        # de cada equipo.
+        # ---- Duties realistas (Turton/Douglas HDA, escala 10000 tm/año) ----
+        # Las utilities se auto-calculan desde estos duties al lanzar
+        # el análisis: el sistema elige steam_LP / MP / HP / fuel_gas
+        # según T promedio del bloque, o electricity para bombas.
+        self._set_block_duty(e101, +1500)   # preheater 25→200°C
+        self._set_block_duty(f101, +6500)   # horno 200→600°C (incluye ΔH_vap)
+        self._set_block_duty(r101, -1500)   # reactor HDA exotérmico
+        self._set_block_duty(e102, -8500)   # enfría salida 620→50°C
+        self._set_block_duty(e103, -3000)   # condensador top (incluye ΔH_vap)
+        self._set_block_duty(e104, +2000)   # reboiler (incluye ΔH_vap)
+        self._set_block_duty(p101, +15)     # bomba 15 kW eléctricos
 
-        # ---- OPEX extras: utilities + consumibles ----
-        # H2 makeup (raw material adicional, no es un stream del PFD)
+        # ---- OPEX extras manuales: SOLO los no-térmicos ----
+        # H2 makeup (raw material adicional)
         self._add_example_extra("H2 makeup",      flowrate=200,      price=1800.0,
                                 stream="Raw Materials")
         # Catalizador Pt/alúmina (consumible)
         self._add_example_extra("Catalizador Pt", flowrate=0.5,      price=25_000.0,
                                 stream="Consumables")
-        # Utilities (Turton §8 + Towler Apx A) — escala MYPE
-        self._add_example_extra("Steam MP",       flowrate=30_000,   price=25.0,
-                                stream="Utilities")
-        self._add_example_extra("Cooling water",  flowrate=500_000,  price=0.30,
-                                stream="Utilities")
-        self._add_example_extra("Fuel gas",       flowrate=5_000,    price=300.0,
-                                stream="Utilities")
-        self._add_example_extra("Electricity",    flowrate=4_000_000, price=0.08,
-                                units="kWh", stream="Utilities")
-        # Labor se calcula automáticamente con Turton §8.3 desde
-        # el número de equipos (no override).
+        # Las utilities (steam, cooling, fuel, electricity) se generan
+        # automáticamente desde los duties — no hace falta declararlas
+        # manualmente.  Labor se calcula con Turton.
 
     def _example_methanol(self):
         """Síntesis de metanol simplificada.
@@ -1356,18 +1379,19 @@ class FlowsheetEditor:
                                  src_port="vapor", dst_port="entrada",
                                  price=0.0, T=40, cp=1.1)
 
-        # Sin duties declarados; Q_calc se reporta desde los streams.
+        # ---- Duties realistas (síntesis metanol, escala 10000 tm/año) ----
+        self._set_block_duty(k101, +800)    # compresor 800 kW eléctricos
+        self._set_block_duty(e101, +3000)   # preheater 40→230°C
+        self._set_block_duty(r101, -4000)   # reactor exotérmico ΔH=-90 kJ/mol
+        self._set_block_duty(e102, -3000)   # cooler 260→40°C
+        self._set_block_duty(e103, -2000)   # condensador
+        self._set_block_duty(e104, +1500)   # reboiler
 
-        # ---- OPEX extras: utilities + consumibles ----
-        # Catalizador CuZnO/Al2O3 para síntesis de metanol (~3 años de vida)
-        self._add_example_extra("Catalizador CuZnO", flowrate=2,        price=40_000.0,
+        # ---- OPEX extras manuales: SOLO consumibles ----
+        # Catalizador CuZnO/Al2O3 (~3 años de vida)
+        self._add_example_extra("Catalizador CuZnO", flowrate=2, price=40_000.0,
                                 stream="Consumables")
-        self._add_example_extra("Steam HP",          flowrate=50_000,   price=28.0,
-                                stream="Utilities")
-        self._add_example_extra("Cooling water",     flowrate=700_000,  price=0.30,
-                                stream="Utilities")
-        self._add_example_extra("Electricity",       flowrate=8_000_000, price=0.08,
-                                units="kWh", stream="Utilities")
+        # Utilities → auto desde duties.
 
     def _example_distillation(self):
         """Destilación binaria benceno/tolueno (50/50).
@@ -1413,15 +1437,12 @@ class FlowsheetEditor:
                                  src_port="vap_out",  dst_port="entrada",
                                  price=700.0, T=40, cp=1.7)
 
-        # Sin duties declarados; Q_calc se reporta desde los streams.
-
-        # ---- OPEX extras: solo utilities (no hay reacción, no catalizador) ----
-        self._add_example_extra("Steam LP",      flowrate=25_000,  price=20.0,
-                                stream="Utilities")
-        self._add_example_extra("Cooling water", flowrate=400_000, price=0.30,
-                                stream="Utilities")
-        self._add_example_extra("Electricity",   flowrate=100_000, price=0.08,
-                                units="kWh", stream="Utilities")
+        # ---- Duties realistas (destilación binaria, 10000 tm/año feed) ----
+        self._set_block_duty(p101, +8)      # bomba 8 kW eléctricos
+        self._set_block_duty(e101, +500)    # preheater 25→85°C
+        self._set_block_duty(e102, -2000)   # condenser top (incluye ΔH_vap)
+        self._set_block_duty(e103, +2000)   # reboiler fondo (incluye ΔH_vap)
+        # Utilities → auto desde duties.
 
     def open_json(self):
         path = filedialog.askopenfilename(
@@ -2372,6 +2393,11 @@ class FlowsheetEditor:
                 cat = ex.get("stream", "Utilities")
                 cost = ex.get("flowrate", 0.0) * ex.get("price_usd_per_unit", 0.0)
                 extras_by_cat[cat] = extras_by_cat.get(cat, 0.0) + cost
+            # sumar utilities auto-calculadas desde duties
+            _u_rows, u_summary = self._compute_utilities_from_duties()
+            auto_util_cost = sum(cost for _, _, _, _, cost in u_summary)
+            if auto_util_cost:
+                extras_by_cat["Utilities"] = extras_by_cat.get("Utilities", 0.0) + auto_util_cost
 
             # Labor: override del user, o calculado con Turton §8.3
             labor_info = None
@@ -2470,6 +2496,24 @@ class FlowsheetEditor:
             out_lines.append(f"  Heating total:  {total_heating:>7.0f} kW")
             out_lines.append(f"  Cooling total:  {total_cooling:>7.0f} kW")
 
+        # ---- utilities auto-calculadas desde duties declarados ----
+        _util_rows, util_summary = self._compute_utilities_from_duties()
+        if util_summary:
+            out_lines.append("")
+            out_lines.append("─ Utilities derivadas de duties (USD/año) ─")
+            agg = {}    # util_key → (consumo total, costo total)
+            for block_name, util_key, units, cons, cost in util_summary:
+                u = ep.UTILITIES[util_key]
+                tag = f"  {block_name:8s} → {u['name']:24s} {cons:>10,.0f} {units}  $ {cost:>9,.0f}/año"
+                out_lines.append(tag)
+                if util_key in agg:
+                    agg[util_key] = (agg[util_key][0] + cons,
+                                     agg[util_key][1] + cost)
+                else:
+                    agg[util_key] = (cons, cost)
+            total_util_cost = sum(c for _, c in agg.values())
+            out_lines.append(f"  TOTAL utilities:                                $ {total_util_cost:>9,.0f}/año")
+
         self.results_var.set("\n".join(out_lines))
         self._last_isbl = isbl_mm
         self._last_feed_total    = feed_total
@@ -2520,6 +2564,72 @@ class FlowsheetEditor:
         dT     = s.temperature - T_REF_C
         # H [kW] = m [kg/s] × Cp [kJ/kg·K] × dT [K]
         return m_kg_s * s.cp * dT
+
+    def _block_avg_temperature(self, b):
+        """T promedio (°C) entre entradas y salidas del bloque, para
+        autoselect de la utility.  Si no hay streams con T, devuelve
+        25°C como default."""
+        ts = []
+        for s in self.fs.streams.values():
+            if (s.src == b.id or s.dst == b.id) and s.cp > 0:
+                ts.append(s.temperature)
+        if not ts:
+            return 25.0
+        return sum(ts) / len(ts)
+
+    def _compute_utilities_from_duties(self):
+        """Recorre todos los bloques con duty != 0 y genera la lista
+        de filas opex (utilities consumidas) para inyectar en df_variable.
+
+        Cada fila tiene la misma estructura que self.fs.opex_extras
+        pero se marca aparte (sin sufijo PFD) — el dedupe del xlsx
+        las distingue por la columna 'stream' = 'Utilities' y el
+        sufijo '(PFD-util)' en el nombre.
+
+        Returns:
+            (rows, summary)  donde summary es lista de tuplas
+            (block_name, util_key, units, consumo_anual, costo_anual)
+            para reportar en compute() output.
+        """
+        rows = []
+        summary = []
+        agg = {}  # acumula consumos por util_key  → (consumo, costo)
+
+        for b in self.fs.blocks.values():
+            if b.duty == 0:
+                continue
+            T_avg = self._block_avg_temperature(b)
+            util_key = b.heat_source or ep.autoselect_heat_source(
+                b.eq_type, b.duty, T_avg
+            )
+            if not util_key or util_key not in ep.UTILITIES:
+                continue
+            util = ep.UTILITIES[util_key]
+            consumption = ep.utility_consumption(util_key, b.duty)
+            cost        = consumption * util["price"]
+            summary.append((b.name, util_key, util["units"],
+                            consumption, cost))
+            # agregamos por utility (varios bloques pueden compartir)
+            if util_key in agg:
+                agg[util_key] = (
+                    agg[util_key][0] + consumption,
+                    agg[util_key][1] + cost,
+                )
+            else:
+                agg[util_key] = (consumption, cost)
+
+        for util_key, (cons, _cost) in agg.items():
+            util = ep.UTILITIES[util_key]
+            rows.append({
+                "name":               f"{util['name']} (PFD-util)",
+                "units":              util["units"],
+                "time_basis":         "year",
+                "flowrate":           float(cons),
+                "price_usd_per_unit": float(util["price"]),
+                "stream":             "Utilities",
+            })
+
+        return rows, summary
 
     def _block_energy_balance(self, b):
         """Balance de energía sobre un bloque.
@@ -2777,10 +2887,10 @@ class FlowsheetEditor:
             if mask.any():
                 df_fixed.loc[mask, "Value"] = float(labor_info["labor_usd_yr"])
 
-        # dedupe: borrar filas previas marcadas '(PFD)'
+        # dedupe: borrar filas previas marcadas '(PFD)' o '(PFD-util)'
         if "variable operating costs" in df_variable.columns:
             mask = df_variable["variable operating costs"].astype(str).str.contains(
-                r"\(PFD\)", regex=True, na=False)
+                r"\(PFD(?:-util)?\)", regex=True, na=False)
             df_variable = df_variable[~mask].reset_index(drop=True)
 
         # append filas del PFD (con precio del propio stream)
@@ -2803,9 +2913,9 @@ class FlowsheetEditor:
                 "price usd/units":    float(getattr(s, "price_usd_per_tm", 0.0)),
                 "stream":             "Raw Materials",
             })
-        # opex_extras: utilities (vapor, agua, electricidad) + consumibles
-        # (catalizadores) — sin sufijo (PFD) tampoco se duplican porque arriba
-        # se borran todas las filas que matchen '(PFD)' en el nombre.
+        # opex_extras manuales: raw materials adicionales, consumibles
+        # (catalizadores) — utilities manuales también van acá.
+        # Sufijo (PFD) los distingue de las auto-utility.
         for ex in self.fs.opex_extras:
             new_rows.append({
                 "variable operating costs": f"{ex.get('name','?')} (PFD)",
@@ -2814,6 +2924,19 @@ class FlowsheetEditor:
                 "flowrate":           float(ex.get("flowrate", 0.0)),
                 "price usd/units":    float(ex.get("price_usd_per_unit", 0.0)),
                 "stream":             ex.get("stream", "Utilities"),
+            })
+        # utilities AUTO-CALCULADAS desde duties de los bloques.
+        # Sufijo (PFD-util) las distingue de las opex_extras manuales,
+        # así el editor no las muestra y el dedupe las regenera siempre.
+        auto_rows, _summary = self._compute_utilities_from_duties()
+        for ex in auto_rows:
+            new_rows.append({
+                "variable operating costs": ex["name"],
+                "units":              ex["units"],
+                "time basis":         ex["time_basis"],
+                "flowrate":           ex["flowrate"],
+                "price usd/units":    ex["price_usd_per_unit"],
+                "stream":             ex["stream"],
             })
         if new_rows:
             df_variable = pd.concat(

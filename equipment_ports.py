@@ -393,3 +393,156 @@ def turton_labor_cost(blocks, salary_per_op=TURTON_SALARY_USD_YR):
     res["labor_usd_yr"]  = res["n_total"] * salary_per_op
     return res
 
+
+# ======================================================
+# UTILIDADES (utilities) — coupling duty → opex_extras
+# ======================================================
+# Cada utility tiene:
+#   name      → nombre legible para df_variable
+#   units     → 'tm' o 'kWh'
+#   price     → USD/unit (mercado Perú 2024, estimaciones)
+#   delta_h   → kJ/kg de calor entregable o removible
+#               (heating: latente vapor / LHV fuel)
+#               (cooling: Cp × ΔT de circulación)
+#   type      → 'heating', 'cooling', 'electrical'
+#   T_range   → (T_min, T_max) °C donde la utility es aplicable
+#   efficiency→ eficiencia térmica del equipo que la usa
+#               (heaters/coolers ~1.0, hornos ~0.85, bombas ~0.65)
+
+UTILITIES = {
+    "steam_LP": {
+        "name":       "Steam LP (5 barg)",
+        "units":      "tm",
+        "price":      20.0,
+        "delta_h":    2200,   # kJ/kg latente a 160°C
+        "type":       "heating",
+        "T_range":    (50, 150),
+        "efficiency": 0.95,
+    },
+    "steam_MP": {
+        "name":       "Steam MP (11 barg)",
+        "units":      "tm",
+        "price":      25.0,
+        "delta_h":    2000,
+        "type":       "heating",
+        "T_range":    (140, 220),
+        "efficiency": 0.95,
+    },
+    "steam_HP": {
+        "name":       "Steam HP (40 barg)",
+        "units":      "tm",
+        "price":      28.0,
+        "delta_h":    1700,
+        "type":       "heating",
+        "T_range":    (200, 280),
+        "efficiency": 0.95,
+    },
+    "fuel_gas": {
+        "name":       "Fuel gas (natural)",
+        "units":      "tm",
+        "price":      300.0,
+        "delta_h":    50_000,  # LHV gas natural típico
+        "type":       "heating",
+        "T_range":    (250, 1200),
+        "efficiency": 0.85,    # horno típico ~85%
+    },
+    "cooling_water": {
+        "name":       "Cooling water",
+        "units":      "tm",
+        "price":      0.30,
+        "delta_h":    63.0,    # 4.18 kJ/kg·K × 15 °C ΔT típico
+        "type":       "cooling",
+        "T_range":    (35, 200),  # no enfría debajo de 35°C
+        "efficiency": 1.0,
+    },
+    "refrigeration": {
+        "name":       "Refrigerant",
+        "units":      "tm",
+        "price":      8.0,
+        "delta_h":    200,     # latente NH3 / freón
+        "type":       "cooling",
+        "T_range":    (-50, 35),
+        "efficiency": 0.7,
+    },
+    "electricity": {
+        "name":       "Electricity",
+        "units":      "kWh",
+        "price":      0.08,
+        "type":       "electrical",
+        "efficiency": 0.85,    # eficiencia eléctrica del motor + driver
+    },
+}
+
+
+# Equipos cuyo "duty" es POTENCIA ELÉCTRICA (kW eléctricos),
+# no calor térmico.  En estos el duty se convierte directamente
+# a kWh/año.
+ELECTRICAL_EQUIPMENT = {
+    "Pump — centrifugal", "Pump — positive displacement",
+    "Pump — reciprocating",
+    "Compressor — axial", "Compressor — centrifugal",
+    "Compressor — reciprocating", "Compressor — rotary",
+    "Fan — axial", "Fan — centrifugal radial",
+}
+
+
+def is_electrical_equipment(eq_type):
+    return eq_type in ELECTRICAL_EQUIPMENT
+
+
+def autoselect_heat_source(eq_type, duty_kw, T_avg):
+    """Elige la utility apropiada para un bloque dado su tipo,
+    duty (kW) y temperatura promedio del proceso (°C).
+
+    Returns:
+        clave de UTILITIES o '' si duty=0 (adiabático).
+    """
+    if duty_kw == 0:
+        return ""
+    if is_electrical_equipment(eq_type):
+        return "electricity"
+    if duty_kw > 0:
+        # heating: elegir steam según T del proceso (con ΔT mínimo
+        # de 20°C entre utility y proceso)
+        if T_avg < 120:
+            return "steam_LP"
+        if T_avg < 200:
+            return "steam_MP"
+        if T_avg < 260:
+            return "steam_HP"
+        return "fuel_gas"
+    # duty_kw < 0  → cooling
+    if T_avg > 35:
+        return "cooling_water"
+    return "refrigeration"
+
+
+def utility_consumption(util_key, duty_kw_abs):
+    """Calcula el consumo anual de una utility dado el duty absoluto
+    del bloque (kW) y la operación 8760 h/año (factor de servicio
+    se aplica fuera).
+
+    Returns:
+        consumo en las unidades de la utility (tm o kWh por año).
+    """
+    if util_key not in UTILITIES:
+        return 0.0
+    util = UTILITIES[util_key]
+    eff = util.get("efficiency", 1.0)
+    duty = abs(duty_kw_abs)
+
+    if util["type"] == "electrical":
+        # Q[kW] × 8760 h × (1/η) = kWh/año
+        # Para bombas/compresores la "duty" ya viene como potencia al eje;
+        # el motor agrega su η.
+        return duty * 8760.0 / eff
+
+    # heating o cooling: convertir kW térmicos a tm/año via ΔH_vap
+    SEC_PER_YEAR = 8760 * 3600
+    Q_kJ_per_year = duty * SEC_PER_YEAR              # kJ/año (kW · s = kJ)
+    delta_h = util.get("delta_h", 1.0)
+    mass_kg = Q_kJ_per_year / delta_h
+    if util["type"] == "heating":
+        mass_kg /= eff       # ineficiencia del horno/equipo
+    return mass_kg / 1000.0  # tm/año
+
