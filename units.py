@@ -1,39 +1,86 @@
 # ======================================================
-# LIBRERÍAS
+# UNITS — sistema de unidades físicas + validación
 # ======================================================
+# Internal SI bases per physical type:
+#   mass         -> tm     ;  price -> USD/tm
+#   energy       -> kJ     ;  price -> USD/kJ
+#   electricity  -> Wh     ;  price -> USD/Wh
+# Time internal base: year.
+# ======================================================
+
 from difflib import get_close_matches
 
 import pandas as pd
 
+
 # ======================================================
-# UNIDADES FÍSICAS SOPORTADAS
+# TABLA ÚNICA DE TIPOS FÍSICOS
+# ======================================================
+# Para cada tipo: la unidad interna (SI) y el factor que
+# convierte CADA alias a esa unidad interna.
+#
+#     unidad_interna = alias_value * factors_to_internal[alias]
+#
+# El factor de precio es 1/factor_de_flowrate (porque price
+# es por-unidad), por lo que se deriva — no se duplica.
 # ======================================================
 
-PHYSICAL_UNITS = {
+UNIT_TYPES = {
 
-    # MASS
-    "kg": "mass",
-    "tm": "mass",
-    "lb": "mass",
+    "mass": {
+        "internal": "tm",
+        "factors_to_internal": {
+            "kg": 0.001,
+            "tm": 1.0,
+            "lb": 0.000453592,
+        },
+    },
 
-    # MONEY
-    "usd": "money",
-    "mmusd": "money",
+    "energy": {
+        "internal": "kj",
+        "factors_to_internal": {
+            "kj": 1.0,
+            "mj": 1_000.0,
+            "gj": 1_000_000.0,
+        },
+    },
 
-    # ENERGY
-    "kj": "energy",
-    "mj": "energy",
-    "gj": "energy",
-
-    # ELECTRICITY
-    "wh": "electricity",
-    "kwh": "electricity",
-    "mwh": "electricity"
+    "electricity": {
+        "internal": "wh",
+        "factors_to_internal": {
+            "wh": 1.0,
+            "kwh": 1_000.0,
+            "mwh": 1_000_000.0,
+        },
+    },
 
 }
 
+
 # ======================================================
-# BASES DE TIEMPO SOPORTADAS
+# TABLAS DERIVADAS (no editar a mano)
+# ======================================================
+
+PHYSICAL_UNITS = {
+    alias: tipo
+    for tipo, spec in UNIT_TYPES.items()
+    for alias in spec["factors_to_internal"]
+}
+
+_FLOWRATE_FACTOR = {
+    alias: factor
+    for spec in UNIT_TYPES.values()
+    for alias, factor in spec["factors_to_internal"].items()
+}
+
+_PRICE_FACTOR = {
+    alias: 1.0 / factor
+    for alias, factor in _FLOWRATE_FACTOR.items()
+}
+
+
+# ======================================================
+# BASES DE TIEMPO
 # ======================================================
 
 TIME_ALIASES = {
@@ -43,156 +90,94 @@ TIME_ALIASES = {
     "yr": "year",
     "year": "year",
 
-    # DAY
-    "d": "day",
-    "day": "day",
-
     # MONTH
     "m": "month",
     "month": "month",
 
+    # DAY
+    "d": "day",
+    "day": "day",
+
     # HOUR
     "h": "hour",
     "hr": "hour",
-    "hour": "hour"
+    "hour": "hour",
 
+}
+
+# Cuántas unidades-tiempo entran en 1 año.
+TIME_PER_YEAR = {
+    "year":   1,
+    "month":  12,
+    "day":    365,
+    "hour":   8760,
 }
 
 
 # ======================================================
-# FACTORES DE CONVERSIÓN DE MASA
-# BASE INTERNA = TM
+# LOOKUP HELPERS
 # ======================================================
 
-MASS_CONVERSIONS = {
+def _norm(texto):
+    return str(texto).strip().lower()
 
-    "kg": 0.001,
-    "tm": 1.0,
-    "lb": 0.000453592
-
-}
-# ======================================================
-# FACTORES DE PRECIO
-# BASE INTERNA:
-# USD/kg
-# ======================================================
-
-# ======================================================
-# FACTORES DE PRECIO
-#
-# MASS         -> USD/kg
-# ENERGY       -> USD/kJ
-# ELECTRICITY  -> USD/Wh
-# ======================================================
-
-PRICE_CONVERSIONS = {
-
-    # MASS
-    "kg": 1000.0,
-    "tm": 1.0,
-    "lb": 2204.62,
-
-    # ENERGY
-    "kj": 1.0,
-    "mj": 1 / 1000,
-    "gj": 1 / 1_000_000,
-
-    # ELECTRICITY
-    "wh": 1.0,
-    "kwh": 1 / 1000,
-    "mwh": 1 / 1_000_000
-
-}
-
-# ======================================================
-# FACTORES DE CONVERSIÓN DE TIEMPO
-# BASE INTERNA = year
-# ======================================================
-
-TIME_CONVERSIONS = {
-
-    "hour": 8760,
-
-    "day": 365,
-
-    "month": 12,
-
-    "year": 1
-
-}
-
-# ======================================================
-# FACTORES DE CONVERSIÓN DE MASA
-# BASE INTERNA = TM
-# ======================================================
-
-MASS_FACTORS = {
-
-    "kg": 0.001,
-    "tm": 1.0,
-    "lb": 0.000453592
-
-}
-
-# ======================================================
-# FACTORES DE TIEMPO
-# BASE INTERNA = year
-# ======================================================
-
-TIME_FACTORS = {
-
-    "hour": 8760,
-    "day": 365,
-    "month": 12,
-    "year": 1
-
-}
-
-# ======================================================
-# IDENTIFICAR TIPO DE UNIDAD
-# ======================================================
 
 def ObtenerTipoUnidad(unidad):
+    """Devuelve 'mass' | 'energy' | 'electricity' para el
+    alias dado.  KeyError si no es válido."""
+    return PHYSICAL_UNITS[_norm(unidad)]
 
-    unidad = unidad.strip().lower()
-
-    return PHYSICAL_UNITS[unidad]
-
-# ======================================================
-# VALIDAR UNIDAD FÍSICA
-# ======================================================
 
 def EsUnidadFisicaValida(unidad):
+    return _norm(unidad) in PHYSICAL_UNITS
 
-    return unidad in PHYSICAL_UNITS
-
-# ======================================================
-# VALIDAR BASE TEMPORAL
-# ======================================================
 
 def EsUnidadTiempoValida(unidad_tiempo):
+    return _norm(unidad_tiempo) in TIME_ALIASES
 
-    return unidad_tiempo in TIME_ALIASES
-
-# ======================================================
 
 def SugerirTimeBasis(unidad_tiempo):
-
+    """Sugiere la time basis más cercana a un input typo'd.
+    Devuelve None si no hay match decente."""
     sugerencia = get_close_matches(
-        unidad_tiempo,
+        _norm(unidad_tiempo),
         TIME_ALIASES.keys(),
         n=1,
-        cutoff=0.6
+        cutoff=0.6,
     )
+    return sugerencia[0] if sugerencia else None
 
-    if sugerencia:
-        return sugerencia[0]
 
-    return None
+def SugerirUnidadFisica(unidad):
+    """Sugiere unidad física cercana.  None si no hay
+    match."""
+    sugerencia = get_close_matches(
+        _norm(unidad),
+        PHYSICAL_UNITS.keys(),
+        n=1,
+        cutoff=0.6,
+    )
+    return sugerencia[0] if sugerencia else None
+
 
 # ======================================================
-# VALIDAR DATAFRAME
+# VALIDACIÓN DEL DATAFRAME DE INPUTS
 # ======================================================
+
+def _make_error(codigo, mensaje, nombre_tabla, fila, variable, valor):
+    return {
+        "codigo":   codigo,
+        "mensaje":  mensaje,
+        "tabla":    nombre_tabla,
+        "fila":     fila,
+        "variable": variable,
+        "valor":    valor,
+    }
+
+
+def _es_vacio(valor):
+    return pd.isna(valor) or str(valor).strip() == ""
+
 
 def ValidarUnidadesDataframe(
         dataframe,
@@ -201,497 +186,127 @@ def ValidarUnidadesDataframe(
         columna_tiempo,
         columna_flowrate,
         columna_price,
-        nombre_tabla
+        nombre_tabla,
 ):
+    """Recorre el dataframe y devuelve lista de errores.
+
+    Códigos:
+        UNIT-001  missing physical unit
+        UNIT-002  unknown physical unit
+        TIME-001  missing time basis
+        TIME-002  unknown time basis
+        NUM-001   missing flowrate
+        NUM-002   negative flowrate
+        NUM-003   non-numeric flowrate
+        MONEY-001 missing price
+        MONEY-002 negative price
+        MONEY-003 non-numeric price
+    """
 
     errores = []
 
     for indice, fila in dataframe.iterrows():
 
-        # ==================================================
-        # LEER FILA
-        # ==================================================
+        variable    = str(fila[columna_variable]).strip()
+        unidad_raw  = fila[columna_unidad]
+        tiempo_raw  = fila[columna_tiempo]
+        flowrate    = fila[columna_flowrate]
+        price       = fila[columna_price]
 
-        variable = str(
-            fila[columna_variable]
-        ).strip()
+        fila_num = indice + 1
 
-        unidad_raw = fila[columna_unidad]
-        tiempo_raw = fila[columna_tiempo]
-
-        unidad_vacia = (
-            pd.isna(unidad_raw)
-            or str(unidad_raw).strip() == ""
-        )
-
-        tiempo_vacio = (
-            pd.isna(tiempo_raw)
-            or str(tiempo_raw).strip() == ""
-        )
-
-        unidad = (
-            ""
-            if unidad_vacia
-            else str(unidad_raw).strip().lower()
-        )
-
-        tiempo = (
-            ""
-            if tiempo_vacio
-            else str(tiempo_raw).strip().lower()
-        )
-
-        flowrate = fila[columna_flowrate]
-
-        price = fila[columna_price]
-
-        # ==================================================
-        # UNIT-001
-        # UNIDAD VACÍA
-        # ==================================================
-
-        if unidad_vacia:
-
-            errores.append({
-
-                "codigo": "UNIT-001",
-
-                "mensaje": "Missing physical unit",
-
-                "tabla": nombre_tabla,
-
-                "fila": indice + 1,
-
-                "variable": variable,
-
-                "valor": unidad,
-
-            })
-
-        # ==================================================
-        # UNIT-002
-        # UNIDAD DESCONOCIDA
-        # ==================================================
-
-        elif not EsUnidadFisicaValida(unidad):
-
-            errores.append({
-
-                "codigo": "UNIT-002",
-
-                "mensaje": "Unknown physical unit",
-
-                "tabla": nombre_tabla,
-
-                "fila": indice + 1,
-
-                "variable": variable,
-
-                "valor": unidad,
-
-            })
-
-        # ==================================================
-        # TIME-001
-        # TIME BASIS VACÍO
-        # ==================================================
-
-        if tiempo_vacio:
-
-            errores.append({
-
-                "codigo": "TIME-001",
-
-                "mensaje": "Missing time basis",
-
-                "tabla": nombre_tabla,
-
-                "fila": indice + 1,
-
-                "variable": variable,
-
-                "valor": tiempo,
-
-            })
-
-        # ==================================================
-        # TIME-002
-        # TIME BASIS DESCONOCIDO
-        # ==================================================
-
-        elif not EsUnidadTiempoValida(tiempo):
-
-            errores.append({
-
-                "codigo": "TIME-002",
-
-                "mensaje": "Unknown time basis",
-
-                "tabla": nombre_tabla,
-
-                "fila": indice + 1,
-
-                "variable": variable,
-
-                "valor": tiempo,
-
-
-            })
-
+        # ---- UNIDAD FÍSICA --------------------------------
+        if _es_vacio(unidad_raw):
+            errores.append(_make_error(
+                "UNIT-001", "Missing physical unit",
+                nombre_tabla, fila_num, variable, "",
+            ))
         else:
+            unidad = _norm(unidad_raw)
+            if not EsUnidadFisicaValida(unidad):
+                errores.append(_make_error(
+                    "UNIT-002", "Unknown physical unit",
+                    nombre_tabla, fila_num, variable, unidad,
+                ))
 
-            tiempo_normalizado = TIME_ALIASES[tiempo]
-
-        # ==================================================
-        # NUM-001
-        # FLOWRATE VACÍO
-        # ==================================================
-
-        if pd.isna(flowrate) or str(flowrate).strip() == "":
-
-            errores.append({
-
-                "codigo": "NUM-001",
-
-                "mensaje": "Missing flowrate",
-
-                "tabla": nombre_tabla,
-
-                "fila": indice + 1,
-
-                "variable": variable,
-
-                "valor": flowrate,
-
-            })
-
+        # ---- TIME BASIS -----------------------------------
+        if _es_vacio(tiempo_raw):
+            errores.append(_make_error(
+                "TIME-001", "Missing time basis",
+                nombre_tabla, fila_num, variable, "",
+            ))
         else:
+            tiempo = _norm(tiempo_raw)
+            if not EsUnidadTiempoValida(tiempo):
+                errores.append(_make_error(
+                    "TIME-002", "Unknown time basis",
+                    nombre_tabla, fila_num, variable, tiempo,
+                ))
 
+        # ---- FLOWRATE -------------------------------------
+        if _es_vacio(flowrate):
+            errores.append(_make_error(
+                "NUM-001", "Missing flowrate",
+                nombre_tabla, fila_num, variable, flowrate,
+            ))
+        else:
             try:
-
-                flowrate_num = float(flowrate)
-
-                # ==========================================
-                # NUM-002
-                # FLOWRATE NEGATIVO
-                # ==========================================
-
-                if flowrate_num < 0:
-
-                    errores.append({
-
-                        "codigo": "NUM-002",
-
-                        "mensaje": "Negative flowrate",
-
-                        "tabla": nombre_tabla,
-
-                        "fila": indice + 1,
-
-                        "variable": variable,
-
-                        "valor": flowrate,
-
-                    })
-
+                if float(flowrate) < 0:
+                    errores.append(_make_error(
+                        "NUM-002", "Negative flowrate",
+                        nombre_tabla, fila_num, variable, flowrate,
+                    ))
             except (ValueError, TypeError):
+                errores.append(_make_error(
+                    "NUM-003", "Non-numeric flowrate",
+                    nombre_tabla, fila_num, variable, flowrate,
+                ))
 
-                # ==========================================
-                # NUM-003
-                # FLOWRATE NO NUMÉRICO
-                # ==========================================
-
-                errores.append({
-
-                    "codigo": "NUM-003",
-
-                    "mensaje": "Non-numeric flowrate",
-
-                    "tabla": nombre_tabla,
-
-                    "fila": indice + 1,
-
-                    "variable": variable,
-
-                    "valor": flowrate,
-
-                })
-
-        # ==================================================
-        # MONEY-001
-        # PRECIO VACÍO
-        # ==================================================
-
-        if pd.isna(price) or str(price).strip() == "":
-
-            errores.append({
-
-                "codigo": "MONEY-001",
-
-                "mensaje": "Missing price",
-
-                "tabla": nombre_tabla,
-
-                "fila": indice + 1,
-
-                "variable": variable,
-
-                "valor": price,
-
-            })
-
+        # ---- PRICE ----------------------------------------
+        if _es_vacio(price):
+            errores.append(_make_error(
+                "MONEY-001", "Missing price",
+                nombre_tabla, fila_num, variable, price,
+            ))
         else:
-
             try:
-
-                price_num = float(price)
-
-                # ==========================================
-                # MONEY-002
-                # PRECIO NEGATIVO
-                # ==========================================
-
-                if price_num < 0:
-
-                    errores.append({
-
-                        "codigo": "MONEY-002",
-
-                        "mensaje": "Negative price",
-
-                        "tabla": nombre_tabla,
-
-                        "fila": indice + 1,
-
-                        "variable": variable,
-
-                        "valor": price,
-
-                    })
-
+                if float(price) < 0:
+                    errores.append(_make_error(
+                        "MONEY-002", "Negative price",
+                        nombre_tabla, fila_num, variable, price,
+                    ))
             except (ValueError, TypeError):
-
-                # ==========================================
-                # MONEY-003
-                # PRECIO NO NUMÉRICO
-                # ==========================================
-
-                errores.append({
-
-                    "codigo": "MONEY-003",
-
-                    "mensaje": "Non-numeric price",
-
-                    "tabla": nombre_tabla,
-
-                    "fila": indice + 1,
-
-                    "variable": variable,
-
-                    "valor": price,
-
-                })
+                errores.append(_make_error(
+                    "MONEY-003", "Non-numeric price",
+                    nombre_tabla, fila_num, variable, price,
+                ))
 
     return errores
 
-# ======================================================
-# NORMALIZAR FLOWRATE
-# BASE INTERNA:
-#
-# MASS         -> kg/year
-# ENERGY       -> kJ/year
-# ELECTRICITY  -> Wh/year
-# ======================================================
-
-def NormalizarFlowrate(
-        flowrate,
-        unidad,
-        tiempo
-):
-
-    # ----------------------------------------------
-    # NORMALIZAR TEXTO
-    # ----------------------------------------------
-
-    unidad = unidad.strip().lower()
-
-    tiempo = tiempo.strip().lower()
-
-    tiempo = TIME_ALIASES[tiempo]
-
-    # ----------------------------------------------
-    # TIPO DE UNIDAD
-    # ----------------------------------------------
-
-    tipo = ObtenerTipoUnidad(unidad)
-
-    # ----------------------------------------------
-    # FACTOR TIEMPO
-    # ----------------------------------------------
-
-    factor_tiempo = TIME_CONVERSIONS[tiempo]
-
-    valor = float(flowrate)
-
-    # ----------------------------------------------
-    # MASS
-    # ----------------------------------------------
-
-    if tipo == "mass":
-
-        factor = MASS_CONVERSIONS[unidad]
-
-        return valor * factor * factor_tiempo
-
-    # ----------------------------------------------
-    # ENERGY
-    # BASE = kJ/year
-    # ----------------------------------------------
-
-    elif tipo == "energy":
-
-        ENERGY_CONVERSIONS = {
-
-            "kj": 1.0,
-            "mj": 1000.0,
-            "gj": 1_000_000.0
-
-        }
-
-        factor = ENERGY_CONVERSIONS[unidad]
-
-        return valor * factor * factor_tiempo
-
-    # ----------------------------------------------
-    # ELECTRICITY
-    # BASE = Wh/year
-    # ----------------------------------------------
-
-    elif tipo == "electricity":
-
-        ELECTRICITY_CONVERSIONS = {
-
-            "wh": 1.0,
-            "kwh": 1000.0,
-            "mwh": 1_000_000.0
-
-        }
-
-        factor = ELECTRICITY_CONVERSIONS[unidad]
-
-        return valor * factor * factor_tiempo
-
-    # ----------------------------------------------
-    # ERROR
-    # ----------------------------------------------
-
-    raise ValueError(
-        f"Unsupported unit type: {unidad}"
-    )
-
 
 # ======================================================
-
-def NormalizarPrecio(
-        price,
-        unidad
-):
-
-    # ----------------------------------------------
-    # NORMALIZAR TEXTO
-    # ----------------------------------------------
-
-    unidad = unidad.strip().lower()
-
-    # ----------------------------------------------
-    # FACTOR
-    # ----------------------------------------------
-
-    factor_precio = PRICE_CONVERSIONS[unidad]
-
-    # ----------------------------------------------
-    # CONVERSIÓN
-    # ----------------------------------------------
-
-    price_normalizado = (
-        float(price)
-        * factor_precio
-    )
-
-    return price_normalizado
-
-# ======================================================
-# CONVERTIR FLOWRATE A UNIDAD VISUAL
+# CONVERSIONES
 # ======================================================
 
-def ConvertirFlowrateVisible(
-        flowrate_si,
-        unidad,
-        tiempo
-):
+def NormalizarFlowrate(flowrate, unidad, tiempo):
+    """Convierte un flowrate (valor + unidad + base
+    temporal) a la base interna del tipo físico, por año."""
+    unidad = _norm(unidad)
+    tiempo = TIME_ALIASES[_norm(tiempo)]
+    return float(flowrate) * _FLOWRATE_FACTOR[unidad] * TIME_PER_YEAR[tiempo]
 
-    unidad = unidad.strip().lower()
 
-    tiempo = tiempo.strip().lower()
+def NormalizarPrecio(price, unidad):
+    """Convierte un precio USD/<unidad> a USD/<unidad
+    interna del tipo físico>.  El factor temporal NO
+    interviene porque price ya es por unidad de cantidad."""
+    return float(price) * _PRICE_FACTOR[_norm(unidad)]
 
-    tiempo = TIME_ALIASES[tiempo]
 
-    tipo = ObtenerTipoUnidad(unidad)
-
-    factor_tiempo = TIME_CONVERSIONS[tiempo]
-
-    # ==============================================
-    # MASS
-    # ==============================================
-
-    if tipo == "mass":
-
-        factor = MASS_CONVERSIONS[unidad]
-
-        return flowrate_si / (
-            factor * factor_tiempo
-        )
-
-    # ==============================================
-    # ENERGY
-    # ==============================================
-
-    elif tipo == "energy":
-
-        ENERGY_CONVERSIONS = {
-
-            "kj": 1.0,
-            "mj": 1000.0,
-            "gj": 1_000_000.0
-
-        }
-
-        factor = ENERGY_CONVERSIONS[unidad]
-
-        return flowrate_si / (
-            factor * factor_tiempo
-        )
-
-    # ==============================================
-    # ELECTRICITY
-    # ==============================================
-
-    elif tipo == "electricity":
-
-        ELECTRICITY_CONVERSIONS = {
-
-            "wh": 1.0,
-            "kwh": 1000.0,
-            "mwh": 1_000_000.0
-
-        }
-
-        factor = ELECTRICITY_CONVERSIONS[unidad]
-
-        return flowrate_si / (
-            factor * factor_tiempo
-        )
-
-    raise ValueError(
-        f"Unsupported unit: {unidad}"
-    )
+def ConvertirFlowrateVisible(flowrate_si, unidad, tiempo):
+    """Inversa de NormalizarFlowrate: parte de la base
+    interna por año y devuelve el flowrate en (unidad,
+    time basis)."""
+    unidad = _norm(unidad)
+    tiempo = TIME_ALIASES[_norm(tiempo)]
+    return flowrate_si / (_FLOWRATE_FACTOR[unidad] * TIME_PER_YEAR[tiempo])

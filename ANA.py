@@ -93,14 +93,10 @@ class ModelEngine:
 
 
 # ======================================================
-# ENGINE GLOBAL
+# ENGINE GLOBAL + DATAFRAMES DE PROYECTO
 # ======================================================
 
 engine = ModelEngine()
-
-# ======================================================
-# VARIABLES GLOBALES
-# ======================================================
 
 df_capital = pd.DataFrame()
 df_fixed = pd.DataFrame()
@@ -150,7 +146,6 @@ def ImportarProyecto():
     global df_capital
     global df_fixed
     global df_variable
-    global df_variable_internal
 
     archivo = filedialog.askopenfilename(
         title="Import Project",
@@ -397,97 +392,7 @@ def ImportarProyecto():
                 mensaje
             )
 
-            print("\nENGINE UPDATED AFTER IMPORT:\n")
-            print(engine.df_internal)
-
             return
-
-        # ==================================================
-        # NORMALIZAR DATA
-        # ==================================================
-
-        flowrates_normalizados = []
-        prices_normalizados = []
-        tiempos_normalizados = []
-
-        for _, fila in df_variable.iterrows():
-
-            # ----------------------------------------------
-            # FLOWRATE
-            # ----------------------------------------------
-
-            flowrate_si = NormalizarFlowrate(
-
-                flowrate=fila["flowrate"],
-
-                unidad=fila["units"],
-
-                tiempo=fila["time basis"]
-
-            )
-
-            flowrates_normalizados.append(
-                flowrate_si
-            )
-
-            # ----------------------------------------------
-            # PRICE
-            # ----------------------------------------------
-
-            price_si = NormalizarPrecio(
-
-                price=fila["price usd/units"],
-
-                unidad=fila["units"]
-
-            )
-
-            prices_normalizados.append(
-                price_si
-            )
-
-            # ----------------------------------------------
-            # TIME
-            # ----------------------------------------------
-
-            tiempo_si = TIME_ALIASES[
-                str(
-                    fila["time basis"]
-                ).strip().lower()
-            ]
-
-            tiempos_normalizados.append(
-                tiempo_si
-            )
-
-        # ==================================================
-        # WORKSPACE INTERNO
-        # ==================================================
-
-        df_variable_internal = pd.DataFrame({
-
-            "Variable":
-                df_variable[
-                    "variable operating costs"
-                ],
-
-            "Flowrate SI":
-                flowrates_normalizados,
-
-            "Price SI":
-                prices_normalizados,
-
-            "Time SI":
-                tiempos_normalizados,
-
-            "Stream":
-                df_variable["stream"]
-
-        })
-
-        engine.load(df_variable)
-        print(df_variable_internal)
-
 
         # ==================================================
         # CONSOLA
@@ -527,7 +432,7 @@ def ImportarProyecto():
 
         ConsolaResultados.insert(
             END,
-            f"Workspace Rows     : {len(df_variable_internal)}\n"
+            f"Workspace Rows     : {len(engine.df_internal)}\n"
         )
 
         ConsolaResultados.config(state="disabled")
