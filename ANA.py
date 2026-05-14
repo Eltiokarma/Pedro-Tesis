@@ -29,6 +29,8 @@ from pipeline import ejecutar_analisis, ejecutar_montecarlo, construir_data_y_pa
 
 from mc_ui import AbrirVentanaConfigMC, AbrirVentanaResultadosMC
 
+from capital_ui import AbrirVentanaEstimateISBL
+
 # ======================================================
 # ENGINE CENTRAL (SINGLE SOURCE OF TRUTH)
 # ======================================================
@@ -1664,6 +1666,41 @@ menubar.add_cascade(
 menuData.add_command(
     label='View Project Data',
     command=VentanaVisualizarData
+)
+
+# ------------------------------------------------------
+# TOOLS
+# ------------------------------------------------------
+
+def LanzarEstimateISBL():
+    """Abre la ventana 'Estimate ISBL from Equipment List'.
+    Requiere que ya esté cargado df_capital con los % de
+    OSBL/ENG/CONT para poder despejar ISBL implícito."""
+
+    if df_capital.empty:
+        messagebox.showerror(
+            "No project",
+            "Import a project first (File > Import Project)."
+        )
+        return
+
+    def OnApply():
+        ConsolaResultados.config(state="normal")
+        ConsolaResultados.insert(
+            END,
+            f"\nISBL updated from equipment list: "
+            f"{float(df_capital.iat[0, 2]):.2f} MM USD\n"
+        )
+        ConsolaResultados.config(state="disabled")
+
+    AbrirVentanaEstimateISBL(raiz, df_capital, on_apply=OnApply)
+
+
+menuTools = Menu(menubar, tearoff=0)
+menubar.add_cascade(label='Tools', menu=menuTools)
+menuTools.add_command(
+    label='Estimate Capital from Equipment List (Turton / Lang)…',
+    command=LanzarEstimateISBL,
 )
 
 menuHelp = Menu(
