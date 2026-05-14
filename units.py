@@ -1,6 +1,8 @@
 # ======================================================
 # LIBRERÍAS
 # ======================================================
+from difflib import get_close_matches
+
 import pandas as pd
 
 # ======================================================
@@ -178,7 +180,7 @@ def SugerirTimeBasis(unidad_tiempo):
 
     sugerencia = get_close_matches(
         unidad_tiempo,
-        TIME_UNITS,
+        TIME_ALIASES.keys(),
         n=1,
         cutoff=0.6
     )
@@ -214,13 +216,30 @@ def ValidarUnidadesDataframe(
             fila[columna_variable]
         ).strip()
 
-        unidad = str(
-            fila[columna_unidad]
-        ).strip().lower()
+        unidad_raw = fila[columna_unidad]
+        tiempo_raw = fila[columna_tiempo]
 
-        tiempo = str(
-            fila[columna_tiempo]
-        ).strip().lower()
+        unidad_vacia = (
+            pd.isna(unidad_raw)
+            or str(unidad_raw).strip() == ""
+        )
+
+        tiempo_vacio = (
+            pd.isna(tiempo_raw)
+            or str(tiempo_raw).strip() == ""
+        )
+
+        unidad = (
+            ""
+            if unidad_vacia
+            else str(unidad_raw).strip().lower()
+        )
+
+        tiempo = (
+            ""
+            if tiempo_vacio
+            else str(tiempo_raw).strip().lower()
+        )
 
         flowrate = fila[columna_flowrate]
 
@@ -231,7 +250,7 @@ def ValidarUnidadesDataframe(
         # UNIDAD VACÍA
         # ==================================================
 
-        if pd.isna(unidad) or unidad == "":
+        if unidad_vacia:
 
             errores.append({
 
@@ -277,7 +296,7 @@ def ValidarUnidadesDataframe(
         # TIME BASIS VACÍO
         # ==================================================
 
-        if pd.isna(tiempo) or tiempo == "":
+        if tiempo_vacio:
 
             errores.append({
 
@@ -375,7 +394,7 @@ def ValidarUnidadesDataframe(
 
                     })
 
-            except:
+            except (ValueError, TypeError):
 
                 # ==========================================
                 # NUM-003
@@ -450,7 +469,7 @@ def ValidarUnidadesDataframe(
 
                     })
 
-            except:
+            except (ValueError, TypeError):
 
                 # ==========================================
                 # MONEY-003

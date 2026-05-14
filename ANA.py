@@ -834,7 +834,7 @@ def VentanaVisualizarData():
             try:
                 float(texto)
                 return True
-            except:
+            except (ValueError, TypeError):
                 return False
 
         validacion = (
@@ -960,7 +960,7 @@ def VentanaVisualizarData():
 
             try:
                 editor_activo.destroy()
-            except:
+            except TclError:
                 pass
 
             editor_activo = None
@@ -1251,7 +1251,7 @@ def VentanaVisualizarData():
                     float(texto)
                     return True
 
-                except:
+                except (ValueError, TypeError):
                     return False
 
 
@@ -1278,7 +1278,7 @@ def VentanaVisualizarData():
 
                 try:
                     nuevo_valor = float(nuevo_valor)
-                except:
+                except (ValueError, TypeError):
                     messagebox.showerror("Invalid Value", "Only numeric values allowed.")
                     return
 
@@ -1310,7 +1310,7 @@ def VentanaVisualizarData():
 
             try:
                 editor_activo.destroy()
-            except:
+            except TclError:
                 pass
 
         editor_activo = None
@@ -1355,7 +1355,7 @@ def VentanaVisualizarData():
 
             try:
                 editor_activo.destroy()
-            except:
+            except TclError:
                 pass
 
             editor_activo = None
