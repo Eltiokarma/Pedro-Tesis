@@ -38,7 +38,8 @@ def main():
             root.after(100, editor.zoom_fit)   # tras layout inicial
             editor._update_status()
         except Exception as e:
-            messagebox.showerror("Open failed", f"{type(e).__name__}: {e}")
+            messagebox.showerror("Falló la apertura",
+                                 f"{type(e).__name__}: {e}")
 
     root.mainloop()
 

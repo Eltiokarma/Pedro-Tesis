@@ -63,6 +63,7 @@ from tkinter import filedialog
 from tkinter import simpledialog
 
 import equipment_costs as eq
+import equipment_ports as ep
 
 
 # ======================================================
@@ -122,6 +123,8 @@ class Stream:
     dst:       int               # id del bloque destino
     mass_flow: float = 0.0       # tm/year (signo +)
     role:      str = "internal"  # "internal" | "feed" | "product"
+    src_port:  str = ""          # nombre del puerto en src; "" = autoselect
+    dst_port:  str = ""          # nombre del puerto en dst; "" = autoselect
 
     canvas_line:  Optional[int] = field(default=None, repr=False)
     canvas_label: Optional[int] = field(default=None, repr=False)
@@ -178,7 +181,7 @@ class Flowsheet:
 # ======================================================
 
 class BlockEditDialog:
-    """Modal para editar S, n y nombre del bloque."""
+    """Editor del equipo: tag ISA, tamaño S, n unidades en paralelo."""
 
     def __init__(self, parent, block):
         self.parent = parent
@@ -186,8 +189,8 @@ class BlockEditDialog:
         self.result = None
 
         dlg = Toplevel(parent)
-        dlg.title(f"Edit block — {block.name}")
-        dlg.geometry("360x260+300+200")
+        dlg.title(f"Editar equipo — {block.name}")
+        dlg.geometry("380x280+300+200")
         dlg.transient(parent)
         dlg.grab_set()
         self.dlg = dlg
@@ -197,13 +200,13 @@ class BlockEditDialog:
         frm = ttk.Frame(dlg, padding=14)
         frm.pack(fill=BOTH, expand=True)
 
-        ttk.Label(frm, text="Block ID:").grid(row=0, column=0, sticky=W, pady=4)
+        ttk.Label(frm, text="Tag ISA:").grid(row=0, column=0, sticky=W, pady=4)
         ttk.Label(frm, text=block.name, foreground="#555").grid(row=0, column=1, sticky=W, pady=4)
 
-        ttk.Label(frm, text="Equipment type:").grid(row=1, column=0, sticky=W, pady=4)
+        ttk.Label(frm, text="Tipo de equipo:").grid(row=1, column=0, sticky=W, pady=4)
         ttk.Label(frm, text=block.eq_type, foreground="#555").grid(row=1, column=1, sticky=W, pady=4)
 
-        ttk.Label(frm, text=f"Size S ({spec.get('S_unit', '?')}) *:").grid(row=2, column=0, sticky=W, pady=4)
+        ttk.Label(frm, text=f"Tamaño S ({spec.get('S_unit', '?')}) *:").grid(row=2, column=0, sticky=W, pady=4)
         self.entry_s = ttk.Entry(frm, justify="right", width=14)
         self.entry_s.insert(0, f"{block.S:g}")
         self.entry_s.grid(row=2, column=1, sticky=W, pady=4)
@@ -213,26 +216,25 @@ class BlockEditDialog:
         if s_min is not None and s_max is not None:
             ttk.Label(
                 frm,
-                text=f"Turton valid range: [{s_min:g} – {s_max:g}] {spec.get('S_unit', '')}",
+                text=f"Rango válido (Turton): [{s_min:g} – {s_max:g}] {spec.get('S_unit', '')}",
                 foreground="#888",
                 font=("Segoe UI", 8),
             ).grid(row=3, column=0, columnspan=2, sticky=W, pady=(0, 6))
 
-        ttk.Label(frm, text="N° units in parallel:").grid(row=4, column=0, sticky=W, pady=4)
+        ttk.Label(frm, text="N° unidades en paralelo:").grid(row=4, column=0, sticky=W, pady=4)
         self.entry_n = ttk.Entry(frm, justify="right", width=14)
         self.entry_n.insert(0, str(block.n))
         self.entry_n.grid(row=4, column=1, sticky=W, pady=4)
 
-        ttk.Label(frm, text="Custom name:").grid(row=5, column=0, sticky=W, pady=4)
+        ttk.Label(frm, text="Nombre personalizado:").grid(row=5, column=0, sticky=W, pady=4)
         self.entry_name = ttk.Entry(frm, width=22)
         self.entry_name.insert(0, block.name)
         self.entry_name.grid(row=5, column=1, sticky=W, pady=4)
 
-        # buttons
         btns = ttk.Frame(frm)
         btns.grid(row=6, column=0, columnspan=2, pady=(10, 0), sticky=E)
-        ttk.Button(btns, text="Cancel", command=dlg.destroy).pack(side=LEFT, padx=4)
-        ttk.Button(btns, text="OK",     command=self._ok).pack(side=LEFT)
+        ttk.Button(btns, text="Cancelar", command=dlg.destroy).pack(side=LEFT, padx=4)
+        ttk.Button(btns, text="OK",       command=self._ok).pack(side=LEFT)
 
         self.entry_s.focus()
         dlg.wait_window()
@@ -244,7 +246,7 @@ class BlockEditDialog:
             if S <= 0 or n < 1:
                 raise ValueError
         except ValueError:
-            messagebox.showerror("Invalid", "S > 0 y n ≥ 1 son requeridos.")
+            messagebox.showerror("Inválido", "Se requiere S > 0 y n ≥ 1.")
             return
         nombre = self.entry_name.get().strip() or self.block.name
         self.block.S = S
@@ -255,35 +257,44 @@ class BlockEditDialog:
 
 
 class StreamEditDialog:
-    """Modal para editar mass flow + role del stream."""
+    """Editor de la corriente: nombre, flujo, rol, puertos src/dst."""
 
     def __init__(self, parent, stream, fs):
+        import equipment_ports as ep_mod  # local para evitar shadowing
         self.stream = stream
         self.result = None
         self.fs = fs
 
         dlg = Toplevel(parent)
-        dlg.title(f"Edit stream — {stream.name}")
-        dlg.geometry("400x270+320+220")
+        dlg.title(f"Editar corriente — {stream.name}")
+        dlg.geometry("440x420+320+200")
         dlg.transient(parent)
         dlg.grab_set()
         self.dlg = dlg
 
-        src = fs.blocks[stream.src].name
-        dst = fs.blocks[stream.dst].name
+        b_src = fs.blocks[stream.src]
+        b_dst = fs.blocks[stream.dst]
+        ports_src = list(ep_mod.get_ports(b_src.eq_type).keys())
+        ports_dst = list(ep_mod.get_ports(b_dst.eq_type).keys())
 
         frm = ttk.Frame(dlg, padding=14)
         frm.pack(fill=BOTH, expand=True)
 
-        ttk.Label(frm, text=f"Stream {stream.name}").grid(row=0, column=0, columnspan=2, sticky=W, pady=4)
-        ttk.Label(frm, text=f"{src}  →  {dst}", foreground="#555").grid(row=1, column=0, columnspan=2, sticky=W, pady=4)
+        ttk.Label(frm, text=f"Corriente {stream.name}",
+                  font=("Segoe UI", 10, "bold")).grid(
+            row=0, column=0, columnspan=2, sticky=W, pady=4)
+        ttk.Label(frm, text=f"{b_src.name}  →  {b_dst.name}",
+                  foreground="#555").grid(
+            row=1, column=0, columnspan=2, sticky=W, pady=2)
 
-        ttk.Label(frm, text="Mass flow (tm/yr):").grid(row=2, column=0, sticky=W, pady=8)
+        # ---- flujo másico ----
+        ttk.Label(frm, text="Flujo másico (tm/año):").grid(row=2, column=0, sticky=W, pady=8)
         self.entry_m = ttk.Entry(frm, justify="right", width=14)
         self.entry_m.insert(0, f"{stream.mass_flow:g}")
         self.entry_m.grid(row=2, column=1, sticky=W, pady=8)
 
-        ttk.Label(frm, text="Role:").grid(row=3, column=0, sticky=W, pady=8)
+        # ---- rol ----
+        ttk.Label(frm, text="Rol:").grid(row=3, column=0, sticky=W, pady=8)
         self.role_var = StringVar(value=stream.role)
         self.role_combo = ttk.Combobox(
             frm, textvariable=self.role_var,
@@ -294,21 +305,46 @@ class StreamEditDialog:
 
         ttk.Label(
             frm,
-            text="feed: materia prima externa (alimenta costos variables)\n"
-                 "product: producto final (alimenta producción anual)\n"
-                 "internal: stream entre bloques (mass balance)",
+            text="feed:     materia prima externa (alimenta costos variables)\n"
+                 "product:  producto final (alimenta producción anual)\n"
+                 "internal: corriente entre bloques (balance de masa)",
             foreground="#888", font=("Segoe UI", 8), justify="left",
         ).grid(row=4, column=0, columnspan=2, sticky=W, pady=(0, 6))
 
-        ttk.Label(frm, text="Custom name:").grid(row=5, column=0, sticky=W, pady=4)
+        # ---- puertos ISA ----
+        ttk.Separator(frm, orient=HORIZONTAL).grid(
+            row=5, column=0, columnspan=2, sticky="ew", pady=8)
+
+        ttk.Label(frm, text=f"Puerto en {b_src.name}:").grid(row=6, column=0, sticky=W, pady=4)
+        self.src_port_var = StringVar(value=stream.src_port or (ports_src[0] if ports_src else ""))
+        self.src_port_combo = ttk.Combobox(
+            frm, textvariable=self.src_port_var,
+            values=ports_src, state="readonly", width=22,
+        )
+        self.src_port_combo.grid(row=6, column=1, sticky=W, pady=4)
+
+        ttk.Label(frm, text=f"Puerto en {b_dst.name}:").grid(row=7, column=0, sticky=W, pady=4)
+        self.dst_port_var = StringVar(value=stream.dst_port or (ports_dst[0] if ports_dst else ""))
+        self.dst_port_combo = ttk.Combobox(
+            frm, textvariable=self.dst_port_var,
+            values=ports_dst, state="readonly", width=22,
+        )
+        self.dst_port_combo.grid(row=7, column=1, sticky=W, pady=4)
+
+        # ---- nombre ----
+        ttk.Separator(frm, orient=HORIZONTAL).grid(
+            row=8, column=0, columnspan=2, sticky="ew", pady=8)
+
+        ttk.Label(frm, text="Nombre:").grid(row=9, column=0, sticky=W, pady=4)
         self.entry_name = ttk.Entry(frm, width=22)
         self.entry_name.insert(0, stream.name)
-        self.entry_name.grid(row=5, column=1, sticky=W, pady=4)
+        self.entry_name.grid(row=9, column=1, sticky=W, pady=4)
 
+        # ---- botones ----
         btns = ttk.Frame(frm)
-        btns.grid(row=6, column=0, columnspan=2, pady=(10, 0), sticky=E)
-        ttk.Button(btns, text="Cancel", command=dlg.destroy).pack(side=LEFT, padx=4)
-        ttk.Button(btns, text="OK",     command=self._ok).pack(side=LEFT)
+        btns.grid(row=10, column=0, columnspan=2, pady=(14, 0), sticky=E)
+        ttk.Button(btns, text="Cancelar", command=dlg.destroy).pack(side=LEFT, padx=4)
+        ttk.Button(btns, text="OK",       command=self._ok).pack(side=LEFT)
 
         self.entry_m.focus()
         dlg.wait_window()
@@ -319,10 +355,12 @@ class StreamEditDialog:
             if m < 0:
                 raise ValueError
         except ValueError:
-            messagebox.showerror("Invalid", "Mass flow ≥ 0 requerido.")
+            messagebox.showerror("Inválido", "Flujo másico ≥ 0 requerido.")
             return
         self.stream.mass_flow = m
         self.stream.role = self.role_var.get() or "internal"
+        self.stream.src_port = self.src_port_var.get() or ""
+        self.stream.dst_port = self.dst_port_var.get() or ""
         nombre = self.entry_name.get().strip() or self.stream.name
         self.stream.name = nombre
         self.result = "ok"
@@ -372,7 +410,7 @@ class FlowsheetEditor:
 
         # título y geometría sólo si el container es ventana
         if hasattr(container, "title"):
-            container.title("Flowsheet Editor — Process design")
+            container.title("Diagrama de proceso — diseño en bloques")
         if hasattr(container, "geometry"):
             try:
                 container.geometry("1320x780+80+30")
@@ -382,36 +420,37 @@ class FlowsheetEditor:
         # toolbar arriba
         toolbar = ttk.Frame(container, padding=4)
         toolbar.pack(side=TOP, fill=X)
-        ttk.Button(toolbar, text="New",            command=self.new).pack(side=LEFT, padx=2)
-        ttk.Button(toolbar, text="Open…",          command=self.open_json).pack(side=LEFT, padx=2)
-        ttk.Button(toolbar, text="Save…",          command=self.save_json).pack(side=LEFT, padx=2)
+        ttk.Button(toolbar, text="Nuevo",     command=self.new).pack(side=LEFT, padx=2)
+        ttk.Button(toolbar, text="Abrir…",    command=self.open_json).pack(side=LEFT, padx=2)
+        ttk.Button(toolbar, text="Guardar…",  command=self.save_json).pack(side=LEFT, padx=2)
 
-        # menu "Examples" para cargar procesos preestablecidos
-        examples_btn = ttk.Menubutton(toolbar, text="Examples ▾")
+        # menu "Ejemplos" para cargar procesos preestablecidos
+        examples_btn = ttk.Menubutton(toolbar, text="Ejemplos ▾")
         ex_menu = Menu(examples_btn, tearoff=0)
-        ex_menu.add_command(label="HDA — Hydrodealkylation of toluene",
+        ex_menu.add_command(label="HDA — Hidrodealquilación de tolueno",
                             command=lambda: self.load_example("hda"))
-        ex_menu.add_command(label="Methanol synthesis (simplified)",
+        ex_menu.add_command(label="Síntesis de metanol (simplificada)",
                             command=lambda: self.load_example("methanol"))
-        ex_menu.add_command(label="Binary distillation (benzene/toluene)",
+        ex_menu.add_command(label="Destilación binaria (benceno/tolueno)",
                             command=lambda: self.load_example("distillation"))
         examples_btn.configure(menu=ex_menu)
         examples_btn.pack(side=LEFT, padx=2)
 
         ttk.Separator(toolbar, orient=VERTICAL).pack(side=LEFT, fill=Y, padx=8, pady=4)
-        ttk.Button(toolbar, text="Delete selected (Del)", command=self.delete_selected).pack(side=LEFT, padx=2)
+        ttk.Button(toolbar, text="Borrar selección (Supr)",
+                   command=self.delete_selected).pack(side=LEFT, padx=2)
         ttk.Separator(toolbar, orient=VERTICAL).pack(side=LEFT, fill=Y, padx=8, pady=4)
 
-        # zoom controls
+        # controles de zoom
         ttk.Button(toolbar, text="−", width=3, command=self.zoom_out).pack(side=LEFT, padx=1)
         self.zoom_label_var = StringVar(value="100%")
         ttk.Button(toolbar, textvariable=self.zoom_label_var, width=6,
                    command=self.zoom_reset).pack(side=LEFT, padx=1)
         ttk.Button(toolbar, text="+", width=3, command=self.zoom_in).pack(side=LEFT, padx=1)
-        ttk.Button(toolbar, text="Fit", width=5, command=self.zoom_fit).pack(side=LEFT, padx=2)
+        ttk.Button(toolbar, text="Ajustar", width=8, command=self.zoom_fit).pack(side=LEFT, padx=2)
 
         ttk.Separator(toolbar, orient=VERTICAL).pack(side=LEFT, fill=Y, padx=8, pady=4)
-        ttk.Button(toolbar, text="Compute",        command=self.compute).pack(side=LEFT, padx=2)
+        ttk.Button(toolbar, text="Calcular", command=self.compute).pack(side=LEFT, padx=2)
 
         # botón de transición distinto según modo
         if mode == "main":
@@ -420,8 +459,8 @@ class FlowsheetEditor:
                 command=self.launch_analysis,
             ).pack(side=RIGHT, padx=2)
         else:
-            ttk.Button(toolbar, text="Apply ISBL",     command=self.apply_isbl).pack(side=LEFT, padx=2)
-            ttk.Button(toolbar, text="Close",          command=self._close).pack(side=RIGHT, padx=2)
+            ttk.Button(toolbar, text="Aplicar ISBL", command=self.apply_isbl).pack(side=LEFT, padx=2)
+            ttk.Button(toolbar, text="Cerrar",       command=self._close).pack(side=RIGHT, padx=2)
 
         # body
         body = ttk.Frame(container)
@@ -437,7 +476,7 @@ class FlowsheetEditor:
         self._build_properties(body)
 
         # status bar
-        self.status_var = StringVar(value="0 blocks · 0 streams")
+        self.status_var = StringVar(value="0 equipos · 0 corrientes")
         ttk.Label(
             container, textvariable=self.status_var,
             anchor=W, padding=6,
@@ -617,15 +656,15 @@ class FlowsheetEditor:
     # ==================================================
 
     def _build_library(self, body):
-        frame = ttk.LabelFrame(body, text=" Equipment library ", padding=6, width=240)
+        frame = ttk.LabelFrame(body, text=" Biblioteca de equipos ", padding=6, width=240)
         frame.pack(side=LEFT, fill=Y, padx=(8, 4), pady=8)
         frame.pack_propagate(False)
 
         ttk.Label(
             frame,
-            text="Click on an equipment, then 'Add'.\n"
-                 "Double-click on a block to edit S/n.\n"
-                 "Right-click a block → Connect to...",
+            text="Seleccioná un equipo y apretá 'Agregar'.\n"
+                 "Doble-click en un bloque para editar S/n.\n"
+                 "Click derecho en un bloque → Conectar a…",
             foreground="#666", font=("Segoe UI", 8),
             justify="left", wraplength=220,
         ).pack(fill=X, pady=(0, 6))
@@ -640,8 +679,7 @@ class FlowsheetEditor:
         tree.pack(fill=BOTH, expand=True)
         self.lib_tree = tree
 
-        # botón Add
-        ttk.Button(frame, text="+ Add to canvas",
+        ttk.Button(frame, text="+ Agregar al diagrama",
                    command=self.add_selected_equipment).pack(fill=X, pady=(6, 0))
 
         # doble-click también agrega
@@ -700,11 +738,11 @@ class FlowsheetEditor:
         canvas.bind("<Shift-Button-5>",     lambda e: canvas.xview_scroll(1, "units"))
 
     def _build_properties(self, body):
-        frame = ttk.LabelFrame(body, text=" Properties ", padding=6, width=300)
+        frame = ttk.LabelFrame(body, text=" Propiedades ", padding=6, width=300)
         frame.pack(side=LEFT, fill=Y, padx=(4, 8), pady=8)
         frame.pack_propagate(False)
 
-        self.prop_var = StringVar(value="(nothing selected)")
+        self.prop_var = StringVar(value="(nada seleccionado)")
         self.prop_label = ttk.Label(
             frame, textvariable=self.prop_var,
             justify="left", wraplength=280, anchor="nw",
@@ -712,11 +750,10 @@ class FlowsheetEditor:
         )
         self.prop_label.pack(fill=BOTH, expand=True)
 
-        # área de resultados al final
         sep = ttk.Separator(frame, orient=HORIZONTAL)
         sep.pack(fill=X, pady=8)
 
-        self.results_var = StringVar(value="(Compute to estimate ISBL)")
+        self.results_var = StringVar(value="(apretá Calcular para estimar el ISBL)")
         ttk.Label(
             frame, textvariable=self.results_var,
             justify="left", wraplength=280, anchor="nw",
@@ -729,7 +766,7 @@ class FlowsheetEditor:
 
     def new(self):
         if self.fs.blocks and not messagebox.askyesno(
-            "New flowsheet", "Discard current flowsheet and start empty?"
+            "Nuevo diagrama", "¿Descartar el diagrama actual y empezar vacío?"
         ):
             return
         self.fs = Flowsheet()
@@ -739,7 +776,7 @@ class FlowsheetEditor:
         self.selected_stream = None
         self._update_status()
         self._update_properties()
-        self.results_var.set("(Compute to estimate ISBL)")
+        self.results_var.set("(apretá Calcular para estimar el ISBL)")
 
     # ==================================================
     # EXAMPLES — procesos preestablecidos
@@ -748,11 +785,11 @@ class FlowsheetEditor:
     def load_example(self, key):
         """Carga un proceso preestablecido (sobrescribe el actual).
         Sirve como smoke test del software end-to-end:
-        bloques + streams con feeds/products + Compute + ISBL.
+        equipos + corrientes con feeds/products + Calcular + ISBL.
         """
         if self.fs.blocks and not messagebox.askyesno(
-            "Load example",
-            "Esto va a reemplazar el flowsheet actual. ¿Continuar?",
+            "Cargar ejemplo",
+            "Esto va a reemplazar el diagrama actual. ¿Continuar?",
         ):
             return
 
@@ -773,7 +810,7 @@ class FlowsheetEditor:
         self.selected_stream = None
         self._update_status()
         self._update_properties()
-        self.results_var.set("(Compute to estimate ISBL)")
+        self.results_var.set("(apretá Calcular para estimar el ISBL)")
 
     def _add_example_block(self, name, eq_type, S, x, y, n=1):
         bid = self.fs.new_id()
@@ -781,112 +818,140 @@ class FlowsheetEditor:
         self.fs.blocks[bid] = b
         return bid
 
-    def _add_example_stream(self, src, dst, name, mass_flow=0.0, role="internal"):
+    def _add_example_stream(self, src, dst, name, mass_flow=0.0,
+                            role="internal", src_port="", dst_port=""):
         sid = self.fs.new_id()
-        s = Stream(id=sid, name=name, src=src, dst=dst,
-                   mass_flow=mass_flow, role=role)
+        s = Stream(
+            id=sid, name=name, src=src, dst=dst,
+            mass_flow=mass_flow, role=role,
+            src_port=src_port, dst_port=dst_port,
+        )
         self.fs.streams[sid] = s
         return sid
 
     def _example_hda(self):
-        """HDA — Hydrodealkylation of toluene to benzene.
-        Versión simplificada de Douglas / Turton.
-        Toluene + H2 → Benzene + CH4
-        100 kmol/h tolueno, conversión ~75%."""
-        col_x = [120, 360, 600, 840, 1080, 1320]
-        row_y = [240, 420]
+        """HDA — Hidrodealquilación de tolueno (Douglas / Turton).
+        Tolueno + H2 → Benceno + CH4. ~75% conversión.
+        Tags ISA-5.1: E (HX), F (horno), R (reactor),
+        V (separador), T (columna), P (bomba), TK (tanque)."""
+        cx = [120, 360, 600, 840, 1080, 1320]
+        y_top = 240
+        y_bot = 460
 
-        # row 0 — alimentación + reacción
-        b_pre  = self._add_example_block("PRE-1", "Heat exch. — floating head", 250.0, col_x[0], row_y[0])
-        b_fur  = self._add_example_block("F-1",  "Fired heater — non-reformer", 5000.0, col_x[1], row_y[0])
-        b_rxn  = self._add_example_block("R-1",  "Reactor — jacketed non-agit.",   25.0, col_x[2], row_y[0])
-        b_cool = self._add_example_block("E-1",  "Heat exch. — air cooler",       180.0, col_x[3], row_y[0])
-        b_fls  = self._add_example_block("V-1",  "Vessel — vertical",              20.0, col_x[4], row_y[0])
+        # tren de reacción (fila superior)
+        e101 = self._add_example_block("E-101", "Heat exch. — floating head", 250.0, cx[0], y_top)
+        f101 = self._add_example_block("F-101", "Fired heater — non-reformer", 5000.0, cx[1], y_top)
+        r101 = self._add_example_block("R-101", "Reactor — jacketed non-agit.",  25.0, cx[2], y_top)
+        e102 = self._add_example_block("E-102", "Heat exch. — air cooler",      180.0, cx[3], y_top)
+        v101 = self._add_example_block("V-101", "Vessel — vertical",             20.0, cx[4], y_top)
 
-        # row 1 — separación
-        b_col  = self._add_example_block("T-1",  "Tower (column shell)",           45.0, col_x[2], row_y[1])
-        b_reb  = self._add_example_block("E-2",  "Heat exch. — kettle reboiler",  150.0, col_x[3], row_y[1])
-        b_cnd  = self._add_example_block("E-3",  "Heat exch. — floating head",    160.0, col_x[1], row_y[1])
-        b_pmp  = self._add_example_block("P-1",  "Pump — centrifugal",             15.0, col_x[0], row_y[1])
+        # separación (fila inferior)
+        t101 = self._add_example_block("T-101", "Tower (column shell)",          45.0, cx[2], y_bot)
+        e104 = self._add_example_block("E-104", "Heat exch. — kettle reboiler", 150.0, cx[3], y_bot)
+        e103 = self._add_example_block("E-103", "Heat exch. — floating head",   160.0, cx[1], y_bot)
+        p101 = self._add_example_block("P-101", "Pump — centrifugal",            15.0, cx[0], y_bot)
+        tk1  = self._add_example_block("TK-101","Storage tank — cone roof",     500.0, cx[5], y_bot)
+        tk2  = self._add_example_block("TK-102","Storage tank — cone roof",     100.0, cx[5], y_top)
 
-        # streams
-        self._add_example_stream(b_pmp,  b_pre,  "S-feed-tol", 11000, role="feed")
-        self._add_example_stream(b_pre,  b_fur,  "S-1")
-        self._add_example_stream(b_fur,  b_rxn,  "S-2")
-        self._add_example_stream(b_rxn,  b_cool, "S-3")
-        self._add_example_stream(b_cool, b_fls,  "S-4")
-        self._add_example_stream(b_fls,  b_col,  "S-liq")
-        self._add_example_stream(b_col,  b_reb,  "S-bot")
-        self._add_example_stream(b_col,  b_cnd,  "S-vap")
-        self._add_example_stream(b_cnd,  b_pmp,  "S-recyc")     # recycle
-        # producto + subproducto
-        b_prod = self._add_example_block("PROD", "Storage tank — cone roof", 500.0, col_x[5], row_y[1])
-        self._add_example_stream(b_cnd, b_prod, "S-benzene", 8500, role="product")
-        b_h2   = self._add_example_block("FH2",  "Storage tank — cone roof", 100.0, col_x[5], row_y[0])
-        self._add_example_stream(b_fls, b_h2,   "S-H2-purge", 350, role="product")
+        # corrientes (puertos específicos por tipo de equipo)
+        self._add_example_stream(p101, e101, "S-1",  11000, role="feed",
+                                 src_port="descarga",  dst_port="tube_in")
+        self._add_example_stream(e101, f101, "S-2",
+                                 src_port="tube_out",  dst_port="proceso_in")
+        self._add_example_stream(f101, r101, "S-3",
+                                 src_port="proceso_out", dst_port="alimentacion")
+        self._add_example_stream(r101, e102, "S-4",
+                                 src_port="producto",  dst_port="proceso_in")
+        self._add_example_stream(e102, v101, "S-5",
+                                 src_port="proceso_out", dst_port="alimentacion")
+        self._add_example_stream(v101, t101, "S-6",
+                                 src_port="liquido",   dst_port="alimentacion")
+        self._add_example_stream(t101, e104, "S-7",
+                                 src_port="liquido_fondo", dst_port="liq_in")
+        self._add_example_stream(t101, e103, "S-8",
+                                 src_port="vapor_tope", dst_port="tube_in")
+        self._add_example_stream(e103, p101, "S-9-recic",   # reciclo
+                                 src_port="shell_out", dst_port="succion")
+        self._add_example_stream(e103, tk1,  "S-benceno", 8500, role="product",
+                                 src_port="tube_out",  dst_port="entrada")
+        self._add_example_stream(v101, tk2,  "S-purga-H2", 350, role="product",
+                                 src_port="vapor",     dst_port="entrada")
 
     def _example_methanol(self):
-        """Methanol synthesis (simplified).
-        Syngas (CO + 2H2) → CH3OH
-        Reactor + flash + column."""
-        col_x = [120, 360, 600, 840, 1080]
+        """Síntesis de metanol simplificada.
+        Syngas (CO + 2H2) → CH3OH. Reactor + flash + columna."""
+        cx = [120, 360, 600, 840, 1080]
         y_top = 240
-        y_bot = 440
+        y_bot = 460
 
-        b_comp = self._add_example_block("C-1",  "Compressor — centrifugal",      800.0, col_x[0], y_top)
-        b_pre  = self._add_example_block("E-1",  "Heat exch. — floating head",    220.0, col_x[1], y_top)
-        b_rxn  = self._add_example_block("R-1",  "Reactor — jacketed non-agit.",   30.0, col_x[2], y_top)
-        b_cool = self._add_example_block("E-2",  "Heat exch. — air cooler",       200.0, col_x[3], y_top)
-        b_fls  = self._add_example_block("V-1",  "Vessel — vertical",              15.0, col_x[4], y_top)
+        k101 = self._add_example_block("K-101", "Compressor — centrifugal",      800.0, cx[0], y_top)
+        e101 = self._add_example_block("E-101", "Heat exch. — floating head",    220.0, cx[1], y_top)
+        r101 = self._add_example_block("R-101", "Reactor — jacketed non-agit.",   30.0, cx[2], y_top)
+        e102 = self._add_example_block("E-102", "Heat exch. — air cooler",       200.0, cx[3], y_top)
+        v101 = self._add_example_block("V-101", "Vessel — vertical",              15.0, cx[4], y_top)
 
-        b_col  = self._add_example_block("T-1",  "Tower (column shell)",           35.0, col_x[2], y_bot)
-        b_reb  = self._add_example_block("E-3",  "Heat exch. — kettle reboiler",  130.0, col_x[3], y_bot)
-        b_cnd  = self._add_example_block("E-4",  "Heat exch. — floating head",    140.0, col_x[1], y_bot)
+        t101 = self._add_example_block("T-101", "Tower (column shell)",           35.0, cx[2], y_bot)
+        e104 = self._add_example_block("E-104", "Heat exch. — kettle reboiler",  130.0, cx[3], y_bot)
+        e103 = self._add_example_block("E-103", "Heat exch. — floating head",    140.0, cx[1], y_bot)
+        tk1  = self._add_example_block("TK-101","Storage tank — floating roof",  400.0, cx[4], y_bot)
+        tk2  = self._add_example_block("TK-102","Storage tank — cone roof",       50.0, cx[0], y_bot)
 
-        self._add_example_stream(b_comp, b_pre,  "S-syngas", 14000, role="feed")
-        self._add_example_stream(b_pre,  b_rxn,  "S-1")
-        self._add_example_stream(b_rxn,  b_cool, "S-2")
-        self._add_example_stream(b_cool, b_fls,  "S-3")
-        self._add_example_stream(b_fls,  b_col,  "S-crude")
-        self._add_example_stream(b_col,  b_reb,  "S-bot")
-        self._add_example_stream(b_col,  b_cnd,  "S-vap")
-
-        b_meoh = self._add_example_block("PROD", "Storage tank — floating roof", 400.0, col_x[4], y_bot)
-        self._add_example_stream(b_cnd, b_meoh, "S-MeOH", 9500, role="product")
-
-        b_water = self._add_example_block("WW",  "Storage tank — cone roof", 50.0, col_x[0], y_bot)
-        self._add_example_stream(b_reb, b_water, "S-water", 600, role="product")
+        self._add_example_stream(k101, e101, "S-1", 14000, role="feed",
+                                 src_port="descarga", dst_port="tube_in")
+        self._add_example_stream(e101, r101, "S-2",
+                                 src_port="tube_out", dst_port="alimentacion")
+        self._add_example_stream(r101, e102, "S-3",
+                                 src_port="producto", dst_port="proceso_in")
+        self._add_example_stream(e102, v101, "S-4",
+                                 src_port="proceso_out", dst_port="alimentacion")
+        self._add_example_stream(v101, t101, "S-5",
+                                 src_port="liquido",  dst_port="alimentacion")
+        self._add_example_stream(t101, e104, "S-6",
+                                 src_port="liquido_fondo", dst_port="liq_in")
+        self._add_example_stream(t101, e103, "S-7",
+                                 src_port="vapor_tope", dst_port="tube_in")
+        self._add_example_stream(e103, tk1,  "S-MeOH", 9500, role="product",
+                                 src_port="tube_out", dst_port="entrada")
+        self._add_example_stream(e104, tk2,  "S-agua", 600, role="product",
+                                 src_port="cond_out", dst_port="entrada")
 
     def _example_distillation(self):
-        """Destilación binaria benceno/tolueno.
-        Mezcla 50/50 → benceno por top, tolueno por fondo.
-        Pre-heater + column + condenser + reboiler + pumps."""
-        col_x = [120, 360, 600, 840, 1080]
+        """Destilación binaria benceno/tolueno (50/50).
+        Pre-calentador + columna + condensador + reboiler + bombas."""
+        cx = [120, 360, 600, 840, 1080]
         y_top = 220
-        y_bot = 480
+        y_mid = 380
+        y_bot = 540
 
-        b_feed = self._add_example_block("F-tank", "Storage tank — cone roof", 200.0, col_x[0], 350)
-        b_pmp1 = self._add_example_block("P-1",    "Pump — centrifugal",         8.0, col_x[1], 350)
-        b_pre  = self._add_example_block("E-1",    "Heat exch. — floating head", 120.0, col_x[2], 350)
-        b_col  = self._add_example_block("T-1",    "Tower (column shell)",        20.0, col_x[3], 350)
+        tk0  = self._add_example_block("TK-101","Storage tank — cone roof", 200.0, cx[0], y_mid)
+        p101 = self._add_example_block("P-101", "Pump — centrifugal",         8.0, cx[1], y_mid)
+        e101 = self._add_example_block("E-101", "Heat exch. — floating head",120.0, cx[2], y_mid)
+        t101 = self._add_example_block("T-101", "Tower (column shell)",       20.0, cx[3], y_mid)
 
-        b_cnd  = self._add_example_block("E-2",    "Heat exch. — floating head",  90.0, col_x[3], y_top)
-        b_reb  = self._add_example_block("E-3",    "Heat exch. — kettle reboiler", 85.0, col_x[3], y_bot)
+        e102 = self._add_example_block("E-102", "Heat exch. — floating head", 90.0, cx[3], y_top)
+        e103 = self._add_example_block("E-103", "Heat exch. — kettle reboiler", 85.0, cx[3], y_bot)
 
-        b_dist = self._add_example_block("PROD-D", "Storage tank — cone roof",    150.0, col_x[4], y_top)
-        b_bot  = self._add_example_block("PROD-B", "Storage tank — cone roof",    150.0, col_x[4], y_bot)
+        tk1  = self._add_example_block("TK-102","Storage tank — cone roof",  150.0, cx[4], y_top)
+        tk2  = self._add_example_block("TK-103","Storage tank — cone roof",  150.0, cx[4], y_bot)
 
-        self._add_example_stream(b_feed, b_pmp1, "S-feed", 10000, role="feed")
-        self._add_example_stream(b_pmp1, b_pre,  "S-1")
-        self._add_example_stream(b_pre,  b_col,  "S-2")
-        self._add_example_stream(b_col,  b_cnd,  "S-vap")
-        self._add_example_stream(b_col,  b_reb,  "S-bot")
-        self._add_example_stream(b_cnd,  b_dist, "S-benzene", 5000, role="product")
-        self._add_example_stream(b_reb,  b_bot,  "S-toluene", 5000, role="product")
+        self._add_example_stream(tk0,  p101, "S-1", 10000, role="feed",
+                                 src_port="salida",   dst_port="succion")
+        self._add_example_stream(p101, e101, "S-2",
+                                 src_port="descarga", dst_port="tube_in")
+        self._add_example_stream(e101, t101, "S-3",
+                                 src_port="tube_out", dst_port="alimentacion")
+        self._add_example_stream(t101, e102, "S-4",
+                                 src_port="vapor_tope",     dst_port="tube_in")
+        self._add_example_stream(t101, e103, "S-5",
+                                 src_port="liquido_fondo",  dst_port="liq_in")
+        self._add_example_stream(e102, tk1,  "S-benceno", 5000, role="product",
+                                 src_port="tube_out", dst_port="entrada")
+        self._add_example_stream(e103, tk2,  "S-tolueno", 5000, role="product",
+                                 src_port="vap_out",  dst_port="entrada")
 
     def open_json(self):
         path = filedialog.askopenfilename(
-            title="Open flowsheet",
+            title="Abrir diagrama",
             filetypes=[("JSON", "*.json")],
         )
         if not path:
@@ -896,7 +961,7 @@ class FlowsheetEditor:
                 data = json.load(f)
             self.fs = Flowsheet.from_dict(data)
         except Exception as e:
-            messagebox.showerror("Open error", f"{type(e).__name__}: {e}")
+            messagebox.showerror("Error al abrir", f"{type(e).__name__}: {e}")
             return
         self.selected_block = None
         self.selected_stream = None
@@ -907,7 +972,7 @@ class FlowsheetEditor:
 
     def save_json(self):
         path = filedialog.asksaveasfilename(
-            title="Save flowsheet",
+            title="Guardar diagrama",
             defaultextension=".json",
             filetypes=[("JSON", "*.json")],
         )
@@ -917,9 +982,9 @@ class FlowsheetEditor:
             with open(path, "w", encoding="utf-8") as f:
                 json.dump(self.fs.to_dict(), f, indent=2)
         except Exception as e:
-            messagebox.showerror("Save error", f"{type(e).__name__}: {e}")
+            messagebox.showerror("Error al guardar", f"{type(e).__name__}: {e}")
             return
-        messagebox.showinfo("Saved", f"Flowsheet saved to:\n{path}")
+        messagebox.showinfo("Guardado", f"Diagrama guardado en:\n{path}")
 
     def delete_selected(self):
         if self.selected_block is not None:
@@ -934,12 +999,14 @@ class FlowsheetEditor:
     def add_selected_equipment(self):
         sel = self.lib_tree.selection()
         if not sel:
-            messagebox.showinfo("Select equipment", "Click on an equipment first.")
+            messagebox.showinfo("Seleccioná un equipo",
+                                "Hacé click sobre un equipo de la biblioteca.")
             return
         item = sel[0]
         tags = self.lib_tree.item(item, "tags")
         if "eq" not in tags:
-            messagebox.showinfo("Pick equipment", "Select a leaf, not a category.")
+            messagebox.showinfo("Elegí un equipo",
+                                "Seleccioná un equipo, no una categoría.")
             return
         eq_type = self.lib_tree.item(item, "text")
         self._add_block(eq_type)
@@ -955,23 +1022,11 @@ class FlowsheetEditor:
 
         bid = self.fs.new_id()
         S_default = (spec["S_min"] + spec["S_max"]) / 2
-        # short name por categoría
-        prefix_map = {
-            "Heat exchangers": "HX",
-            "Compressors":     "C",
-            "Pumps":           "P",
-            "Vessels":         "V",
-            "Storage":         "TK",
-            "Reactors":        "R",
-            "Fired heaters":   "H",
-            "Solids / sep.":   "F",
-            "Fans / blowers":  "FAN",
-            "Trays / packing": "T",
-        }
-        prefix = prefix_map.get(spec["categoria"], "EQ")
-        # contar cuántos del mismo prefix ya hay
-        same = [b for b in self.fs.blocks.values() if b.name.startswith(prefix + "-")]
-        nombre = f"{prefix}-{len(same) + 1}"
+
+        # nombre ISA-5.1: prefix por tipo + autoincrement desde 101
+        nombre = ep.next_block_name(
+            eq_type, [b.name for b in self.fs.blocks.values()]
+        )
 
         if x is None:
             # ubicar en el centro del viewport, evitando overlaps
@@ -1015,6 +1070,31 @@ class FlowsheetEditor:
             tags=("block", f"b{b.id}"),
         )
 
+        # port markers: pequeños círculos en cada puerto del eq_type
+        ports = ep.get_ports(b.eq_type)
+        used_out = {t.src_port for t in self.fs.streams.values()
+                    if t.src == b.id and t.src_port}
+        used_in  = {t.dst_port for t in self.fs.streams.values()
+                    if t.dst == b.id and t.dst_port}
+        r = max(2.5, 4 * self.zoom)
+        for pname, (side, frac) in ports.items():
+            if side == "right":
+                px, py = b.x + BLOCK_W,         b.y + BLOCK_H * frac
+            elif side == "left":
+                px, py = b.x,                   b.y + BLOCK_H * frac
+            elif side == "top":
+                px, py = b.x + BLOCK_W * frac, b.y
+            else:
+                px, py = b.x + BLOCK_W * frac, b.y + BLOCK_H
+            cx, cy = self._sc(px), self._sc(py)
+            connected = pname in used_out or pname in used_in
+            color = "#1565c0" if connected else "#bbbbbb"
+            self.canvas.create_oval(
+                cx - r, cy - r, cx + r, cy + r,
+                fill=color, outline="#333", width=1,
+                tags=("port", f"port_b{b.id}", f"port_b{b.id}_{pname}"),
+            )
+
     def _refresh_block_text(self, b):
         spec = eq.EQUIPMENT_DATA.get(b.eq_type, {})
         unit = spec.get("S_unit", "")
@@ -1036,6 +1116,8 @@ class FlowsheetEditor:
         for cid in (b.canvas_rect, b.canvas_text, b.canvas_sub):
             if cid is not None:
                 self.canvas.delete(cid)
+        # port markers (creados con tag port_b{id})
+        self.canvas.delete(f"port_b{bid}")
 
     def _select_block(self, bid):
         # deselect anteriores
@@ -1062,101 +1144,166 @@ class FlowsheetEditor:
     # STREAMS
     # ==================================================
 
-    def _add_stream(self, src_id, dst_id):
+    def _add_stream(self, src_id, dst_id, src_port="", dst_port=""):
         if src_id == dst_id:
             return
-        # evitar duplicado
+        # evitar duplicado exacto (mismos bloques + mismos puertos)
         for s in self.fs.streams.values():
-            if s.src == src_id and s.dst == dst_id:
-                messagebox.showinfo("Stream exists",
-                                    f"Stream {s.name} already connects these blocks.")
+            if (s.src == src_id and s.dst == dst_id
+                and s.src_port == src_port and s.dst_port == dst_port):
+                messagebox.showinfo(
+                    "Conexión existente",
+                    f"La corriente {s.name} ya conecta esos puertos.",
+                )
                 return
+
+        b_src = self.fs.blocks.get(src_id)
+        b_dst = self.fs.blocks.get(dst_id)
+
+        # autoseleccionar puertos si no se especificaron
+        if not src_port and b_src is not None:
+            used_out = [t.src_port for t in self.fs.streams.values()
+                        if t.src == src_id and t.src_port]
+            src_port = ep.autoselect_outlet(b_src.eq_type, used_out)
+        if not dst_port and b_dst is not None:
+            used_in = [t.dst_port for t in self.fs.streams.values()
+                       if t.dst == dst_id and t.dst_port]
+            dst_port = ep.autoselect_inlet(b_dst.eq_type, used_in)
+
         sid = self.fs.new_id()
-        nombre = f"S-{len([s for s in self.fs.streams.values()]) + 1}"
-        s = Stream(id=sid, name=nombre, src=src_id, dst=dst_id, mass_flow=0.0)
+        nombre = f"S-{len(self.fs.streams) + 1}"
+        s = Stream(
+            id=sid, name=nombre, src=src_id, dst=dst_id,
+            mass_flow=0.0, src_port=src_port, dst_port=dst_port,
+        )
         self.fs.streams[sid] = s
         self._render_stream(s)
         self._update_status()
 
-    # ---------- anchors distribuidos ----------
-    # Si un bloque tiene N streams entrando por la izquierda,
-    # se reparten en y = h*(i+1)/(N+1).  Lo mismo para outlets
-    # por la derecha.  Esto evita superposiciones y da el
-    # look de ingeniería precisa.
+    # ---------- puertos específicos por equipo ----------
+    # Cada eq_type tiene un catálogo de puertos en equipment_ports.
+    # Si el stream tiene src_port/dst_port nombrados, se usan;
+    # si están vacíos, se autoselecciona el primer puerto libre del
+    # lado convencional (right para outlet, left para inlet).
 
-    def _stream_slot(self, s, side):
-        """Devuelve (idx, total) para colocar el ancla de
-        este stream en el lado `side` del bloque correspondiente.
-
-        side: 'src_out' = salida del src (derecha del src)
-              'dst_in'  = entrada del dst (izquierda del dst)
-        """
-        if side == "src_out":
-            bid = s.src
-            others = [t for t in self.fs.streams.values() if t.src == bid]
+    def _resolve_port(self, b, port_name, default_side):
+        """Resuelve (port_name, side, x, y) para un bloque y un puerto.
+        Si port_name no existe en el catálogo, autoselecciona uno del
+        default_side ('right' para salidas, 'left' para entradas)."""
+        ports = ep.get_ports(b.eq_type)
+        if port_name and port_name in ports:
+            side, frac = ports[port_name]
         else:
-            bid = s.dst
-            others = [t for t in self.fs.streams.values() if t.dst == bid]
-        others.sort(key=lambda t: t.id)
-        idx = others.index(s) if s in others else 0
-        return idx, max(1, len(others))
-
-    def _block_port(self, b, side, idx, total):
-        """Coord (modelo) del puerto idx-ésimo de `total` en el
-        lado `side` de un bloque."""
-        frac = (idx + 1) / (total + 1)
+            # fallback: autoseleccionar uno del default_side
+            chosen = None
+            for pname, (side, frac) in ports.items():
+                if side == default_side:
+                    chosen = (pname, side, frac)
+                    break
+            if chosen is None:
+                pname = next(iter(ports))
+                side, frac = ports[pname]
+            else:
+                pname, side, frac = chosen
+            port_name = pname
+        # coord del puerto en el modelo
         if side == "right":
-            return b.x + BLOCK_W, b.y + BLOCK_H * frac
-        if side == "left":
-            return b.x,           b.y + BLOCK_H * frac
-        if side == "top":
-            return b.x + BLOCK_W * frac, b.y
-        if side == "bottom":
-            return b.x + BLOCK_W * frac, b.y + BLOCK_H
-        return b.x, b.y
+            x, y = b.x + BLOCK_W,             b.y + BLOCK_H * frac
+        elif side == "left":
+            x, y = b.x,                       b.y + BLOCK_H * frac
+        elif side == "top":
+            x, y = b.x + BLOCK_W * frac,     b.y
+        elif side == "bottom":
+            x, y = b.x + BLOCK_W * frac,     b.y + BLOCK_H
+        else:
+            x, y = b.x, b.y
+        return port_name, side, x, y
 
-    def _ortho_path(self, x1, y1, x2, y2):
-        """Devuelve la polyline ortogonal en coords del MODELO
-        entre el puerto out (x1,y1, sale a derecha) y el puerto
-        in (x2,y2, entra por izquierda).  Estilo PFD:
+    @staticmethod
+    def _side_dir(side):
+        """Vector unitario hacia afuera del bloque para un lado."""
+        return {"right": (1, 0), "left": (-1, 0),
+                "top":   (0, -1), "bottom": (0, 1)}.get(side, (1, 0))
 
-          1) sale horizontal del src una distancia mínima
-          2) sube/baja vertical
-          3) entra horizontal al dst
+    def _ortho_route(self, x1, y1, side1, x2, y2, side2):
+        """Polyline ortogonal entre dos puertos respetando la
+        dirección de salida/entrada de cada uno.
 
-        Si están casi alineados (Δy pequeño), línea recta con
-        leve offset para no pisar bordes."""
+        Algoritmo:
+          1. Extruir cada extremo `gap` hacia afuera del bloque.
+          2. Conectar los puntos extruidos con codos ortogonales:
+             - opuestos horizontales (right↔left): Z-shape horizontal
+             - opuestos verticales (top↔bottom):   Z-shape vertical
+             - perpendiculares:                    L-shape
+             - mismo lado:                         U-shape
+        """
         gap = ROUTING_GAP
-        # midpoint x — si dst está a la izquierda del src (loop),
-        # rodeamos por arriba o abajo
-        if x2 >= x1 + 2 * gap:
-            mx = (x1 + x2) / 2
-            if abs(y1 - y2) < 2:   # alineados → línea recta
-                return [x1, y1, x2, y2]
-            return [x1, y1,  mx, y1,  mx, y2,  x2, y2]
-        # bucle de retroceso (recycle): salir derecha, bajar/subir
-        # bordeando, volver
-        out_x = x1 + gap
-        in_x  = x2 - gap
-        # ir hacia abajo o arriba — elegimos abajo para consistencia
-        below = max(y1, y2) + 2 * gap
-        return [x1, y1,  out_x, y1,  out_x, below,
-                in_x,  below, in_x,  y2,  x2, y2]
+        dx1, dy1 = self._side_dir(side1)
+        dx2, dy2 = self._side_dir(side2)
+        # puntos extruidos (justo afuera de cada bloque)
+        ex1, ey1 = x1 + dx1 * gap, y1 + dy1 * gap
+        ex2, ey2 = x2 + dx2 * gap, y2 + dy2 * gap
+
+        h_sides = ("left", "right")
+        v_sides = ("top", "bottom")
+
+        # ambos horizontales
+        if side1 in h_sides and side2 in h_sides:
+            if side1 == "right" and side2 == "left" and ex2 >= ex1:
+                # caso PFD clásico: alineados
+                if abs(ey1 - ey2) < 2:
+                    return [x1, y1, x2, y2]
+                mx = (ex1 + ex2) / 2
+                return [x1, y1, ex1, ey1, mx, ey1, mx, ey2, ex2, ey2, x2, y2]
+            if side1 == "left" and side2 == "right" and ex1 >= ex2:
+                # mirror
+                if abs(ey1 - ey2) < 2:
+                    return [x1, y1, x2, y2]
+                mx = (ex1 + ex2) / 2
+                return [x1, y1, ex1, ey1, mx, ey1, mx, ey2, ex2, ey2, x2, y2]
+            # mismo lado → U que rodea por encima o por abajo
+            extra = gap
+            if side1 == "right":
+                far = max(ex1, ex2) + extra
+            else:
+                far = min(ex1, ex2) - extra
+            return [x1, y1, far, ey1, far, ey2, x2, y2]
+
+        # ambos verticales
+        if side1 in v_sides and side2 in v_sides:
+            if side1 == "bottom" and side2 == "top" and ey2 >= ey1:
+                if abs(ex1 - ex2) < 2:
+                    return [x1, y1, x2, y2]
+                my = (ey1 + ey2) / 2
+                return [x1, y1, ex1, ey1, ex1, my, ex2, my, ex2, ey2, x2, y2]
+            if side1 == "top" and side2 == "bottom" and ey1 >= ey2:
+                if abs(ex1 - ex2) < 2:
+                    return [x1, y1, x2, y2]
+                my = (ey1 + ey2) / 2
+                return [x1, y1, ex1, ey1, ex1, my, ex2, my, ex2, ey2, x2, y2]
+            extra = gap
+            if side1 == "bottom":
+                far = max(ey1, ey2) + extra
+            else:
+                far = min(ey1, ey2) - extra
+            return [x1, y1, ex1, far, ex2, far, x2, y2]
+
+        # perpendiculares → L-shape (un solo codo)
+        if side1 in h_sides:   # primero horizontal, después vertical
+            return [x1, y1, ex1, ey1, ex2, ey1, ex2, ey2, x2, y2]
+        else:                   # primero vertical, después horizontal
+            return [x1, y1, ex1, ey1, ex1, ey2, ex2, ey2, x2, y2]
 
     def _stream_endpoints(self, s):
-        """Coords (modelo) del polyline ortogonal del stream."""
+        """Polyline ortogonal del stream en coords del modelo + sides."""
         b_src = self.fs.blocks.get(s.src)
         b_dst = self.fs.blocks.get(s.dst)
         if b_src is None or b_dst is None:
             return None
 
-        # slot del puerto
-        out_idx, out_n = self._stream_slot(s, "src_out")
-        in_idx,  in_n  = self._stream_slot(s, "dst_in")
-
-        x1, y1 = self._block_port(b_src, "right", out_idx, out_n)
-        x2, y2 = self._block_port(b_dst, "left",  in_idx,  in_n)
-        return self._ortho_path(x1, y1, x2, y2)
+        _pn1, side1, x1, y1 = self._resolve_port(b_src, s.src_port, "right")
+        _pn2, side2, x2, y2 = self._resolve_port(b_dst, s.dst_port, "left")
+        return self._ortho_route(x1, y1, side1, x2, y2, side2)
 
     def _label_xy(self, pts):
         """Punto medio del polyline para colocar el label."""
@@ -1347,9 +1494,9 @@ class FlowsheetEditor:
         dy_c = self._sc(ny - b.y)
         b.x = nx
         b.y = ny
-        for cid in (b.canvas_rect, b.canvas_text, b.canvas_sub):
-            if cid is not None:
-                self.canvas.move(cid, dx_c, dy_c)
+        # mueve rect/text/sub + todos los port markers de un saque (tag b{id})
+        self.canvas.move(f"b{b.id}", dx_c, dy_c)
+        self.canvas.move(f"port_b{b.id}", dx_c, dy_c)
         for s in self.fs.streams.values():
             if s.src == b.id or s.dst == b.id:
                 self._refresh_stream(s)
@@ -1368,11 +1515,11 @@ class FlowsheetEditor:
         menu = Menu(self.canvas, tearoff=0)
         menu.add_command(label=f"{b.name}", state="disabled")
         menu.add_separator()
-        menu.add_command(label="Connect to…",
+        menu.add_command(label="Conectar a…",
                          command=lambda: self._start_connection(b.id))
-        menu.add_command(label="Edit properties (Double-click)",
+        menu.add_command(label="Editar propiedades (doble-click)",
                          command=lambda: self._open_block_dialog(b))
-        menu.add_command(label="Delete",
+        menu.add_command(label="Borrar",
                          command=lambda: self._delete_and_refresh_block(b.id))
         try:
             menu.tk_popup(event.x_root, event.y_root)
@@ -1406,7 +1553,7 @@ class FlowsheetEditor:
         self._connecting_from = bid
         b = self.fs.blocks[bid]
         self.status_var.set(
-            f"Connecting from {b.name}…  click on the destination block (Esc to cancel)"
+            f"Conectando desde {b.name}…  hacé click en el equipo destino (Esc para cancelar)"
         )
 
     def _clear_pending_connection(self):
@@ -1426,25 +1573,25 @@ class FlowsheetEditor:
             outs = [s for s in self.fs.streams.values() if s.src == b.id]
             in_total  = sum(s.mass_flow for s in ins)
             out_total = sum(s.mass_flow for s in outs)
-            bal = "(open source/sink)"
+            bal = "(fuente/sumidero abierto)"
             if ins and outs:
                 diff = abs(in_total - out_total)
                 rel  = diff / max(in_total, out_total, 1e-9)
                 if rel < 0.005:
-                    bal = "✓ closed"
+                    bal = "✓ cierra"
                 else:
-                    bal = f"✗ {diff:g} tm/yr ({rel*100:.1f}%)"
+                    bal = f"✗ {diff:g} tm/año  ({rel*100:.1f}%)"
 
             txt = (
-                f"BLOCK  {b.name}\n"
-                f"Type   {b.eq_type}\n"
-                f"Cat.   {spec.get('categoria', '?')}\n"
-                f"S      {b.S:g} {spec.get('S_unit', '?')}\n"
-                f"n      {b.n}\n"
-                f"Range  [{spec.get('S_min', '?')} … {spec.get('S_max', '?')}]\n\n"
-                f"Streams in:  {len(ins)}  ({in_total:g} tm/yr)\n"
-                f"Streams out: {len(outs)} ({out_total:g} tm/yr)\n"
-                f"Mass balance: {bal}"
+                f"EQUIPO    {b.name}\n"
+                f"Tipo      {b.eq_type}\n"
+                f"Cat.      {spec.get('categoria', '?')}\n"
+                f"S         {b.S:g} {spec.get('S_unit', '?')}\n"
+                f"n         {b.n}\n"
+                f"Rango     [{spec.get('S_min', '?')} … {spec.get('S_max', '?')}]\n\n"
+                f"Entradas: {len(ins)}  ({in_total:g} tm/año)\n"
+                f"Salidas:  {len(outs)} ({out_total:g} tm/año)\n"
+                f"Balance:  {bal}"
             )
             self.prop_var.set(txt)
             return
@@ -1453,26 +1600,28 @@ class FlowsheetEditor:
             s = self.fs.streams[self.selected_stream]
             src = self.fs.blocks[s.src].name
             dst = self.fs.blocks[s.dst].name
+            sp = s.src_port or "(auto)"
+            dp = s.dst_port or "(auto)"
             self.prop_var.set(
-                f"STREAM  {s.name}\n"
-                f"From    {src}\n"
-                f"To      {dst}\n"
-                f"Role    {s.role}\n"
-                f"Mass    {s.mass_flow:g} tm/yr"
+                f"CORRIENTE  {s.name}\n"
+                f"Desde      {src}  ({sp})\n"
+                f"Hacia      {dst}  ({dp})\n"
+                f"Rol        {s.role}\n"
+                f"Flujo      {s.mass_flow:g} tm/año"
             )
             return
 
         self.prop_var.set(
-            "(nothing selected)\n\n"
-            "Click on a block or stream to see its properties.\n"
-            "Right-click a block → Connect to… to draw arrows."
+            "(nada seleccionado)\n\n"
+            "Hacé click en un equipo o corriente para ver sus propiedades.\n"
+            "Click derecho en un equipo → Conectar a… para dibujar flechas."
         )
 
     def _update_status(self):
         nb = len(self.fs.blocks)
         ns = len(self.fs.streams)
         if self._connecting_from is None:
-            self.status_var.set(f"{nb} blocks · {ns} streams")
+            self.status_var.set(f"{nb} equipos · {ns} corrientes")
 
     # ==================================================
     # COMPUTE / APPLY
@@ -1480,7 +1629,8 @@ class FlowsheetEditor:
 
     def compute(self):
         if not self.fs.blocks:
-            messagebox.showinfo("Compute", "Add at least one equipment block first.")
+            messagebox.showinfo("Calcular",
+                                "Primero agregá al menos un equipo.")
             return
 
         equipos = [
@@ -1488,22 +1638,21 @@ class FlowsheetEditor:
             for b in self.fs.blocks.values()
         ]
 
-        # tomar plant type y CEPCI year via prompts simples
-        # (en una v2 estos serían parte de la UI persistente)
+        # tipo de planta + año CEPCI vía prompts (v2: UI persistente)
         from tkinter.simpledialog import askstring
         plant_type = askstring(
-            "Plant type",
-            "Plant type:\n  Fluid processing (default)\n  Solid-fluid processing\n  Solid processing",
+            "Tipo de planta",
+            "Tipo de planta:\n  Fluid processing (default)\n  Solid-fluid processing\n  Solid processing",
             initialvalue="Fluid processing",
         )
         if not plant_type:
             return
         if plant_type not in eq.LANG_FACTORS:
-            messagebox.showerror("Invalid", f"Unknown plant type: {plant_type}")
+            messagebox.showerror("Inválido", f"Tipo de planta desconocido: {plant_type}")
             return
 
-        year_str = askstring("Target year (CEPCI)",
-                             "Target year:", initialvalue="2026")
+        year_str = askstring("Año destino (CEPCI)",
+                             "Año:", initialvalue="2026")
         try:
             year = int(year_str)
         except (TypeError, ValueError):
@@ -1512,23 +1661,23 @@ class FlowsheetEditor:
         try:
             res = eq.lang_fci(equipos, plant_type=plant_type, year_target=year)
         except ValueError as e:
-            messagebox.showerror("Compute error", str(e))
+            messagebox.showerror("Error de cálculo", str(e))
             return
 
-        # mass balance global por bloque
+        # balance de masa global por bloque
         warnings_mb = []
         for b in self.fs.blocks.values():
             ins  = [s for s in self.fs.streams.values() if s.dst == b.id]
             outs = [s for s in self.fs.streams.values() if s.src == b.id]
             if not ins or not outs:
-                continue  # source or sink — sin balance esperado
+                continue  # fuente o sumidero — sin balance esperado
             in_t  = sum(s.mass_flow for s in ins)
             out_t = sum(s.mass_flow for s in outs)
             diff  = abs(in_t - out_t)
             rel   = diff / max(in_t, out_t, 1e-9)
             if rel >= 0.005:
                 warnings_mb.append(
-                    f"{b.name}: in={in_t:g}, out={out_t:g}, Δ={diff:g} tm/yr ({rel*100:.1f}%)"
+                    f"{b.name}: ent={in_t:g}, sal={out_t:g}, Δ={diff:g} tm/año ({rel*100:.1f}%)"
                 )
 
         # ISBL implícito
@@ -1551,9 +1700,9 @@ class FlowsheetEditor:
 
         # mostrar resultados
         out_lines = [
-            f"Plant type:   {plant_type}",
-            f"Lang factor:  {res['lang_factor']:.2f}",
-            f"Target year:  {res['year_target']}",
+            f"Tipo de planta:  {plant_type}",
+            f"Factor Lang:     {res['lang_factor']:.2f}",
+            f"Año destino:     {res['year_target']}",
             "",
             f"Σ Cp°:   $ {res['sum_Cp']:>14,.0f}",
             f"FCI:     {res['FCI_MMUSD']:>10.2f} MM USD",
@@ -1566,30 +1715,32 @@ class FlowsheetEditor:
             isbl_mm = eq.isbl_implicito(res["FCI_MMUSD"], 0.30, 0.10, 0.10)
             out_lines.append(f"ISBL:    {isbl_mm:>10.2f} MM USD  (defaults 30/10/10%)")
         else:
-            out_lines.append("ISBL:    (need project loaded)")
+            out_lines.append("ISBL:    (cargá un proyecto)")
 
         if feeds or products:
             out_lines.append("")
-            out_lines.append("─ Mass flows ─")
+            out_lines.append("─ Flujos másicos ─")
             if products:
-                out_lines.append(f"Annual production: {product_total:g} tm/yr  ({len(products)} stream{'s' if len(products)>1 else ''})")
+                out_lines.append(f"Producción anual: {product_total:g} tm/año  "
+                                 f"({len(products)} corriente{'s' if len(products)>1 else ''})")
             if feeds:
-                out_lines.append(f"Feed total:        {feed_total:g} tm/yr  ({len(feeds)} stream{'s' if len(feeds)>1 else ''})")
+                out_lines.append(f"Alimentación:     {feed_total:g} tm/año  "
+                                 f"({len(feeds)} corriente{'s' if len(feeds)>1 else ''})")
                 for s in feeds:
-                    out_lines.append(f"  · {s.name}: {s.mass_flow:g} tm/yr")
+                    out_lines.append(f"  · {s.name}: {s.mass_flow:g} tm/año")
 
         if res["warnings"]:
             out_lines.append("")
-            out_lines.append("⚠ Cp° warnings:")
+            out_lines.append("⚠ Avisos en Cp°:")
             out_lines += [f"  · {w}" for w in res["warnings"]]
 
         if warnings_mb:
             out_lines.append("")
-            out_lines.append("⚠ Mass balance:")
+            out_lines.append("⚠ Balance de masa:")
             out_lines += [f"  · {w}" for w in warnings_mb]
         elif self.fs.streams:
             out_lines.append("")
-            out_lines.append("✓ Mass balance OK on all internal blocks.")
+            out_lines.append("✓ Balance de masa OK en todos los equipos internos.")
 
         self.results_var.set("\n".join(out_lines))
         self._last_isbl = isbl_mm
@@ -1600,23 +1751,23 @@ class FlowsheetEditor:
 
     def apply_isbl(self):
         if not hasattr(self, "_last_isbl") or self._last_isbl is None:
-            messagebox.showinfo("Apply ISBL", "Run Compute first.")
+            messagebox.showinfo("Aplicar ISBL", "Primero apretá Calcular.")
             return
         if self.df_capital is None or self.df_capital.empty:
             messagebox.showinfo(
-                "Apply ISBL",
+                "Aplicar ISBL",
                 "Para aplicar el ISBL al análisis, importá o creá un proyecto primero."
             )
             return
         if not messagebox.askyesno(
-            "Apply ISBL",
-            f"Apply ISBL = {self._last_isbl:.2f} MM USD to the project?"
+            "Aplicar ISBL",
+            f"¿Aplicar ISBL = {self._last_isbl:.2f} MM USD al proyecto?"
         ):
             return
         self.df_capital.iat[0, 2] = float(self._last_isbl)
         if self.on_apply is not None:
             self.on_apply()
-        messagebox.showinfo("Applied", "ISBL updated in the project.")
+        messagebox.showinfo("Aplicado", "ISBL actualizado en el proyecto.")
 
     # ==================================================
     # TRANSICIÓN AL ANÁLISIS ECONÓMICO (modo main)
@@ -1638,8 +1789,7 @@ class FlowsheetEditor:
         if not self.fs.blocks:
             if not messagebox.askyesno(
                 "Sin proceso modelado",
-                "El flowsheet está vacío.  "
-                "¿Abrir el análisis económico igual?",
+                "El diagrama está vacío. ¿Abrir el análisis económico igual?",
             ):
                 return
             isbl = None
@@ -1654,7 +1804,7 @@ class FlowsheetEditor:
                     res = eq.lang_fci(equipos, plant_type="Fluid processing", year_target=2026)
                     isbl = eq.isbl_implicito(res["FCI_MMUSD"], 0.30, 0.10, 0.10)
                 except ValueError as e:
-                    messagebox.showerror("Compute error", str(e))
+                    messagebox.showerror("Error de cálculo", str(e))
                     return
             else:
                 isbl = self._last_isbl
@@ -1663,9 +1813,9 @@ class FlowsheetEditor:
         usar_xlsx = messagebox.askyesnocancel(
             "Análisis económico",
             "¿Usar un .xlsx base existente para el análisis?\n\n"
-            "  Sí  → seleccionás el archivo\n"
-            "  No  → análisis con template default Turton\n"
-            "  Cancel → vuelvo al flowsheet",
+            "  Sí        → seleccionás el archivo\n"
+            "  No        → análisis con plantilla Turton por defecto\n"
+            "  Cancelar  → vuelvo al diagrama",
         )
         if usar_xlsx is None:
             return
@@ -1673,8 +1823,8 @@ class FlowsheetEditor:
         cmd = [sys.executable, "ANA.py"]
         if usar_xlsx:
             path = filedialog.askopenfilename(
-                title="Project xlsx",
-                filetypes=[("Excel files", "*.xlsx *.xls")],
+                title="Proyecto .xlsx",
+                filetypes=[("Excel", "*.xlsx *.xls")],
             )
             if not path:
                 return
@@ -1688,16 +1838,16 @@ class FlowsheetEditor:
             getattr(self, "_last_products", None)):
             extras = []
             if self._last_products:
-                extras.append(f"Annual production: {self._last_product_total:g} tm/yr")
+                extras.append(f"Producción anual: {self._last_product_total:g} tm/año")
             if self._last_feeds:
-                extras.append("Feeds:")
+                extras.append("Alimentaciones:")
                 for s in self._last_feeds:
-                    extras.append(f"  · {s.name}: {s.mass_flow:g} tm/yr")
+                    extras.append(f"  · {s.name}: {s.mass_flow:g} tm/año")
             messagebox.showinfo(
-                "Datos del flowsheet (copialos a mano)",
-                "El ISBL se inyecta automáticamente en el análisis.\n"
-                "Estos otros datos del flowsheet quedan disponibles para que "
-                "los cargues a mano en el análisis económico:\n\n"
+                "Datos del diagrama (copialos a mano)",
+                "El ISBL se inyecta automáticamente al análisis.\n"
+                "Estos otros datos quedan disponibles para que los cargues "
+                "manualmente en el análisis económico:\n\n"
                 + "\n".join(extras),
             )
 
@@ -1705,7 +1855,8 @@ class FlowsheetEditor:
             cwd = os.path.dirname(os.path.abspath(__file__))
             subprocess.Popen(cmd, cwd=cwd)
         except Exception as e:
-            messagebox.showerror("Launch failed", f"{type(e).__name__}: {e}")
+            messagebox.showerror("Falló el lanzamiento",
+                                 f"{type(e).__name__}: {e}")
 
 
 # ======================================================

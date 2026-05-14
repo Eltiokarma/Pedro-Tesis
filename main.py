@@ -89,16 +89,16 @@ class WelcomeWindow:
 
     def __init__(self):
         root = Tk()
-        root.title("Tesis — Process & Economic Analysis")
+        root.title("Tesis — Análisis de proceso y económico")
         root.geometry("680x520+200+120")
         self.root = root
 
-        # header
+        # encabezado
         header = ttk.Frame(root, padding=(24, 18))
         header.pack(fill="x")
         ttk.Label(
             header,
-            text="Process & Economic Analysis",
+            text="Análisis de proceso y económico",
             font=("Segoe UI", 18, "bold"),
         ).pack(anchor="w")
         ttk.Label(
@@ -112,26 +112,25 @@ class WelcomeWindow:
         body = ttk.Frame(root, padding=(24, 16))
         body.pack(fill="both", expand=True)
 
-        # botones principales
         ttk.Label(
             body, text="Empezar", font=("Segoe UI", 11, "bold"),
         ).pack(anchor="w", pady=(0, 8))
 
         btn_new = ttk.Button(
-            body, text="  New project — diseñar proceso desde cero",
+            body, text="  Nuevo proyecto — diseñar el proceso desde cero",
             command=self._on_new,
         )
         btn_new.pack(fill="x", pady=3, ipady=6)
 
         btn_open = ttk.Button(
-            body, text="  Open project…  (.json del flowsheet o .xlsx legacy)",
+            body, text="  Abrir proyecto…  (.json del diagrama o .xlsx legacy)",
             command=self._on_open,
         )
         btn_open.pack(fill="x", pady=3, ipady=6)
 
         # recientes
         ttk.Label(
-            body, text="Recent", font=("Segoe UI", 11, "bold"),
+            body, text="Recientes", font=("Segoe UI", 11, "bold"),
         ).pack(anchor="w", pady=(18, 4))
 
         recent = _load_recent()
@@ -144,17 +143,17 @@ class WelcomeWindow:
             for path in recent:
                 self._add_recent_row(body, path)
 
-        # footer
+        # pie
         footer = ttk.Frame(root, padding=(24, 10))
         footer.pack(fill="x", side="bottom")
         ttk.Separator(root, orient="horizontal").pack(fill="x", side="bottom")
-        ttk.Button(footer, text="Exit", command=root.destroy).pack(side="right")
+        ttk.Button(footer, text="Salir", command=root.destroy).pack(side="right")
 
     def _add_recent_row(self, body, path):
         row = ttk.Frame(body)
         row.pack(fill="x", pady=1)
         ext = os.path.splitext(path)[1].lower()
-        tag = "Flowsheet" if ext == ".json" else ("Legacy xlsx" if ext in (".xlsx", ".xls") else "?")
+        tag = "Diagrama" if ext == ".json" else ("Excel legacy" if ext in (".xlsx", ".xls") else "?")
         ttk.Button(
             row, text=f"{tag}  ·  {os.path.basename(path)}",
             command=lambda p=path: self._open_path(p),
@@ -168,11 +167,11 @@ class WelcomeWindow:
 
     def _on_open(self):
         path = filedialog.askopenfilename(
-            title="Open project",
+            title="Abrir proyecto",
             filetypes=[
-                ("Flowsheet (JSON)", "*.json"),
-                ("Legacy project (Excel)", "*.xlsx *.xls"),
-                ("All files", "*.*"),
+                ("Diagrama de proceso (JSON)", "*.json"),
+                ("Proyecto legacy (Excel)",    "*.xlsx *.xls"),
+                ("Todos los archivos",         "*.*"),
             ],
         )
         if not path:
@@ -191,10 +190,10 @@ class WelcomeWindow:
             cont = messagebox.askokcancel(
                 "Proyecto sin proceso modelado",
                 "Este archivo es un proyecto legacy del análisis económico, "
-                "sin flowsheet asociado.\n\n"
-                "Lo voy a abrir directamente en el análisis económico — "
-                "si querés modelar el proceso en bloques, cancelá y empezá "
-                "con 'New project'.",
+                "sin diagrama de proceso asociado.\n\n"
+                "Lo voy a abrir directamente en el análisis económico. "
+                "Si querés modelar el proceso en bloques primero, cancelá "
+                "y elegí 'Nuevo proyecto'.",
             )
             if not cont:
                 return
@@ -204,8 +203,8 @@ class WelcomeWindow:
 
         messagebox.showerror(
             "Tipo de archivo no soportado",
-            f"No sé cómo abrir extensión: {ext}\n"
-            "Use .json (flowsheet) o .xlsx (proyecto legacy).",
+            f"No sé cómo abrir la extensión: {ext}\n"
+            "Usá .json (diagrama) o .xlsx (proyecto legacy).",
         )
 
     def run(self):
