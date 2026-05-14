@@ -1,3 +1,8 @@
+import os
+import subprocess
+import sys
+import traceback
+
 from tkinter import *
 from tkinter import ttk
 from tkinter import scrolledtext
@@ -19,6 +24,8 @@ from units import (
     ObtenerTipoUnidad,
 
 )
+
+from pipeline import ejecutar_analisis
 
 # ======================================================
 # ENGINE CENTRAL (SINGLE SOURCE OF TRUTH)
@@ -1430,59 +1437,143 @@ def ActualizarDepreciacion():
         RadioDMACRS15.config(state="normal")
 
 # ======================================================
-# DEMO RESULTADOS
+# ESTADO DEL ÚLTIMO REPORTE
 # ======================================================
 
-def MostrarDemoResultados():
+ultimo_reporte = {"path": None}
+
+# ======================================================
+# ABRIR EL ÚLTIMO REPORTE EXCEL
+# ======================================================
+
+def AbrirUltimoReporte():
+
+    ruta = ultimo_reporte.get("path")
+
+    if not ruta or not os.path.exists(ruta):
+        messagebox.showwarning(
+            "No report",
+            "Run the analysis first."
+        )
+        return
+
+    try:
+        if sys.platform.startswith("win"):
+            os.startfile(ruta)
+        elif sys.platform == "darwin":
+            subprocess.run(["open", ruta], check=False)
+        else:
+            subprocess.run(["xdg-open", ruta], check=False)
+    except OSError as e:
+        messagebox.showerror("Open Error", str(e))
+
+# ======================================================
+# RECOLECTAR INPUTS ECONÓMICOS DE LA UI
+# ======================================================
+
+def _leer_entry_float(entry, nombre):
+    texto = entry.get().strip()
+    if texto == "":
+        raise ValueError(f"{nombre} is required")
+    return float(texto)
+
+
+def _recolectar_inputs():
+
+    inputs = {
+        "fc_csv":        EntryFC.get(),
+        "vcop_csv":      EntryVCOP.get(),
+        "project_life":  _leer_entry_float(EntryProjLife, "Project life"),
+        "tax_rate":      _leer_entry_float(EntryTaxeRate, "Tax rate"),
+        "discount_rate": _leer_entry_float(EntryDiscountRate, "Discount rate"),
+        "metodo_dep":    opcionDepre.get(),
+        "tipo_macrs":    opcionMACRS.get(),
+    }
+
+    if inputs["metodo_dep"] == 0:
+        inputs["periodo_dep"] = _leer_entry_float(
+            EntryDLineal, "Depreciation period"
+        )
+
+    return inputs
+
+# ======================================================
+# RESOLVER (BOTÓN SOLVE)
+# ======================================================
+
+def EjecutarAnalisis():
+
+    ConsolaResultados.config(state="normal")
+    ConsolaResultados.delete(1.0, END)
+    ConsolaResultados.insert(END, "Running economic analysis...\n\n")
+    ConsolaResultados.config(state="disabled")
+    raiz.update_idletasks()
+
+    # 1) inputs
+    try:
+        inputs = _recolectar_inputs()
+    except (ValueError, TypeError) as e:
+        messagebox.showerror("Invalid input", str(e))
+        return
+
+    # 2) datos cargados
+    if df_capital.empty or df_fixed.empty or engine.df_internal.empty:
+        messagebox.showerror(
+            "No project",
+            "Import a project first (File > Import Project)."
+        )
+        return
+
+    # 3) destino
+    archivo = filedialog.asksaveasfilename(
+        title="Save Economic Analysis Report",
+        defaultextension=".xlsx",
+        initialfile="Economic_Analysis.xlsx",
+        filetypes=[("Excel files", "*.xlsx")],
+    )
+
+    if not archivo:
+        return
+
+    # 4) corre pipeline
+    try:
+        resultado = ejecutar_analisis(
+            df_capital=df_capital,
+            df_fixed=df_fixed,
+            df_internal=engine.df_internal,
+            inputs_economicos=inputs,
+            archivo_salida=archivo,
+        )
+    except Exception as e:
+        messagebox.showerror(
+            "Analysis Error",
+            f"{type(e).__name__}: {e}\n\n{traceback.format_exc()}"
+        )
+        return
+
+    ultimo_reporte["path"] = archivo
 
     BotonReporteEconomico.config(state="normal")
 
-    BotonReporteSensibilidad.config(state="normal")
+    # 5) consola
+    npv = resultado["npv"]
+    irr = resultado["irr"]
+    fci = resultado["costos"]["FCI"]
+    wc = resultado["costos"]["WC"]
 
     ConsolaResultados.config(state="normal")
-
     ConsolaResultados.delete(1.0, END)
+    ConsolaResultados.insert(END, "Economic Analysis Completed\n\n")
+    ConsolaResultados.insert(END, f"FCI  : {fci:>10.2f} MM USD\n")
+    ConsolaResultados.insert(END, f"WC   : {wc:>10.2f} MM USD\n")
+    ConsolaResultados.insert(END, f"NPV  : {npv:>10.2f} MM USD\n")
 
-    ConsolaResultados.insert(
-        END,
-        "ANA Economic Analysis Initialized\n\n"
-    )
+    if irr is not None:
+        ConsolaResultados.insert(END, f"IRR  : {irr*100:>10.2f} %\n")
+    else:
+        ConsolaResultados.insert(END, "IRR  :        n/a (no sign change in CF)\n")
 
-    ConsolaResultados.insert(
-        END,
-        "Loading project workspace...\n"
-    )
-
-    ConsolaResultados.insert(
-        END,
-        "Validating unit system...\n"
-    )
-
-    ConsolaResultados.insert(
-        END,
-        "Running economic analysis...\n\n"
-    )
-
-    ConsolaResultados.insert(
-        END,
-        "NPV  : 15.82 MM USD\n"
-    )
-
-    ConsolaResultados.insert(
-        END,
-        "IRR  : 21.45 %\n"
-    )
-
-    ConsolaResultados.insert(
-        END,
-        "POT  : 4.1 years\n"
-    )
-
-    ConsolaResultados.insert(
-        END,
-        "\nEconomic analysis completed successfully."
-    )
-
+    ConsolaResultados.insert(END, f"\nReport saved to:\n{archivo}\n")
     ConsolaResultados.config(state="disabled")
 
 # ======================================================
@@ -1835,7 +1926,8 @@ BotonReporteEconomico = ttk.Button(
     ContornoResultados,
     text='Economic Analysis Report',
     width=30,
-    state="disabled"
+    state="disabled",
+    command=AbrirUltimoReporte
 )
 
 BotonReporteEconomico.place(
@@ -1863,7 +1955,7 @@ BotonResolver = ttk.Button(
     raiz,
     text='Solve',
     width=20,
-    command=MostrarDemoResultados
+    command=EjecutarAnalisis
 )
 
 BotonResolver.place(
