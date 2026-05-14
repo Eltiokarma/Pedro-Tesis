@@ -119,6 +119,7 @@ engine = ModelEngine()
 df_capital = pd.DataFrame()
 df_fixed = pd.DataFrame()
 df_variable = pd.DataFrame()
+df_equipment = pd.DataFrame()    # equipos del PFD (si el xlsx viene del flowsheet)
 
 
 # ======================================================
@@ -201,17 +202,24 @@ def NuevoProyecto():
 
 
 def _limpiar_frame_inputs():
-    """Vacía todos los Entries del frame Input Data,
-    resetea Comboboxes a su default, des-marca Sensitivity
-    y restaura Depreciation a lineal.  Se llama al hacer
-    'New Project'."""
+    """Resetea el frame Input Data a defaults sensatos
+    (no a vacío) para que el usuario pueda apretar Solve
+    enseguida.  Se llama al hacer 'New Project'."""
 
-    # Entries de texto numérico
-    for entry in (EntryFC, EntryVCOP, EntryProjLife, EntryTaxeRate,
-                  EntryDiscountRate, EntryDLineal):
+    # Entries con valores por defecto razonables
+    defaults = (
+        (EntryFC,           "1.0"),    # FOC schedule = 100% cada año
+        (EntryVCOP,         "1.0"),    # VOC schedule = 100% cada año
+        (EntryProjLife,     "10"),     # 10 años (Turton típico)
+        (EntryTaxeRate,     "29.5"),   # Perú IR tercera categoría
+        (EntryDiscountRate, "12"),     # 12% típico project finance
+        (EntryDLineal,      "10"),     # SL igual a la vida del proyecto
+    )
+    for entry, val in defaults:
         entry.delete(0, END)
+        entry.insert(0, val)
 
-    # CEPCI defaults (mantenemos el año actual)
+    # CEPCI: año actual
     for entry, val in ((EntryCEPCIBasis, "2026"), (EntryCEPCITarget, "2026")):
         entry.delete(0, END)
         entry.insert(0, val)
@@ -220,8 +228,8 @@ def _limpiar_frame_inputs():
     LabelFCuni.set("Fraction")
     LabelVCOPuni.set("Fraction")
     LabelProjLifeUni.set("Years")
-    LabelTaxRateUni.set("Fraction")
-    LabelDiscountRateUni.set("Fraction")
+    LabelTaxRateUni.set("Percentage")
+    LabelDiscountRateUni.set("Percentage")
     LabelDLinealUni.set("Years")
 
     # Toggles
@@ -262,6 +270,11 @@ def ImportarProyecto(archivo=None):
         Fixed Operating Costs   (cols E,F,G)
         Variable Operating Costs (cols I..N)
 
+    Si el xlsx fue generado por el flowsheet editor también
+    trae una pestaña adicional 'Equipment' con la lista de
+    equipos del PFD — se carga en df_equipment para mostrar
+    en View / edit data.
+
     Valida unidades en Variable Costs; si hay errores,
     muestra messagebox detallado y aborta el load del
     engine.  Migra streams en formato letra (A..F) a
@@ -274,6 +287,7 @@ def ImportarProyecto(archivo=None):
     global df_capital
     global df_fixed
     global df_variable
+    global df_equipment
 
     if archivo is None:
         archivo = filedialog.askopenfilename(
@@ -566,6 +580,25 @@ def ImportarProyecto(archivo=None):
 
         ConsolaResultados.config(state="disabled")
 
+        # ==================================================
+        # PESTAÑA OPCIONAL "Equipment" (xlsx generado por PFD)
+        # ==================================================
+        try:
+            xls = pd.ExcelFile(archivo)
+            if "Equipment" in xls.sheet_names:
+                df_equipment = pd.read_excel(archivo, sheet_name="Equipment")
+                df_equipment = df_equipment.dropna(how="all").reset_index(drop=True)
+                ConsolaResultados.config(state="normal")
+                ConsolaResultados.insert(
+                    END,
+                    f"Equipment Rows     : {len(df_equipment)}  (from PFD)\n"
+                )
+                ConsolaResultados.config(state="disabled")
+            else:
+                df_equipment = pd.DataFrame()
+        except Exception:
+            df_equipment = pd.DataFrame()
+
         _actualizar_status_proyecto(
             f"Imported: {os.path.basename(archivo)}"
         )
@@ -709,6 +742,53 @@ def VentanaVisualizarData():
         padx=10,
         pady=10
     )
+
+    # ==================================================
+    # TAB EQUIPMENT  (sólo si el xlsx vino del PFD)
+    # ==================================================
+
+    tablaEquipos = None
+    if not df_equipment.empty:
+        tabEquipos = ttk.Frame(notebook)
+        notebook.add(
+            tabEquipos,
+            text="Equipment (from PFD)"
+        )
+
+        # nota explicativa arriba
+        ttk.Label(
+            tabEquipos,
+            text="Lista de equipos del diagrama de proceso (read-only).\n"
+                 "Editá los equipos desde el Flowsheet Editor "
+                 "(Tools > Open Flowsheet Editor).",
+            foreground="#555",
+            justify="left",
+        ).pack(side="top", anchor="w", padx=10, pady=(10, 4))
+
+        tablaEquipos = ttk.Treeview(
+            tabEquipos,
+            show="headings",
+        )
+
+        cols_eq = list(df_equipment.columns)
+        tablaEquipos["columns"] = cols_eq
+        for c in cols_eq:
+            tablaEquipos.heading(c, text=str(c))
+            tablaEquipos.column(c, width=120, anchor="w")
+
+        for _, row in df_equipment.iterrows():
+            tablaEquipos.insert(
+                "", END,
+                values=[row[c] for c in cols_eq],
+            )
+
+        tablaEquipos.pack(
+            side="top",
+            fill="both",
+            expand=True,
+            padx=10,
+            pady=10,
+        )
 
     # ==================================================
     # BLOQUEAR RESIZE COLUMNAS
@@ -2055,6 +2135,22 @@ def LanzarFlowsheet():
     )
 
 
+def _AbrirFlowsheetExterno():
+    """Abre el editor de diagrama como proceso separado.
+    El análisis económico queda corriendo en paralelo."""
+    here = os.path.dirname(os.path.abspath(__file__))
+    try:
+        subprocess.Popen(
+            [sys.executable, "flowsheet_main.py"],
+            cwd=here,
+        )
+    except Exception as e:
+        messagebox.showerror(
+            "No se pudo abrir el diagrama",
+            f"{type(e).__name__}: {e}",
+        )
+
+
 menuTools = Menu(menubar, tearoff=0)
 menubar.add_cascade(label='Tools', menu=menuTools)
 menuTools.add_command(
@@ -2062,8 +2158,8 @@ menuTools.add_command(
     command=LanzarEstimateISBL,
 )
 menuTools.add_command(
-    label='Estimate Capital from PFD (block diagram)…',
-    command=LanzarFlowsheet,
+    label='Open Flowsheet Editor…   (process diagram in a separate window)',
+    command=_AbrirFlowsheetExterno,
 )
 
 menuHelp = Menu(
@@ -2098,7 +2194,7 @@ raiz.config(menu=menubar)
 # ======================================================
 
 ToolbarFrame = ttk.LabelFrame(raiz, text="Workflow")
-ToolbarFrame.place(x=15, y=10, width=690, height=60)
+ToolbarFrame.place(x=15, y=10, width=820, height=60)
 
 BtnTbNew = ttk.Button(
     ToolbarFrame,
@@ -2140,6 +2236,14 @@ BtnTbSolve = ttk.Button(
 )
 BtnTbSolve.place(x=595, y=8)
 
+BtnTbFlowsheet = ttk.Button(
+    ToolbarFrame,
+    text="🧩  Flowsheet",
+    width=14,
+    command=lambda: _AbrirFlowsheetExterno(),
+)
+BtnTbFlowsheet.place(x=695, y=8)
+
 
 # ======================================================
 # INPUT FRAME
@@ -2178,7 +2282,7 @@ SeparadorVertical.place(
 
 LabelFC = ttk.Label(
     ContornoDatos,
-    text='FC :'
+    text='FOC schedule :'
 )
 
 LabelFC.place(x=25, y=25)
@@ -2189,6 +2293,7 @@ EntryFC = ttk.Entry(
     justify="right"
 )
 
+EntryFC.insert(0, "1.0")
 EntryFC.place(x=120, y=25)
 
 LabelFCuni = ttk.Combobox(
@@ -2201,11 +2306,21 @@ LabelFCuni.set("Fraction")
 
 LabelFCuni.place(x=255, y=25)
 
+# tooltip aclaratorio (FOC = Fixed Operating Cost schedule)
+Tooltip(
+    LabelFC,
+    "Fixed Operating Cost schedule.\n"
+    "Fracción del costo fijo total aplicada cada año.\n"
+    "Formato CSV: año1, año2, ...  (un solo valor = todos los años igual).\n"
+    "Default 1.0 = costo fijo al 100% desde el año 1.\n"
+    "El costo fijo TOTAL se calcula con Turton desde Fixed Operating Costs."
+)
+
 # ------------------------------------------------------
 
 LabelVCOP = ttk.Label(
     ContornoDatos,
-    text='VCOP :'
+    text='VOC schedule :'
 )
 
 LabelVCOP.place(x=25, y=65)
@@ -2216,6 +2331,7 @@ EntryVCOP = ttk.Entry(
     justify="right"
 )
 
+EntryVCOP.insert(0, "1.0")
 EntryVCOP.place(x=120, y=65)
 
 LabelVCOPuni = ttk.Combobox(
@@ -2227,6 +2343,15 @@ LabelVCOPuni = ttk.Combobox(
 LabelVCOPuni.set("Fraction")
 
 LabelVCOPuni.place(x=255, y=65)
+
+Tooltip(
+    LabelVCOP,
+    "Variable Operating Cost schedule.\n"
+    "Fracción del costo variable total aplicada cada año.\n"
+    "Formato CSV: año1, año2, ...  (un solo valor = todos los años igual).\n"
+    "Default 1.0 = planta a producción nominal desde el año 1.\n"
+    "El costo variable TOTAL se calcula desde Variable Operating Costs (Σ flujo × precio)."
+)
 
 # ------------------------------------------------------
 
@@ -2243,6 +2368,7 @@ EntryProjLife = ttk.Entry(
     justify="right"
 )
 
+EntryProjLife.insert(0, "10")    # default 10 años (típico Turton)
 EntryProjLife.place(x=120, y=105)
 
 LabelProjLifeUni = ttk.Combobox(
@@ -2270,6 +2396,7 @@ EntryTaxeRate = ttk.Entry(
     justify="right"
 )
 
+EntryTaxeRate.insert(0, "29.5")  # Perú impuesto a la renta tercera categoría
 EntryTaxeRate.place(x=120, y=145)
 
 LabelTaxRateUni = ttk.Combobox(
@@ -2278,7 +2405,7 @@ LabelTaxRateUni = ttk.Combobox(
     state="readonly",
     width=11,
 )
-LabelTaxRateUni.set("Fraction")
+LabelTaxRateUni.set("Percentage")
 
 LabelTaxRateUni.place(x=255, y=145)
 
@@ -2358,6 +2485,7 @@ EntryDLineal = ttk.Entry(
     justify="right"
 )
 
+EntryDLineal.insert(0, "10")     # depreciación SL típica: igual a la vida del proyecto
 EntryDLineal.place(x=535, y=60)
 
 LabelDLinealUni = ttk.Combobox(
@@ -2423,6 +2551,7 @@ EntryDiscountRate = ttk.Entry(
     justify="right"
 )
 
+EntryDiscountRate.insert(0, "12")   # 12% típico project finance
 EntryDiscountRate.place(x=535, y=205)
 
 LabelDiscountRateUni = ttk.Combobox(
@@ -2431,7 +2560,7 @@ LabelDiscountRateUni = ttk.Combobox(
     state="readonly",
     width=11,
 )
-LabelDiscountRateUni.set("Fraction")
+LabelDiscountRateUni.set("Percentage")
 
 LabelDiscountRateUni.place(x=635, y=205)
 

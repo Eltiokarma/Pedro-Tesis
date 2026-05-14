@@ -2155,8 +2155,28 @@ class FlowsheetEditor:
                 ignore_index=True,
             )
 
-        # escribir xlsx con las 3 secciones lado a lado
-        self._write_3sections_xlsx(path, df_capital, df_fixed, df_variable)
+        # escribir xlsx con las 3 secciones lado a lado +
+        # pestaña adicional con la lista de equipos del PFD
+        equipment_rows = self._collect_equipment_rows()
+        self._write_3sections_xlsx(path, df_capital, df_fixed,
+                                   df_variable, equipment=equipment_rows)
+
+    def _collect_equipment_rows(self):
+        """Lista de dicts con la info de cada bloque del PFD,
+        para escribir como pestaña 'Equipment' en el xlsx."""
+        import equipment_costs as eq_mod
+        rows = []
+        for b in sorted(self.fs.blocks.values(), key=lambda b: b.name):
+            spec = eq_mod.EQUIPMENT_DATA.get(b.eq_type, {})
+            rows.append({
+                "Tag":        b.name,
+                "Type":       b.eq_type,
+                "Category":   spec.get("categoria", ""),
+                "Size S":     float(b.S),
+                "Unit":       spec.get("S_unit", ""),
+                "N° units":   int(b.n),
+            })
+        return rows
 
     @staticmethod
     def _read_project_xlsx(path):
@@ -2182,13 +2202,17 @@ class FlowsheetEditor:
         return df_capital, df_fixed, df_variable
 
     @staticmethod
-    def _write_3sections_xlsx(path, df_capital, df_fixed, df_variable):
+    def _write_3sections_xlsx(path, df_capital, df_fixed, df_variable,
+                              equipment=None):
         """Escribe un xlsx con:
-          cols A-C  → Capital Costs
-          col  D    → vacía
-          cols E-G  → Fixed Operating Costs
-          col  H    → vacía
-          cols I-N  → Variable Operating Costs
+          Hoja 'Project':
+            cols A-C  → Capital Costs
+            col  D    → vacía
+            cols E-G  → Fixed Operating Costs
+            col  H    → vacía
+            cols I-N  → Variable Operating Costs
+          Hoja 'Equipment' (opcional):
+            lista de equipos del diagrama de bloques
         Formato compatible con ANA.ImportarProyecto."""
         import openpyxl
         wb = openpyxl.Workbook()
@@ -2218,6 +2242,17 @@ class FlowsheetEditor:
         _write_block(df_capital,  1)
         _write_block(df_fixed,    5)
         _write_block(df_variable, 9)
+
+        # pestaña Equipment con la lista de bloques del PFD
+        if equipment:
+            ws_eq = wb.create_sheet("Equipment")
+            cols = ["Tag", "Type", "Category", "Size S", "Unit", "N° units"]
+            for j, name in enumerate(cols):
+                ws_eq.cell(row=1, column=j + 1, value=name)
+            for i, row in enumerate(equipment):
+                for j, key in enumerate(cols):
+                    ws_eq.cell(row=2 + i, column=j + 1, value=row.get(key, ""))
+
         wb.save(path)
 
 
