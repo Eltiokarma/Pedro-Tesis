@@ -1618,7 +1618,7 @@ def AbrirUltimoReporte(tab_inicial=0):
 
 def AbrirUltimoReporteSensitivity():
     """Atajo al Dashboard, tab Sensitivity."""
-    AbrirUltimoReporte(tab_inicial=3)
+    AbrirUltimoReporte(tab_inicial=4)
 
 
 def AbrirExcelExterno():
@@ -1847,7 +1847,7 @@ def LanzarMonteCarlo(inputs, archivo_excel):
             resultado_base=ultimo_reporte["resultado"],
             resultado_mc=resultado,
             on_open_excel=AbrirExcelExterno,
-            tab_inicial=3,
+            tab_inicial=4,
         )
 
     AbrirVentanaConfigMC(raiz, data, CorrerMC)

@@ -22,6 +22,7 @@ from tkinter import (
     Toplevel,
     Frame,
     Label,
+    Canvas,
     StringVar,
     END,
     BOTH,
@@ -142,6 +143,7 @@ def AbrirDashboard(
 
     # tabs
     _construir_tab_overview(notebook, resultado_base)
+    _construir_tab_detail(notebook, resultado_base)
     _construir_tab_cashflow(notebook, resultado_base)
     _construir_tab_breakdown(notebook, resultado_base)
     _construir_tab_sensitivity(notebook, resultado_mc)
@@ -254,6 +256,152 @@ def _construir_tab_overview(notebook, r):
     ]
     _two_col_table(op_card, ("Item", "Value"), op_rows)
 
+    # --- segunda fila: FCOP detalle desglosado ---
+    bottom2 = ttk.Frame(tab, style="Tab.TFrame")
+    bottom2.pack(fill=BOTH, expand=True, padx=18, pady=(0, 10))
+
+    fcop_card = _section_card(bottom2, "Fixed cost of production — detailed (Turton §8)")
+    fcop_card.pack(side=LEFT, fill=BOTH, expand=True, padx=(0, 8))
+
+    fc_det = c.get("FCOP_detalle", {})
+    fcop_rows = [
+        ("Labor",                   f"{fc_det.get('Labor', 0):>10.4f} MM USD/yr",  "USD/yr  (input)"),
+        ("Supervision",             f"{fc_det.get('Supervision', 0):>10.4f} MM USD/yr",  "% of Labor"),
+        ("Direct Salary Overhead",  f"{fc_det.get('Salary Overhead', 0):>10.4f} MM USD/yr",  "% of Labor + Supervision"),
+        ("Maintenance",             f"{fc_det.get('Maintenance', 0):>10.4f} MM USD/yr",  "% of FCI"),
+        ("Plant Overhead",          f"{fc_det.get('Plant Overhead', 0):>10.4f} MM USD/yr",  "% of Labor + Maintenance"),
+        ("Tax & Insurance",         f"{fc_det.get('Tax & Insurance', 0):>10.4f} MM USD/yr",  "% of ISBL + OSBL"),
+        ("Interest on debt",        f"{fc_det.get('Interest', 0):>10.4f} MM USD/yr",  "% of FCI"),
+        ("General Expenses",        f"{fc_det.get('General Expenses', 0):>10.4f} MM USD/yr",  "% of WC"),
+        ("─" * 22,                  "─" * 22, "─" * 22),
+        ("FCOP total",              f"{fc_det.get('FCOP_total', 0):>10.4f} MM USD/yr",  ""),
+    ]
+    _three_col_table(fcop_card, ("Concept", "Value", "Basis"), fcop_rows)
+
+    # Royalties — fuera del FCOP, se aplica al cash flow
+    roy_pct = fc_det.get("royalties_pct", 0) * 100
+    royalties_card = _section_card(bottom2, "Royalties")
+    royalties_card.pack(side=LEFT, fill=BOTH, expand=True, padx=(8, 0))
+    _two_col_table(
+        royalties_card, ("Item", "Value"),
+        [
+            ("Rate",            f"{roy_pct:.2f} % of Revenue"),
+            ("Annual @ base",   f"{c['Revenue'] * fc_det.get('royalties_pct', 0):>10.4f} MM USD/yr"),
+            ("", ""),
+            ("Note", "Royalties son net of FCOP — se aplican\nen el cash flow, no en el FCOP_total."),
+        ]
+    )
+
+
+# ======================================================
+# TAB 2 — DETAIL (streams por categoría)
+# ======================================================
+
+def _construir_tab_detail(notebook, r):
+
+    tab = ttk.Frame(notebook, style="Tab.TFrame")
+    notebook.add(tab, text="Detail")
+
+    data = r.get("data", {})
+
+    # ---- contenedor scrollable ----
+    canvas = Canvas(tab, bg=COLOR_BG, highlightthickness=0)
+    canvas.pack(side=LEFT, fill=BOTH, expand=True)
+    sb = ttk.Scrollbar(tab, orient=VERTICAL, command=canvas.yview)
+    sb.pack(side=RIGHT, fill=Y)
+    canvas.configure(yscrollcommand=sb.set)
+    inner = ttk.Frame(canvas, style="Tab.TFrame")
+    canvas.create_window((0, 0), window=inner, anchor="nw")
+
+    def _on_configure(_e):
+        canvas.configure(scrollregion=canvas.bbox("all"))
+    inner.bind("<Configure>", _on_configure)
+
+    # ---- secciones por bucket ----
+    secciones = [
+        ("Key Products",   data.get("key_products", []),   COLOR_POSITIVE),
+        ("By-products & Waste Streams", data.get("byproducts", []), "#6a9c4a"),
+        ("Raw Materials",  data.get("raw_materials", []),  COLOR_NEGATIVE),
+        ("Consumables",    data.get("consumables", []),    "#f57c00"),
+        ("Utilities",      data.get("utilities", []),      "#7b1fa2"),
+    ]
+
+    for titulo, items, color in secciones:
+
+        section = _section_card(inner, titulo)
+        section.pack(fill=X, padx=18, pady=(12, 0))
+
+        if not items:
+            Label(
+                section, bg=COLOR_CARD, fg=COLOR_SUBTLE,
+                text="(no items)", font=FONT_BODY,
+                anchor="w",
+            ).pack(fill=X, padx=14, pady=(0, 10), anchor=W)
+            continue
+
+        body = Frame(section, bg=COLOR_CARD)
+        body.pack(fill=X, padx=14, pady=(0, 12))
+
+        # encabezado
+        headers = ("Concept", "Flowrate", "Price", "$MM/yr")
+        for col, h in enumerate(headers):
+            Label(
+                body, text=h,
+                font=FONT_H2, bg=COLOR_CARD, fg=COLOR_SUBTLE,
+                anchor="e" if col > 0 else "w",
+            ).grid(row=0, column=col, sticky="ew", padx=4, pady=(0, 4))
+
+        total = 0.0
+        for i, item in enumerate(items, start=1):
+            flow  = item.get("flow", 0)
+            price = item.get("price", 0)
+            val   = flow * price / 1e6
+            total += val
+
+            Label(body, text=item.get("concept", ""),
+                  font=FONT_TABLE, bg=COLOR_CARD, fg=COLOR_NEUTRAL,
+                  anchor="w").grid(row=i, column=0, sticky="w", padx=4, pady=1)
+            Label(body, text=f"{flow:>12,.0f}",
+                  font=FONT_TABLE, bg=COLOR_CARD, fg=COLOR_NEUTRAL,
+                  anchor="e").grid(row=i, column=1, sticky="e", padx=4, pady=1)
+            Label(body, text=f"{price:>10,.2f}",
+                  font=FONT_TABLE, bg=COLOR_CARD, fg=COLOR_NEUTRAL,
+                  anchor="e").grid(row=i, column=2, sticky="e", padx=4, pady=1)
+            Label(body, text=f"{val:>10,.4f}",
+                  font=FONT_TABLE, bg=COLOR_CARD, fg=color,
+                  anchor="e").grid(row=i, column=3, sticky="e", padx=4, pady=1)
+
+        # total row
+        n = len(items) + 1
+        Label(body, text=f"Total {titulo}",
+              font=FONT_H2, bg=COLOR_CARD, fg=COLOR_HEADER,
+              anchor="e").grid(row=n, column=0, columnspan=3, sticky="e", padx=4, pady=(4, 0))
+        Label(body, text=f"{total:>10,.4f} MM USD/yr",
+              font=FONT_H2, bg=COLOR_CARD, fg=COLOR_HEADER,
+              anchor="e").grid(row=n, column=3, sticky="e", padx=4, pady=(4, 0))
+
+        for col in range(4):
+            body.columnconfigure(col, weight=1)
+
+    # ---- summary final ----
+    summary = _section_card(inner, "Summary")
+    summary.pack(fill=X, padx=18, pady=12)
+
+    c = r["costos"]
+    sum_rows = [
+        ("Revenue (REV)",         f"{c['Revenue']:>10.4f} MM USD/yr"),
+        ("Byproducts (BP)",       f"{c['Byproducts']:>10.4f} MM USD/yr"),
+        ("Raw Materials (RM)",    f"{c['RawMaterials']:>10.4f} MM USD/yr"),
+        ("Consumables (CONS)",    f"{c['Consumables']:>10.4f} MM USD/yr"),
+        ("Utilities (UTS)",       f"{c['Utilities']:>10.4f} MM USD/yr"),
+        ("─" * 22,                "─" * 22),
+        ("VCOP = RM − BP + CONS + UTS",  f"{c['VCOP']:>10.4f} MM USD/yr"),
+        ("FCOP",                  f"{c['FCOP']:>10.4f} MM USD/yr"),
+        ("─" * 22,                "─" * 22),
+        ("CCOP = VCOP + FCOP",    f"{c['VCOP'] + c['FCOP']:>10.4f} MM USD/yr"),
+    ]
+    _two_col_table(summary, ("Item", "Value"), sum_rows)
+
 
 # ======================================================
 # TAB 2 — CASH FLOW
@@ -267,6 +415,75 @@ def _construir_tab_cashflow(notebook, r):
     cf = r["cf"]
     años = cf["años"]
     tasa = r["params"]["tasa_interes"]
+    params = r["params"]
+
+    # ---- Economic Assumptions + Construction Schedule ----
+    top_row = ttk.Frame(tab, style="Tab.TFrame")
+    top_row.pack(fill=X, padx=18, pady=(14, 6))
+
+    # Assumptions card
+    assumptions_card = _section_card(top_row, "Economic Assumptions")
+    assumptions_card.pack(side=LEFT, fill=BOTH, expand=True, padx=(0, 8))
+
+    metodo = "Straight-line" if params["metodo_dep"] == 0 else "MACRS"
+    if params["metodo_dep"] == 0:
+        dep_extra = f"{params['periodo_dep']} yr"
+    else:
+        macrs_names = {0: "MACRS 5", 1: "MACRS 7", 2: "MACRS 15"}
+        dep_extra = macrs_names.get(params["tipo_macrs"], "MACRS")
+
+    cepci_basis  = r.get("cepci_year_basis",  2026)
+    cepci_target = r.get("cepci_year_target", 2026)
+    cepci_factor = r.get("cepci_factor", 1.0)
+
+    asum_rows = [
+        ("Tax rate",            f"{params['tasa_impuesto']*100:.2f} %"),
+        ("Discount rate (WACC)",f"{params['tasa_interes']*100:.2f} %"),
+        ("Depreciation method", f"{metodo}  ({dep_extra})"),
+        ("Project life",        f"{params['vida']} years (total)"),
+        ("Construction span",   f"{params['schedule']['t_start']} years"),
+        ("Operation start",     f"year {params['schedule']['t_start'] + 1}"),
+    ]
+    if cepci_basis != cepci_target:
+        asum_rows.append(
+            ("CEPCI adjustment",
+             f"{cepci_basis} → {cepci_target}  (factor {cepci_factor:.3f})")
+        )
+    _two_col_table(assumptions_card, ("Item", "Value"), asum_rows)
+
+    # Construction schedule card
+    sched_card = _section_card(top_row, "Construction & ramp-up schedule")
+    sched_card.pack(side=LEFT, fill=BOTH, expand=True, padx=(8, 0))
+
+    sched = params["schedule"]
+    sched_rows = []
+    for i in range(min(sched["cutoff"], len(sched["FC"]))):
+        año = int(sched["años_display"][i])
+        sched_rows.append((
+            f"Year {año}",
+            f"{sched['FC'][i]*100:>5.1f} %",
+            f"{sched['WL'][i]*100:>5.1f} %",
+            f"{sched['FCOP'][i]*100:>5.1f} %",
+            f"{sched['VCOP'][i]*100:>5.1f} %",
+        ))
+
+    body = Frame(sched_card, bg=COLOR_CARD)
+    body.pack(fill=BOTH, expand=True, padx=14, pady=(0, 12))
+
+    headers_s = ("", "% FC", "% WC", "% FCOP", "% VCOP")
+    for col, h in enumerate(headers_s):
+        Label(body, text=h, font=FONT_H2, bg=COLOR_CARD, fg=COLOR_SUBTLE,
+              anchor="center" if col > 0 else "w")\
+            .grid(row=0, column=col, sticky="ew", padx=4, pady=(0, 4))
+
+    for i, row_vals in enumerate(sched_rows, start=1):
+        for col, txt in enumerate(row_vals):
+            Label(body, text=txt, font=FONT_TABLE, bg=COLOR_CARD, fg=COLOR_NEUTRAL,
+                  anchor="center" if col > 0 else "w")\
+                .grid(row=i, column=col, sticky="ew", padx=4, pady=1)
+
+    for col in range(5):
+        body.columnconfigure(col, weight=1)
 
     # NPV acumulado por año
     npv_acum = []
@@ -593,6 +810,34 @@ def _section_card(parent, titulo):
         padx=14, pady=(10, 6), anchor="w",
     ).pack(fill=X)
     return frame
+
+
+def _three_col_table(parent, headers, rows):
+    """Tabla 3 columnas card-body."""
+
+    body = Frame(parent, bg=COLOR_CARD)
+    body.pack(fill=BOTH, expand=True, padx=14, pady=(0, 12))
+
+    for col, h in enumerate(headers):
+        anchor = "w" if col == 0 else ("center" if col == 1 else "w")
+        Label(
+            body, text=h,
+            font=FONT_H2, bg=COLOR_CARD, fg=COLOR_SUBTLE,
+            anchor=anchor,
+        ).grid(row=0, column=col, sticky="ew", pady=(0, 4), padx=4)
+
+    for i, row_vals in enumerate(rows, start=1):
+        for col, txt in enumerate(row_vals):
+            anchor = "w" if col == 0 else ("e" if col == 1 else "w")
+            Label(
+                body, text=str(txt),
+                font=FONT_TABLE, bg=COLOR_CARD, fg=COLOR_NEUTRAL,
+                anchor=anchor,
+            ).grid(row=i, column=col, sticky="ew", pady=1, padx=4)
+
+    body.columnconfigure(0, weight=2)
+    body.columnconfigure(1, weight=2)
+    body.columnconfigure(2, weight=3)
 
 
 def _two_col_table(parent, headers, rows):
