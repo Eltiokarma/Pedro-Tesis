@@ -77,6 +77,17 @@ MAX_ITER      = 30
 # ======================================================
 
 @dataclass
+class RecycleSolution:
+    """Resultado del solver Wegstein sobre un reciclo."""
+    tear_stream:  str       = ""
+    cycle_blocks: List[str] = field(default_factory=list)
+    converged:    bool      = False
+    iterations:   int       = 0
+    final_value:  float     = 0.0
+    history:      List[float] = field(default_factory=list)
+
+
+@dataclass
 class SolverResult:
     success:      bool                      = False
     iterations:   int                       = 0
@@ -86,6 +97,7 @@ class SolverResult:
     mass_balance_errors: List[str]          = field(default_factory=list)
     energy_balance_errors: List[str]        = field(default_factory=list)
     cycles_detected:    List[List[str]]     = field(default_factory=list)
+    recycle_solutions:  List[RecycleSolution] = field(default_factory=list)
 
     def summary(self):
         lines = []
@@ -113,8 +125,19 @@ class SolverResult:
             lines.append(f"\nReciclos detectados ({len(self.cycles_detected)}):")
             for cyc in self.cycles_detected:
                 lines.append(f"  · {' → '.join(cyc)} → (back)")
-            lines.append("  Para resolver reciclos, declarar manualmente al menos")
-            lines.append("  un stream del ciclo (tear stream).")
+
+        if self.recycle_solutions:
+            lines.append("")
+            for rs in self.recycle_solutions:
+                status = "✓ Wegstein convergió" if rs.converged else "⚠ Wegstein NO convergió"
+                lines.append(f"{status}  (tear = {rs.tear_stream}, {rs.iterations} iter)")
+                lines.append(f"  ciclo: {' → '.join(rs.cycle_blocks)}")
+                lines.append(f"  valor final: {rs.final_value:.4g} tm/año")
+                if len(rs.history) > 1:
+                    hist_str = " → ".join(f"{v:.1f}" for v in rs.history[:5])
+                    if len(rs.history) > 5:
+                        hist_str += f" → … → {rs.history[-1]:.1f}"
+                    lines.append(f"  trayectoria: {hist_str}")
 
         if self.mass_balance_errors:
             lines.append(f"\nBalance de masa con error:")
@@ -334,6 +357,182 @@ def _solve_energy_iteration(fs, tol_T=0.5):
 
 
 # ======================================================
+# TEAR STREAM + WEGSTEIN (resolución de reciclos)
+# ======================================================
+# Cuando un SCC tiene > 1 bloque y alguno de sus streams tiene
+# mass_flow desconocido, el solver de closure no puede arrancar.
+# Wegstein:
+#   1. Elegir un tear stream del ciclo.
+#   2. Asignarle un guess inicial (estimado por feeds externos al SCC).
+#   3. Propagar el resto del ciclo con ese guess (cierre normal).
+#   4. Calcular el "nuevo" valor del tear desde el balance del bloque
+#      cuyo OUTPUT es el tear stream.
+#   5. Si nuevo ≈ guess, convergió.  Si no, actualizar guess con Wegstein:
+#         q = s / (s − 1)    donde  s = (f(x_n) − f(x_{n-1})) / (x_n − x_{n-1})
+#         x_{n+1} = (1 − q) · f(x_n) + q · x_n
+#      (acelera convergencia y previene oscilación)
+#   6. Repetir hasta convergencia o max iter.
+
+
+def _is_recycle_scc(scc_block_ids, fs):
+    """Verdadero si el SCC tiene > 1 bloque, o 1 bloque con auto-edge."""
+    if len(scc_block_ids) > 1:
+        return True
+    bid = scc_block_ids[0]
+    for s in fs.streams.values():
+        if s.src == bid and s.dst == bid:
+            return True
+    return False
+
+
+def _streams_in_scc(scc_block_ids, fs):
+    """Streams cuyos src y dst están ambos en el SCC."""
+    bids = set(scc_block_ids)
+    return [s for s in fs.streams.values()
+            if s.src in bids and s.dst in bids]
+
+
+def _choose_tear(scc_streams):
+    """Heurística: primer stream sin mass_flow declarado.
+    Si todos declarados, devuelve None (no hace falta tear)."""
+    unknowns = [s for s in scc_streams if s.mass_flow <= 0]
+    if unknowns:
+        return unknowns[0]
+    return None
+
+
+def _initial_guess(fs, scc_block_ids, tear_stream):
+    """Guess inicial del tear basado en feeds externos al SCC.
+
+    Idea: la masa que circula en el ciclo es del orden de los
+    inputs externos.  Si el reciclo es de purga (recycle), suele
+    ser una fracción del flujo total.  Empezamos con el total
+    externo dividido por 5 — luego Wegstein corrige."""
+    bids = set(scc_block_ids)
+    external_inputs = [
+        s for s in fs.streams.values()
+        if s.src not in bids and s.dst in bids and s.mass_flow > 0
+    ]
+    total_ext = sum(s.mass_flow for s in external_inputs)
+    if total_ext > 0:
+        return total_ext * 0.2     # 20% del feed externo como guess
+    return 1000.0                  # fallback arbitrario
+
+
+def _propagate_until_stable(fs, max_inner=30):
+    """Corre _solve_mass_iteration hasta no haber cambios."""
+    for _ in range(max_inner):
+        if not _solve_mass_iteration(fs):
+            break
+
+
+def _balance_at_block(fs, block_id, exclude_stream_id=None):
+    """Devuelve el balance del bloque ignorando un stream:
+    sum_in - sum_out_sin_excluido.
+    Útil para inferir el valor de un stream excluido."""
+    sum_in = sum(
+        s.mass_flow for s in fs.streams.values()
+        if s.dst == block_id and s.id != exclude_stream_id and s.mass_flow > 0
+    )
+    sum_out_otros = sum(
+        s.mass_flow for s in fs.streams.values()
+        if s.src == block_id and s.id != exclude_stream_id and s.mass_flow > 0
+    )
+    return sum_in - sum_out_otros
+
+
+def _solve_recycle_wegstein(fs, scc_block_ids,
+                            max_iter=25, tol=0.001):
+    """Resuelve un reciclo via tear + Wegstein.
+
+    Returns RecycleSolution con history del tear, convergencia, etc.
+    """
+    scc_streams = _streams_in_scc(scc_block_ids, fs)
+    tear = _choose_tear(scc_streams)
+    rs = RecycleSolution(
+        cycle_blocks=[fs.blocks[bid].name for bid in scc_block_ids],
+    )
+
+    if tear is None:
+        rs.converged = True
+        return rs
+
+    rs.tear_stream = tear.name
+
+    # guess inicial
+    guess = _initial_guess(fs, scc_block_ids, tear)
+    tear.mass_flow = guess
+    rs.history.append(guess)
+
+    # buffers para Wegstein
+    x_prev:     float = guess
+    f_prev:     float = guess
+
+    for it in range(max_iter):
+        # 1. Propagar el resto del flowsheet con el tear actual
+        _propagate_until_stable(fs)
+
+        # 2. Calcular nuevo valor del tear: balance del bloque
+        #    cuya OUTPUT es el tear stream.
+        #
+        #    El tear pertenece al output del bloque tear.src:
+        #      sum(in tear.src) = tear.mass_flow + sum(otros out tear.src)
+        #      → tear_new = sum(in) - sum(otros out)
+        f_new = _balance_at_block(fs, tear.src, exclude_stream_id=tear.id)
+
+        if f_new <= 0:
+            # algo está mal — break con no-converged
+            rs.converged = False
+            rs.iterations = it + 1
+            rs.final_value = tear.mass_flow
+            return rs
+
+        x_n = tear.mass_flow
+
+        # 3. Test de convergencia
+        diff = abs(f_new - x_n)
+        scale = max(abs(f_new), abs(x_n), 1e-9)
+        if diff / scale < tol:
+            tear.mass_flow = f_new
+            rs.history.append(f_new)
+            # propagar una vez más para que el resto del flowsheet
+            # use el valor final del tear
+            _propagate_until_stable(fs)
+            rs.converged = True
+            rs.iterations = it + 1
+            rs.final_value = f_new
+            return rs
+
+        # 4. Wegstein update
+        if it == 0:
+            # primera iter: substitution directa
+            x_next = f_new
+        else:
+            denom = (x_n - x_prev)
+            if abs(denom) < 1e-12:
+                x_next = f_new
+            else:
+                s = (f_new - f_prev) / denom
+                # estabilizar: si s ∉ (−5, 1), usar substitution
+                if -5.0 < s < 0.99:
+                    q = s / (s - 1.0)
+                    x_next = (1.0 - q) * f_new + q * x_n
+                else:
+                    x_next = f_new
+
+        # actualizar buffers
+        x_prev, f_prev = x_n, f_new
+        tear.mass_flow = x_next
+        rs.history.append(x_next)
+
+    # no convergió
+    rs.converged = False
+    rs.iterations = max_iter
+    rs.final_value = tear.mass_flow
+    return rs
+
+
+# ======================================================
 # ENTRYPOINT
 # ======================================================
 
@@ -349,21 +548,41 @@ def solve(fs, max_iter=MAX_ITER):
     """
     result = SolverResult()
 
-    # 1. Detectar ciclos (warning informativo; el solver puede manejar
-    #    algunos vía closure si hay suficientes streams declarados)
-    result.cycles_detected = _detect_cycles(fs)
+    # 1. Detectar SCCs y reciclos
+    sccs = _strongly_connected_components(fs)
+    recycle_sccs = [scc for scc in sccs if _is_recycle_scc(scc, fs)]
+    result.cycles_detected = [
+        [fs.blocks[b].name for b in scc] for scc in recycle_sccs
+    ]
 
-    # 2. Solver de masa — propagación iterativa
+    # 2. Propagación inicial (closure) — resuelve todo lo lineal y
+    #    los reciclos cuyos streams ya están todos declarados.
     total_propagated_mass = []
     for it in range(max_iter):
         prop = _solve_mass_iteration(fs)
         total_propagated_mass.extend(prop)
         if not prop:
             break
-    result.propagated_mass = total_propagated_mass
     result.iterations = it + 1
 
-    # 3. Solver de energía — análogo
+    # 3. Wegstein por reciclo no resuelto
+    for scc in recycle_sccs:
+        scc_streams = _streams_in_scc(scc, fs)
+        if all(s.mass_flow > 0 for s in scc_streams):
+            continue  # ya está resuelto por closure
+        rs = _solve_recycle_wegstein(fs, scc)
+        result.recycle_solutions.append(rs)
+
+    # 4. Re-propagar después de los tears resueltos (cierra todo lo
+    #    que dependía indirectamente de un tear)
+    for _ in range(max_iter):
+        prop = _solve_mass_iteration(fs)
+        total_propagated_mass.extend(prop)
+        if not prop:
+            break
+    result.propagated_mass = total_propagated_mass
+
+    # 5. Solver de energía
     total_propagated_temp = []
     for it_e in range(max_iter):
         prop_e = _solve_energy_iteration(fs)
