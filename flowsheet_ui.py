@@ -2484,17 +2484,13 @@ class FlowsheetEditor:
         if any_complete:
             out_lines.append("")
             out_lines.append("─ Balance de energía (kW) ─")
+            out_lines.append("  (Q_calc = sensible heat del modelo Cp simple;")
+            out_lines.append("   duty declarado puede incluir ΔH_vap, ΔH_rxn — no comparable directo)")
             for name, Q, duty, mismatch in per_block_energy:
-                tag = ""
-                if duty != 0 and mismatch is not None:
-                    scale = max(abs(Q), abs(duty), 1e-9)
-                    if mismatch / scale >= ENERGY_TOL_REL:
-                        tag = f"  ⚠ vs duty={duty:+.0f}"
-                    else:
-                        tag = f"  ✓ duty"
-                out_lines.append(f"  {name:8s}  Q = {Q:+8.0f} kW{tag}")
-            out_lines.append(f"  Heating total:  {total_heating:>7.0f} kW")
-            out_lines.append(f"  Cooling total:  {total_cooling:>7.0f} kW")
+                tag = f"  duty = {duty:+.0f} kW" if duty != 0 else ""
+                out_lines.append(f"  {name:8s}  Q_calc = {Q:+8.0f} kW{tag}")
+            out_lines.append(f"  Heating Q_calc total: {total_heating:>7.0f} kW")
+            out_lines.append(f"  Cooling Q_calc total: {total_cooling:>7.0f} kW")
 
         # ---- utilities auto-calculadas desde duties declarados ----
         _util_rows, util_summary = self._compute_utilities_from_duties()
@@ -2744,36 +2740,25 @@ class FlowsheetEditor:
                 return
             feeds, products, isbl = [], [], None
         else:
-            # ---- validación de balances ----
-            # No tiene sentido correr el análisis económico con un PFD
-            # que no cierra masa o energía.  Listamos los errores y
-            # pedimos confirmación explícita para forzar.
+            # ---- validación de balance de masa ----
+            # NO bloqueamos por balance de energía: el modelo Cp simple
+            # no captura ΔH_vap ni ΔH_rxn, así que cualquier duty realista
+            # va a mismatch contra el Q_calc.  Energy balance queda como
+            # info en compute output, no como gate.
             mb_errors = self._check_mass_balance(tol_rel=0.005)
-            eb_errors = self._check_energy_balance(tol_rel=ENERGY_TOL_REL)
-            if mb_errors or eb_errors:
-                lines = []
-                if mb_errors:
-                    lines.append("⚠ Balance de masa:")
-                    lines += [f"   · {m}" for m in mb_errors]
-                if eb_errors:
-                    if mb_errors:
-                        lines.append("")
-                    lines.append("⚠ Balance de energía:")
-                    lines += [f"   · {m}" for m in eb_errors]
+            if mb_errors:
+                lines = [f"   · {m}" for m in mb_errors]
                 forzar = messagebox.askyesno(
-                    "Balances no cuadran",
-                    "Los siguientes equipos tienen balances inconsistentes:\n\n"
+                    "Balance de masa no cuadra",
+                    "Los siguientes equipos no cierran balance de masa:\n\n"
+                    "⚠ Balance de masa:\n"
                     + "\n".join(lines)
-                    + "\n\nUn análisis económico con balances rotos puede "
-                      "dar resultados muy engañosos:\n"
-                      "  · masa: ingresos por productos que el proceso no\n"
-                      "          puede producir, costos de materia prima\n"
-                      "          que no entran\n"
-                      "  · energía: utilities sub o sobre-dimensionadas,\n"
-                      "          duties incoherentes con los streams\n\n"
+                    + "\n\nUn análisis económico con masas inconsistentes\n"
+                      "puede dar resultados muy engañosos (ingresos por\n"
+                      "productos que el proceso no puede producir, costos\n"
+                      "de materia prima que no entran, etc.).\n\n"
                     "Lo recomendable es volver al diagrama y arreglar los\n"
-                    "flujos / temperaturas / Cp / duties.\n\n"
-                    "¿Querés forzar el análisis igual?",
+                    "flujos.  ¿Querés forzar el análisis igual?",
                     default="no",
                 )
                 if not forzar:
