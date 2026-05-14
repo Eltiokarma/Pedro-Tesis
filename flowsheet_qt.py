@@ -66,6 +66,7 @@ from PySide6.QtWidgets import (
     QComboBox, QTableWidget, QTableWidgetItem, QHeaderView, QCheckBox,
     QGroupBox, QGraphicsSceneContextMenuEvent, QToolButton,
 )
+from PySide6.QtGui import QUndoStack, QUndoCommand
 
 import equipment_costs as eq
 import equipment_ports as ep
@@ -92,6 +93,44 @@ COLOR_BLOCK_SUB     = QColor("#6c6c70")
 COLOR_PORT_FREE     = QColor("#bbbbbb")
 COLOR_PORT_CONN     = QColor("#1565c0")
 COLOR_LABEL_BG      = QColor(255, 255, 255, 220)
+
+
+# ======================================================
+# UNDO / REDO — SnapshotCommand
+# ======================================================
+# Approach pragmático: cada acción que modifica el flowsheet
+# (mover bloque, agregar/borrar, editar dialog, etc.) push un
+# SnapshotCommand que recuerda el estado del fs ANTES y DESPUÉS.
+# Undo/redo restauran el snapshot completo.
+#
+# Costo: ~1 KB por command (fs.to_dict() es JSON-serializable
+# pequeño).  Con 100 acciones = ~100 KB, trivial.
+#
+# Trade-off: simple y robusto, pero más caro en memoria que
+# tener QUndoCommands específicos (MoveBlockCommand,
+# AddStreamCommand, etc.).  Para el tamaño de flowsheets típicos
+# (decenas de bloques) este enfoque está OK.
+
+class SnapshotCommand(QUndoCommand):
+    """Reemplaza el flowsheet entero con un snapshot anterior/posterior."""
+
+    def __init__(self, text, editor, before_dict, after_dict):
+        super().__init__(text)
+        self.editor = editor
+        self.before = before_dict
+        self.after  = after_dict
+        # bandera para evitar el redo() inicial cuando el command
+        # se pushea (el editor ya tiene el estado 'after')
+        self._first_push = True
+
+    def redo(self):
+        if self._first_push:
+            self._first_push = False
+            return                  # el state ya está aplicado
+        self.editor._apply_snapshot(self.after)
+
+    def undo(self):
+        self.editor._apply_snapshot(self.before)
 
 
 # ======================================================
@@ -573,6 +612,8 @@ class BlockItem(QGraphicsItemGroup):
 
         self.setPos(block.x, block.y)
         self.setZValue(10)
+        self.setAcceptHoverEvents(True)
+        self._update_tooltip()
 
     # ---------------------------------------------------
     # DECORACIÓN POR CATEGORÍA (símbolos PFD simplificados)
@@ -773,6 +814,27 @@ class BlockItem(QGraphicsItemGroup):
             else:
                 ell.setBrush(QBrush(COLOR_PORT_FREE))
 
+    def _update_tooltip(self):
+        """Tooltip al hover con info del bloque (HTML)."""
+        b = self.model
+        spec = eq.EQUIPMENT_DATA.get(b.eq_type, {})
+        ports = ep.get_ports(b.eq_type)
+        port_list = ", ".join(ports.keys()) if ports else "(sin puertos)"
+        lines = [
+            f"<b>{b.name}</b>",
+            f"<span style='color:#666;'>{b.eq_type}</span>",
+            f"S = {b.S:g} {spec.get('S_unit','')}",
+        ]
+        if b.n > 1:
+            lines.append(f"N° unidades: {b.n}")
+        if b.duty:
+            lines.append(f"Duty: {b.duty:+g} kW")
+        if b.heat_source:
+            lines.append(f"Utility: {b.heat_source}")
+        lines.append(f"<span style='color:#888; font-size:8pt;'>"
+                     f"Puertos: {port_list}</span>")
+        self.setToolTip("<br>".join(lines))
+
     def set_selected_visual(self, selected: bool):
         if selected:
             self.rect.setPen(QPen(COLOR_BLOCK_BORDER_SEL, 3))
@@ -780,9 +842,14 @@ class BlockItem(QGraphicsItemGroup):
             self.rect.setPen(QPen(COLOR_BLOCK_BORDER, 2))
 
     def itemChange(self, change, value):
-        """Sync posición al modelo + refresh streams conectados."""
+        """Sync posición al modelo + refresh streams conectados.
+
+        Group move: si hay varios bloques seleccionados, Qt mueve
+        todos juntos.  Cada uno hace su propio itemChange con su
+        nueva pos.  Snap aplicado individualmente preserva el
+        alineamiento porque el delta es el mismo round.
+        """
         if change == QGraphicsItem.ItemPositionChange and self.scene():
-            # snap a grid
             new_pos: QPointF = value
             nx = round(new_pos.x() / GRID_STEP) * GRID_STEP
             ny = round(new_pos.y() / GRID_STEP) * GRID_STEP
@@ -808,7 +875,19 @@ class BlockItem(QGraphicsItemGroup):
             self.editor.complete_connection(self.model.id)
             event.accept()
             return
+        # snapshot del estado antes del drag (para undo)
+        if (event.button() == Qt.LeftButton and self.editor is not None
+            and self.editor._drag_before_snapshot is None):
+            self.editor._drag_before_snapshot = self.editor.begin_action()
         super().mousePressEvent(event)
+
+    def mouseReleaseEvent(self, event):
+        super().mouseReleaseEvent(event)
+        # push undo si hubo un drag
+        if (event.button() == Qt.LeftButton and self.editor is not None
+            and self.editor._drag_before_snapshot is not None):
+            self.editor.end_action("Mover", self.editor._drag_before_snapshot)
+            self.editor._drag_before_snapshot = None
 
     def contextMenuEvent(self, event):
         """Click derecho → menú contextual."""
@@ -845,6 +924,7 @@ class StreamItem(QGraphicsPathItem):
         self.editor = editor      # FlowsheetMainWindow (para edit dialog)
         self.setZValue(5)
         self.setFlag(QGraphicsItem.ItemIsSelectable, True)
+        self.setAcceptHoverEvents(True)
 
         # label asociado (texto + fondo)
         self.label_bg   = QGraphicsRectItem()
@@ -873,6 +953,29 @@ class StreamItem(QGraphicsPathItem):
         if self.isSelected():
             return QColor(STREAM_ROLE_COLORS_SEL.get(self.model.role, "#c62828"))
         return QColor(STREAM_ROLE_COLORS.get(self.model.role, "#37474f"))
+
+    def _update_tooltip(self):
+        s = self.model
+        b_src = self.fs.blocks.get(s.src)
+        b_dst = self.fs.blocks.get(s.dst)
+        if b_src is None or b_dst is None:
+            return
+        lines = [
+            f"<b>{s.name}</b>",
+            f"<span style='color:#666;'>"
+            f"{b_src.name} ({s.src_port or 'auto'}) → "
+            f"{b_dst.name} ({s.dst_port or 'auto'})</span>",
+            f"Rol: {s.role}",
+            f"Flujo: {s.mass_flow:g} tm/año",
+        ]
+        if s.role in ("feed", "product") and s.price_usd_per_tm:
+            total = s.mass_flow * s.price_usd_per_tm
+            lbl = "Ingreso" if s.role == "product" else "Costo MP"
+            lines.append(f"Precio: {s.price_usd_per_tm:g} USD/tm")
+            lines.append(f"{lbl}: $ {total:,.0f}/año")
+        if s.cp > 0:
+            lines.append(f"T = {s.temperature:g} °C, Cp = {s.cp:g} kJ/kg·K")
+        self.setToolTip("<br>".join(lines))
 
     def update_path(self):
         s = self.model
@@ -916,6 +1019,8 @@ class StreamItem(QGraphicsPathItem):
             bb.width() + 2 * pad,
             bb.height() + 2,
         )
+        # tooltip dinámico
+        self._update_tooltip()
 
     def _draw_arrow(self, path, x_end, y_end, x_prev, y_prev):
         """Triángulo al final del path (en lugar de marker arrow)."""
@@ -1217,6 +1322,14 @@ class FlowsheetMainWindow(QMainWindow):
         # state de conexión pendiente (right-click + left-click)
         self._connecting_from: int = None
 
+        # undo/redo
+        self.undo_stack = QUndoStack(self)
+        self.undo_stack.setUndoLimit(100)
+        # flag para suprimir snapshots durante apply_snapshot (evita recursión)
+        self._suppress_snapshot = False
+        # snapshot 'antes' del drag de bloques (se pushea al release)
+        self._drag_before_snapshot = None
+
         self._build_toolbar()
         self._build_library_dock()
         self._build_properties_dock()
@@ -1290,6 +1403,13 @@ class FlowsheetMainWindow(QMainWindow):
         tb.addSeparator()
 
         add_btn("Borrar selección", self.action_delete)
+        # undo/redo
+        self.undo_action = self.undo_stack.createUndoAction(self, "↶ Deshacer")
+        self.undo_action.setShortcut(QKeySequence.Undo)
+        tb.addAction(self.undo_action)
+        self.redo_action = self.undo_stack.createRedoAction(self, "↷ Rehacer")
+        self.redo_action.setShortcut(QKeySequence.Redo)
+        tb.addAction(self.redo_action)
         tb.addSeparator()
 
         add_btn("Zoom −",     self.view.zoom_out)
@@ -1455,10 +1575,11 @@ class FlowsheetMainWindow(QMainWindow):
             )
             if ans != QMessageBox.Yes:
                 return
-
+        before = self.begin_action()
         # Los example builders son métodos del FlowsheetEditor (Tk).
-        # Los podemos llamar con un shim que provee los helpers que esperan.
         from flowsheet_ui import FlowsheetEditor as TkEditor
+        # reset del fs y rearmar
+        self.fs = Flowsheet()
         shim = _ExampleBuilderShim(self.fs)
         builder_map = {
             "hda":          TkEditor._example_hda,
@@ -1472,18 +1593,24 @@ class FlowsheetMainWindow(QMainWindow):
         self._rebuild_scene()
         self.view.zoom_fit()
         self._update_status()
+        self.end_action(f"Cargar ejemplo: {key}", before)
 
     # ---------------------------------------------------
     # ACCIONES — Otros
     # ---------------------------------------------------
 
     def action_delete(self):
-        for it in list(self.scene.selectedItems()):
+        selected = list(self.scene.selectedItems())
+        if not selected:
+            return
+        before = self.begin_action()
+        for it in selected:
             if isinstance(it, BlockItem):
                 self._delete_block(it.model.id)
             elif isinstance(it, StreamItem):
                 self._delete_stream(it.model.id)
         self._update_status()
+        self.end_action(f"Borrar selección ({len(selected)})", before)
 
     def action_solve(self):
         if not self.fs.blocks:
@@ -1539,10 +1666,12 @@ class FlowsheetMainWindow(QMainWindow):
                                   f"{type(e).__name__}: {e}")
 
     def action_opex_extras(self):
+        before = self.begin_action()
         dlg = OpexExtrasDialog(self, self.fs)
         dlg.exec()
         # los cambios se reflejan en self.fs.opex_extras dentro del dialog
         self._update_status()
+        self.end_action("Editar OPEX extras", before)
 
     def action_launch_analysis(self):
         """Genera xlsx temporal y lanza ANA.py como subprocess.
@@ -1797,29 +1926,35 @@ class FlowsheetMainWindow(QMainWindow):
         """Abre BlockEditDialog y refresca el render."""
         dlg = BlockEditDialog(self, block)
         if dlg.exec() == QDialog.Accepted:
+            before = self.begin_action()
             dlg.apply_to_model()
-            # refrescar item
             item = self.scene.block_items.get(block.id)
             if item is not None:
                 self.scene.removeItem(item)
                 del self.scene.block_items[block.id]
                 self._render_block(block)
-                # los streams conectados también se refrescan visualmente
+                # tooltip nuevo
+                new_item = self.scene.block_items.get(block.id)
+                if new_item is not None:
+                    new_item._update_tooltip()
                 self.refresh_streams_of(block.id)
             self._refresh_port_colors()
             self._update_status()
             self._on_selection_changed()
+            self.end_action(f"Editar {block.name}", before)
 
     def edit_stream(self, stream: Stream):
         """Abre StreamEditDialog y refresca el render."""
         dlg = StreamEditDialog(self, stream, self.fs)
         if dlg.exec() == QDialog.Accepted:
+            before = self.begin_action()
             dlg.apply_to_model()
             item = self.scene.stream_items.get(stream.id)
             if item is not None:
                 item.update_path()
             self._refresh_port_colors()
             self._on_selection_changed()
+            self.end_action(f"Editar {stream.name}", before)
 
     def is_connecting(self) -> bool:
         return self._connecting_from is not None
@@ -1848,11 +1983,11 @@ class FlowsheetMainWindow(QMainWindow):
         self._add_stream(src, dst_block_id)
 
     def _add_stream(self, src_id, dst_id, src_port="", dst_port=""):
-        # autoselect de puertos
         b_src = self.fs.blocks.get(src_id)
         b_dst = self.fs.blocks.get(dst_id)
         if b_src is None or b_dst is None:
             return
+        before = self.begin_action()
         if not src_port:
             used_out = [t.src_port for t in self.fs.streams.values()
                         if t.src == src_id and t.src_port]
@@ -1873,6 +2008,7 @@ class FlowsheetMainWindow(QMainWindow):
         self._render_stream(s)
         self._refresh_port_colors()
         self._update_status()
+        self.end_action(f"Conectar {b_src.name}→{b_dst.name}", before)
 
     def delete_block(self, bid: int):
         ans = QMessageBox.question(
@@ -1881,8 +2017,11 @@ class FlowsheetMainWindow(QMainWindow):
         )
         if ans != QMessageBox.Yes:
             return
+        before = self.begin_action()
+        bname = self.fs.blocks[bid].name
         self._delete_block(bid)
         self._update_status()
+        self.end_action(f"Borrar {bname}", before)
 
     # ---------------------------------------------------
     # SCENE OPS
@@ -1899,6 +2038,42 @@ class FlowsheetMainWindow(QMainWindow):
         for s in self.fs.streams.values():
             self._render_stream(s)
         self._refresh_port_colors()
+
+    # ---------------------------------------------------
+    # UNDO / REDO infrastructure
+    # ---------------------------------------------------
+
+    def _apply_snapshot(self, snapshot_dict):
+        """Reemplaza self.fs con un snapshot y reconstruye la scene.
+        Lo llaman SnapshotCommand.undo() y .redo()."""
+        self._suppress_snapshot = True
+        try:
+            self.fs = Flowsheet.from_dict(snapshot_dict)
+            self._rebuild_scene()
+            self._update_status()
+            self._on_selection_changed()
+        finally:
+            self._suppress_snapshot = False
+
+    def begin_action(self):
+        """Snapshot del fs ANTES de la acción.  Devuelve el dict.
+        Llamar al INICIO de una operación que muta el fs."""
+        if self._suppress_snapshot:
+            return None
+        import copy
+        return copy.deepcopy(self.fs.to_dict())
+
+    def end_action(self, text, before):
+        """Push un SnapshotCommand con el before guardado y el state
+        actual como after.  Si el state no cambió, no se pushea."""
+        if self._suppress_snapshot or before is None:
+            return
+        import copy
+        after = copy.deepcopy(self.fs.to_dict())
+        if before == after:
+            return        # no hubo cambios reales
+        cmd = SnapshotCommand(text, self, before, after)
+        self.undo_stack.push(cmd)
 
     def _render_block(self, b: Block):
         item = BlockItem(b, editor=self)
@@ -2019,11 +2194,11 @@ class FlowsheetMainWindow(QMainWindow):
         spec = eq.EQUIPMENT_DATA.get(eq_type)
         if not spec:
             return
+        before = self.begin_action()
         bid = self.fs.new_id()
         nombre = ep.next_block_name(eq_type,
                                      [b.name for b in self.fs.blocks.values()])
         S_default = (spec["S_min"] + spec["S_max"]) / 2
-        # posicionar en una grilla simple
         n_existing = len(self.fs.blocks)
         x = 200 + (n_existing % 6) * 180
         y = 100 + ((n_existing // 6) % 6) * 120
@@ -2033,6 +2208,7 @@ class FlowsheetMainWindow(QMainWindow):
         self._render_block(b)
         self._refresh_port_colors()
         self._update_status()
+        self.end_action(f"Agregar {nombre}", before)
 
 
 # ======================================================
