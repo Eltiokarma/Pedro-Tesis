@@ -25,7 +25,9 @@ from units import (
 
 )
 
-from pipeline import ejecutar_analisis
+from pipeline import ejecutar_analisis, ejecutar_montecarlo, construir_data_y_params
+
+from mc_ui import AbrirVentanaConfigMC, AbrirVentanaResultadosMC
 
 # ======================================================
 # ENGINE CENTRAL (SINGLE SOURCE OF TRUTH)
@@ -1519,6 +1521,80 @@ def EjecutarAnalisis():
 
     ConsolaResultados.insert(END, f"\nReport saved to:\n{archivo}\n")
     ConsolaResultados.config(state="disabled")
+
+    # 6) Sensitivity analysis (Monte Carlo)
+    if VeSensibilidad.get():
+        LanzarMonteCarlo(inputs, archivo)
+
+
+# ======================================================
+# MONTE CARLO LAUNCHER
+# ======================================================
+
+def LanzarMonteCarlo(inputs, archivo_excel):
+    """Abre la ventana de config MC.  Cuando el usuario
+    aprieta Run, ejecuta el MC y abre la ventana de
+    resultados (histograma + tornado + stats)."""
+
+    try:
+        data, _params = construir_data_y_params(
+            df_capital, df_fixed, engine.df_internal, inputs,
+        )
+    except Exception as e:
+        messagebox.showerror("Monte Carlo", f"{type(e).__name__}: {e}")
+        return
+
+    def CorrerMC(variables, n_runs, seed):
+
+        ConsolaResultados.config(state="normal")
+        ConsolaResultados.insert(
+            END,
+            f"\nRunning Monte Carlo ({n_runs} runs, "
+            f"{len(variables)} uncertain vars)...\n"
+        )
+        ConsolaResultados.config(state="disabled")
+        raiz.update_idletasks()
+
+        try:
+            resultado = ejecutar_montecarlo(
+                df_capital=df_capital,
+                df_fixed=df_fixed,
+                df_internal=engine.df_internal,
+                inputs_economicos=inputs,
+                variables_inciertas=variables,
+                n_runs=n_runs,
+                seed=seed,
+                archivo_salida=archivo_excel,
+            )
+        except Exception as e:
+            messagebox.showerror(
+                "Monte Carlo Error",
+                f"{type(e).__name__}: {e}\n\n{traceback.format_exc()}"
+            )
+            return
+
+        # consola
+        s = resultado["mc"]["stats"]
+        ConsolaResultados.config(state="normal")
+        ConsolaResultados.insert(END, "\nMonte Carlo done.\n")
+        ConsolaResultados.insert(
+            END,
+            f"NPV mean ± std: {s['npv_mean']:.2f} ± {s['npv_std']:.2f}\n"
+        )
+        ConsolaResultados.insert(
+            END,
+            f"NPV P10/P50/P90: {s['npv_p10']:.2f} / {s['npv_p50']:.2f} / {s['npv_p90']:.2f}\n"
+        )
+        ConsolaResultados.insert(
+            END,
+            f"P(NPV<0): {s['p_npv_neg']*100:.1f}%\n"
+        )
+        ConsolaResultados.config(state="disabled")
+
+        AbrirVentanaResultadosMC(raiz, resultado)
+
+    AbrirVentanaConfigMC(raiz, data, CorrerMC)
+
 
 # ======================================================
 # MENU

@@ -277,6 +277,91 @@ def ejecutar_analisis(
 
 
 # ======================================================
+# MONTE CARLO
+# ======================================================
+
+def construir_data_y_params(
+        df_capital,
+        df_fixed,
+        df_internal,
+        inputs_economicos,
+):
+    """Helper: construye data + params (con schedule
+    expandido) sin correr el análisis.  Útil para correr
+    Monte Carlo sin recomputar el schedule cada
+    iteración."""
+
+    if df_capital is None or df_capital.empty:
+        raise ValueError("Capital Costs vacío")
+    if df_fixed is None or df_fixed.empty:
+        raise ValueError("Fixed Operating Costs vacío")
+    if df_internal is None or df_internal.empty:
+        raise ValueError("Variable Operating Costs vacío")
+
+    data = _construir_data(df_capital, df_fixed, df_internal)
+    params = construir_params(inputs_economicos)
+
+    reporte = ReportGenerator()
+    params["schedule"] = reporte.construir_schedule(
+        params["schedule"],
+        params["vida"],
+    )
+
+    return data, params
+
+
+def ejecutar_montecarlo(
+        df_capital,
+        df_fixed,
+        df_internal,
+        inputs_economicos,
+        variables_inciertas,
+        n_runs=5000,
+        seed=None,
+        archivo_salida=None,
+        adjuntar_a_excel_existente=True,
+):
+    """Corre N simulaciones Monte Carlo + tornado chart.
+
+    variables_inciertas: lista de
+        montecarlo.VariableIncierta.
+
+    Si archivo_salida es dado y
+    adjuntar_a_excel_existente=True, agrega hojas
+    'Monte Carlo' y 'Tornado' al .xlsx existente (típicamente
+    el reporte económico ya generado por ejecutar_analisis).
+
+    Devuelve dict con 'mc' (resultado del MC), 'tornado'
+    (lista ordenada) y 'archivo' (path, si aplica).
+    """
+
+    from montecarlo import correr_montecarlo, correr_tornado, exportar_montecarlo_excel
+
+    data, params = construir_data_y_params(
+        df_capital, df_fixed, df_internal, inputs_economicos,
+    )
+
+    mc = correr_montecarlo(
+        data, params, variables_inciertas, n_runs=n_runs, seed=seed,
+    )
+
+    tornado = correr_tornado(
+        data, params, variables_inciertas,
+    )
+
+    if archivo_salida is not None:
+        exportar_montecarlo_excel(archivo_salida, mc, tornado)
+
+    return {
+        "mc":       mc,
+        "tornado":  tornado,
+        "archivo":  archivo_salida,
+        "data":     data,
+        "params":   params,
+    }
+
+
+# ======================================================
 # IRR (Newton-Raphson simple sobre NPV)
 # ======================================================
 
