@@ -812,6 +812,8 @@ class FlowsheetEditor:
         ttk.Separator(toolbar, orient=VERTICAL).pack(side=LEFT, fill=Y, padx=8, pady=4)
         ttk.Button(toolbar, text="OPEX extras…",
                    command=self.open_opex_dialog).pack(side=LEFT, padx=2)
+        ttk.Button(toolbar, text="Solve balances",
+                   command=self.solve_balances).pack(side=LEFT, padx=2)
         ttk.Button(toolbar, text="Calcular", command=self.compute).pack(side=LEFT, padx=2)
 
         # botón de transición distinto según modo
@@ -2545,6 +2547,43 @@ class FlowsheetEditor:
         """Abre el editor de OPEX extras (utilities, consumibles)."""
         OpexExtrasDialog(self.win, self.fs)
         self._update_properties()
+
+    def solve_balances(self):
+        """Corre el solver iterativo de balances de masa y energía,
+        propaga los flujos / temperaturas faltantes y reporta."""
+        if not self.fs.blocks:
+            messagebox.showinfo("Solve", "El diagrama está vacío.")
+            return
+        try:
+            import flowsheet_solver as fsolv
+        except Exception as e:
+            messagebox.showerror("Solver no disponible", str(e))
+            return
+
+        result = fsolv.solve(self.fs)
+
+        # refrescar visual de streams (mass/T pueden haber cambiado)
+        for s in self.fs.streams.values():
+            self._refresh_stream(s)
+        self._update_properties()
+        self._update_status()
+
+        # mostrar resumen
+        summary = result.summary()
+        title = "Solver: OK" if result.success else "Solver: revisar"
+        # ventana con texto scrollable para resúmenes largos
+        win = Toplevel(self.win)
+        win.title(title)
+        win.geometry("620x440+250+160")
+        win.transient(self.win)
+        txt_frame = ttk.Frame(win, padding=10)
+        txt_frame.pack(fill=BOTH, expand=True)
+        from tkinter import Text
+        txt = Text(txt_frame, font=("Consolas", 9), wrap="word")
+        txt.pack(fill=BOTH, expand=True)
+        txt.insert("1.0", summary)
+        txt.config(state="disabled")
+        ttk.Button(win, text="Cerrar", command=win.destroy).pack(pady=6)
 
     # ==================================================
     # BALANCE DE ENERGÍA
