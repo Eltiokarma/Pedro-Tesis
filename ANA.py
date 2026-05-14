@@ -1674,15 +1674,12 @@ menuData.add_command(
 
 def LanzarEstimateISBL():
     """Abre la ventana 'Estimate ISBL from Equipment List'.
-    Requiere que ya esté cargado df_capital con los % de
-    OSBL/ENG/CONT para poder despejar ISBL implícito."""
 
-    if df_capital.empty:
-        messagebox.showerror(
-            "No project",
-            "Import a project first (File > Import Project)."
-        )
-        return
+    Se puede usar SIN proyecto cargado (sólo para calcular
+    FCI Lang).  Para inyectar el ISBL al análisis sí hace
+    falta tener proyecto importado — la ventana se encarga
+    de habilitar/deshabilitar el botón según corresponda.
+    """
 
     def OnApply():
         ConsolaResultados.config(state="normal")
@@ -1693,7 +1690,11 @@ def LanzarEstimateISBL():
         )
         ConsolaResultados.config(state="disabled")
 
-    AbrirVentanaEstimateISBL(raiz, df_capital, on_apply=OnApply)
+    AbrirVentanaEstimateISBL(
+        raiz,
+        df_capital if not df_capital.empty else None,
+        on_apply=OnApply,
+    )
 
 
 menuTools = Menu(menubar, tearoff=0)
