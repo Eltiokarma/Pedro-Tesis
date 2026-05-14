@@ -318,21 +318,18 @@ def ejecutar_montecarlo(
         variables_inciertas,
         n_runs=5000,
         seed=None,
+        correlacion=None,
         archivo_salida=None,
-        adjuntar_a_excel_existente=True,
 ):
     """Corre N simulaciones Monte Carlo + tornado chart.
 
-    variables_inciertas: lista de
-        montecarlo.VariableIncierta.
+    correlacion: None | dict {(i,j): rho} | np.ndarray KxK.
+        Define la matriz de correlación entre variables
+        para Gaussian copula sampling.
 
-    Si archivo_salida es dado y
-    adjuntar_a_excel_existente=True, agrega hojas
-    'Monte Carlo' y 'Tornado' al .xlsx existente (típicamente
-    el reporte económico ya generado por ejecutar_analisis).
-
-    Devuelve dict con 'mc' (resultado del MC), 'tornado'
-    (lista ordenada) y 'archivo' (path, si aplica).
+    Si archivo_salida es dado, agrega hojas 'Monte Carlo'
+    y 'Tornado' al .xlsx existente (típicamente el reporte
+    económico ya generado por ejecutar_analisis).
     """
 
     from montecarlo import correr_montecarlo, correr_tornado, exportar_montecarlo_excel
@@ -342,12 +339,11 @@ def ejecutar_montecarlo(
     )
 
     mc = correr_montecarlo(
-        data, params, variables_inciertas, n_runs=n_runs, seed=seed,
+        data, params, variables_inciertas,
+        n_runs=n_runs, seed=seed, correlacion=correlacion,
     )
 
-    tornado = correr_tornado(
-        data, params, variables_inciertas,
-    )
+    tornado = correr_tornado(data, params, variables_inciertas)
 
     if archivo_salida is not None:
         exportar_montecarlo_excel(archivo_salida, mc, tornado)

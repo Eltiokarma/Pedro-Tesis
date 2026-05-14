@@ -1544,13 +1544,14 @@ def LanzarMonteCarlo(inputs, archivo_excel):
         messagebox.showerror("Monte Carlo", f"{type(e).__name__}: {e}")
         return
 
-    def CorrerMC(variables, n_runs, seed):
+    def CorrerMC(variables, n_runs, seed, correlacion):
 
+        nota_corr = " correlated" if correlacion is not None else ""
         ConsolaResultados.config(state="normal")
         ConsolaResultados.insert(
             END,
             f"\nRunning Monte Carlo ({n_runs} runs, "
-            f"{len(variables)} uncertain vars)...\n"
+            f"{len(variables)}{nota_corr} vars)...\n"
         )
         ConsolaResultados.config(state="disabled")
         raiz.update_idletasks()
@@ -1564,6 +1565,7 @@ def LanzarMonteCarlo(inputs, archivo_excel):
                 variables_inciertas=variables,
                 n_runs=n_runs,
                 seed=seed,
+                correlacion=correlacion,
                 archivo_salida=archivo_excel,
             )
         except Exception as e:
