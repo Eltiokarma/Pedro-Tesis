@@ -256,7 +256,7 @@ def _actualizar_status_proyecto(texto):
 # IMPORTAR PROYECTO
 # ======================================================
 
-def ImportarProyecto():
+def ImportarProyecto(archivo=None):
     """Importa un Excel de proyecto con 3 secciones:
         Capital Costs           (cols A,B,C)
         Fixed Operating Costs   (cols E,F,G)
@@ -266,18 +266,22 @@ def ImportarProyecto():
     muestra messagebox detallado y aborta el load del
     engine.  Migra streams en formato letra (A..F) a
     nombres legibles (Key Products, etc.).
+
+    Si `archivo` es None, abre file dialog.  Si se pasa
+    explícitamente (caso CLI o launcher), lo usa directo.
     """
 
     global df_capital
     global df_fixed
     global df_variable
 
-    archivo = filedialog.askopenfilename(
-        title="Import Project",
-        filetypes=[
-            ("Excel files", "*.xlsx *.xls")
-        ]
-    )
+    if archivo is None:
+        archivo = filedialog.askopenfilename(
+            title="Import Project",
+            filetypes=[
+                ("Excel files", "*.xlsx *.xls")
+            ]
+        )
 
     if not archivo:
         return
@@ -2641,6 +2645,41 @@ adjuntar_tooltips({
 # ======================================================
 
 ActualizarDepreciacion()
+
+# ======================================================
+# CLI: --import path.xlsx  [--isbl X]
+# Permite lanzar ANA.py desde main.py / flowsheet_main.py
+# con el proyecto ya cargado y opcionalmente con el ISBL
+# inyectado desde el flowsheet.
+# ======================================================
+
+if "--import" in sys.argv:
+    _idx = sys.argv.index("--import")
+    if _idx + 1 < len(sys.argv):
+        _path = sys.argv[_idx + 1]
+        try:
+            ImportarProyecto(_path)
+        except Exception as _e:
+            messagebox.showerror(
+                "Import failed",
+                f"No se pudo abrir {_path}:\n{type(_e).__name__}: {_e}",
+            )
+
+if "--isbl" in sys.argv:
+    _idx = sys.argv.index("--isbl")
+    if _idx + 1 < len(sys.argv):
+        try:
+            _isbl = float(sys.argv[_idx + 1])
+            if not df_capital.empty:
+                df_capital.iat[0, 2] = _isbl
+                ConsolaResultados.config(state="normal")
+                ConsolaResultados.insert(
+                    END,
+                    f"\nISBL injected from flowsheet: {_isbl:.2f} MM USD\n",
+                )
+                ConsolaResultados.config(state="disabled")
+        except (ValueError, TypeError):
+            pass
 
 # ======================================================
 # MAINLOOP

@@ -111,9 +111,22 @@ class Stream:
     src:       int               # id del bloque origen
     dst:       int               # id del bloque destino
     mass_flow: float = 0.0       # tm/year (signo +)
+    role:      str = "internal"  # "internal" | "feed" | "product"
 
     canvas_line:  Optional[int] = field(default=None, repr=False)
     canvas_label: Optional[int] = field(default=None, repr=False)
+
+
+STREAM_ROLE_COLORS = {
+    "internal": "#37474f",
+    "feed":     "#2e7d32",
+    "product":  "#e65100",
+}
+STREAM_ROLE_COLORS_SEL = {
+    "internal": "#c62828",
+    "feed":     "#1b5e20",
+    "product":  "#bf360c",
+}
 
 
 @dataclass
@@ -232,7 +245,7 @@ class BlockEditDialog:
 
 
 class StreamEditDialog:
-    """Modal para editar mass flow del stream."""
+    """Modal para editar mass flow + role del stream."""
 
     def __init__(self, parent, stream, fs):
         self.stream = stream
@@ -241,7 +254,7 @@ class StreamEditDialog:
 
         dlg = Toplevel(parent)
         dlg.title(f"Edit stream — {stream.name}")
-        dlg.geometry("360x200+320+220")
+        dlg.geometry("400x270+320+220")
         dlg.transient(parent)
         dlg.grab_set()
         self.dlg = dlg
@@ -260,13 +273,30 @@ class StreamEditDialog:
         self.entry_m.insert(0, f"{stream.mass_flow:g}")
         self.entry_m.grid(row=2, column=1, sticky=W, pady=8)
 
-        ttk.Label(frm, text="Custom name:").grid(row=3, column=0, sticky=W, pady=4)
+        ttk.Label(frm, text="Role:").grid(row=3, column=0, sticky=W, pady=8)
+        self.role_var = StringVar(value=stream.role)
+        self.role_combo = ttk.Combobox(
+            frm, textvariable=self.role_var,
+            values=["internal", "feed", "product"],
+            state="readonly", width=12,
+        )
+        self.role_combo.grid(row=3, column=1, sticky=W, pady=8)
+
+        ttk.Label(
+            frm,
+            text="feed: materia prima externa (alimenta costos variables)\n"
+                 "product: producto final (alimenta producción anual)\n"
+                 "internal: stream entre bloques (mass balance)",
+            foreground="#888", font=("Segoe UI", 8), justify="left",
+        ).grid(row=4, column=0, columnspan=2, sticky=W, pady=(0, 6))
+
+        ttk.Label(frm, text="Custom name:").grid(row=5, column=0, sticky=W, pady=4)
         self.entry_name = ttk.Entry(frm, width=22)
         self.entry_name.insert(0, stream.name)
-        self.entry_name.grid(row=3, column=1, sticky=W, pady=4)
+        self.entry_name.grid(row=5, column=1, sticky=W, pady=4)
 
         btns = ttk.Frame(frm)
-        btns.grid(row=4, column=0, columnspan=2, pady=(10, 0), sticky=E)
+        btns.grid(row=6, column=0, columnspan=2, pady=(10, 0), sticky=E)
         ttk.Button(btns, text="Cancel", command=dlg.destroy).pack(side=LEFT, padx=4)
         ttk.Button(btns, text="OK",     command=self._ok).pack(side=LEFT)
 
@@ -282,6 +312,7 @@ class StreamEditDialog:
             messagebox.showerror("Invalid", "Mass flow ≥ 0 requerido.")
             return
         self.stream.mass_flow = m
+        self.stream.role = self.role_var.get() or "internal"
         nombre = self.entry_name.get().strip() or self.stream.name
         self.stream.name = nombre
         self.result = "ok"
@@ -293,11 +324,25 @@ class StreamEditDialog:
 # ======================================================
 
 class FlowsheetEditor:
+    """Editor de block diagram para estimar ISBL desde un PFD.
 
-    def __init__(self, parent, df_capital=None, on_apply=None):
-        self.parent = parent
+    Modos:
+      - mode="main": se monta sobre un Tk root (la ventana principal
+        de la app).  El botón final es 'Análisis económico →'
+        y dispara subprocess.Popen lanzando ANA.py con el ISBL
+        ya inyectado.
+      - mode="modal": se monta sobre un Toplevel hijo del análisis
+        económico existente.  El botón final es 'Apply ISBL' y
+        actualiza df_capital in-place (caso legacy: invocado desde
+        ANA.py > Tools > Estimate Capital from PFD).
+    """
+
+    def __init__(self, container, df_capital=None, on_apply=None, mode="modal"):
+        self.container = container
         self.df_capital = df_capital
         self.on_apply = on_apply
+        self.mode = mode
+        self.win = container        # cualquier widget que acepte .pack como hijo
 
         self.fs = Flowsheet()
         self.selected_block: Optional[int] = None
@@ -311,15 +356,17 @@ class FlowsheetEditor:
         # pending connection (after right-click "Connect to...")
         self._connecting_from: Optional[int] = None
 
-        # ---- ventana ----
-        win = Toplevel(parent)
-        win.title("Flowsheet Editor — Estimate ISBL from PFD")
-        win.geometry("1280x760+120+30")
-        win.transient(parent)
-        self.win = win
+        # título y geometría sólo si el container es ventana
+        if hasattr(container, "title"):
+            container.title("Flowsheet Editor — Process design")
+        if hasattr(container, "geometry"):
+            try:
+                container.geometry("1320x780+80+30")
+            except Exception:
+                pass
 
         # toolbar arriba
-        toolbar = ttk.Frame(win, padding=4)
+        toolbar = ttk.Frame(container, padding=4)
         toolbar.pack(side=TOP, fill=X)
         ttk.Button(toolbar, text="New",            command=self.new).pack(side=LEFT, padx=2)
         ttk.Button(toolbar, text="Open…",          command=self.open_json).pack(side=LEFT, padx=2)
@@ -328,11 +375,19 @@ class FlowsheetEditor:
         ttk.Button(toolbar, text="Delete selected (Del)", command=self.delete_selected).pack(side=LEFT, padx=2)
         ttk.Separator(toolbar, orient=VERTICAL).pack(side=LEFT, fill=Y, padx=8, pady=4)
         ttk.Button(toolbar, text="Compute",        command=self.compute).pack(side=LEFT, padx=2)
-        ttk.Button(toolbar, text="Apply ISBL",     command=self.apply_isbl).pack(side=LEFT, padx=2)
-        ttk.Button(toolbar, text="Close",          command=win.destroy).pack(side=RIGHT, padx=2)
+
+        # botón de transición distinto según modo
+        if mode == "main":
+            ttk.Button(
+                toolbar, text="Análisis económico →",
+                command=self.launch_analysis,
+            ).pack(side=RIGHT, padx=2)
+        else:
+            ttk.Button(toolbar, text="Apply ISBL",     command=self.apply_isbl).pack(side=LEFT, padx=2)
+            ttk.Button(toolbar, text="Close",          command=self._close).pack(side=RIGHT, padx=2)
 
         # body
-        body = ttk.Frame(win)
+        body = ttk.Frame(container)
         body.pack(side=TOP, fill=BOTH, expand=True)
 
         # library (left)
@@ -347,17 +402,23 @@ class FlowsheetEditor:
         # status bar
         self.status_var = StringVar(value="0 blocks · 0 streams")
         ttk.Label(
-            win, textvariable=self.status_var,
+            container, textvariable=self.status_var,
             anchor=W, padding=6,
             relief="sunken",
         ).pack(side=BOTTOM, fill=X)
 
-        # keyboard bindings
-        win.bind("<Delete>",   lambda e: self.delete_selected())
-        win.bind("<Escape>",   lambda e: self._clear_pending_connection())
+        # keyboard bindings (bind_all para que funcionen desde cualquier widget)
+        container.bind_all("<Delete>",   lambda e: self.delete_selected())
+        container.bind_all("<Escape>",   lambda e: self._clear_pending_connection())
 
         self._draw_grid()
         self._update_status()
+
+    def _close(self):
+        try:
+            self.win.destroy()
+        except Exception:
+            pass
 
     # ==================================================
     # PANELES
@@ -623,8 +684,8 @@ class FlowsheetEditor:
                                           outline=BLOCK_BORDER, width=2)
         for s in self.fs.streams.values():
             if s.canvas_line is not None:
-                self.canvas.itemconfigure(s.canvas_line,
-                                          fill=STREAM_COLOR, width=2)
+                color = STREAM_ROLE_COLORS.get(s.role, STREAM_COLOR)
+                self.canvas.itemconfigure(s.canvas_line, fill=color, width=2)
 
     # ==================================================
     # STREAMS
@@ -653,14 +714,20 @@ class FlowsheetEditor:
         x1, y1 = self._block_anchor(b_src, "right")
         x2, y2 = self._block_anchor(b_dst, "left")
 
+        color = STREAM_ROLE_COLORS.get(s.role, STREAM_COLOR)
         s.canvas_line = self.canvas.create_line(
             x1, y1, x2, y2,
-            fill=STREAM_COLOR, width=2, arrow="last", arrowshape=(12, 14, 5),
+            fill=color, width=2, arrow="last", arrowshape=(12, 14, 5),
             tags=("stream", f"s{s.id}"),
         )
+        role_tag = ""
+        if s.role == "feed":
+            role_tag = " [feed]"
+        elif s.role == "product":
+            role_tag = " [product]"
         s.canvas_label = self.canvas.create_text(
             (x1 + x2) / 2, (y1 + y2) / 2 - 10,
-            text=s.name + (f"  {s.mass_flow:g} tm/yr" if s.mass_flow else ""),
+            text=s.name + role_tag + (f"  {s.mass_flow:g} tm/yr" if s.mass_flow else ""),
             fill="#444", font=("Segoe UI", 8),
             tags=("stream", f"s{s.id}"),
         )
@@ -674,11 +741,18 @@ class FlowsheetEditor:
         x2, y2 = self._block_anchor(b_dst, "left")
         if s.canvas_line is not None:
             self.canvas.coords(s.canvas_line, x1, y1, x2, y2)
+            color = STREAM_ROLE_COLORS.get(s.role, STREAM_COLOR)
+            self.canvas.itemconfigure(s.canvas_line, fill=color)
         if s.canvas_label is not None:
             self.canvas.coords(s.canvas_label, (x1 + x2) / 2, (y1 + y2) / 2 - 10)
+            role_tag = ""
+            if s.role == "feed":
+                role_tag = " [feed]"
+            elif s.role == "product":
+                role_tag = " [product]"
             self.canvas.itemconfigure(
                 s.canvas_label,
-                text=s.name + (f"  {s.mass_flow:g} tm/yr" if s.mass_flow else ""),
+                text=s.name + role_tag + (f"  {s.mass_flow:g} tm/yr" if s.mass_flow else ""),
             )
 
     def _delete_stream(self, sid):
@@ -695,8 +769,8 @@ class FlowsheetEditor:
         self.selected_stream = sid
         s = self.fs.streams.get(sid)
         if s and s.canvas_line is not None:
-            self.canvas.itemconfigure(s.canvas_line,
-                                      fill=STREAM_COLOR_SEL, width=3)
+            color = STREAM_ROLE_COLORS_SEL.get(s.role, STREAM_COLOR_SEL)
+            self.canvas.itemconfigure(s.canvas_line, fill=color, width=3)
         self._update_properties()
 
     @staticmethod
@@ -905,6 +979,7 @@ class FlowsheetEditor:
                 f"STREAM  {s.name}\n"
                 f"From    {src}\n"
                 f"To      {dst}\n"
+                f"Role    {s.role}\n"
                 f"Mass    {s.mass_flow:g} tm/yr"
             )
             return
@@ -990,6 +1065,12 @@ class FlowsheetEditor:
         else:
             isbl_mm = None
 
+        # feeds y products (para coupling con análisis económico)
+        feeds    = [s for s in self.fs.streams.values() if s.role == "feed"]
+        products = [s for s in self.fs.streams.values() if s.role == "product"]
+        feed_total    = sum(s.mass_flow for s in feeds)
+        product_total = sum(s.mass_flow for s in products)
+
         # mostrar resultados
         out_lines = [
             f"Plant type:   {plant_type}",
@@ -1001,8 +1082,23 @@ class FlowsheetEditor:
         ]
         if isbl_mm is not None:
             out_lines.append(f"ISBL:    {isbl_mm:>10.2f} MM USD  (back-out)")
+        elif self.mode == "main":
+            # en modo main, ISBL implícito requiere %OSBL/%ENG/%CONT
+            # del análisis económico (defaults Turton)
+            isbl_mm = eq.isbl_implicito(res["FCI_MMUSD"], 0.30, 0.10, 0.10)
+            out_lines.append(f"ISBL:    {isbl_mm:>10.2f} MM USD  (defaults 30/10/10%)")
         else:
             out_lines.append("ISBL:    (need project loaded)")
+
+        if feeds or products:
+            out_lines.append("")
+            out_lines.append("─ Mass flows ─")
+            if products:
+                out_lines.append(f"Annual production: {product_total:g} tm/yr  ({len(products)} stream{'s' if len(products)>1 else ''})")
+            if feeds:
+                out_lines.append(f"Feed total:        {feed_total:g} tm/yr  ({len(feeds)} stream{'s' if len(feeds)>1 else ''})")
+                for s in feeds:
+                    out_lines.append(f"  · {s.name}: {s.mass_flow:g} tm/yr")
 
         if res["warnings"]:
             out_lines.append("")
@@ -1019,6 +1115,10 @@ class FlowsheetEditor:
 
         self.results_var.set("\n".join(out_lines))
         self._last_isbl = isbl_mm
+        self._last_feed_total    = feed_total
+        self._last_product_total = product_total
+        self._last_feeds    = feeds
+        self._last_products = products
 
     def apply_isbl(self):
         if not hasattr(self, "_last_isbl") or self._last_isbl is None:
@@ -1040,13 +1140,104 @@ class FlowsheetEditor:
             self.on_apply()
         messagebox.showinfo("Applied", "ISBL updated in the project.")
 
+    # ==================================================
+    # TRANSICIÓN AL ANÁLISIS ECONÓMICO (modo main)
+    # ==================================================
+
+    def launch_analysis(self):
+        """Modo main: dispara el análisis económico como
+        proceso separado, con el ISBL ya inyectado.
+
+        Flujo:
+          1. Si no hay Compute previo, lo corre con defaults.
+          2. Pide al usuario un .xlsx base (o usa template default).
+          3. Lanza:  python ANA.py [--import path.xlsx] [--isbl X]
+        """
+        import subprocess
+        import sys
+        import os
+
+        if not self.fs.blocks:
+            if not messagebox.askyesno(
+                "Sin proceso modelado",
+                "El flowsheet está vacío.  "
+                "¿Abrir el análisis económico igual?",
+            ):
+                return
+            isbl = None
+        else:
+            if not hasattr(self, "_last_isbl") or self._last_isbl is None:
+                # corremos compute silencioso con defaults
+                try:
+                    equipos = [
+                        {"nombre": b.eq_type, "S": b.S, "n": b.n}
+                        for b in self.fs.blocks.values()
+                    ]
+                    res = eq.lang_fci(equipos, plant_type="Fluid processing", year_target=2026)
+                    isbl = eq.isbl_implicito(res["FCI_MMUSD"], 0.30, 0.10, 0.10)
+                except ValueError as e:
+                    messagebox.showerror("Compute error", str(e))
+                    return
+            else:
+                isbl = self._last_isbl
+
+        # opción de xlsx base
+        usar_xlsx = messagebox.askyesnocancel(
+            "Análisis económico",
+            "¿Usar un .xlsx base existente para el análisis?\n\n"
+            "  Sí  → seleccionás el archivo\n"
+            "  No  → análisis con template default Turton\n"
+            "  Cancel → vuelvo al flowsheet",
+        )
+        if usar_xlsx is None:
+            return
+
+        cmd = [sys.executable, "ANA.py"]
+        if usar_xlsx:
+            path = filedialog.askopenfilename(
+                title="Project xlsx",
+                filetypes=[("Excel files", "*.xlsx *.xls")],
+            )
+            if not path:
+                return
+            cmd += ["--import", path]
+
+        if isbl is not None:
+            cmd += ["--isbl", f"{isbl:.4f}"]
+
+        # nota de feeds/products no auto-inyectados (commit aparte)
+        if (getattr(self, "_last_feeds", None) or
+            getattr(self, "_last_products", None)):
+            extras = []
+            if self._last_products:
+                extras.append(f"Annual production: {self._last_product_total:g} tm/yr")
+            if self._last_feeds:
+                extras.append("Feeds:")
+                for s in self._last_feeds:
+                    extras.append(f"  · {s.name}: {s.mass_flow:g} tm/yr")
+            messagebox.showinfo(
+                "Datos del flowsheet (copialos a mano)",
+                "El ISBL se inyecta automáticamente en el análisis.\n"
+                "Estos otros datos del flowsheet quedan disponibles para que "
+                "los cargues a mano en el análisis económico:\n\n"
+                + "\n".join(extras),
+            )
+
+        try:
+            cwd = os.path.dirname(os.path.abspath(__file__))
+            subprocess.Popen(cmd, cwd=cwd)
+        except Exception as e:
+            messagebox.showerror("Launch failed", f"{type(e).__name__}: {e}")
+
 
 # ======================================================
 # ENTRY POINT
 # ======================================================
 
 def AbrirVentanaFlowsheet(parent, df_capital=None, on_apply=None):
-    """Abre el editor de flowsheet.  df_capital y on_apply
-    pueden ser None — entonces el botón 'Apply ISBL' muestra
-    un mensaje informativo en vez de actualizar el proyecto."""
-    FlowsheetEditor(parent, df_capital=df_capital, on_apply=on_apply)
+    """Modo legacy: abre el editor como Toplevel hijo del
+    análisis económico.  Botón final 'Apply ISBL' actualiza
+    df_capital in-place.  Usado desde ANA.py > Tools."""
+    top = Toplevel(parent)
+    top.transient(parent)
+    FlowsheetEditor(top, df_capital=df_capital, on_apply=on_apply, mode="modal")
