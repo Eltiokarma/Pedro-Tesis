@@ -65,17 +65,29 @@ from tkinter import simpledialog
 import equipment_costs as eq
 import equipment_ports as ep
 
+# El modelo (Block, Stream, Flowsheet) ahora vive en flowsheet_model
+# para que tanto el editor Tk como el Qt lo compartan.
+from flowsheet_model import (
+    Block, Stream, Flowsheet,
+    STREAM_ROLE_COLORS, STREAM_ROLE_COLORS_SEL,
+    GRID_STEP, BLOCK_W, BLOCK_H, ROUTING_GAP,
+    T_REF_C, SEC_PER_YEAR, TM_TO_KG,
+)
+
 
 # ======================================================
 # CONSTANTES DE LAYOUT Y ESTILO
 # ======================================================
 
+# ======================================================
+# CONSTANTES UI-ESPECÍFICAS (colores, zoom, canvas)
+# ======================================================
+# Las constantes geométricas y termo del modelo viven en
+# flowsheet_model.py para que el editor Qt las comparta.
+
 CANVAS_BG     = "#fafafc"
 GRID_COLOR    = "#e8e8ee"
-GRID_STEP     = 20
 
-BLOCK_W       = 130
-BLOCK_H       = 60
 BLOCK_FILL    = "#ffffff"
 BLOCK_BORDER  = "#5c6bc0"
 BLOCK_BORDER_SEL = "#283593"
@@ -88,141 +100,16 @@ STREAM_LABEL_BG  = "#fff8d6"
 
 ZOOM_MIN      = 0.30
 ZOOM_MAX      = 3.00
-ZOOM_STEP     = 1.15        # factor por tecleo de zoom in/out
-CANVAS_W_LOG  = 4000        # tamaño lógico del lienzo (modelo)
+ZOOM_STEP     = 1.15
+CANVAS_W_LOG  = 4000
 CANVAS_H_LOG  = 3000
 
-ROUTING_GAP   = 30          # distancia mínima desde el bloque al codo
-
-# ======================================================
-# CONSTANTES PARA BALANCE DE ENERGÍA
-# ======================================================
-# Modelo simplificado de Cp constante por corriente.  Para procesos
-# con cambios de fase o ΔT > 200°C, usar Cp promedio razonable.
-# Cuando se necesita rigor (síntesis con HYSYS), se exporta el PFD
-# como JSON y se procesa fuera.
-
-T_REF_C       = 25.0        # temperatura de referencia para entalpía (°C)
-SEC_PER_YEAR  = 8760 * 3600 # segundos en un año (operación continua 100%)
-TM_TO_KG      = 1000.0      # 1 tonelada métrica = 1000 kg
-ENERGY_TOL_REL = 0.05       # 5 % tolerancia para validar duty vs Q_calc
+ENERGY_TOL_REL = 0.05
 
 
 # ======================================================
 # MODELO DE DATOS
 # ======================================================
-
-@dataclass
-class Block:
-    id:        int
-    name:      str               # ej "HX-1"
-    eq_type:   str               # nombre del catálogo eq.EQUIPMENT_DATA
-    S:         float             # parámetro de tamaño
-    n:         int = 1           # cantidad en paralelo
-    x:         float = 0.0
-    y:         float = 0.0
-
-    # duty térmico del equipo (kW).  Convención:
-    #   > 0  → el equipo entrega calor al proceso (heater, reboiler,
-    #           reactor endotérmico)
-    #   < 0  → el equipo extrae calor del proceso (cooler, condenser,
-    #           reactor exotérmico)
-    #   = 0  → adiabático o sin balance de energía declarado
-    duty:      float = 0.0       # kW
-
-    # utility que provee/recibe el duty.  Vacío → autoselect según
-    # eq_type, signo de duty y T promedio.  Override manual válido:
-    # 'steam_LP', 'steam_MP', 'steam_HP', 'fuel_gas',
-    # 'cooling_water', 'refrigeration', 'electricity'.
-    heat_source: str = ""
-
-    # caches del canvas (no se serializan)
-    canvas_rect: Optional[int] = field(default=None, repr=False)
-    canvas_text: Optional[int] = field(default=None, repr=False)
-    canvas_sub:  Optional[int] = field(default=None, repr=False)
-
-
-@dataclass
-class Stream:
-    id:        int
-    name:      str                  # ej "S-1"
-    src:       int                  # id del bloque origen
-    dst:       int                  # id del bloque destino
-    mass_flow: float = 0.0          # tm/year (signo +)
-    role:      str = "internal"     # "internal" | "feed" | "product"
-    src_port:  str = ""             # nombre del puerto en src; "" = autoselect
-    dst_port:  str = ""             # nombre del puerto en dst; "" = autoselect
-    price_usd_per_tm: float = 0.0   # USD/tm — sólo relevante si role∈{feed,product}
-
-    # propiedades termofísicas (para balance de energía)
-    # Cp = 0  → corriente sin datos termo (se omite del balance)
-    temperature: float = 25.0       # °C
-    cp:          float = 0.0        # kJ/kg·K  (capacidad calorífica específica)
-
-    canvas_line:    Optional[int] = field(default=None, repr=False)
-    canvas_label:   Optional[int] = field(default=None, repr=False)
-    canvas_lbl_bg:  Optional[int] = field(default=None, repr=False)
-
-
-STREAM_ROLE_COLORS = {
-    "internal": "#37474f",
-    "feed":     "#2e7d32",
-    "product":  "#e65100",
-}
-STREAM_ROLE_COLORS_SEL = {
-    "internal": "#c62828",
-    "feed":     "#1b5e20",
-    "product":  "#bf360c",
-}
-
-
-@dataclass
-class Flowsheet:
-    blocks:   Dict[int, Block]   = field(default_factory=dict)
-    streams:  Dict[int, Stream]  = field(default_factory=dict)
-    _next_id: int = 1
-
-    # --- OPEX extras (no son streams del proceso pero entran al análisis) ---
-    # Cada extra es un dict con:
-    #   name (str), units (str), time_basis (str), flowrate (float),
-    #   price_usd_per_unit (float), stream (str: 'Utilities'|'Consumables'|...)
-    # Ejemplo: vapor MP, cooling water, electricidad, catalizador, fuel gas.
-    opex_extras: List[Dict] = field(default_factory=list)
-    # Overrides de Fixed Operating Costs (por Concept exacto del template Turton)
-    # Ejemplo: {"Labor": 250000.0} para una planta más chica que el default 500k.
-    fixed_overrides: Dict[str, float] = field(default_factory=dict)
-
-    def new_id(self):
-        v = self._next_id
-        self._next_id += 1
-        return v
-
-    # --- serialization ---
-    def to_dict(self):
-        return {
-            "blocks":   {bid: {k: v for k, v in asdict(b).items() if not k.startswith("canvas_")}
-                         for bid, b in self.blocks.items()},
-            "streams":  {sid: {k: v for k, v in asdict(s).items() if not k.startswith("canvas_")}
-                         for sid, s in self.streams.items()},
-            "_next_id":        self._next_id,
-            "opex_extras":     list(self.opex_extras),
-            "fixed_overrides": dict(self.fixed_overrides),
-        }
-
-    @staticmethod
-    def from_dict(d):
-        fs = Flowsheet()
-        for bid, bdict in d.get("blocks", {}).items():
-            b = Block(**{k: v for k, v in bdict.items() if k in Block.__annotations__})
-            fs.blocks[int(bid)] = b
-        for sid, sdict in d.get("streams", {}).items():
-            s = Stream(**{k: v for k, v in sdict.items() if k in Stream.__annotations__})
-            fs.streams[int(sid)] = s
-        fs._next_id        = d.get("_next_id", 1)
-        fs.opex_extras     = list(d.get("opex_extras",     []))
-        fs.fixed_overrides = dict(d.get("fixed_overrides", {}))
-        return fs
-
 
 # ======================================================
 # DIALOGS DE EDICIÓN

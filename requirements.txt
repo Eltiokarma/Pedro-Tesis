@@ -1,0 +1,18 @@
+# ======================================================
+# Dependencias del proyecto
+# ======================================================
+# Instalación:
+#     pip install -r requirements.txt
+#
+# Notas:
+#   - pandas / openpyxl / numpy son del análisis económico (ANA.py + pipeline)
+#   - PySide6 es para el editor Qt (flowsheet_main_qt.py); opcional si
+#     todavía usás el editor Tk legacy (flowsheet_main.py).
+#   - tkinter viene con Python por default en Win/Linux/Mac.
+
+pandas       >= 2.0
+openpyxl     >= 3.1
+numpy        >= 1.24
+
+# Editor Qt (opcional durante la migración)
+PySide6      >= 6.5
