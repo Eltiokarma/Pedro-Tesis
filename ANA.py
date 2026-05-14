@@ -178,6 +178,7 @@ def NuevoProyecto():
 
     engine.load(df_variable)
 
+    _limpiar_frame_inputs()
     _actualizar_status_proyecto("New project (templates)")
 
     ConsolaResultados.config(state="normal")
@@ -185,7 +186,7 @@ def NuevoProyecto():
     ConsolaResultados.insert(
         END,
         "New project created with Turton defaults.\n"
-        "Edit it from Data > View Project Data.\n"
+        "Inputs cleared — fill them and press Solve.\n"
     )
     ConsolaResultados.config(state="disabled")
 
@@ -195,6 +196,44 @@ def NuevoProyecto():
         "Edit Capital, Fixed and Variable Operating Costs\n"
         "from the 'Data > View Project Data' menu."
     )
+
+
+def _limpiar_frame_inputs():
+    """Vacía todos los Entries del frame Input Data,
+    resetea Comboboxes a su default, des-marca Sensitivity
+    y restaura Depreciation a lineal.  Se llama al hacer
+    'New Project'."""
+
+    # Entries de texto numérico
+    for entry in (EntryFC, EntryVCOP, EntryProjLife, EntryTaxeRate,
+                  EntryDiscountRate, EntryDLineal):
+        entry.delete(0, END)
+
+    # CEPCI defaults (mantenemos el año actual)
+    for entry, val in ((EntryCEPCIBasis, "2026"), (EntryCEPCITarget, "2026")):
+        entry.delete(0, END)
+        entry.insert(0, val)
+
+    # Combobox de unidades
+    LabelFCuni.set("Fraction")
+    LabelVCOPuni.set("Fraction")
+    LabelProjLifeUni.set("Years")
+    LabelTaxRateUni.set("Fraction")
+    LabelDiscountRateUni.set("Fraction")
+    LabelDLinealUni.set("Years")
+
+    # Toggles
+    VeSensibilidad.set(0)
+    opcionDepre.set(0)   # Straight-line
+    opcionMACRS.set(0)
+    ActualizarDepreciacion()
+
+    # Botones de reporte se deshabilitan hasta que haya Solve
+    BotonReporteEconomico.config(state="disabled")
+    BotonReporteSensibilidad.config(state="disabled")
+    ultimo_reporte["resultado"] = None
+    ultimo_reporte["resultado_mc"] = None
+    ultimo_reporte["path"] = None
 
 
 # ======================================================
@@ -1677,14 +1716,44 @@ def _leer_entry_float(entry, nombre):
     return float(texto)
 
 
+def _to_fraction(valor, unidad):
+    """Convierte valor a fracción según la unidad elegida
+    en el Combobox.  'Fraction' lo deja como está;
+    'Percentage' divide por 100."""
+    return valor / 100.0 if unidad == "Percentage" else valor
+
+
+def _csv_to_fraction(csv_text, unidad):
+    """Convierte un CSV de fracciones/porcentajes a un CSV
+    de fracciones según la unidad."""
+    if not csv_text.strip():
+        return ""
+    pieces = [p.strip() for p in csv_text.split(",") if p.strip() != ""]
+    if unidad == "Percentage":
+        pieces = [str(float(p) / 100.0) for p in pieces]
+    return ",".join(pieces)
+
+
+def _years(valor, unidad):
+    """Convierte a años enteros según la unidad
+    ('Years' deja como está, 'Months' divide por 12 y
+    redondea)."""
+    yr = valor / 12.0 if unidad == "Months" else valor
+    return max(1, int(round(yr)))
+
+
 def _recolectar_inputs():
 
+    project_life_raw = _leer_entry_float(EntryProjLife, "Project life")
+    tax_raw          = _leer_entry_float(EntryTaxeRate, "Tax rate")
+    discount_raw     = _leer_entry_float(EntryDiscountRate, "Discount rate")
+
     inputs = {
-        "fc_csv":            EntryFC.get(),
-        "vcop_csv":          EntryVCOP.get(),
-        "project_life":      _leer_entry_float(EntryProjLife, "Project life"),
-        "tax_rate":          _leer_entry_float(EntryTaxeRate, "Tax rate"),
-        "discount_rate":     _leer_entry_float(EntryDiscountRate, "Discount rate"),
+        "fc_csv":            _csv_to_fraction(EntryFC.get(),   LabelFCuni.get()),
+        "vcop_csv":          _csv_to_fraction(EntryVCOP.get(), LabelVCOPuni.get()),
+        "project_life":      _years(project_life_raw, LabelProjLifeUni.get()),
+        "tax_rate":          _to_fraction(tax_raw,      LabelTaxRateUni.get()),
+        "discount_rate":     _to_fraction(discount_raw, LabelDiscountRateUni.get()),
         "metodo_dep":        opcionDepre.get(),
         "tipo_macrs":        opcionMACRS.get(),
         "cepci_year_basis":  int(_leer_entry_float(EntryCEPCIBasis,  "CEPCI basis year")),
@@ -1692,9 +1761,8 @@ def _recolectar_inputs():
     }
 
     if inputs["metodo_dep"] == 0:
-        inputs["periodo_dep"] = _leer_entry_float(
-            EntryDLineal, "Depreciation period"
-        )
+        period_raw = _leer_entry_float(EntryDLineal, "Depreciation period")
+        inputs["periodo_dep"] = _years(period_raw, LabelDLinealUni.get())
 
     return inputs
 
@@ -2092,10 +2160,13 @@ EntryFC = ttk.Entry(
 
 EntryFC.place(x=120, y=25)
 
-LabelFCuni = ttk.Label(
+LabelFCuni = ttk.Combobox(
     ContornoDatos,
-    text='Fraction'
+    values=["Fraction", "Percentage"],
+    state="readonly",
+    width=11,
 )
+LabelFCuni.set("Fraction")
 
 LabelFCuni.place(x=255, y=25)
 
@@ -2116,10 +2187,13 @@ EntryVCOP = ttk.Entry(
 
 EntryVCOP.place(x=120, y=65)
 
-LabelVCOPuni = ttk.Label(
+LabelVCOPuni = ttk.Combobox(
     ContornoDatos,
-    text='Fraction'
+    values=["Fraction", "Percentage"],
+    state="readonly",
+    width=11,
 )
+LabelVCOPuni.set("Fraction")
 
 LabelVCOPuni.place(x=255, y=65)
 
@@ -2140,10 +2214,13 @@ EntryProjLife = ttk.Entry(
 
 EntryProjLife.place(x=120, y=105)
 
-LabelProjLifeUni = ttk.Label(
+LabelProjLifeUni = ttk.Combobox(
     ContornoDatos,
-    text='Years'
+    values=["Years", "Months"],
+    state="readonly",
+    width=11,
 )
+LabelProjLifeUni.set("Years")
 
 LabelProjLifeUni.place(x=255, y=105)
 
@@ -2164,10 +2241,13 @@ EntryTaxeRate = ttk.Entry(
 
 EntryTaxeRate.place(x=120, y=145)
 
-LabelTaxRateUni = ttk.Label(
+LabelTaxRateUni = ttk.Combobox(
     ContornoDatos,
-    text='Fraction'
+    values=["Fraction", "Percentage"],
+    state="readonly",
+    width=11,
 )
+LabelTaxRateUni.set("Fraction")
 
 LabelTaxRateUni.place(x=255, y=145)
 
@@ -2249,10 +2329,13 @@ EntryDLineal = ttk.Entry(
 
 EntryDLineal.place(x=535, y=60)
 
-LabelDLinealUni = ttk.Label(
+LabelDLinealUni = ttk.Combobox(
     ContornoDatos,
-    text='Years'
+    values=["Years", "Months"],
+    state="readonly",
+    width=8,
 )
+LabelDLinealUni.set("Years")
 
 LabelDLinealUni.place(x=620, y=60)
 
@@ -2311,10 +2394,13 @@ EntryDiscountRate = ttk.Entry(
 
 EntryDiscountRate.place(x=535, y=205)
 
-LabelDiscountRateUni = ttk.Label(
+LabelDiscountRateUni = ttk.Combobox(
     ContornoDatos,
-    text='Fraction'
+    values=["Fraction", "Percentage"],
+    state="readonly",
+    width=11,
 )
+LabelDiscountRateUni.set("Fraction")
 
 LabelDiscountRateUni.place(x=635, y=205)
 

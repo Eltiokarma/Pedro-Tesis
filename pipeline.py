@@ -288,23 +288,16 @@ def construir_params(
         ),
     }
 
-    # tax_rate y discount_rate aceptan ambas convenciones:
-    #   "0.35"  → 35%      "35" → 35%
-    #   "0.15"  → 15%      "15" → 15%
-    # Si el user escribe >1, asumimos escala 0-100 y dividimos.
-    # Si está entre 0 y 1, asumimos fracción y lo dejamos.
-    tax_raw   = float(inputs_economicos["tax_rate"])
-    disc_raw  = float(inputs_economicos["discount_rate"])
-    tasa_imp  = tax_raw  / 100.0 if tax_raw  > 1 else tax_raw
-    tasa_int  = disc_raw / 100.0 if disc_raw > 1 else disc_raw
-
+    # tax_rate y discount_rate llegan como fracción (0-1).
+    # La UI convierte vía dropdown Fraction/Percentage antes
+    # de pasar los valores acá, así que no hay heurística.
     return {
         "vida":          int(inputs_economicos["project_life"]),
-        "tasa_impuesto": tasa_imp,
+        "tasa_impuesto": float(inputs_economicos["tax_rate"]),
         "metodo_dep":    int(inputs_economicos["metodo_dep"]),
         "periodo_dep":   int(inputs_economicos.get("periodo_dep", 10)),
         "tipo_macrs":    int(inputs_economicos.get("tipo_macrs", 0)),
-        "tasa_interes":  tasa_int,
+        "tasa_interes":  float(inputs_economicos["discount_rate"]),
         "schedule":      schedule_raw,
     }
 
