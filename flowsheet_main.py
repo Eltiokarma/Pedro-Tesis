@@ -34,10 +34,8 @@ def main():
             with open(initial_json, "r", encoding="utf-8") as f:
                 data = json.load(f)
             editor.fs = Flowsheet.from_dict(data)
-            for b in editor.fs.blocks.values():
-                editor._render_block(b)
-            for s in editor.fs.streams.values():
-                editor._render_stream(s)
+            editor._redraw_all()
+            root.after(100, editor.zoom_fit)   # tras layout inicial
             editor._update_status()
         except Exception as e:
             messagebox.showerror("Open failed", f"{type(e).__name__}: {e}")

@@ -36,6 +36,8 @@ from tkinter import (
     Canvas,
     Frame,
     Label,
+    Menu,
+    Scrollbar,
     StringVar,
     DoubleVar,
     IntVar,
@@ -82,6 +84,14 @@ BLOCK_SUB     = "#6c6c70"
 STREAM_COLOR     = "#37474f"
 STREAM_COLOR_SEL = "#c62828"
 STREAM_LABEL_BG  = "#fff8d6"
+
+ZOOM_MIN      = 0.30
+ZOOM_MAX      = 3.00
+ZOOM_STEP     = 1.15        # factor por tecleo de zoom in/out
+CANVAS_W_LOG  = 4000        # tamaño lógico del lienzo (modelo)
+CANVAS_H_LOG  = 3000
+
+ROUTING_GAP   = 30          # distancia mínima desde el bloque al codo
 
 
 # ======================================================
@@ -356,6 +366,10 @@ class FlowsheetEditor:
         # pending connection (after right-click "Connect to...")
         self._connecting_from: Optional[int] = None
 
+        # zoom y pan (modelo en unidades base; canvas se renderiza × zoom)
+        self.zoom = 1.0
+        self._panning = False
+
         # título y geometría sólo si el container es ventana
         if hasattr(container, "title"):
             container.title("Flowsheet Editor — Process design")
@@ -371,8 +385,31 @@ class FlowsheetEditor:
         ttk.Button(toolbar, text="New",            command=self.new).pack(side=LEFT, padx=2)
         ttk.Button(toolbar, text="Open…",          command=self.open_json).pack(side=LEFT, padx=2)
         ttk.Button(toolbar, text="Save…",          command=self.save_json).pack(side=LEFT, padx=2)
+
+        # menu "Examples" para cargar procesos preestablecidos
+        examples_btn = ttk.Menubutton(toolbar, text="Examples ▾")
+        ex_menu = Menu(examples_btn, tearoff=0)
+        ex_menu.add_command(label="HDA — Hydrodealkylation of toluene",
+                            command=lambda: self.load_example("hda"))
+        ex_menu.add_command(label="Methanol synthesis (simplified)",
+                            command=lambda: self.load_example("methanol"))
+        ex_menu.add_command(label="Binary distillation (benzene/toluene)",
+                            command=lambda: self.load_example("distillation"))
+        examples_btn.configure(menu=ex_menu)
+        examples_btn.pack(side=LEFT, padx=2)
+
         ttk.Separator(toolbar, orient=VERTICAL).pack(side=LEFT, fill=Y, padx=8, pady=4)
         ttk.Button(toolbar, text="Delete selected (Del)", command=self.delete_selected).pack(side=LEFT, padx=2)
+        ttk.Separator(toolbar, orient=VERTICAL).pack(side=LEFT, fill=Y, padx=8, pady=4)
+
+        # zoom controls
+        ttk.Button(toolbar, text="−", width=3, command=self.zoom_out).pack(side=LEFT, padx=1)
+        self.zoom_label_var = StringVar(value="100%")
+        ttk.Button(toolbar, textvariable=self.zoom_label_var, width=6,
+                   command=self.zoom_reset).pack(side=LEFT, padx=1)
+        ttk.Button(toolbar, text="+", width=3, command=self.zoom_in).pack(side=LEFT, padx=1)
+        ttk.Button(toolbar, text="Fit", width=5, command=self.zoom_fit).pack(side=LEFT, padx=2)
+
         ttk.Separator(toolbar, orient=VERTICAL).pack(side=LEFT, fill=Y, padx=8, pady=4)
         ttk.Button(toolbar, text="Compute",        command=self.compute).pack(side=LEFT, padx=2)
 
@@ -421,6 +458,161 @@ class FlowsheetEditor:
             pass
 
     # ==================================================
+    # ZOOM Y PAN
+    # ==================================================
+
+    def _sc(self, v):
+        """Modelo → canvas (multiplicar por zoom)."""
+        return v * self.zoom
+
+    def _unsc(self, v):
+        """Canvas → modelo."""
+        return v / self.zoom
+
+    def _model_xy(self, event):
+        """Coord del modelo a partir del event del mouse,
+        respetando scroll del canvas y zoom."""
+        cx = self.canvas.canvasx(event.x)
+        cy = self.canvas.canvasy(event.y)
+        return self._unsc(cx), self._unsc(cy)
+
+    def _refresh_zoom_label(self):
+        self.zoom_label_var.set(f"{self.zoom * 100:.0f}%")
+
+    def _redraw_all(self):
+        """Borra todo y vuelve a dibujar desde el modelo.
+        Se usa al cambiar el zoom."""
+        # preservar selección
+        sel_b = self.selected_block
+        sel_s = self.selected_stream
+
+        self.canvas.delete("all")
+        self._draw_grid()
+        for b in self.fs.blocks.values():
+            self._render_block(b)
+        for s in self.fs.streams.values():
+            self._render_stream(s)
+
+        # reanchear scrollregion al contenido + margen
+        max_x = max((b.x + BLOCK_W for b in self.fs.blocks.values()),
+                    default=CANVAS_W_LOG)
+        max_y = max((b.y + BLOCK_H for b in self.fs.blocks.values()),
+                    default=CANVAS_H_LOG)
+        sr_w = max(self._sc(max_x) + 200, 800)
+        sr_h = max(self._sc(max_y) + 200, 600)
+        self.canvas.configure(scrollregion=(0, 0, sr_w, sr_h))
+
+        # reaplicar selección visual
+        if sel_b is not None and sel_b in self.fs.blocks:
+            self._select_block(sel_b)
+        elif sel_s is not None and sel_s in self.fs.streams:
+            self._select_stream(sel_s)
+
+        self._refresh_zoom_label()
+
+    def _zoom_at(self, view_x, view_y, factor):
+        """Zoom anclado al punto (view_x, view_y) del widget.
+        El punto bajo el cursor queda quieto en pantalla."""
+        new_zoom = self.zoom * factor
+        new_zoom = max(ZOOM_MIN, min(ZOOM_MAX, new_zoom))
+        if abs(new_zoom - self.zoom) < 1e-6:
+            return
+
+        # punto del modelo bajo el cursor (antes del zoom)
+        cx_before = self.canvas.canvasx(view_x)
+        cy_before = self.canvas.canvasy(view_y)
+        mx = cx_before / self.zoom
+        my = cy_before / self.zoom
+
+        self.zoom = new_zoom
+        self._redraw_all()
+
+        # mover scroll para que (mx, my) quede en (view_x, view_y)
+        cx_after = mx * self.zoom
+        cy_after = my * self.zoom
+        sr = self.canvas.cget("scrollregion").split()
+        try:
+            sr_w = float(sr[2])
+            sr_h = float(sr[3])
+        except (IndexError, ValueError):
+            return
+        self.canvas.xview_moveto(max(0.0, (cx_after - view_x) / sr_w))
+        self.canvas.yview_moveto(max(0.0, (cy_after - view_y) / sr_h))
+
+    def zoom_in(self):
+        w = self.canvas.winfo_width()  or 800
+        h = self.canvas.winfo_height() or 600
+        self._zoom_at(w / 2, h / 2, ZOOM_STEP)
+
+    def zoom_out(self):
+        w = self.canvas.winfo_width()  or 800
+        h = self.canvas.winfo_height() or 600
+        self._zoom_at(w / 2, h / 2, 1 / ZOOM_STEP)
+
+    def zoom_reset(self):
+        self.zoom = 1.0
+        self._redraw_all()
+        self.canvas.xview_moveto(0)
+        self.canvas.yview_moveto(0)
+
+    def zoom_fit(self):
+        """Ajusta zoom para que todos los bloques entren en la vista."""
+        if not self.fs.blocks:
+            self.zoom_reset()
+            return
+
+        xs = [b.x for b in self.fs.blocks.values()]
+        ys = [b.y for b in self.fs.blocks.values()]
+        min_x, max_x = min(xs), max(xs) + BLOCK_W
+        min_y, max_y = min(ys), max(ys) + BLOCK_H
+
+        margin = 60
+        w = (self.canvas.winfo_width()  or 800) - 2 * margin
+        h = (self.canvas.winfo_height() or 600) - 2 * margin
+        if w <= 0 or h <= 0:
+            return
+
+        fx = w / (max_x - min_x + 1)
+        fy = h / (max_y - min_y + 1)
+        self.zoom = max(ZOOM_MIN, min(ZOOM_MAX, min(fx, fy)))
+        self._redraw_all()
+
+        # centrar el contenido en la vista
+        sr = self.canvas.cget("scrollregion").split()
+        try:
+            sr_w = float(sr[2])
+            sr_h = float(sr[3])
+        except (IndexError, ValueError):
+            return
+        cx = self._sc((min_x + max_x) / 2)
+        cy = self._sc((min_y + max_y) / 2)
+        view_w = self.canvas.winfo_width()  or 800
+        view_h = self.canvas.winfo_height() or 600
+        self.canvas.xview_moveto(max(0.0, (cx - view_w / 2) / sr_w))
+        self.canvas.yview_moveto(max(0.0, (cy - view_h / 2) / sr_h))
+
+    def _on_mousewheel_zoom(self, event):
+        # Windows: event.delta múltiplo de 120
+        factor = ZOOM_STEP if event.delta > 0 else 1 / ZOOM_STEP
+        self._zoom_at(event.x, event.y, factor)
+
+    def _on_mousewheel_scroll(self, event):
+        self.canvas.yview_scroll(-int(event.delta / 120) or (-1 if event.delta > 0 else 1), "units")
+
+    def _on_mousewheel_hscroll(self, event):
+        self.canvas.xview_scroll(-int(event.delta / 120) or (-1 if event.delta > 0 else 1), "units")
+
+    def _on_pan_start(self, event):
+        self.canvas.scan_mark(event.x, event.y)
+        self.canvas.configure(cursor="fleur")
+
+    def _on_pan_drag(self, event):
+        self.canvas.scan_dragto(event.x, event.y, gain=1)
+
+    def _on_pan_end(self, _event):
+        self.canvas.configure(cursor="")
+
+    # ==================================================
     # PANELES
     # ==================================================
 
@@ -459,16 +651,53 @@ class FlowsheetEditor:
         center = ttk.Frame(body)
         center.pack(side=LEFT, fill=BOTH, expand=True, padx=4, pady=8)
 
-        canvas = Canvas(center, bg=CANVAS_BG, highlightthickness=1,
-                        highlightbackground="#cccccc")
-        canvas.pack(fill=BOTH, expand=True)
+        # grid layout para canvas + scrollbars
+        center.rowconfigure(0, weight=1)
+        center.columnconfigure(0, weight=1)
+
+        canvas = Canvas(
+            center, bg=CANVAS_BG, highlightthickness=1,
+            highlightbackground="#cccccc",
+            scrollregion=(0, 0, CANVAS_W_LOG, CANVAS_H_LOG),
+        )
+        canvas.grid(row=0, column=0, sticky="nsew")
         self.canvas = canvas
 
+        hbar = Scrollbar(center, orient=HORIZONTAL, command=canvas.xview)
+        hbar.grid(row=1, column=0, sticky="ew")
+        vbar = Scrollbar(center, orient=VERTICAL,   command=canvas.yview)
+        vbar.grid(row=0, column=1, sticky="ns")
+        canvas.configure(xscrollcommand=hbar.set, yscrollcommand=vbar.set)
+
+        # mouse: izquierdo selecciona/arrastra bloque
         canvas.bind("<Button-1>",       self._on_left_click)
         canvas.bind("<B1-Motion>",      self._on_left_drag)
         canvas.bind("<ButtonRelease-1>",self._on_left_release)
         canvas.bind("<Button-3>",       self._on_right_click)
         canvas.bind("<Double-1>",       self._on_double_click)
+
+        # mouse middle (Button-2): pan
+        canvas.bind("<ButtonPress-2>",   self._on_pan_start)
+        canvas.bind("<B2-Motion>",       self._on_pan_drag)
+        canvas.bind("<ButtonRelease-2>", self._on_pan_end)
+
+        # Space + drag izquierdo también funciona como pan (laptops sin
+        # middle button). Mantengo state en self._panning.
+        canvas.bind("<KeyPress-space>",   lambda e: setattr(self, "_panning", True))
+        canvas.bind("<KeyRelease-space>", lambda e: setattr(self, "_panning", False))
+        canvas.focus_set()
+
+        # rueda: zoom con Ctrl, scroll vertical sin Ctrl
+        # Linux usa Button-4 / Button-5, Windows/Mac usa MouseWheel
+        canvas.bind("<Control-MouseWheel>", self._on_mousewheel_zoom)
+        canvas.bind("<Control-Button-4>",   lambda e: self._zoom_at(e.x, e.y, ZOOM_STEP))
+        canvas.bind("<Control-Button-5>",   lambda e: self._zoom_at(e.x, e.y, 1 / ZOOM_STEP))
+        canvas.bind("<MouseWheel>",         self._on_mousewheel_scroll)
+        canvas.bind("<Button-4>",           lambda e: canvas.yview_scroll(-1, "units"))
+        canvas.bind("<Button-5>",           lambda e: canvas.yview_scroll(1, "units"))
+        canvas.bind("<Shift-MouseWheel>",   self._on_mousewheel_hscroll)
+        canvas.bind("<Shift-Button-4>",     lambda e: canvas.xview_scroll(-1, "units"))
+        canvas.bind("<Shift-Button-5>",     lambda e: canvas.xview_scroll(1, "units"))
 
     def _build_properties(self, body):
         frame = ttk.LabelFrame(body, text=" Properties ", padding=6, width=300)
@@ -512,6 +741,149 @@ class FlowsheetEditor:
         self._update_properties()
         self.results_var.set("(Compute to estimate ISBL)")
 
+    # ==================================================
+    # EXAMPLES — procesos preestablecidos
+    # ==================================================
+
+    def load_example(self, key):
+        """Carga un proceso preestablecido (sobrescribe el actual).
+        Sirve como smoke test del software end-to-end:
+        bloques + streams con feeds/products + Compute + ISBL.
+        """
+        if self.fs.blocks and not messagebox.askyesno(
+            "Load example",
+            "Esto va a reemplazar el flowsheet actual. ¿Continuar?",
+        ):
+            return
+
+        builders = {
+            "hda":          self._example_hda,
+            "methanol":     self._example_methanol,
+            "distillation": self._example_distillation,
+        }
+        builder = builders.get(key)
+        if builder is None:
+            return
+
+        self.fs = Flowsheet()
+        builder()
+        self._redraw_all()
+        self.zoom_fit()
+        self.selected_block = None
+        self.selected_stream = None
+        self._update_status()
+        self._update_properties()
+        self.results_var.set("(Compute to estimate ISBL)")
+
+    def _add_example_block(self, name, eq_type, S, x, y, n=1):
+        bid = self.fs.new_id()
+        b = Block(id=bid, name=name, eq_type=eq_type, S=S, n=n, x=x, y=y)
+        self.fs.blocks[bid] = b
+        return bid
+
+    def _add_example_stream(self, src, dst, name, mass_flow=0.0, role="internal"):
+        sid = self.fs.new_id()
+        s = Stream(id=sid, name=name, src=src, dst=dst,
+                   mass_flow=mass_flow, role=role)
+        self.fs.streams[sid] = s
+        return sid
+
+    def _example_hda(self):
+        """HDA — Hydrodealkylation of toluene to benzene.
+        Versión simplificada de Douglas / Turton.
+        Toluene + H2 → Benzene + CH4
+        100 kmol/h tolueno, conversión ~75%."""
+        col_x = [120, 360, 600, 840, 1080, 1320]
+        row_y = [240, 420]
+
+        # row 0 — alimentación + reacción
+        b_pre  = self._add_example_block("PRE-1", "Heat exch. — floating head", 250.0, col_x[0], row_y[0])
+        b_fur  = self._add_example_block("F-1",  "Fired heater — non-reformer", 5000.0, col_x[1], row_y[0])
+        b_rxn  = self._add_example_block("R-1",  "Reactor — jacketed non-agit.",   25.0, col_x[2], row_y[0])
+        b_cool = self._add_example_block("E-1",  "Heat exch. — air cooler",       180.0, col_x[3], row_y[0])
+        b_fls  = self._add_example_block("V-1",  "Vessel — vertical",              20.0, col_x[4], row_y[0])
+
+        # row 1 — separación
+        b_col  = self._add_example_block("T-1",  "Tower (column shell)",           45.0, col_x[2], row_y[1])
+        b_reb  = self._add_example_block("E-2",  "Heat exch. — kettle reboiler",  150.0, col_x[3], row_y[1])
+        b_cnd  = self._add_example_block("E-3",  "Heat exch. — floating head",    160.0, col_x[1], row_y[1])
+        b_pmp  = self._add_example_block("P-1",  "Pump — centrifugal",             15.0, col_x[0], row_y[1])
+
+        # streams
+        self._add_example_stream(b_pmp,  b_pre,  "S-feed-tol", 11000, role="feed")
+        self._add_example_stream(b_pre,  b_fur,  "S-1")
+        self._add_example_stream(b_fur,  b_rxn,  "S-2")
+        self._add_example_stream(b_rxn,  b_cool, "S-3")
+        self._add_example_stream(b_cool, b_fls,  "S-4")
+        self._add_example_stream(b_fls,  b_col,  "S-liq")
+        self._add_example_stream(b_col,  b_reb,  "S-bot")
+        self._add_example_stream(b_col,  b_cnd,  "S-vap")
+        self._add_example_stream(b_cnd,  b_pmp,  "S-recyc")     # recycle
+        # producto + subproducto
+        b_prod = self._add_example_block("PROD", "Storage tank — cone roof", 500.0, col_x[5], row_y[1])
+        self._add_example_stream(b_cnd, b_prod, "S-benzene", 8500, role="product")
+        b_h2   = self._add_example_block("FH2",  "Storage tank — cone roof", 100.0, col_x[5], row_y[0])
+        self._add_example_stream(b_fls, b_h2,   "S-H2-purge", 350, role="product")
+
+    def _example_methanol(self):
+        """Methanol synthesis (simplified).
+        Syngas (CO + 2H2) → CH3OH
+        Reactor + flash + column."""
+        col_x = [120, 360, 600, 840, 1080]
+        y_top = 240
+        y_bot = 440
+
+        b_comp = self._add_example_block("C-1",  "Compressor — centrifugal",      800.0, col_x[0], y_top)
+        b_pre  = self._add_example_block("E-1",  "Heat exch. — floating head",    220.0, col_x[1], y_top)
+        b_rxn  = self._add_example_block("R-1",  "Reactor — jacketed non-agit.",   30.0, col_x[2], y_top)
+        b_cool = self._add_example_block("E-2",  "Heat exch. — air cooler",       200.0, col_x[3], y_top)
+        b_fls  = self._add_example_block("V-1",  "Vessel — vertical",              15.0, col_x[4], y_top)
+
+        b_col  = self._add_example_block("T-1",  "Tower (column shell)",           35.0, col_x[2], y_bot)
+        b_reb  = self._add_example_block("E-3",  "Heat exch. — kettle reboiler",  130.0, col_x[3], y_bot)
+        b_cnd  = self._add_example_block("E-4",  "Heat exch. — floating head",    140.0, col_x[1], y_bot)
+
+        self._add_example_stream(b_comp, b_pre,  "S-syngas", 14000, role="feed")
+        self._add_example_stream(b_pre,  b_rxn,  "S-1")
+        self._add_example_stream(b_rxn,  b_cool, "S-2")
+        self._add_example_stream(b_cool, b_fls,  "S-3")
+        self._add_example_stream(b_fls,  b_col,  "S-crude")
+        self._add_example_stream(b_col,  b_reb,  "S-bot")
+        self._add_example_stream(b_col,  b_cnd,  "S-vap")
+
+        b_meoh = self._add_example_block("PROD", "Storage tank — floating roof", 400.0, col_x[4], y_bot)
+        self._add_example_stream(b_cnd, b_meoh, "S-MeOH", 9500, role="product")
+
+        b_water = self._add_example_block("WW",  "Storage tank — cone roof", 50.0, col_x[0], y_bot)
+        self._add_example_stream(b_reb, b_water, "S-water", 600, role="product")
+
+    def _example_distillation(self):
+        """Destilación binaria benceno/tolueno.
+        Mezcla 50/50 → benceno por top, tolueno por fondo.
+        Pre-heater + column + condenser + reboiler + pumps."""
+        col_x = [120, 360, 600, 840, 1080]
+        y_top = 220
+        y_bot = 480
+
+        b_feed = self._add_example_block("F-tank", "Storage tank — cone roof", 200.0, col_x[0], 350)
+        b_pmp1 = self._add_example_block("P-1",    "Pump — centrifugal",         8.0, col_x[1], 350)
+        b_pre  = self._add_example_block("E-1",    "Heat exch. — floating head", 120.0, col_x[2], 350)
+        b_col  = self._add_example_block("T-1",    "Tower (column shell)",        20.0, col_x[3], 350)
+
+        b_cnd  = self._add_example_block("E-2",    "Heat exch. — floating head",  90.0, col_x[3], y_top)
+        b_reb  = self._add_example_block("E-3",    "Heat exch. — kettle reboiler", 85.0, col_x[3], y_bot)
+
+        b_dist = self._add_example_block("PROD-D", "Storage tank — cone roof",    150.0, col_x[4], y_top)
+        b_bot  = self._add_example_block("PROD-B", "Storage tank — cone roof",    150.0, col_x[4], y_bot)
+
+        self._add_example_stream(b_feed, b_pmp1, "S-feed", 10000, role="feed")
+        self._add_example_stream(b_pmp1, b_pre,  "S-1")
+        self._add_example_stream(b_pre,  b_col,  "S-2")
+        self._add_example_stream(b_col,  b_cnd,  "S-vap")
+        self._add_example_stream(b_col,  b_reb,  "S-bot")
+        self._add_example_stream(b_cnd,  b_dist, "S-benzene", 5000, role="product")
+        self._add_example_stream(b_reb,  b_bot,  "S-toluene", 5000, role="product")
+
     def open_json(self):
         path = filedialog.askopenfilename(
             title="Open flowsheet",
@@ -526,14 +898,10 @@ class FlowsheetEditor:
         except Exception as e:
             messagebox.showerror("Open error", f"{type(e).__name__}: {e}")
             return
-        self.canvas.delete("all")
-        self._draw_grid()
-        for b in self.fs.blocks.values():
-            self._render_block(b)
-        for s in self.fs.streams.values():
-            self._render_stream(s)
         self.selected_block = None
         self.selected_stream = None
+        self._redraw_all()
+        self.zoom_fit()
         self._update_status()
         self._update_properties()
 
@@ -622,10 +990,13 @@ class FlowsheetEditor:
         unit = spec.get("S_unit", "")
         cat = spec.get("categoria", "")
 
-        x0 = b.x
-        y0 = b.y
-        x1 = x0 + BLOCK_W
-        y1 = y0 + BLOCK_H
+        x0 = self._sc(b.x)
+        y0 = self._sc(b.y)
+        x1 = self._sc(b.x + BLOCK_W)
+        y1 = self._sc(b.y + BLOCK_H)
+
+        font_title = ("Segoe UI", max(7, int(10 * self.zoom)), "bold")
+        font_sub   = ("Segoe UI", max(6, int(8  * self.zoom)))
 
         b.canvas_rect = self.canvas.create_rectangle(
             x0, y0, x1, y1,
@@ -633,14 +1004,14 @@ class FlowsheetEditor:
             tags=("block", f"b{b.id}"),
         )
         b.canvas_text = self.canvas.create_text(
-            (x0 + x1) / 2, y0 + 18,
-            text=b.name, fill=BLOCK_TEXT, font=("Segoe UI", 10, "bold"),
+            (x0 + x1) / 2, y0 + self._sc(18),
+            text=b.name, fill=BLOCK_TEXT, font=font_title,
             tags=("block", f"b{b.id}"),
         )
         b.canvas_sub = self.canvas.create_text(
-            (x0 + x1) / 2, y0 + 40,
+            (x0 + x1) / 2, y0 + self._sc(40),
             text=f"{cat}\nS = {b.S:g} {unit}" + (f"  × {b.n}" if b.n > 1 else ""),
-            fill=BLOCK_SUB, font=("Segoe UI", 8), justify="center",
+            fill=BLOCK_SUB, font=font_sub, justify="center",
             tags=("block", f"b{b.id}"),
         )
 
@@ -707,49 +1078,138 @@ class FlowsheetEditor:
         self._render_stream(s)
         self._update_status()
 
+    # ---------- anchors distribuidos ----------
+    # Si un bloque tiene N streams entrando por la izquierda,
+    # se reparten en y = h*(i+1)/(N+1).  Lo mismo para outlets
+    # por la derecha.  Esto evita superposiciones y da el
+    # look de ingeniería precisa.
+
+    def _stream_slot(self, s, side):
+        """Devuelve (idx, total) para colocar el ancla de
+        este stream en el lado `side` del bloque correspondiente.
+
+        side: 'src_out' = salida del src (derecha del src)
+              'dst_in'  = entrada del dst (izquierda del dst)
+        """
+        if side == "src_out":
+            bid = s.src
+            others = [t for t in self.fs.streams.values() if t.src == bid]
+        else:
+            bid = s.dst
+            others = [t for t in self.fs.streams.values() if t.dst == bid]
+        others.sort(key=lambda t: t.id)
+        idx = others.index(s) if s in others else 0
+        return idx, max(1, len(others))
+
+    def _block_port(self, b, side, idx, total):
+        """Coord (modelo) del puerto idx-ésimo de `total` en el
+        lado `side` de un bloque."""
+        frac = (idx + 1) / (total + 1)
+        if side == "right":
+            return b.x + BLOCK_W, b.y + BLOCK_H * frac
+        if side == "left":
+            return b.x,           b.y + BLOCK_H * frac
+        if side == "top":
+            return b.x + BLOCK_W * frac, b.y
+        if side == "bottom":
+            return b.x + BLOCK_W * frac, b.y + BLOCK_H
+        return b.x, b.y
+
+    def _ortho_path(self, x1, y1, x2, y2):
+        """Devuelve la polyline ortogonal en coords del MODELO
+        entre el puerto out (x1,y1, sale a derecha) y el puerto
+        in (x2,y2, entra por izquierda).  Estilo PFD:
+
+          1) sale horizontal del src una distancia mínima
+          2) sube/baja vertical
+          3) entra horizontal al dst
+
+        Si están casi alineados (Δy pequeño), línea recta con
+        leve offset para no pisar bordes."""
+        gap = ROUTING_GAP
+        # midpoint x — si dst está a la izquierda del src (loop),
+        # rodeamos por arriba o abajo
+        if x2 >= x1 + 2 * gap:
+            mx = (x1 + x2) / 2
+            if abs(y1 - y2) < 2:   # alineados → línea recta
+                return [x1, y1, x2, y2]
+            return [x1, y1,  mx, y1,  mx, y2,  x2, y2]
+        # bucle de retroceso (recycle): salir derecha, bajar/subir
+        # bordeando, volver
+        out_x = x1 + gap
+        in_x  = x2 - gap
+        # ir hacia abajo o arriba — elegimos abajo para consistencia
+        below = max(y1, y2) + 2 * gap
+        return [x1, y1,  out_x, y1,  out_x, below,
+                in_x,  below, in_x,  y2,  x2, y2]
+
+    def _stream_endpoints(self, s):
+        """Coords (modelo) del polyline ortogonal del stream."""
+        b_src = self.fs.blocks.get(s.src)
+        b_dst = self.fs.blocks.get(s.dst)
+        if b_src is None or b_dst is None:
+            return None
+
+        # slot del puerto
+        out_idx, out_n = self._stream_slot(s, "src_out")
+        in_idx,  in_n  = self._stream_slot(s, "dst_in")
+
+        x1, y1 = self._block_port(b_src, "right", out_idx, out_n)
+        x2, y2 = self._block_port(b_dst, "left",  in_idx,  in_n)
+        return self._ortho_path(x1, y1, x2, y2)
+
+    def _label_xy(self, pts):
+        """Punto medio del polyline para colocar el label."""
+        if len(pts) >= 4:
+            # punto medio del segmento horizontal más largo
+            best_len = -1
+            best = (pts[0], pts[1])
+            for i in range(0, len(pts) - 2, 2):
+                x1, y1 = pts[i], pts[i+1]
+                x2, y2 = pts[i+2], pts[i+3]
+                if y1 == y2:
+                    L = abs(x2 - x1)
+                    if L > best_len:
+                        best_len = L
+                        best = ((x1 + x2) / 2, y1 - 10)
+            return best
+        return (pts[0], pts[1])
+
     def _render_stream(self, s):
-        b_src = self.fs.blocks[s.src]
-        b_dst = self.fs.blocks[s.dst]
-
-        x1, y1 = self._block_anchor(b_src, "right")
-        x2, y2 = self._block_anchor(b_dst, "left")
-
+        pts = self._stream_endpoints(s)
+        if pts is None:
+            return
+        canvas_pts = [self._sc(v) for v in pts]
         color = STREAM_ROLE_COLORS.get(s.role, STREAM_COLOR)
+
         s.canvas_line = self.canvas.create_line(
-            x1, y1, x2, y2,
-            fill=color, width=2, arrow="last", arrowshape=(12, 14, 5),
+            *canvas_pts,
+            fill=color, width=2, arrow="last",
+            arrowshape=(12, 14, 5),
             tags=("stream", f"s{s.id}"),
         )
-        role_tag = ""
-        if s.role == "feed":
-            role_tag = " [feed]"
-        elif s.role == "product":
-            role_tag = " [product]"
+        lx, ly = self._label_xy(pts)
+        role_tag = " [feed]" if s.role == "feed" else (" [product]" if s.role == "product" else "")
         s.canvas_label = self.canvas.create_text(
-            (x1 + x2) / 2, (y1 + y2) / 2 - 10,
+            self._sc(lx), self._sc(ly),
             text=s.name + role_tag + (f"  {s.mass_flow:g} tm/yr" if s.mass_flow else ""),
-            fill="#444", font=("Segoe UI", 8),
+            fill="#444", font=("Segoe UI", max(6, int(8 * self.zoom))),
             tags=("stream", f"s{s.id}"),
         )
 
     def _refresh_stream(self, s):
-        b_src = self.fs.blocks.get(s.src)
-        b_dst = self.fs.blocks.get(s.dst)
-        if b_src is None or b_dst is None:
+        pts = self._stream_endpoints(s)
+        if pts is None:
             return
-        x1, y1 = self._block_anchor(b_src, "right")
-        x2, y2 = self._block_anchor(b_dst, "left")
+        canvas_pts = [self._sc(v) for v in pts]
         if s.canvas_line is not None:
-            self.canvas.coords(s.canvas_line, x1, y1, x2, y2)
+            self.canvas.coords(s.canvas_line, *canvas_pts)
             color = STREAM_ROLE_COLORS.get(s.role, STREAM_COLOR)
             self.canvas.itemconfigure(s.canvas_line, fill=color)
         if s.canvas_label is not None:
-            self.canvas.coords(s.canvas_label, (x1 + x2) / 2, (y1 + y2) / 2 - 10)
-            role_tag = ""
-            if s.role == "feed":
-                role_tag = " [feed]"
-            elif s.role == "product":
-                role_tag = " [product]"
+            lx, ly = self._label_xy(pts)
+            self.canvas.coords(s.canvas_label, self._sc(lx), self._sc(ly))
+            role_tag = " [feed]" if s.role == "feed" else (" [product]" if s.role == "product" else "")
             self.canvas.itemconfigure(
                 s.canvas_label,
                 text=s.name + role_tag + (f"  {s.mass_flow:g} tm/yr" if s.mass_flow else ""),
@@ -775,6 +1235,8 @@ class FlowsheetEditor:
 
     @staticmethod
     def _block_anchor(b, side):
+        # legacy: anchor centrado.  Hoy usamos _block_port para
+        # distribuir múltiples puertos a lo largo del lado.
         if side == "right":
             return b.x + BLOCK_W, b.y + BLOCK_H / 2
         if side == "left":
@@ -789,13 +1251,23 @@ class FlowsheetEditor:
     # ==================================================
 
     def _draw_grid(self):
-        w = self.canvas.winfo_reqwidth() or 800
-        h = self.canvas.winfo_reqheight() or 600
-        # dibujamos grid grande para que no se note el border
-        for x in range(0, 2000, GRID_STEP):
-            self.canvas.create_line(x, 0, x, 1500, fill=GRID_COLOR, tags=("grid",))
-        for y in range(0, 1500, GRID_STEP):
-            self.canvas.create_line(0, y, 2000, y, fill=GRID_COLOR, tags=("grid",))
+        # grid en coords del CANVAS (ya escaladas), cubre el scrollregion
+        sr = self.canvas.cget("scrollregion").split()
+        try:
+            w = float(sr[2]) if len(sr) >= 4 else CANVAS_W_LOG * self.zoom
+            h = float(sr[3]) if len(sr) >= 4 else CANVAS_H_LOG * self.zoom
+        except ValueError:
+            w, h = CANVAS_W_LOG * self.zoom, CANVAS_H_LOG * self.zoom
+
+        step = max(8, int(GRID_STEP * self.zoom))  # no spammear líneas a zoom bajo
+        x = 0
+        while x <= w:
+            self.canvas.create_line(x, 0, x, h, fill=GRID_COLOR, tags=("grid",))
+            x += step
+        y = 0
+        while y <= h:
+            self.canvas.create_line(0, y, w, y, fill=GRID_COLOR, tags=("grid",))
+            y += step
         self.canvas.tag_lower("grid")
 
     def _block_under_cursor(self, x, y):
@@ -805,9 +1277,10 @@ class FlowsheetEditor:
                 return b
         return None
 
-    def _stream_under_cursor(self, x, y):
-        # buscar elementos cercanos al click
-        items = self.canvas.find_closest(x, y, halo=4)
+    def _stream_under_cursor(self, mx, my):
+        """mx, my en coords del MODELO."""
+        cx, cy = self._sc(mx), self._sc(my)
+        items = self.canvas.find_closest(cx, cy, halo=4)
         if not items:
             return None
         for item in items:
@@ -816,77 +1289,82 @@ class FlowsheetEditor:
                     sid = int(tag[1:])
                     s = self.fs.streams.get(sid)
                     if s is not None:
-                        # confirm click realmente sobre la línea
                         bbox = self.canvas.bbox(item)
-                        if bbox and bbox[0] - 6 <= x <= bbox[2] + 6 and bbox[1] - 6 <= y <= bbox[3] + 6:
+                        if bbox and bbox[0] - 6 <= cx <= bbox[2] + 6 and bbox[1] - 6 <= cy <= bbox[3] + 6:
                             return s
         return None
 
     def _on_left_click(self, event):
-        x, y = self.canvas.canvasx(event.x), self.canvas.canvasy(event.y)
+        # space+drag = pan
+        if self._panning:
+            self.canvas.scan_mark(event.x, event.y)
+            self.canvas.configure(cursor="fleur")
+            return
+        mx, my = self._model_xy(event)
+        self.canvas.focus_set()
 
-        # pending connection: si hay origen, este click es el destino
+        # pending connection
         if self._connecting_from is not None:
-            b_dst = self._block_under_cursor(x, y)
+            b_dst = self._block_under_cursor(mx, my)
             if b_dst is not None:
                 self._add_stream(self._connecting_from, b_dst.id)
             self._clear_pending_connection()
             return
 
-        b = self._block_under_cursor(x, y)
+        b = self._block_under_cursor(mx, my)
         if b is not None:
             self._select_block(b.id)
             self._drag_block = b.id
-            self._drag_offx = x - b.x
-            self._drag_offy = y - b.y
+            self._drag_offx = mx - b.x
+            self._drag_offy = my - b.y
             return
 
-        s = self._stream_under_cursor(x, y)
+        s = self._stream_under_cursor(mx, my)
         if s is not None:
             self._select_stream(s.id)
             return
 
-        # click en vacío: deselect
         self._deselect_all_visual()
         self.selected_block = None
         self.selected_stream = None
         self._update_properties()
 
     def _on_left_drag(self, event):
+        if self._panning:
+            self.canvas.scan_dragto(event.x, event.y, gain=1)
+            return
         if self._drag_block is None:
             return
-        x, y = self.canvas.canvasx(event.x), self.canvas.canvasy(event.y)
+        mx, my = self._model_xy(event)
         b = self.fs.blocks.get(self._drag_block)
         if b is None:
             return
-        # snap a grid
-        nx = round((x - self._drag_offx) / GRID_STEP) * GRID_STEP
-        ny = round((y - self._drag_offy) / GRID_STEP) * GRID_STEP
+        nx = round((mx - self._drag_offx) / GRID_STEP) * GRID_STEP
+        ny = round((my - self._drag_offy) / GRID_STEP) * GRID_STEP
         nx = max(0, nx)
         ny = max(0, ny)
-        dx = nx - b.x
-        dy = ny - b.y
+        dx_c = self._sc(nx - b.x)
+        dy_c = self._sc(ny - b.y)
         b.x = nx
         b.y = ny
         for cid in (b.canvas_rect, b.canvas_text, b.canvas_sub):
             if cid is not None:
-                self.canvas.move(cid, dx, dy)
-        # refrescar streams conectados
+                self.canvas.move(cid, dx_c, dy_c)
         for s in self.fs.streams.values():
             if s.src == b.id or s.dst == b.id:
                 self._refresh_stream(s)
 
     def _on_left_release(self, event):
+        if self._panning:
+            self.canvas.configure(cursor="")
         self._drag_block = None
 
     def _on_right_click(self, event):
-        x, y = self.canvas.canvasx(event.x), self.canvas.canvasy(event.y)
-        b = self._block_under_cursor(x, y)
+        mx, my = self._model_xy(event)
+        b = self._block_under_cursor(mx, my)
         if b is None:
             return
 
-        # context menu
-        from tkinter import Menu
         menu = Menu(self.canvas, tearoff=0)
         menu.add_command(label=f"{b.name}", state="disabled")
         menu.add_separator()
@@ -902,12 +1380,12 @@ class FlowsheetEditor:
             menu.grab_release()
 
     def _on_double_click(self, event):
-        x, y = self.canvas.canvasx(event.x), self.canvas.canvasy(event.y)
-        b = self._block_under_cursor(x, y)
+        mx, my = self._model_xy(event)
+        b = self._block_under_cursor(mx, my)
         if b is not None:
             self._open_block_dialog(b)
             return
-        s = self._stream_under_cursor(x, y)
+        s = self._stream_under_cursor(mx, my)
         if s is not None:
             d = StreamEditDialog(self.win, s, self.fs)
             if d.result == "ok":
