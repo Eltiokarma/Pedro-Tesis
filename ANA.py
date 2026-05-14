@@ -1419,13 +1419,15 @@ def _leer_entry_float(entry, nombre):
 def _recolectar_inputs():
 
     inputs = {
-        "fc_csv":        EntryFC.get(),
-        "vcop_csv":      EntryVCOP.get(),
-        "project_life":  _leer_entry_float(EntryProjLife, "Project life"),
-        "tax_rate":      _leer_entry_float(EntryTaxeRate, "Tax rate"),
-        "discount_rate": _leer_entry_float(EntryDiscountRate, "Discount rate"),
-        "metodo_dep":    opcionDepre.get(),
-        "tipo_macrs":    opcionMACRS.get(),
+        "fc_csv":            EntryFC.get(),
+        "vcop_csv":          EntryVCOP.get(),
+        "project_life":      _leer_entry_float(EntryProjLife, "Project life"),
+        "tax_rate":          _leer_entry_float(EntryTaxeRate, "Tax rate"),
+        "discount_rate":     _leer_entry_float(EntryDiscountRate, "Discount rate"),
+        "metodo_dep":        opcionDepre.get(),
+        "tipo_macrs":        opcionMACRS.get(),
+        "cepci_year_basis":  int(_leer_entry_float(EntryCEPCIBasis,  "CEPCI basis year")),
+        "cepci_year_target": int(_leer_entry_float(EntryCEPCITarget, "CEPCI target year")),
     }
 
     if inputs["metodo_dep"] == 0:
@@ -1504,20 +1506,43 @@ def EjecutarAnalisis():
     # 5) consola
     npv = resultado["npv"]
     irr = resultado["irr"]
+    pbs = resultado["pbp_simple"]
+    pbd = resultado["pbp_descontado"]
+    roi = resultado["roi"]
     fci = resultado["costos"]["FCI"]
     wc = resultado["costos"]["WC"]
+    cepci_f = resultado["cepci_factor"]
+    cepci_b = resultado["cepci_year_basis"]
+    cepci_t = resultado["cepci_year_target"]
+
+    def _fmt(v, fmt, unit=""):
+        if v is None:
+            return "n/a"
+        return f"{v:{fmt}} {unit}".rstrip()
 
     ConsolaResultados.config(state="normal")
     ConsolaResultados.delete(1.0, END)
     ConsolaResultados.insert(END, "Economic Analysis Completed\n\n")
-    ConsolaResultados.insert(END, f"FCI  : {fci:>10.2f} MM USD\n")
-    ConsolaResultados.insert(END, f"WC   : {wc:>10.2f} MM USD\n")
-    ConsolaResultados.insert(END, f"NPV  : {npv:>10.2f} MM USD\n")
+    ConsolaResultados.insert(END, f"FCI         : {fci:>10.2f} MM USD\n")
+    ConsolaResultados.insert(END, f"WC          : {wc:>10.2f} MM USD\n")
+
+    if cepci_b != cepci_t:
+        ConsolaResultados.insert(
+            END,
+            f"CEPCI {cepci_b}→{cepci_t}: factor {cepci_f:.3f}\n"
+        )
+
+    ConsolaResultados.insert(END, f"NPV         : {npv:>10.2f} MM USD\n")
 
     if irr is not None:
-        ConsolaResultados.insert(END, f"IRR  : {irr*100:>10.2f} %\n")
+        ConsolaResultados.insert(END, f"IRR/DCFROR  : {irr*100:>10.2f} %\n")
     else:
-        ConsolaResultados.insert(END, "IRR  :        n/a (no sign change in CF)\n")
+        ConsolaResultados.insert(END, "IRR/DCFROR  :        n/a (no sign change in CF)\n")
+
+    ConsolaResultados.insert(END, f"PBP simple  : {_fmt(pbs, '>10.2f', 'years')}\n")
+    ConsolaResultados.insert(END, f"PBP discntd : {_fmt(pbd, '>10.2f', 'years')}\n")
+    if roi is not None:
+        ConsolaResultados.insert(END, f"ROI avg     : {roi*100:>10.2f} %\n")
 
     ConsolaResultados.insert(END, f"\nReport saved to:\n{archivo}\n")
     ConsolaResultados.config(state="disabled")
@@ -1796,13 +1821,52 @@ LabelTaxRateUni.place(x=255, y=145)
 
 # ------------------------------------------------------
 
+LabelCEPCIBasis = ttk.Label(
+    ContornoDatos,
+    text='CEPCI basis :'
+)
+
+LabelCEPCIBasis.place(x=25, y=185)
+
+EntryCEPCIBasis = ttk.Entry(
+    ContornoDatos,
+    width=6,
+    justify="right"
+)
+
+EntryCEPCIBasis.insert(0, "2026")
+EntryCEPCIBasis.place(x=120, y=185)
+
+LabelCEPCITarget = ttk.Label(
+    ContornoDatos,
+    text='target :'
+)
+
+LabelCEPCITarget.place(x=180, y=185)
+
+EntryCEPCITarget = ttk.Entry(
+    ContornoDatos,
+    width=6,
+    justify="right"
+)
+
+EntryCEPCITarget.insert(0, "2026")
+EntryCEPCITarget.place(x=240, y=185)
+
+LabelCEPCIUni = ttk.Label(
+    ContornoDatos,
+    text='Year'
+)
+
+LabelCEPCIUni.place(x=300, y=185)
+
 CheckSensibilidad = ttk.Checkbutton(
     ContornoDatos,
     text="Sensitivity analysis",
     variable=VeSensibilidad
 )
 
-CheckSensibilidad.place(x=25, y=205)
+CheckSensibilidad.place(x=25, y=225)
 
 # ======================================================
 # COLUMNA DERECHA

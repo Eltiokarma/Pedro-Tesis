@@ -15,6 +15,9 @@ from flujoflujoclass import (
     ReportGenerator,
 )
 
+import cepci
+import indicators
+
 
 # ======================================================
 # CONSTRUCCIÓN DEL DICT data ESPERADO POR CostModel
@@ -64,8 +67,13 @@ def _construir_data(
         df_capital,
         df_fixed,
         df_internal,
+        factor_cepci=1.0,
 ):
     """Arma el dict data que consume CostModel.
+
+    factor_cepci: multiplicador opcional para llevar ISBL
+    del año de estimación al año objetivo (CEPCI).
+    Default 1.0 (sin ajuste).
 
     Filas asumidas en df_capital (orden estricto):
         0: ISBL (USD)
@@ -89,7 +97,7 @@ def _construir_data(
     data = {}
 
     # CAPITAL
-    data["ISBL"]     = _valor_capital(df_capital, 0)
+    data["ISBL"]     = _valor_capital(df_capital, 0) * factor_cepci
     data["OSBL_pct"] = _pct(_valor_capital(df_capital, 1))
     data["ENG_pct"]  = _pct(_valor_capital(df_capital, 2))
     data["CONT_pct"] = _pct(_valor_capital(df_capital, 3))
@@ -208,6 +216,15 @@ def construir_params(
 # EJECUCIÓN END-TO-END
 # ======================================================
 
+def _resolver_factor_cepci(inputs_economicos):
+    """Lee 'cepci_year_basis' y 'cepci_year_target' de los
+    inputs y devuelve el multiplicador.  Defaults: ambos
+    iguales (factor=1)."""
+    basis  = int(inputs_economicos.get("cepci_year_basis",  cepci.AÑO_BASE_DEFAULT))
+    target = int(inputs_economicos.get("cepci_year_target", cepci.AÑO_BASE_DEFAULT))
+    return cepci.factor_cepci(basis, target), basis, target
+
+
 def ejecutar_analisis(
         df_capital,
         df_fixed,
@@ -217,8 +234,9 @@ def ejecutar_analisis(
 ):
     """Corre todo el pipeline y exporta el reporte Excel.
 
-    Devuelve un dict con: costos, cf (cashflow dict),
-    params, npv_acumulado.
+    Devuelve dict con: data, costos, cf, params, npv, irr,
+    dcfror, pbp_simple, pbp_descontado, roi, cepci_factor,
+    npv_at_rates, indicadores.
     """
 
     if df_capital is None or df_capital.empty:
@@ -230,8 +248,13 @@ def ejecutar_analisis(
     if df_internal is None or df_internal.empty:
         raise ValueError("Variable Operating Costs vacío")
 
-    # 1) data dict + costos
-    data = _construir_data(df_capital, df_fixed, df_internal)
+    factor, year_basis, year_target = _resolver_factor_cepci(inputs_economicos)
+
+    # 1) data dict + costos (con ajuste CEPCI sobre ISBL)
+    data = _construir_data(
+        df_capital, df_fixed, df_internal,
+        factor_cepci=factor,
+    )
     costos = CostModel(data).calcular()
 
     # 2) params + schedule completo
@@ -247,17 +270,15 @@ def ejecutar_analisis(
     # 3) cash flow
     cf = CashFlowModel(costos, params).calcular()
 
-    # 4) NPV (idéntico al cálculo de exportar_cashflow)
+    # 4) indicadores
     tasa = params["tasa_interes"]
-    npv = sum(
-        cf["CF"][i] / ((1 + tasa) ** cf["años"][i])
-        for i in range(len(cf["CF"]))
+    t_start = params["schedule"]["t_start"]
+    ind = indicators.resumen(
+        cf["CF"], cf["años"], costos["FCI"],
+        tasa_descuento=tasa, t_start=t_start,
     )
 
-    # 5) IRR aproximada (bisección sobre el CF)
-    irr = _calcular_irr(cf["CF"], cf["años"])
-
-    # 6) exportar Excel
+    # 5) exportar Excel base
     reporte.exportar_cashflow(
         archivo_salida,
         cf,
@@ -266,14 +287,162 @@ def ejecutar_analisis(
         data,
     )
 
+    # 6) hoja extra de indicadores
+    _exportar_indicadores_excel(
+        archivo_salida, ind, costos, data,
+        cepci_info={
+            "factor": factor,
+            "year_basis": year_basis,
+            "year_target": year_target,
+        },
+    )
+
     return {
-        "data":   data,
-        "costos": costos,
-        "cf":     cf,
-        "params": params,
-        "npv":    npv,
-        "irr":    irr,
+        "data":            data,
+        "costos":          costos,
+        "cf":              cf,
+        "params":          params,
+        "npv":             ind["NPV"],
+        "irr":             ind["IRR"],
+        "dcfror":          ind["DCFROR"],
+        "pbp_simple":      ind["PBP_simple"],
+        "pbp_descontado":  ind["PBP_descontado"],
+        "roi":             ind["ROI_promedio"],
+        "npv_at_rates":    ind["NPV_at_rates"],
+        "indicadores":     ind,
+        "cepci_factor":    factor,
+        "cepci_year_basis":  year_basis,
+        "cepci_year_target": year_target,
     }
+
+
+# ======================================================
+# HOJA EXTRA "Profitability Indicators"
+# ======================================================
+
+def _exportar_indicadores_excel(archivo, ind, costos, data, cepci_info):
+    """Agrega hoja 'Profitability Indicators' con la tabla
+    completa de indicadores estándar de Turton §10."""
+
+    from openpyxl import load_workbook
+    from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
+
+    wb = load_workbook(archivo)
+    if "Profitability Indicators" in wb.sheetnames:
+        del wb["Profitability Indicators"]
+    ws = wb.create_sheet("Profitability Indicators")
+
+    bold       = Font(bold=True)
+    title      = Font(bold=True, size=13)
+    fill_head  = PatternFill(start_color="D9D9D9", fill_type="solid")
+    border_top = Border(top=Side(style="medium"))
+    fmt_num    = "#,##0.00"
+    fmt_pct    = "0.00%"
+    fmt_years  = "0.00"
+
+    row = 1
+
+    # ---- header ----
+    ws.cell(row, 1, "PROFITABILITY INDICATORS").font = title
+    ws.merge_cells(start_row=row, start_column=1, end_row=row, end_column=4)
+    row += 2
+
+    # ---- CEPCI ----
+    ws.cell(row, 1, "Capital Cost Inflation (CEPCI)").font = bold
+    row += 1
+    ws.cell(row, 1, "Year basis (estimation)")
+    ws.cell(row, 2, cepci_info["year_basis"])
+    row += 1
+    ws.cell(row, 1, "Year target (analysis)")
+    ws.cell(row, 2, cepci_info["year_target"])
+    row += 1
+    ws.cell(row, 1, "CEPCI factor (target / basis)")
+    c = ws.cell(row, 2, cepci_info["factor"])
+    c.number_format = "0.000"
+    row += 1
+    ws.cell(row, 1, "ISBL adjusted (MM USD)")
+    c = ws.cell(row, 2, data["ISBL"])
+    c.number_format = fmt_num
+    row += 2
+
+    # ---- summary table ----
+    ws.cell(row, 1, "Headline metrics").font = bold
+    row += 1
+    ws.cell(row, 1, "Metric").font = bold
+    ws.cell(row, 2, "Value").font = bold
+    ws.cell(row, 3, "Units").font = bold
+    for c in range(1, 4):
+        ws.cell(row, c).fill = fill_head
+    row += 1
+
+    def emit(label, valor, fmt=fmt_num, units=""):
+        nonlocal row
+        ws.cell(row, 1, label)
+        if valor is None:
+            ws.cell(row, 2, "n/a")
+        else:
+            c = ws.cell(row, 2, valor)
+            c.number_format = fmt
+        ws.cell(row, 3, units)
+        row += 1
+
+    emit("NPV @ project discount rate", ind["NPV"], fmt_num, "MM USD")
+    emit("IRR (= DCFROR)", ind["IRR"], fmt_pct, "")
+    emit("DCFROR (alias)", ind["DCFROR"], fmt_pct, "")
+    emit("Payback period (simple)", ind["PBP_simple"], fmt_years, "years")
+    emit("Payback period (discounted)", ind["PBP_descontado"], fmt_years, "years")
+    emit("ROI (mean annual CF / FCI)", ind["ROI_promedio"], fmt_pct, "")
+    row += 1
+
+    # ---- NPV @ varias tasas ----
+    ws.cell(row, 1, "NPV @ alternative discount rates").font = bold
+    row += 1
+    ws.cell(row, 1, "Discount rate").font = bold
+    ws.cell(row, 2, "NPV (MM USD)").font = bold
+    for c in range(1, 3):
+        ws.cell(row, c).fill = fill_head
+    row += 1
+
+    for tasa, val in sorted(ind["NPV_at_rates"].items()):
+        c1 = ws.cell(row, 1, tasa); c1.number_format = fmt_pct
+        c2 = ws.cell(row, 2, val);  c2.number_format = fmt_num
+        # marcar la fila de la tasa "del proyecto"
+        if abs(tasa - ind["tasa_descuento"]) < 1e-9:
+            c1.font = bold
+            c2.font = bold
+        row += 1
+
+    row += 1
+
+    # ---- comparativa Payback simple vs descontado ----
+    ws.cell(row, 1, "Comparison: simple vs discounted payback").font = bold
+    row += 1
+    pbs = ind["PBP_simple"]
+    pbd = ind["PBP_descontado"]
+    ws.cell(row, 1, "PBP simple (years)")
+    ws.cell(row, 2, pbs if pbs is not None else "n/a")
+    if pbs is not None:
+        ws.cell(row, 2).number_format = fmt_years
+    row += 1
+    ws.cell(row, 1, "PBP discounted (years)")
+    ws.cell(row, 2, pbd if pbd is not None else "n/a")
+    if pbd is not None:
+        ws.cell(row, 2).number_format = fmt_years
+    row += 1
+    if pbs is not None and pbd is not None:
+        ws.cell(row, 1, "Discount penalty (Δ years)")
+        c = ws.cell(row, 2, pbd - pbs)
+        c.number_format = fmt_years
+    elif pbs is not None and pbd is None:
+        ws.cell(row, 1, "Discount penalty")
+        ws.cell(row, 2, "project never pays back when discounted")
+
+    wb.save(archivo)
+
+
+# ======================================================
+# IRR (Newton-Raphson simple sobre NPV) — legacy alias
+# ======================================================
 
 
 # ======================================================
@@ -298,7 +467,12 @@ def construir_data_y_params(
     if df_internal is None or df_internal.empty:
         raise ValueError("Variable Operating Costs vacío")
 
-    data = _construir_data(df_capital, df_fixed, df_internal)
+    factor, _, _ = _resolver_factor_cepci(inputs_economicos)
+
+    data = _construir_data(
+        df_capital, df_fixed, df_internal,
+        factor_cepci=factor,
+    )
     params = construir_params(inputs_economicos)
 
     reporte = ReportGenerator()
