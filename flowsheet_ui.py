@@ -150,6 +150,16 @@ class Flowsheet:
     streams:  Dict[int, Stream]  = field(default_factory=dict)
     _next_id: int = 1
 
+    # --- OPEX extras (no son streams del proceso pero entran al análisis) ---
+    # Cada extra es un dict con:
+    #   name (str), units (str), time_basis (str), flowrate (float),
+    #   price_usd_per_unit (float), stream (str: 'Utilities'|'Consumables'|...)
+    # Ejemplo: vapor MP, cooling water, electricidad, catalizador, fuel gas.
+    opex_extras: List[Dict] = field(default_factory=list)
+    # Overrides de Fixed Operating Costs (por Concept exacto del template Turton)
+    # Ejemplo: {"Labor": 250000.0} para una planta más chica que el default 500k.
+    fixed_overrides: Dict[str, float] = field(default_factory=dict)
+
     def new_id(self):
         v = self._next_id
         self._next_id += 1
@@ -162,7 +172,9 @@ class Flowsheet:
                          for bid, b in self.blocks.items()},
             "streams":  {sid: {k: v for k, v in asdict(s).items() if not k.startswith("canvas_")}
                          for sid, s in self.streams.items()},
-            "_next_id": self._next_id,
+            "_next_id":        self._next_id,
+            "opex_extras":     list(self.opex_extras),
+            "fixed_overrides": dict(self.fixed_overrides),
         }
 
     @staticmethod
@@ -174,7 +186,9 @@ class Flowsheet:
         for sid, sdict in d.get("streams", {}).items():
             s = Stream(**{k: v for k, v in sdict.items() if k in Stream.__annotations__})
             fs.streams[int(sid)] = s
-        fs._next_id = d.get("_next_id", 1)
+        fs._next_id        = d.get("_next_id", 1)
+        fs.opex_extras     = list(d.get("opex_extras",     []))
+        fs.fixed_overrides = dict(d.get("fixed_overrides", {}))
         return fs
 
 
@@ -851,6 +865,25 @@ class FlowsheetEditor:
         self.fs.blocks[bid] = b
         return bid
 
+    def _add_example_extra(self, name, flowrate, price, units="tm",
+                           stream="Utilities"):
+        """Agrega una utility / consumible al OPEX (no es un stream del
+        proceso, va directo al df_variable del análisis económico)."""
+        self.fs.opex_extras.append({
+            "name":               name,
+            "units":              units,
+            "time_basis":         "year",
+            "flowrate":           float(flowrate),
+            "price_usd_per_unit": float(price),
+            "stream":             stream,
+        })
+
+    def _set_example_labor(self, labor_usd_per_year):
+        """Override del costo de mano de obra anual.  El template
+        default Turton son $500k; para una planta más chica conviene
+        bajarlo."""
+        self.fs.fixed_overrides["Labor"] = float(labor_usd_per_year)
+
     def _add_example_stream(self, src, dst, name, mass_flow=0.0,
                             role="internal", src_port="", dst_port="",
                             price=0.0):
@@ -912,10 +945,29 @@ class FlowsheetEditor:
                                  src_port="shell_out", dst_port="succion")
         self._add_example_stream(e103, tk1,  "S-benceno", 8500, role="product",
                                  src_port="tube_out",  dst_port="entrada",
-                                 price=1050.0)
+                                 price=1150.0)
         self._add_example_stream(v101, tk2,  "S-purga-H2", 350, role="product",
                                  src_port="vapor",     dst_port="entrada",
                                  price=2000.0)
+
+        # ---- OPEX extras: utilities + consumibles ----
+        # H2 makeup (raw material adicional, no es un stream del PFD)
+        self._add_example_extra("H2 makeup",      flowrate=200,      price=1800.0,
+                                stream="Raw Materials")
+        # Catalizador Pt/alúmina (consumible)
+        self._add_example_extra("Catalizador Pt", flowrate=0.5,      price=25_000.0,
+                                stream="Consumables")
+        # Utilities (Turton §8 + Towler Apx A) — escala MYPE
+        self._add_example_extra("Steam MP",       flowrate=30_000,   price=25.0,
+                                stream="Utilities")
+        self._add_example_extra("Cooling water",  flowrate=500_000,  price=0.30,
+                                stream="Utilities")
+        self._add_example_extra("Fuel gas",       flowrate=5_000,    price=300.0,
+                                stream="Utilities")
+        self._add_example_extra("Electricity",    flowrate=4_000_000, price=0.08,
+                                units="kWh", stream="Utilities")
+        # Labor: planta MYPE, no la asunción default de 50 operadores
+        self._set_example_labor(250_000)
 
     def _example_methanol(self):
         """Síntesis de metanol simplificada.
@@ -962,13 +1014,25 @@ class FlowsheetEditor:
                                  src_port="vapor_tope", dst_port="shell_in")
         self._add_example_stream(e103, tk1,  "S-MeOH", 9500, role="product",
                                  src_port="shell_out", dst_port="entrada",
-                                 price=430.0)
+                                 price=480.0)
         # fondo de T-101 → reboiler E-104 → tanque agua (der)
         self._add_example_stream(t101, e104, "S-fondo",
                                  src_port="liquido_fondo", dst_port="liq_in")
         self._add_example_stream(e104, tk2,  "S-agua", 600, role="product",
                                  src_port="cond_out", dst_port="entrada",
                                  price=5.0)
+
+        # ---- OPEX extras: utilities + consumibles ----
+        # Catalizador CuZnO/Al2O3 para síntesis de metanol (~3 años de vida)
+        self._add_example_extra("Catalizador CuZnO", flowrate=2,        price=40_000.0,
+                                stream="Consumables")
+        self._add_example_extra("Steam HP",          flowrate=50_000,   price=28.0,
+                                stream="Utilities")
+        self._add_example_extra("Cooling water",     flowrate=700_000,  price=0.30,
+                                stream="Utilities")
+        self._add_example_extra("Electricity",       flowrate=8_000_000, price=0.08,
+                                units="kWh", stream="Utilities")
+        self._set_example_labor(280_000)
 
     def _example_distillation(self):
         """Destilación binaria benceno/tolueno (50/50).
@@ -1008,6 +1072,15 @@ class FlowsheetEditor:
         self._add_example_stream(e103, tk2,  "S-tolueno", 5000, role="product",
                                  src_port="vap_out",  dst_port="entrada",
                                  price=700.0)
+
+        # ---- OPEX extras: solo utilities (no hay reacción, no catalizador) ----
+        self._add_example_extra("Steam LP",      flowrate=25_000,  price=20.0,
+                                stream="Utilities")
+        self._add_example_extra("Cooling water", flowrate=400_000, price=0.30,
+                                stream="Utilities")
+        self._add_example_extra("Electricity",   flowrate=100_000, price=0.08,
+                                units="kWh", stream="Utilities")
+        self._set_example_labor(180_000)   # planta chica, 3-4 operadores
 
     def open_json(self):
         path = filedialog.askopenfilename(
@@ -1948,18 +2021,47 @@ class FlowsheetEditor:
                 for s in feeds:
                     out_lines.append(f"  · {s.name}: {s.mass_flow:g} tm/año")
 
-            # Ingresos / costos materia prima a partir de precios USD/tm
+            # Ingresos / costos OPEX a partir de precios + extras
             revenue = sum(s.mass_flow * s.price_usd_per_tm for s in products)
             raw_mp  = sum(s.mass_flow * s.price_usd_per_tm for s in feeds)
-            if revenue or raw_mp:
+
+            # extras agrupados por categoría (Utilities, Consumables, Raw Materials extra)
+            extras_by_cat = {}
+            for ex in self.fs.opex_extras:
+                cat = ex.get("stream", "Utilities")
+                cost = ex.get("flowrate", 0.0) * ex.get("price_usd_per_unit", 0.0)
+                extras_by_cat[cat] = extras_by_cat.get(cat, 0.0) + cost
+
+            labor = self.fs.fixed_overrides.get("Labor")
+
+            has_any = revenue or raw_mp or extras_by_cat or labor
+            if has_any:
                 out_lines.append("")
                 out_lines.append("─ Economía aproximada (USD/año) ─")
                 if revenue:
                     out_lines.append(f"Ingresos:         $ {revenue:>14,.0f}")
                 if raw_mp:
                     out_lines.append(f"Materia prima:    $ {raw_mp:>14,.0f}")
-                if revenue and raw_mp:
-                    margin = revenue - raw_mp
+                # mostrar extras: Raw Materials (extra), Utilities, Consumables, etc.
+                # priorizamos el orden Raw → Utilities → Consumables → otros
+                cat_order = ("Raw Materials", "Utilities", "Consumables")
+                for cat in cat_order:
+                    if cat in extras_by_cat and extras_by_cat[cat] > 0:
+                        label = {"Raw Materials": "Otros raw mat.",
+                                 "Utilities":     "Utilities:    ",
+                                 "Consumables":   "Consumibles:  "}[cat]
+                        out_lines.append(f"{label}    $ {extras_by_cat[cat]:>14,.0f}")
+                for cat, val in extras_by_cat.items():
+                    if cat in cat_order or val == 0:
+                        continue
+                    out_lines.append(f"{cat[:13]:13s}    $ {val:>14,.0f}")
+                if labor:
+                    out_lines.append(f"Labor:            $ {labor:>14,.0f}")
+                # totales
+                total_voc = raw_mp + sum(extras_by_cat.values())
+                if revenue and total_voc:
+                    out_lines.append(f"VOC total:        $ {total_voc:>14,.0f}")
+                    margin = revenue - total_voc - (labor or 0)
                     out_lines.append(f"Margen bruto:     $ {margin:>14,.0f}")
 
         if res["warnings"]:
@@ -2123,6 +2225,14 @@ class FlowsheetEditor:
         if isbl is not None and not df_capital.empty:
             df_capital.iat[0, 2] = float(isbl)
 
+        # aplicar fixed_overrides al df_fixed (match exacto por Concept)
+        if (not df_fixed.empty and "Concept" in df_fixed.columns
+            and self.fs.fixed_overrides):
+            for concept, value in self.fs.fixed_overrides.items():
+                mask = df_fixed["Concept"].astype(str).str.strip() == concept
+                if mask.any():
+                    df_fixed.loc[mask, "Value"] = float(value)
+
         # dedupe: borrar filas previas marcadas '(PFD)'
         if "variable operating costs" in df_variable.columns:
             mask = df_variable["variable operating costs"].astype(str).str.contains(
@@ -2148,6 +2258,18 @@ class FlowsheetEditor:
                 "flowrate":           float(s.mass_flow),
                 "price usd/units":    float(getattr(s, "price_usd_per_tm", 0.0)),
                 "stream":             "Raw Materials",
+            })
+        # opex_extras: utilities (vapor, agua, electricidad) + consumibles
+        # (catalizadores) — sin sufijo (PFD) tampoco se duplican porque arriba
+        # se borran todas las filas que matchen '(PFD)' en el nombre.
+        for ex in self.fs.opex_extras:
+            new_rows.append({
+                "variable operating costs": f"{ex.get('name','?')} (PFD)",
+                "units":              ex.get("units", "tm"),
+                "time basis":         ex.get("time_basis", "year"),
+                "flowrate":           float(ex.get("flowrate", 0.0)),
+                "price usd/units":    float(ex.get("price_usd_per_unit", 0.0)),
+                "stream":             ex.get("stream", "Utilities"),
             })
         if new_rows:
             df_variable = pd.concat(
