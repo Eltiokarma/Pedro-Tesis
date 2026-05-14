@@ -27,9 +27,11 @@ from units import (
 
 from pipeline import ejecutar_analisis, ejecutar_montecarlo, construir_data_y_params
 
-from mc_ui import AbrirVentanaConfigMC, AbrirVentanaResultadosMC
+from mc_ui import AbrirVentanaConfigMC
 
 from capital_ui import AbrirVentanaEstimateISBL
+
+from results_ui import AbrirDashboard
 
 # ======================================================
 # ENGINE CENTRAL (SINGLE SOURCE OF TRUTH)
@@ -1378,23 +1380,47 @@ def ActualizarDepreciacion():
 # ESTADO DEL ÚLTIMO REPORTE
 # ======================================================
 
-ultimo_reporte = {"path": None}
+ultimo_reporte = {
+    "path":           None,
+    "resultado":      None,   # dict de pipeline.ejecutar_analisis()
+    "resultado_mc":   None,   # dict de pipeline.ejecutar_montecarlo()
+}
 
 # ======================================================
 # ABRIR EL ÚLTIMO REPORTE EXCEL
 # ======================================================
 
-def AbrirUltimoReporte():
-    """Abre el último .xlsx generado con la app por
-    defecto del sistema (xdg-open / open / startfile)."""
+def AbrirUltimoReporte(tab_inicial=0):
+    """Abre el Dashboard de resultados del último Solve."""
+
+    res = ultimo_reporte.get("resultado")
+    if res is None:
+        messagebox.showwarning(
+            "No analysis",
+            "Run the analysis first (Solve)."
+        )
+        return
+
+    AbrirDashboard(
+        raiz,
+        resultado_base=res,
+        resultado_mc=ultimo_reporte.get("resultado_mc"),
+        on_open_excel=AbrirExcelExterno,
+        tab_inicial=tab_inicial,
+    )
+
+
+def AbrirUltimoReporteSensitivity():
+    """Atajo al Dashboard, tab Sensitivity."""
+    AbrirUltimoReporte(tab_inicial=3)
+
+
+def AbrirExcelExterno():
+    """Abre el .xlsx con el visor por defecto del sistema."""
 
     ruta = ultimo_reporte.get("path")
-
     if not ruta or not os.path.exists(ruta):
-        messagebox.showwarning(
-            "No report",
-            "Run the analysis first."
-        )
+        messagebox.showwarning("No report", "Excel report not available.")
         return
 
     try:
@@ -1502,56 +1528,46 @@ def EjecutarAnalisis():
         return
 
     ultimo_reporte["path"] = archivo
+    ultimo_reporte["resultado"] = resultado
+    ultimo_reporte["resultado_mc"] = None  # reset; se setea si MC corre
 
     BotonReporteEconomico.config(state="normal")
 
-    # 5) consola
-    npv = resultado["npv"]
-    irr = resultado["irr"]
-    pbs = resultado["pbp_simple"]
-    pbd = resultado["pbp_descontado"]
-    roi = resultado["roi"]
-    fci = resultado["costos"]["FCI"]
-    wc = resultado["costos"]["WC"]
-    cepci_f = resultado["cepci_factor"]
-    cepci_b = resultado["cepci_year_basis"]
-    cepci_t = resultado["cepci_year_target"]
-
-    def _fmt(v, fmt, unit=""):
-        if v is None:
-            return "n/a"
-        return f"{v:{fmt}} {unit}".rstrip()
-
-    ConsolaResultados.config(state="normal")
-    ConsolaResultados.delete(1.0, END)
-    ConsolaResultados.insert(END, "Economic Analysis Completed\n\n")
-    ConsolaResultados.insert(END, f"FCI         : {fci:>10.2f} MM USD\n")
-    ConsolaResultados.insert(END, f"WC          : {wc:>10.2f} MM USD\n")
-
-    if cepci_b != cepci_t:
-        ConsolaResultados.insert(
-            END,
-            f"CEPCI {cepci_b}→{cepci_t}: factor {cepci_f:.3f}\n"
-        )
-
-    ConsolaResultados.insert(END, f"NPV         : {npv:>10.2f} MM USD\n")
-
-    if irr is not None:
-        ConsolaResultados.insert(END, f"IRR/DCFROR  : {irr*100:>10.2f} %\n")
-    else:
-        ConsolaResultados.insert(END, "IRR/DCFROR  :        n/a (no sign change in CF)\n")
-
-    ConsolaResultados.insert(END, f"PBP simple  : {_fmt(pbs, '>10.2f', 'years')}\n")
-    ConsolaResultados.insert(END, f"PBP discntd : {_fmt(pbd, '>10.2f', 'years')}\n")
-    if roi is not None:
-        ConsolaResultados.insert(END, f"ROI avg     : {roi*100:>10.2f} %\n")
-
-    ConsolaResultados.insert(END, f"\nReport saved to:\n{archivo}\n")
-    ConsolaResultados.config(state="disabled")
+    # 5) resumen breve en la consola principal
+    _consola_resumen_base(resultado, archivo)
 
     # 6) Sensitivity analysis (Monte Carlo)
     if VeSensibilidad.get():
         LanzarMonteCarlo(inputs, archivo)
+    else:
+        # No MC requested → abrir Dashboard directo (tab Overview)
+        AbrirDashboard(
+            raiz,
+            resultado_base=resultado,
+            resultado_mc=None,
+            on_open_excel=AbrirExcelExterno,
+            tab_inicial=0,
+        )
+
+
+def _consola_resumen_base(r, archivo):
+    """Imprime un resumen breve en la consola principal
+    (3-4 líneas).  El detalle completo lo da el Dashboard."""
+    npv = r["npv"]
+    irr = r["irr"]
+    pbs = r.get("pbp_simple")
+
+    irr_txt = f"{irr*100:.2f}%" if irr is not None else "n/a"
+    pbs_txt = f"{pbs:.2f} yr"   if pbs is not None else "n/a"
+
+    ConsolaResultados.config(state="normal")
+    ConsolaResultados.delete(1.0, END)
+    ConsolaResultados.insert(END, "Analysis completed — see dashboard for details.\n")
+    ConsolaResultados.insert(END,
+        f"  NPV {npv:.2f} MM USD   ·   IRR {irr_txt}   ·   PBP {pbs_txt}\n"
+    )
+    ConsolaResultados.insert(END, f"  Excel: {os.path.basename(archivo)}\n")
+    ConsolaResultados.config(state="disabled")
 
 
 # ======================================================
@@ -1602,25 +1618,28 @@ def LanzarMonteCarlo(inputs, archivo_excel):
             )
             return
 
-        # consola
+        # consola: una línea
         s = resultado["mc"]["stats"]
         ConsolaResultados.config(state="normal")
-        ConsolaResultados.insert(END, "\nMonte Carlo done.\n")
         ConsolaResultados.insert(
             END,
-            f"NPV mean ± std: {s['npv_mean']:.2f} ± {s['npv_std']:.2f}\n"
-        )
-        ConsolaResultados.insert(
-            END,
-            f"NPV P10/P50/P90: {s['npv_p10']:.2f} / {s['npv_p50']:.2f} / {s['npv_p90']:.2f}\n"
-        )
-        ConsolaResultados.insert(
-            END,
-            f"P(NPV<0): {s['p_npv_neg']*100:.1f}%\n"
+            f"  MC: NPV P10/P50/P90 = "
+            f"{s['npv_p10']:.1f} / {s['npv_p50']:.1f} / {s['npv_p90']:.1f}   "
+            f"P(NPV<0) = {s['p_npv_neg']*100:.1f}%\n"
         )
         ConsolaResultados.config(state="disabled")
 
-        AbrirVentanaResultadosMC(raiz, resultado)
+        ultimo_reporte["resultado_mc"] = resultado
+        BotonReporteSensibilidad.config(state="normal")
+
+        # Abrir dashboard en tab Sensitivity
+        AbrirDashboard(
+            raiz,
+            resultado_base=ultimo_reporte["resultado"],
+            resultado_mc=resultado,
+            on_open_excel=AbrirExcelExterno,
+            tab_inicial=3,
+        )
 
     AbrirVentanaConfigMC(raiz, data, CorrerMC)
 
@@ -2063,7 +2082,8 @@ BotonReporteSensibilidad = ttk.Button(
     ContornoResultados,
     text='Economic Sensitivity Report',
     width=30,
-    state="disabled"
+    state="disabled",
+    command=AbrirUltimoReporteSensitivity,
 )
 
 BotonReporteSensibilidad.place(
