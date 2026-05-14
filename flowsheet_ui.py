@@ -94,6 +94,19 @@ CANVAS_H_LOG  = 3000
 
 ROUTING_GAP   = 30          # distancia mínima desde el bloque al codo
 
+# ======================================================
+# CONSTANTES PARA BALANCE DE ENERGÍA
+# ======================================================
+# Modelo simplificado de Cp constante por corriente.  Para procesos
+# con cambios de fase o ΔT > 200°C, usar Cp promedio razonable.
+# Cuando se necesita rigor (síntesis con HYSYS), se exporta el PFD
+# como JSON y se procesa fuera.
+
+T_REF_C       = 25.0        # temperatura de referencia para entalpía (°C)
+SEC_PER_YEAR  = 8760 * 3600 # segundos en un año (operación continua 100%)
+TM_TO_KG      = 1000.0      # 1 tonelada métrica = 1000 kg
+ENERGY_TOL_REL = 0.05       # 5 % tolerancia para validar duty vs Q_calc
+
 
 # ======================================================
 # MODELO DE DATOS
@@ -108,6 +121,16 @@ class Block:
     n:         int = 1           # cantidad en paralelo
     x:         float = 0.0
     y:         float = 0.0
+
+    # duty térmico del equipo (kW).  Convención:
+    #   > 0  → el equipo entrega calor al proceso (heater, reboiler,
+    #           reactor endotérmico)
+    #   < 0  → el equipo extrae calor del proceso (cooler, condenser,
+    #           reactor exotérmico)
+    #   = 0  → adiabático o sin balance de energía declarado
+    # Valor declarativo: si los streams tienen T y Cp, el balance
+    # de energía se calcula y se compara con este número.
+    duty:      float = 0.0       # kW
 
     # caches del canvas (no se serializan)
     canvas_rect: Optional[int] = field(default=None, repr=False)
@@ -126,6 +149,11 @@ class Stream:
     src_port:  str = ""             # nombre del puerto en src; "" = autoselect
     dst_port:  str = ""             # nombre del puerto en dst; "" = autoselect
     price_usd_per_tm: float = 0.0   # USD/tm — sólo relevante si role∈{feed,product}
+
+    # propiedades termofísicas (para balance de energía)
+    # Cp = 0  → corriente sin datos termo (se omite del balance)
+    temperature: float = 25.0       # °C
+    cp:          float = 0.0        # kJ/kg·K  (capacidad calorífica específica)
 
     canvas_line:    Optional[int] = field(default=None, repr=False)
     canvas_label:   Optional[int] = field(default=None, repr=False)
@@ -206,7 +234,7 @@ class BlockEditDialog:
 
         dlg = Toplevel(parent)
         dlg.title(f"Editar equipo — {block.name}")
-        dlg.geometry("380x280+300+200")
+        dlg.geometry("420x440+300+180")
         dlg.transient(parent)
         dlg.grab_set()
         self.dlg = dlg
@@ -247,8 +275,26 @@ class BlockEditDialog:
         self.entry_name.insert(0, block.name)
         self.entry_name.grid(row=5, column=1, sticky=W, pady=4)
 
+        # ---- Duty térmico (declarativo, para balance de energía) ----
+        ttk.Separator(frm, orient=HORIZONTAL).grid(
+            row=6, column=0, columnspan=2, sticky="ew", pady=(8, 4))
+
+        ttk.Label(frm, text="Duty (kW):").grid(row=7, column=0, sticky=W, pady=4)
+        self.entry_duty = ttk.Entry(frm, justify="right", width=14)
+        self.entry_duty.insert(0, f"{block.duty:g}")
+        self.entry_duty.grid(row=7, column=1, sticky=W, pady=4)
+
+        ttk.Label(
+            frm,
+            text="> 0  = el equipo entrega calor al proceso (heater, reboiler)\n"
+                 "< 0  = el equipo extrae calor del proceso (cooler, condenser)\n"
+                 "= 0  = adiabático / sin balance declarado\n"
+                 "Si los streams tienen T y Cp, el balance se compara con este número.",
+            foreground="#888", font=("Segoe UI", 8), justify="left",
+        ).grid(row=8, column=0, columnspan=2, sticky=W, pady=(0, 4))
+
         btns = ttk.Frame(frm)
-        btns.grid(row=6, column=0, columnspan=2, pady=(10, 0), sticky=E)
+        btns.grid(row=9, column=0, columnspan=2, pady=(10, 0), sticky=E)
         ttk.Button(btns, text="Cancelar", command=dlg.destroy).pack(side=LEFT, padx=4)
         ttk.Button(btns, text="OK",       command=self._ok).pack(side=LEFT)
 
@@ -259,15 +305,18 @@ class BlockEditDialog:
         try:
             S = float(self.entry_s.get())
             n = int(self.entry_n.get())
+            duty = float(self.entry_duty.get())
             if S <= 0 or n < 1:
                 raise ValueError
         except ValueError:
-            messagebox.showerror("Inválido", "Se requiere S > 0 y n ≥ 1.")
+            messagebox.showerror("Inválido",
+                                 "Se requiere S > 0, n ≥ 1 y duty numérico.")
             return
         nombre = self.entry_name.get().strip() or self.block.name
         self.block.S = S
         self.block.n = n
         self.block.name = nombre
+        self.block.duty = duty
         self.result = "ok"
         self.dlg.destroy()
 
@@ -283,7 +332,7 @@ class StreamEditDialog:
 
         dlg = Toplevel(parent)
         dlg.title(f"Editar corriente — {stream.name}")
-        dlg.geometry("440x420+320+200")
+        dlg.geometry("460x560+320+140")
         dlg.transient(parent)
         dlg.grab_set()
         self.dlg = dlg
@@ -336,38 +385,58 @@ class StreamEditDialog:
         self.entry_price.grid(row=5, column=1, sticky=W, pady=6)
         self._toggle_price()  # mostrar/ocultar según role inicial
 
-        # ---- puertos ISA ----
+        # ---- termofísicas (para balance de energía) ----
         ttk.Separator(frm, orient=HORIZONTAL).grid(
             row=6, column=0, columnspan=2, sticky="ew", pady=8)
+        ttk.Label(frm, text="Temperatura (°C):").grid(row=7, column=0, sticky=W, pady=4)
+        self.entry_t = ttk.Entry(frm, justify="right", width=14)
+        self.entry_t.insert(0, f"{stream.temperature:g}")
+        self.entry_t.grid(row=7, column=1, sticky=W, pady=4)
 
-        ttk.Label(frm, text=f"Puerto en {b_src.name}:").grid(row=7, column=0, sticky=W, pady=4)
+        ttk.Label(frm, text="Cp (kJ/kg·K):").grid(row=8, column=0, sticky=W, pady=4)
+        self.entry_cp = ttk.Entry(frm, justify="right", width=14)
+        self.entry_cp.insert(0, f"{stream.cp:g}")
+        self.entry_cp.grid(row=8, column=1, sticky=W, pady=4)
+
+        ttk.Label(
+            frm,
+            text="Cp típicos:  agua líq 4.18 · vapor 2.0 · aire 1.0 · hidrocarbo líq 1.7-2.2\n"
+                 "Si Cp = 0, la corriente se omite del balance de energía.",
+            foreground="#888", font=("Segoe UI", 8), justify="left",
+        ).grid(row=9, column=0, columnspan=2, sticky=W, pady=(0, 4))
+
+        # ---- puertos ISA ----
+        ttk.Separator(frm, orient=HORIZONTAL).grid(
+            row=10, column=0, columnspan=2, sticky="ew", pady=8)
+
+        ttk.Label(frm, text=f"Puerto en {b_src.name}:").grid(row=11, column=0, sticky=W, pady=4)
         self.src_port_var = StringVar(value=stream.src_port or (ports_src[0] if ports_src else ""))
         self.src_port_combo = ttk.Combobox(
             frm, textvariable=self.src_port_var,
             values=ports_src, state="readonly", width=22,
         )
-        self.src_port_combo.grid(row=7, column=1, sticky=W, pady=4)
+        self.src_port_combo.grid(row=11, column=1, sticky=W, pady=4)
 
-        ttk.Label(frm, text=f"Puerto en {b_dst.name}:").grid(row=8, column=0, sticky=W, pady=4)
+        ttk.Label(frm, text=f"Puerto en {b_dst.name}:").grid(row=12, column=0, sticky=W, pady=4)
         self.dst_port_var = StringVar(value=stream.dst_port or (ports_dst[0] if ports_dst else ""))
         self.dst_port_combo = ttk.Combobox(
             frm, textvariable=self.dst_port_var,
             values=ports_dst, state="readonly", width=22,
         )
-        self.dst_port_combo.grid(row=8, column=1, sticky=W, pady=4)
+        self.dst_port_combo.grid(row=12, column=1, sticky=W, pady=4)
 
         # ---- nombre ----
         ttk.Separator(frm, orient=HORIZONTAL).grid(
-            row=9, column=0, columnspan=2, sticky="ew", pady=8)
+            row=13, column=0, columnspan=2, sticky="ew", pady=8)
 
-        ttk.Label(frm, text="Nombre:").grid(row=10, column=0, sticky=W, pady=4)
+        ttk.Label(frm, text="Nombre:").grid(row=14, column=0, sticky=W, pady=4)
         self.entry_name = ttk.Entry(frm, width=22)
         self.entry_name.insert(0, stream.name)
-        self.entry_name.grid(row=10, column=1, sticky=W, pady=4)
+        self.entry_name.grid(row=14, column=1, sticky=W, pady=4)
 
         # ---- botones ----
         btns = ttk.Frame(frm)
-        btns.grid(row=11, column=0, columnspan=2, pady=(14, 0), sticky=E)
+        btns.grid(row=15, column=0, columnspan=2, pady=(14, 0), sticky=E)
         ttk.Button(btns, text="Cancelar", command=dlg.destroy).pack(side=LEFT, padx=4)
         ttk.Button(btns, text="OK",       command=self._ok).pack(side=LEFT)
 
@@ -403,11 +472,22 @@ class StreamEditDialog:
             except ValueError:
                 messagebox.showerror("Inválido", "Precio ≥ 0 requerido.")
                 return
-        self.stream.mass_flow = m
-        self.stream.role = role
+        # termo
+        try:
+            t  = float(self.entry_t.get())
+            cp = float(self.entry_cp.get())
+            if cp < 0:
+                raise ValueError
+        except ValueError:
+            messagebox.showerror("Inválido", "T numérica y Cp ≥ 0 requeridos.")
+            return
+        self.stream.mass_flow        = m
+        self.stream.role             = role
         self.stream.price_usd_per_tm = price
-        self.stream.src_port = self.src_port_var.get() or ""
-        self.stream.dst_port = self.dst_port_var.get() or ""
+        self.stream.temperature      = t
+        self.stream.cp               = cp
+        self.stream.src_port         = self.src_port_var.get() or ""
+        self.stream.dst_port         = self.dst_port_var.get() or ""
         nombre = self.entry_name.get().strip() or self.stream.name
         self.stream.name = nombre
         self.result = "ok"
@@ -1095,16 +1175,22 @@ class FlowsheetEditor:
 
     def _add_example_stream(self, src, dst, name, mass_flow=0.0,
                             role="internal", src_port="", dst_port="",
-                            price=0.0):
+                            price=0.0, T=25.0, cp=0.0):
         sid = self.fs.new_id()
         s = Stream(
             id=sid, name=name, src=src, dst=dst,
             mass_flow=mass_flow, role=role,
             src_port=src_port, dst_port=dst_port,
             price_usd_per_tm=price,
+            temperature=T, cp=cp,
         )
         self.fs.streams[sid] = s
         return sid
+
+    def _set_block_duty(self, bid, duty_kw):
+        """Setea duty declarativo del bloque (kW)."""
+        if bid in self.fs.blocks:
+            self.fs.blocks[bid].duty = float(duty_kw)
 
     def _example_hda(self):
         """HDA — Hidrodealquilación de tolueno (Douglas / Turton).
@@ -1129,35 +1215,62 @@ class FlowsheetEditor:
         p101 = self._add_example_block("P-101", "Pump — centrifugal",            15.0, cx[0], y_bot)
         tk1  = self._add_example_block("TK-101","Storage tank — cone roof",     500.0, cx[5], y_bot)
         tk2  = self._add_example_block("TK-102","Storage tank — cone roof",     100.0, cx[5], y_top)
+        # tanque de tolueno fresco (la planta consume tolueno + recicla algo del fondo)
+        tk3  = self._add_example_block("TK-103","Storage tank — cone roof",     300.0, cx[0], y_bot - 100)
 
         # corrientes (puertos específicos por tipo de equipo)
         # Precios USD/tm (referencia mercado 2024):
         #   tolueno feed  ~650, benceno ~1050, H2 ~2000
-        self._add_example_stream(p101, e101, "S-1",  11000, role="feed",
+        # Cp típicos (kJ/kg·K):
+        #   tolueno líquido 1.7, vapor con H2 (mezcla) 1.9
+        # Balance: tolueno fresco (8850 tm/año) + reciclo (2150) → P-101 → ...
+        # → benceno (8500) + purga H2 (350); el balance interno se asume
+        # como si todos los streams fueran toluen + benceno (sin reacción
+        # explícita).  Cp/T son de mezcla orgánica.
+        self._add_example_stream(tk3, p101, "S-feed-tol", 8850, role="feed",
+                                 src_port="salida",   dst_port="succion",
+                                 price=650.0, T=25, cp=1.7)
+        self._add_example_stream(p101, e101, "S-1",  11000,
                                  src_port="descarga",  dst_port="tube_in",
-                                 price=650.0)
-        self._add_example_stream(e101, f101, "S-2",
-                                 src_port="tube_out",  dst_port="proceso_in")
-        self._add_example_stream(f101, r101, "S-3",
-                                 src_port="proceso_out", dst_port="alimentacion")
-        self._add_example_stream(r101, e102, "S-4",
-                                 src_port="producto",  dst_port="proceso_in")
-        self._add_example_stream(e102, v101, "S-5",
-                                 src_port="proceso_out", dst_port="alimentacion")
-        self._add_example_stream(v101, t101, "S-6",
-                                 src_port="liquido",   dst_port="alimentacion")
-        self._add_example_stream(t101, e104, "S-7",
-                                 src_port="liquido_fondo", dst_port="liq_in")
-        self._add_example_stream(t101, e103, "S-8",
-                                 src_port="vapor_tope", dst_port="tube_in")
-        self._add_example_stream(e103, p101, "S-9-recic",   # reciclo
-                                 src_port="shell_out", dst_port="succion")
+                                 T=27, cp=1.7)
+        self._add_example_stream(e101, f101, "S-2",  11000,
+                                 src_port="tube_out",  dst_port="proceso_in",
+                                 T=200, cp=1.9)
+        self._add_example_stream(f101, r101, "S-3",  11000,
+                                 src_port="proceso_out", dst_port="alimentacion",
+                                 T=600, cp=2.0)
+        self._add_example_stream(r101, e102, "S-4",  11000,
+                                 src_port="producto",  dst_port="proceso_in",
+                                 T=620, cp=2.0)
+        self._add_example_stream(e102, v101, "S-5",  11000,
+                                 src_port="proceso_out", dst_port="alimentacion",
+                                 T=50, cp=1.8)
+        self._add_example_stream(v101, t101, "S-6",  10650,   # menos H2 que va por arriba
+                                 src_port="liquido",   dst_port="alimentacion",
+                                 T=80, cp=1.75)
+        self._add_example_stream(t101, e104, "S-7",  2150,    # fondo
+                                 src_port="liquido_fondo", dst_port="liq_in",
+                                 T=110, cp=1.7)
+        self._add_example_stream(t101, e103, "S-8",  8500,    # tope
+                                 src_port="vapor_tope", dst_port="tube_in",
+                                 T=85, cp=1.8)
+        # reciclo de fondo (tolueno sin reaccionar) → bomba
+        self._add_example_stream(e104, p101, "S-9-recic", 2150,
+                                 src_port="cond_out", dst_port="succion",
+                                 T=110, cp=1.7)
         self._add_example_stream(e103, tk1,  "S-benceno", 8500, role="product",
                                  src_port="tube_out",  dst_port="entrada",
-                                 price=1150.0)
+                                 price=1150.0, T=40, cp=1.74)
         self._add_example_stream(v101, tk2,  "S-purga-H2", 350, role="product",
                                  src_port="vapor",     dst_port="entrada",
-                                 price=2000.0)
+                                 price=2000.0, T=50, cp=14.5)  # H2 puro Cp alto
+
+        # Nota: NO declaramos duty por bloque.  Q_calc se reporta
+        # desde los streams (T, Cp).  Los Q reales en HDA incluyen
+        # ΔH de reacción, ΔH de vaporización y son varias veces los
+        # Q_calc del modelo simplificado.  Si el user quiere validar
+        # con duty riguroso, lo carga manualmente desde el dialog
+        # de cada equipo.
 
         # ---- OPEX extras: utilities + consumibles ----
         # H2 makeup (raw material adicional, no es un stream del PFD)
@@ -1204,32 +1317,46 @@ class FlowsheetEditor:
         t101 = self._add_example_block("T-101", "Tower (column shell)",           35.0, cx[2], y_bot)
         e104 = self._add_example_block("E-104", "Heat exch. — kettle reboiler",  130.0, cx[3], y_bot)
         tk2  = self._add_example_block("TK-102","Storage tank — cone roof",       50.0, cx[4], y_bot)
+        # tanque de venteo para purga de gases del flash V-101
+        tk3  = self._add_example_block("TK-103","Storage tank — cone roof",       30.0, cx[4], y_top - 100)
 
         # Precios USD/tm (referencia mercado 2024):
         #   syngas ~150, metanol ~430, agua de proceso ~5
+        # Cp típicos: syngas 1.1 · metanol líq 2.55 · vap 1.85 · agua 4.18
+        # Flujos: syngas 14000 → crude meoh 10100 → meoh 9500 + agua 600
         self._add_example_stream(k101, e101, "S-1", 14000, role="feed",
                                  src_port="descarga", dst_port="tube_in",
-                                 price=150.0)
-        self._add_example_stream(e101, r101, "S-2",
-                                 src_port="tube_out", dst_port="alimentacion")
-        self._add_example_stream(r101, e102, "S-3",
-                                 src_port="producto", dst_port="proceso_in")
-        self._add_example_stream(e102, v101, "S-4",
-                                 src_port="proceso_out", dst_port="alimentacion")
-        self._add_example_stream(v101, t101, "S-5",
-                                 src_port="liquido",  dst_port="alimentacion")
-        # destilado por el top de T-101 → condensador E-103 → tanque MeOH (izq)
-        self._add_example_stream(t101, e103, "S-vap-tope",
-                                 src_port="vapor_tope", dst_port="shell_in")
+                                 price=150.0, T=40, cp=1.1)
+        self._add_example_stream(e101, r101, "S-2", 14000,
+                                 src_port="tube_out", dst_port="alimentacion",
+                                 T=230, cp=1.2)
+        self._add_example_stream(r101, e102, "S-3", 14000,
+                                 src_port="producto", dst_port="proceso_in",
+                                 T=260, cp=2.0)
+        self._add_example_stream(e102, v101, "S-4", 14000,
+                                 src_port="proceso_out", dst_port="alimentacion",
+                                 T=40, cp=2.0)
+        self._add_example_stream(v101, t101, "S-5", 10100,
+                                 src_port="liquido",  dst_port="alimentacion",
+                                 T=60, cp=2.5)
+        self._add_example_stream(t101, e103, "S-vap-tope", 9500,
+                                 src_port="vapor_tope", dst_port="shell_in",
+                                 T=68, cp=1.85)
         self._add_example_stream(e103, tk1,  "S-MeOH", 9500, role="product",
                                  src_port="shell_out", dst_port="entrada",
-                                 price=480.0)
-        # fondo de T-101 → reboiler E-104 → tanque agua (der)
-        self._add_example_stream(t101, e104, "S-fondo",
-                                 src_port="liquido_fondo", dst_port="liq_in")
+                                 price=480.0, T=40, cp=2.55)
+        self._add_example_stream(t101, e104, "S-fondo", 600,
+                                 src_port="liquido_fondo", dst_port="liq_in",
+                                 T=100, cp=4.0)
         self._add_example_stream(e104, tk2,  "S-agua", 600, role="product",
                                  src_port="cond_out", dst_port="entrada",
-                                 price=5.0)
+                                 price=5.0, T=40, cp=4.18)
+        # venteo de gases no condensados del flash (CO, H2 residual)
+        self._add_example_stream(v101, tk3, "S-purge", 3900, role="product",
+                                 src_port="vapor", dst_port="entrada",
+                                 price=0.0, T=40, cp=1.1)
+
+        # Sin duties declarados; Q_calc se reporta desde los streams.
 
         # ---- OPEX extras: utilities + consumibles ----
         # Catalizador CuZnO/Al2O3 para síntesis de metanol (~3 años de vida)
@@ -1263,23 +1390,30 @@ class FlowsheetEditor:
 
         # Precios USD/tm (referencia mercado 2024):
         #   mezcla bz/tol ~850, benceno ~1050, tolueno ~700
+        # Cp benceno líq 1.74, tolueno líq 1.7, mezcla ≈ 1.72
         self._add_example_stream(tk0,  p101, "S-1", 10000, role="feed",
                                  src_port="salida",   dst_port="succion",
-                                 price=850.0)
-        self._add_example_stream(p101, e101, "S-2",
-                                 src_port="descarga", dst_port="tube_in")
-        self._add_example_stream(e101, t101, "S-3",
-                                 src_port="tube_out", dst_port="alimentacion")
-        self._add_example_stream(t101, e102, "S-4",
-                                 src_port="vapor_tope",     dst_port="tube_in")
-        self._add_example_stream(t101, e103, "S-5",
-                                 src_port="liquido_fondo",  dst_port="liq_in")
+                                 price=850.0, T=25, cp=1.72)
+        self._add_example_stream(p101, e101, "S-2", 10000,
+                                 src_port="descarga", dst_port="tube_in",
+                                 T=26, cp=1.72)
+        self._add_example_stream(e101, t101, "S-3", 10000,
+                                 src_port="tube_out", dst_port="alimentacion",
+                                 T=85, cp=1.72)
+        self._add_example_stream(t101, e102, "S-4", 5000,
+                                 src_port="vapor_tope",     dst_port="tube_in",
+                                 T=82, cp=1.85)
+        self._add_example_stream(t101, e103, "S-5", 5000,
+                                 src_port="liquido_fondo",  dst_port="liq_in",
+                                 T=110, cp=1.7)
         self._add_example_stream(e102, tk1,  "S-benceno", 5000, role="product",
                                  src_port="tube_out", dst_port="entrada",
-                                 price=1050.0)
+                                 price=1050.0, T=40, cp=1.74)
         self._add_example_stream(e103, tk2,  "S-tolueno", 5000, role="product",
                                  src_port="vap_out",  dst_port="entrada",
-                                 price=700.0)
+                                 price=700.0, T=40, cp=1.7)
+
+        # Sin duties declarados; Q_calc se reporta desde los streams.
 
         # ---- OPEX extras: solo utilities (no hay reacción, no catalizador) ----
         self._add_example_extra("Steam LP",      flowrate=25_000,  price=20.0,
@@ -2297,6 +2431,45 @@ class FlowsheetEditor:
             out_lines.append("")
             out_lines.append("✓ Balance de masa OK en todos los equipos internos.")
 
+        # ---- balance de energía ----
+        # se reporta sólo para bloques con todos los streams in/out
+        # con Cp > 0.  Heating: Q_calc > 0 = el bloque entrega calor;
+        # cooling: Q_calc < 0 = el bloque extrae calor.
+        total_heating = 0.0
+        total_cooling = 0.0
+        per_block_energy = []
+        any_complete = False
+        for b in self.fs.blocks.values():
+            ins  = [s for s in self.fs.streams.values() if s.dst == b.id]
+            outs = [s for s in self.fs.streams.values() if s.src == b.id]
+            if not ins or not outs:
+                continue
+            info = self._block_energy_balance(b)
+            if not info["complete"]:
+                continue
+            any_complete = True
+            Q = info["Q_calc"]
+            per_block_energy.append((b.name, Q, info["duty"], info["mismatch"]))
+            if Q > 0:
+                total_heating += Q
+            elif Q < 0:
+                total_cooling += abs(Q)
+
+        if any_complete:
+            out_lines.append("")
+            out_lines.append("─ Balance de energía (kW) ─")
+            for name, Q, duty, mismatch in per_block_energy:
+                tag = ""
+                if duty != 0 and mismatch is not None:
+                    scale = max(abs(Q), abs(duty), 1e-9)
+                    if mismatch / scale >= ENERGY_TOL_REL:
+                        tag = f"  ⚠ vs duty={duty:+.0f}"
+                    else:
+                        tag = f"  ✓ duty"
+                out_lines.append(f"  {name:8s}  Q = {Q:+8.0f} kW{tag}")
+            out_lines.append(f"  Heating total:  {total_heating:>7.0f} kW")
+            out_lines.append(f"  Cooling total:  {total_cooling:>7.0f} kW")
+
         self.results_var.set("\n".join(out_lines))
         self._last_isbl = isbl_mm
         self._last_feed_total    = feed_total
@@ -2332,6 +2505,84 @@ class FlowsheetEditor:
         """Abre el editor de OPEX extras (utilities, consumibles)."""
         OpexExtrasDialog(self.win, self.fs)
         self._update_properties()
+
+    # ==================================================
+    # BALANCE DE ENERGÍA
+    # ==================================================
+
+    @staticmethod
+    def _stream_enthalpy_kW(s):
+        """Entalpía de una corriente referida a T_REF_C, en kW.
+        Devuelve None si el stream no tiene datos termo (cp=0)."""
+        if s.cp <= 0:
+            return None
+        m_kg_s = (s.mass_flow * TM_TO_KG) / SEC_PER_YEAR
+        dT     = s.temperature - T_REF_C
+        # H [kW] = m [kg/s] × Cp [kJ/kg·K] × dT [K]
+        return m_kg_s * s.cp * dT
+
+    def _block_energy_balance(self, b):
+        """Balance de energía sobre un bloque.
+
+        Devuelve dict con:
+          'H_in'    : entalpía total entrante (kW)
+          'H_out'   : entalpía total saliente (kW)
+          'Q_calc'  : H_out - H_in (kW)  → calor neto que el bloque
+                      entrega al proceso (>0 = calienta; <0 = enfría)
+          'duty'    : duty declarado del bloque (kW)
+          'mismatch': |Q_calc - duty|  o None si no se puede comparar
+          'complete': True si TODOS los streams in/out tienen cp>0
+        """
+        ins  = [s for s in self.fs.streams.values() if s.dst == b.id]
+        outs = [s for s in self.fs.streams.values() if s.src == b.id]
+
+        H_in_parts  = [self._stream_enthalpy_kW(s) for s in ins]
+        H_out_parts = [self._stream_enthalpy_kW(s) for s in outs]
+
+        complete = all(h is not None for h in H_in_parts + H_out_parts)
+        if not complete:
+            return {
+                "H_in": None, "H_out": None, "Q_calc": None,
+                "duty": b.duty, "mismatch": None, "complete": False,
+            }
+
+        H_in  = sum(H_in_parts)
+        H_out = sum(H_out_parts)
+        Q_calc = H_out - H_in
+
+        mismatch = None
+        if b.duty != 0:
+            mismatch = abs(Q_calc - b.duty)
+
+        return {
+            "H_in":     H_in,
+            "H_out":    H_out,
+            "Q_calc":   Q_calc,
+            "duty":     b.duty,
+            "mismatch": mismatch,
+            "complete": True,
+        }
+
+    def _check_energy_balance(self, tol_rel=ENERGY_TOL_REL):
+        """Lista de mensajes 'EQUIPO: Q_calc=X kW vs duty=Y kW (Δ=Z%)'
+        para bloques con duty declarado != Q calculado.
+
+        Bloques con streams sin Cp se omiten (incompletos).
+        Bloques sin duty declarado se omiten (no hay con qué comparar).
+        """
+        errors = []
+        for b in self.fs.blocks.values():
+            info = self._block_energy_balance(b)
+            if not info["complete"] or info["mismatch"] is None:
+                continue
+            scale = max(abs(info["Q_calc"]), abs(info["duty"]), 1e-9)
+            rel = info["mismatch"] / scale
+            if rel >= tol_rel:
+                errors.append(
+                    f"{b.name}: Q_calc={info['Q_calc']:+.0f} kW vs "
+                    f"duty={info['duty']:+.0f} kW  (Δ={rel*100:.1f}%)"
+                )
+        return errors
 
     def _check_mass_balance(self, tol_rel=0.005):
         """Lista de mensajes 'EQUIPO: in=X, out=Y, Δ=Z (R%)' por
@@ -2383,23 +2634,36 @@ class FlowsheetEditor:
                 return
             feeds, products, isbl = [], [], None
         else:
-            # ---- validación de balance de masa ----
+            # ---- validación de balances ----
             # No tiene sentido correr el análisis económico con un PFD
-            # que no cierra masa.  Listamos los bloques que fallan y
+            # que no cierra masa o energía.  Listamos los errores y
             # pedimos confirmación explícita para forzar.
             mb_errors = self._check_mass_balance(tol_rel=0.005)
-            if mb_errors:
-                lines = [f"  · {msg}" for msg in mb_errors]
+            eb_errors = self._check_energy_balance(tol_rel=ENERGY_TOL_REL)
+            if mb_errors or eb_errors:
+                lines = []
+                if mb_errors:
+                    lines.append("⚠ Balance de masa:")
+                    lines += [f"   · {m}" for m in mb_errors]
+                if eb_errors:
+                    if mb_errors:
+                        lines.append("")
+                    lines.append("⚠ Balance de energía:")
+                    lines += [f"   · {m}" for m in eb_errors]
                 forzar = messagebox.askyesno(
-                    "Balance de masa no cuadra",
-                    "Los siguientes equipos no cierran balance de masa:\n\n"
+                    "Balances no cuadran",
+                    "Los siguientes equipos tienen balances inconsistentes:\n\n"
                     + "\n".join(lines)
-                    + "\n\nUn análisis económico con masas inconsistentes "
-                      "puede dar resultados muy engañosos (ingresos por "
-                      "productos que el proceso no puede producir, costos "
-                      "de materia prima que no entran, etc.).\n\n"
-                    "Lo recomendable es volver al diagrama y arreglar los "
-                    "flujos.  ¿Querés forzar el análisis igual?",
+                    + "\n\nUn análisis económico con balances rotos puede "
+                      "dar resultados muy engañosos:\n"
+                      "  · masa: ingresos por productos que el proceso no\n"
+                      "          puede producir, costos de materia prima\n"
+                      "          que no entran\n"
+                      "  · energía: utilities sub o sobre-dimensionadas,\n"
+                      "          duties incoherentes con los streams\n\n"
+                    "Lo recomendable es volver al diagrama y arreglar los\n"
+                    "flujos / temperaturas / Cp / duties.\n\n"
+                    "¿Querés forzar el análisis igual?",
                     default="no",
                 )
                 if not forzar:
