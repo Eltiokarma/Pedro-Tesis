@@ -33,6 +33,9 @@ from capital_ui import AbrirVentanaEstimateISBL
 
 from results_ui import AbrirDashboard
 
+from tooltip import Tooltip, adjuntar_tooltips
+import templates
+
 # ======================================================
 # ENGINE CENTRAL (SINGLE SOURCE OF TRUTH)
 # ======================================================
@@ -149,6 +152,64 @@ def VentanaAbout():
         "About ANA",
         "ANA\nEconomic Analysis Software"
     )
+
+# ======================================================
+# NUEVO PROYECTO (sin Excel)
+# ======================================================
+
+def NuevoProyecto():
+    """Inicializa los 3 DataFrames con templates default
+    (valores típicos de Turton).  El user después edita
+    todo desde Data > View Project Data, sin necesidad de
+    ningún archivo Excel."""
+
+    global df_capital, df_fixed, df_variable
+
+    if not df_capital.empty or not df_fixed.empty or not df_variable.empty:
+        if not messagebox.askyesno(
+            "New Project",
+            "Already have a project loaded. Discard it and start fresh?"
+        ):
+            return
+
+    df_capital = templates.template_capital()
+    df_fixed   = templates.template_fixed()
+    df_variable = templates.template_variable()
+
+    engine.load(df_variable)
+
+    _actualizar_status_proyecto("New project (templates)")
+
+    ConsolaResultados.config(state="normal")
+    ConsolaResultados.delete(1.0, END)
+    ConsolaResultados.insert(
+        END,
+        "New project created with Turton defaults.\n"
+        "Edit it from Data > View Project Data.\n"
+    )
+    ConsolaResultados.config(state="disabled")
+
+    messagebox.showinfo(
+        "New Project",
+        "Project initialized with typical values.\n\n"
+        "Edit Capital, Fixed and Variable Operating Costs\n"
+        "from the 'Data > View Project Data' menu."
+    )
+
+
+# ======================================================
+# STATUS DEL PROYECTO (label visible)
+# ======================================================
+
+def _actualizar_status_proyecto(texto):
+    """Actualiza el título del LabelFrame de inputs con el
+    estado del proyecto.  ● = cargado, ○ = vacío."""
+    if "ContornoDatos" in globals():
+        if texto:
+            ContornoDatos.config(text=f"Input Data  —  ●  {texto}")
+        else:
+            ContornoDatos.config(text="Input Data  —  ○  No project loaded")
+
 
 # ======================================================
 # IMPORTAR PROYECTO
@@ -460,6 +521,10 @@ def ImportarProyecto():
 
         ConsolaResultados.config(state="disabled")
 
+        _actualizar_status_proyecto(
+            f"Imported: {os.path.basename(archivo)}"
+        )
+
         messagebox.showinfo(
             "Import",
             "Project imported successfully."
@@ -530,12 +595,16 @@ def VentanaVisualizarData():
         text="Capital Costs"
     )
 
+    toolbarCapital = ttk.Frame(tabCapital)
+    toolbarCapital.pack(side="bottom", fill="x", padx=10, pady=(0, 8))
+
     tablaCapital = ttk.Treeview(
         tabCapital,
         show="headings"
     )
 
     tablaCapital.pack(
+        side="top",
         fill="both",
         expand=True,
         padx=10,
@@ -553,12 +622,16 @@ def VentanaVisualizarData():
         text="Fixed Operating Costs"
     )
 
+    toolbarFixed = ttk.Frame(tabFixed)
+    toolbarFixed.pack(side="bottom", fill="x", padx=10, pady=(0, 8))
+
     tablaFixed = ttk.Treeview(
         tabFixed,
         show="headings"
     )
 
     tablaFixed.pack(
+        side="top",
         fill="both",
         expand=True,
         padx=10,
@@ -576,12 +649,16 @@ def VentanaVisualizarData():
         text="Variable Operating Costs"
     )
 
+    toolbarVariable = ttk.Frame(tabVariable)
+    toolbarVariable.pack(side="bottom", fill="x", padx=10, pady=(0, 8))
+
     tablaVariable = ttk.Treeview(
         tabVariable,
         show="headings"
     )
 
     tablaVariable.pack(
+        side="top",
         fill="both",
         expand=True,
         padx=10,
@@ -924,10 +1001,12 @@ def VentanaVisualizarData():
         # COLUMNAS EDITABLES
         # ==============================================
         columnas_editables = [
+            "variable operating costs",  # concept name (text)
             "units",
             "time basis",
+            "flowrate",                  # numeric
             "price usd/units",
-            "stream"
+            "stream",
         ]
 
         if nombre_columna not in columnas_editables:
@@ -950,6 +1029,70 @@ def VentanaVisualizarData():
                 valor_actual,
                 valor_actual
             )
+
+        # ==================================================
+        # ENTRY TEXTO - concept name
+        # ==================================================
+        if nombre_columna == "variable operating costs":
+
+            entry = ttk.Entry(tablaVariable, justify="left")
+            entry.place(x=x, y=y, width=width, height=height)
+            editor_activo = entry
+            entry.insert(0, valor_actual)
+            entry.focus()
+
+            def GuardarConcept(event):
+                nuevo = entry.get().strip()
+                if nuevo == "":
+                    nuevo = "(no name)"
+                indice = tablaVariable.index(item)
+                tablaVariable.set(item, columna, nuevo)
+                df_variable.at[indice, "variable operating costs"] = nuevo
+                engine.load(df_variable)
+                entry.destroy()
+
+            entry.bind("<Return>", GuardarConcept)
+            entry.bind("<FocusOut>", lambda e: entry.destroy())
+            return
+
+        # ==================================================
+        # ENTRY NUMÉRICO - flowrate
+        # ==================================================
+        if nombre_columna == "flowrate":
+
+            def ValidarNum(texto):
+                if texto == "":
+                    return True
+                try:
+                    float(texto); return True
+                except (ValueError, TypeError):
+                    return False
+
+            entry = ttk.Entry(
+                tablaVariable,
+                justify="center",
+                validate="key",
+                validatecommand=(tablaVariable.register(ValidarNum), "%P"),
+            )
+            entry.place(x=x, y=y, width=width, height=height)
+            editor_activo = entry
+            entry.insert(0, valor_actual)
+            entry.focus()
+
+            def GuardarFlow(event):
+                txt = entry.get().strip()
+                if txt == "":
+                    return
+                nuevo = float(txt)
+                indice = tablaVariable.index(item)
+                tablaVariable.set(item, columna, nuevo)
+                df_variable.at[indice, "flowrate"] = nuevo
+                engine.load(df_variable)
+                entry.destroy()
+
+            entry.bind("<Return>", GuardarFlow)
+            entry.bind("<FocusOut>", lambda e: entry.destroy())
+            return
 
         # ==================================================
         # COMBOBOX - UNITS
@@ -1352,6 +1495,69 @@ def VentanaVisualizarData():
         EditarCeldaFixed
     )
 
+    # ==================================================
+    # AGREGAR / ELIMINAR FILAS
+    # ==================================================
+
+    def AddVariable():
+        global df_variable
+        nueva = templates.fila_variable_vacia()
+        df_variable = pd.concat(
+            [df_variable, pd.DataFrame([nueva])],
+            ignore_index=True,
+        )
+        engine.load(df_variable)
+        cargar_dataframe(tablaVariable, df_variable, "variable")
+
+    def RemoveVariable():
+        global df_variable
+        sel = tablaVariable.selection()
+        if not sel:
+            messagebox.showinfo("Remove row", "Select a row first.")
+            return
+        idxs = sorted([tablaVariable.index(iid) for iid in sel], reverse=True)
+        df_variable = df_variable.drop(df_variable.index[idxs]).reset_index(drop=True)
+        engine.load(df_variable)
+        cargar_dataframe(tablaVariable, df_variable, "variable")
+
+    # Para Capital y Fixed: el modelo asume filas FIJAS
+    # (5 filas Capital, 9 filas Fixed).  No tiene sentido
+    # agregar/borrar — solo se editan valores.  Por eso
+    # los toolbars de esos tabs muestran nota informativa.
+
+    ttk.Label(
+        toolbarCapital,
+        text="Capital structure is fixed (5 rows). Edit values by double-click.",
+        foreground="#555555",
+    ).pack(side=LEFT)
+
+    ttk.Label(
+        toolbarFixed,
+        text="FCOP structure is fixed (9 rows). Edit values by double-click.",
+        foreground="#555555",
+    ).pack(side=LEFT)
+
+    ttk.Button(toolbarVariable, text="+ Add row",  command=AddVariable).pack(side=LEFT)
+    ttk.Button(toolbarVariable, text="– Remove",   command=RemoveVariable).pack(side=LEFT, padx=6)
+    ttk.Label(
+        toolbarVariable,
+        text="  (double-click a cell to edit)",
+        foreground="#555555",
+    ).pack(side=LEFT, padx=10)
+
+    # tooltips dentro de la ventana
+    Tooltip(tablaCapital,
+            "ISBL: capital fijo principal (battery limits).\n"
+            "OSBL, ENG, CONT, WC se expresan como % sobre ISBL/FCI.")
+    Tooltip(tablaFixed,
+            "Fixed Operating Costs según Turton §8:\n"
+            "labor + porcentajes sobre Labor/FCI/ISBL+OSBL/WC.\n"
+            "El total se calcula al apretar Solve.")
+    Tooltip(tablaVariable,
+            "Variable Operating Costs: cada fila es un stream\n"
+            "(producto, byproduct, raw material, consumable o utility).\n"
+            "Doble-click sobre una celda para editar.")
+
 # ======================================================
 # CONTROL DE DEPRECIACIÓN
 # ======================================================
@@ -1496,7 +1702,10 @@ def EjecutarAnalisis():
     if df_capital.empty or df_fixed.empty or engine.df_internal.empty:
         messagebox.showerror(
             "No project",
-            "Import a project first (File > Import Project)."
+            "No project loaded yet.\n\n"
+            "Choose one of:\n"
+            "  • File > New Project (templates)\n"
+            "  • File > Import Project (from Excel)"
         )
         return
 
@@ -1661,8 +1870,13 @@ menubar.add_cascade(
 )
 
 menuFile.add_command(
-    label='Import Project',
-    command=ImportarProyecto
+    label='New Project (templates)',
+    command=NuevoProyecto,
+)
+
+menuFile.add_command(
+    label='Import Project (from Excel)…',
+    command=ImportarProyecto,
 )
 
 menuFile.add_separator()
@@ -1753,7 +1967,7 @@ raiz.config(menu=menubar)
 
 ContornoDatos = ttk.LabelFrame(
     raiz,
-    text="Input Data"
+    text="Input Data  —  ○  No project loaded"
 )
 
 ContornoDatos.place(
@@ -1832,7 +2046,7 @@ LabelVCOPuni.place(x=255, y=65)
 
 LabelProjLife = ttk.Label(
     ContornoDatos,
-    text='Project life :'
+    text='Project life * :'
 )
 
 LabelProjLife.place(x=25, y=105)
@@ -1856,7 +2070,7 @@ LabelProjLifeUni.place(x=255, y=105)
 
 LabelTaxeRate = ttk.Label(
     ContornoDatos,
-    text='Tax rate :'
+    text='Tax rate * :'
 )
 
 LabelTaxeRate.place(x=25, y=145)
@@ -1931,7 +2145,7 @@ CheckSensibilidad.place(x=25, y=225)
 
 LabelDEpreciacion = ttk.Label(
     ContornoDatos,
-    text='Depreciation :'
+    text='Depreciation * :'
 )
 
 LabelDEpreciacion.place(x=395, y=25)
@@ -2003,7 +2217,7 @@ RadioDMACRS15.place(x=490, y=145)
 
 LabelDiscountRate = ttk.Label(
     ContornoDatos,
-    text='Discount rate :'
+    text='Discount rate * :'
 )
 
 LabelDiscountRate.place(x=395, y=205)
@@ -2106,6 +2320,95 @@ BotonResolver.place(
     x=285,
     y=480
 )
+
+# ======================================================
+# LEYENDA "* required"
+# ======================================================
+
+LeyendaObligatorios = ttk.Label(
+    raiz,
+    text="*  required field",
+    foreground="#c62828",
+    font=("Segoe UI", 8),
+)
+LeyendaObligatorios.place(x=20, y=272)
+
+# ======================================================
+# TOOLTIPS — burbujas informativas sobre los inputs
+# ======================================================
+
+adjuntar_tooltips({
+    EntryFC: (
+        "Construction schedule — fracción del CapEx invertido cada año.\n\n"
+        "Ej: '0.3,0.7'  → 30% año 1, 70% año 2.\n"
+        "Vacío  → planta instantánea (1 año de inversión)."
+    ),
+    EntryVCOP: (
+        "Capacity ramp-up — fracción de capacidad operativa por año.\n\n"
+        "Ej: '0.5,1.0'  → 50% el 1er año de operación, 100% en adelante.\n"
+        "Vacío  → arranca al 100% desde el inicio."
+    ),
+    EntryProjLife: (
+        "Años de operación de la planta (no incluye construcción).\n"
+        "Típico: 15 a 20 años en industria química."
+    ),
+    EntryTaxeRate: (
+        "Tasa impositiva sobre el ingreso operativo gravable.\n"
+        "Ingresá como fracción.  Ej: 0.30  (= 30%).\n\n"
+        "Los taxes se pagan con desfase de 1 año (Turton §10)."
+    ),
+    EntryCEPCIBasis: (
+        "Año en el que se hizo la estimación original del ISBL.\n"
+        "Si tu cotización es de 2018, poné 2018.\n\n"
+        "CEPCI = Chemical Engineering Plant Cost Index."
+    ),
+    EntryCEPCITarget: (
+        "Año al que se quiere actualizar el ISBL por inflación.\n"
+        "Default 2026.\n\n"
+        "El factor multiplica al ISBL:  CEPCI[target] / CEPCI[basis]."
+    ),
+    EntryDiscountRate: (
+        "Tasa de descuento para el NPV.\n"
+        "Suele ser el WACC del proyecto o la tasa de retorno requerida.\n"
+        "Ingresá como fracción.  Ej: 0.15  (= 15%)."
+    ),
+    EntryDLineal: (
+        "Años para depreciar el FCI en forma lineal.\n"
+        "D anual = FCI / N años.\n"
+        "Típico: 10 años para plantas químicas (IRS Pub. 946)."
+    ),
+    RadioDLineal: (
+        "Depreciación constante: D = FCI / N años.\n"
+        "Más simple; usado para análisis preliminar."
+    ),
+    RadioDMACRS: (
+        "Modified Accelerated Cost Recovery System (US tax law).\n"
+        "Depreciación acelerada en los primeros años.\n"
+        "Reduce taxes tempranos → mejora NPV."
+    ),
+    RadioDMACRS5:  ("MACRS de 5 años — usado para vehículos, equipos electrónicos."),
+    RadioDMACRS7:  ("MACRS de 7 años — usado para maquinaria industrial standard."),
+    RadioDMACRS15: ("MACRS de 15 años — usado para infraestructura, mejoras de planta."),
+    CheckSensibilidad: (
+        "Si está activado, al apretar Solve después del cálculo base\n"
+        "se abre Monte Carlo (sampling sobre precios de productos,\n"
+        "raw materials e ISBL) y el dashboard se abre en\n"
+        "la pestaña 'Sensitivity'."
+    ),
+    BotonResolver: (
+        "Ejecuta el análisis económico end-to-end:\n"
+        "Costos → Cash Flow → NPV, IRR/DCFROR, Payback, ROI.\n"
+        "Abre el Dashboard de resultados al terminar."
+    ),
+    BotonReporteEconomico: (
+        "Abre el Dashboard con todos los resultados del último Solve.\n"
+        "(Habilitado solo después de ejecutar Solve.)"
+    ),
+    BotonReporteSensibilidad: (
+        "Abre el Dashboard directamente en la pestaña Sensitivity\n"
+        "(Habilitado después de un Solve con Monte Carlo)."
+    ),
+})
 
 # ======================================================
 # CONFIGURACIÓN INICIAL
