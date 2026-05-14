@@ -126,8 +126,9 @@ class Stream:
     src_port:  str = ""          # nombre del puerto en src; "" = autoselect
     dst_port:  str = ""          # nombre del puerto en dst; "" = autoselect
 
-    canvas_line:  Optional[int] = field(default=None, repr=False)
-    canvas_label: Optional[int] = field(default=None, repr=False)
+    canvas_line:    Optional[int] = field(default=None, repr=False)
+    canvas_label:   Optional[int] = field(default=None, repr=False)
+    canvas_lbl_bg:  Optional[int] = field(default=None, repr=False)
 
 
 STREAM_ROLE_COLORS = {
@@ -879,10 +880,17 @@ class FlowsheetEditor:
 
     def _example_methanol(self):
         """Síntesis de metanol simplificada.
-        Syngas (CO + 2H2) → CH3OH. Reactor + flash + columna."""
-        cx = [120, 360, 600, 840, 1080]
-        y_top = 240
-        y_bot = 460
+        Syngas (CO + 2H2) → CH3OH. Reactor + flash + columna.
+
+        Layout: 2 filas alineadas para que el routing salga limpio.
+          fila 1: K-101 → E-101 → R-101 → E-102 → V-101
+          fila 2: TK-MeOH ← E-103 ← T-101 → E-104 → TK-agua
+        El destilado va a TK-MeOH (izquierda), el agua de fondo va a TK-agua (derecha),
+        sin que ninguna corriente cruce equipos.
+        """
+        cx = [80, 280, 480, 680, 880]
+        y_top = 220
+        y_bot = 500
 
         k101 = self._add_example_block("K-101", "Compressor — centrifugal",      800.0, cx[0], y_top)
         e101 = self._add_example_block("E-101", "Heat exch. — floating head",    220.0, cx[1], y_top)
@@ -890,11 +898,12 @@ class FlowsheetEditor:
         e102 = self._add_example_block("E-102", "Heat exch. — air cooler",       200.0, cx[3], y_top)
         v101 = self._add_example_block("V-101", "Vessel — vertical",              15.0, cx[4], y_top)
 
+        # fila inferior: tanque-MeOH y tanque-agua en los extremos
+        tk1  = self._add_example_block("TK-101","Storage tank — floating roof",  400.0, cx[0], y_bot)
+        e103 = self._add_example_block("E-103", "Heat exch. — floating head",    140.0, cx[1], y_bot)
         t101 = self._add_example_block("T-101", "Tower (column shell)",           35.0, cx[2], y_bot)
         e104 = self._add_example_block("E-104", "Heat exch. — kettle reboiler",  130.0, cx[3], y_bot)
-        e103 = self._add_example_block("E-103", "Heat exch. — floating head",    140.0, cx[1], y_bot)
-        tk1  = self._add_example_block("TK-101","Storage tank — floating roof",  400.0, cx[4], y_bot)
-        tk2  = self._add_example_block("TK-102","Storage tank — cone roof",       50.0, cx[0], y_bot)
+        tk2  = self._add_example_block("TK-102","Storage tank — cone roof",       50.0, cx[4], y_bot)
 
         self._add_example_stream(k101, e101, "S-1", 14000, role="feed",
                                  src_port="descarga", dst_port="tube_in")
@@ -906,12 +915,14 @@ class FlowsheetEditor:
                                  src_port="proceso_out", dst_port="alimentacion")
         self._add_example_stream(v101, t101, "S-5",
                                  src_port="liquido",  dst_port="alimentacion")
-        self._add_example_stream(t101, e104, "S-6",
-                                 src_port="liquido_fondo", dst_port="liq_in")
-        self._add_example_stream(t101, e103, "S-7",
-                                 src_port="vapor_tope", dst_port="tube_in")
+        # destilado por el top de T-101 → condensador E-103 → tanque MeOH (izq)
+        self._add_example_stream(t101, e103, "S-vap-tope",
+                                 src_port="vapor_tope", dst_port="shell_in")
         self._add_example_stream(e103, tk1,  "S-MeOH", 9500, role="product",
-                                 src_port="tube_out", dst_port="entrada")
+                                 src_port="shell_out", dst_port="entrada")
+        # fondo de T-101 → reboiler E-104 → tanque agua (der)
+        self._add_example_stream(t101, e104, "S-fondo",
+                                 src_port="liquido_fondo", dst_port="liq_in")
         self._add_example_stream(e104, tk2,  "S-agua", 600, role="product",
                                  src_port="cond_out", dst_port="entrada")
 
@@ -1225,74 +1236,201 @@ class FlowsheetEditor:
         return {"right": (1, 0), "left": (-1, 0),
                 "top":   (0, -1), "bottom": (0, 1)}.get(side, (1, 0))
 
-    def _ortho_route(self, x1, y1, side1, x2, y2, side2):
-        """Polyline ortogonal entre dos puertos respetando la
-        dirección de salida/entrada de cada uno.
+    # ---------- detección de colisión con bloques ----------
 
-        Algoritmo:
-          1. Extruir cada extremo `gap` hacia afuera del bloque.
-          2. Conectar los puntos extruidos con codos ortogonales:
-             - opuestos horizontales (right↔left): Z-shape horizontal
-             - opuestos verticales (top↔bottom):   Z-shape vertical
-             - perpendiculares:                    L-shape
-             - mismo lado:                         U-shape
-        """
+    @staticmethod
+    def _seg_intersects_rect(x1, y1, x2, y2, rx1, ry1, rx2, ry2):
+        """Chequea si el segmento (x1,y1)-(x2,y2) intersecta el
+        rect (rx1,ry1)-(rx2,ry2).  Asume segmento ortogonal."""
+        if abs(x1 - x2) < 1e-6:        # vertical
+            if not (rx1 <= x1 <= rx2):
+                return False
+            ymin, ymax = (y1, y2) if y1 < y2 else (y2, y1)
+            return not (ymax < ry1 or ymin > ry2)
+        if abs(y1 - y2) < 1e-6:        # horizontal
+            if not (ry1 <= y1 <= ry2):
+                return False
+            xmin, xmax = (x1, x2) if x1 < x2 else (x2, x1)
+            return not (xmax < rx1 or xmin > rx2)
+        return False                   # no ortogonal: skip
+
+    def _path_crosses_others(self, pts, exclude_ids, shrink=4):
+        """¿El polyline cruza algún bloque que NO sea src/dst?
+        shrink: encoger el rect para tolerar pasar por el borde."""
+        for i in range(0, len(pts) - 2, 2):
+            x1, y1, x2, y2 = pts[i], pts[i+1], pts[i+2], pts[i+3]
+            for b in self.fs.blocks.values():
+                if b.id in exclude_ids:
+                    continue
+                rx1 = b.x + shrink
+                ry1 = b.y + shrink
+                rx2 = b.x + BLOCK_W - shrink
+                ry2 = b.y + BLOCK_H - shrink
+                if self._seg_intersects_rect(x1, y1, x2, y2, rx1, ry1, rx2, ry2):
+                    return True
+        return False
+
+    # ---------- routing ortogonal ----------
+
+    def _z_route(self, x1, y1, side1, x2, y2, side2, mid):
+        """Z-shape ortogonal con el codo en `mid` (x si laterales,
+        y si verticales).  Soporta cualquier orientación."""
         gap = ROUTING_GAP
         dx1, dy1 = self._side_dir(side1)
         dx2, dy2 = self._side_dir(side2)
-        # puntos extruidos (justo afuera de cada bloque)
         ex1, ey1 = x1 + dx1 * gap, y1 + dy1 * gap
         ex2, ey2 = x2 + dx2 * gap, y2 + dy2 * gap
 
         h_sides = ("left", "right")
         v_sides = ("top", "bottom")
 
-        # ambos horizontales
         if side1 in h_sides and side2 in h_sides:
-            if side1 == "right" and side2 == "left" and ex2 >= ex1:
-                # caso PFD clásico: alineados
-                if abs(ey1 - ey2) < 2:
-                    return [x1, y1, x2, y2]
-                mx = (ex1 + ex2) / 2
-                return [x1, y1, ex1, ey1, mx, ey1, mx, ey2, ex2, ey2, x2, y2]
-            if side1 == "left" and side2 == "right" and ex1 >= ex2:
-                # mirror
-                if abs(ey1 - ey2) < 2:
-                    return [x1, y1, x2, y2]
-                mx = (ex1 + ex2) / 2
-                return [x1, y1, ex1, ey1, mx, ey1, mx, ey2, ex2, ey2, x2, y2]
-            # mismo lado → U que rodea por encima o por abajo
-            extra = gap
-            if side1 == "right":
-                far = max(ex1, ex2) + extra
-            else:
-                far = min(ex1, ex2) - extra
+            mx = mid
+            return [x1, y1, ex1, ey1, mx, ey1, mx, ey2, ex2, ey2, x2, y2]
+        if side1 in v_sides and side2 in v_sides:
+            my = mid
+            return [x1, y1, ex1, ey1, ex1, my, ex2, my, ex2, ey2, x2, y2]
+        # perpendiculares: ignoramos mid, L-shape
+        if side1 in h_sides:
+            return [x1, y1, ex1, ey1, ex2, ey1, ex2, ey2, x2, y2]
+        return [x1, y1, ex1, ey1, ex1, ey2, ex2, ey2, x2, y2]
+
+    def _u_route(self, x1, y1, side1, x2, y2, side2, far):
+        """U-shape: salida y entrada por el mismo lado, rodeando
+        en `far` (x si horizontales, y si verticales)."""
+        gap = ROUTING_GAP
+        dx1, dy1 = self._side_dir(side1)
+        dx2, dy2 = self._side_dir(side2)
+        ex1, ey1 = x1 + dx1 * gap, y1 + dy1 * gap
+        ex2, ey2 = x2 + dx2 * gap, y2 + dy2 * gap
+
+        if side1 in ("left", "right"):
             return [x1, y1, far, ey1, far, ey2, x2, y2]
+        return [x1, y1, ex1, far, ex2, far, x2, y2]
+
+    def _layout_bounds(self):
+        """(ymin, ymax, xmin, xmax) del conjunto de bloques."""
+        if not self.fs.blocks:
+            return 0, 0, 0, 0
+        ys1 = [b.y                for b in self.fs.blocks.values()]
+        ys2 = [b.y + BLOCK_H     for b in self.fs.blocks.values()]
+        xs1 = [b.x                for b in self.fs.blocks.values()]
+        xs2 = [b.x + BLOCK_W     for b in self.fs.blocks.values()]
+        return min(ys1), max(ys2), min(xs1), max(xs2)
+
+    def _ortho_route(self, x1, y1, side1, x2, y2, side2,
+                     src_id=None, dst_id=None):
+        """Polyline ortogonal entre dos puertos con avoid-collision:
+        prueba varias variantes y devuelve la primera que no cruza
+        bloques externos.  Si todas cruzan, devuelve la primaria."""
+        gap = ROUTING_GAP
+        dx1, dy1 = self._side_dir(side1)
+        dx2, dy2 = self._side_dir(side2)
+        ex1, ey1 = x1 + dx1 * gap, y1 + dy1 * gap
+        ex2, ey2 = x2 + dx2 * gap, y2 + dy2 * gap
+
+        h_sides = ("left", "right")
+        v_sides = ("top", "bottom")
+        ymin, ymax, xmin, xmax = self._layout_bounds()
+
+        # ---- generar candidatos en orden de preferencia ----
+        candidates = []
+
+        # ambos horizontales (opuestos: right↔left)
+        if side1 in h_sides and side2 in h_sides:
+            same_side = (side1 == side2)
+            if not same_side and (
+                (side1 == "right" and ex2 >= ex1) or
+                (side1 == "left"  and ex1 >= ex2)
+            ):
+                if abs(ey1 - ey2) < 2:
+                    candidates.append([x1, y1, x2, y2])  # recta
+                # Z con codo en midpoint x
+                candidates.append(self._z_route(x1, y1, side1, x2, y2, side2,
+                                                (ex1 + ex2) / 2))
+            # variantes por encima y por debajo del layout
+            corridor_above = ymin - 40
+            corridor_below = ymax + 40
+            # Z con codo a "corridor" y → en realidad usamos U que rodea
+            # de side1 al side2 pasando por (y = corridor)
+            far_x_right = max(ex1, ex2) + gap
+            far_x_left  = min(ex1, ex2) - gap
+            if side1 == "right":
+                # ir derecha → bajar/subir a corridor → entrar dst
+                candidates.append([x1, y1, ex1, ey1,
+                                   ex1, corridor_above,
+                                   ex2, corridor_above,
+                                   ex2, ey2, x2, y2])
+                candidates.append([x1, y1, ex1, ey1,
+                                   ex1, corridor_below,
+                                   ex2, corridor_below,
+                                   ex2, ey2, x2, y2])
+            else:  # both "left" o mixed
+                candidates.append([x1, y1, ex1, ey1,
+                                   ex1, corridor_above,
+                                   ex2, corridor_above,
+                                   ex2, ey2, x2, y2])
+                candidates.append([x1, y1, ex1, ey1,
+                                   ex1, corridor_below,
+                                   ex2, corridor_below,
+                                   ex2, ey2, x2, y2])
+            if same_side:
+                candidates.append(self._u_route(x1, y1, side1, x2, y2, side2,
+                                                far_x_right if side1 == "right" else far_x_left))
 
         # ambos verticales
-        if side1 in v_sides and side2 in v_sides:
-            if side1 == "bottom" and side2 == "top" and ey2 >= ey1:
+        elif side1 in v_sides and side2 in v_sides:
+            opp = ((side1 == "bottom" and side2 == "top" and ey2 >= ey1) or
+                   (side1 == "top" and side2 == "bottom" and ey1 >= ey2))
+            if opp:
                 if abs(ex1 - ex2) < 2:
-                    return [x1, y1, x2, y2]
-                my = (ey1 + ey2) / 2
-                return [x1, y1, ex1, ey1, ex1, my, ex2, my, ex2, ey2, x2, y2]
-            if side1 == "top" and side2 == "bottom" and ey1 >= ey2:
-                if abs(ex1 - ex2) < 2:
-                    return [x1, y1, x2, y2]
-                my = (ey1 + ey2) / 2
-                return [x1, y1, ex1, ey1, ex1, my, ex2, my, ex2, ey2, x2, y2]
-            extra = gap
+                    candidates.append([x1, y1, x2, y2])
+                candidates.append(self._z_route(x1, y1, side1, x2, y2, side2,
+                                                (ey1 + ey2) / 2))
+            corridor_right = xmax + 40
+            corridor_left  = xmin - 40
             if side1 == "bottom":
-                far = max(ey1, ey2) + extra
+                candidates.append([x1, y1, ex1, ey1,
+                                   corridor_right, ey1,
+                                   corridor_right, ey2,
+                                   ex2, ey2, x2, y2])
+                candidates.append([x1, y1, ex1, ey1,
+                                   corridor_left, ey1,
+                                   corridor_left, ey2,
+                                   ex2, ey2, x2, y2])
             else:
-                far = min(ey1, ey2) - extra
-            return [x1, y1, ex1, far, ex2, far, x2, y2]
+                candidates.append([x1, y1, ex1, ey1,
+                                   corridor_right, ey1,
+                                   corridor_right, ey2,
+                                   ex2, ey2, x2, y2])
+                candidates.append([x1, y1, ex1, ey1,
+                                   corridor_left, ey1,
+                                   corridor_left, ey2,
+                                   ex2, ey2, x2, y2])
+            if side1 == side2:
+                far_y = ymax + 40 if side1 == "bottom" else ymin - 40
+                candidates.append(self._u_route(x1, y1, side1, x2, y2, side2, far_y))
 
-        # perpendiculares → L-shape (un solo codo)
-        if side1 in h_sides:   # primero horizontal, después vertical
-            return [x1, y1, ex1, ey1, ex2, ey1, ex2, ey2, x2, y2]
-        else:                   # primero vertical, después horizontal
-            return [x1, y1, ex1, ey1, ex1, ey2, ex2, ey2, x2, y2]
+        # perpendiculares → L-shape + variantes
+        else:
+            if side1 in h_sides:
+                candidates.append([x1, y1, ex1, ey1, ex2, ey1, ex2, ey2, x2, y2])
+                # variante con codo invertido
+                candidates.append([x1, y1, ex1, ey1, ex1, ey2, ex2, ey2, x2, y2])
+            else:
+                candidates.append([x1, y1, ex1, ey1, ex1, ey2, ex2, ey2, x2, y2])
+                candidates.append([x1, y1, ex1, ey1, ex2, ey1, ex2, ey2, x2, y2])
+
+        # ---- seleccionar primer candidato sin colisión ----
+        exclude = set()
+        if src_id is not None: exclude.add(src_id)
+        if dst_id is not None: exclude.add(dst_id)
+
+        for path in candidates:
+            if not self._path_crosses_others(path, exclude):
+                return path
+        # ninguno limpio: devolver el primero
+        return candidates[0] if candidates else [x1, y1, x2, y2]
 
     def _stream_endpoints(self, s):
         """Polyline ortogonal del stream en coords del modelo + sides."""
@@ -1303,7 +1441,8 @@ class FlowsheetEditor:
 
         _pn1, side1, x1, y1 = self._resolve_port(b_src, s.src_port, "right")
         _pn2, side2, x2, y2 = self._resolve_port(b_dst, s.dst_port, "left")
-        return self._ortho_route(x1, y1, side1, x2, y2, side2)
+        return self._ortho_route(x1, y1, side1, x2, y2, side2,
+                                 src_id=s.src, dst_id=s.dst)
 
     def _label_xy(self, pts):
         """Punto medio del polyline para colocar el label."""
@@ -1336,13 +1475,30 @@ class FlowsheetEditor:
             tags=("stream", f"s{s.id}"),
         )
         lx, ly = self._label_xy(pts)
-        role_tag = " [feed]" if s.role == "feed" else (" [product]" if s.role == "product" else "")
+        text = self._stream_label_text(s)
+        font = ("Segoe UI", max(6, int(8 * self.zoom)))
+        # texto invisible primero para medir bbox, después rectangulo + texto encima
         s.canvas_label = self.canvas.create_text(
             self._sc(lx), self._sc(ly),
-            text=s.name + role_tag + (f"  {s.mass_flow:g} tm/yr" if s.mass_flow else ""),
-            fill="#444", font=("Segoe UI", max(6, int(8 * self.zoom))),
+            text=text, fill="#222", font=font,
             tags=("stream", f"s{s.id}"),
         )
+        bbox = self.canvas.bbox(s.canvas_label)
+        if bbox:
+            pad = max(2, int(2 * self.zoom))
+            s.canvas_lbl_bg = self.canvas.create_rectangle(
+                bbox[0] - pad, bbox[1] - 1,
+                bbox[2] + pad, bbox[3] + 1,
+                fill="#ffffff", outline="",
+                tags=("stream", f"s{s.id}"),
+            )
+            # bring the text to front so the bg doesn't cover it
+            self.canvas.tag_lower(s.canvas_lbl_bg, s.canvas_label)
+
+    def _stream_label_text(self, s):
+        role_tag = " [feed]" if s.role == "feed" else (" [product]" if s.role == "product" else "")
+        flow = f"  {s.mass_flow:g} tm/año" if s.mass_flow else ""
+        return s.name + role_tag + flow
 
     def _refresh_stream(self, s):
         pts = self._stream_endpoints(s)
@@ -1356,17 +1512,22 @@ class FlowsheetEditor:
         if s.canvas_label is not None:
             lx, ly = self._label_xy(pts)
             self.canvas.coords(s.canvas_label, self._sc(lx), self._sc(ly))
-            role_tag = " [feed]" if s.role == "feed" else (" [product]" if s.role == "product" else "")
-            self.canvas.itemconfigure(
-                s.canvas_label,
-                text=s.name + role_tag + (f"  {s.mass_flow:g} tm/yr" if s.mass_flow else ""),
-            )
+            self.canvas.itemconfigure(s.canvas_label, text=self._stream_label_text(s))
+            # reajustar fondo
+            bbox = self.canvas.bbox(s.canvas_label)
+            if bbox and s.canvas_lbl_bg is not None:
+                pad = max(2, int(2 * self.zoom))
+                self.canvas.coords(
+                    s.canvas_lbl_bg,
+                    bbox[0] - pad, bbox[1] - 1,
+                    bbox[2] + pad, bbox[3] + 1,
+                )
 
     def _delete_stream(self, sid):
         s = self.fs.streams.pop(sid, None)
         if s is None:
             return
-        for cid in (s.canvas_line, s.canvas_label):
+        for cid in (s.canvas_line, s.canvas_label, s.canvas_lbl_bg):
             if cid is not None:
                 self.canvas.delete(cid)
 
@@ -1774,17 +1935,21 @@ class FlowsheetEditor:
     # ==================================================
 
     def launch_analysis(self):
-        """Modo main: dispara el análisis económico como
-        proceso separado, con el ISBL ya inyectado.
+        """Modo main: genera un xlsx temporal con:
+          - df_capital: ISBL inyectado desde el diagrama
+          - df_fixed:   templates Turton (o lo que traiga el xlsx base)
+          - df_variable: filas de los feeds y products del diagrama
+                         auto-poblados (marcadas con sufijo '(PFD)')
+        y lanza `python ANA.py --import <tmp.xlsx>`.
 
-        Flujo:
-          1. Si no hay Compute previo, lo corre con defaults.
-          2. Pide al usuario un .xlsx base (o usa template default).
-          3. Lanza:  python ANA.py [--import path.xlsx] [--isbl X]
+        El diagrama de bloques en esta ventana queda intacto.
+        Subir un xlsx solo aporta datos económicos extra; nunca
+        reemplaza el diagrama.
         """
         import subprocess
         import sys
         import os
+        import tempfile
 
         if not self.fs.blocks:
             if not messagebox.askyesno(
@@ -1792,64 +1957,62 @@ class FlowsheetEditor:
                 "El diagrama está vacío. ¿Abrir el análisis económico igual?",
             ):
                 return
-            isbl = None
+            feeds, products, isbl = [], [], None
         else:
+            # asegurar Compute previo (silencioso con defaults si no hay)
             if not hasattr(self, "_last_isbl") or self._last_isbl is None:
-                # corremos compute silencioso con defaults
                 try:
                     equipos = [
                         {"nombre": b.eq_type, "S": b.S, "n": b.n}
                         for b in self.fs.blocks.values()
                     ]
                     res = eq.lang_fci(equipos, plant_type="Fluid processing", year_target=2026)
-                    isbl = eq.isbl_implicito(res["FCI_MMUSD"], 0.30, 0.10, 0.10)
+                    self._last_isbl = eq.isbl_implicito(res["FCI_MMUSD"], 0.30, 0.10, 0.10)
+                    self._last_feeds    = [s for s in self.fs.streams.values() if s.role == "feed"]
+                    self._last_products = [s for s in self.fs.streams.values() if s.role == "product"]
                 except ValueError as e:
                     messagebox.showerror("Error de cálculo", str(e))
                     return
-            else:
-                isbl = self._last_isbl
+            isbl = self._last_isbl
+            feeds    = getattr(self, "_last_feeds", [])    or []
+            products = getattr(self, "_last_products", []) or []
 
         # opción de xlsx base
         usar_xlsx = messagebox.askyesnocancel(
             "Análisis económico",
+            "El diagrama de bloques queda intacto en esta ventana.\n\n"
             "¿Usar un .xlsx base existente para el análisis?\n\n"
-            "  Sí        → seleccionás el archivo\n"
-            "  No        → análisis con plantilla Turton por defecto\n"
+            "  Sí        → seleccionás el archivo y le agrego los\n"
+            "              feeds/products del diagrama\n"
+            "  No        → genero la plantilla Turton + feeds/products\n"
             "  Cancelar  → vuelvo al diagrama",
         )
         if usar_xlsx is None:
             return
 
-        cmd = [sys.executable, "ANA.py"]
+        base_xlsx = None
         if usar_xlsx:
-            path = filedialog.askopenfilename(
-                title="Proyecto .xlsx",
+            base_xlsx = filedialog.askopenfilename(
+                title="Proyecto .xlsx base",
                 filetypes=[("Excel", "*.xlsx *.xls")],
             )
-            if not path:
+            if not base_xlsx:
                 return
-            cmd += ["--import", path]
 
-        if isbl is not None:
-            cmd += ["--isbl", f"{isbl:.4f}"]
-
-        # nota de feeds/products no auto-inyectados (commit aparte)
-        if (getattr(self, "_last_feeds", None) or
-            getattr(self, "_last_products", None)):
-            extras = []
-            if self._last_products:
-                extras.append(f"Producción anual: {self._last_product_total:g} tm/año")
-            if self._last_feeds:
-                extras.append("Alimentaciones:")
-                for s in self._last_feeds:
-                    extras.append(f"  · {s.name}: {s.mass_flow:g} tm/año")
-            messagebox.showinfo(
-                "Datos del diagrama (copialos a mano)",
-                "El ISBL se inyecta automáticamente al análisis.\n"
-                "Estos otros datos quedan disponibles para que los cargues "
-                "manualmente en el análisis económico:\n\n"
-                + "\n".join(extras),
+        # generar xlsx temporal
+        try:
+            tmp_dir = tempfile.gettempdir()
+            tmp_path = os.path.join(tmp_dir, f"ANA_from_PFD_{os.getpid()}.xlsx")
+            self._write_project_xlsx(tmp_path, isbl, feeds, products, base_xlsx)
+        except Exception as e:
+            messagebox.showerror(
+                "Falló la generación del xlsx",
+                f"{type(e).__name__}: {e}\n\nProbá importar tu xlsx "
+                "manualmente desde ANA.py.",
             )
+            return
+
+        cmd = [sys.executable, "ANA.py", "--import", tmp_path]
 
         try:
             cwd = os.path.dirname(os.path.abspath(__file__))
@@ -1857,6 +2020,133 @@ class FlowsheetEditor:
         except Exception as e:
             messagebox.showerror("Falló el lanzamiento",
                                  f"{type(e).__name__}: {e}")
+
+    # ==================================================
+    # GENERACIÓN DEL XLSX PARA EL ANÁLISIS ECONÓMICO
+    # ==================================================
+
+    def _write_project_xlsx(self, path, isbl, feeds, products, base_xlsx=None):
+        """Escribe un xlsx con las 3 secciones que ANA.ImportarProyecto
+        espera (Capital cols A-C, Fixed cols E-G, Variable cols I-N).
+
+        Si base_xlsx es None → templates Turton + filas del PFD.
+        Si base_xlsx existe → reusa ese xlsx, override ISBL, mantiene
+        sus filas variables y APENDE las del PFD (marcadas con sufijo
+        ' (PFD)' para distinguirlas; si reabrís el análisis varias
+        veces, las del PFD se reemplazan, no se duplican)."""
+        import pandas as pd
+        import templates as tmpl
+
+        if base_xlsx:
+            df_capital, df_fixed, df_variable = self._read_project_xlsx(base_xlsx)
+        else:
+            df_capital  = tmpl.template_capital()
+            df_fixed    = tmpl.template_fixed()
+            df_variable = pd.DataFrame(columns=[
+                "variable operating costs", "units", "time basis",
+                "flowrate", "price usd/units", "stream",
+            ])
+
+        # inyectar ISBL
+        if isbl is not None and not df_capital.empty:
+            df_capital.iat[0, 2] = float(isbl)
+
+        # dedupe: borrar filas previas marcadas '(PFD)'
+        if "variable operating costs" in df_variable.columns:
+            mask = df_variable["variable operating costs"].astype(str).str.contains(
+                r"\(PFD\)", regex=True, na=False)
+            df_variable = df_variable[~mask].reset_index(drop=True)
+
+        # append filas del PFD
+        new_rows = []
+        for s in products:
+            new_rows.append({
+                "variable operating costs": f"{s.name} (PFD)",
+                "units":              "tm",
+                "time basis":         "year",
+                "flowrate":           float(s.mass_flow),
+                "price usd/units":    0.0,
+                "stream":             "Key Products",
+            })
+        for s in feeds:
+            new_rows.append({
+                "variable operating costs": f"{s.name} (PFD)",
+                "units":              "tm",
+                "time basis":         "year",
+                "flowrate":           float(s.mass_flow),
+                "price usd/units":    0.0,
+                "stream":             "Raw Materials",
+            })
+        if new_rows:
+            df_variable = pd.concat(
+                [df_variable, pd.DataFrame(new_rows)],
+                ignore_index=True,
+            )
+
+        # escribir xlsx con las 3 secciones lado a lado
+        self._write_3sections_xlsx(path, df_capital, df_fixed, df_variable)
+
+    @staticmethod
+    def _read_project_xlsx(path):
+        """Lee un xlsx del análisis económico y devuelve los 3 dfs
+        (capital, fixed, variable) replicando la lógica de
+        ANA.ImportarProyecto."""
+        import pandas as pd
+        df_raw = pd.read_excel(path, header=None)
+
+        def _section(cols):
+            df = df_raw.iloc[:, cols].copy()
+            df = df.dropna(how="all")
+            if df.empty:
+                return df
+            df.columns = df.iloc[0].tolist()
+            df = df.iloc[1:].reset_index(drop=True)
+            df = df[df.iloc[:, 0].notna()].reset_index(drop=True)
+            return df
+
+        df_capital  = _section([0, 1, 2])
+        df_fixed    = _section([4, 5, 6])
+        df_variable = _section([8, 9, 10, 11, 12, 13])
+        return df_capital, df_fixed, df_variable
+
+    @staticmethod
+    def _write_3sections_xlsx(path, df_capital, df_fixed, df_variable):
+        """Escribe un xlsx con:
+          cols A-C  → Capital Costs
+          col  D    → vacía
+          cols E-G  → Fixed Operating Costs
+          col  H    → vacía
+          cols I-N  → Variable Operating Costs
+        Formato compatible con ANA.ImportarProyecto."""
+        import openpyxl
+        wb = openpyxl.Workbook()
+        ws = wb.active
+        ws.title = "Project"
+
+        def _write_block(df, col_start):
+            if df is None or df.empty:
+                return
+            # header
+            for j, name in enumerate(df.columns):
+                ws.cell(row=1, column=col_start + j, value=str(name))
+            # rows
+            for i in range(len(df)):
+                for j in range(len(df.columns)):
+                    v = df.iat[i, j]
+                    try:
+                        if v is None:
+                            continue
+                        import math
+                        if isinstance(v, float) and math.isnan(v):
+                            continue
+                    except Exception:
+                        pass
+                    ws.cell(row=2 + i, column=col_start + j, value=v)
+
+        _write_block(df_capital,  1)
+        _write_block(df_fixed,    5)
+        _write_block(df_variable, 9)
+        wb.save(path)
 
 
 # ======================================================
