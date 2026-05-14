@@ -418,6 +418,213 @@ class StreamEditDialog:
 # VENTANA PRINCIPAL — FlowsheetEditor
 # ======================================================
 
+class OpexExtraRowDialog:
+    """Modal para editar una fila de opex_extras."""
+
+    OPEX_CATEGORIES = ["Raw Materials", "Utilities", "Consumables",
+                       "Waste Treatment", "Other"]
+
+    def __init__(self, parent, row=None):
+        # row=None → modo "agregar"; dict → modo "editar"
+        self.result = None
+        self.row = dict(row) if row else {
+            "name":               "",
+            "units":              "tm",
+            "time_basis":         "year",
+            "flowrate":           0.0,
+            "price_usd_per_unit": 0.0,
+            "stream":             "Utilities",
+        }
+
+        dlg = Toplevel(parent)
+        dlg.title("OPEX extra" if row else "Nuevo OPEX extra")
+        dlg.geometry("400x320+340+220")
+        dlg.transient(parent)
+        dlg.grab_set()
+        self.dlg = dlg
+
+        frm = ttk.Frame(dlg, padding=14)
+        frm.pack(fill=BOTH, expand=True)
+
+        def _row(r, label, widget):
+            ttk.Label(frm, text=label).grid(row=r, column=0, sticky=W, pady=4)
+            widget.grid(row=r, column=1, sticky=W, pady=4)
+
+        self.entry_name = ttk.Entry(frm, width=24)
+        self.entry_name.insert(0, str(self.row["name"]))
+        _row(0, "Nombre:", self.entry_name)
+
+        self.cat_var = StringVar(value=self.row.get("stream", "Utilities"))
+        self.cat_combo = ttk.Combobox(
+            frm, textvariable=self.cat_var,
+            values=self.OPEX_CATEGORIES, state="readonly", width=20,
+        )
+        _row(1, "Categoría:", self.cat_combo)
+
+        self.entry_units = ttk.Entry(frm, width=10)
+        self.entry_units.insert(0, str(self.row["units"]))
+        _row(2, "Unidades:", self.entry_units)
+
+        self.entry_flow = ttk.Entry(frm, justify="right", width=18)
+        self.entry_flow.insert(0, f"{self.row['flowrate']:g}")
+        _row(3, "Flujo / consumo:", self.entry_flow)
+
+        self.entry_price = ttk.Entry(frm, justify="right", width=18)
+        self.entry_price.insert(0, f"{self.row['price_usd_per_unit']:g}")
+        _row(4, "Precio (USD/unidad):", self.entry_price)
+
+        ttk.Label(
+            frm,
+            text="Ejemplos:\n"
+                 "  Steam MP:   30000 tm/año × 25 USD/tm\n"
+                 "  Cooling:   500000 tm/año × 0.30 USD/tm\n"
+                 "  Electric: 4M kWh/año × 0.08 USD/kWh\n"
+                 "  Catalizador Pt: 0.5 tm/año × 25000 USD/tm",
+            foreground="#888", font=("Segoe UI", 8), justify="left",
+        ).grid(row=5, column=0, columnspan=2, sticky=W, pady=(8, 4))
+
+        btns = ttk.Frame(frm)
+        btns.grid(row=6, column=0, columnspan=2, pady=(14, 0), sticky=E)
+        ttk.Button(btns, text="Cancelar", command=dlg.destroy).pack(side=LEFT, padx=4)
+        ttk.Button(btns, text="OK",       command=self._ok).pack(side=LEFT)
+
+        self.entry_name.focus()
+        dlg.wait_window()
+
+    def _ok(self):
+        name = self.entry_name.get().strip()
+        if not name:
+            messagebox.showerror("Inválido", "El nombre no puede estar vacío.")
+            return
+        try:
+            flow = float(self.entry_flow.get())
+            price = float(self.entry_price.get())
+            if flow < 0 or price < 0:
+                raise ValueError
+        except ValueError:
+            messagebox.showerror("Inválido", "Flujo y precio deben ser ≥ 0.")
+            return
+
+        self.result = {
+            "name":               name,
+            "units":              self.entry_units.get().strip() or "tm",
+            "time_basis":         "year",
+            "flowrate":           flow,
+            "price_usd_per_unit": price,
+            "stream":             self.cat_var.get() or "Utilities",
+        }
+        self.dlg.destroy()
+
+
+class OpexExtrasDialog:
+    """Tabla editable de OPEX extras (utilities, consumibles, etc.)
+    del flowsheet.  Cambios se persisten en fs.opex_extras."""
+
+    def __init__(self, parent, fs):
+        self.fs = fs
+        self.parent = parent
+
+        dlg = Toplevel(parent)
+        dlg.title("OPEX extras — utilidades, consumibles, materias primas adicionales")
+        dlg.geometry("780x440+200+120")
+        dlg.transient(parent)
+        self.dlg = dlg
+
+        ttk.Label(
+            dlg,
+            text="Costos operativos variables que no son streams del PFD.\n"
+                 "Se agregan automáticamente a 'Variable Operating Costs' "
+                 "al lanzar el análisis económico.",
+            foreground="#555", justify="left", padding=10,
+        ).pack(fill=X)
+
+        # Treeview
+        cols = ("name", "stream", "units", "flowrate", "price", "annual")
+        tree = ttk.Treeview(dlg, columns=cols, show="headings", height=12)
+        widths = (180, 130, 70, 100, 110, 130)
+        headings = ("Nombre", "Categoría", "Unidades", "Flujo/año",
+                    "Precio USD/unidad", "Total USD/año")
+        for c, w, h in zip(cols, widths, headings):
+            tree.heading(c, text=h)
+            tree.column(c, width=w, anchor="w" if c in ("name", "stream", "units") else "e")
+        tree.pack(fill=BOTH, expand=True, padx=10, pady=4)
+        self.tree = tree
+
+        # Toolbar
+        toolbar = ttk.Frame(dlg, padding=8)
+        toolbar.pack(fill=X)
+        ttk.Button(toolbar, text="+ Agregar fila",
+                   command=self._on_add).pack(side=LEFT, padx=2)
+        ttk.Button(toolbar, text="Editar fila",
+                   command=self._on_edit).pack(side=LEFT, padx=2)
+        ttk.Button(toolbar, text="− Borrar fila",
+                   command=self._on_delete).pack(side=LEFT, padx=2)
+        self.lbl_total = ttk.Label(toolbar, text="", foreground="#333",
+                                    font=("Segoe UI", 9, "bold"))
+        self.lbl_total.pack(side=LEFT, padx=20)
+        ttk.Button(toolbar, text="Cerrar",
+                   command=dlg.destroy).pack(side=RIGHT, padx=2)
+
+        # double-click row → edit
+        tree.bind("<Double-1>", lambda e: self._on_edit())
+
+        self._refresh()
+
+    def _refresh(self):
+        self.tree.delete(*self.tree.get_children())
+        total = 0.0
+        for idx, ex in enumerate(self.fs.opex_extras):
+            annual = ex.get("flowrate", 0) * ex.get("price_usd_per_unit", 0)
+            total += annual
+            self.tree.insert(
+                "", END, iid=str(idx),
+                values=(
+                    ex.get("name", ""),
+                    ex.get("stream", ""),
+                    ex.get("units", ""),
+                    f"{ex.get('flowrate', 0):g}",
+                    f"{ex.get('price_usd_per_unit', 0):g}",
+                    f"$ {annual:>10,.0f}",
+                ),
+            )
+        self.lbl_total.config(
+            text=f"Total OPEX extras: $ {total:>10,.0f}/año  "
+                 f"({len(self.fs.opex_extras)} filas)"
+        )
+
+    def _on_add(self):
+        d = OpexExtraRowDialog(self.dlg, row=None)
+        if d.result:
+            self.fs.opex_extras.append(d.result)
+            self._refresh()
+
+    def _on_edit(self):
+        sel = self.tree.selection()
+        if not sel:
+            messagebox.showinfo("Editar", "Seleccioná una fila primero.")
+            return
+        idx = int(sel[0])
+        d = OpexExtraRowDialog(self.dlg, row=self.fs.opex_extras[idx])
+        if d.result:
+            self.fs.opex_extras[idx] = d.result
+            self._refresh()
+
+    def _on_delete(self):
+        sel = self.tree.selection()
+        if not sel:
+            messagebox.showinfo("Borrar", "Seleccioná una fila primero.")
+            return
+        idx = int(sel[0])
+        ex = self.fs.opex_extras[idx]
+        if not messagebox.askyesno(
+            "Confirmar borrado",
+            f"¿Borrar '{ex.get('name', '?')}'?",
+        ):
+            return
+        del self.fs.opex_extras[idx]
+        self._refresh()
+
+
 class FlowsheetEditor:
     """Editor de block diagram para estimar ISBL desde un PFD.
 
@@ -497,6 +704,8 @@ class FlowsheetEditor:
         ttk.Button(toolbar, text="Ajustar", width=8, command=self.zoom_fit).pack(side=LEFT, padx=2)
 
         ttk.Separator(toolbar, orient=VERTICAL).pack(side=LEFT, fill=Y, padx=8, pady=4)
+        ttk.Button(toolbar, text="OPEX extras…",
+                   command=self.open_opex_dialog).pack(side=LEFT, padx=2)
         ttk.Button(toolbar, text="Calcular", command=self.compute).pack(side=LEFT, padx=2)
 
         # botón de transición distinto según modo
@@ -966,8 +1175,8 @@ class FlowsheetEditor:
                                 stream="Utilities")
         self._add_example_extra("Electricity",    flowrate=4_000_000, price=0.08,
                                 units="kWh", stream="Utilities")
-        # Labor: planta MYPE, no la asunción default de 50 operadores
-        self._set_example_labor(250_000)
+        # Labor se calcula automáticamente con Turton §8.3 desde
+        # el número de equipos (no override).
 
     def _example_methanol(self):
         """Síntesis de metanol simplificada.
@@ -1032,7 +1241,6 @@ class FlowsheetEditor:
                                 stream="Utilities")
         self._add_example_extra("Electricity",       flowrate=8_000_000, price=0.08,
                                 units="kWh", stream="Utilities")
-        self._set_example_labor(280_000)
 
     def _example_distillation(self):
         """Destilación binaria benceno/tolueno (50/50).
@@ -1080,7 +1288,6 @@ class FlowsheetEditor:
                                 stream="Utilities")
         self._add_example_extra("Electricity",   flowrate=100_000, price=0.08,
                                 units="kWh", stream="Utilities")
-        self._set_example_labor(180_000)   # planta chica, 3-4 operadores
 
     def open_json(self):
         path = filedialog.askopenfilename(
@@ -2032,7 +2239,12 @@ class FlowsheetEditor:
                 cost = ex.get("flowrate", 0.0) * ex.get("price_usd_per_unit", 0.0)
                 extras_by_cat[cat] = extras_by_cat.get(cat, 0.0) + cost
 
+            # Labor: override del user, o calculado con Turton §8.3
+            labor_info = None
             labor = self.fs.fixed_overrides.get("Labor")
+            if labor is None and self.fs.blocks:
+                labor_info = ep.turton_labor_cost(self.fs.blocks.values())
+                labor = labor_info["labor_usd_yr"]
 
             has_any = revenue or raw_mp or extras_by_cat or labor
             if has_any:
@@ -2056,7 +2268,15 @@ class FlowsheetEditor:
                         continue
                     out_lines.append(f"{cat[:13]:13s}    $ {val:>14,.0f}")
                 if labor:
-                    out_lines.append(f"Labor:            $ {labor:>14,.0f}")
+                    if labor_info is not None:
+                        out_lines.append(
+                            f"Labor:            $ {labor:>14,.0f}  "
+                            f"({labor_info['n_total']} op., Turton)"
+                        )
+                    else:
+                        out_lines.append(
+                            f"Labor:            $ {labor:>14,.0f}  (override)"
+                        )
                 # totales
                 total_voc = raw_mp + sum(extras_by_cat.values())
                 if revenue and total_voc:
@@ -2108,6 +2328,36 @@ class FlowsheetEditor:
     # TRANSICIÓN AL ANÁLISIS ECONÓMICO (modo main)
     # ==================================================
 
+    def open_opex_dialog(self):
+        """Abre el editor de OPEX extras (utilities, consumibles)."""
+        OpexExtrasDialog(self.win, self.fs)
+        self._update_properties()
+
+    def _check_mass_balance(self, tol_rel=0.005):
+        """Lista de mensajes 'EQUIPO: in=X, out=Y, Δ=Z (R%)' por
+        cada bloque interno (con entradas Y salidas) cuya
+        diferencia relativa supere tol_rel.
+
+        Devuelve [] si todo cierra (o si no hay datos para validar)."""
+        errors = []
+        for b in self.fs.blocks.values():
+            ins  = [s for s in self.fs.streams.values() if s.dst == b.id]
+            outs = [s for s in self.fs.streams.values() if s.src == b.id]
+            if not ins or not outs:
+                continue   # source/sink → sin balance esperado
+            in_t  = sum(s.mass_flow for s in ins)
+            out_t = sum(s.mass_flow for s in outs)
+            if in_t == 0 and out_t == 0:
+                continue
+            diff = abs(in_t - out_t)
+            rel  = diff / max(in_t, out_t, 1e-9)
+            if rel >= tol_rel:
+                errors.append(
+                    f"{b.name}: ent={in_t:g}, sal={out_t:g}, "
+                    f"Δ={diff:g} tm/año  ({rel*100:.1f}%)"
+                )
+        return errors
+
     def launch_analysis(self):
         """Modo main: genera un xlsx temporal con:
           - df_capital: ISBL inyectado desde el diagrama
@@ -2133,6 +2383,27 @@ class FlowsheetEditor:
                 return
             feeds, products, isbl = [], [], None
         else:
+            # ---- validación de balance de masa ----
+            # No tiene sentido correr el análisis económico con un PFD
+            # que no cierra masa.  Listamos los bloques que fallan y
+            # pedimos confirmación explícita para forzar.
+            mb_errors = self._check_mass_balance(tol_rel=0.005)
+            if mb_errors:
+                lines = [f"  · {msg}" for msg in mb_errors]
+                forzar = messagebox.askyesno(
+                    "Balance de masa no cuadra",
+                    "Los siguientes equipos no cierran balance de masa:\n\n"
+                    + "\n".join(lines)
+                    + "\n\nUn análisis económico con masas inconsistentes "
+                      "puede dar resultados muy engañosos (ingresos por "
+                      "productos que el proceso no puede producir, costos "
+                      "de materia prima que no entran, etc.).\n\n"
+                    "Lo recomendable es volver al diagrama y arreglar los "
+                    "flujos.  ¿Querés forzar el análisis igual?",
+                    default="no",
+                )
+                if not forzar:
+                    return
             # asegurar Compute previo (silencioso con defaults si no hay)
             if not hasattr(self, "_last_isbl") or self._last_isbl is None:
                 try:
@@ -2232,6 +2503,15 @@ class FlowsheetEditor:
                 mask = df_fixed["Concept"].astype(str).str.strip() == concept
                 if mask.any():
                     df_fixed.loc[mask, "Value"] = float(value)
+
+        # auto-labor con Turton §8.3 si el user no especificó override
+        if (not df_fixed.empty and "Concept" in df_fixed.columns
+            and "Labor" not in self.fs.fixed_overrides
+            and self.fs.blocks):
+            labor_info = ep.turton_labor_cost(self.fs.blocks.values())
+            mask = df_fixed["Concept"].astype(str).str.strip() == "Labor"
+            if mask.any():
+                df_fixed.loc[mask, "Value"] = float(labor_info["labor_usd_yr"])
 
         # dedupe: borrar filas previas marcadas '(PFD)'
         if "variable operating costs" in df_variable.columns:

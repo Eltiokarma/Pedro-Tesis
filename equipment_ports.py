@@ -292,3 +292,104 @@ def autoselect_inlet(eq_type, used_ports=()):
             if side == preferred_side and pname not in used:
                 return pname
     return next(iter(ports))
+
+
+# ======================================================
+# CLASIFICACIÓN PARA LABOR (Turton §8.3)
+# ======================================================
+# Fórmula de Turton para operadores por turno:
+#   Nol = (6.29 + 31.7·P² + 0.23·Nnp)^0.5
+# donde:
+#   P   = etapas que manejan sólidos particulados
+#         (filter, dryer, evaporator, crystallizer, ...)
+#   Nnp = equipos no-particulados que sí cuentan
+#         (HX, reactor, tower, vessel, compresor, horno)
+# Bombas, tanques de almacenamiento, fans/blowers
+# tradicionalmente NO se cuentan (Turton/Towler).
+# Operadores totales año = Nol × 4.5  (cobertura 24/7 +
+# vacaciones + ausentismo, factor estándar Turton).
+
+LABOR_CLASSIFICATION = {
+    # particulate (manejo de sólidos) — entran en P
+    "Filter — belt":                "particulate",
+    "Dryer — drum":                 "particulate",
+    "Evaporator — vertical":        "particulate",
+    "Crystallizer":                 "particulate",
+
+    # excluidos del conteo (Turton/Towler)
+    "Pump — centrifugal":           "excluded",
+    "Pump — positive displacement": "excluded",
+    "Pump — reciprocating":         "excluded",
+    "Storage tank — cone roof":     "excluded",
+    "Storage tank — floating roof": "excluded",
+    "Fan — axial":                  "excluded",
+    "Fan — centrifugal radial":     "excluded",
+    "Tray — sieve":                 "excluded",  # interno de columna
+    "Tray — valve":                 "excluded",
+}
+
+# default para los que no estén en el dict arriba: non-particulate
+DEFAULT_LABOR_CLASS = "non-particulate"
+
+# parámetros Turton
+TURTON_SHIFT_FACTOR  = 4.5     # turnos × cobertura para operación 24/7
+TURTON_SALARY_USD_YR = 25_000  # salario operador industrial Perú (sueldo + cargas)
+
+
+def labor_class_for(eq_type):
+    """Devuelve 'particulate', 'non-particulate' o 'excluded'."""
+    return LABOR_CLASSIFICATION.get(eq_type, DEFAULT_LABOR_CLASS)
+
+
+def count_for_labor(blocks):
+    """Cuenta (P, Nnp, excluded) para la fórmula Turton.
+
+    blocks: iterable de objetos con atributo .eq_type y .n
+    (cantidad de unidades en paralelo: cuentan como N unidades).
+    """
+    P = Nnp = excl = 0
+    for b in blocks:
+        cls = labor_class_for(b.eq_type)
+        units = max(1, int(getattr(b, "n", 1)))
+        if cls == "particulate":
+            P   += units
+        elif cls == "non-particulate":
+            Nnp += units
+        else:
+            excl += units
+    return P, Nnp, excl
+
+
+def turton_operators(blocks):
+    """Operadores por turno (Nol) y totales año.
+
+    Returns:
+        dict con keys:
+          'P', 'Nnp', 'excluded'        — conteos
+          'Nol'                         — operadores/turno (float, antes de redondeo)
+          'n_total'                     — operadores totales año (int)
+    """
+    import math
+    P, Nnp, excluded = count_for_labor(blocks)
+    Nol = math.sqrt(6.29 + 31.7 * P * P + 0.23 * Nnp)
+    n_total = math.ceil(Nol * TURTON_SHIFT_FACTOR)
+    return {
+        "P":         P,
+        "Nnp":       Nnp,
+        "excluded":  excluded,
+        "Nol":       Nol,
+        "n_total":   n_total,
+    }
+
+
+def turton_labor_cost(blocks, salary_per_op=TURTON_SALARY_USD_YR):
+    """Costo anual de mano de obra según Turton.
+
+    Returns:
+        dict con keys de turton_operators + 'labor_usd_yr'.
+    """
+    res = turton_operators(blocks)
+    res["salary_per_op"] = salary_per_op
+    res["labor_usd_yr"]  = res["n_total"] * salary_per_op
+    return res
+
