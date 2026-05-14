@@ -19,7 +19,7 @@ import sys
 
 def main():
     try:
-        from PySide6.QtWidgets import QApplication
+        from PySide6.QtWidgets import QApplication, QMessageBox
     except ImportError:
         print(
             "Falta PySide6.  Instalalo con:\n"
@@ -34,26 +34,42 @@ def main():
     app = QApplication(sys.argv)
     app.setApplicationName("Diagrama de proceso (Qt)")
 
-    win = fq.FlowsheetMainWindow()
-
-    # --open path → cargar diagrama al inicio
+    # --open path → saltea welcome, abre el editor directo
+    initial_path = None
+    skip_welcome = False
     if "--open" in sys.argv:
         idx = sys.argv.index("--open")
         if idx + 1 < len(sys.argv):
-            import json
-            path = sys.argv[idx + 1]
-            try:
-                with open(path, "r", encoding="utf-8") as f:
-                    win.fs = Flowsheet.from_dict(json.load(f))
-                win._rebuild_scene()
-                win.view.zoom_fit()
-                win._update_status()
-            except Exception as e:
-                from PySide6.QtWidgets import QMessageBox
-                QMessageBox.critical(
-                    win, "No se pudo abrir",
-                    f"{type(e).__name__}: {e}",
-                )
+            initial_path = sys.argv[idx + 1]
+            skip_welcome = True
+    if "--no-welcome" in sys.argv:
+        skip_welcome = True
+
+    if not skip_welcome:
+        import welcome_qt as wq
+        action, payload = wq.show_and_get_action()
+        if action is None:
+            return 0           # user cerró sin elegir
+        if action == "legacy":
+            return 0           # subprocess.Popen ya se ejecutó en welcome
+        # action == "qt"
+        initial_path = payload
+
+    # ---- abrir editor Qt ----
+    win = fq.FlowsheetMainWindow()
+    if initial_path:
+        import json
+        try:
+            with open(initial_path, "r", encoding="utf-8") as f:
+                win.fs = Flowsheet.from_dict(json.load(f))
+            win._rebuild_scene()
+            win.view.zoom_fit()
+            win._update_status()
+        except Exception as e:
+            QMessageBox.critical(
+                win, "No se pudo abrir",
+                f"{type(e).__name__}: {e}",
+            )
 
     win.show()
     return app.exec()

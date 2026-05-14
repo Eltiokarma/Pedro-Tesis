@@ -536,18 +536,22 @@ class BlockItem(QGraphicsItemGroup):
         self.setFlag(QGraphicsItem.ItemSendsGeometryChanges, True)
         self.setHandlesChildEvents(False)
 
-        # --- cuerpo ---
+        # --- cuerpo (rect base + decoración por categoría) ---
         self.rect = QGraphicsRectItem(0, 0, BLOCK_W, BLOCK_H, parent=self)
         self.rect.setBrush(QBrush(COLOR_BLOCK_FILL))
         self.rect.setPen(QPen(COLOR_BLOCK_BORDER, 2))
 
-        # --- textos ---
-        f_title = QFont("Segoe UI", 10, QFont.Bold)
-        f_sub   = QFont("Segoe UI", 8)
         spec = eq.EQUIPMENT_DATA.get(block.eq_type, {})
         unit = spec.get("S_unit", "")
         cat  = spec.get("categoria", "")
-        sub_text = f"{cat}\nS = {block.S:g} {unit}"
+        self.decoration_items = []   # items hijos que decoran según categoría
+        self._draw_category_decoration(cat, block.eq_type)
+
+        # --- textos ---
+        f_title = QFont("Segoe UI", 10, QFont.Bold)
+        f_sub   = QFont("Segoe UI", 7)
+
+        sub_text = f"S = {block.S:g} {unit}"
         if block.n > 1:
             sub_text += f"  × {block.n}"
 
@@ -555,13 +559,13 @@ class BlockItem(QGraphicsItemGroup):
         self.text_name.setFont(f_title)
         self.text_name.setBrush(QBrush(COLOR_BLOCK_TEXT))
         br = self.text_name.boundingRect()
-        self.text_name.setPos((BLOCK_W - br.width()) / 2, 8)
+        self.text_name.setPos((BLOCK_W - br.width()) / 2, 6)
 
         self.text_sub = QGraphicsSimpleTextItem(sub_text, parent=self)
         self.text_sub.setFont(f_sub)
         self.text_sub.setBrush(QBrush(COLOR_BLOCK_SUB))
         br_s = self.text_sub.boundingRect()
-        self.text_sub.setPos((BLOCK_W - br_s.width()) / 2, 28)
+        self.text_sub.setPos((BLOCK_W - br_s.width()) / 2, BLOCK_H - br_s.height() - 4)
 
         # --- puertos ---
         self.port_items: dict = {}     # port_name → QGraphicsEllipseItem
@@ -569,6 +573,179 @@ class BlockItem(QGraphicsItemGroup):
 
         self.setPos(block.x, block.y)
         self.setZValue(10)
+
+    # ---------------------------------------------------
+    # DECORACIÓN POR CATEGORÍA (símbolos PFD simplificados)
+    # ---------------------------------------------------
+
+    def _add_deco_line(self, x1, y1, x2, y2, width=1.5, color=None):
+        line = QGraphicsLineItem(x1, y1, x2, y2, parent=self)
+        pen = QPen(color or COLOR_BLOCK_BORDER, width)
+        line.setPen(pen)
+        self.decoration_items.append(line)
+        return line
+
+    def _add_deco_path(self, path: QPainterPath, width=1.5, color=None,
+                       fill=None):
+        item = QGraphicsPathItem(path, parent=self)
+        item.setPen(QPen(color or COLOR_BLOCK_BORDER, width))
+        if fill is not None:
+            item.setBrush(QBrush(fill))
+        self.decoration_items.append(item)
+        return item
+
+    def _draw_category_decoration(self, category, eq_type):
+        """Dibuja símbolos PFD simplificados según la categoría del
+        equipo.  Mantiene el rect base para hit-testing/select."""
+        w, h = BLOCK_W, BLOCK_H
+        cx, cy = w / 2, h / 2
+
+        if category == "Heat exchangers":
+            # 2 líneas paralelas horizontales atravesando el bloque
+            # (representa el banco de tubos)
+            self._add_deco_line(8, h * 0.42, w - 8, h * 0.42, 1.3,
+                                QColor("#90a4ae"))
+            self._add_deco_line(8, h * 0.58, w - 8, h * 0.58, 1.3,
+                                QColor("#90a4ae"))
+            # punteros de retorno en los extremos
+            self._add_deco_line(8, h * 0.42, 8, h * 0.58, 1.3,
+                                QColor("#90a4ae"))
+            self._add_deco_line(w - 8, h * 0.42, w - 8, h * 0.58, 1.3,
+                                QColor("#90a4ae"))
+
+        elif category == "Pumps":
+            # círculo central (cuerpo de la bomba)
+            r = 14
+            circle = QPainterPath()
+            circle.addEllipse(cx - r, cy - r, 2*r, 2*r)
+            self._add_deco_path(circle, 1.5, QColor("#5c6bc0"),
+                                QColor("#e8eaf6"))
+            # triángulo apuntando a la derecha (impulsor)
+            tri = QPainterPath()
+            tri.moveTo(cx - 5, cy - 6)
+            tri.lineTo(cx + 6, cy)
+            tri.lineTo(cx - 5, cy + 6)
+            tri.closeSubpath()
+            self._add_deco_path(tri, 0, COLOR_BLOCK_BORDER,
+                                COLOR_BLOCK_BORDER)
+
+        elif category == "Compressors":
+            # forma trapezoidal (entrada estrecha, salida ancha)
+            tr = QPainterPath()
+            tr.moveTo(15, h * 0.30)
+            tr.lineTo(w - 15, h * 0.18)
+            tr.lineTo(w - 15, h * 0.82)
+            tr.lineTo(15, h * 0.70)
+            tr.closeSubpath()
+            self._add_deco_path(tr, 1.5, QColor("#5c6bc0"),
+                                QColor("#fff3e0"))
+
+        elif category == "Reactors":
+            # rect interno + agitador (línea vertical + cruz arriba)
+            inner = QPainterPath()
+            inner.addRoundedRect(10, h * 0.20, w - 20, h * 0.6, 4, 4)
+            self._add_deco_path(inner, 1.3, QColor("#5c6bc0"),
+                                QColor("#fbe9e7"))
+            # eje del agitador
+            self._add_deco_line(cx, 6, cx, h * 0.50, 1.2)
+            # paletas del agitador (cruz)
+            self._add_deco_line(cx - 7, h * 0.50, cx + 7, h * 0.50, 1.2)
+
+        elif category == "Vessels":
+            # caso especial: torre vs vessel horizontal vs vertical
+            if "Tower" in eq_type:
+                # rect alto centrado + bandejas (líneas horizontales)
+                col_w = 22
+                rect = QPainterPath()
+                rect.addRoundedRect(cx - col_w / 2, 8, col_w, h - 16, 3, 3)
+                self._add_deco_path(rect, 1.5, QColor("#5c6bc0"),
+                                    QColor("#e3f2fd"))
+                # bandejas
+                for i in range(1, 5):
+                    y_tray = 8 + (h - 16) * i / 5
+                    self._add_deco_line(cx - col_w / 2 + 2, y_tray,
+                                        cx + col_w / 2 - 2, y_tray, 0.8,
+                                        QColor("#90a4ae"))
+            elif "horizontal" in eq_type.lower():
+                # cilindro horizontal (rect redondeado en los extremos)
+                rect = QPainterPath()
+                rect.addRoundedRect(8, h * 0.30, w - 16, h * 0.4, 12, 12)
+                self._add_deco_path(rect, 1.5, QColor("#5c6bc0"),
+                                    QColor("#e3f2fd"))
+            else:
+                # vessel vertical (rect alto)
+                vw = w * 0.45
+                rect = QPainterPath()
+                rect.addRoundedRect(cx - vw / 2, 8, vw, h - 16, 8, 8)
+                self._add_deco_path(rect, 1.5, QColor("#5c6bc0"),
+                                    QColor("#e3f2fd"))
+
+        elif category == "Storage":
+            # tanque: cilindro vertical con techo
+            tw = w * 0.55
+            rect = QPainterPath()
+            rect.addRect(cx - tw / 2, h * 0.30, tw, h * 0.55)
+            self._add_deco_path(rect, 1.5, QColor("#5c6bc0"),
+                                QColor("#e8f5e9"))
+            # techo (línea curva arriba)
+            if "cone" in eq_type.lower():
+                roof = QPainterPath()
+                roof.moveTo(cx - tw / 2, h * 0.30)
+                roof.lineTo(cx, h * 0.18)
+                roof.lineTo(cx + tw / 2, h * 0.30)
+                self._add_deco_path(roof, 1.5, QColor("#5c6bc0"))
+            else:  # floating roof
+                self._add_deco_line(cx - tw / 2 + 2, h * 0.35,
+                                    cx + tw / 2 - 2, h * 0.35, 1.0,
+                                    QColor("#5c6bc0"))
+
+        elif category == "Fired heaters":
+            # horno: rect con llama (triángulos abajo)
+            rect = QPainterPath()
+            rect.addRoundedRect(8, h * 0.25, w - 16, h * 0.55, 4, 4)
+            self._add_deco_path(rect, 1.5, QColor("#5c6bc0"),
+                                QColor("#fff8e1"))
+            # llama: 3 triángulos en la base
+            flame = QPainterPath()
+            base_y = h * 0.80
+            tip_y  = h * 0.65
+            for fx in (cx - 14, cx, cx + 14):
+                flame.moveTo(fx - 4, base_y)
+                flame.lineTo(fx, tip_y)
+                flame.lineTo(fx + 4, base_y)
+            self._add_deco_path(flame, 1.3, QColor("#ef6c00"),
+                                QColor("#ffcc80"))
+
+        elif category == "Fans / blowers":
+            # círculo con 3 aspas
+            r = 13
+            circle = QPainterPath()
+            circle.addEllipse(cx - r, cy - r, 2*r, 2*r)
+            self._add_deco_path(circle, 1.3, QColor("#5c6bc0"),
+                                QColor("#e1f5fe"))
+            # aspas (líneas radiales)
+            import math
+            for k in range(3):
+                ang = (math.pi / 2) + k * (2 * math.pi / 3)
+                self._add_deco_line(
+                    cx, cy,
+                    cx + r * 0.85 * math.cos(ang),
+                    cy + r * 0.85 * math.sin(ang),
+                    1.4, QColor("#5c6bc0"),
+                )
+
+        elif category == "Solids / sep.":
+            # rect con triángulo de sólidos (cono abajo)
+            inner = QPainterPath()
+            inner.moveTo(12, h * 0.30)
+            inner.lineTo(w - 12, h * 0.30)
+            inner.lineTo(cx + 8, h - 6)
+            inner.lineTo(cx - 8, h - 6)
+            inner.closeSubpath()
+            self._add_deco_path(inner, 1.3, QColor("#5c6bc0"),
+                                QColor("#efebe9"))
+
+        # otras categorías: solo el rect base + el texto
 
     def _render_ports(self):
         ports = ep.get_ports(self.model.eq_type)
@@ -1053,10 +1230,26 @@ class FlowsheetMainWindow(QMainWindow):
 
     def _setup_shortcuts(self):
         from PySide6.QtGui import QShortcut
-        sc = QShortcut(QKeySequence(Qt.Key_Escape), self)
-        sc.activated.connect(self.cancel_connection)
-        sc_del = QShortcut(QKeySequence(Qt.Key_Delete), self)
-        sc_del.activated.connect(self.action_delete)
+        # navegación / archivo
+        for seq, slot in (
+            (QKeySequence.New,    self.action_new),
+            (QKeySequence.Open,   self.action_open),
+            (QKeySequence.Save,   self.action_save),
+            (QKeySequence.Quit,   self.close),
+            ("Ctrl+E",            self.action_export_pdf),       # default = PDF
+            ("Ctrl+Shift+E",      self.action_export_svg),
+            ("F5",                self.action_solve),
+            ("F9",                self.action_compute),
+            ("Ctrl+Plus",         self.view.zoom_in),
+            ("Ctrl+-",            self.view.zoom_out),
+            ("Ctrl+0",            self.view.zoom_reset),
+            ("Ctrl+1",            self.view.zoom_fit),
+        ):
+            sc = QShortcut(QKeySequence(seq), self)
+            sc.activated.connect(slot)
+        # escapar conexión pendiente / borrar
+        QShortcut(QKeySequence(Qt.Key_Escape), self, activated=self.cancel_connection)
+        QShortcut(QKeySequence(Qt.Key_Delete), self, activated=self.action_delete)
 
     # ---------------------------------------------------
     # WIDGETS
@@ -1109,6 +1302,19 @@ class FlowsheetMainWindow(QMainWindow):
         add_btn("Solve balances",  self.action_solve)
         add_btn("Calcular",        self.action_compute)
         add_btn("Análisis económico →", self.action_launch_analysis)
+        tb.addSeparator()
+
+        # menú Exportar
+        export_act = QAction("Exportar ▾", self)
+        export_menu = QMenu(self)
+        export_menu.addAction("PDF…", self.action_export_pdf)
+        export_menu.addAction("SVG (vectorial)…", self.action_export_svg)
+        export_menu.addAction("PNG (alta resolución)…", self.action_export_png)
+        export_act.setMenu(export_menu)
+        tb.addAction(export_act)
+        ebtn = tb.widgetForAction(export_act)
+        if ebtn is not None and hasattr(ebtn, "setPopupMode"):
+            ebtn.setPopupMode(QToolButton.InstantPopup)
 
     def _build_library_dock(self):
         dock = QDockWidget(" Biblioteca de equipos ", self)
@@ -1419,6 +1625,169 @@ class FlowsheetMainWindow(QMainWindow):
         except Exception as e:
             QMessageBox.critical(self, "Falló el lanzamiento",
                                   f"{type(e).__name__}: {e}")
+
+    # ---------------------------------------------------
+    # EXPORT (PDF / SVG / PNG)
+    # ---------------------------------------------------
+
+    def _scene_export_rect(self):
+        """Bounding box de los bloques + margen, para que el export
+        cubra el contenido visible sin la grilla infinita."""
+        items = [it for it in self.scene.items()
+                 if isinstance(it, (BlockItem, StreamItem))]
+        if not items:
+            return self.view.viewport().rect()
+        bbox = items[0].sceneBoundingRect()
+        for it in items[1:]:
+            bbox = bbox.united(it.sceneBoundingRect())
+        # incluir labels de streams (label_bg / label_text son items aparte)
+        for sid, sit in self.scene.stream_items.items():
+            if sit.label_bg.scene() is self.scene:
+                bbox = bbox.united(sit.label_bg.sceneBoundingRect())
+        bbox.adjust(-40, -40, 40, 40)
+        return bbox
+
+    def action_export_pdf(self):
+        if not self.fs.blocks:
+            QMessageBox.information(self, "Exportar PDF",
+                                     "El diagrama está vacío.")
+            return
+        path, _ = QFileDialog.getSaveFileName(
+            self, "Exportar PDF", "diagrama.pdf",
+            "PDF (*.pdf)",
+        )
+        if not path:
+            return
+        if not path.lower().endswith(".pdf"):
+            path += ".pdf"
+        try:
+            from PySide6.QtPrintSupport import QPrinter
+            from PySide6.QtCore import QSizeF
+            from PySide6.QtGui  import QPageSize, QPageLayout
+
+            bbox = self._scene_export_rect()
+            printer = QPrinter(QPrinter.HighResolution)
+            printer.setOutputFormat(QPrinter.PdfFormat)
+            printer.setOutputFileName(path)
+            # tamaño de la página = bbox (escalado a tamaño físico A4 si
+            # bbox es demasiado grande)
+            aspect = bbox.width() / max(bbox.height(), 1)
+            if aspect > 1:
+                printer.setPageOrientation(QPageLayout.Landscape)
+            else:
+                printer.setPageOrientation(QPageLayout.Portrait)
+            printer.setPageSize(QPageSize(QPageSize.A4))
+
+            painter = QPainter(printer)
+            painter.setRenderHint(QPainter.Antialiasing, True)
+            painter.setRenderHint(QPainter.TextAntialiasing, True)
+            # render del scene sobre el painter (sin la grilla)
+            self._render_to_painter(painter, bbox,
+                                    target_rect=printer.pageRect(QPrinter.DevicePixel))
+            painter.end()
+            self.status.showMessage(f"Exportado: {path}", 5000)
+        except Exception as e:
+            QMessageBox.critical(self, "Error al exportar PDF",
+                                  f"{type(e).__name__}: {e}")
+
+    def action_export_svg(self):
+        if not self.fs.blocks:
+            QMessageBox.information(self, "Exportar SVG",
+                                     "El diagrama está vacío.")
+            return
+        path, _ = QFileDialog.getSaveFileName(
+            self, "Exportar SVG", "diagrama.svg",
+            "SVG (*.svg)",
+        )
+        if not path:
+            return
+        if not path.lower().endswith(".svg"):
+            path += ".svg"
+        try:
+            from PySide6.QtSvg import QSvgGenerator
+            from PySide6.QtCore import QSize, QRect
+
+            bbox = self._scene_export_rect()
+            gen = QSvgGenerator()
+            gen.setFileName(path)
+            gen.setSize(QSize(int(bbox.width()), int(bbox.height())))
+            gen.setViewBox(QRect(0, 0, int(bbox.width()), int(bbox.height())))
+            gen.setTitle("Diagrama de proceso")
+            gen.setDescription("Generado con flowsheet_qt")
+
+            painter = QPainter(gen)
+            painter.setRenderHint(QPainter.Antialiasing, True)
+            painter.setRenderHint(QPainter.TextAntialiasing, True)
+            self._render_to_painter(painter, bbox,
+                                    target_rect=QRect(0, 0,
+                                                       int(bbox.width()),
+                                                       int(bbox.height())))
+            painter.end()
+            self.status.showMessage(f"Exportado: {path}", 5000)
+        except Exception as e:
+            QMessageBox.critical(self, "Error al exportar SVG",
+                                  f"{type(e).__name__}: {e}")
+
+    def action_export_png(self):
+        if not self.fs.blocks:
+            QMessageBox.information(self, "Exportar PNG",
+                                     "El diagrama está vacío.")
+            return
+        path, _ = QFileDialog.getSaveFileName(
+            self, "Exportar PNG (alta resolución)", "diagrama.png",
+            "PNG (*.png)",
+        )
+        if not path:
+            return
+        if not path.lower().endswith(".png"):
+            path += ".png"
+        try:
+            from PySide6.QtGui  import QImage, QColor
+            from PySide6.QtCore import QSize, QRect
+
+            bbox = self._scene_export_rect()
+            # 2× para alta DPI (≈ 200 DPI cuando se imprime A4)
+            scale = 2.0
+            target_w = int(bbox.width()  * scale)
+            target_h = int(bbox.height() * scale)
+            img = QImage(target_w, target_h, QImage.Format_ARGB32)
+            img.fill(QColor("#ffffff"))
+
+            painter = QPainter(img)
+            painter.setRenderHint(QPainter.Antialiasing, True)
+            painter.setRenderHint(QPainter.TextAntialiasing, True)
+            painter.setRenderHint(QPainter.SmoothPixmapTransform, True)
+            self._render_to_painter(painter, bbox,
+                                    target_rect=QRect(0, 0, target_w, target_h))
+            painter.end()
+            img.save(path)
+            self.status.showMessage(f"Exportado: {path} ({target_w}×{target_h})", 5000)
+        except Exception as e:
+            QMessageBox.critical(self, "Error al exportar PNG",
+                                  f"{type(e).__name__}: {e}")
+
+    def _render_to_painter(self, painter, source_rect, target_rect):
+        """Render del scene EXCLUYENDO la grilla de fondo (z=-100).
+
+        Para que el export no incluya las líneas de la grilla,
+        ocultamos temporalmente los items grid antes de render().
+        """
+        from PySide6.QtCore import QRectF
+        # ocultar grilla
+        grid_items = [it for it in self.scene.items()
+                      if isinstance(it, QGraphicsLineItem) and it.zValue() <= -100]
+        for g in grid_items:
+            g.setVisible(False)
+        try:
+            self.scene.render(
+                painter,
+                target=QRectF(target_rect),
+                source=QRectF(source_rect),
+                aspectRatioMode=Qt.KeepAspectRatio,
+            )
+        finally:
+            for g in grid_items:
+                g.setVisible(True)
 
     # ---------------------------------------------------
     # API pública para BlockItem / StreamItem
