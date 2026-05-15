@@ -149,7 +149,13 @@ def _get_svg_pixmap(eq_type, width, height, svg_str=None):
     painter.setRenderHint(QPainter.Antialiasing, True)
     painter.setRenderHint(QPainter.TextAntialiasing, True)
     painter.setRenderHint(QPainter.SmoothPixmapTransform, True)
-    renderer.render(painter)
+    # IMPORTANTE: pasar target_rect explícito que llena toda la imagen.
+    # Sin esto, QSvgRenderer usa defaultSize() (de los atrs width/height
+    # del <svg>) que mide en unidades de escena, no pixels — y el SVG
+    # se renderiza sólo en la esquina superior izquierda del painter,
+    # dejando 3/4 de la imagen transparente.
+    from PySide6.QtCore import QRectF
+    renderer.render(painter, QRectF(0, 0, img.width(), img.height()))
     painter.end()
 
     pixmap = QPixmap.fromImage(img)
