@@ -714,7 +714,6 @@ class BlockItem(QGraphicsItemGroup):
         self.text_name.setFont(f_title)
         self.text_name.setBrush(QBrush(COLOR_BLOCK_TEXT))
         br = self.text_name.boundingRect()
-        self.text_name.setPos((BLOCK_W - br.width()) / 2, 6)
         self.text_name.setZValue(2)
 
         self.text_sub = QGraphicsSimpleTextItem(sub_text, parent=self)
@@ -724,29 +723,13 @@ class BlockItem(QGraphicsItemGroup):
         self.text_sub.setPos((BLOCK_W - br_s.width()) / 2, BLOCK_H - br_s.height() - 4)
         self.text_sub.setZValue(2)
 
-        # En modo SVG, el ícono cubre el bloque entero.  Agregamos
-        # fondo blanco translúcido detrás del nombre para legibilidad,
-        # y dejamos el sub visible al pie con su propio fondo.
+        # En modo SVG (estilo PFD industrial): el tag del equipo va
+        # ARRIBA del símbolo, el "S = ..." sigue al pie del bloque.
+        # En modo fallback: textos dentro del rect (como antes).
         if getattr(self, "_svg_mode", False):
-            name_bg = QGraphicsRectItem(
-                self.text_name.x() - 3, self.text_name.y() - 1,
-                br.width() + 6, br.height() + 2,
-                parent=self,
-            )
-            name_bg.setBrush(QBrush(QColor(255, 255, 255, 220)))
-            name_bg.setPen(QPen(Qt.NoPen))
-            name_bg.setZValue(1.5)   # debajo del texto, encima del SVG
-            self.decoration_items.append(name_bg)
-
-            sub_bg = QGraphicsRectItem(
-                self.text_sub.x() - 3, self.text_sub.y() - 1,
-                br_s.width() + 6, br_s.height() + 2,
-                parent=self,
-            )
-            sub_bg.setBrush(QBrush(QColor(255, 255, 255, 220)))
-            sub_bg.setPen(QPen(Qt.NoPen))
-            sub_bg.setZValue(1.5)
-            self.decoration_items.append(sub_bg)
+            self.text_name.setPos((BLOCK_W - br.width()) / 2, -br.height() - 2)
+        else:
+            self.text_name.setPos((BLOCK_W - br.width()) / 2, 6)
 
         # --- puertos ---
         self.port_items: dict = {}     # port_name → QGraphicsEllipseItem
@@ -805,9 +788,11 @@ class BlockItem(QGraphicsItemGroup):
                 pix_item.setPos(0, 0)
                 pix_item.setZValue(0)
                 pix_item.setTransformationMode(Qt.SmoothTransformation)
-                # rect base: visible con borde claro, fill blanco
-                self.rect.setBrush(QBrush(COLOR_BLOCK_FILL))
-                self.rect.setPen(QPen(COLOR_BLOCK_BORDER, 1.5))
+                # rect base: INVISIBLE en modo SVG (estilo PFD industrial).
+                # Sigue siendo hit-target gracias al brush alpha=1 (invisible
+                # al ojo pero captura clicks en zonas vacías del SVG).
+                self.rect.setBrush(QBrush(QColor(0, 0, 0, 1)))
+                self.rect.setPen(Qt.NoPen)
                 self.rect.setZValue(-0.5)
                 self.decoration_items.append(pix_item)
                 self._svg_mode = True
@@ -1015,13 +1000,20 @@ class BlockItem(QGraphicsItemGroup):
         self.setToolTip("<br>".join(lines))
 
     def set_selected_visual(self, selected: bool):
+        svg = getattr(self, "_svg_mode", False)
         if selected:
-            self.rect.setPen(QPen(COLOR_BLOCK_BORDER_SEL, 3))
+            if svg:
+                # solo borde punteado al seleccionar; el rect sigue
+                # transparente por dentro.
+                self.rect.setPen(QPen(COLOR_BLOCK_BORDER_SEL, 1.5,
+                                      Qt.DashLine))
+            else:
+                self.rect.setPen(QPen(COLOR_BLOCK_BORDER_SEL, 3))
         else:
-            # rect base siempre visible para que se vea el outline del
-            # bloque, independiente de si el SVG cargó bien o no.
-            self.rect.setPen(QPen(COLOR_BLOCK_BORDER,
-                                   1.5 if getattr(self, "_svg_mode", False) else 2))
+            if svg:
+                self.rect.setPen(Qt.NoPen)
+            else:
+                self.rect.setPen(QPen(COLOR_BLOCK_BORDER, 2))
 
     def itemChange(self, change, value):
         """Sync posición al modelo + refresh streams conectados.
