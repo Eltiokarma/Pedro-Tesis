@@ -743,6 +743,41 @@ class _StreamHandle(QGraphicsEllipseItem):
         return super().itemChange(change, value)
 
 
+class _GhostStreamHandle(QGraphicsEllipseItem):
+    """Handle fantasma en un bend point del auto-routing.  Click → bakea
+    los bends del auto-route en model.waypoints y aparecen handles reales
+    draggables.  Visualmente más chico y traslúcido que los reales."""
+
+    RADIUS = 4
+
+    def __init__(self, stream_item: "StreamItem", x: float, y: float):
+        r = self.RADIUS
+        super().__init__(-r, -r, 2*r, 2*r)
+        self._stream_item = stream_item
+        self.setBrush(QBrush(QColor(31, 111, 235, 130)))
+        self.setPen(QPen(QColor("#ffffff"), 1.0))
+        self.setZValue(7.5)
+        self.setCursor(Qt.PointingHandCursor)
+        self.setToolTip("Click para hacer este bend editable, luego arrastrá")
+        self.setPos(x, y)
+
+    def mousePressEvent(self, event):
+        si = self._stream_item
+        pts = getattr(si, '_last_pts', None)
+        if pts and len(pts) >= 6:
+            # bakear todos los bend points interiores en model.waypoints
+            interior = []
+            for i in range(2, len(pts) - 2, 2):
+                interior.append([pts[i], pts[i+1]])
+            si.model.waypoints = interior
+        else:
+            # corner case: stream sin bends visibles, agregamos uno en
+            # la posición clickeada
+            si.model.waypoints = [[self.pos().x(), self.pos().y()]]
+        si.update_path()
+        event.accept()
+
+
 class BlockItem(QGraphicsItemGroup):
     """Bloque del flowsheet renderizado en el canvas.
 
@@ -765,7 +800,12 @@ class BlockItem(QGraphicsItemGroup):
         self.setFlag(QGraphicsItem.ItemIsMovable, True)
         self.setFlag(QGraphicsItem.ItemIsSelectable, True)
         self.setFlag(QGraphicsItem.ItemSendsGeometryChanges, True)
-        self.setHandlesChildEvents(False)
+        # IMPORTANTE: setHandlesChildEvents = True (default) — el grupo
+        # captura los clicks de TODOS sus hijos y aplica ItemIsMovable.
+        # Si lo seteamos a False, los hijos (rect invisible, pixmap del
+        # SVG, ports, textos) reciben los clicks individualmente y el
+        # bloque queda inerte porque ninguno de ellos es movable.
+        self.setHandlesChildEvents(True)
 
         # Dimensiones del símbolo PFD (varían por equipo).  Fallback al
         # tamaño legacy 130×60 si el eq_type no tiene símbolo nuevo.
@@ -1099,6 +1139,8 @@ class StreamItem(QGraphicsPathItem):
             pts = self._compute_polyline(b_src, b_dst, s)
         if not pts:
             return
+        # guardar para que los handles fantasma puedan leer los bend points
+        self._last_pts = pts
 
         path = QPainterPath(QPointF(pts[0], pts[1]))
         for i in range(2, len(pts), 2):
@@ -1151,9 +1193,15 @@ class StreamItem(QGraphicsPathItem):
 
     def _rebuild_handles(self):
         """Recrea los handles de waypoints.  Solo visibles cuando el
-        stream está seleccionado."""
+        stream está seleccionado.
+
+        · Si model.waypoints está poblado: handles reales draggables
+          (azul sólido, snap a grilla).
+        · Si no: handles fantasma en los bend points del auto-route
+          (azul translúcido).  Click → bakea los bends en waypoints
+          y aparecen handles reales.
+        """
         scene = self.scene()
-        # remover handles viejos
         for h in self._handles:
             if scene is not None and h.scene() is scene:
                 scene.removeItem(h)
@@ -1161,10 +1209,19 @@ class StreamItem(QGraphicsPathItem):
 
         if not self.isSelected() or scene is None:
             return
-        for i in range(len(self.model.waypoints)):
-            h = _StreamHandle(self, i)
-            scene.addItem(h)
-            self._handles.append(h)
+        if self.model.waypoints:
+            for i in range(len(self.model.waypoints)):
+                h = _StreamHandle(self, i)
+                scene.addItem(h)
+                self._handles.append(h)
+        else:
+            # mostrar ghost handles en los interior bend points del
+            # auto-route (pts[2:-2] cada 2).
+            pts = getattr(self, '_last_pts', None) or []
+            for i in range(2, len(pts) - 2, 2):
+                h = _GhostStreamHandle(self, pts[i], pts[i+1])
+                scene.addItem(h)
+                self._handles.append(h)
 
     def itemChange(self, change, value):
         if change == QGraphicsItem.ItemSelectedHasChanged:
