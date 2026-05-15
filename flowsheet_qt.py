@@ -771,11 +771,61 @@ class _StreamHandle(QGraphicsEllipseItem):
         wp = stream_item.model.waypoints[waypoint_idx]
         self.setPos(float(wp[0]), float(wp[1]))
 
+    def _neighbor_pts(self):
+        """Devuelve (prev, next) — los puntos vecinos en el polyline del
+        stream, para el snap ortogonal del magnetismo.
+
+        prev: waypoint[idx-1] o, si idx=0, la posición del puerto source.
+        next: waypoint[idx+1] o, si último, la posición del puerto dest.
+        Cada uno es (x, y) o None si no se puede resolver.
+        """
+        si = self._stream_item
+        s  = si.model
+        i  = self._wp_idx
+        n  = len(s.waypoints)
+        prev_pt = next_pt = None
+        if 0 <= i < n:
+            if i > 0:
+                wp = s.waypoints[i - 1]
+                prev_pt = (float(wp[0]), float(wp[1]))
+            else:
+                b_src = si.fs.blocks.get(s.src)
+                if b_src is not None:
+                    try:
+                        _, x1, y1 = si._resolve_port(b_src, s.src_port, "right")
+                        prev_pt = (x1, y1)
+                    except Exception:
+                        pass
+            if i < n - 1:
+                wp = s.waypoints[i + 1]
+                next_pt = (float(wp[0]), float(wp[1]))
+            else:
+                b_dst = si.fs.blocks.get(s.dst)
+                if b_dst is not None:
+                    try:
+                        _, x2, y2 = si._resolve_port(b_dst, s.dst_port, "left")
+                        next_pt = (x2, y2)
+                    except Exception:
+                        pass
+        return prev_pt, next_pt
+
     def itemChange(self, change, value):
         if change == QGraphicsItem.ItemPositionChange and self.scene():
-            # snap a la grilla
+            # 1. snap a grilla
             nx = round(value.x() / GRID_STEP) * GRID_STEP
             ny = round(value.y() / GRID_STEP) * GRID_STEP
+            # 2. MAGNETISMO: snap ortogonal a los vecinos del waypoint
+            #    (mantiene segmentos horizontales o verticales si está
+            #    suficientemente cerca de alineación).
+            SNAP_TOL = 10.0     # tolerancia px
+            prev_pt, next_pt = self._neighbor_pts()
+            for n_pt in (prev_pt, next_pt):
+                if n_pt is None:
+                    continue
+                if abs(nx - n_pt[0]) < SNAP_TOL:
+                    nx = n_pt[0]
+                if abs(ny - n_pt[1]) < SNAP_TOL:
+                    ny = n_pt[1]
             value = QPointF(nx, ny)
         elif change == QGraphicsItem.ItemPositionHasChanged and self.scene():
             si = self._stream_item
