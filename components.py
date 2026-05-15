@@ -182,6 +182,20 @@ COMPONENTS: Dict[str, Component] = {
         dh_vap=300.0,
     ),
 
+    # ---- Inorgánicos / industriales ----
+    "ammonia":   Component(
+        name="ammonia", label="Amoníaco (NH₃)", mw=17.03, tb_c=-33.4,
+        cp_l_a=4.450, cp_l_b=0.0,
+        cp_v_a=2.130, cp_v_b=0.00100,
+        dh_vap=1370.0,
+    ),
+    "glucose":   Component(
+        name="glucose", label="Glucosa (C₆H₁₂O₆)", mw=180.16, tb_c=146.0,
+        cp_l_a=1.250, cp_l_b=0.00200,
+        cp_v_a=1.000, cp_v_b=0.00200,
+        dh_vap=300.0,
+    ),
+
     # ---- Genéricos (fallback si el user no sabe el componente) ----
     "generic_liquid": Component(
         name="generic_liquid", label="Líquido genérico (hidrocarburo)",

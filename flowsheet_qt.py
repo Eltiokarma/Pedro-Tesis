@@ -1800,9 +1800,12 @@ class FlowsheetMainWindow(QMainWindow):
         # reusar los example builders del editor legacy
         def make_loader(key):
             return lambda: self.action_load_example(key)
-        examples_menu.addAction("HDA — Hidrodealquilación de tolueno", make_loader("hda"))
-        examples_menu.addAction("Síntesis de metanol",                  make_loader("methanol"))
-        examples_menu.addAction("Destilación binaria",                  make_loader("distillation"))
+        examples_menu.addAction("HDA — Hidrodealquilación de tolueno",  make_loader("hda"))
+        examples_menu.addAction("Síntesis de metanol",                   make_loader("methanol"))
+        examples_menu.addAction("Destilación binaria benceno/tolueno",   make_loader("distillation"))
+        examples_menu.addSeparator()
+        examples_menu.addAction("Síntesis de amoníaco (Haber-Bosch)",    make_loader("ammonia"))
+        examples_menu.addAction("Producción de etanol",                  make_loader("ethanol"))
         examples_act.setMenu(examples_menu)
         tb.addAction(examples_act)
         # workaround: QAction con menu necesita un QToolButton para mostrar el dropdown
@@ -2011,21 +2014,42 @@ class FlowsheetMainWindow(QMainWindow):
             if ans != QMessageBox.Yes:
                 return
         before = self.begin_action()
-        # Los example builders son métodos del FlowsheetEditor (Tk).
         from flowsheet_ui import FlowsheetEditor as TkEditor
-        # reset del fs y rearmar
         self.fs = Flowsheet()
         shim = _ExampleBuilderShim(self.fs)
+        # builder_map: clave → (método del builder, título_PFD, area, drawing_no)
         builder_map = {
-            "hda":          TkEditor._example_hda,
-            "methanol":     TkEditor._example_methanol,
-            "distillation": TkEditor._example_distillation,
+            "hda":          (TkEditor._example_hda,
+                              "HDA — Hidrodealquilación de tolueno",
+                              "100 — Reacción / Sep.", "PFD-HDA-001"),
+            "methanol":     (TkEditor._example_methanol,
+                              "Síntesis de metanol", "100 — Reacción / Sep.",
+                              "PFD-MeOH-001"),
+            "distillation": (TkEditor._example_distillation,
+                              "Destilación binaria benceno/tolueno",
+                              "200 — Separación", "PFD-BTX-001"),
+            "ammonia":      (TkEditor._example_ammonia,
+                              "Síntesis de amoníaco (Haber-Bosch)",
+                              "100 — Reacción", "PFD-NH3-001"),
+            "ethanol":      (TkEditor._example_ethanol,
+                              "Producción de etanol (fermentación + destilación)",
+                              "200 — Fermentación / Sep.", "PFD-EtOH-001"),
         }
-        builder = builder_map.get(key)
-        if builder is None:
+        entry = builder_map.get(key)
+        if entry is None:
             return
+        builder, title, area, dwg_no = entry
         builder(shim)
         self._rebuild_scene()
+
+        # Auto-mostrar el marco PFD con los datos del ejemplo
+        self.scene.set_paper_visible(False)        # reset si había uno previo
+        self.scene.paper_frame = None
+        self.scene.set_paper_visible(True, project_title=title,
+                                       area=area, drawing_no=dwg_no)
+        if hasattr(self, "_paper_action"):
+            self._paper_action.setChecked(True)
+
         self.view.zoom_fit()
         self._update_status()
         self.end_action(f"Cargar ejemplo: {key}", before)

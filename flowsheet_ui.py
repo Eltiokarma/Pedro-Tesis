@@ -1117,26 +1117,24 @@ class FlowsheetEditor:
         Tolueno + H2 → Benceno + CH4. ~75% conversión.
         Tags ISA-5.1: E (HX), F (horno), R (reactor),
         V (separador), T (columna), P (bomba), TK (tanque)."""
-        cx = [120, 360, 600, 840, 1080, 1320]
-        y_top = 240
-        y_bot = 460
+        # Layout PFD industrial (1600×960 paper).
+        # Top row: tren de reacción (left→right).  Bottom row: separación.
+        # tren de reacción (fila superior, y centro ≈ 240)
+        e101 = self._add_example_block("E-101", "Heat exch. — floating head", 250.0,  300, 220)
+        f101 = self._add_example_block("F-101", "Fired heater — non-reformer", 5000.0, 480, 180)
+        r101 = self._add_example_block("R-101", "Reactor — jacketed non-agit.",  25.0, 640, 180)
+        e102 = self._add_example_block("E-102", "Heat exch. — air cooler",      180.0, 750, 200)
+        v101 = self._add_example_block("V-101", "Vessel — vertical",             20.0, 930, 180)
 
-        # tren de reacción (fila superior)
-        e101 = self._add_example_block("E-101", "Heat exch. — floating head", 250.0, cx[0], y_top)
-        f101 = self._add_example_block("F-101", "Fired heater — non-reformer", 5000.0, cx[1], y_top)
-        r101 = self._add_example_block("R-101", "Reactor — jacketed non-agit.",  25.0, cx[2], y_top)
-        e102 = self._add_example_block("E-102", "Heat exch. — air cooler",      180.0, cx[3], y_top)
-        v101 = self._add_example_block("V-101", "Vessel — vertical",             20.0, cx[4], y_top)
-
-        # separación (fila inferior)
-        t101 = self._add_example_block("T-101", "Tower (column shell)",          45.0, cx[2], y_bot)
-        e104 = self._add_example_block("E-104", "Heat exch. — kettle reboiler", 150.0, cx[3], y_bot)
-        e103 = self._add_example_block("E-103", "Heat exch. — floating head",   160.0, cx[1], y_bot)
-        p101 = self._add_example_block("P-101", "Pump — centrifugal",            15.0, cx[0], y_bot)
-        tk1  = self._add_example_block("TK-101","Storage tank — cone roof",     500.0, cx[5], y_bot)
-        tk2  = self._add_example_block("TK-102","Storage tank — cone roof",     100.0, cx[5], y_top)
-        # tanque de tolueno fresco (la planta consume tolueno + recicla algo del fondo)
-        tk3  = self._add_example_block("TK-103","Storage tank — cone roof",     300.0, cx[0], y_bot - 100)
+        # separación (fila inferior, y centro ≈ 580)
+        t101 = self._add_example_block("T-101", "Tower (column shell)",          45.0, 500, 480)
+        e104 = self._add_example_block("E-104", "Heat exch. — kettle reboiler", 150.0, 620, 540)
+        e103 = self._add_example_block("E-103", "Heat exch. — floating head",   160.0, 300, 560)
+        p101 = self._add_example_block("P-101", "Pump — centrifugal",            15.0,  80, 555)
+        tk1  = self._add_example_block("TK-101","Storage tank — cone roof",     500.0, 820, 540)   # benceno
+        tk2  = self._add_example_block("TK-102","Storage tank — cone roof",     100.0,1060, 180)   # purga
+        # tanque de tolueno fresco
+        tk3  = self._add_example_block("TK-103","Storage tank — cone roof",     300.0,  80, 200)
 
         # Streams con composición + fase declarada (modelo extendido).
         # Reacción: C₇H₈ + H₂ → C₆H₆ + CH₄
@@ -1241,24 +1239,24 @@ class FlowsheetEditor:
         El destilado va a TK-MeOH (izquierda), el agua de fondo va a TK-agua (derecha),
         sin que ninguna corriente cruce equipos.
         """
-        cx = [80, 280, 480, 680, 880]
-        y_top = 220
-        y_bot = 500
+        # Layout PFD industrial 1600×960.
+        # Top row: K-101 → E-101 → R-101 → E-102 → V-101 → TK-purga
+        # Bottom row: separación con T-101 al centro
+        k101 = self._add_example_block("K-101", "Compressor — centrifugal",      800.0,  80, 215)
+        e101 = self._add_example_block("E-101", "Heat exch. — floating head",    220.0, 240, 220)
+        r101 = self._add_example_block("R-101", "Reactor — jacketed non-agit.",   30.0, 420, 180)
+        e102 = self._add_example_block("E-102", "Heat exch. — air cooler",       200.0, 540, 200)
+        v101 = self._add_example_block("V-101", "Vessel — vertical",              15.0, 720, 180)
+        tk3  = self._add_example_block("TK-103","Storage tank — cone roof",       30.0, 860, 180)   # purga
 
-        k101 = self._add_example_block("K-101", "Compressor — centrifugal",      800.0, cx[0], y_top)
-        e101 = self._add_example_block("E-101", "Heat exch. — floating head",    220.0, cx[1], y_top)
-        r101 = self._add_example_block("R-101", "Reactor — jacketed non-agit.",   30.0, cx[2], y_top)
-        e102 = self._add_example_block("E-102", "Heat exch. — air cooler",       200.0, cx[3], y_top)
-        v101 = self._add_example_block("V-101", "Vessel — vertical",              15.0, cx[4], y_top)
-
-        # fila inferior: tanque-MeOH y tanque-agua en los extremos
-        tk1  = self._add_example_block("TK-101","Storage tank — floating roof",  400.0, cx[0], y_bot)
-        e103 = self._add_example_block("E-103", "Heat exch. — floating head",    140.0, cx[1], y_bot)
-        t101 = self._add_example_block("T-101", "Tower (column shell)",           35.0, cx[2], y_bot)
-        e104 = self._add_example_block("E-104", "Heat exch. — kettle reboiler",  130.0, cx[3], y_bot)
-        tk2  = self._add_example_block("TK-102","Storage tank — cone roof",       50.0, cx[4], y_bot)
-        # tanque de venteo para purga de gases del flash V-101
-        tk3  = self._add_example_block("TK-103","Storage tank — cone roof",       30.0, cx[4], y_top - 100)
+        # fila inferior
+        tk1  = self._add_example_block("TK-101","Storage tank — floating roof",  400.0,  80, 540)   # crude meoh feed to T-101? no, era feed
+        e103 = self._add_example_block("E-103", "Heat exch. — floating head",    140.0, 240, 560)
+        t101 = self._add_example_block("T-101", "Tower (column shell)",           35.0, 460, 460)
+        e104 = self._add_example_block("E-104", "Heat exch. — kettle reboiler",  130.0, 580, 540)
+        tk2  = self._add_example_block("TK-102","Storage tank — cone roof",       50.0, 800, 540)   # agua
+        # tanque metanol producto (lo dibujamos al lado derecho)
+        # Nota: el flujo original de los streams sigue siendo igual
 
         # Streams con composición + fase declarada (modelo extendido).
         # El solver de energía usa Cp(T) del catálogo + ΔH_vap si hay
@@ -1330,22 +1328,19 @@ class FlowsheetEditor:
 
     def _example_distillation(self):
         """Destilación binaria benceno/tolueno (50/50).
-        Pre-calentador + columna + condensador + reboiler + bombas."""
-        cx = [120, 360, 600, 840, 1080]
-        y_top = 220
-        y_mid = 380
-        y_bot = 540
+        Pre-calentador + columna + condensador + reboiler + bombas.
+        Layout PFD 1600×960: feed entra desde izquierda al mid, columna
+        central, productos a la derecha."""
+        tk0  = self._add_example_block("TK-101","Storage tank — cone roof", 200.0,  80, 380)
+        p101 = self._add_example_block("P-101", "Pump — centrifugal",         8.0, 220, 405)
+        e101 = self._add_example_block("E-101", "Heat exch. — floating head",120.0, 340, 410)
+        t101 = self._add_example_block("T-101", "Tower (column shell)",       20.0, 540, 340)
 
-        tk0  = self._add_example_block("TK-101","Storage tank — cone roof", 200.0, cx[0], y_mid)
-        p101 = self._add_example_block("P-101", "Pump — centrifugal",         8.0, cx[1], y_mid)
-        e101 = self._add_example_block("E-101", "Heat exch. — floating head",120.0, cx[2], y_mid)
-        t101 = self._add_example_block("T-101", "Tower (column shell)",       20.0, cx[3], y_mid)
+        e102 = self._add_example_block("E-102", "Heat exch. — floating head", 90.0, 700, 190)   # condensador top
+        e103 = self._add_example_block("E-103", "Heat exch. — kettle reboiler", 85.0, 700, 600)  # reboiler bottom
 
-        e102 = self._add_example_block("E-102", "Heat exch. — floating head", 90.0, cx[3], y_top)
-        e103 = self._add_example_block("E-103", "Heat exch. — kettle reboiler", 85.0, cx[3], y_bot)
-
-        tk1  = self._add_example_block("TK-102","Storage tank — cone roof",  150.0, cx[4], y_top)
-        tk2  = self._add_example_block("TK-103","Storage tank — cone roof",  150.0, cx[4], y_bot)
+        tk1  = self._add_example_block("TK-102","Storage tank — cone roof",  150.0, 900, 180)   # benceno
+        tk2  = self._add_example_block("TK-103","Storage tank — cone roof",  150.0, 900, 590)   # tolueno
 
         # Streams con composición + fase (mezcla benzene+toluene).
         # Sin reacción química — pura separación física.
@@ -1396,6 +1391,205 @@ class FlowsheetEditor:
         from flowsheet_solver import auto_set_duties_from_thermo
         auto_set_duties_from_thermo(self.fs)
         self._set_block_duty(p101, +8)      # bomba: eléctrico, manual
+
+    # ======================================================
+    # EJEMPLOS NUEVOS
+    # ======================================================
+
+    def _example_ammonia(self):
+        """Síntesis de amoníaco — Haber-Bosch simplificado (sin recycle).
+
+        N₂ + 3H₂ → 2NH₃, ΔH = -92 kJ/mol NH₃ (muy exotérmica).
+        ~15% conversión por paso; el resto se purga (en planta real
+        habría recycle pero acá lo dejamos one-shot por claridad).
+
+        Layout PFD 1600×960.  Feed entra como mezcla 3H₂+N₂.
+        """
+        tk_feed   = self._add_example_block("TK-101","Storage tank — cone roof", 200.0,  80, 200)
+        k101      = self._add_example_block("K-101", "Compressor — centrifugal",1500.0, 230, 215)
+        e101      = self._add_example_block("E-101", "Heat exch. — floating head",220.0, 360, 220)
+        r101      = self._add_example_block("R-101", "Reactor — jacketed non-agit.", 50.0, 540, 180)
+        e102      = self._add_example_block("E-102", "Heat exch. — floating head",300.0, 660, 220)
+        v101      = self._add_example_block("V-101", "Vessel — vertical",          18.0, 850, 180)
+        tk_nh3    = self._add_example_block("TK-102","Storage tank — cone roof", 150.0, 980, 540)
+        tk_purge  = self._add_example_block("TK-103","Storage tank — cone roof",  50.0, 980, 180)
+
+        # Composiciones (fracción másica).
+        # Feed estequiométrico: 3 H₂ + N₂  ⇒  mass: 6 H₂ : 28 N₂ ⇒ 0.176/0.824
+        feed_mix   = {"hydrogen": 0.176, "nitrogen": 0.824}
+        # Post-reactor (15% conv): se forma 0.15 mass de NH₃, el resto sin reaccionar
+        post_mix   = {"hydrogen": 0.150, "nitrogen": 0.700, "ammonia": 0.150}
+        # Purga (gas no convertido, libre de NH₃)
+        purge_mix  = feed_mix
+
+        # Feed: 10000 t/yr de syngas (3H₂+N₂)
+        self._add_example_stream(tk_feed, k101, "S-feed", 10000, role="feed",
+                                 src_port="salida",   dst_port="succion",
+                                 price=180.0, T=25,
+                                 composition=feed_mix,
+                                 main_component="nitrogen", phase="gas")
+        # Post-compresor: gas comprimido, T sube por compresión adiabática
+        self._add_example_stream(k101, e101, "S-1", 10000,
+                                 src_port="descarga", dst_port="tube_in",
+                                 T=180,
+                                 composition=feed_mix,
+                                 main_component="nitrogen", phase="gas")
+        # Post-preheater: T de operación reactor ~450°C
+        self._add_example_stream(e101, r101, "S-2", 10000,
+                                 src_port="tube_out", dst_port="alimentacion",
+                                 T=450,
+                                 composition=feed_mix,
+                                 main_component="nitrogen", phase="gas")
+        # Post-reactor: con NH₃ formado, T sube por exotermia
+        self._add_example_stream(r101, e102, "S-3", 10000,
+                                 src_port="producto", dst_port="tube_in",
+                                 T=500,
+                                 composition=post_mix,
+                                 main_component="nitrogen", phase="gas")
+        # Post-cooler: enfriado a ~30°C, NH₃ se condensa parcialmente
+        # (a la P alta del proceso 200 bar, NH₃ liq a 30°C).
+        self._add_example_stream(e102, v101, "S-4", 10000,
+                                 src_port="tube_out", dst_port="alimentacion",
+                                 T=30,
+                                 composition=post_mix,
+                                 main_component="nitrogen", phase="liquid")
+        # NH₃ producto (liquido del flash)
+        self._add_example_stream(v101, tk_nh3, "S-NH3", 1500, role="product",
+                                 src_port="liquido",  dst_port="entrada",
+                                 price=620.0, T=30,
+                                 main_component="ammonia", phase="liquid")
+        # Purga (gas del flash)
+        self._add_example_stream(v101, tk_purge, "S-purga", 8500, role="product",
+                                 src_port="vapor",    dst_port="entrada",
+                                 price=120.0, T=30,
+                                 composition=purge_mix,
+                                 main_component="nitrogen", phase="gas")
+
+        # ---- Calor de reacción: N₂+3H₂→2NH₃, ΔH ≈ -2700 kJ/kg NH₃ ----
+        # Sobre kg de input total con 15% mass yield NH₃: -2700 × 0.15 ≈ -405 kJ/kg input
+        self.fs.blocks[r101].heat_of_reaction = -405.0
+
+        # ---- Duties auto ----
+        from flowsheet_solver import auto_set_duties_from_thermo
+        auto_set_duties_from_thermo(self.fs)
+        self._set_block_duty(k101, +1200)   # compresor: eléctrico
+
+        # ---- OPEX extras ----
+        # Catalizador Fe-K2O (vida útil ~3-5 años)
+        self._add_example_extra("Catalizador Fe-K2O", flowrate=1.0, price=18_000.0,
+                                stream="Consumables")
+
+    def _example_ethanol(self):
+        """Producción de etanol — fermentación + destilación.
+
+        C₆H₁₂O₆ → 2 C₂H₅OH + 2 CO₂  (fermentación alcohólica).
+        ΔH ≈ -68 kJ/mol glucosa, mass yield 51% EtOH / 49% CO₂.
+
+        Topología:
+          TK-mosto → R-101 (fermentador) → V-101 (venteo CO₂) →
+          P-101 → E-101 → T-101 (destilación)
+          T-101 vap → E-102 (condensador) → TK-EtOH (producto 95%)
+          T-101 liq → E-103 (reboiler) → TK-vinaza (residuo)
+
+        Mosto al 12% glucosa (típico caña/maíz).
+        """
+        tk_mosto = self._add_example_block("TK-101","Storage tank — cone roof", 300.0,  80, 200)
+        r101     = self._add_example_block("R-101", "Reactor — jacketed agitated", 80.0, 240, 180)  # fermentador
+        v101     = self._add_example_block("V-101", "Vessel — vertical",            20.0, 360, 180)  # venteo CO₂
+        tk_co2   = self._add_example_block("TK-102","Storage tank — cone roof",     30.0, 480, 60)   # CO₂ venteo
+        p101     = self._add_example_block("P-101", "Pump — centrifugal",           10.0, 360, 460)
+        e101     = self._add_example_block("E-101", "Heat exch. — floating head",  160.0, 480, 460)
+        t101     = self._add_example_block("T-101", "Tower (column shell)",          40.0, 660, 380)
+        e102     = self._add_example_block("E-102", "Heat exch. — floating head",  120.0, 820, 200)  # cond top
+        e103     = self._add_example_block("E-103", "Heat exch. — kettle reboiler", 100.0, 820, 600)  # reboiler
+        tk_eth   = self._add_example_block("TK-103","Storage tank — cone roof",    100.0,1000, 190)  # etanol
+        tk_vin   = self._add_example_block("TK-104","Storage tank — cone roof",    200.0,1000, 580)  # vinaza
+
+        # Composiciones (fracción másica).
+        mosto_mix   = {"water": 0.88, "glucose": 0.12}
+        # Post-fermentación: 12% glucosa → 6.1% etanol + 5.3% CO₂ + agua restante
+        fermented   = {"water": 0.876, "ethanol": 0.061, "co2": 0.053, "glucose": 0.010}
+        # Tras venteo CO₂: mismo líquido sin CO₂
+        post_v      = {"water": 0.925, "ethanol": 0.065, "glucose": 0.010}
+        # Tope columna: 95% etanol (azeotrópico)
+        top         = {"ethanol": 0.95, "water": 0.05}
+        # Fondo columna: agua + residuos (vinaza)
+        bottom      = {"water": 0.995, "glucose": 0.005}
+
+        # Feed: mosto azucarado
+        self._add_example_stream(tk_mosto, r101, "S-mosto", 10000, role="feed",
+                                 src_port="salida",   dst_port="alimentacion",
+                                 price=80.0, T=25,
+                                 composition=mosto_mix,
+                                 main_component="water", phase="liquid")
+        # Post-fermentador: vino fermentado
+        self._add_example_stream(r101, v101, "S-1", 10000,
+                                 src_port="producto", dst_port="alimentacion",
+                                 T=32,
+                                 composition=fermented,
+                                 main_component="water", phase="liquid")
+        # Venteo CO₂
+        self._add_example_stream(v101, tk_co2, "S-CO2", 528, role="product",
+                                 src_port="vapor",    dst_port="entrada",
+                                 price=0.0, T=32,
+                                 main_component="co2", phase="gas")
+        # Líquido fermentado a la bomba
+        self._add_example_stream(v101, p101, "S-2", 9472,
+                                 src_port="liquido",  dst_port="succion",
+                                 T=32,
+                                 composition=post_v,
+                                 main_component="water", phase="liquid")
+        # Post-bomba
+        self._add_example_stream(p101, e101, "S-3", 9472,
+                                 src_port="descarga", dst_port="tube_in",
+                                 T=33,
+                                 composition=post_v,
+                                 main_component="water", phase="liquid")
+        # Post-preheater al destilador
+        self._add_example_stream(e101, t101, "S-4", 9472,
+                                 src_port="tube_out", dst_port="alimentacion",
+                                 T=85,
+                                 composition=post_v,
+                                 main_component="water", phase="liquid")
+        # Vapor de tope (etanol 95%)
+        self._add_example_stream(t101, e102, "S-vap", 612,
+                                 src_port="vapor_tope", dst_port="tube_in",
+                                 T=79,
+                                 composition=top,
+                                 main_component="ethanol", phase="vapor")
+        # Etanol producto (condensado)
+        self._add_example_stream(e102, tk_eth, "S-EtOH", 612, role="product",
+                                 src_port="tube_out", dst_port="entrada",
+                                 price=720.0, T=40,
+                                 composition=top,
+                                 main_component="ethanol", phase="liquid")
+        # Líquido de fondo (mostly water + glucose residual)
+        self._add_example_stream(t101, e103, "S-fondo", 8860,
+                                 src_port="liquido_fondo", dst_port="liq_in",
+                                 T=100,
+                                 composition=bottom,
+                                 main_component="water", phase="liquid")
+        # Vinaza al tanque
+        self._add_example_stream(e103, tk_vin, "S-vinaza", 8860, role="product",
+                                 src_port="cond_out", dst_port="entrada",
+                                 price=2.0, T=60,
+                                 composition=bottom,
+                                 main_component="water", phase="liquid")
+
+        # ---- Calor de reacción fermentación ----
+        # ΔH ≈ -68 kJ/mol glucosa = -377 kJ/kg glucosa.
+        # Por kg input total con 12% glucosa: -377 × 0.12 ≈ -45 kJ/kg input
+        self.fs.blocks[r101].heat_of_reaction = -45.0
+
+        # ---- Duties auto ----
+        from flowsheet_solver import auto_set_duties_from_thermo
+        auto_set_duties_from_thermo(self.fs)
+        self._set_block_duty(p101, +10)   # bomba: eléctrico
+
+        # ---- OPEX extras ----
+        # Levadura (Saccharomyces cerevisiae) — consumible
+        self._add_example_extra("Levadura (S. cerevisiae)", flowrate=15.0,
+                                price=2_000.0, stream="Consumables")
 
     def open_json(self):
         path = filedialog.askopenfilename(
