@@ -45,14 +45,16 @@ TM_TO_KG      = 1000.0        # 1 tm = 1000 kg
 # ======================================================
 
 STREAM_ROLE_COLORS = {
-    "internal": "#37474f",
-    "feed":     "#2e7d32",
-    "product":  "#e65100",
+    "internal": "#0d0d0d",   # process — negro
+    "feed":     "#0d0d0d",   # entra al proceso desde afuera, también negro
+    "product":  "#c41e3a",   # producto que sale de planta — rojo
+    "utility":  "#1e3a8a",   # agua de enfriamiento, vapor, etc. — azul
 }
 STREAM_ROLE_COLORS_SEL = {
-    "internal": "#c62828",
-    "feed":     "#1b5e20",
-    "product":  "#bf360c",
+    "internal": "#1f6feb",
+    "feed":     "#1f6feb",
+    "product":  "#7a1428",
+    "utility":  "#0f1f4a",
 }
 
 

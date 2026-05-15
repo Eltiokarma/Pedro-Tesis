@@ -965,26 +965,34 @@ class StreamItem(QGraphicsPathItem):
         self.setFlag(QGraphicsItem.ItemIsSelectable, True)
         self.setAcceptHoverEvents(True)
 
-        # label asociado (texto + fondo)
-        self.label_bg   = QGraphicsRectItem()
-        self.label_bg.setBrush(QBrush(COLOR_LABEL_BG))
-        self.label_bg.setPen(QPen(Qt.NoPen))
+        # label estilo PFD industrial: pill (rounded rect blanco con
+        # borde del color del stream) + nombre + flujo en mono.
+        self.label_bg = _RoundedRectBody(0, 0, 10, 10)
+        self.label_bg.RADIUS = 3
+        self.label_bg.setBrush(QBrush(QColor("#ffffff")))
+        self.label_bg.setPen(QPen(Qt.NoPen))    # se setea en update_path con el color
         self.label_bg.setZValue(6)
 
-        self.label_text = QGraphicsSimpleTextItem()
-        self.label_text.setFont(QFont("Segoe UI", 8))
-        self.label_text.setBrush(QBrush(QColor("#222222")))
-        self.label_text.setZValue(7)
+        mono = pfd_fonts.MONO if pfd_fonts.available() else "Consolas"
+        self.label_name = QGraphicsSimpleTextItem()
+        self.label_name.setFont(QFont(mono, 8, QFont.Medium))
+        self.label_name.setZValue(7)
+
+        self.label_flow = QGraphicsSimpleTextItem()
+        self.label_flow.setFont(QFont(mono, 8))
+        self.label_flow.setBrush(QBrush(QColor("#6b7280")))   # gris suave
+        self.label_flow.setZValue(7)
 
         self.update_path()
 
     def add_to_scene(self, scene: QGraphicsScene):
         scene.addItem(self)
         scene.addItem(self.label_bg)
-        scene.addItem(self.label_text)
+        scene.addItem(self.label_name)
+        scene.addItem(self.label_flow)
 
     def remove_from_scene(self, scene: QGraphicsScene):
-        for item in (self, self.label_bg, self.label_text):
+        for item in (self, self.label_bg, self.label_name, self.label_flow):
             if item.scene() is scene:
                 scene.removeItem(item)
 
@@ -1033,32 +1041,40 @@ class StreamItem(QGraphicsPathItem):
         self.setPath(path)
 
         color = self._color()
-        pen = QPen(color, 2)
-        pen.setCapStyle(Qt.RoundCap)
-        pen.setJoinStyle(Qt.RoundJoin)
+        pen = QPen(color, 2.2)
+        pen.setCapStyle(Qt.SquareCap)
+        pen.setJoinStyle(Qt.MiterJoin)
         self.setPen(pen)
-
-        # flecha simple al final
-        # (Qt no tiene flecha built-in en PathItem; la dibujamos como
-        # parte del path al final).  Simplificación: triángulo aparte
-        # con add_arrow_to_path en una v2; aquí dejamos pen con flecha
-        # cosmética en el extremo.
         self._draw_arrow(path, pts[-2], pts[-1], pts[-4], pts[-3])
 
-        # label
+        # ---- label (pill blanca con borde del color del stream) ----
+        name_text, flow_text = self._label_parts(s)
+        self.label_name.setText(name_text)
+        self.label_name.setBrush(QBrush(color))
+        self.label_flow.setText(flow_text)
+
+        bb_name = self.label_name.boundingRect()
+        bb_flow = self.label_flow.boundingRect()
+
+        gap   = 8 if flow_text else 0
+        inner = bb_name.width() + gap + bb_flow.width()
+        pad_x = 9
+        pad_y = 3
+        pill_w = inner + 2 * pad_x
+        pill_h = max(bb_name.height(), bb_flow.height()) + 2 * pad_y
+
         lx, ly = self._label_xy(pts)
-        text = self._label_text(s)
-        self.label_text.setText(text)
-        bb = self.label_text.boundingRect()
-        self.label_text.setPos(lx - bb.width() / 2, ly - bb.height() / 2)
-        pad = 2
-        self.label_bg.setRect(
-            lx - bb.width() / 2 - pad,
-            ly - bb.height() / 2 - 1,
-            bb.width() + 2 * pad,
-            bb.height() + 2,
-        )
-        # tooltip dinámico
+        x0 = lx - pill_w / 2
+        y0 = ly - pill_h / 2
+
+        self.label_bg.setRect(x0, y0, pill_w, pill_h)
+        self.label_bg.setPen(QPen(color, 1.0))
+
+        # name a la izquierda, flow a la derecha
+        ty = y0 + (pill_h - bb_name.height()) / 2
+        self.label_name.setPos(x0 + pad_x, ty)
+        self.label_flow.setPos(x0 + pad_x + bb_name.width() + gap, ty)
+
         self._update_tooltip()
 
     def _draw_arrow(self, path, x_end, y_end, x_prev, y_prev):
@@ -1090,14 +1106,15 @@ class StreamItem(QGraphicsPathItem):
             self.editor.edit_stream(self.model)
         super().mouseDoubleClickEvent(event)
 
-    def _label_text(self, s):
-        role_tag = ""
-        if s.role == "feed":    role_tag = " [feed]"
-        elif s.role == "product": role_tag = " [product]"
+    def _label_parts(self, s):
+        """Devuelve (nombre_con_tag_de_rol, flujo_con_unidad).
+        Pueden ir en distintos tipos/colores dentro de la pill."""
+        name = s.name
+        if s.role == "feed":      name += " [feed]"
+        elif s.role == "product": name += " [product]"
+        elif s.role == "utility": name += " [util]"
         # unidad de display: la elegida en el dock de streams, default tm/año
         unit = "tm/año"
-        # intentar leer la unidad activa del editor (puede no existir
-        # durante construcción inicial)
         try:
             from PySide6.QtWidgets import QApplication
             app = QApplication.instance()
@@ -1107,8 +1124,8 @@ class StreamItem(QGraphicsPathItem):
                     break
         except Exception:
             pass
-        flow = f"  {funits.format_flow(s.mass_flow, unit)}" if s.mass_flow else ""
-        return s.name + role_tag + flow
+        flow = funits.format_flow(s.mass_flow, unit) if s.mass_flow else ""
+        return name, flow
 
     # ---- helpers de routing (réplica simplificada de flowsheet_ui) ----
 
@@ -2021,7 +2038,7 @@ class FlowsheetMainWindow(QMainWindow):
         bbox = items[0].sceneBoundingRect()
         for it in items[1:]:
             bbox = bbox.united(it.sceneBoundingRect())
-        # incluir labels de streams (label_bg / label_text son items aparte)
+        # incluir pills de streams (label_bg / label_name / label_flow son aparte)
         for sid, sit in self.scene.stream_items.items():
             if sit.label_bg.scene() is self.scene:
                 bbox = bbox.united(sit.label_bg.sceneBoundingRect())
