@@ -321,21 +321,49 @@ def _solve_energy_iteration(fs, tol_T=0.5, skipped=None):
         skipped = []
 
     def _try_set(s_out, t_new, block_name):
-        """Setea T_out si está en rango razonable.  Devuelve True si
-        se propagó (T cambió por más que tol_T)."""
+        """Setea T_out si está en rango razonable y NO contradice una
+        T ya declarada por el user.
+
+        Caso 'T absurda' (fuera de rango físico): NO propaga, reporta.
+        Caso 'T diferente pero razonable': respeta T declarada
+                  (probable cambio de fase no modelado), reporta como
+                  info no-crítica.
+        """
         if not (T_MIN_REASONABLE <= t_new <= T_MAX_REASONABLE):
             skipped.append(
                 f"{block_name} → {s_out.name}: T calc = {t_new:.0f} °C "
-                f"fuera de rango [-100, 1500]; "
-                f"duty/Cp incompatibles (Cp simple sin ΔH_vap/ΔH_rxn). "
-                f"T mantenida en {s_out.temperature:g} °C."
+                f"fuera de rango físico [-100, 1500].  "
+                f"Probable que el duty incluya ΔH_vap o ΔH_rxn que el "
+                f"modelo Cp simple no captura.  T mantenida en {s_out.temperature:g} °C."
             )
             return False
-        if abs(t_new - s_out.temperature) > tol_T:
+        # T en rango razonable: si difiere significativamente de la
+        # declarada, respetamos la declaración (puede haber cambio de
+        # fase parcial que el Cp simple no represente).  Solo
+        # propagamos si la T del stream era el default T_REF (=25)
+        # y la calculada es distinta.
+        diff = abs(t_new - s_out.temperature)
+        if diff <= tol_T:
+            return False  # ya coincide
+        # Si la T actual es default T_REF (25) y la calculada da algo
+        # diferente y razonable → propagar (el stream estaba sin T
+        # declarada).  Si la T actual es != T_REF → la respeto
+        # (declaración del user).
+        if abs(s_out.temperature - T_REF_C) < 0.01:
             s_out.temperature = t_new
             propagated.append((s_out.name, t_new))
             return True
+        # T declarada existe pero difiere de la calculada → solo info
+        skipped.append(
+            f"{block_name} → {s_out.name}: T calc = {t_new:.1f} °C "
+            f"pero T declarada = {s_out.temperature:g} °C "
+            f"(Δ={diff:.0f} °C).  Se respeta la declaración del user "
+            f"(probable cambio de fase parcial)."
+        )
         return False
+
+    # importar lazy para evitar circular
+    import equipment_ports as _ep_mod
 
     for b in fs.blocks.values():
         ins  = [s for s in fs.streams.values() if s.dst == b.id]
@@ -343,6 +371,11 @@ def _solve_energy_iteration(fs, tol_T=0.5, skipped=None):
         if not ins or not outs:
             continue
         if not all(s.cp > 0 and s.mass_flow > 0 for s in ins + outs):
+            continue
+        # bombas, compresores y fans tienen duty ELÉCTRICO (kW al eje),
+        # no térmico.  El balance de entalpía no aplica.  Su consumo
+        # se traduce a electricidad en compute_utilities_from_duties.
+        if _ep_mod.is_electrical_equipment(b.eq_type):
             continue
 
         duty = b.duty
