@@ -162,8 +162,8 @@ def _get_svg_pixmap(eq_type, width, height, svg_str=None):
 # COLORES (paleta Material lite)
 # ======================================================
 
-COLOR_CANVAS_BG     = QColor("#fafafc")
-COLOR_GRID          = QColor("#e8e8ee")
+COLOR_CANVAS_BG     = QColor("#fbfaf6")   # papel de dibujo (warm off-white)
+COLOR_GRID          = QColor(13, 13, 13, 18)   # negro alpha=18/255 (~7%)
 COLOR_BLOCK_FILL    = QColor("#ffffff")
 COLOR_BLOCK_BORDER  = QColor("#5c6bc0")
 COLOR_BLOCK_BORDER_SEL = QColor("#283593")
@@ -1236,6 +1236,159 @@ class StreamItem(QGraphicsPathItem):
 # ======================================================
 # SCENE — contiene grid, blocks, streams
 # ======================================================
+# PAPEL DE DIBUJO PFD (marco + leyenda + cuadro de título)
+# ======================================================
+# Decoración estilo ingeniería: el "papel" donde se dibuja el PFD.
+# Es un QGraphicsItemGroup que se ubica en la escena como fondo.
+# No es parte del modelo; sólo se ve, no se serializa.
+
+class _PaperFrame(QGraphicsItemGroup):
+    """Hoja de dibujo PFD: marco exterior + ticks + cuadro de título + leyenda.
+
+    Tamaño nominal 1600×960 (proporción ~A3 horizontal).  Se inserta
+    en (0, 0) de la escena con zValue -100 para que quede de fondo.
+    """
+
+    PAPER_W = 1600
+    PAPER_H = 960
+
+    def __init__(self, project_title="PFD", area="100",
+                 drawing_no="PFD-100-001", rev="A", date=None):
+        super().__init__()
+        self.setZValue(-100)
+        self._project_title = project_title
+        self._area          = area
+        self._drawing_no    = drawing_no
+        self._rev           = rev
+        if date is None:
+            import datetime
+            date = datetime.date.today().isoformat()
+        self._date          = date
+
+        self._sans = pfd_fonts.SANS if pfd_fonts.available() else "Segoe UI"
+        self._mono = pfd_fonts.MONO if pfd_fonts.available() else "Consolas"
+        self._BLACK = QColor("#0d0d0d")
+        self._SOFT  = QColor("#6b7280")
+
+        self._build_frame()
+        self._build_legend()
+        self._build_title_block()
+
+    # ---------- helpers ----------
+    def _add_rect(self, x, y, w, h, stroke_w=1.0, fill=None, parent=None):
+        item = QGraphicsRectItem(x, y, w, h, parent or self)
+        item.setPen(QPen(self._BLACK, stroke_w))
+        item.setBrush(QBrush(fill) if fill else QBrush(Qt.NoBrush))
+        return item
+
+    def _add_line(self, x1, y1, x2, y2, stroke_w=0.8, color=None, parent=None):
+        item = QGraphicsLineItem(x1, y1, x2, y2, parent or self)
+        item.setPen(QPen(color or self._BLACK, stroke_w))
+        return item
+
+    def _add_text(self, x, y, text, font, color=None, parent=None):
+        t = QGraphicsSimpleTextItem(text, parent or self)
+        t.setFont(font)
+        t.setBrush(QBrush(color or self._BLACK))
+        t.setPos(x, y)
+        return t
+
+    # ---------- partes ----------
+    def _build_frame(self):
+        W, H = self.PAPER_W, self.PAPER_H
+        # marco exterior
+        self._add_rect(20, 20, W - 40, H - 40, stroke_w=1.4)
+        # ticks de centrado (cada 25%) — convención ingeniería
+        for t in (0.25, 0.5, 0.75):
+            self._add_line(W*t, 20,  W*t, 40,  0.6)
+            self._add_line(W*t, H-40, W*t, H-20, 0.6)
+            self._add_line(20,  H*t, 40,  H*t, 0.6)
+            self._add_line(W-40, H*t, W-20, H*t, 0.6)
+
+    def _build_legend(self):
+        BLACK = self._BLACK
+        SOFT  = self._SOFT
+        RED   = QColor("#c41e3a")
+        BLUE  = QColor("#1e3a8a")
+
+        # top-right corner
+        x0 = self.PAPER_W - 360
+        y0 = 60
+        gx, gy = x0, y0
+        self._add_rect(gx, gy, 320, 88, stroke_w=0.8,
+                       fill=QColor("#ffffff"))
+        f_title = QFont(self._sans, 9, QFont.Bold)
+        f_title.setLetterSpacing(QFont.AbsoluteSpacing, 1.2)
+        f_body  = QFont(self._mono, 8)
+        self._add_text(gx + 12, gy + 6,  "LEYENDA", f_title)
+        self._add_line(gx + 12, gy + 26, gx + 308, gy + 26, 0.4)
+        # process line
+        self._add_line(gx + 14, gy + 42, gx + 42, gy + 42, 2.2, BLACK)
+        self._add_text(gx + 50, gy + 36, "Línea de proceso", f_body)
+        # product
+        self._add_line(gx + 14, gy + 58, gx + 42, gy + 58, 2.2, RED)
+        self._add_text(gx + 50, gy + 52, "Producto",         f_body)
+        # utility
+        self._add_line(gx + 14, gy + 74, gx + 42, gy + 74, 2.2, BLUE)
+        self._add_text(gx + 50, gy + 68, "Agua / utility",   f_body)
+
+        # port sample
+        ell = QGraphicsEllipseItem(gx + 196, gy + 38, 7.2, 7.2, self)
+        ell.setBrush(QBrush(QColor("#ffffff")))
+        ell.setPen(QPen(BLACK, 1.6))
+        self._add_text(gx + 212, gy + 36, "Conexión",  f_body)
+        self._add_text(gx + 196, gy + 52, "tm/año",    QFont(self._mono, 8), color=SOFT)
+        self._add_text(gx + 196, gy + 68, "S = m², V = m³", QFont(self._mono, 8), color=SOFT)
+
+    def _build_title_block(self):
+        BLACK = self._BLACK
+        SOFT  = self._SOFT
+        W, H  = self.PAPER_W, self.PAPER_H
+
+        # bottom-right
+        bx = W - 500
+        by = H - 160
+        self._add_rect(bx, by, 460, 120, stroke_w=1.4, fill=QColor("#ffffff"))
+        # internal grid
+        self._add_line(bx,        by + 30,  bx + 460, by + 30,  0.8)
+        self._add_line(bx,        by + 70,  bx + 460, by + 70,  0.8)
+        self._add_line(bx,        by + 95,  bx + 460, by + 95,  0.8)
+        self._add_line(bx + 300,  by + 30,  bx + 300, by + 120, 0.8)
+        self._add_line(bx + 380,  by + 70,  bx + 380, by + 120, 0.8)
+
+        f_h1 = QFont(self._sans, 12, QFont.Bold)
+        f_label = QFont(self._mono, 7)
+        f_label.setLetterSpacing(QFont.AbsoluteSpacing, 0.5)
+        f_val = QFont(self._sans, 10, QFont.Medium)
+        f_val_mono = QFont(self._mono, 9, QFont.Medium)
+
+        # título (fila superior)
+        self._add_text(bx + 12, by + 6, self._project_title, f_h1)
+
+        # PROYECTO / ÁREA  (fila 2)
+        self._add_text(bx + 12,  by + 36, "PROYECTO", f_label, color=SOFT)
+        self._add_text(bx + 12,  by + 50, "PFD",      f_val)
+        self._add_text(bx + 312, by + 36, "ÁREA",     f_label, color=SOFT)
+        self._add_text(bx + 312, by + 50, self._area, f_val)
+
+        # DIBUJO N° / REV / FECHA (fila 3)
+        self._add_text(bx + 12,  by + 73, "DIBUJO N°", f_label, color=SOFT)
+        self._add_text(bx + 80,  by + 73, self._drawing_no, f_val_mono)
+        self._add_text(bx + 312, by + 73, "REV",      f_label, color=SOFT)
+        self._add_text(bx + 342, by + 73, self._rev,  QFont(self._mono, 11, QFont.Bold))
+        self._add_text(bx + 388, by + 73, "FECHA",    f_label, color=SOFT)
+        self._add_text(bx + 388, by + 100, self._date, f_val_mono)
+
+        # ESCALA / UNIDADES / DIBUJÓ (fila 4)
+        self._add_text(bx + 12,  by + 100, "ESCALA",   f_label, color=SOFT)
+        self._add_text(bx + 56,  by + 100, "NTS",      f_val_mono)
+        self._add_text(bx + 120, by + 100, "UNIDADES", f_label, color=SOFT)
+        self._add_text(bx + 180, by + 100, "SI · tm/año", f_val_mono)
+        self._add_text(bx + 312, by + 100, "DIBUJÓ",   f_label, color=SOFT)
+        self._add_text(bx + 350, by + 100, "—",        f_val_mono)
+
+
+# ======================================================
 
 class FlowsheetScene(QGraphicsScene):
     """QGraphicsScene con grid de fondo + items del flowsheet.
@@ -1247,7 +1400,26 @@ class FlowsheetScene(QGraphicsScene):
         self.setSceneRect(-200, -200, 5000, 4000)
         self.block_items:  dict = {}      # block_id  → BlockItem
         self.stream_items: dict = {}      # stream_id → StreamItem
+        self.paper_frame: "_PaperFrame|None" = None
         self._draw_grid()
+
+    def set_paper_visible(self, visible: bool,
+                           project_title="PFD", area="100",
+                           drawing_no="PFD-100-001"):
+        """Muestra/oculta el papel de dibujo PFD (marco + leyenda +
+        cuadro de título).  Se posiciona en (0, 0)."""
+        if visible:
+            if self.paper_frame is None:
+                self.paper_frame = _PaperFrame(
+                    project_title=project_title,
+                    area=area, drawing_no=drawing_no,
+                )
+                self.paper_frame.setPos(0, 0)
+                self.addItem(self.paper_frame)
+            self.paper_frame.setVisible(True)
+        else:
+            if self.paper_frame is not None:
+                self.paper_frame.setVisible(False)
 
     def _draw_grid(self):
         pen = QPen(COLOR_GRID, 0)
@@ -1666,6 +1838,13 @@ class FlowsheetMainWindow(QMainWindow):
             toggle.setText("Tabla de corrientes")
             toggle.setShortcut("Ctrl+T")
             tb.addAction(toggle)
+        # toggle del papel de dibujo PFD (marco + leyenda + cuadro de título)
+        paper_act = QAction("Marco PFD", self)
+        paper_act.setCheckable(True)
+        paper_act.setShortcut("Ctrl+M")
+        paper_act.triggered.connect(self.action_toggle_paper)
+        tb.addAction(paper_act)
+        self._paper_action = paper_act
         add_btn("Calcular",        self.action_compute)
         add_btn("Análisis económico →", self.action_launch_analysis)
         tb.addSeparator()
@@ -1867,6 +2046,11 @@ class FlowsheetMainWindow(QMainWindow):
                 self._delete_stream(it.model.id)
         self._update_status()
         self.end_action(f"Borrar selección ({len(selected)})", before)
+
+    def action_toggle_paper(self, checked: bool):
+        """Muestra/oculta el papel de dibujo PFD (marco + cuadro de
+        título + leyenda)."""
+        self.scene.set_paper_visible(checked)
 
     def action_solve(self):
         if not self.fs.blocks:
