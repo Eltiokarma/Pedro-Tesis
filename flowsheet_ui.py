@@ -1591,6 +1591,197 @@ class FlowsheetEditor:
         self._add_example_extra("Levadura (S. cerevisiae)", flowrate=15.0,
                                 price=2_000.0, stream="Consumables")
 
+    def _example_biodiesel(self):
+        """Producción de biodiesel — transesterificación de aceite vegetal.
+
+        Reacción:  triglicérido + 3 metanol → 3 FAME (biodiesel) + glicerina
+        Catalizador: NaOH disuelto en metanol (catálisis homogénea alcalina).
+        Conversión típica: >95% a 60°C, 1 atm, 1 h de residencia.
+
+        Mass balance (basis 1000 kg aceite):
+          1000 oil + 105 MeOH (estequiom × 1.05 exceso 5%) → 1000 FAME + 100 glycerin + 5 MeOH sin reaccionar
+          (aprox; depende del peso molecular del aceite)
+
+        Topología:
+          TK-oil + TK-MeOH → MIX (R-101) → V-101 (decanter) →
+            fase biodiesel → E-101 (vaporiza MeOH residual) → TK-biodiesel
+            fase glicerina → TK-glicerina
+        """
+        tk_oil  = self._add_example_block("TK-101","Storage tank — cone roof",   200.0,  80, 180)
+        tk_meoh = self._add_example_block("TK-102","Storage tank — cone roof",    50.0,  80, 420)
+        r101    = self._add_example_block("R-101", "Reactor — jacketed agitated", 30.0, 280, 280)  # transesterificador
+        v101    = self._add_example_block("V-101", "Vessel — horizontal",         15.0, 460, 280)  # decanter
+        e101    = self._add_example_block("E-101", "Heat exch. — floating head",  60.0, 640, 200)  # secado biodiesel
+        tk_bd   = self._add_example_block("TK-103","Storage tank — cone roof",   150.0, 840, 200)  # biodiesel
+        tk_gly  = self._add_example_block("TK-104","Storage tank — cone roof",    50.0, 640, 480)  # glicerina
+
+        # Composiciones (fracción másica) — basis 1000 kg input
+        oil_in   = {"vegetable_oil": 1.0}
+        meoh_in  = {"methanol": 1.0}
+        # post-reactor: mezcla compleja (FAME + glicerina + MeOH residual + traces aceite)
+        post_rxn = {"biodiesel": 0.905, "glycerin": 0.090, "methanol": 0.005}
+        # fase biodiesel (decantación):  ~95% FAME + traces MeOH
+        bio_phase = {"biodiesel": 0.985, "methanol": 0.015}
+        # fase glicerina: glicerina + MeOH residual
+        gly_phase = {"glycerin": 0.85, "methanol": 0.15}
+        # biodiesel seco (post stripping de MeOH)
+        bio_dry   = {"biodiesel": 1.0}
+
+        # Feeds
+        self._add_example_stream(tk_oil, r101, "S-oil", 1000, role="feed",
+                                 src_port="salida",   dst_port="alimentacion",
+                                 price=950.0, T=25,
+                                 composition=oil_in,
+                                 main_component="vegetable_oil", phase="liquid")
+        self._add_example_stream(tk_meoh, r101, "S-meoh", 105, role="feed",
+                                 src_port="salida",   dst_port="util_in",
+                                 price=480.0, T=25,
+                                 composition=meoh_in,
+                                 main_component="methanol", phase="liquid")
+        # Post-reactor: efluente bifásico (biodiesel/glicerina)
+        self._add_example_stream(r101, v101, "S-1", 1105,
+                                 src_port="producto", dst_port="alimentacion",
+                                 T=60,
+                                 composition=post_rxn,
+                                 main_component="biodiesel", phase="liquid")
+        # Decanter: fase liviana (biodiesel, ~990 kg).  El MeOH residual
+        # particiona preferencialmente a la fase polar (glicerina), por
+        # eso esta fase ya sale seca y la pesada se lleva el MeOH.
+        self._add_example_stream(v101, e101, "S-bio-wet", 990,
+                                 src_port="vapor",    dst_port="tube_in",
+                                 T=60,
+                                 composition=bio_dry,
+                                 main_component="biodiesel", phase="liquid")
+        # Biodiesel cooled → tanque producto
+        self._add_example_stream(e101, tk_bd, "S-biodiesel", 990, role="product",
+                                 src_port="tube_out", dst_port="entrada",
+                                 price=1100.0, T=50,
+                                 composition=bio_dry,
+                                 main_component="biodiesel", phase="liquid")
+        # Decanter: fase pesada (glicerina + MeOH residual, ~115 kg)
+        self._add_example_stream(v101, tk_gly, "S-glycerin", 115, role="product",
+                                 src_port="liquido",  dst_port="entrada",
+                                 price=350.0, T=60,
+                                 composition={"glycerin": 0.78, "methanol": 0.22},
+                                 main_component="glycerin", phase="liquid")
+
+        # ---- Calor de reacción transesterificación ----
+        # ΔH ≈ -7 kJ/mol triglicérido (levemente exotérmica)
+        # = -8 kJ/kg aceite → muy chico
+        self.fs.blocks[r101].heat_of_reaction = -8.0
+
+        # ---- Duties auto ----
+        from flowsheet_solver import auto_set_duties_from_thermo
+        auto_set_duties_from_thermo(self.fs)
+
+        # ---- OPEX extras ----
+        # Catalizador NaOH (1% del feed total)
+        self._add_example_extra("NaOH catalizador", flowrate=11, price=600.0,
+                                stream="Consumables")
+        # H2SO4 para neutralizar la glicerina
+        self._add_example_extra("H2SO4 neutralizante", flowrate=2, price=300.0,
+                                stream="Consumables")
+
+    def _example_crude_distillation(self):
+        """Refinería atmosférica simplificada (CDU — Crude Distillation Unit).
+
+        Crudo medio (~30° API) se separa en 3 cortes:
+          nafta (tope),  querosén (extracción lateral),  residuo atmosférico (fondo).
+        Sin reacción química — separación física por torre de destilación
+        con horno y reflujo.
+
+        Mass balance (basis 100 t/h crudo = 876,000 t/año):
+          100% feed → 25% nafta + 15% querosén + 60% residuo (aprox)
+        Para no manejar números tan grandes, usamos basis 100,000 t/año (planta chica).
+        """
+        tk_crudo = self._add_example_block("TK-101","Storage tank — cone roof", 600.0,  80, 360)
+        p101     = self._add_example_block("P-101", "Pump — centrifugal",        50.0, 240, 385)
+        e101     = self._add_example_block("E-101", "Heat exch. — floating head",400.0, 340, 390)
+        f101     = self._add_example_block("F-101", "Fired heater — non-reformer", 8000.0, 500, 360)
+        t101     = self._add_example_block("T-101", "Tower (column shell)",       80.0, 680, 240)  # CDU column alta
+
+        e102     = self._add_example_block("E-102", "Heat exch. — floating head",250.0, 820, 100)  # cond top (nafta)
+        e103     = self._add_example_block("E-103", "Heat exch. — air cooler",   180.0, 820, 380)  # cooler kerosene
+        e104     = self._add_example_block("E-104", "Heat exch. — air cooler",   200.0, 820, 580)  # cooler residue
+
+        tk_n     = self._add_example_block("TK-102","Storage tank — cone roof", 200.0,1020, 100)  # nafta
+        tk_k     = self._add_example_block("TK-103","Storage tank — cone roof", 150.0,1020, 380)  # querosén
+        tk_r     = self._add_example_block("TK-104","Storage tank — cone roof", 400.0,1020, 580)  # residuo
+
+        # Composiciones (proxies de cortes).
+        crudo_mix = {"crude_oil": 1.0}
+        nafta_mix = {"naphtha": 0.92, "kerosene": 0.08}
+        kero_mix  = {"kerosene": 0.85, "naphtha": 0.08, "diesel": 0.07}
+        res_mix   = {"atmospheric_residue": 0.78, "diesel": 0.15, "kerosene": 0.07}
+
+        # Feed: 100,000 t/yr crudo
+        self._add_example_stream(tk_crudo, p101, "S-crudo", 100000, role="feed",
+                                 src_port="salida",   dst_port="succion",
+                                 price=600.0, T=25,
+                                 composition=crudo_mix,
+                                 main_component="crude_oil", phase="liquid")
+        # Post-bomba
+        self._add_example_stream(p101, e101, "S-1", 100000,
+                                 src_port="descarga", dst_port="tube_in",
+                                 T=30,
+                                 composition=crudo_mix,
+                                 main_component="crude_oil", phase="liquid")
+        # Post-preheater (intercambio con productos calientes)
+        self._add_example_stream(e101, f101, "S-2", 100000,
+                                 src_port="tube_out", dst_port="proceso_in",
+                                 T=180,
+                                 composition=crudo_mix,
+                                 main_component="crude_oil", phase="liquid")
+        # Post-horno: T de flash zone ~360°C
+        self._add_example_stream(f101, t101, "S-3", 100000,
+                                 src_port="proceso_out", dst_port="alimentacion",
+                                 T=360,
+                                 composition=crudo_mix,
+                                 main_component="crude_oil", phase="vapor")
+        # Tope: nafta vapor
+        self._add_example_stream(t101, e102, "S-nafta-v", 25000,
+                                 src_port="vapor_tope", dst_port="tube_in",
+                                 T=130,
+                                 composition=nafta_mix,
+                                 main_component="naphtha", phase="vapor")
+        # Nafta producto (condensada)
+        self._add_example_stream(e102, tk_n, "S-nafta", 25000, role="product",
+                                 src_port="tube_out", dst_port="entrada",
+                                 price=780.0, T=40,
+                                 composition=nafta_mix,
+                                 main_component="naphtha", phase="liquid")
+        # Extracción lateral: querosén
+        self._add_example_stream(t101, e103, "S-kero-h", 15000,
+                                 src_port="extraccion_lateral", dst_port="proceso_in",
+                                 T=215,
+                                 composition=kero_mix,
+                                 main_component="kerosene", phase="liquid")
+        # Querosén producto (enfriado)
+        self._add_example_stream(e103, tk_k, "S-kero", 15000, role="product",
+                                 src_port="proceso_out", dst_port="entrada",
+                                 price=850.0, T=40,
+                                 composition=kero_mix,
+                                 main_component="kerosene", phase="liquid")
+        # Fondo: residuo atmosférico
+        self._add_example_stream(t101, e104, "S-res-h", 60000,
+                                 src_port="liquido_fondo", dst_port="proceso_in",
+                                 T=350,
+                                 composition=res_mix,
+                                 main_component="atmospheric_residue", phase="liquid")
+        # Residuo producto (enfriado)
+        self._add_example_stream(e104, tk_r, "S-residuo", 60000, role="product",
+                                 src_port="proceso_out", dst_port="entrada",
+                                 price=350.0, T=80,
+                                 composition=res_mix,
+                                 main_component="atmospheric_residue", phase="liquid")
+
+        # No hay reacción química — sólo separación.
+
+        # ---- Duties auto ----
+        from flowsheet_solver import auto_set_duties_from_thermo
+        auto_set_duties_from_thermo(self.fs)
+        self._set_block_duty(p101, +50)    # bomba: eléctrico
+
     def open_json(self):
         path = filedialog.askopenfilename(
             title="Abrir diagrama",

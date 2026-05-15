@@ -196,6 +196,74 @@ COMPONENTS: Dict[str, Component] = {
         dh_vap=300.0,
     ),
 
+    # ---- Biodiesel / oleo ----
+    "vegetable_oil": Component(
+        # Triglicérido típico (soja/palma).  MW ~880 (3× ácido C18).
+        name="vegetable_oil", label="Aceite vegetal (triglicérido)",
+        mw=880.0, tb_c=300.0,
+        cp_l_a=1.900, cp_l_b=0.00300,
+        cp_v_a=1.400, cp_v_b=0.00200,
+        dh_vap=350.0,
+    ),
+    "biodiesel":   Component(
+        # FAME (Fatty Acid Methyl Ester) — metil oleato, mayoritario.
+        name="biodiesel", label="Biodiesel (FAME C19H36O2)",
+        mw=296.5, tb_c=343.0,
+        cp_l_a=2.100, cp_l_b=0.00300,
+        cp_v_a=1.500, cp_v_b=0.00200,
+        dh_vap=230.0,
+    ),
+    "glycerin":    Component(
+        name="glycerin", label="Glicerina (C₃H₈O₃)",
+        mw=92.09, tb_c=290.0,
+        cp_l_a=2.400, cp_l_b=0.00500,
+        cp_v_a=1.500, cp_v_b=0.00200,
+        dh_vap=663.0,
+    ),
+
+    # ---- Cortes de crudo (proxies para CDU) ----
+    "naphtha":     Component(
+        # nafta liviana, mezcla C5-C10 (Tb avg ~130°C)
+        name="naphtha", label="Nafta (C₅-C₁₀)",
+        mw=100.0, tb_c=130.0,
+        cp_l_a=2.050, cp_l_b=0.00280,
+        cp_v_a=1.600, cp_v_b=0.00350,
+        dh_vap=310.0,
+    ),
+    "kerosene":    Component(
+        # querosén, C10-C16 (Tb avg ~215°C)
+        name="kerosene", label="Querosén (C₁₀-C₁₆)",
+        mw=170.0, tb_c=215.0,
+        cp_l_a=2.100, cp_l_b=0.00300,
+        cp_v_a=1.700, cp_v_b=0.00350,
+        dh_vap=275.0,
+    ),
+    "diesel":      Component(
+        # diésel, C12-C22 (Tb avg ~290°C)
+        name="diesel", label="Diésel (C₁₂-C₂₂)",
+        mw=210.0, tb_c=290.0,
+        cp_l_a=2.150, cp_l_b=0.00310,
+        cp_v_a=1.800, cp_v_b=0.00340,
+        dh_vap=250.0,
+    ),
+    "crude_oil":   Component(
+        # crudo medio (mezcla); promedios aproximados de ASTM D2887
+        name="crude_oil", label="Crudo (mezcla)",
+        mw=280.0, tb_c=280.0,
+        cp_l_a=1.900, cp_l_b=0.00310,
+        cp_v_a=1.700, cp_v_b=0.00330,
+        dh_vap=250.0,
+    ),
+    "atmospheric_residue": Component(
+        # residuo atmosférico (>360°C), no se vaporiza
+        name="atmospheric_residue",
+        label="Residuo atmosférico (>360°C)",
+        mw=400.0, tb_c=450.0,
+        cp_l_a=2.300, cp_l_b=0.00320,
+        cp_v_a=1.900, cp_v_b=0.00300,
+        dh_vap=180.0,
+    ),
+
     # ---- Genéricos (fallback si el user no sabe el componente) ----
     "generic_liquid": Component(
         name="generic_liquid", label="Líquido genérico (hidrocarburo)",

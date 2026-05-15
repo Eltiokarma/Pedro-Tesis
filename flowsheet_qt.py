@@ -1983,6 +1983,8 @@ class FlowsheetMainWindow(QMainWindow):
         examples_menu.addSeparator()
         examples_menu.addAction("Síntesis de amoníaco (Haber-Bosch)",    make_loader("ammonia"))
         examples_menu.addAction("Producción de etanol",                  make_loader("ethanol"))
+        examples_menu.addAction("Producción de biodiesel",               make_loader("biodiesel"))
+        examples_menu.addAction("Refinería atmosférica simplificada",    make_loader("cdu"))
         examples_act.setMenu(examples_menu)
         tb.addAction(examples_act)
         # workaround: QAction con menu necesita un QToolButton para mostrar el dropdown
@@ -2211,6 +2213,12 @@ class FlowsheetMainWindow(QMainWindow):
             "ethanol":      (TkEditor._example_ethanol,
                               "Producción de etanol (fermentación + destilación)",
                               "200 — Fermentación / Sep.", "PFD-EtOH-001"),
+            "biodiesel":    (TkEditor._example_biodiesel,
+                              "Producción de biodiesel (transesterificación)",
+                              "100 — Reacción / Sep.", "PFD-BD-001"),
+            "cdu":          (TkEditor._example_crude_distillation,
+                              "Refinería atmosférica simplificada (CDU)",
+                              "100 — Destilación primaria", "PFD-CDU-001"),
         }
         entry = builder_map.get(key)
         if entry is None:
