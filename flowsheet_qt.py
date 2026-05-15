@@ -282,9 +282,7 @@ class BlockEditDialog(QDialog):
             "Sin marcar: el solver lo computa desde balance de energía\n"
             "de las T's del in/out."
         )
-        self.duty_lock.setChecked(
-            getattr(block, "duty_locked", False) or abs(block.duty) > 1e-9
-        )
+        self.duty_lock.setChecked(getattr(block, "duty_locked", False))
         d_row = QWidget(); d_lay = QHBoxLayout(d_row)
         d_lay.setContentsMargins(0,0,0,0)
         d_lay.addWidget(self.duty_lock); d_lay.addWidget(self.duty_edit, 1)
@@ -395,9 +393,10 @@ class StreamEditDialog(QDialog):
             "Sin marcar: el solver lo computa desde balance de masa."
         )
         # heurística para el lock inicial: mass_flow_locked OR > 0
-        self.mass_lock.setChecked(
-            getattr(stream, "mass_flow_locked", False) or stream.mass_flow > 0
-        )
+        # Estado del lock: SOLO el flag explícito.  Si el stream tiene
+        # mass_flow > 0 pero el lock está False, significa que el solver
+        # lo computó (no es spec del user) — mostrar unchecked.
+        self.mass_lock.setChecked(getattr(stream, "mass_flow_locked", False))
         m_row = QWidget(); m_lay = QHBoxLayout(m_row)
         m_lay.setContentsMargins(0,0,0,0)
         m_lay.addWidget(self.mass_lock); m_lay.addWidget(self.mass_edit, 1)
@@ -452,10 +451,7 @@ class StreamEditDialog(QDialog):
             "Marcar para fijar T (sudoku spec).\n"
             "Sin marcar: el solver la computa desde balance de energía."
         )
-        self.t_lock.setChecked(
-            getattr(stream, "temperature_locked", False)
-            or abs(stream.temperature - 25.0) > 0.01
-        )
+        self.t_lock.setChecked(getattr(stream, "temperature_locked", False))
         t_row = QWidget(); t_lay = QHBoxLayout(t_row)
         t_lay.setContentsMargins(0,0,0,0)
         t_lay.addWidget(self.t_lock); t_lay.addWidget(self.t_edit, 1)
@@ -491,11 +487,7 @@ class StreamEditDialog(QDialog):
             "Sin marcar: el solver la computa desde composición de inputs\n"
             "(weighted avg en mixers/HX, sin reaccionar)."
         )
-        self.comp_lock.setChecked(
-            getattr(stream, "composition_locked", False)
-            or bool(stream.composition)
-            or bool(stream.main_component)
-        )
+        self.comp_lock.setChecked(getattr(stream, "composition_locked", False))
         gb_layout.addRow(self.comp_lock)
 
         self.comp_combo = QComboBox()
@@ -3381,6 +3373,11 @@ class _ExampleBuilderShim:
             phase=phase,
             composition=dict(composition) if composition else {},
         )
+        # Sudoku locks (mismo criterio que FlowsheetEditor de Tk):
+        # cualquier valor declarado explícitamente = locked.
+        s.mass_flow_locked   = (mass_flow > 0)
+        s.temperature_locked = abs(T - 25.0) > 0.01
+        s.composition_locked = bool(composition) or bool(main_component)
         self.fs.streams[sid] = s
         return sid
 
@@ -3398,3 +3395,4 @@ class _ExampleBuilderShim:
     def _set_block_duty(self, bid, duty_kw):
         if bid in self.fs.blocks:
             self.fs.blocks[bid].duty = float(duty_kw)
+            self.fs.blocks[bid].duty_locked = (abs(duty_kw) > 1e-9)

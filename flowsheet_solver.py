@@ -233,33 +233,33 @@ def _detect_cycles(fs):
 # ======================================================
 
 def _is_mass_locked(s):
-    """True si el user fijó mass_flow.  Respeta locks explícitos.
-    Fallback heurístico: mass_flow > 0 sin lock = treat as locked
-    (compat con JSONs viejos y example builders que no setean lock)."""
-    if getattr(s, "mass_flow_locked", False):
-        return True
-    return s.mass_flow > 0
+    """True SOLO si el user fijó mass_flow (lock explícito).
+
+    La heurística vieja (mass_flow > 0) ya NO se usa aquí: si la usáramos
+    como fallback, los valores que el solver PROPAGA (no fijos) quedarían
+    marcados como 'lock' en la siguiente iteración y nunca se podrían
+    recomputar — eso rompe el unlock UX y la idempotencia del solver.
+
+    Las fuentes legítimas de specs (example builders, from_dict, UI dialog)
+    setean explícitamente el lock al crear/cargar.  Para JSONs viejos, la
+    migración en Flowsheet.from_dict los infiere por heurística una vez."""
+    return getattr(s, "mass_flow_locked", False)
 
 
 def _is_temp_locked(s):
-    """True si user fijó T.  Fallback: T != T_REF_C (heurística vieja)."""
-    if getattr(s, "temperature_locked", False):
-        return True
-    return abs(s.temperature - T_REF_C) > 0.01
+    """True solo si user fijó T (lock explícito).  Ver _is_mass_locked
+    para el razonamiento de no usar heurística como fallback runtime."""
+    return getattr(s, "temperature_locked", False)
 
 
 def _is_comp_locked(s):
-    """True si user fijó composición (o main_component)."""
-    if getattr(s, "composition_locked", False):
-        return True
-    return bool(s.composition) or bool(s.main_component)
+    """True solo si user fijó composición (lock explícito)."""
+    return getattr(s, "composition_locked", False)
 
 
 def _is_duty_locked(b):
-    """True si user fijó duty del bloque."""
-    if getattr(b, "duty_locked", False):
-        return True
-    return abs(b.duty) > 1e-9
+    """True solo si user fijó duty (lock explícito)."""
+    return getattr(b, "duty_locked", False)
 
 
 def _solve_mass_iteration(fs):
