@@ -739,28 +739,20 @@ class BlockItem(QGraphicsItemGroup):
         # --- textos (IBM Plex si está disponible, fallback al sistema) ---
         sans = pfd_fonts.SANS if pfd_fonts.available() else "Segoe UI"
         mono = pfd_fonts.MONO if pfd_fonts.available() else "Consolas"
-        f_title = QFont(sans, 11, QFont.Bold)
-        f_sub   = QFont(mono, 8)
+        f_title = QFont(sans, 9, QFont.Bold)
 
-        sub_text = f"S = {block.S:g} {unit}"
-        if block.n > 1:
-            sub_text += f"  × {block.n}"
-
-        # Tag: AFUERA del bloque, encima, centrado (estilo PFD industrial)
+        # Tag: AFUERA del bloque, encima, centrado (estilo PFD industrial).
+        # La spec (S = … m²) NO se muestra en el bloque para reducir clutter
+        # — se ve en el tooltip al hover y en el panel de propiedades.
         self.text_name = QGraphicsSimpleTextItem(block.name, parent=self)
         self.text_name.setFont(f_title)
         self.text_name.setBrush(QBrush(COLOR_BLOCK_TEXT))
         br = self.text_name.boundingRect()
         self.text_name.setPos((self.W - br.width()) / 2, -br.height() - 4)
         self.text_name.setZValue(2)
-
-        # Sub: AFUERA del bloque, debajo
-        self.text_sub = QGraphicsSimpleTextItem(sub_text, parent=self)
-        self.text_sub.setFont(f_sub)
-        self.text_sub.setBrush(QBrush(COLOR_BLOCK_SUB))
-        br_s = self.text_sub.boundingRect()
-        self.text_sub.setPos((self.W - br_s.width()) / 2, self.H + 4)
-        self.text_sub.setZValue(2)
+        # text_sub queda como atributo None para no romper código que lo
+        # referencia (e.g., _update_status, undo); el sub vive en tooltip.
+        self.text_sub = None
 
         # --- puertos ---
         self.port_items: dict = {}     # port_name → QGraphicsEllipseItem
@@ -977,11 +969,11 @@ class StreamItem(QGraphicsPathItem):
 
         mono = pfd_fonts.MONO if pfd_fonts.available() else "Consolas"
         self.label_name = QGraphicsSimpleTextItem()
-        self.label_name.setFont(QFont(mono, 8, QFont.Medium))
+        self.label_name.setFont(QFont(mono, 7, QFont.Medium))
         self.label_name.setZValue(7)
 
         self.label_flow = QGraphicsSimpleTextItem()
-        self.label_flow.setFont(QFont(mono, 8))
+        self.label_flow.setFont(QFont(mono, 7))
         self.label_flow.setBrush(QBrush(QColor("#6b7280")))   # gris suave
         self.label_flow.setZValue(7)
 
@@ -1187,14 +1179,22 @@ class StreamItem(QGraphicsPathItem):
 
         # ambos horizontales opuestos
         if side1 in h_sides and side2 in h_sides:
-            cond_fwd = (side1 == "right" and side2 == "left" and ex2 >= ex1) \
-                       or (side1 == "left" and side2 == "right" and ex1 >= ex2)
-            if cond_fwd and abs(ey1 - ey2) < 2:
+            # cond_fwd: el destino está FÍSICAMENTE a la derecha del
+            # origen (right→left) o a la izquierda (left→right).  Usa
+            # x1/x2 directos, NO ex1/ex2 (que requerían 2×ROUTING_GAP
+            # de holgura y forzaban detours feos cuando los bloques
+            # estaban cerca).
+            cond_fwd = (side1 == "right" and side2 == "left" and x2 > x1) \
+                       or (side1 == "left" and side2 == "right" and x1 > x2)
+            if cond_fwd and abs(y1 - y2) < 2:
                 return [x1, y1, x2, y2]
             if cond_fwd:
-                mx = (ex1 + ex2) / 2
-                return [x1, y1, ex1, ey1, mx, ey1, mx, ey2, ex2, ey2, x2, y2]
-            # mismo lado o opuestos pero atrás: rodea por arriba
+                # Z-shape simple: codo en la mitad horizontal.  Sin
+                # ROUTING_GAP fijo — bend en el punto medio, lo que
+                # produce líneas más naturales aunque haya poco espacio.
+                mx = (x1 + x2) / 2
+                return [x1, y1, mx, y1, mx, y2, x2, y2]
+            # backward (raro: dst físicamente atrás del src): rodea por arriba
             ymin = min(b_src.y, b_dst.y) - 40
             return [x1, y1, ex1, ey1, ex1, ymin, ex2, ymin, ex2, ey2, x2, y2]
 
