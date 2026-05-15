@@ -55,7 +55,7 @@ from PySide6.QtGui import (
 )
 from PySide6.QtWidgets import (
     QApplication, QMainWindow, QGraphicsScene, QGraphicsView,
-    QGraphicsItem, QGraphicsRectItem, QGraphicsPathItem,
+    QGraphicsItem, QGraphicsRectItem, QGraphicsPathItem, QGraphicsPolygonItem,
     QGraphicsTextItem, QGraphicsEllipseItem, QGraphicsLineItem,
     QGraphicsItemGroup, QGraphicsSimpleTextItem,
     QToolBar, QStatusBar, QDockWidget, QTreeWidget, QTreeWidgetItem,
@@ -867,18 +867,14 @@ class BlockItem(QGraphicsItemGroup):
         self.setToolTip("<br>".join(lines))
 
     def set_selected_visual(self, selected: bool):
-        svg = getattr(self, "_svg_mode", False)
         if selected:
-            # borde índigo continuo para selección (estilo Aspen).
-            self.rect.setPen(QPen(COLOR_BLOCK_BORDER_SEL,
-                                   2.0 if svg else 3.0))
+            # halo de selección: borde índigo punteado alrededor del
+            # bloque, sólo visible al estar seleccionado.
+            self.rect.setPen(QPen(COLOR_BLOCK_BORDER_SEL, 1.5, Qt.DashLine))
         else:
-            # borde sutil gris claro en modo SVG, índigo normal en
-            # fallback Qt paths.
-            if svg:
-                self.rect.setPen(QPen(QColor("#78909c"), 1.2))
-            else:
-                self.rect.setPen(QPen(COLOR_BLOCK_BORDER, 2))
+            # sin selección el rect queda invisible — el símbolo SVG
+            # es la representación visual del bloque, no la caja.
+            self.rect.setPen(Qt.NoPen)
 
     def itemChange(self, change, value):
         """Sync posición al modelo + refresh streams conectados.
@@ -965,6 +961,12 @@ class StreamItem(QGraphicsPathItem):
         self.setFlag(QGraphicsItem.ItemIsSelectable, True)
         self.setAcceptHoverEvents(True)
 
+        # punta de flecha al final del stream (triángulo relleno,
+        # ítem separado para que no comparta stroke con la línea).
+        self.arrow_head = QGraphicsPolygonItem()
+        self.arrow_head.setPen(QPen(Qt.NoPen))
+        self.arrow_head.setZValue(5.5)
+
         # label estilo PFD industrial: pill (rounded rect blanco con
         # borde del color del stream) + nombre + flujo en mono.
         self.label_bg = _RoundedRectBody(0, 0, 10, 10)
@@ -987,12 +989,14 @@ class StreamItem(QGraphicsPathItem):
 
     def add_to_scene(self, scene: QGraphicsScene):
         scene.addItem(self)
+        scene.addItem(self.arrow_head)
         scene.addItem(self.label_bg)
         scene.addItem(self.label_name)
         scene.addItem(self.label_flow)
 
     def remove_from_scene(self, scene: QGraphicsScene):
-        for item in (self, self.label_bg, self.label_name, self.label_flow):
+        for item in (self, self.arrow_head, self.label_bg,
+                      self.label_name, self.label_flow):
             if item.scene() is scene:
                 scene.removeItem(item)
 
@@ -1042,7 +1046,7 @@ class StreamItem(QGraphicsPathItem):
 
         color = self._color()
         pen = QPen(color, 2.2)
-        pen.setCapStyle(Qt.SquareCap)
+        pen.setCapStyle(Qt.FlatCap)   # línea termina justo en el puerto
         pen.setJoinStyle(Qt.MiterJoin)
         self.setPen(pen)
         self._draw_arrow(path, pts[-2], pts[-1], pts[-4], pts[-3])
@@ -1078,27 +1082,25 @@ class StreamItem(QGraphicsPathItem):
         self._update_tooltip()
 
     def _draw_arrow(self, path, x_end, y_end, x_prev, y_prev):
-        """Triángulo al final del path (en lugar de marker arrow)."""
+        """Punta de flecha rellena al final del stream — QGraphicsPolygonItem
+        separado, no se mezcla con el stroke de la polilínea (que con
+        SquareCap dejaba la flecha hueca)."""
         import math
         dx = x_end - x_prev
         dy = y_end - y_prev
         L = math.hypot(dx, dy)
         if L < 0.01:
+            self.arrow_head.setPolygon(QPolygonF())
             return
         ux, uy = dx / L, dy / L      # versor en dirección de la flecha
         nx, ny = -uy, ux             # perpendicular
-        # vértices del triángulo
-        size = 8
-        wing = 4
+        size = 11
+        wing = 4.5
         tip = QPointF(x_end, y_end)
         b1  = QPointF(x_end - size*ux + wing*nx, y_end - size*uy + wing*ny)
         b2  = QPointF(x_end - size*ux - wing*nx, y_end - size*uy - wing*ny)
-        path.moveTo(tip)
-        path.lineTo(b1)
-        path.lineTo(b2)
-        path.lineTo(tip)
-        # actualiza el path
-        self.setPath(path)
+        self.arrow_head.setPolygon(QPolygonF([tip, b1, b2]))
+        self.arrow_head.setBrush(QBrush(self._color()))
 
     def mouseDoubleClickEvent(self, event):
         """Doble-click sobre el stream → abrir editor."""
