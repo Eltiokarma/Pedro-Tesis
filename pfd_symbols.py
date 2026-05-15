@@ -956,3 +956,75 @@ def list_categories() -> List[str]:
 def list_by_category(category: str) -> List[str]:
     """IDs de símbolos de una categoría."""
     return sorted(sid for sid, d in SYMBOLS.items() if d["category"] == category)
+
+
+# ======================================================
+# DIMENSIONES Y PUERTOS POR eq_type
+# ======================================================
+# Helpers para que el render (BlockItem) y el router (StreamItem) usen
+# las dimensiones del símbolo PFD asociado al eq_type, en vez de
+# constantes BLOCK_W/BLOCK_H.
+
+# Fallback cuando un eq_type no tiene símbolo en el catálogo.
+DEFAULT_W = 130.0
+DEFAULT_H = 60.0
+
+
+def block_dims(eq_type: str) -> Tuple[float, float]:
+    """Devuelve (w, h) del símbolo asociado al eq_type.
+    Si no hay símbolo, devuelve (DEFAULT_W, DEFAULT_H)."""
+    s = get_for_eq_type(eq_type)
+    if s is None:
+        return (DEFAULT_W, DEFAULT_H)
+    return (s["w"], s["h"])
+
+
+def port_coords(eq_type: str,
+                 w: Optional[float] = None,
+                 h: Optional[float] = None
+                 ) -> Dict[str, Tuple[float, float]]:
+    """Devuelve {port_name: (x, y)} en coordenadas absolutas del bloque,
+    combinando los lados+fracciones de equipment_ports.py con el (w, h)
+    del símbolo PFD (que en general varía por equipo).
+
+    Si w/h no se especifican, los toma de block_dims(eq_type).
+    Si un side no es reconocido, se devuelve (0, h/2) como fallback.
+    """
+    if w is None or h is None:
+        bw, bh = block_dims(eq_type)
+        w = bw if w is None else w
+        h = bh if h is None else h
+
+    try:
+        import equipment_ports as ep
+    except ImportError:
+        return {}
+
+    out: Dict[str, Tuple[float, float]] = {}
+    for name, (side, frac) in ep.get_ports(eq_type).items():
+        if side == "left":
+            out[name] = (0.0, h * frac)
+        elif side == "right":
+            out[name] = (w, h * frac)
+        elif side == "top":
+            out[name] = (w * frac, 0.0)
+        elif side == "bottom":
+            out[name] = (w * frac, h)
+        else:
+            out[name] = (0.0, h / 2)
+    return out
+
+
+def port_side(eq_type: str, port_name: str) -> str:
+    """Lado del puerto ('left'|'right'|'top'|'bottom'), o 'right' si
+    no se encuentra (default).  Útil para el router que decide la
+    dirección de salida."""
+    try:
+        import equipment_ports as ep
+    except ImportError:
+        return "right"
+    ports = ep.get_ports(eq_type)
+    info = ports.get(port_name)
+    if info is None:
+        return "right"
+    return info[0]

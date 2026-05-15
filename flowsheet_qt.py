@@ -71,6 +71,8 @@ from PySide6.QtGui import QUndoStack, QUndoCommand
 import equipment_costs as eq
 import equipment_ports as ep
 import equipment_icons as eicon
+import pfd_symbols as pfd
+import pfd_fonts
 import flowsheet_solver as fsolv
 import flowsheet_export as fexp
 import flowsheet_validation as fval
@@ -97,24 +99,32 @@ _SVG_PIXMAPS   = {}        # (eq_type, w, h) → QPixmap renderizado
 _SVG_AVAILABLE = None      # lazy: ¿PySide6.QtSvg disponible?
 
 
-def _get_svg_pixmap(eq_type, width, height):
-    """Renderiza el SVG de eq_type a un QPixmap de tamaño width×height
-    (con supersampling 2× para nitidez).  Cache compartido.
+def _get_svg_pixmap(eq_type, width, height, svg_str=None):
+    """Renderiza un SVG a un QPixmap de tamaño width×height (con
+    supersampling 2× para nitidez).  Cache compartido.
+
+    Si `svg_str` se pasa, se usa directamente (sirve para el catálogo
+    pfd_symbols, donde el SVG ya está armado).  Si no, se busca via
+    equipment_icons.get_icon_svg(eq_type) — legacy.
 
     Devuelve None si:
-      · no hay SVG hardcoded para ese eq_type, o
+      · no hay SVG, o
       · PySide6.QtSvg no está disponible, o
-      · el SVG no parsea correctamente.
+      · el SVG no parsea.
     """
     global _SVG_AVAILABLE
     if _SVG_AVAILABLE is False:
         return None
 
-    cache_key = (eq_type, width, height)
+    # cache key incluye un hash chico del svg_str para que distintas
+    # versiones (legacy vs pfd_symbols) no choquen.
+    key_suffix = hash(svg_str) if svg_str is not None else "legacy"
+    cache_key = (eq_type, width, height, key_suffix)
     if cache_key in _SVG_PIXMAPS:
         return _SVG_PIXMAPS[cache_key]
 
-    svg_str = eicon.get_icon_svg(eq_type)
+    if svg_str is None:
+        svg_str = eicon.get_icon_svg(eq_type)
     if svg_str is None:
         return None
 
@@ -708,15 +718,17 @@ class BlockItem(QGraphicsItemGroup):
         self.setFlag(QGraphicsItem.ItemSendsGeometryChanges, True)
         self.setHandlesChildEvents(False)
 
-        # --- sombra + rect base (esquinas redondeadas via paint) ---
-        self.shadow = _RoundedRectBody(2, 2, BLOCK_W, BLOCK_H, parent=self)
-        self.shadow.setBrush(QBrush(QColor(0, 0, 0, 28)))
-        self.shadow.setPen(Qt.NoPen)
-        self.shadow.setZValue(-1)
+        # Dimensiones del símbolo PFD (varían por equipo).  Fallback al
+        # tamaño legacy 130×60 si el eq_type no tiene símbolo nuevo.
+        self.W, self.H = pfd.block_dims(block.eq_type)
 
-        self.rect = _RoundedRectBody(0, 0, BLOCK_W, BLOCK_H, parent=self)
-        self.rect.setBrush(QBrush(COLOR_BLOCK_FILL))
-        self.rect.setPen(QPen(COLOR_BLOCK_BORDER, 2))
+        # --- rect base (invisible, solo hit-target) ---
+        # El símbolo PFD ES el bloque visible; el rect cumple rol de
+        # hit-box para clicks en zonas vacías del símbolo.
+        self.rect = _RoundedRectBody(0, 0, self.W, self.H, parent=self)
+        self.rect.setBrush(QBrush(QColor(0, 0, 0, 1)))  # invisible, hittable
+        self.rect.setPen(Qt.NoPen)
+        self.rect.setZValue(-0.5)
 
         spec = eq.EQUIPMENT_DATA.get(block.eq_type, {})
         unit = spec.get("S_unit", "")
@@ -724,27 +736,30 @@ class BlockItem(QGraphicsItemGroup):
         self.decoration_items = []   # items hijos que decoran según categoría
         self._draw_category_decoration(cat, block.eq_type)
 
-        # --- textos ---
-        f_title = QFont("Segoe UI", 10, QFont.Bold)
-        f_sub   = QFont("Segoe UI", 7)
+        # --- textos (IBM Plex si está disponible, fallback al sistema) ---
+        sans = pfd_fonts.SANS if pfd_fonts.available() else "Segoe UI"
+        mono = pfd_fonts.MONO if pfd_fonts.available() else "Consolas"
+        f_title = QFont(sans, 11, QFont.Bold)
+        f_sub   = QFont(mono, 8)
 
         sub_text = f"S = {block.S:g} {unit}"
         if block.n > 1:
             sub_text += f"  × {block.n}"
 
+        # Tag: AFUERA del bloque, encima, centrado (estilo PFD industrial)
         self.text_name = QGraphicsSimpleTextItem(block.name, parent=self)
         self.text_name.setFont(f_title)
         self.text_name.setBrush(QBrush(COLOR_BLOCK_TEXT))
         br = self.text_name.boundingRect()
-        # Tag siempre dentro del bloque, centrado arriba (estilo Aspen).
-        self.text_name.setPos((BLOCK_W - br.width()) / 2, 4)
+        self.text_name.setPos((self.W - br.width()) / 2, -br.height() - 4)
         self.text_name.setZValue(2)
 
+        # Sub: AFUERA del bloque, debajo
         self.text_sub = QGraphicsSimpleTextItem(sub_text, parent=self)
         self.text_sub.setFont(f_sub)
         self.text_sub.setBrush(QBrush(COLOR_BLOCK_SUB))
         br_s = self.text_sub.boundingRect()
-        self.text_sub.setPos((BLOCK_W - br_s.width()) / 2, BLOCK_H - br_s.height() - 4)
+        self.text_sub.setPos((self.W - br_s.width()) / 2, self.H + 4)
         self.text_sub.setZValue(2)
 
         # --- puertos ---
@@ -777,215 +792,49 @@ class BlockItem(QGraphicsItemGroup):
         return item
 
     def _draw_category_decoration(self, category, eq_type):
-        """Dibuja símbolos PFD según el eq_type.
+        """Renderiza el símbolo PFD del eq_type (catálogo pfd_symbols).
 
-        Estrategia:
-          1. Si hay SVG hardcoded para este eq_type (equipment_icons.py)
-             y QtSvg está disponible → renderizar como QGraphicsSvgItem.
-             El rect base queda visible con borde índigo claro (por si
-             el SVG no carga visualmente, al menos vemos la caja del
-             equipo).
-          2. Si no → fallback a Qt paths simples (phase C).
+        El símbolo se renderiza a su tamaño natural (W × H del viewBox).
+        Si no hay símbolo en el catálogo, queda solo el rect (invisible)
+        + los textos.
         """
         self._svg_mode = False
 
-        # 1. SVG hardcoded (icono profesional) → QPixmap renderizado
+        svg_str = pfd.wrap_svg(pfd.EQ_TYPE_TO_SYMBOL.get(eq_type, ""),
+                                w=self.W, h=self.H)
+        if not svg_str:
+            return  # sin símbolo: rect invisible + textos solamente
+
         try:
-            pixmap = _get_svg_pixmap(eq_type, BLOCK_W, BLOCK_H)
+            pixmap = _get_svg_pixmap(eq_type, int(self.W), int(self.H),
+                                      svg_str=svg_str)
         except Exception:
             pixmap = None
-        if pixmap is not None and not pixmap.isNull():
-            try:
-                from PySide6.QtWidgets import QGraphicsPixmapItem
-                pix_item = QGraphicsPixmapItem(pixmap, parent=self)
-                # como el pixmap se renderizó a 2× supersample, lo
-                # escalamos a 0.5 para mostrarlo a tamaño nominal.
-                pix_item.setScale(0.5)
-                pix_item.setPos(0, 0)
-                pix_item.setZValue(0)
-                pix_item.setTransformationMode(Qt.SmoothTransformation)
-                # Estilo Aspen Plus / HYSYS: caja blanca con borde fino
-                # gris claro; el ícono SVG queda centrado adentro y
-                # los textos van dentro del bloque (no superpuestos al
-                # ícono, gracias al espacio que dejan los SVGs en sus
-                # bordes superior/inferior).
-                self.rect.setBrush(QBrush(COLOR_BLOCK_FILL))
-                self.rect.setPen(QPen(QColor("#78909c"), 1.2))
-                self.rect.setZValue(-0.5)
-                self.decoration_items.append(pix_item)
-                self._svg_mode = True
-                return
-            except Exception:
-                pass
+        if pixmap is None or pixmap.isNull():
+            return
 
-        # 2. Fallback: Qt paths (phase C, simples pero funcionales)
-        w, h = BLOCK_W, BLOCK_H
-        cx, cy = w / 2, h / 2
-
-        if category == "Heat exchangers":
-            # 2 líneas paralelas horizontales atravesando el bloque
-            # (representa el banco de tubos)
-            self._add_deco_line(8, h * 0.42, w - 8, h * 0.42, 1.3,
-                                QColor("#90a4ae"))
-            self._add_deco_line(8, h * 0.58, w - 8, h * 0.58, 1.3,
-                                QColor("#90a4ae"))
-            # punteros de retorno en los extremos
-            self._add_deco_line(8, h * 0.42, 8, h * 0.58, 1.3,
-                                QColor("#90a4ae"))
-            self._add_deco_line(w - 8, h * 0.42, w - 8, h * 0.58, 1.3,
-                                QColor("#90a4ae"))
-
-        elif category == "Pumps":
-            # círculo central (cuerpo de la bomba)
-            r = 14
-            circle = QPainterPath()
-            circle.addEllipse(cx - r, cy - r, 2*r, 2*r)
-            self._add_deco_path(circle, 1.5, QColor("#5c6bc0"),
-                                QColor("#e8eaf6"))
-            # triángulo apuntando a la derecha (impulsor)
-            tri = QPainterPath()
-            tri.moveTo(cx - 5, cy - 6)
-            tri.lineTo(cx + 6, cy)
-            tri.lineTo(cx - 5, cy + 6)
-            tri.closeSubpath()
-            self._add_deco_path(tri, 0, COLOR_BLOCK_BORDER,
-                                COLOR_BLOCK_BORDER)
-
-        elif category == "Compressors":
-            # forma trapezoidal (entrada estrecha, salida ancha)
-            tr = QPainterPath()
-            tr.moveTo(15, h * 0.30)
-            tr.lineTo(w - 15, h * 0.18)
-            tr.lineTo(w - 15, h * 0.82)
-            tr.lineTo(15, h * 0.70)
-            tr.closeSubpath()
-            self._add_deco_path(tr, 1.5, QColor("#5c6bc0"),
-                                QColor("#fff3e0"))
-
-        elif category == "Reactors":
-            # rect interno + agitador (línea vertical + cruz arriba)
-            inner = QPainterPath()
-            inner.addRoundedRect(10, h * 0.20, w - 20, h * 0.6, 4, 4)
-            self._add_deco_path(inner, 1.3, QColor("#5c6bc0"),
-                                QColor("#fbe9e7"))
-            # eje del agitador
-            self._add_deco_line(cx, 6, cx, h * 0.50, 1.2)
-            # paletas del agitador (cruz)
-            self._add_deco_line(cx - 7, h * 0.50, cx + 7, h * 0.50, 1.2)
-
-        elif category == "Vessels":
-            # caso especial: torre vs vessel horizontal vs vertical
-            if "Tower" in eq_type:
-                # rect alto centrado + bandejas (líneas horizontales)
-                col_w = 22
-                rect = QPainterPath()
-                rect.addRoundedRect(cx - col_w / 2, 8, col_w, h - 16, 3, 3)
-                self._add_deco_path(rect, 1.5, QColor("#5c6bc0"),
-                                    QColor("#e3f2fd"))
-                # bandejas
-                for i in range(1, 5):
-                    y_tray = 8 + (h - 16) * i / 5
-                    self._add_deco_line(cx - col_w / 2 + 2, y_tray,
-                                        cx + col_w / 2 - 2, y_tray, 0.8,
-                                        QColor("#90a4ae"))
-            elif "horizontal" in eq_type.lower():
-                # cilindro horizontal (rect redondeado en los extremos)
-                rect = QPainterPath()
-                rect.addRoundedRect(8, h * 0.30, w - 16, h * 0.4, 12, 12)
-                self._add_deco_path(rect, 1.5, QColor("#5c6bc0"),
-                                    QColor("#e3f2fd"))
-            else:
-                # vessel vertical (rect alto)
-                vw = w * 0.45
-                rect = QPainterPath()
-                rect.addRoundedRect(cx - vw / 2, 8, vw, h - 16, 8, 8)
-                self._add_deco_path(rect, 1.5, QColor("#5c6bc0"),
-                                    QColor("#e3f2fd"))
-
-        elif category == "Storage":
-            # tanque: cilindro vertical con techo
-            tw = w * 0.55
-            rect = QPainterPath()
-            rect.addRect(cx - tw / 2, h * 0.30, tw, h * 0.55)
-            self._add_deco_path(rect, 1.5, QColor("#5c6bc0"),
-                                QColor("#e8f5e9"))
-            # techo (línea curva arriba)
-            if "cone" in eq_type.lower():
-                roof = QPainterPath()
-                roof.moveTo(cx - tw / 2, h * 0.30)
-                roof.lineTo(cx, h * 0.18)
-                roof.lineTo(cx + tw / 2, h * 0.30)
-                self._add_deco_path(roof, 1.5, QColor("#5c6bc0"))
-            else:  # floating roof
-                self._add_deco_line(cx - tw / 2 + 2, h * 0.35,
-                                    cx + tw / 2 - 2, h * 0.35, 1.0,
-                                    QColor("#5c6bc0"))
-
-        elif category == "Fired heaters":
-            # horno: rect con llama (triángulos abajo)
-            rect = QPainterPath()
-            rect.addRoundedRect(8, h * 0.25, w - 16, h * 0.55, 4, 4)
-            self._add_deco_path(rect, 1.5, QColor("#5c6bc0"),
-                                QColor("#fff8e1"))
-            # llama: 3 triángulos en la base
-            flame = QPainterPath()
-            base_y = h * 0.80
-            tip_y  = h * 0.65
-            for fx in (cx - 14, cx, cx + 14):
-                flame.moveTo(fx - 4, base_y)
-                flame.lineTo(fx, tip_y)
-                flame.lineTo(fx + 4, base_y)
-            self._add_deco_path(flame, 1.3, QColor("#ef6c00"),
-                                QColor("#ffcc80"))
-
-        elif category == "Fans / blowers":
-            # círculo con 3 aspas
-            r = 13
-            circle = QPainterPath()
-            circle.addEllipse(cx - r, cy - r, 2*r, 2*r)
-            self._add_deco_path(circle, 1.3, QColor("#5c6bc0"),
-                                QColor("#e1f5fe"))
-            # aspas (líneas radiales)
-            import math
-            for k in range(3):
-                ang = (math.pi / 2) + k * (2 * math.pi / 3)
-                self._add_deco_line(
-                    cx, cy,
-                    cx + r * 0.85 * math.cos(ang),
-                    cy + r * 0.85 * math.sin(ang),
-                    1.4, QColor("#5c6bc0"),
-                )
-
-        elif category == "Solids / sep.":
-            # rect con triángulo de sólidos (cono abajo)
-            inner = QPainterPath()
-            inner.moveTo(12, h * 0.30)
-            inner.lineTo(w - 12, h * 0.30)
-            inner.lineTo(cx + 8, h - 6)
-            inner.lineTo(cx - 8, h - 6)
-            inner.closeSubpath()
-            self._add_deco_path(inner, 1.3, QColor("#5c6bc0"),
-                                QColor("#efebe9"))
-
-        # otras categorías: solo el rect base + el texto
+        try:
+            from PySide6.QtWidgets import QGraphicsPixmapItem
+            pix_item = QGraphicsPixmapItem(pixmap, parent=self)
+            # supersample 2× → escalar a 0.5
+            pix_item.setScale(0.5)
+            pix_item.setPos(0, 0)
+            pix_item.setZValue(0)
+            pix_item.setTransformationMode(Qt.SmoothTransformation)
+            self.decoration_items.append(pix_item)
+            self._svg_mode = True
+        except Exception:
+            pass
 
     def _render_ports(self):
-        ports = ep.get_ports(self.model.eq_type)
         r = self.PORT_RADIUS
-        for pname, (side, frac) in ports.items():
-            if side == "right":
-                cx, cy = BLOCK_W, BLOCK_H * frac
-            elif side == "left":
-                cx, cy = 0, BLOCK_H * frac
-            elif side == "top":
-                cx, cy = BLOCK_W * frac, 0
-            else:  # bottom
-                cx, cy = BLOCK_W * frac, BLOCK_H
+        coords = pfd.port_coords(self.model.eq_type, self.W, self.H)
+        for pname, (cx, cy) in coords.items():
             ell = QGraphicsEllipseItem(cx - r, cy - r, 2*r, 2*r, parent=self)
             ell.setBrush(QBrush(COLOR_PORT_FREE))
             ell.setPen(QPen(QColor("#333333"), 1))
             ell.setData(0, pname)        # guardamos el nombre del puerto
-            ell.setZValue(3)             # encima del SVG/rect y debajo del texto
+            ell.setZValue(3)
             self.port_items[pname] = ell
 
     def update_port_colors(self, used_ports: set):
@@ -1278,14 +1127,15 @@ class StreamItem(QGraphicsPathItem):
                 side, frac = ports[pname]
             else:
                 pname, side, frac = chosen
+        w, h = pfd.block_dims(b.eq_type)
         if side == "right":
-            x, y = b.x + BLOCK_W,         b.y + BLOCK_H * frac
+            x, y = b.x + w,         b.y + h * frac
         elif side == "left":
-            x, y = b.x,                   b.y + BLOCK_H * frac
+            x, y = b.x,             b.y + h * frac
         elif side == "top":
-            x, y = b.x + BLOCK_W * frac,  b.y
+            x, y = b.x + w * frac,  b.y
         else:  # bottom
-            x, y = b.x + BLOCK_W * frac,  b.y + BLOCK_H
+            x, y = b.x + w * frac,  b.y + h
         return side, x, y
 
     @staticmethod
@@ -1299,11 +1149,12 @@ class StreamItem(QGraphicsPathItem):
         # porque complete_connection lo rechaza, pero un JSON malformado
         # podría tenerlo.  Devolvemos un loop pequeño visual.
         if b_src is b_dst:
-            x = b_src.x + BLOCK_W
-            y = b_src.y + BLOCK_H / 2
+            w, h = pfd.block_dims(b_src.eq_type)
+            x = b_src.x + w
+            y = b_src.y + h / 2
             return [x, y, x + 30, y, x + 30, y - 30,
-                    b_src.x + BLOCK_W / 2, y - 30,
-                    b_src.x + BLOCK_W / 2, b_src.y]
+                    b_src.x + w / 2, y - 30,
+                    b_src.x + w / 2, b_src.y]
         side1, x1, y1 = self._resolve_port(b_src, s.src_port, "right")
         side2, x2, y2 = self._resolve_port(b_dst, s.dst_port, "left")
         dx1, dy1 = self._side_dir(side1)
@@ -1340,7 +1191,9 @@ class StreamItem(QGraphicsPathItem):
                     return [x1, y1, x2, y2]
                 my = (ey1 + ey2) / 2
                 return [x1, y1, ex1, ey1, ex1, my, ex2, my, ex2, ey2, x2, y2]
-            xmax = max(b_src.x + BLOCK_W, b_dst.x + BLOCK_W) + 40
+            w_src, _ = pfd.block_dims(b_src.eq_type)
+            w_dst, _ = pfd.block_dims(b_dst.eq_type)
+            xmax = max(b_src.x + w_src, b_dst.x + w_dst) + 40
             return [x1, y1, ex1, ey1, xmax, ey1, xmax, ey2, ex2, ey2, x2, y2]
 
         # perpendiculares → L-shape
@@ -1674,6 +1527,10 @@ class FlowsheetMainWindow(QMainWindow):
         super().__init__()
         self.setWindowTitle("Diagrama de proceso — Qt edition")
         self.resize(1400, 820)
+
+        # Registrar IBM Plex Sans / Mono para tags y especs (Aspen style).
+        # Idempotente — si Qt no encuentra las TTFs, cae al sistema.
+        pfd_fonts.load_all()
 
         self.fs = Flowsheet()
         self.scene = FlowsheetScene(self)
