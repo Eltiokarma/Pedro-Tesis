@@ -1209,19 +1209,16 @@ class FlowsheetEditor:
                                  composition={"hydrogen": 0.4, "methane": 0.6},
                                  main_component="hydrogen", phase="gas")
 
-        # ---- Duties realistas (Turton/Douglas HDA, escala 10000 tm/año) ----
-        self._set_block_duty(e101, +1500)   # preheater 25→200°C
-        self._set_block_duty(f101, +6500)   # horno 200→600°C (incluye ΔH_vap)
-        self._set_block_duty(r101, -1500)   # extracción de calor de la chaqueta
-        self._set_block_duty(e102, -8500)   # cooler + parcial condensación
-        self._set_block_duty(e103, -3000)   # condensador top (incluye ΔH_vap)
-        self._set_block_duty(e104, +2000)   # reboiler (incluye ΔH_vap)
-        self._set_block_duty(p101, +15)     # bomba 15 kW eléctricos
-
-        # Calor de reacción HDA: C₇H₈ + H₂ → C₆H₆ + CH₄
-        #   ΔH ≈ -42 kJ/mol benceno formado
-        #   sobre kg de input total: -42 × (8500/11000) / 78 × 1000 ≈ -416 kJ/kg
+        # ---- Calor de reacción HDA: C₇H₈ + H₂ → C₆H₆ + CH₄ ----
+        # ΔH ≈ -42 kJ/mol benceno formado; sobre kg input total ≈ -416 kJ/kg
         self.fs.blocks[r101].heat_of_reaction = -416.0
+
+        # ---- Duties inferidos del balance termodinámico ----
+        # T, fase, composición y mass_flow declarados arriba determinan
+        # el duty; el solver lo computa y lo asigna a cada bloque térmico.
+        from flowsheet_solver import auto_set_duties_from_thermo
+        auto_set_duties_from_thermo(self.fs)
+        self._set_block_duty(p101, +15)     # bomba: eléctrico, manual
 
         # ---- OPEX extras manuales: SOLO los no-térmicos ----
         # H2 makeup (raw material adicional)
@@ -1316,16 +1313,14 @@ class FlowsheetEditor:
                                  price=0.0, T=40,
                                  main_component="syngas", phase="gas")
 
-        # ---- Duties realistas (síntesis metanol, escala 10000 tm/año) ----
-        self._set_block_duty(k101, +800)    # compresor 800 kW eléctricos
-        self._set_block_duty(e101, +3000)   # preheater 40→230°C
-        self._set_block_duty(r101, -4000)   # reactor exotérmico
-        self._set_block_duty(e102, -3000)   # cooler + parcial condensación
-        self._set_block_duty(e103, -2000)   # condensador
-        self._set_block_duty(e104, +1500)   # reboiler
-        # Calor de reacción para R-101: CO + 2H2 → CH3OH, ΔH = -90 kJ/mol
-        # = -2810 kJ/kg metanol (sobre kg de input syngas, aprox -200 kJ/kg)
-        self.fs.blocks[r101].heat_of_reaction = -200.0   # kJ/kg input
+        # ---- Calor de reacción: CO + 2H2 → CH3OH, ΔH = -90 kJ/mol ----
+        # = -2828 kJ/kg MeOH; con yield mass ~72%, sobre kg input syngas ≈ -2000
+        self.fs.blocks[r101].heat_of_reaction = -2000.0  # kJ/kg input
+
+        # ---- Duties inferidos del balance termodinámico ----
+        from flowsheet_solver import auto_set_duties_from_thermo
+        auto_set_duties_from_thermo(self.fs)
+        self._set_block_duty(k101, +800)    # compresor: eléctrico, manual
 
         # ---- OPEX extras manuales: SOLO consumibles ----
         # Catalizador CuZnO/Al2O3 (~3 años de vida)
@@ -1397,12 +1392,10 @@ class FlowsheetEditor:
                                  composition={"benzene": 0.02, "toluene": 0.98},
                                  main_component="toluene", phase="liquid")
 
-        # ---- Duties realistas (destilación binaria, 10000 tm/año feed) ----
-        self._set_block_duty(p101, +8)      # bomba 8 kW eléctricos
-        self._set_block_duty(e101, +500)    # preheater 25→85°C
-        self._set_block_duty(e102, -2000)   # condenser top (incluye ΔH_vap)
-        self._set_block_duty(e103, +2000)   # reboiler fondo (incluye ΔH_vap)
-        # Utilities → auto desde duties.
+        # ---- Duties inferidos del balance termodinámico ----
+        from flowsheet_solver import auto_set_duties_from_thermo
+        auto_set_duties_from_thermo(self.fs)
+        self._set_block_duty(p101, +8)      # bomba: eléctrico, manual
 
     def open_json(self):
         path = filedialog.askopenfilename(

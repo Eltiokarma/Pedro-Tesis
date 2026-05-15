@@ -542,6 +542,78 @@ def _solve_energy_iteration(fs, tol_T=0.5, skipped=None):
 
 
 # ======================================================
+# INFERENCIA DE DUTY DESDE BALANCE TERMODINÁMICO
+# ======================================================
+# Cuando un bloque tiene declaradas T, fase, composición y mass_flow
+# de TODOS sus in/out, el duty queda determinado por el balance de
+# energía.  Útil para:
+#   - Auto-calibrar ejemplos (que el user solo declare T's, no duties).
+#   - Botón "calcular duty desde balance" en la UI.
+#   - Verificar consistencia: si el user declara un duty distinto al
+#     inferido, hay algo mal en T's, fases o composiciones.
+
+def infer_block_duty(fs, b):
+    """Devuelve el duty kW que cierra el balance del bloque, o None si
+    no se puede inferir (Cp irresoluble, mass_flow=0, sin in/out).
+
+    Balance: H_out_total = H_in_total + duty_external + Q_rxn_released
+    Donde Q_rxn_released = -m_in_total · heat_of_reaction (kJ/kg input).
+
+    Para equipos eléctricos (bombas, compresores, fans) devuelve None
+    — su duty es eléctrico, no térmico, y se setea aparte.
+    """
+    import equipment_ports as _ep_mod
+    if _ep_mod.is_electrical_equipment(b.eq_type):
+        return None
+
+    ins  = [s for s in fs.streams.values() if s.dst == b.id]
+    outs = [s for s in fs.streams.values() if s.src == b.id]
+    if not ins or not outs:
+        return None
+
+    h_in_total = 0.0
+    for s in ins:
+        h = _stream_enthalpy_kW(s)
+        if h is None:
+            return None
+        h_in_total += h
+
+    h_out_total = 0.0
+    for s in outs:
+        h = _stream_enthalpy_kW(s)
+        if h is None:
+            return None
+        h_out_total += h
+
+    q_rxn = 0.0
+    if b.heat_of_reaction != 0:
+        m_in_total = sum(s.mass_flow * TM_TO_KG / SEC_PER_YEAR for s in ins)
+        # exo (h_of_r < 0) → q_rxn > 0 (el medio recibe calor)
+        q_rxn = -m_in_total * b.heat_of_reaction
+
+    return h_out_total - h_in_total - q_rxn
+
+
+def auto_set_duties_from_thermo(fs, only_zero=False):
+    """Para cada bloque no-eléctrico, computa duty desde balance y lo
+    asigna.  Si only_zero=True, sólo sobrescribe bloques con duty=0
+    (respeta declaraciones del user).
+
+    Devuelve dict {block_id: duty_kw} de los duties asignados.
+    """
+    assigned = {}
+    for b in fs.blocks.values():
+        if only_zero and b.duty != 0:
+            continue
+        d = infer_block_duty(fs, b)
+        if d is None:
+            continue
+        b.duty = float(d)
+        assigned[b.id] = float(d)
+    return assigned
+
+
+# ======================================================
 # TEAR STREAM + WEGSTEIN (resolución de reciclos)
 # ======================================================
 # Cuando un SCC tiene > 1 bloque y alguno de sus streams tiene
