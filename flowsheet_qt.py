@@ -72,6 +72,7 @@ import equipment_costs as eq
 import equipment_ports as ep
 import flowsheet_solver as fsolv
 import flowsheet_export as fexp
+import flowsheet_validation as fval
 from flowsheet_model import (
     Block, Stream, Flowsheet,
     STREAM_ROLE_COLORS, STREAM_ROLE_COLORS_SEL,
@@ -1092,6 +1093,15 @@ class StreamItem(QGraphicsPathItem):
 
     def _compute_polyline(self, b_src, b_dst, s):
         """Polyline ortogonal Z-shape o L-shape entre puertos del src y dst."""
+        # Guard: auto-edge (mismo bloque a sí mismo).  No debería pasar
+        # porque complete_connection lo rechaza, pero un JSON malformado
+        # podría tenerlo.  Devolvemos un loop pequeño visual.
+        if b_src is b_dst:
+            x = b_src.x + BLOCK_W
+            y = b_src.y + BLOCK_H / 2
+            return [x, y, x + 30, y, x + 30, y - 30,
+                    b_src.x + BLOCK_W / 2, y - 30,
+                    b_src.x + BLOCK_W / 2, b_src.y]
         side1, x1, y1 = self._resolve_port(b_src, s.src_port, "right")
         side2, x2, y2 = self._resolve_port(b_dst, s.dst_port, "left")
         dx1, dy1 = self._side_dir(side1)
@@ -1190,12 +1200,19 @@ class FlowsheetScene(QGraphicsScene):
             self.addItem(line)
 
     def clear_flowsheet(self):
+        # Borra los items conocidos via mapping
         for item in list(self.block_items.values()):
             self.removeItem(item)
         for item in list(self.stream_items.values()):
             item.remove_from_scene(self)
         self.block_items.clear()
         self.stream_items.clear()
+        # Defensa: cualquier item no-grid que haya quedado huérfano
+        # (renderizado incompleto, fallos previos) se borra ahora.
+        for it in list(self.items()):
+            if it.zValue() > -100:    # grid items tienen z=-100
+                # mantenemos los items con tag de grid, removemos el resto
+                self.removeItem(it)
 
 
 # ======================================================
@@ -1621,11 +1638,24 @@ class FlowsheetMainWindow(QMainWindow):
         for sid, item in self.stream_items_iter():
             item.update_path()
         self._update_status()
+        # auditar conexiones semánticas
+        sem_issues = fval.validate_all_streams(self.fs)
         # mostrar resumen
+        summary = result.summary()
+        if sem_issues:
+            summary += "\n\n─ Validación semántica de conexiones ─\n"
+            for name, sev, msg in sem_issues:
+                tag = "⚠" if sev == "warn" else "✗"
+                summary += f"\n{tag} {name}:\n"
+                # solo la primera línea del mensaje (compacto)
+                first_line = msg.split("\n")[0] if msg else ""
+                summary += f"  {first_line}\n"
         dlg = QMessageBox(self)
-        dlg.setWindowTitle("Solver: " + ("OK" if result.success else "revisar"))
+        title = "Solver: OK" if (result.success and not sem_issues) \
+                else "Solver: revisar"
+        dlg.setWindowTitle(title)
         dlg.setText("Resumen del solver:")
-        dlg.setDetailedText(result.summary())
+        dlg.setDetailedText(summary)
         dlg.exec()
 
     def action_compute(self):
@@ -1946,15 +1976,39 @@ class FlowsheetMainWindow(QMainWindow):
     def edit_stream(self, stream: Stream):
         """Abre StreamEditDialog y refresca el render."""
         dlg = StreamEditDialog(self, stream, self.fs)
-        if dlg.exec() == QDialog.Accepted:
-            before = self.begin_action()
-            dlg.apply_to_model()
-            item = self.scene.stream_items.get(stream.id)
-            if item is not None:
-                item.update_path()
-            self._refresh_port_colors()
-            self._on_selection_changed()
-            self.end_action(f"Editar {stream.name}", before)
+        if dlg.exec() != QDialog.Accepted:
+            return
+        # snapshot antes de aplicar
+        before = self.begin_action()
+        # aplicar al modelo
+        dlg.apply_to_model()
+        # validar la conexión actualizada (puertos pueden haber cambiado)
+        sev, msg = fval.validate_connection(
+            self.fs, stream.src, stream.dst,
+            stream.src_port, stream.dst_port,
+        )
+        if sev == "error":
+            QMessageBox.critical(self, "Conexión inválida",
+                                  msg + "\n\nLa edición se revierte.")
+            self._apply_snapshot(before)
+            return
+        if sev == "warn":
+            ans = QMessageBox.question(
+                self, "Conexión atípica",
+                msg + "\n\n¿Mantener los cambios igual?",
+                QMessageBox.Yes | QMessageBox.No,
+                QMessageBox.No,
+            )
+            if ans != QMessageBox.Yes:
+                self._apply_snapshot(before)
+                return
+        # OK: refrescar y push undo
+        item = self.scene.stream_items.get(stream.id)
+        if item is not None:
+            item.update_path()
+        self._refresh_port_colors()
+        self._on_selection_changed()
+        self.end_action(f"Editar {stream.name}", before)
 
     def is_connecting(self) -> bool:
         return self._connecting_from is not None
@@ -1987,7 +2041,6 @@ class FlowsheetMainWindow(QMainWindow):
         b_dst = self.fs.blocks.get(dst_id)
         if b_src is None or b_dst is None:
             return
-        before = self.begin_action()
         if not src_port:
             used_out = [t.src_port for t in self.fs.streams.values()
                         if t.src == src_id and t.src_port]
@@ -1997,6 +2050,23 @@ class FlowsheetMainWindow(QMainWindow):
                        if t.dst == dst_id and t.dst_port]
             dst_port = ep.autoselect_inlet(b_dst.eq_type, used_in)
 
+        # Validación semántica: chequear compatibilidad de fluid types
+        sev, msg = fval.validate_connection(self.fs, src_id, dst_id,
+                                              src_port, dst_port)
+        if sev == "error":
+            QMessageBox.critical(self, "Conexión inválida", msg)
+            return
+        elif sev == "warn":
+            ans = QMessageBox.question(
+                self, "Conexión atípica",
+                msg + "\n\n¿Crear la conexión igual?",
+                QMessageBox.Yes | QMessageBox.No,
+                QMessageBox.No,
+            )
+            if ans != QMessageBox.Yes:
+                return
+
+        before = self.begin_action()
         sid = self.fs.new_id()
         name = f"S-{len(self.fs.streams) + 1}"
         s = Stream(
@@ -2047,6 +2117,12 @@ class FlowsheetMainWindow(QMainWindow):
         """Reemplaza self.fs con un snapshot y reconstruye la scene.
         Lo llaman SnapshotCommand.undo() y .redo()."""
         self._suppress_snapshot = True
+        # invalidar drag pendiente: si user undo'a en mitad de un drag,
+        # el snapshot guardado al inicio del drag ya no aplica al
+        # nuevo state.
+        self._drag_before_snapshot = None
+        # cancelar conexión pendiente también
+        self._connecting_from = None
         try:
             self.fs = Flowsheet.from_dict(snapshot_dict)
             self._rebuild_scene()
@@ -2106,6 +2182,14 @@ class FlowsheetMainWindow(QMainWindow):
     def _delete_block(self, bid):
         item = self.scene.block_items.pop(bid, None)
         if item is not None and item.scene() is self.scene:
+            # children del QGraphicsItemGroup (rect, texts, ports,
+            # decoration_items) se eliminan automáticamente con el padre,
+            # pero Python mantiene refs en la lista decoration_items.
+            # Limpiamos para que el GC libere todo.
+            if hasattr(item, "decoration_items"):
+                item.decoration_items.clear()
+            if hasattr(item, "port_items"):
+                item.port_items.clear()
             self.scene.removeItem(item)
         self.fs.blocks.pop(bid, None)
         # streams asociados
@@ -2159,8 +2243,13 @@ class FlowsheetMainWindow(QMainWindow):
             for other in self.scene.block_items.values():
                 other.set_selected_visual(False)
             s = it.model
-            b_src = self.fs.blocks[s.src].name
-            b_dst = self.fs.blocks[s.dst].name
+            # defensa: si los bloques referenciados ya no existen
+            # (stream huérfano por inconsistencia de modelo), mostrar
+            # info parcial sin crash.
+            src_b = self.fs.blocks.get(s.src)
+            dst_b = self.fs.blocks.get(s.dst)
+            b_src = src_b.name if src_b else "(borrado)"
+            b_dst = dst_b.name if dst_b else "(borrado)"
             sp = s.src_port or "(auto)"
             dp = s.dst_port or "(auto)"
             txt = (
