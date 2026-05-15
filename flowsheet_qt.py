@@ -1675,10 +1675,12 @@ class FlowsheetMainWindow(QMainWindow):
         # snapshot 'antes' del drag de bloques (se pushea al release)
         self._drag_before_snapshot = None
 
-        self._build_toolbar()
+        # Docks se construyen ANTES del toolbar para que éste pueda
+        # tomar sus toggleViewAction() y mostrarlos como botones.
         self._build_library_dock()
         self._build_properties_dock()
         self._build_streams_dock()
+        self._build_toolbar()
         self._build_statusbar()
 
         # selección
@@ -1766,6 +1768,14 @@ class FlowsheetMainWindow(QMainWindow):
 
         add_btn("OPEX extras…",    self.action_opex_extras)
         add_btn("Solve balances",  self.action_solve)
+        # toggle del dock de tabla de corrientes (creado en
+        # _build_streams_dock); toggleViewAction() ya viene cableado
+        # para mostrar/ocultar y refleja el estado actual.
+        if hasattr(self, "streams_dock") and self.streams_dock is not None:
+            toggle = self.streams_dock.toggleViewAction()
+            toggle.setText("Tabla de corrientes")
+            toggle.setShortcut("Ctrl+T")
+            tb.addAction(toggle)
         add_btn("Calcular",        self.action_compute)
         add_btn("Análisis económico →", self.action_launch_analysis)
         tb.addSeparator()
