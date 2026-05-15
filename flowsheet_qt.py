@@ -940,8 +940,11 @@ class BlockItem(QGraphicsItemGroup):
         try:
             from PySide6.QtWidgets import QGraphicsPixmapItem
             pix_item = QGraphicsPixmapItem(pixmap, parent=self)
-            # supersample 2× → escalar a 0.5
-            pix_item.setScale(0.5)
+            # NO usar setScale(0.5): el pixmap ya tiene
+            # setDevicePixelRatio(2) que hace que Qt reporte un
+            # boundingRect en unidades lógicas (la mitad del pixel
+            # size).  Aplicar setScale(0.5) además habría sido una
+            # doble reducción → SVG aparecía a 1/4 del área del bloque.
             pix_item.setPos(0, 0)
             pix_item.setZValue(0)
             pix_item.setTransformationMode(Qt.SmoothTransformation)
