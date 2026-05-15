@@ -667,6 +667,23 @@ class OpexExtrasDialog(QDialog):
 # BLOQUE COMO QGraphicsItem
 # ======================================================
 
+class _RoundedRectBody(QGraphicsRectItem):
+    """QGraphicsRectItem con esquinas redondeadas dibujadas via paint().
+
+    Hereda de QGraphicsRectItem (no de QGraphicsPathItem) para que
+    shape() siga siendo el rect cuadrado completo — garantiza hit
+    testing en todo el área del bloque, incluyendo las pequeñas
+    zonas de esquinas donde el visual rounded no llega.
+    """
+    RADIUS = 4
+
+    def paint(self, painter, option, widget=None):
+        painter.setRenderHint(QPainter.Antialiasing)
+        painter.setBrush(self.brush())
+        painter.setPen(self.pen())
+        painter.drawRoundedRect(self.rect(), self.RADIUS, self.RADIUS)
+
+
 class BlockItem(QGraphicsItemGroup):
     """Bloque del flowsheet renderizado en el canvas.
 
@@ -691,20 +708,13 @@ class BlockItem(QGraphicsItemGroup):
         self.setFlag(QGraphicsItem.ItemSendsGeometryChanges, True)
         self.setHandlesChildEvents(False)
 
-        # --- cuerpo (rect base + sombra + decoración por categoría) ---
-        # Sombra: rect negro translúcido desplazado (2,2) detrás del
-        # bloque, para sensación de objeto elevado tipo HYSYS.
-        shadow_path = QPainterPath()
-        shadow_path.addRoundedRect(2, 2, BLOCK_W, BLOCK_H, 4, 4)
-        self.shadow = QGraphicsPathItem(shadow_path, parent=self)
+        # --- sombra + rect base (esquinas redondeadas via paint) ---
+        self.shadow = _RoundedRectBody(2, 2, BLOCK_W, BLOCK_H, parent=self)
         self.shadow.setBrush(QBrush(QColor(0, 0, 0, 28)))
         self.shadow.setPen(Qt.NoPen)
         self.shadow.setZValue(-1)
 
-        # Rect base: esquinas redondeadas 4px (estilo HYSYS / Aspen Plus).
-        rect_path = QPainterPath()
-        rect_path.addRoundedRect(0, 0, BLOCK_W, BLOCK_H, 4, 4)
-        self.rect = QGraphicsPathItem(rect_path, parent=self)
+        self.rect = _RoundedRectBody(0, 0, BLOCK_W, BLOCK_H, parent=self)
         self.rect.setBrush(QBrush(COLOR_BLOCK_FILL))
         self.rect.setPen(QPen(COLOR_BLOCK_BORDER, 2))
 
@@ -800,7 +810,7 @@ class BlockItem(QGraphicsItemGroup):
                 # ícono, gracias al espacio que dejan los SVGs en sus
                 # bordes superior/inferior).
                 self.rect.setBrush(QBrush(COLOR_BLOCK_FILL))
-                self.rect.setPen(QPen(QColor("#b0bec5"), 1.0))
+                self.rect.setPen(QPen(QColor("#78909c"), 1.2))
                 self.rect.setZValue(-0.5)
                 self.decoration_items.append(pix_item)
                 self._svg_mode = True
@@ -1017,7 +1027,7 @@ class BlockItem(QGraphicsItemGroup):
             # borde sutil gris claro en modo SVG, índigo normal en
             # fallback Qt paths.
             if svg:
-                self.rect.setPen(QPen(QColor("#b0bec5"), 1.0))
+                self.rect.setPen(QPen(QColor("#78909c"), 1.2))
             else:
                 self.rect.setPen(QPen(COLOR_BLOCK_BORDER, 2))
 
