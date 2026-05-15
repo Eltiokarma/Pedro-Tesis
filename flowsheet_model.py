@@ -128,6 +128,13 @@ class Stream:
     # ΔH_vap override (kJ/kg).  Si 0, se calcula de la composition.
     delta_h_vap_override: float = 0.0
 
+    # Waypoints intermedios para routing manual del stream.  Cada
+    # waypoint es [x, y] en coordenadas absolutas de la escena Qt.
+    # Si está vacío, el router calcula la polilínea automáticamente
+    # (Z-step o detour).  Si tiene puntos, la polilínea es:
+    #   src_port → waypoints[0] → … → waypoints[N] → dst_port
+    waypoints: List[List[float]] = field(default_factory=list)
+
     # caches del canvas Tk
     canvas_line:    Optional[int] = field(default=None, repr=False)
     canvas_label:   Optional[int] = field(default=None, repr=False)

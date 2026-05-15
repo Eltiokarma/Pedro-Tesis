@@ -693,6 +693,55 @@ class _RoundedRectBody(QGraphicsRectItem):
         painter.setPen(self.pen())
         painter.drawRoundedRect(self.rect(), self.RADIUS, self.RADIUS)
 
+    def shape(self):
+        # SIEMPRE devolver el rect completo como shape de hit-testing,
+        # independiente de pen/brush.  Sin esto, cuando el rect tiene
+        # pen=NoPen y brush con alpha casi 0 (como el hit-target
+        # invisible del BlockItem), Qt podría no registrar clicks en
+        # el interior y los bloques no se podrían mover.
+        from PySide6.QtGui import QPainterPath
+        p = QPainterPath()
+        p.addRect(self.rect())
+        return p
+
+
+class _StreamHandle(QGraphicsEllipseItem):
+    """Handle circular azul para arrastrar un waypoint de stream.
+    Se renderiza solo cuando el stream está seleccionado.  Al moverlo,
+    snap a la grilla y se actualiza model.waypoints[idx]."""
+
+    RADIUS = 5
+
+    def __init__(self, stream_item: "StreamItem", waypoint_idx: int):
+        r = self.RADIUS
+        super().__init__(-r, -r, 2*r, 2*r)
+        self._stream_item = stream_item
+        self._wp_idx = waypoint_idx
+        self.setFlag(QGraphicsItem.ItemIsMovable, True)
+        self.setFlag(QGraphicsItem.ItemIsSelectable, True)
+        self.setFlag(QGraphicsItem.ItemSendsGeometryChanges, True)
+        self.setBrush(QBrush(QColor("#1f6feb")))
+        self.setPen(QPen(QColor("#ffffff"), 1.2))
+        self.setZValue(8)
+        self.setCursor(Qt.SizeAllCursor)
+        # init pos desde el modelo (scene-coords)
+        wp = stream_item.model.waypoints[waypoint_idx]
+        self.setPos(float(wp[0]), float(wp[1]))
+
+    def itemChange(self, change, value):
+        if change == QGraphicsItem.ItemPositionChange and self.scene():
+            # snap a la grilla
+            nx = round(value.x() / GRID_STEP) * GRID_STEP
+            ny = round(value.y() / GRID_STEP) * GRID_STEP
+            value = QPointF(nx, ny)
+        elif change == QGraphicsItem.ItemPositionHasChanged and self.scene():
+            si = self._stream_item
+            i = self._wp_idx
+            if 0 <= i < len(si.model.waypoints):
+                si.model.waypoints[i] = [self.pos().x(), self.pos().y()]
+                si.update_path(rebuild_handles=False)
+        return super().itemChange(change, value)
+
 
 class BlockItem(QGraphicsItemGroup):
     """Bloque del flowsheet renderizado en el canvas.
@@ -959,6 +1008,10 @@ class StreamItem(QGraphicsPathItem):
         self.arrow_head.setPen(QPen(Qt.NoPen))
         self.arrow_head.setZValue(5.5)
 
+        # handles draggables (uno por waypoint).  Se crean/muestran
+        # solo cuando el stream está seleccionado.
+        self._handles: list = []
+
         # label estilo PFD industrial: pill (rounded rect blanco con
         # borde del color del stream) + nombre + flujo en mono.
         self.label_bg = _RoundedRectBody(0, 0, 10, 10)
@@ -987,6 +1040,11 @@ class StreamItem(QGraphicsPathItem):
         scene.addItem(self.label_flow)
 
     def remove_from_scene(self, scene: QGraphicsScene):
+        # remover handles de waypoints si estaban activos
+        for h in self._handles:
+            if h.scene() is scene:
+                scene.removeItem(h)
+        self._handles.clear()
         for item in (self, self.arrow_head, self.label_bg,
                       self.label_name, self.label_flow):
             if item.scene() is scene:
@@ -1020,14 +1078,25 @@ class StreamItem(QGraphicsPathItem):
             lines.append(f"T = {s.temperature:g} °C, Cp = {s.cp:g} kJ/kg·K")
         self.setToolTip("<br>".join(lines))
 
-    def update_path(self):
+    def update_path(self, rebuild_handles=True):
         s = self.model
         b_src = self.fs.blocks.get(s.src)
         b_dst = self.fs.blocks.get(s.dst)
         if b_src is None or b_dst is None:
             return
-        # resolver puertos con el catálogo (helper compartido con flowsheet_ui)
-        pts = self._compute_polyline(b_src, b_dst, s)
+        # Si hay waypoints declarados, usar routing manual.
+        # Si no, autoroute con _compute_polyline.
+        if s.waypoints:
+            side1, x1, y1 = self._resolve_port(b_src, s.src_port, "right")
+            side2, x2, y2 = self._resolve_port(b_dst, s.dst_port, "left")
+            pts = [x1, y1]
+            for wp in s.waypoints:
+                pts.append(float(wp[0]))
+                pts.append(float(wp[1]))
+            pts.append(x2)
+            pts.append(y2)
+        else:
+            pts = self._compute_polyline(b_src, b_dst, s)
         if not pts:
             return
 
@@ -1071,7 +1140,56 @@ class StreamItem(QGraphicsPathItem):
         self.label_name.setPos(x0 + pad_x, ty)
         self.label_flow.setPos(x0 + pad_x + bb_name.width() + gap, ty)
 
+        if rebuild_handles:
+            self._rebuild_handles()
+
         self._update_tooltip()
+
+    # ---------------------------------------------------
+    # WAYPOINTS DRAGGABLES (routing manual)
+    # ---------------------------------------------------
+
+    def _rebuild_handles(self):
+        """Recrea los handles de waypoints.  Solo visibles cuando el
+        stream está seleccionado."""
+        scene = self.scene()
+        # remover handles viejos
+        for h in self._handles:
+            if scene is not None and h.scene() is scene:
+                scene.removeItem(h)
+        self._handles.clear()
+
+        if not self.isSelected() or scene is None:
+            return
+        for i in range(len(self.model.waypoints)):
+            h = _StreamHandle(self, i)
+            scene.addItem(h)
+            self._handles.append(h)
+
+    def itemChange(self, change, value):
+        if change == QGraphicsItem.ItemSelectedHasChanged:
+            self._rebuild_handles()
+        return super().itemChange(change, value)
+
+    def contextMenuEvent(self, event):
+        """Menú right-click: insertar waypoint, resetear auto-routing."""
+        from PySide6.QtWidgets import QMenu
+        menu = QMenu()
+        click_pos = event.scenePos()
+        a_add = menu.addAction("Insertar waypoint acá")
+        a_reset = menu.addAction("Resetear auto-routing")
+        a_reset.setEnabled(bool(self.model.waypoints))
+        chosen = menu.exec_(event.screenPos())
+        if chosen is a_add:
+            # snap a la grilla
+            wx = round(click_pos.x() / GRID_STEP) * GRID_STEP
+            wy = round(click_pos.y() / GRID_STEP) * GRID_STEP
+            self.model.waypoints.append([wx, wy])
+            self.update_path()
+        elif chosen is a_reset:
+            self.model.waypoints.clear()
+            self.update_path()
+        event.accept()
 
     def _draw_arrow(self, path, x_end, y_end, x_prev, y_prev):
         """Punta de flecha rellena al final del stream — QGraphicsPolygonItem
