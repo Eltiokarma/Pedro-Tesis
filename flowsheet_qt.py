@@ -83,34 +83,45 @@ from flowsheet_model import (
 
 
 # ======================================================
-# CACHE DE QSvgRenderer COMPARTIDOS
+# CACHE DE PIXMAPS RENDERIZADOS DESDE SVG
 # ======================================================
-# Cada SVG se compila una vez y se comparte entre todos los items
-# del mismo eq_type.  Eficiente y mantiene la ref viva.
+# QGraphicsSvgItem demostró ser frágil en algunos entornos:
+# requiere QtSvgWidgets, a veces no aplica el viewBox y queda
+# con boundingRect efectivo cero (resultado: cuadrado vacío).
+#
+# Solución: renderizar cada SVG a un QPixmap (raster) UNA VEZ
+# a 2× resolución (HiDPI-friendly), y usar QGraphicsPixmapItem
+# para mostrarlo.  El item queda al tamaño correcto siempre.
 
-_SVG_RENDERERS = {}      # eq_type → QSvgRenderer
-_SVG_AVAILABLE = None    # lazy check: ¿QtSvg está instalado?
+_SVG_PIXMAPS   = {}        # (eq_type, w, h) → QPixmap renderizado
+_SVG_AVAILABLE = None      # lazy: ¿PySide6.QtSvg disponible?
 
 
-def _get_svg_renderer(eq_type):
-    """Devuelve un QSvgRenderer para el eq_type, o None si:
+def _get_svg_pixmap(eq_type, width, height):
+    """Renderiza el SVG de eq_type a un QPixmap de tamaño width×height
+    (con supersampling 2× para nitidez).  Cache compartido.
+
+    Devuelve None si:
       · no hay SVG hardcoded para ese eq_type, o
-      · PySide6.QtSvg / QtSvgWidgets no está disponible.
+      · PySide6.QtSvg no está disponible, o
+      · el SVG no parsea correctamente.
     """
     global _SVG_AVAILABLE
     if _SVG_AVAILABLE is False:
         return None
 
+    cache_key = (eq_type, width, height)
+    if cache_key in _SVG_PIXMAPS:
+        return _SVG_PIXMAPS[cache_key]
+
     svg_str = eicon.get_icon_svg(eq_type)
     if svg_str is None:
         return None
 
-    if eq_type in _SVG_RENDERERS:
-        return _SVG_RENDERERS[eq_type]
-
     try:
-        from PySide6.QtSvg import QSvgRenderer
+        from PySide6.QtSvg  import QSvgRenderer
         from PySide6.QtCore import QByteArray
+        from PySide6.QtGui  import QImage, QPainter, QPixmap
         _SVG_AVAILABLE = True
     except ImportError:
         _SVG_AVAILABLE = False
@@ -119,8 +130,22 @@ def _get_svg_renderer(eq_type):
     renderer = QSvgRenderer(QByteArray(svg_str.encode("utf-8")))
     if not renderer.isValid():
         return None
-    _SVG_RENDERERS[eq_type] = renderer
-    return renderer
+
+    # supersampling 2× → render más nítido a HiDPI
+    sup = 2
+    img = QImage(width * sup, height * sup, QImage.Format_ARGB32)
+    img.fill(Qt.transparent)
+    painter = QPainter(img)
+    painter.setRenderHint(QPainter.Antialiasing, True)
+    painter.setRenderHint(QPainter.TextAntialiasing, True)
+    painter.setRenderHint(QPainter.SmoothPixmapTransform, True)
+    renderer.render(painter)
+    painter.end()
+
+    pixmap = QPixmap.fromImage(img)
+    pixmap.setDevicePixelRatio(sup)   # decir a Qt que es 2× DPI
+    _SVG_PIXMAPS[cache_key] = pixmap
+    return pixmap
 
 
 # ======================================================
@@ -718,46 +743,29 @@ class BlockItem(QGraphicsItemGroup):
         """
         self._svg_mode = False
 
-        # 1. SVG hardcoded (icono profesional)
-        renderer = _get_svg_renderer(eq_type)
-        if renderer is not None:
+        # 1. SVG hardcoded (icono profesional) → QPixmap renderizado
+        try:
+            pixmap = _get_svg_pixmap(eq_type, BLOCK_W, BLOCK_H)
+        except Exception:
+            pixmap = None
+        if pixmap is not None and not pixmap.isNull():
             try:
-                from PySide6.QtSvgWidgets import QGraphicsSvgItem
-                from PySide6.QtCore import QRectF
-                svg_item = QGraphicsSvgItem(parent=self)
-                svg_item.setSharedRenderer(renderer)
-                # IMPORTANTE: forzar el tamaño del item al viewBox.
-                # Sin esto, QGraphicsSvgItem puede tener boundingRect
-                # vacío y no renderizar nada visible.
-                # El SVG está en viewBox 0 0 130 60 = BLOCK_W × BLOCK_H.
-                vb = renderer.viewBoxF()
-                if vb.isEmpty():
-                    vb = QRectF(0, 0, BLOCK_W, BLOCK_H)
-                # escalar al tamaño del bloque por si el viewBox difiere
-                scale_x = BLOCK_W / max(vb.width(),  1.0)
-                scale_y = BLOCK_H / max(vb.height(), 1.0)
-                scale = min(scale_x, scale_y)
-                svg_item.setScale(scale)
-                # centrar en el bloque si hubo recorte
-                actual_w = vb.width()  * scale
-                actual_h = vb.height() * scale
-                svg_item.setPos((BLOCK_W - actual_w) / 2,
-                                 (BLOCK_H - actual_h) / 2)
-                svg_item.setZValue(0)
-                # rect base: visible con borde claro, fill blanco (para
-                # que el texto sea legible).  Si el SVG falla, queda al
-                # menos un rect bonito.
+                from PySide6.QtWidgets import QGraphicsPixmapItem
+                pix_item = QGraphicsPixmapItem(pixmap, parent=self)
+                # como el pixmap se renderizó a 2× supersample, lo
+                # escalamos a 0.5 para mostrarlo a tamaño nominal.
+                pix_item.setScale(0.5)
+                pix_item.setPos(0, 0)
+                pix_item.setZValue(0)
+                pix_item.setTransformationMode(Qt.SmoothTransformation)
+                # rect base: visible con borde claro, fill blanco
                 self.rect.setBrush(QBrush(COLOR_BLOCK_FILL))
                 self.rect.setPen(QPen(COLOR_BLOCK_BORDER, 1.5))
-                self.rect.setZValue(-0.5)   # detrás del SVG
-                self.decoration_items.append(svg_item)
+                self.rect.setZValue(-0.5)
+                self.decoration_items.append(pix_item)
                 self._svg_mode = True
                 return
-            except ImportError:
-                # QtSvgWidgets no disponible — caemos al fallback
-                pass
             except Exception:
-                # cualquier otro error de renderizado del SVG → fallback
                 pass
 
         # 2. Fallback: Qt paths (phase C, simples pero funcionales)

@@ -71,6 +71,13 @@ MASS_TOL_REL  = 0.005      # 0.5 %  tolerancia de balance de masa
 ENERGY_TOL_REL = 0.05      # 5 %    tolerancia de balance de energía
 MAX_ITER      = 30
 
+# Rango físico razonable para T en un PFD industrial.
+# Si el solver calcula una T fuera de este rango, NO la propaga
+# (es señal de que el modelo Cp simple no captura ΔH_vap o ΔH_rxn
+# y el duty declarado da una T absurda).
+T_MIN_REASONABLE = -100.0    # °C  (refrigeración severa)
+T_MAX_REASONABLE = 1500.0    # °C  (hornos de craqueo)
+
 
 # ======================================================
 # RESULTADO
@@ -291,7 +298,7 @@ def _stream_enthalpy_kW(s):
     return m_kg_s * s.cp * (s.temperature - T_REF_C)
 
 
-def _solve_energy_iteration(fs, tol_T=0.5):
+def _solve_energy_iteration(fs, tol_T=0.5, skipped=None):
     """Una pasada propagando T sobre los bloques.
 
     A diferencia del solver de masa, el de energía no usa "T_known":
@@ -300,17 +307,41 @@ def _solve_energy_iteration(fs, tol_T=0.5):
     inputs.  Si la T calculada coincide con la actual (tol 0.5°C),
     no se reporta como propagada.
 
+    Guard: si la T calculada cae fuera de [T_MIN_REASONABLE,
+    T_MAX_REASONABLE], NO se propaga (probablemente el duty declarado
+    incluye ΔH_vap o ΔH_rxn que el modelo Cp simple no representa).
+    Se acumula en `skipped` (lista) para reportar al user.
+
     Sólo procesa bloques cuyos inputs ya están "listos":
       - todos los inputs tienen Cp > 0 y mass_flow > 0
       - todos los outputs tienen Cp > 0 y mass_flow > 0
     """
     propagated = []
+    if skipped is None:
+        skipped = []
+
+    def _try_set(s_out, t_new, block_name):
+        """Setea T_out si está en rango razonable.  Devuelve True si
+        se propagó (T cambió por más que tol_T)."""
+        if not (T_MIN_REASONABLE <= t_new <= T_MAX_REASONABLE):
+            skipped.append(
+                f"{block_name} → {s_out.name}: T calc = {t_new:.0f} °C "
+                f"fuera de rango [-100, 1500]; "
+                f"duty/Cp incompatibles (Cp simple sin ΔH_vap/ΔH_rxn). "
+                f"T mantenida en {s_out.temperature:g} °C."
+            )
+            return False
+        if abs(t_new - s_out.temperature) > tol_T:
+            s_out.temperature = t_new
+            propagated.append((s_out.name, t_new))
+            return True
+        return False
+
     for b in fs.blocks.values():
         ins  = [s for s in fs.streams.values() if s.dst == b.id]
         outs = [s for s in fs.streams.values() if s.src == b.id]
         if not ins or not outs:
             continue
-        # tabla de prerrequisitos para procesar el bloque
         if not all(s.cp > 0 and s.mass_flow > 0 for s in ins + outs):
             continue
 
@@ -319,14 +350,12 @@ def _solve_energy_iteration(fs, tol_T=0.5):
         # Passthrough simple: 1 in - 1 out
         if len(ins) == 1 and len(outs) == 1:
             s_in, s_out = ins[0], outs[0]
-            h_in        = _stream_enthalpy_kW(s_in) or 0.0
-            m_out_kg_s  = (s_out.mass_flow * TM_TO_KG) / SEC_PER_YEAR
+            h_in       = _stream_enthalpy_kW(s_in) or 0.0
+            m_out_kg_s = (s_out.mass_flow * TM_TO_KG) / SEC_PER_YEAR
             denom = m_out_kg_s * s_out.cp
             if denom > 0:
                 t_new = T_REF_C + (h_in + duty) / denom
-                if abs(t_new - s_out.temperature) > tol_T:
-                    s_out.temperature = t_new
-                    propagated.append((s_out.name, t_new))
+                _try_set(s_out, t_new, b.name)
             continue
 
         # Mixer: N in - 1 out
@@ -341,18 +370,18 @@ def _solve_energy_iteration(fs, tol_T=0.5):
             denom_out  = m_out_kg_s * s_out.cp
             if denom_out > 0:
                 t_new = T_REF_C + (num + duty) / denom_out
-                if abs(t_new - s_out.temperature) > tol_T:
-                    s_out.temperature = t_new
-                    propagated.append((s_out.name, t_new))
+                _try_set(s_out, t_new, b.name)
             continue
 
-        # Splitter: 1 in - N out.  T_out_j = T_in (split adiabático)
-        if len(ins) == 1:
-            t_in = ins[0].temperature
-            for s_out in outs:
-                if abs(t_in - s_out.temperature) > tol_T:
-                    s_out.temperature = t_in
-                    propagated.append((s_out.name, t_in))
+        # Splitter: 1 in - N out.
+        # NO propagamos T en splitters porque típicamente hay
+        # equilibrio L-V o cambios de fase (vapor más caliente que
+        # líquido del flash, fondos vs tope de columna, etc.) que
+        # el modelo Cp simple no representa.  El user declara las
+        # Ts de cada output explícitamente.
+        # Si el split es realmente adiabático (caudales paralelos
+        # sin cambio de fase), el user declara T_out_j = T_in y
+        # listo.
     return propagated
 
 
@@ -584,12 +613,22 @@ def solve(fs, max_iter=MAX_ITER):
 
     # 5. Solver de energía
     total_propagated_temp = []
+    skipped_temp = []
     for it_e in range(max_iter):
-        prop_e = _solve_energy_iteration(fs)
+        prop_e = _solve_energy_iteration(fs, skipped=skipped_temp)
         total_propagated_temp.extend(prop_e)
         if not prop_e:
             break
     result.propagated_temp = total_propagated_temp
+    # Mensajes de T omitidas por estar fuera de rango razonable
+    # (típicamente porque el duty incluye ΔH_vap/ΔH_rxn que el modelo
+    # Cp simple no captura).  Reportamos UNA vez cada uno.
+    if skipped_temp:
+        seen = set()
+        for msg in skipped_temp:
+            if msg not in seen:
+                result.energy_balance_errors.append(msg)
+                seen.add(msg)
 
     # 4. Validación + listado de unresolved
     for s in fs.streams.values():
