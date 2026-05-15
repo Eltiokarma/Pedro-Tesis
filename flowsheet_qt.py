@@ -1985,6 +1985,11 @@ class FlowsheetMainWindow(QMainWindow):
         examples_menu.addAction("Producción de etanol",                  make_loader("ethanol"))
         examples_menu.addAction("Producción de biodiesel",               make_loader("biodiesel"))
         examples_menu.addAction("Refinería atmosférica simplificada",    make_loader("cdu"))
+        examples_menu.addSeparator()
+        # ---- Procesos industriales completos ----
+        examples_menu.addAction("HDA completo (Douglas, escala industrial)", make_loader("hda_full"))
+        examples_menu.addAction("Endulzamiento de gas natural (MDEA)",       make_loader("gas_sweet"))
+        examples_menu.addAction("Planta de azúcar (caña)",                   make_loader("sugar"))
         examples_act.setMenu(examples_menu)
         tb.addAction(examples_act)
         # workaround: QAction con menu necesita un QToolButton para mostrar el dropdown
@@ -2219,6 +2224,16 @@ class FlowsheetMainWindow(QMainWindow):
             "cdu":          (TkEditor._example_crude_distillation,
                               "Refinería atmosférica simplificada (CDU)",
                               "100 — Destilación primaria", "PFD-CDU-001"),
+            # ---- Procesos industriales completos (mayor escala, recycles) ----
+            "hda_full":     (TkEditor._example_hda_full,
+                              "HDA completo (Douglas) — escala industrial",
+                              "100 — Reacción / Separación", "PFD-HDA-FULL"),
+            "gas_sweet":    (TkEditor._example_gas_sweetening,
+                              "Endulzamiento de gas natural (MDEA)",
+                              "200 — Tratamiento de gas", "PFD-GAS-001"),
+            "sugar":        (TkEditor._example_sugar_mill,
+                              "Planta de azúcar (caña → cristalización)",
+                              "100 — Cristalización", "PFD-SUGAR-001"),
         }
         entry = builder_map.get(key)
         if entry is None:

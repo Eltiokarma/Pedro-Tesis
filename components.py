@@ -195,6 +195,30 @@ COMPONENTS: Dict[str, Component] = {
         cp_v_a=1.000, cp_v_b=0.00200,
         dh_vap=300.0,
     ),
+    "sucrose":   Component(
+        # sacarosa — disuelta en jugo de caña / remolacha
+        name="sucrose", label="Sacarosa (C₁₂H₂₂O₁₁)",
+        mw=342.30, tb_c=186.0,
+        cp_l_a=1.250, cp_l_b=0.00200,
+        cp_v_a=1.000, cp_v_b=0.00200,
+        dh_vap=400.0,
+    ),
+    "h2s":       Component(
+        # ácido sulfhídrico, contaminante en gas natural
+        name="h2s", label="Ácido sulfhídrico (H₂S)",
+        mw=34.08, tb_c=-60.3,
+        cp_l_a=2.10, cp_l_b=0.0,
+        cp_v_a=1.00, cp_v_b=0.00050,
+        dh_vap=540.0,
+    ),
+    "mdea":      Component(
+        # MDEA, amina típica para endulzamiento de gas
+        name="mdea", label="MDEA (metildietanolamina)",
+        mw=119.16, tb_c=247.0,
+        cp_l_a=2.70, cp_l_b=0.00300,
+        cp_v_a=1.85, cp_v_b=0.00250,
+        dh_vap=520.0,
+    ),
 
     # ---- Biodiesel / oleo ----
     "vegetable_oil": Component(

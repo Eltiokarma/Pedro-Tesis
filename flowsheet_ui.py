@@ -1782,6 +1782,521 @@ class FlowsheetEditor:
         auto_set_duties_from_thermo(self.fs)
         self._set_block_duty(p101, +50)    # bomba: eléctrico
 
+    # ======================================================
+    # EJEMPLOS INDUSTRIALES (escala real, recycles, > 15 equipos)
+    # ======================================================
+
+    def _example_hda_full(self):
+        """HDA industrial completo (Douglas) — escala 110,000 t/año feed,
+        producción ~85,000 t/año benceno.
+
+        Topología completa con recycle de gas (compresor) + tren de 3
+        columnas de destilación: estabilizadora (light ends),
+        benceno (producto), y tolueno (reciclo).
+
+        Reacción: C₇H₈ + H₂ → C₆H₆ + CH₄   (~75% conv)
+        """
+        # ============ Sección reacción (fila superior, y centro 240) ============
+        tk_tol_fresh = self._add_example_block("TK-101","Storage tank — cone roof", 600.0,  60, 180)
+        p101 = self._add_example_block("P-101", "Pump — centrifugal",                30.0, 180, 215)
+        e101 = self._add_example_block("E-101", "Heat exch. — floating head",      1500.0, 290, 220)
+        f101 = self._add_example_block("F-101", "Fired heater — non-reformer",    25000.0, 450, 180)
+        r101 = self._add_example_block("R-101", "Reactor — jacketed non-agit.",    120.0, 600, 180)
+        e102 = self._add_example_block("E-102", "Heat exch. — air cooler",         900.0, 720, 200)
+        v101 = self._add_example_block("V-101", "Vessel — vertical",                50.0, 900, 180)
+        # Recycle de gas (H₂ + CH₄ light)
+        k101 = self._add_example_block("K-101", "Compressor — centrifugal",        300.0, 980, 60)
+        # Purga de gas (10% del recycle, para evitar acumulación de CH₄)
+        tk_purga = self._add_example_block("TK-102","Storage tank — cone roof",     50.0, 1100, 60)
+
+        # ============ Tren de destilación (fila inferior + lado) ============
+        # Estabilizadora: T-101 separa light ends (CH₄ disuelto, gas en el líquido)
+        e103 = self._add_example_block("E-103", "Heat exch. — floating head",      400.0,  60, 460)
+        t101 = self._add_example_block("T-101", "Tower (column shell)",             80.0, 220, 380)  # stabilizer
+        e104 = self._add_example_block("E-104", "Heat exch. — floating head",      300.0, 360, 380)  # cond top T-101 (gas fuel)
+        e105 = self._add_example_block("E-105", "Heat exch. — kettle reboiler",    300.0, 220, 620)  # reboiler T-101
+        tk_fuel = self._add_example_block("TK-103","Storage tank — cone roof",      50.0, 500, 380)  # off-gas (fuel gas)
+        # Columna de benceno: T-102 producto cabeza
+        t102 = self._add_example_block("T-102", "Tower (column shell)",            100.0, 640, 440)
+        e106 = self._add_example_block("E-106", "Heat exch. — floating head",      500.0, 760, 320)  # cond top T-102 (benceno)
+        e107 = self._add_example_block("E-107", "Heat exch. — kettle reboiler",    400.0, 760, 660)  # reboiler T-102
+        tk_bz = self._add_example_block("TK-104","Storage tank — cone roof",       500.0, 920, 320)  # benceno producto
+        # Columna de tolueno: T-103 recupera tolueno para reciclo
+        t103 = self._add_example_block("T-103", "Tower (column shell)",             80.0, 1080, 440)
+        e108 = self._add_example_block("E-108", "Heat exch. — floating head",      300.0, 1200, 320)  # cond top
+        e109 = self._add_example_block("E-109", "Heat exch. — kettle reboiler",    250.0, 1200, 660)  # reboiler
+        tk_pesados = self._add_example_block("TK-105","Storage tank — cone roof",   60.0, 1360, 660)  # difenilo, etc
+
+        # ============ Streams ============
+        # Composiciones tipo Douglas (fracciones másicas).
+        feed_tol  = {"toluene": 1.0}
+        post_rxn  = {"benzene": 0.78, "toluene": 0.13, "methane": 0.06, "hydrogen": 0.03}
+        v101_liq  = {"benzene": 0.81, "toluene": 0.13, "methane": 0.05, "hydrogen": 0.01}
+        v101_gas  = {"hydrogen": 0.45, "methane": 0.50, "benzene": 0.05}
+        t101_top  = {"methane": 0.70, "hydrogen": 0.20, "benzene": 0.10}  # off-gas a fuel
+        t101_bot  = {"benzene": 0.86, "toluene": 0.14}    # benceno + tolueno mezcla
+        bz_pure   = {"benzene": 0.998, "toluene": 0.002}
+        tol_recyc = {"toluene": 0.99, "benzene": 0.01}
+        pesados   = {"toluene": 0.20, "atmospheric_residue": 0.80}  # difenilo aprox
+
+        # --- Sección reacción ---
+        self._add_example_stream(tk_tol_fresh, p101, "S-feed-tol", 60000, role="feed",
+                                 src_port="salida", dst_port="succion",
+                                 price=650.0, T=25,
+                                 composition=feed_tol,
+                                 main_component="toluene", phase="liquid")
+        # Post-bomba mezclado con tolueno reciclo
+        self._add_example_stream(p101, e101, "S-1", 80000,
+                                 src_port="descarga", dst_port="tube_in",
+                                 T=30,
+                                 composition=feed_tol,
+                                 main_component="toluene", phase="liquid")
+        # Post-preheater (HX feed/effluent)
+        self._add_example_stream(e101, f101, "S-2", 80000,
+                                 src_port="tube_out", dst_port="proceso_in",
+                                 T=350,
+                                 composition=feed_tol,
+                                 main_component="toluene", phase="vapor")
+        # Post-horno: T reacción ~620°C
+        self._add_example_stream(f101, r101, "S-3", 88000,
+                                 src_port="proceso_out", dst_port="alimentacion",
+                                 T=620,
+                                 composition=feed_tol,
+                                 main_component="toluene", phase="vapor")
+        # Post-reactor: efluente con benceno + light ends
+        self._add_example_stream(r101, e102, "S-4", 88000,
+                                 src_port="producto", dst_port="proceso_in",
+                                 T=640,
+                                 composition=post_rxn,
+                                 main_component="benzene", phase="vapor")
+        # Post-cooler: parcialmente condensado
+        self._add_example_stream(e102, v101, "S-5", 88000,
+                                 src_port="proceso_out", dst_port="alimentacion",
+                                 T=45,
+                                 composition=post_rxn,
+                                 main_component="benzene", phase="liquid")
+        # Gas del flash (recycle a compresor)
+        self._add_example_stream(v101, k101, "S-gas-recic", 8800,
+                                 src_port="vapor", dst_port="succion",
+                                 T=45,
+                                 composition=v101_gas,
+                                 main_component="hydrogen", phase="gas")
+        # Post-compresor: gas comprimido al horno (se uniría con el feed antes de E-101)
+        self._add_example_stream(k101, f101, "S-gas-pre", 8000,
+                                 src_port="descarga", dst_port="combustible",
+                                 T=80,
+                                 composition=v101_gas,
+                                 main_component="hydrogen", phase="gas")
+        # Purga: 10% del recycle se pierde a fuel gas
+        self._add_example_stream(k101, tk_purga, "S-purga", 800, role="product",
+                                 src_port="descarga", dst_port="entrada",
+                                 price=120.0, T=80,
+                                 composition=v101_gas,
+                                 main_component="hydrogen", phase="gas")
+        # Líquido del flash al pre-cooler antes de estabilizadora
+        self._add_example_stream(v101, e103, "S-liq", 79200,
+                                 src_port="liquido", dst_port="tube_in",
+                                 T=45,
+                                 composition=v101_liq,
+                                 main_component="benzene", phase="liquid")
+        # Feed de la estabilizadora
+        self._add_example_stream(e103, t101, "S-6", 79200,
+                                 src_port="tube_out", dst_port="alimentacion",
+                                 T=80,
+                                 composition=v101_liq,
+                                 main_component="benzene", phase="liquid")
+
+        # --- Estabilizadora T-101: separa light ends del benceno+tolueno ---
+        self._add_example_stream(t101, e104, "S-7-light", 5000,
+                                 src_port="vapor_tope", dst_port="tube_in",
+                                 T=70,
+                                 composition=t101_top,
+                                 main_component="methane", phase="vapor")
+        # Off-gas (a fuel del horno)
+        self._add_example_stream(e104, tk_fuel, "S-fuel", 5000, role="product",
+                                 src_port="tube_out", dst_port="entrada",
+                                 price=180.0, T=40,
+                                 composition=t101_top,
+                                 main_component="methane", phase="gas")
+        # Fondo estabilizadora: benceno + tolueno al sig. paso
+        self._add_example_stream(t101, e105, "S-8", 74200,
+                                 src_port="liquido_fondo", dst_port="liq_in",
+                                 T=130,
+                                 composition=t101_bot,
+                                 main_component="benzene", phase="liquid")
+        # Después del reboiler T-101 (su vapor sube; el líquido neto va al sig.)
+        self._add_example_stream(e105, t102, "S-9", 74200,
+                                 src_port="cond_out", dst_port="alimentacion",
+                                 T=125,
+                                 composition=t101_bot,
+                                 main_component="benzene", phase="liquid")
+
+        # --- Columna benceno T-102: producto cabeza ---
+        self._add_example_stream(t102, e106, "S-10", 52800,
+                                 src_port="vapor_tope", dst_port="tube_in",
+                                 T=82,
+                                 composition=bz_pure,
+                                 main_component="benzene", phase="vapor")
+        # Benceno producto
+        self._add_example_stream(e106, tk_bz, "S-benceno", 52800, role="product",
+                                 src_port="tube_out", dst_port="entrada",
+                                 price=1150.0, T=40,
+                                 composition=bz_pure,
+                                 main_component="benzene", phase="liquid")
+        # Fondo T-102: tolueno (+ algo de benceno) al sig. paso
+        self._add_example_stream(t102, e107, "S-11", 21400,
+                                 src_port="liquido_fondo", dst_port="liq_in",
+                                 T=125,
+                                 composition=tol_recyc,
+                                 main_component="toluene", phase="liquid")
+        self._add_example_stream(e107, t103, "S-12", 21400,
+                                 src_port="cond_out", dst_port="alimentacion",
+                                 T=120,
+                                 composition=tol_recyc,
+                                 main_component="toluene", phase="liquid")
+
+        # --- Columna tolueno T-103: recupera tolueno para reciclo ---
+        self._add_example_stream(t103, e108, "S-13", 20000,
+                                 src_port="vapor_tope", dst_port="tube_in",
+                                 T=110,
+                                 composition=tol_recyc,
+                                 main_component="toluene", phase="vapor")
+        # Tolueno reciclado al P-101 (mezclado con feed fresco)
+        self._add_example_stream(e108, p101, "S-tol-recic", 20000,
+                                 src_port="tube_out", dst_port="succion",
+                                 T=40,
+                                 composition=tol_recyc,
+                                 main_component="toluene", phase="liquid")
+        # Fondo T-103: difenilo + pesados (purga)
+        self._add_example_stream(t103, e109, "S-14", 1400,
+                                 src_port="liquido_fondo", dst_port="liq_in",
+                                 T=180,
+                                 composition=pesados,
+                                 main_component="atmospheric_residue", phase="liquid")
+        self._add_example_stream(e109, tk_pesados, "S-pesados", 1400, role="product",
+                                 src_port="cond_out", dst_port="entrada",
+                                 price=80.0, T=60,
+                                 composition=pesados,
+                                 main_component="atmospheric_residue", phase="liquid")
+
+        # ---- Calor de reacción HDA ----
+        # ΔH ≈ -42 kJ/mol benceno; sobre kg input ≈ -416 kJ/kg
+        self.fs.blocks[r101].heat_of_reaction = -416.0
+
+        # ---- Duties auto ----
+        from flowsheet_solver import auto_set_duties_from_thermo
+        auto_set_duties_from_thermo(self.fs)
+        self._set_block_duty(p101, +30)
+        self._set_block_duty(k101, +300)
+
+        # ---- OPEX extras ----
+        self._add_example_extra("Catalizador Pt/alúmina", flowrate=5.0,
+                                price=25_000.0, stream="Consumables")
+
+    def _example_gas_sweetening(self):
+        """Endulzamiento de gas natural con MDEA (clásico Camisea).
+
+        Topología: absorber + flash + lean/rich HX + stripper + reflux
+        + cooler.  Loop de amina cerrado por Wegstein (el solver
+        resuelve el recycle automáticamente).
+
+        Reacciones (gas-líquido, reversibles):
+          CO₂ + MDEA + H₂O ⇌ MDEAH⁺ + HCO₃⁻
+          H₂S + MDEA       ⇌ MDEAH⁺ + HS⁻
+        En el stripper se invierten por calentamiento.
+        """
+        # Equipos
+        t101 = self._add_example_block("T-101", "Tower (column shell)",         200.0,  340, 240)  # absorber
+        v101 = self._add_example_block("V-101", "Vessel — horizontal",           30.0,  500, 460)  # rich flash
+        e101 = self._add_example_block("E-101", "Heat exch. — floating head",   800.0,  680, 460)  # lean/rich HX
+        t102 = self._add_example_block("T-102", "Tower (column shell)",         150.0,  840, 240)  # stripper
+        e102 = self._add_example_block("E-102", "Heat exch. — air cooler",      400.0, 1000, 100)  # cond top stripper
+        v102 = self._add_example_block("V-102", "Vessel — horizontal",           20.0, 1180, 100)  # reflux drum
+        e103 = self._add_example_block("E-103", "Heat exch. — kettle reboiler", 600.0,  840, 660)  # reboiler stripper
+        e104 = self._add_example_block("E-104", "Heat exch. — air cooler",      300.0,  680, 660)  # cooler amina pobre
+        p101 = self._add_example_block("P-101", "Pump — centrifugal",            40.0,  500, 685)  # bomba amina recycle
+        tk_makeup = self._add_example_block("TK-101","Storage tank — cone roof", 30.0,  100, 660)  # makeup amina
+        # Productos off-page
+        tk_gas_dulce = self._add_example_block("TK-102","Storage tank — cone roof", 100.0, 340, 60)   # gas dulce
+        tk_acid      = self._add_example_block("TK-103","Storage tank — cone roof", 30.0, 1180, 300)  # gas ácido (a Claus)
+        # Feed gas off-page
+        tk_gas_acido = self._add_example_block("TK-104","Storage tank — cone roof", 200.0, 100, 320)
+
+        # Composiciones (fracción másica)
+        # Feed: gas ácido típico Camisea simplificado
+        gas_acido = {"methane": 0.84, "ethane": 0.08, "co2": 0.05, "h2s": 0.03}
+        gas_dulce = {"methane": 0.91, "ethane": 0.087, "co2": 0.002, "h2s": 0.001}
+        # Lean amine: ~40% MDEA en agua (industrial estándar)
+        lean_amine = {"mdea": 0.40, "water": 0.60}
+        # Rich amine: amina cargada con gases ácidos
+        rich_amine = {"mdea": 0.36, "water": 0.55, "co2": 0.06, "h2s": 0.03}
+        # Vapor del flash V-101 (hidrocarburos disueltos)
+        flash_vap  = {"methane": 0.80, "ethane": 0.15, "co2": 0.04, "h2s": 0.01}
+        # Vapor tope stripper (CO₂ + H₂S + algo de agua)
+        acid_gas   = {"co2": 0.65, "h2s": 0.30, "water": 0.05}
+        water_back = {"water": 1.0}
+
+        # --- Loop principal ---
+        # Gas ácido entra al absorber por abajo
+        self._add_example_stream(tk_gas_acido, t101, "S-gas-acido", 1000000, role="feed",
+                                 src_port="salida", dst_port="liquido_fondo",
+                                 price=180.0, T=40,
+                                 composition=gas_acido,
+                                 main_component="methane", phase="gas")
+        # Gas dulce sale por arriba del absorber
+        self._add_example_stream(t101, tk_gas_dulce, "S-gas-dulce", 900000, role="product",
+                                 src_port="vapor_tope", dst_port="entrada",
+                                 price=220.0, T=45,
+                                 composition=gas_dulce,
+                                 main_component="methane", phase="gas")
+        # Amina rica sale por el fondo del absorber → V-101 flash
+        self._add_example_stream(t101, v101, "S-rich-amine", 2600000,
+                                 src_port="liquido_fondo", dst_port="alimentacion",
+                                 T=55,
+                                 composition=rich_amine,
+                                 main_component="water", phase="liquid")
+        # Flash V-101: vapor (HC disueltos) → fuel gas off-page
+        # (lo unimos al tanque de gas ácido para simplificar, simbólicamente)
+        self._add_example_stream(v101, tk_acid, "S-flash-vap", 50000, role="product",
+                                 src_port="vapor", dst_port="entrada",
+                                 price=80.0, T=55,
+                                 composition=flash_vap,
+                                 main_component="methane", phase="gas")
+        # Líquido del flash a la HX lean/rich (lado frío de la amina rica)
+        self._add_example_stream(v101, e101, "S-rich-cold", 2550000,
+                                 src_port="liquido", dst_port="tube_in",
+                                 T=55,
+                                 composition=rich_amine,
+                                 main_component="water", phase="liquid")
+        # Pre-calentada por la HX → stripper
+        self._add_example_stream(e101, t102, "S-rich-hot", 2550000,
+                                 src_port="tube_out", dst_port="alimentacion",
+                                 T=95,
+                                 composition=rich_amine,
+                                 main_component="water", phase="liquid")
+        # Stripper T-102: vapor tope (acid gas) → E-102 cond → V-102
+        self._add_example_stream(t102, e102, "S-top-strip", 100000,
+                                 src_port="vapor_tope", dst_port="proceso_in",
+                                 T=105,
+                                 composition=acid_gas,
+                                 main_component="co2", phase="vapor")
+        # E-102 → V-102 reflux drum
+        self._add_example_stream(e102, v102, "S-acid-cond", 100000,
+                                 src_port="proceso_out", dst_port="alimentacion",
+                                 T=45,
+                                 composition=acid_gas,
+                                 main_component="co2", phase="liquid")
+        # V-102 vapor: CO₂+H₂S a Claus / vent
+        self._add_example_stream(v102, tk_acid, "S-acid-gas", 50000, role="product",
+                                 src_port="vapor", dst_port="entrada",
+                                 price=0.0, T=45,
+                                 composition=acid_gas,
+                                 main_component="co2", phase="gas")
+        # V-102 líquido (agua) vuelve al stripper como reflux
+        self._add_example_stream(v102, t102, "S-reflux", 50000,
+                                 src_port="liquido", dst_port="reflujo",
+                                 T=45,
+                                 composition=water_back,
+                                 main_component="water", phase="liquid")
+        # Fondo stripper: amina pobre regenerada → reboiler (heat) → HX
+        self._add_example_stream(t102, e103, "S-lean-bot", 2500000,
+                                 src_port="liquido_fondo", dst_port="liq_in",
+                                 T=125,
+                                 composition=lean_amine,
+                                 main_component="water", phase="liquid")
+        # Salida reboiler → lado caliente de la HX lean/rich
+        self._add_example_stream(e103, e101, "S-lean-hot", 2500000,
+                                 src_port="cond_out", dst_port="shell_in",
+                                 T=125,
+                                 composition=lean_amine,
+                                 main_component="water", phase="liquid")
+        # Salida HX (amina pobre tibia) → cooler final
+        self._add_example_stream(e101, e104, "S-lean-warm", 2500000,
+                                 src_port="shell_out", dst_port="proceso_in",
+                                 T=70,
+                                 composition=lean_amine,
+                                 main_component="water", phase="liquid")
+        # Cooler → bomba → top absorber
+        self._add_example_stream(e104, p101, "S-lean-cold", 2500000,
+                                 src_port="proceso_out", dst_port="succion",
+                                 T=40,
+                                 composition=lean_amine,
+                                 main_component="water", phase="liquid")
+        # Makeup de amina fresca (compensa pérdidas)
+        self._add_example_stream(tk_makeup, p101, "S-makeup", 2000, role="feed",
+                                 src_port="salida", dst_port="succion",
+                                 price=2500.0, T=25,
+                                 composition=lean_amine,
+                                 main_component="mdea", phase="liquid")
+        # Bomba → top del absorber (CIERRE DEL RECYCLE)
+        self._add_example_stream(p101, t101, "S-lean-feed", 2502000,
+                                 src_port="descarga", dst_port="vapor_tope",
+                                 T=42,
+                                 composition=lean_amine,
+                                 main_component="water", phase="liquid")
+
+        # ---- Calor de reacción absorción/regeneración ----
+        # Absorber: la absorción de CO₂/H₂S es ligeramente exotérmica.
+        # Stripper: la regeneración es endotérmica (igual magnitud, signo opuesto).
+        # Para simplificar, lo asignamos al stripper (donde más cuenta).
+        self.fs.blocks[t102].heat_of_reaction = +50.0   # +endotérmico (consume calor)
+
+        # ---- Duties auto ----
+        from flowsheet_solver import auto_set_duties_from_thermo
+        auto_set_duties_from_thermo(self.fs)
+        self._set_block_duty(p101, +40)
+
+        # ---- OPEX extras ----
+        self._add_example_extra("Antiespumante (silicona)", flowrate=0.5,
+                                price=18_000.0, stream="Consumables")
+        self._add_example_extra("Filtro de carbón activado", flowrate=2.0,
+                                price=8_000.0, stream="Consumables")
+
+    def _example_sugar_mill(self):
+        """Planta de azúcar — caña → jugo → cristalización (proceso típico Latam).
+
+        Sin reacción química: separaciones físicas (clarificación,
+        evaporación múltiple efecto, cristalización, centrifugación).
+        Basis: 100,000 t/año azúcar refino + 80,000 t/año melaza.
+        """
+        # ============ Sección clarificación + evaporación ============
+        tk_jugo  = self._add_example_block("TK-101","Storage tank — cone roof",  800.0,  60, 200)  # jugo crudo
+        r101     = self._add_example_block("R-101", "Reactor — jacketed agitated", 50.0, 240, 180)  # encalado
+        v101     = self._add_example_block("V-101", "Vessel — vertical",          80.0, 400, 180)  # clarificador
+        tk_cach  = self._add_example_block("TK-102","Storage tank — cone roof",  100.0, 240, 460)  # cachaza
+        # Tanque de vapor de agua condensada (venteos de evaporadores + secador).
+        tk_vap   = self._add_example_block("TK-105","Storage tank — cone roof", 1000.0, 540,  60)  # vapor recuperado
+        # Tren de 4 evaporadores (en realidad serían 5, simplificamos a 4)
+        ev1      = self._add_example_block("EV-101","Evaporator — vertical",     400.0, 540, 180)
+        ev2      = self._add_example_block("EV-102","Evaporator — vertical",     350.0, 720, 180)
+        ev3      = self._add_example_block("EV-103","Evaporator — vertical",     300.0, 900, 180)
+        ev4      = self._add_example_block("EV-104","Evaporator — vertical",     250.0,1080, 180)
+        # ============ Cristalización + centrífuga + secado ============
+        r102     = self._add_example_block("R-102", "Crystallizer",              120.0, 380, 500)  # vacuum pan
+        fl101    = self._add_example_block("FL-101","Filter — belt",              80.0, 560, 500)  # centrífuga (proxy)
+        tk_miel  = self._add_example_block("TK-103","Storage tank — cone roof",  300.0, 560, 700)  # melaza
+        dr101    = self._add_example_block("DR-101","Dryer — drum",              120.0, 740, 500)  # secador rotativo
+        tk_az    = self._add_example_block("TK-104","Storage tank — cone roof",  400.0, 920, 500)  # azúcar producto
+
+        # Composiciones (fracción másica)
+        jugo_in     = {"water": 0.85, "sucrose": 0.135, "glucose": 0.015}
+        clarificado = {"water": 0.85, "sucrose": 0.135, "glucose": 0.015}  # mismo (la cal no contabiliza acá)
+        cachaza     = {"water": 0.70, "sucrose": 0.05, "glucose": 0.05,
+                       "atmospheric_residue": 0.20}                          # bagacillo+impurezas (proxy)
+        post_ev1    = {"water": 0.78, "sucrose": 0.198, "glucose": 0.022}
+        post_ev2    = {"water": 0.65, "sucrose": 0.315, "glucose": 0.035}
+        post_ev3    = {"water": 0.50, "sucrose": 0.45,  "glucose": 0.05}
+        post_ev4    = {"water": 0.35, "sucrose": 0.585, "glucose": 0.065}   # miel madre
+        # Cristales: azúcar + miel adherida
+        masa_cocida = {"sucrose": 0.90, "water": 0.06, "glucose": 0.04}
+        azucar_seco = {"sucrose": 1.0}
+        melaza      = {"water": 0.20, "sucrose": 0.45, "glucose": 0.35}
+
+        # --- Streams ---
+        # Feed jugo crudo (basis 800,000 t/año caña, 85% es jugo)
+        self._add_example_stream(tk_jugo, r101, "S-jugo", 680000, role="feed",
+                                 src_port="salida", dst_port="alimentacion",
+                                 price=15.0, T=30,
+                                 composition=jugo_in,
+                                 main_component="water", phase="liquid")
+        # Encalado → clarificador
+        self._add_example_stream(r101, v101, "S-1", 680000,
+                                 src_port="producto", dst_port="alimentacion",
+                                 T=70,
+                                 composition=clarificado,
+                                 main_component="water", phase="liquid")
+        # Clarificado (al evaporador)
+        self._add_example_stream(v101, ev1, "S-2", 660000,
+                                 src_port="liquido", dst_port="alimentacion",
+                                 T=70,
+                                 composition=clarificado,
+                                 main_component="water", phase="liquid")
+        # Cachaza (residuo sólido al tanque)
+        self._add_example_stream(v101, tk_cach, "S-cachaza", 20000, role="product",
+                                 src_port="vapor", dst_port="entrada",
+                                 price=5.0, T=70,
+                                 composition=cachaza,
+                                 main_component="water", phase="liquid")
+        # Tren de 4 evaporadores en serie (cada uno concentra más)
+        self._add_example_stream(ev1, ev2, "S-ev1", 460000,
+                                 src_port="producto", dst_port="alimentacion",
+                                 T=110,
+                                 composition=post_ev1,
+                                 main_component="water", phase="liquid")
+        self._add_example_stream(ev2, ev3, "S-ev2", 290000,
+                                 src_port="producto", dst_port="alimentacion",
+                                 T=105,
+                                 composition=post_ev2,
+                                 main_component="water", phase="liquid")
+        self._add_example_stream(ev3, ev4, "S-ev3", 200000,
+                                 src_port="producto", dst_port="alimentacion",
+                                 T=95,
+                                 composition=post_ev3,
+                                 main_component="water", phase="liquid")
+        # Miel madre (final del tren evaporadores)
+        self._add_example_stream(ev4, r102, "S-miel-madre", 155000,
+                                 src_port="producto", dst_port="alimentacion",
+                                 T=70,
+                                 composition=post_ev4,
+                                 main_component="sucrose", phase="liquid")
+        # Masa cocida al cristalizador (entra al "filtro" = centrífuga proxy)
+        self._add_example_stream(r102, fl101, "S-masa", 155000,
+                                 src_port="producto", dst_port="alimentacion",
+                                 T=65,
+                                 composition=masa_cocida,
+                                 main_component="sucrose", phase="liquid")
+        # Centrífuga: cristales (azúcar húmedo) → secador
+        self._add_example_stream(fl101, dr101, "S-az-humedo", 110000,
+                                 src_port="producto", dst_port="alimentacion",
+                                 T=60,
+                                 composition={"sucrose": 0.97, "water": 0.03},
+                                 main_component="sucrose", phase="liquid")
+        # Centrífuga: melaza (al tanque sub-producto)
+        self._add_example_stream(fl101, tk_miel, "S-melaza", 45000, role="product",
+                                 src_port="util_in", dst_port="entrada",
+                                 price=180.0, T=60,
+                                 composition=melaza,
+                                 main_component="sucrose", phase="liquid")
+        # Azúcar seco al tanque producto
+        self._add_example_stream(dr101, tk_az, "S-azucar", 107000, role="product",
+                                 src_port="producto", dst_port="entrada",
+                                 price=550.0, T=45,
+                                 composition=azucar_seco,
+                                 main_component="sucrose", phase="liquid")
+
+        # ---- Venteos de vapor (cierran el balance de masa de los EV) ----
+        water_vap = {"water": 1.0}
+        self._add_example_stream(ev1, tk_vap, "S-vap1", 200000,
+                                 src_port="venteo", dst_port="entrada",
+                                 T=110, composition=water_vap,
+                                 main_component="water", phase="vapor")
+        self._add_example_stream(ev2, tk_vap, "S-vap2", 170000,
+                                 src_port="venteo", dst_port="entrada",
+                                 T=105, composition=water_vap,
+                                 main_component="water", phase="vapor")
+        self._add_example_stream(ev3, tk_vap, "S-vap3", 90000,
+                                 src_port="venteo", dst_port="entrada",
+                                 T=95, composition=water_vap,
+                                 main_component="water", phase="vapor")
+        self._add_example_stream(ev4, tk_vap, "S-vap4", 45000,
+                                 src_port="venteo", dst_port="entrada",
+                                 T=70, composition=water_vap,
+                                 main_component="water", phase="vapor")
+        self._add_example_stream(dr101, tk_vap, "S-vap-dry", 3000,
+                                 src_port="venteo", dst_port="entrada",
+                                 T=80, composition=water_vap,
+                                 main_component="water", phase="vapor")
+
+        # ---- Duties auto ----
+        from flowsheet_solver import auto_set_duties_from_thermo
+        auto_set_duties_from_thermo(self.fs)
+
+        # ---- OPEX extras ----
+        self._add_example_extra("Cal viva CaO (clarificación)", flowrate=200,
+                                price=180.0, stream="Consumables")
+        self._add_example_extra("Sacos de polipropileno", flowrate=500,
+                                price=600.0, stream="Consumables")
+
     def open_json(self):
         path = filedialog.askopenfilename(
             title="Abrir diagrama",
