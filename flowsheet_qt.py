@@ -2671,7 +2671,9 @@ class _ExampleBuilderShim:
 
     def _add_example_stream(self, src, dst, name, mass_flow=0.0,
                             role="internal", src_port="", dst_port="",
-                            price=0.0, T=25.0, cp=0.0):
+                            price=0.0, T=25.0, cp=0.0,
+                            main_component="", phase="",
+                            composition=None):
         sid = self.fs.new_id()
         s = Stream(
             id=sid, name=name, src=src, dst=dst,
@@ -2679,6 +2681,9 @@ class _ExampleBuilderShim:
             src_port=src_port, dst_port=dst_port,
             price_usd_per_tm=price,
             temperature=T, cp=cp,
+            main_component=main_component,
+            phase=phase,
+            composition=dict(composition) if composition else {},
         )
         self.fs.streams[sid] = s
         return sid

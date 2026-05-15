@@ -1138,64 +1138,90 @@ class FlowsheetEditor:
         # tanque de tolueno fresco (la planta consume tolueno + recicla algo del fondo)
         tk3  = self._add_example_block("TK-103","Storage tank — cone roof",     300.0, cx[0], y_bot - 100)
 
-        # corrientes (puertos específicos por tipo de equipo)
-        # Precios USD/tm (referencia mercado 2024):
-        #   tolueno feed  ~650, benceno ~1050, H2 ~2000
-        # Cp típicos (kJ/kg·K):
-        #   tolueno líquido 1.7, vapor con H2 (mezcla) 1.9
-        # Balance: tolueno fresco (8850 tm/año) + reciclo (2150) → P-101 → ...
-        # → benceno (8500) + purga H2 (350); el balance interno se asume
-        # como si todos los streams fueran toluen + benceno (sin reacción
-        # explícita).  Cp/T son de mezcla orgánica.
+        # Streams con composición + fase declarada (modelo extendido).
+        # Reacción: C₇H₈ + H₂ → C₆H₆ + CH₄
+        #   tolueno fresco (8850 tm/año, liquid) + reciclo de tolueno
+        #   sin reaccionar (2150 tm/año) → 11000 nominal a través del
+        #   tren → benceno (8500 tm/año) + purga H₂/CH₄ (350)
+
+        # Feed fresco: tolueno líquido (catálogo: toluene)
         self._add_example_stream(tk3, p101, "S-feed-tol", 8850, role="feed",
                                  src_port="salida",   dst_port="succion",
-                                 price=650.0, T=25, cp=1.7)
+                                 price=650.0, T=25,
+                                 main_component="toluene", phase="liquid")
+        # Post-bomba: mezcla con reciclo, mostly tolueno líquido
         self._add_example_stream(p101, e101, "S-1",  11000,
                                  src_port="descarga",  dst_port="tube_in",
-                                 T=27, cp=1.7)
+                                 T=27,
+                                 main_component="toluene", phase="liquid")
+        # Post-preheater: ya vaporizado, tolueno + H₂ mezcla (vapor)
         self._add_example_stream(e101, f101, "S-2",  11000,
                                  src_port="tube_out",  dst_port="proceso_in",
-                                 T=200, cp=1.9)
+                                 T=200,
+                                 main_component="toluene", phase="vapor")
+        # Post-horno: 600°C, listo para reaccionar
         self._add_example_stream(f101, r101, "S-3",  11000,
                                  src_port="proceso_out", dst_port="alimentacion",
-                                 T=600, cp=2.0)
+                                 T=600,
+                                 main_component="toluene", phase="vapor")
+        # Post-reactor: ahora con benceno + metano formados (~75% conv.)
         self._add_example_stream(r101, e102, "S-4",  11000,
                                  src_port="producto",  dst_port="proceso_in",
-                                 T=620, cp=2.0)
+                                 T=620,
+                                 composition={"benzene": 0.77, "toluene": 0.18,
+                                              "methane": 0.04, "hydrogen": 0.01},
+                                 main_component="benzene", phase="vapor")
+        # Post-cooler: parcial condensación (vapor + líquido)
         self._add_example_stream(e102, v101, "S-5",  11000,
                                  src_port="proceso_out", dst_port="alimentacion",
-                                 T=50, cp=1.8)
-        self._add_example_stream(v101, t101, "S-6",  10650,   # menos H2 que va por arriba
+                                 T=50,
+                                 main_component="benzene", phase="liquid")
+        # Líquido del flash: benceno + tolueno (sin H₂ ni metano)
+        self._add_example_stream(v101, t101, "S-6",  10650,
                                  src_port="liquido",   dst_port="alimentacion",
-                                 T=80, cp=1.75)
-        self._add_example_stream(t101, e104, "S-7",  2150,    # fondo
+                                 T=80,
+                                 composition={"benzene": 0.79, "toluene": 0.21},
+                                 main_component="benzene", phase="liquid")
+        # Fondo columna: tolueno (vuelve por reciclo)
+        self._add_example_stream(t101, e104, "S-7",  2150,
                                  src_port="liquido_fondo", dst_port="liq_in",
-                                 T=110, cp=1.7)
-        self._add_example_stream(t101, e103, "S-8",  8500,    # tope
+                                 T=110,
+                                 main_component="toluene", phase="liquid")
+        # Tope columna: benceno como vapor
+        self._add_example_stream(t101, e103, "S-8",  8500,
                                  src_port="vapor_tope", dst_port="tube_in",
-                                 T=85, cp=1.8)
-        # reciclo de fondo (tolueno sin reaccionar) → bomba
+                                 T=85,
+                                 main_component="benzene", phase="vapor")
+        # Reciclo del reboiler: tolueno líquido
         self._add_example_stream(e104, p101, "S-9-recic", 2150,
                                  src_port="cond_out", dst_port="succion",
-                                 T=110, cp=1.7)
+                                 T=110,
+                                 main_component="toluene", phase="liquid")
+        # Producto: benceno líquido condensado
         self._add_example_stream(e103, tk1,  "S-benceno", 8500, role="product",
                                  src_port="tube_out",  dst_port="entrada",
-                                 price=1150.0, T=40, cp=1.74)
+                                 price=1150.0, T=40,
+                                 main_component="benzene", phase="liquid")
+        # Purga: gas (H₂ + metano formado)
         self._add_example_stream(v101, tk2,  "S-purga-H2", 350, role="product",
                                  src_port="vapor",     dst_port="entrada",
-                                 price=2000.0, T=50, cp=14.5)  # H2 puro Cp alto
+                                 price=2000.0, T=50,
+                                 composition={"hydrogen": 0.4, "methane": 0.6},
+                                 main_component="hydrogen", phase="gas")
 
         # ---- Duties realistas (Turton/Douglas HDA, escala 10000 tm/año) ----
-        # Las utilities se auto-calculan desde estos duties al lanzar
-        # el análisis: el sistema elige steam_LP / MP / HP / fuel_gas
-        # según T promedio del bloque, o electricity para bombas.
         self._set_block_duty(e101, +1500)   # preheater 25→200°C
         self._set_block_duty(f101, +6500)   # horno 200→600°C (incluye ΔH_vap)
-        self._set_block_duty(r101, -1500)   # reactor HDA exotérmico
-        self._set_block_duty(e102, -8500)   # enfría salida 620→50°C
+        self._set_block_duty(r101, -1500)   # extracción de calor de la chaqueta
+        self._set_block_duty(e102, -8500)   # cooler + parcial condensación
         self._set_block_duty(e103, -3000)   # condensador top (incluye ΔH_vap)
         self._set_block_duty(e104, +2000)   # reboiler (incluye ΔH_vap)
         self._set_block_duty(p101, +15)     # bomba 15 kW eléctricos
+
+        # Calor de reacción HDA: C₇H₈ + H₂ → C₆H₆ + CH₄
+        #   ΔH ≈ -42 kJ/mol benceno formado
+        #   sobre kg de input total: -42 × (8500/11000) / 78 × 1000 ≈ -416 kJ/kg
+        self.fs.blocks[r101].heat_of_reaction = -416.0
 
         # ---- OPEX extras manuales: SOLO los no-térmicos ----
         # H2 makeup (raw material adicional)
@@ -1326,30 +1352,50 @@ class FlowsheetEditor:
         tk1  = self._add_example_block("TK-102","Storage tank — cone roof",  150.0, cx[4], y_top)
         tk2  = self._add_example_block("TK-103","Storage tank — cone roof",  150.0, cx[4], y_bot)
 
-        # Precios USD/tm (referencia mercado 2024):
-        #   mezcla bz/tol ~850, benceno ~1050, tolueno ~700
-        # Cp benceno líq 1.74, tolueno líq 1.7, mezcla ≈ 1.72
+        # Streams con composición + fase (mezcla benzene+toluene).
+        # Sin reacción química — pura separación física.
+
+        # Feed: 50/50 benceno/tolueno líquido a 25°C
         self._add_example_stream(tk0,  p101, "S-1", 10000, role="feed",
                                  src_port="salida",   dst_port="succion",
-                                 price=850.0, T=25, cp=1.72)
+                                 price=850.0, T=25,
+                                 composition={"benzene": 0.5, "toluene": 0.5},
+                                 main_component="benzene", phase="liquid")
+        # Post-bomba: mismo líquido
         self._add_example_stream(p101, e101, "S-2", 10000,
                                  src_port="descarga", dst_port="tube_in",
-                                 T=26, cp=1.72)
+                                 T=26,
+                                 composition={"benzene": 0.5, "toluene": 0.5},
+                                 main_component="benzene", phase="liquid")
+        # Post-preheater: cerca del punto de burbuja
         self._add_example_stream(e101, t101, "S-3", 10000,
                                  src_port="tube_out", dst_port="alimentacion",
-                                 T=85, cp=1.72)
+                                 T=85,
+                                 composition={"benzene": 0.5, "toluene": 0.5},
+                                 main_component="benzene", phase="liquid")
+        # Vapor tope: ~98% benceno (más volátil)
         self._add_example_stream(t101, e102, "S-4", 5000,
                                  src_port="vapor_tope",     dst_port="tube_in",
-                                 T=82, cp=1.85)
+                                 T=82,
+                                 composition={"benzene": 0.98, "toluene": 0.02},
+                                 main_component="benzene", phase="vapor")
+        # Líquido fondo: ~98% tolueno (menos volátil)
         self._add_example_stream(t101, e103, "S-5", 5000,
                                  src_port="liquido_fondo",  dst_port="liq_in",
-                                 T=110, cp=1.7)
+                                 T=110,
+                                 composition={"benzene": 0.02, "toluene": 0.98},
+                                 main_component="toluene", phase="liquid")
+        # Productos condensados al tanque (líquidos)
         self._add_example_stream(e102, tk1,  "S-benceno", 5000, role="product",
                                  src_port="tube_out", dst_port="entrada",
-                                 price=1050.0, T=40, cp=1.74)
+                                 price=1050.0, T=40,
+                                 composition={"benzene": 0.98, "toluene": 0.02},
+                                 main_component="benzene", phase="liquid")
         self._add_example_stream(e103, tk2,  "S-tolueno", 5000, role="product",
                                  src_port="vap_out",  dst_port="entrada",
-                                 price=700.0, T=40, cp=1.7)
+                                 price=700.0, T=40,
+                                 composition={"benzene": 0.02, "toluene": 0.98},
+                                 main_component="toluene", phase="liquid")
 
         # ---- Duties realistas (destilación binaria, 10000 tm/año feed) ----
         self._set_block_duty(p101, +8)      # bomba 8 kW eléctricos
