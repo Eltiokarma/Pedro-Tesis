@@ -1104,13 +1104,19 @@ class FlowsheetEditor:
             phase=phase,
             composition=dict(composition) if composition else {},
         )
+        # Sudoku locks: los example builders DECLARAN valores explícitamente,
+        # así que cualquier no-default = locked (user/example spec).
+        s.mass_flow_locked   = (mass_flow > 0)
+        s.temperature_locked = abs(T - 25.0) > 0.01
+        s.composition_locked = bool(composition) or bool(main_component)
         self.fs.streams[sid] = s
         return sid
 
     def _set_block_duty(self, bid, duty_kw):
-        """Setea duty declarativo del bloque (kW)."""
+        """Setea duty declarativo del bloque (kW) + lock sudoku."""
         if bid in self.fs.blocks:
             self.fs.blocks[bid].duty = float(duty_kw)
+            self.fs.blocks[bid].duty_locked = (abs(duty_kw) > 1e-9)
 
     def _example_hda(self):
         """HDA — Hidrodealquilación de tolueno (Douglas / Turton).

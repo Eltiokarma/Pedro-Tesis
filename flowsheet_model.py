@@ -93,6 +93,12 @@ class Block:
     # del medio = positivo en duty).
     heat_of_reaction: float = 0.0
 
+    # ---- SUDOKU LOCK ----
+    # True si el user fijó este duty (specification).  False si lo
+    # debe inferir el solver desde el balance de energía.  Cargado
+    # desde JSON / examples mediante heurística (duty != 0 → locked).
+    duty_locked: bool = False
+
     # caches del canvas Tk (no se serializan, no se usan en Qt)
     canvas_rect: Optional[int] = field(default=None, repr=False)
     canvas_text: Optional[int] = field(default=None, repr=False)
@@ -129,6 +135,17 @@ class Stream:
     main_component: str = ""     # atajo para componente puro
     # ΔH_vap override (kJ/kg).  Si 0, se calcula de la composition.
     delta_h_vap_override: float = 0.0
+
+    # ---- SUDOKU LOCKS ----
+    # True si el user FIJÓ este valor (es una specification del problema).
+    # False si el solver lo computa desde balance de masa/energía/composición.
+    # En load de JSONs viejos, se infiere por heurística:
+    #   mass_flow_locked   = (mass_flow > 0)
+    #   temperature_locked = (temperature != T_REF_C)
+    #   composition_locked = bool(composition)
+    mass_flow_locked:   bool = False
+    temperature_locked: bool = False
+    composition_locked: bool = False
 
     # ---- DISPLAY (UI) ----
     # Número que muestra la pill en el editor.  0 = auto (numeración
@@ -197,10 +214,21 @@ class Flowsheet:
         for bid, bdict in d.get("blocks", {}).items():
             b = Block(**{k: v for k, v in bdict.items()
                           if k in Block.__annotations__})
+            # Sudoku lock migration: si el JSON no traía duty_locked,
+            # inferir desde valor (duty != 0 → user lo declaró).
+            if "duty_locked" not in bdict:
+                b.duty_locked = (abs(b.duty) > 1e-9)
             fs.blocks[int(bid)] = b
         for sid, sdict in d.get("streams", {}).items():
             s = Stream(**{k: v for k, v in sdict.items()
                            if k in Stream.__annotations__})
+            # Sudoku lock migration: heurística desde valores.
+            if "mass_flow_locked" not in sdict:
+                s.mass_flow_locked = (s.mass_flow > 0)
+            if "temperature_locked" not in sdict:
+                s.temperature_locked = abs(s.temperature - T_REF_C) > 0.01
+            if "composition_locked" not in sdict:
+                s.composition_locked = bool(s.composition) or bool(s.main_component)
             fs.streams[int(sid)] = s
         fs._next_id        = d.get("_next_id", 1)
         fs.opex_extras     = list(d.get("opex_extras", []))

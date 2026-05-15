@@ -270,12 +270,25 @@ class BlockEditDialog(QDialog):
         # ---- duty ----
         gb_duty = QGroupBox("Balance de energía")
         gb_layout = QFormLayout(gb_duty)
+        from PySide6.QtWidgets import QHBoxLayout, QWidget
         self.duty_edit = QDoubleSpinBox()
         self.duty_edit.setRange(-1e7, 1e7)
         self.duty_edit.setDecimals(1)
         self.duty_edit.setSingleStep(10.0)
         self.duty_edit.setValue(block.duty)
-        gb_layout.addRow("Duty (kW):", self.duty_edit)
+        self.duty_lock = QCheckBox("🔒")
+        self.duty_lock.setToolTip(
+            "Marcar para FIJAR el duty del bloque (sudoku spec).\n"
+            "Sin marcar: el solver lo computa desde balance de energía\n"
+            "de las T's del in/out."
+        )
+        self.duty_lock.setChecked(
+            getattr(block, "duty_locked", False) or abs(block.duty) > 1e-9
+        )
+        d_row = QWidget(); d_lay = QHBoxLayout(d_row)
+        d_lay.setContentsMargins(0,0,0,0)
+        d_lay.addWidget(self.duty_lock); d_lay.addWidget(self.duty_edit, 1)
+        gb_layout.addRow("Duty (kW):", d_row)
 
         hint_duty = QLabel(
             ">0 entrega calor (heater, reboiler)\n"
@@ -335,6 +348,7 @@ class BlockEditDialog(QDialog):
         self.block.S = float(self.s_edit.value())
         self.block.n = int(self.n_edit.value())
         self.block.duty = float(self.duty_edit.value())
+        self.block.duty_locked = bool(self.duty_lock.isChecked())
         heat = self.heat_combo.currentText()
         self.block.heat_source = "" if heat == "(auto)" else heat
         # heat_of_reaction (sólo si visible, i.e. reactor)
@@ -368,13 +382,26 @@ class StreamEditDialog(QDialog):
         self.name_edit = QLineEdit(stream.name)
         layout.addRow("Nombre:", self.name_edit)
 
-        # mass flow
+        # mass flow + lock (sudoku)
+        from PySide6.QtWidgets import QHBoxLayout, QWidget
         self.mass_edit = QDoubleSpinBox()
         self.mass_edit.setRange(0.0, 1e9)
         self.mass_edit.setDecimals(2)
         self.mass_edit.setSingleStep(100.0)
         self.mass_edit.setValue(stream.mass_flow)
-        layout.addRow("Flujo másico (tm/año):", self.mass_edit)
+        self.mass_lock = QCheckBox("🔒")
+        self.mass_lock.setToolTip(
+            "Marcar para fijar el flujo másico (sudoku spec).\n"
+            "Sin marcar: el solver lo computa desde balance de masa."
+        )
+        # heurística para el lock inicial: mass_flow_locked OR > 0
+        self.mass_lock.setChecked(
+            getattr(stream, "mass_flow_locked", False) or stream.mass_flow > 0
+        )
+        m_row = QWidget(); m_lay = QHBoxLayout(m_row)
+        m_lay.setContentsMargins(0,0,0,0)
+        m_lay.addWidget(self.mass_lock); m_lay.addWidget(self.mass_edit, 1)
+        layout.addRow("Flujo másico (tm/año):", m_row)
 
         # rol
         self.role_combo = QComboBox()
@@ -414,12 +441,25 @@ class StreamEditDialog(QDialog):
         # termofísicas
         gb_thermo = QGroupBox("Termofísicas (balance de energía)")
         gb_layout = QFormLayout(gb_thermo)
+        from PySide6.QtWidgets import QHBoxLayout, QWidget
         self.t_edit = QDoubleSpinBox()
         self.t_edit.setRange(-273.0, 2000.0)
         self.t_edit.setDecimals(1)
         self.t_edit.setSingleStep(5.0)
         self.t_edit.setValue(stream.temperature)
-        gb_layout.addRow("Temperatura (°C):", self.t_edit)
+        self.t_lock = QCheckBox("🔒")
+        self.t_lock.setToolTip(
+            "Marcar para fijar T (sudoku spec).\n"
+            "Sin marcar: el solver la computa desde balance de energía."
+        )
+        self.t_lock.setChecked(
+            getattr(stream, "temperature_locked", False)
+            or abs(stream.temperature - 25.0) > 0.01
+        )
+        t_row = QWidget(); t_lay = QHBoxLayout(t_row)
+        t_lay.setContentsMargins(0,0,0,0)
+        t_lay.addWidget(self.t_lock); t_lay.addWidget(self.t_edit, 1)
+        gb_layout.addRow("Temperatura (°C):", t_row)
 
         # Setpoint de T (target_temperature, opcional).  Cuando está
         # activado, "Setpoints…" del toolbar puede iterar el duty del
@@ -444,6 +484,20 @@ class StreamEditDialog(QDialog):
 
         # Componente principal (catálogo)
         import components as comp_mod
+        # Lock sudoku para composición (componente + composition dict)
+        self.comp_lock = QCheckBox("🔒 Composición fija (no recomputar)")
+        self.comp_lock.setToolTip(
+            "Marcar para fijar la composición del stream.\n"
+            "Sin marcar: el solver la computa desde composición de inputs\n"
+            "(weighted avg en mixers/HX, sin reaccionar)."
+        )
+        self.comp_lock.setChecked(
+            getattr(stream, "composition_locked", False)
+            or bool(stream.composition)
+            or bool(stream.main_component)
+        )
+        gb_layout.addRow(self.comp_lock)
+
         self.comp_combo = QComboBox()
         self.comp_combo.addItem("(personalizado)", "")
         for key, label in comp_mod.list_labels():
@@ -517,6 +571,7 @@ class StreamEditDialog(QDialog):
         if name:
             self.stream.name = name
         self.stream.mass_flow = float(self.mass_edit.value())
+        self.stream.mass_flow_locked = bool(self.mass_lock.isChecked())
         self.stream.role = self.role_combo.currentText()
         self.stream.display_number = int(self.num_edit.value())
         if self.stream.role in ("feed", "product"):
@@ -524,6 +579,8 @@ class StreamEditDialog(QDialog):
         else:
             self.stream.price_usd_per_tm = 0.0
         self.stream.temperature = float(self.t_edit.value())
+        self.stream.temperature_locked = bool(self.t_lock.isChecked())
+        self.stream.composition_locked = bool(self.comp_lock.isChecked())
         # Setpoint: si la casilla está marcada, guarda T objetivo;
         # si no, -999 (centinela "sin setpoint").
         if self.sp_check.isChecked():
@@ -2218,6 +2275,7 @@ class FlowsheetMainWindow(QMainWindow):
         add_btn("OPEX extras…",    self.action_opex_extras)
         add_btn("Solve balances",  self.action_solve)
         add_btn("Setpoints…",      self.action_setpoints)
+        add_btn("DOF / Balance…",  self.action_dof)
         # toggle del dock de tabla de corrientes (creado en
         # _build_streams_dock); toggleViewAction() ya viene cableado
         # para mostrar/ocultar y refleja el estado actual.
@@ -2474,6 +2532,63 @@ class FlowsheetMainWindow(QMainWindow):
         """Muestra/oculta el papel de dibujo PFD (marco + cuadro de
         título + leyenda)."""
         self.scene.set_paper_visible(checked)
+
+    def action_dof(self):
+        """Muestra análisis de grados de libertad + conflictos detectados.
+        Es el panel de diagnóstico del sudoku: te dice si tenés specs
+        suficientes, faltan, o sobran (y si las que pusiste son consistentes)."""
+        if not self.fs.blocks:
+            QMessageBox.information(self, "DOF", "El diagrama está vacío.")
+            return
+        rows = fsolv.analyze_dof(self.fs)
+        conflicts = fsolv.find_conflicts(self.fs)
+
+        # Resumen general
+        n_ok       = sum(1 for r in rows if r["dof"] == 0)
+        n_under    = sum(1 for r in rows if r["dof"] > 0)
+        n_redund   = sum(1 for r in rows if r["dof"] < 0)
+        total_locked = sum(r["n_locked"] for r in rows)
+
+        lines = []
+        lines.append(f"=== RESUMEN ===")
+        lines.append(f"Bloques: {len(rows)}  · Locks totales: {total_locked}")
+        lines.append(f"  ✓ determinados: {n_ok}")
+        lines.append(f"  ⚠ underspec:    {n_under}  (faltan specs)")
+        lines.append(f"  ℹ redundantes:  {n_redund}  (specs extra, OK si consistentes)")
+        lines.append(f"  ✗ conflictos:   {len(conflicts)}")
+        lines.append("")
+        lines.append("=== POR BLOQUE ===")
+        for r in rows:
+            mark = {"OK (determined)":"✓",
+                    "underspec":"⚠",
+                    "redundant":"ℹ"}.get(r["status"].split(" ")[0] if " " in r["status"] else r["status"], "?")
+            # mejor:
+            if r["dof"] == 0:    mark = "✓"
+            elif r["dof"] > 0:   mark = "⚠"
+            else:                mark = "ℹ"
+            lines.append(f"  {mark} {r['block_name']:10} {r['eq_type'][:28]:28}  "
+                          f"locked={r['n_locked']:2}  {r['status']}")
+        if conflicts:
+            lines.append("")
+            lines.append("=== CONFLICTOS NUMÉRICOS ===")
+            for c in conflicts:
+                lines.append(f"  ✗ {c}")
+
+        # Mostrar en QMessageBox grande
+        from PySide6.QtWidgets import QDialog, QVBoxLayout, QTextEdit, QDialogButtonBox
+        dlg = QDialog(self)
+        dlg.setWindowTitle("DOF / Balance — análisis sudoku")
+        dlg.resize(720, 480)
+        v = QVBoxLayout(dlg)
+        txt = QTextEdit()
+        txt.setReadOnly(True)
+        txt.setStyleSheet("font-family: Consolas, monospace; font-size: 9pt;")
+        txt.setPlainText("\n".join(lines))
+        v.addWidget(txt)
+        btns = QDialogButtonBox(QDialogButtonBox.Close)
+        btns.rejected.connect(dlg.reject)
+        v.addWidget(btns)
+        dlg.exec()
 
     def action_setpoints(self):
         """Verifica los setpoints declarados (target_temperature en

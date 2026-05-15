@@ -232,34 +232,66 @@ def _detect_cycles(fs):
 # SOLVER DE MASA — propagación por closure
 # ======================================================
 
+def _is_mass_locked(s):
+    """True si el user fijó mass_flow.  Respeta locks explícitos.
+    Fallback heurístico: mass_flow > 0 sin lock = treat as locked
+    (compat con JSONs viejos y example builders que no setean lock)."""
+    if getattr(s, "mass_flow_locked", False):
+        return True
+    return s.mass_flow > 0
+
+
+def _is_temp_locked(s):
+    """True si user fijó T.  Fallback: T != T_REF_C (heurística vieja)."""
+    if getattr(s, "temperature_locked", False):
+        return True
+    return abs(s.temperature - T_REF_C) > 0.01
+
+
+def _is_comp_locked(s):
+    """True si user fijó composición (o main_component)."""
+    if getattr(s, "composition_locked", False):
+        return True
+    return bool(s.composition) or bool(s.main_component)
+
+
+def _is_duty_locked(b):
+    """True si user fijó duty del bloque."""
+    if getattr(b, "duty_locked", False):
+        return True
+    return abs(b.duty) > 1e-9
+
+
 def _solve_mass_iteration(fs):
     """Una pasada sobre todos los bloques.  Devuelve lista de tuplas
-    (stream_name, new_mass_flow) con lo que se propagó esta pasada."""
+    (stream_name, new_mass_flow) con lo que se propagó esta pasada.
+
+    Reglas sudoku: si todos los streams in/out están LOCKED, se
+    verifica balance.  Si uno está unlocked, se computa.  Si más de
+    uno está unlocked, se difiere (esperando que otro paso resuelva)."""
     propagated = []
     for b in fs.blocks.values():
         ins  = [s for s in fs.streams.values() if s.dst == b.id]
         outs = [s for s in fs.streams.values() if s.src == b.id]
         if not ins or not outs:
-            continue  # source/sink — sin balance posible
+            continue
 
-        unknown_ins   = [s for s in ins  if s.mass_flow <= 0]
-        unknown_outs  = [s for s in outs if s.mass_flow <= 0]
+        unknown_ins   = [s for s in ins  if not _is_mass_locked(s)]
+        unknown_outs  = [s for s in outs if not _is_mass_locked(s)]
 
         if not unknown_ins and len(unknown_outs) == 1:
-            # cierre por output desconocido
             sum_in        = sum(s.mass_flow for s in ins)
-            sum_known_out = sum(s.mass_flow for s in outs if s.mass_flow > 0)
+            sum_known_out = sum(s.mass_flow for s in outs if _is_mass_locked(s))
             deduced = sum_in - sum_known_out
-            if deduced > 0:
+            if deduced >= 0:    # permitir flujo cero (caso bypass cerrado)
                 unknown_outs[0].mass_flow = deduced
                 propagated.append((unknown_outs[0].name, deduced))
 
         elif not unknown_outs and len(unknown_ins) == 1:
-            # cierre por input desconocido (poco común pero válido)
             sum_out       = sum(s.mass_flow for s in outs)
-            sum_known_in  = sum(s.mass_flow for s in ins if s.mass_flow > 0)
+            sum_known_in  = sum(s.mass_flow for s in ins if _is_mass_locked(s))
             deduced = sum_out - sum_known_in
-            if deduced > 0:
+            if deduced >= 0:
                 unknown_ins[0].mass_flow = deduced
                 propagated.append((unknown_ins[0].name, deduced))
     return propagated
@@ -420,23 +452,21 @@ def _solve_energy_iteration(fs, tol_T=0.5, skipped=None):
                 f"modelo Cp simple no captura.  T mantenida en {s_out.temperature:g} °C."
             )
             return False
-        # T en rango razonable: si difiere significativamente de la
-        # declarada, respetamos la declaración (puede haber cambio de
-        # fase parcial que el Cp simple no represente).  Solo
-        # propagamos si la T del stream era el default T_REF (=25)
-        # y la calculada es distinta.
+        # T en rango razonable.  Sudoku lock: si el user lo fijó
+        # explícitamente (temperature_locked OR heurística != T_REF),
+        # respetamos su declaración.  Si está unlocked, propagamos
+        # el valor calculado.
         diff = abs(t_new - s_out.temperature)
         if diff <= tol_T:
-            return False  # ya coincide
-        # Si la T actual es default T_REF (25) y la calculada da algo
-        # diferente y razonable → propagar (el stream estaba sin T
-        # declarada).  Si la T actual es != T_REF → la respeto
-        # (declaración del user).
-        if abs(s_out.temperature - T_REF_C) < 0.01:
+            return False
+        if not _is_temp_locked(s_out):
+            # T del output era libre → asignar la computed.
             s_out.temperature = t_new
             propagated.append((s_out.name, t_new))
             return True
-        # T declarada existe pero difiere de la calculada → solo info
+        # T locked pero difiere de la computada → reportar como info
+        # (probable cambio de fase, ΔH_vap, ΔH_rxn no modelado, o
+        # configuración overdetermined).
         skipped.append(
             f"{block_name} → {s_out.name}: T calc = {t_new:.1f} °C "
             f"pero T declarada = {s_out.temperature:g} °C "
@@ -612,24 +642,27 @@ def infer_block_duty(fs, b):
     return h_out_total - h_in_total - q_rxn
 
 
-def auto_set_duties_from_thermo(fs, only_zero=False):
+def auto_set_duties_from_thermo(fs, only_zero=False, respect_locks=True):
     """Para cada bloque no-eléctrico, computa duty desde balance y lo
-    asigna.  Si only_zero=True, sólo sobrescribe bloques con duty=0
-    (respeta declaraciones del user).
+    asigna.
+
+    Args:
+        only_zero: si True, sólo sobreescribe bloques con duty=0.
+        respect_locks: si True (default), SKIP bloques cuyo duty está
+            locked por el user (sudoku spec).  Si False, sobreescribe
+            todos (modo legacy, para example builders).
 
     Devuelve dict {block_id: duty_kw} de los duties asignados.
     """
     assigned = {}
     for b in fs.blocks.values():
+        if respect_locks and _is_duty_locked(b):
+            continue
         if only_zero and b.duty != 0:
             continue
         d = infer_block_duty(fs, b)
         if d is None:
             continue
-        # cross-exchange HX: el calor cedido por la corriente caliente
-        # es absorbido por la corriente fría, internamente.  El duty
-        # externo es cero (no consume utility) — el residual numérico
-        # es ruido de redondeo o desbalance de T declaradas.
         if is_cross_exchange(fs, b):
             b.duty = 0.0
             assigned[b.id] = 0.0
@@ -734,6 +767,14 @@ def goal_seek_duty(fs, target_stream_id, block_id, t_target, **kwargs):
         return {"success": False, "message": "bloque o stream no existe",
                 "iterations": 0, "duty_found": None, "t_final": None}
 
+    # Si el duty del bloque está LOCKED por el user, no podemos
+    # variarlo para hit el setpoint.  Sistema overspecified.
+    if _is_duty_locked(block):
+        return {"success": False,
+                "message": f"duty de {block.name} está locked — "
+                           f"conflict con setpoint en {target.name}",
+                "iterations": 0, "duty_found": block.duty, "t_final": target.temperature}
+
     ins  = [s for s in fs.streams.values() if s.dst == block_id]
     outs = [s for s in fs.streams.values() if s.src == block_id]
 
@@ -788,6 +829,135 @@ def goal_seek_duty(fs, target_stream_id, block_id, t_target, **kwargs):
     }
 
 
+def analyze_dof(fs):
+    """Análisis de grados de libertad (sudoku) por bloque.
+
+    Para cada bloque cuenta:
+      - n_vars     : total de variables potencialmente libres
+                     = streams_count * 3 + 1 (m, T, x por stream + duty)
+      - n_constr   : constraints físicos automáticos
+                     = 3 si tiene in/out (mass + energy + composition)
+      - n_locked   : cuántas variables el user fijó (specifications)
+      - dof        : grados de libertad libres = n_vars - n_constr - n_locked
+
+    Status por bloque:
+      'OK'              dof == 0 (sistema determinado por specs)
+      'underspec'       dof > 0 (faltan specs, solver puede no resolver)
+      'overspec'        dof < 0 (demasiadas specs, conflicto potencial)
+
+    Returns:
+        list of dicts: {block_id, block_name, n_vars, n_constr, n_locked,
+                        dof, status}
+    """
+    rows = []
+    for b in fs.blocks.values():
+        ins  = [s for s in fs.streams.values() if s.dst == b.id]
+        outs = [s for s in fs.streams.values() if s.src == b.id]
+        streams = ins + outs
+        n_streams = len(streams)
+        if n_streams == 0:
+            continue
+        # Variables por stream: mass_flow, T, composition (3 cada uno)
+        # Variable del bloque: duty (1)
+        n_vars = n_streams * 3 + 1
+        # Constraints físicos automáticos del bloque
+        n_constr = 0
+        if ins and outs:
+            n_constr += 1  # mass balance
+            n_constr += 1  # energy balance
+            n_constr += 1  # composition propagation (para no-reactores)
+        # Specs (locks)
+        n_locked = 0
+        for s in streams:
+            if _is_mass_locked(s):   n_locked += 1
+            if _is_temp_locked(s):   n_locked += 1
+            if _is_comp_locked(s):   n_locked += 1
+        if _is_duty_locked(b):       n_locked += 1
+        dof = n_vars - n_constr - n_locked
+        # Interpretación del DOF:
+        #   = 0   : sistema determinado por specs exactas (Aspen-style)
+        #   > 0   : faltan specs, solver no puede resolver TODO
+        #   < 0   : redundante (más specs que constraints) — está OK
+        #           SI los valores son consistentes (verificar con
+        #           find_conflicts).  Útil cuando user declara
+        #           inlet+outlet+duty (todos redundantes pero consistentes).
+        if dof == 0:
+            status = "OK (determined)"
+        elif dof > 0:
+            status = f"underspec (+{dof} libre)"
+        else:
+            status = f"redundant ({-dof} extra spec)"
+        rows.append({
+            "block_id":   b.id,
+            "block_name": b.name,
+            "eq_type":    b.eq_type,
+            "n_vars":     n_vars,
+            "n_constr":   n_constr,
+            "n_locked":   n_locked,
+            "dof":        dof,
+            "status":     status,
+        })
+    return rows
+
+
+def find_conflicts(fs, tol_mass_rel=0.01, tol_energy_rel=0.05):
+    """Detecta overspecification numérica: bloques cuyas variables
+    locked NO satisfacen el balance físico.
+
+    - Mass conflict: todos los m_in y m_out están locked PERO
+                     |sum_in - sum_out| / max > tol_mass_rel.
+    - Energy conflict: todas las T's, duty y heat_of_reaction están
+                       locked PERO |H_out - H_in - duty - q_rxn| / |duty| > tol_energy_rel.
+
+    Returns:
+        list de strings con mensajes legibles.
+    """
+    conflicts = []
+    import equipment_ports as _ep_mod
+    for b in fs.blocks.values():
+        # Equipos eléctricos (bombas, compresores, fans): el duty es
+        # potencia eléctrica al motor, no calor al fluido.  El balance
+        # térmico no aplica directamente — skip energía.
+        is_electrical = _ep_mod.is_electrical_equipment(b.eq_type)
+        ins  = [s for s in fs.streams.values() if s.dst == b.id]
+        outs = [s for s in fs.streams.values() if s.src == b.id]
+        if not ins or not outs:
+            continue
+        # Mass: si TODOS están locked, verificar balance
+        all_mass_locked = all(_is_mass_locked(s) for s in ins + outs)
+        if all_mass_locked:
+            sum_in  = sum(s.mass_flow for s in ins)
+            sum_out = sum(s.mass_flow for s in outs)
+            diff = abs(sum_in - sum_out)
+            denom = max(sum_in, sum_out, 1e-9)
+            if diff / denom > tol_mass_rel:
+                conflicts.append(
+                    f"{b.name}: masa locked overspec — "
+                    f"Σm_in={sum_in:g} ≠ Σm_out={sum_out:g} "
+                    f"(Δ={diff:g}, {100*diff/denom:.1f}%)"
+                )
+        # Energy: si TODAS las T están locked Y duty locked
+        # (skip electrical — duty no es calor al fluido)
+        all_T_locked = all(_is_temp_locked(s) for s in ins + outs)
+        if all_T_locked and _is_duty_locked(b) and not is_electrical:
+            # Compute residual
+            try:
+                h_in  = sum(_stream_enthalpy_kW(s) or 0.0 for s in ins)
+                h_out = sum(_stream_enthalpy_kW(s) or 0.0 for s in outs)
+                m_in = sum(s.mass_flow * TM_TO_KG / SEC_PER_YEAR for s in ins)
+                q_rxn = -m_in * b.heat_of_reaction
+                residual = h_out - h_in - b.duty - q_rxn
+                if abs(b.duty) > 1 and abs(residual) / abs(b.duty) > tol_energy_rel:
+                    conflicts.append(
+                        f"{b.name}: energía locked overspec — "
+                        f"H_out - H_in - duty - Q_rxn = {residual:+.1f} kW "
+                        f"(no cierra balance)"
+                    )
+            except Exception:
+                pass
+    return conflicts
+
+
 def auto_propagate_compositions(fs):
     """Para cada bloque NO reactivo, calcula la composición de las
     salidas como promedio ponderado por mass_flow de las entradas.
@@ -827,9 +997,9 @@ def auto_propagate_compositions(fs):
         total = sum(agg.values())
         if total > 0:
             agg = {k: v/total for k, v in agg.items()}
-        # aplicar a outputs sin composición declarada
+        # aplicar a outputs sin composición declarada (sudoku: respeta locks)
         for s_out in outs:
-            if s_out.composition:
+            if _is_comp_locked(s_out):
                 continue
             s_out.composition = dict(agg)
             if not s_out.main_component and agg:
