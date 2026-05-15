@@ -372,15 +372,24 @@ class StreamEditDialog(QDialog):
 
         # rol
         self.role_combo = QComboBox()
-        for r in ("internal", "feed", "product"):
+        for r in ("internal", "feed", "product", "utility", "waste"):
             self.role_combo.addItem(r)
         self.role_combo.setCurrentText(stream.role)
         layout.addRow("Rol:", self.role_combo)
 
+        # Número de corriente custom (display).  0 = auto (topológico).
+        self.num_edit = QSpinBox()
+        self.num_edit.setRange(0, 9999)
+        self.num_edit.setValue(getattr(stream, "display_number", 0))
+        self.num_edit.setSpecialValueText("(auto)")
+        layout.addRow("N° corriente (display):", self.num_edit)
+
         hint = QLabel(
             "feed:    materia prima externa\n"
             "product: producto final\n"
-            "internal: corriente entre bloques"
+            "internal: corriente entre bloques\n"
+            "utility: vapor / agua de enfriamiento\n"
+            "waste:   residuo / efluente a tratamiento"
         )
         hint.setStyleSheet("color: #888; font-size: 8pt;")
         layout.addRow("", hint)
@@ -503,6 +512,7 @@ class StreamEditDialog(QDialog):
             self.stream.name = name
         self.stream.mass_flow = float(self.mass_edit.value())
         self.stream.role = self.role_combo.currentText()
+        self.stream.display_number = int(self.num_edit.value())
         if self.stream.role in ("feed", "product"):
             self.stream.price_usd_per_tm = float(self.price_edit.value())
         else:
@@ -1183,6 +1193,31 @@ class StreamItem(QGraphicsPathItem):
             pts = self._compute_polyline(b_src, b_dst, s)
         if not pts:
             return
+        # Gap entre la flecha y el bloque destino: acortar el último
+        # segmento ~10px para que la punta de flecha NO toque el SVG.
+        # También un gap chico (4px) en el origen para no tocar el SVG src.
+        import math
+        gap_dst = 10.0
+        gap_src = 4.0
+        if len(pts) >= 4:
+            # gap destino: pts[-2:-1] son los últimos x,y
+            xL, yL = pts[-4], pts[-3]
+            xE, yE = pts[-2], pts[-1]
+            dx, dy = xE - xL, yE - yL
+            d = math.hypot(dx, dy)
+            if d > gap_dst + 1:
+                ux, uy = dx / d, dy / d
+                pts[-2] = xE - ux * gap_dst
+                pts[-1] = yE - uy * gap_dst
+            # gap origen
+            xS, yS = pts[0], pts[1]
+            xN, yN = pts[2], pts[3]
+            dx, dy = xN - xS, yN - yS
+            d = math.hypot(dx, dy)
+            if d > gap_src + 1:
+                ux, uy = dx / d, dy / d
+                pts[0] = xS + ux * gap_src
+                pts[1] = yS + uy * gap_src
         # guardar para que los handles fantasma puedan leer los bend points
         self._last_pts = pts
 
@@ -1330,12 +1365,14 @@ class StreamItem(QGraphicsPathItem):
         super().mouseDoubleClickEvent(event)
 
     def _label_parts(self, s):
-        """Devuelve (numero, "").  La pill SÓLO muestra el número de
-        corriente; el rol se distingue por el color del borde, y los
-        detalles (flujo, T, composición) van en el tooltip al hover."""
-        # Display number: usa stream_display_number si está seteado
-        # por sort topológico; si no, cae al ID interno.
-        n = getattr(s, "_display_number", None)
+        """Devuelve (numero, "").  Prioridad para el número:
+            1) display_number CUSTOM seteado por el user (modelo)
+            2) _display_number TOPOLÓGICO (asignado por solver)
+            3) id INTERNO del stream
+        """
+        n = getattr(s, "display_number", 0) or None
+        if n is None:
+            n = getattr(s, "_display_number", None)
         if n is None:
             n = s.id
         return str(n), ""
@@ -1684,6 +1721,33 @@ class FlowsheetScene(QGraphicsScene):
 # VIEW — zoom + pan
 # ======================================================
 
+class _LibraryTree(QTreeWidget):
+    """QTreeWidget custom que soporta drag&drop hacia el canvas.
+    Cuando se arrastra un ítem hijo (eq_type), genera mimeData con
+    el eq_type en el formato 'application/x-pfd-eqtype'."""
+
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.setDragEnabled(True)
+        self.setDragDropMode(QTreeWidget.DragOnly)
+
+    def startDrag(self, supportedActions):
+        item = self.currentItem()
+        if item is None:
+            return
+        eq_type = item.data(0, Qt.UserRole)
+        if not eq_type:
+            return  # categoría, no equipo
+        from PySide6.QtCore import QMimeData, QByteArray
+        from PySide6.QtGui import QDrag
+        mime = QMimeData()
+        mime.setData("application/x-pfd-eqtype",
+                       QByteArray(str(eq_type).encode("utf-8")))
+        drag = QDrag(self)
+        drag.setMimeData(mime)
+        drag.exec(Qt.CopyAction)
+
+
 class FlowsheetView(QGraphicsView):
     """QGraphicsView con zoom anclado al cursor y pan con middle-drag."""
 
@@ -1701,9 +1765,42 @@ class FlowsheetView(QGraphicsView):
         self.setDragMode(QGraphicsView.RubberBandDrag)
         self.setHorizontalScrollBarPolicy(Qt.ScrollBarAsNeeded)
         self.setVerticalScrollBarPolicy(Qt.ScrollBarAsNeeded)
+        # aceptar drops desde la biblioteca de equipos
+        self.setAcceptDrops(True)
         self._zoom = 1.0
         self._panning = False
         self._pan_start = QPointF(0, 0)
+
+    # ---- drag-and-drop desde la biblioteca de equipos ----
+    def dragEnterEvent(self, event):
+        if event.mimeData().hasFormat("application/x-pfd-eqtype"):
+            event.acceptProposedAction()
+        else:
+            super().dragEnterEvent(event)
+
+    def dragMoveEvent(self, event):
+        if event.mimeData().hasFormat("application/x-pfd-eqtype"):
+            event.acceptProposedAction()
+        else:
+            super().dragMoveEvent(event)
+
+    def dropEvent(self, event):
+        md = event.mimeData()
+        if md.hasFormat("application/x-pfd-eqtype"):
+            eq_type = bytes(md.data("application/x-pfd-eqtype")).decode("utf-8")
+            scene_pos = self.mapToScene(event.position().toPoint()
+                                          if hasattr(event, "position")
+                                          else event.pos())
+            # snap a grilla
+            x = round(scene_pos.x() / GRID_STEP) * GRID_STEP
+            y = round(scene_pos.y() / GRID_STEP) * GRID_STEP
+            # buscar el FlowsheetMainWindow padre
+            w = self.window()
+            if hasattr(w, "_add_block_of_type"):
+                w._add_block_of_type(eq_type, x=x, y=y)
+            event.acceptProposedAction()
+            return
+        super().dropEvent(event)
 
     def wheelEvent(self, event):
         if event.modifiers() & Qt.ControlModifier:
@@ -2101,16 +2198,14 @@ class FlowsheetMainWindow(QMainWindow):
         layout.setContentsMargins(6, 6, 6, 6)
 
         info = QLabel(
-            "Doble-click sobre un equipo para agregarlo.\n"
-            "Arrastrá los bloques en el canvas.\n"
-            "Doble-click sobre un bloque → editar.\n"
-            "(dialogs Qt: phase B)"
+            "Arrastrá un equipo al lienzo, o doble-click para agregarlo "
+            "al centro de la vista.  Doble-click en un bloque del lienzo → editar."
         )
         info.setStyleSheet("color:#666; font-size:9pt;")
         info.setWordWrap(True)
         layout.addWidget(info)
 
-        self.lib_tree = QTreeWidget()
+        self.lib_tree = _LibraryTree(self)
         self.lib_tree.setHeaderHidden(True)
         cats = eq.por_categoria()
         for cat, names in cats.items():
@@ -3031,7 +3126,9 @@ class FlowsheetMainWindow(QMainWindow):
             return
         self._add_block_of_type(sel.data(0, Qt.UserRole))
 
-    def _add_block_of_type(self, eq_type):
+    def _add_block_of_type(self, eq_type, x=None, y=None):
+        """Agrega un bloque del tipo dado al flowsheet.  Si x/y no se
+        especifican, se ubica en el centro de la vista actual."""
         spec = eq.EQUIPMENT_DATA.get(eq_type)
         if not spec:
             return
@@ -3040,15 +3137,35 @@ class FlowsheetMainWindow(QMainWindow):
         nombre = ep.next_block_name(eq_type,
                                      [b.name for b in self.fs.blocks.values()])
         S_default = (spec["S_min"] + spec["S_max"]) / 2
-        n_existing = len(self.fs.blocks)
-        x = 200 + (n_existing % 6) * 180
-        y = 100 + ((n_existing // 6) % 6) * 120
+        # Posición default: centro de la vista visible, snap a grid.
+        # Si el usuario está agregando varios, los desplazamos un poco.
+        if x is None or y is None:
+            try:
+                vp_center = self.view.mapToScene(
+                    self.view.viewport().rect().center()
+                )
+                cx_v, cy_v = vp_center.x(), vp_center.y()
+            except Exception:
+                cx_v, cy_v = 300, 200
+            n_existing = len(self.fs.blocks)
+            # offset chico por cada bloque para que no se apilen
+            offset = (n_existing % 8) * 30
+            x = round((cx_v + offset) / GRID_STEP) * GRID_STEP
+            y = round((cy_v + offset) / GRID_STEP) * GRID_STEP
         b = Block(id=bid, name=nombre, eq_type=eq_type, S=S_default,
-                  n=1, x=x, y=y)
+                  n=1, x=float(x), y=float(y))
         self.fs.blocks[bid] = b
         self._render_block(b)
         self._refresh_port_colors()
         self._update_status()
+        # Asegurar que el nuevo bloque sea visible — centrar la vista
+        # en él si no estaba visible.
+        try:
+            block_item = self.scene.block_items.get(bid)
+            if block_item is not None:
+                self.view.ensureVisible(block_item, xmargin=60, ymargin=60)
+        except Exception:
+            pass
         self.end_action(f"Agregar {nombre}", before)
 
 

@@ -931,6 +931,104 @@ EQ_TYPE_TO_SYMBOL: Dict[str, str] = {
 }
 
 
+def _svg_content_bbox(body: str) -> Optional[Tuple[float, float, float, float]]:
+    """Parsea el SVG body y devuelve (x_min, y_min, x_max, y_max) del
+    bounding box de TODO lo que se dibuja.  Usado para 'apretar' el
+    viewBox al contenido visible (eliminar márgenes y hacer que el
+    símbolo llene el bloque).
+
+    Cubre <rect>, <line>, <circle>, <ellipse>, <path> (M/L absolutos).
+    Path parsing es rough — extrae números como pares x/y alternando.
+    """
+    import re
+    xs, ys = [], []
+
+    def _opt_float(s, key, default=0.0):
+        m = re.search(rf'{key}="([^"]+)"', s)
+        return float(m.group(1)) if m else default
+
+    # rect
+    for m in re.finditer(r'<rect\b[^>]*>', body):
+        attrs = m.group()
+        x = _opt_float(attrs, 'x'); y = _opt_float(attrs, 'y')
+        w = _opt_float(attrs, 'width'); h = _opt_float(attrs, 'height')
+        xs += [x, x + w]; ys += [y, y + h]
+    # line
+    for m in re.finditer(r'<line\b[^>]*>', body):
+        attrs = m.group()
+        xs += [_opt_float(attrs, 'x1'), _opt_float(attrs, 'x2')]
+        ys += [_opt_float(attrs, 'y1'), _opt_float(attrs, 'y2')]
+    # circle / ellipse
+    for m in re.finditer(r'<(?:circle|ellipse)\b[^>]*>', body):
+        attrs = m.group()
+        cx = _opt_float(attrs, 'cx'); cy = _opt_float(attrs, 'cy')
+        if 'r="' in attrs:
+            r = _opt_float(attrs, 'r')
+            rx = ry = r
+        else:
+            rx = _opt_float(attrs, 'rx'); ry = _opt_float(attrs, 'ry')
+        xs += [cx - rx, cx + rx]; ys += [cy - ry, cy + ry]
+    # polygon / polyline points="x1,y1 x2,y2 …"
+    for m in re.finditer(r'<(?:polygon|polyline)\b[^>]*>', body):
+        attrs = m.group()
+        pm = re.search(r'points="([^"]+)"', attrs)
+        if pm:
+            nums = re.findall(r'-?\d+(?:\.\d+)?', pm.group(1))
+            for i, v_str in enumerate(nums):
+                v = float(v_str)
+                if i % 2 == 0:
+                    xs.append(v)
+                else:
+                    ys.append(v)
+    # path d="..."  — parseo simple: extraer pares (x, y) tras letras de comando.
+    for m in re.finditer(r'd="([^"]+)"', body):
+        d = m.group(1)
+        # tokens: comandos (MmLlAaCcSsQqTtZzHhVv) y números
+        nums = re.findall(r'-?\d+(?:\.\d+)?', d)
+        # alternar x/y crudo (ignorando comandos H/V que tienen 1 número).
+        # Para los SVGs del catálogo es suficiente.
+        for i, v_str in enumerate(nums):
+            v = float(v_str)
+            if i % 2 == 0:
+                xs.append(v)
+            else:
+                ys.append(v)
+
+    if not xs or not ys:
+        return None
+    return min(xs), min(ys), max(xs), max(ys)
+
+
+_BBOX_CACHE: Dict[str, Optional[Tuple[float, float, float, float]]] = {}
+
+
+def content_bbox(symbol_id: str) -> Optional[Tuple[float, float, float, float]]:
+    """Devuelve el bbox del contenido del símbolo, con cache."""
+    if symbol_id in _BBOX_CACHE:
+        return _BBOX_CACHE[symbol_id]
+    s = SYMBOLS.get(symbol_id)
+    if s is None:
+        _BBOX_CACHE[symbol_id] = None
+        return None
+    bbox = _svg_content_bbox(s["body"])
+    # Validar: bbox debe estar DENTRO o cerca del viewBox original.
+    # Si el parser falla y devuelve algo absurdo, fall-through al viewBox.
+    if bbox:
+        x_min, y_min, x_max, y_max = bbox
+        vb_w, vb_h = s["w"], s["h"]
+        # clamp al viewBox (en caso de path con coords fuera)
+        x_min = max(0.0, min(x_min, vb_w))
+        y_min = max(0.0, min(y_min, vb_h))
+        x_max = max(0.0, min(x_max, vb_w))
+        y_max = max(0.0, min(y_max, vb_h))
+        if x_max - x_min < 5 or y_max - y_min < 5:
+            bbox = None  # bbox demasiado chico, descartar
+        else:
+            bbox = (x_min, y_min, x_max, y_max)
+    _BBOX_CACHE[symbol_id] = bbox
+    return bbox
+
+
 def get(symbol_id: str) -> Optional[dict]:
     """Devuelve los datos del símbolo, o None si no existe."""
     return SYMBOLS.get(symbol_id)
@@ -946,20 +1044,37 @@ def get_for_eq_type(eq_type: str) -> Optional[dict]:
 
 def wrap_svg(symbol_id: str, w: Optional[float] = None,
              h: Optional[float] = None) -> Optional[str]:
-    """SVG completo (con wrapper <svg>) listo para QSvgRenderer.
+    """SVG completo listo para QSvgRenderer.
 
-    Si w/h se especifican, sobrescriben las dimensiones nominales
-    (el viewBox queda igual, así que el contenido se escala).
+    Usa el bbox del contenido como viewBox (no el viewBox nominal),
+    para que el dibujo LLENE el output rect sin márgenes vacíos.
+    Si el bbox no se puede determinar, cae al viewBox original.
+
+    Si w/h se especifican, sobrescriben las dimensiones de salida.
     """
     d = SYMBOLS.get(symbol_id)
     if d is None:
         return None
-    vb_w, vb_h = d["w"], d["h"]
+    # Usar el bbox del contenido como viewBox: el dibujo llena el output.
+    bbox = content_bbox(symbol_id)
+    if bbox:
+        x0, y0, x1, y1 = bbox
+        # margen chico (5% de cada lado) para que la stroke no se corte
+        mx = (x1 - x0) * 0.04
+        my = (y1 - y0) * 0.04
+        vb_x = x0 - mx
+        vb_y = y0 - my
+        vb_w = (x1 - x0) + 2 * mx
+        vb_h = (y1 - y0) + 2 * my
+    else:
+        vb_x = vb_y = 0
+        vb_w, vb_h = d["w"], d["h"]
+    # Output: si el caller pasó w/h, usar esos.  Si no, usar el bbox dims.
     out_w = w if w is not None else vb_w
     out_h = h if h is not None else vb_h
     return (
         f'<svg xmlns="http://www.w3.org/2000/svg" '
-        f'viewBox="0 0 {vb_w:g} {vb_h:g}" '
+        f'viewBox="{vb_x:g} {vb_y:g} {vb_w:g} {vb_h:g}" '
         f'width="{out_w:g}" height="{out_h:g}">'
         f'{d["body"]}'
         f'</svg>'
@@ -989,11 +1104,26 @@ DEFAULT_H = 60.0
 
 
 def block_dims(eq_type: str) -> Tuple[float, float]:
-    """Devuelve (w, h) del símbolo asociado al eq_type.
-    Si no hay símbolo, devuelve (DEFAULT_W, DEFAULT_H)."""
+    """Devuelve (w, h) del bloque para este eq_type.
+
+    Usa el bbox del contenido del símbolo (no el viewBox nominal),
+    así el bloque tiene exactamente las dimensiones del dibujo y
+    no quedan márgenes vacíos.  Los puertos quedan al borde del
+    dibujo.  Fallback al viewBox si el parser no puede determinar
+    el bbox.
+    """
     s = get_for_eq_type(eq_type)
     if s is None:
         return (DEFAULT_W, DEFAULT_H)
+    sid = EQ_TYPE_TO_SYMBOL.get(eq_type)
+    if sid:
+        bbox = content_bbox(sid)
+        if bbox:
+            x0, y0, x1, y1 = bbox
+            # mismo margen 4% que en wrap_svg para coherencia
+            mx = (x1 - x0) * 0.04
+            my = (y1 - y0) * 0.04
+            return ((x1 - x0) + 2 * mx, (y1 - y0) + 2 * my)
     return (s["w"], s["h"])
 
 

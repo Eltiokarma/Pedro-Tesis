@@ -839,43 +839,49 @@ def auto_propagate_compositions(fs):
 
 
 def assign_stream_numbers(fs):
-    """Numera streams topológicamente (1, 2, 3, …) recorriendo el
-    grafo desde los feeds.  Setea `s._display_number` en cada stream.
+    """Numera streams topológicamente (1, 2, 3, …) recorriendo el grafo
+    desde los feeds.  Setea `s._display_number` (cache topológico).
 
-    Útil para mostrar números limpios en las pills del PFD en vez
-    de los IDs internos del modelo (que pueden venir salteados).
+    NOTA: si el user setea `s.display_number` (sin underscore, en el
+    modelo), ESE número se usa al mostrar — el topológico queda como
+    fallback para streams sin numeración manual.  Acá calculamos
+    el topológico para todos, los custom lo sobreescriben en el render.
     """
-    # adjacency: block_id → out_stream_ids
     n = 0
     visited_streams = set()
     visited_blocks = set()
-    # comenzar por bloques que no tienen entradas (feeds)
     starting = []
     for b in fs.blocks.values():
         has_in = any(s.dst == b.id for s in fs.streams.values())
         if not has_in:
             starting.append(b.id)
     queue = list(starting)
+    used_customs = set(s.display_number for s in fs.streams.values()
+                        if s.display_number > 0)
+
+    def _next_avail():
+        nonlocal n
+        n += 1
+        while n in used_customs:
+            n += 1
+        return n
+
     while queue:
         bid = queue.pop(0)
         if bid in visited_blocks:
             continue
         visited_blocks.add(bid)
-        # numerar streams que salen de este bloque
         out_streams = sorted([s for s in fs.streams.values() if s.src == bid],
                               key=lambda s: s.id)
         for s in out_streams:
             if s.id not in visited_streams:
-                n += 1
-                s._display_number = n
+                s._display_number = _next_avail()
                 visited_streams.add(s.id)
                 if s.dst not in visited_blocks:
                     queue.append(s.dst)
-    # streams huérfanos (recycles que no se alcanzaron por BFS) → numerar por id
     for s in fs.streams.values():
         if s.id not in visited_streams:
-            n += 1
-            s._display_number = n
+            s._display_number = _next_avail()
 
 
 def solve_setpoints_all(fs, max_iter=40):

@@ -130,6 +130,12 @@ class Stream:
     # ΔH_vap override (kJ/kg).  Si 0, se calcula de la composition.
     delta_h_vap_override: float = 0.0
 
+    # ---- DISPLAY (UI) ----
+    # Número que muestra la pill en el editor.  0 = auto (numeración
+    # topológica desde feeds asignada por assign_stream_numbers).
+    # Si el user lo setea manualmente, ese número se respeta.
+    display_number: int = 0
+
     # ---- SETPOINTS (design targets) ----
     # Si target_temperature está seteado (≥ -273), el solver lo trata
     # como un OBJETIVO de diseño: ajusta el duty del bloque upstream
