@@ -70,6 +70,7 @@ from PySide6.QtGui import QUndoStack, QUndoCommand
 
 import equipment_costs as eq
 import equipment_ports as ep
+import equipment_icons as eicon
 import flowsheet_solver as fsolv
 import flowsheet_export as fexp
 import flowsheet_validation as fval
@@ -78,6 +79,47 @@ from flowsheet_model import (
     STREAM_ROLE_COLORS, STREAM_ROLE_COLORS_SEL,
     BLOCK_W, BLOCK_H, GRID_STEP, ROUTING_GAP,
 )
+
+
+# ======================================================
+# CACHE DE QSvgRenderer COMPARTIDOS
+# ======================================================
+# Cada SVG se compila una vez y se comparte entre todos los items
+# del mismo eq_type.  Eficiente y mantiene la ref viva.
+
+_SVG_RENDERERS = {}      # eq_type → QSvgRenderer
+_SVG_AVAILABLE = None    # lazy check: ¿QtSvg está instalado?
+
+
+def _get_svg_renderer(eq_type):
+    """Devuelve un QSvgRenderer para el eq_type, o None si:
+      · no hay SVG hardcoded para ese eq_type, o
+      · PySide6.QtSvg / QtSvgWidgets no está disponible.
+    """
+    global _SVG_AVAILABLE
+    if _SVG_AVAILABLE is False:
+        return None
+
+    svg_str = eicon.get_icon_svg(eq_type)
+    if svg_str is None:
+        return None
+
+    if eq_type in _SVG_RENDERERS:
+        return _SVG_RENDERERS[eq_type]
+
+    try:
+        from PySide6.QtSvg import QSvgRenderer
+        from PySide6.QtCore import QByteArray
+        _SVG_AVAILABLE = True
+    except ImportError:
+        _SVG_AVAILABLE = False
+        return None
+
+    renderer = QSvgRenderer(QByteArray(svg_str.encode("utf-8")))
+    if not renderer.isValid():
+        return None
+    _SVG_RENDERERS[eq_type] = renderer
+    return renderer
 
 
 # ======================================================
@@ -600,12 +642,38 @@ class BlockItem(QGraphicsItemGroup):
         self.text_name.setBrush(QBrush(COLOR_BLOCK_TEXT))
         br = self.text_name.boundingRect()
         self.text_name.setPos((BLOCK_W - br.width()) / 2, 6)
+        self.text_name.setZValue(2)
 
         self.text_sub = QGraphicsSimpleTextItem(sub_text, parent=self)
         self.text_sub.setFont(f_sub)
         self.text_sub.setBrush(QBrush(COLOR_BLOCK_SUB))
         br_s = self.text_sub.boundingRect()
         self.text_sub.setPos((BLOCK_W - br_s.width()) / 2, BLOCK_H - br_s.height() - 4)
+        self.text_sub.setZValue(2)
+
+        # En modo SVG, el ícono cubre el bloque entero.  Agregamos
+        # fondo blanco translúcido detrás del nombre para legibilidad,
+        # y dejamos el sub visible al pie con su propio fondo.
+        if getattr(self, "_svg_mode", False):
+            name_bg = QGraphicsRectItem(
+                self.text_name.x() - 3, self.text_name.y() - 1,
+                br.width() + 6, br.height() + 2,
+                parent=self,
+            )
+            name_bg.setBrush(QBrush(QColor(255, 255, 255, 220)))
+            name_bg.setPen(QPen(Qt.NoPen))
+            name_bg.setZValue(1.5)   # debajo del texto, encima del SVG
+            self.decoration_items.append(name_bg)
+
+            sub_bg = QGraphicsRectItem(
+                self.text_sub.x() - 3, self.text_sub.y() - 1,
+                br_s.width() + 6, br_s.height() + 2,
+                parent=self,
+            )
+            sub_bg.setBrush(QBrush(QColor(255, 255, 255, 220)))
+            sub_bg.setPen(QPen(Qt.NoPen))
+            sub_bg.setZValue(1.5)
+            self.decoration_items.append(sub_bg)
 
         # --- puertos ---
         self.port_items: dict = {}     # port_name → QGraphicsEllipseItem
@@ -637,8 +705,38 @@ class BlockItem(QGraphicsItemGroup):
         return item
 
     def _draw_category_decoration(self, category, eq_type):
-        """Dibuja símbolos PFD simplificados según la categoría del
-        equipo.  Mantiene el rect base para hit-testing/select."""
+        """Dibuja símbolos PFD según el eq_type.
+
+        Estrategia:
+          1. Si hay SVG hardcoded para este eq_type (equipment_icons.py)
+             y QtSvg está disponible → renderizar como QGraphicsSvgItem.
+             En este modo, el rect base es transparente; el borde solo
+             aparece cuando el bloque está seleccionado.
+          2. Si no → fallback a Qt paths simples (phase C).
+        """
+        self._svg_mode = False
+
+        # 1. SVG hardcoded (icono profesional)
+        renderer = _get_svg_renderer(eq_type)
+        if renderer is not None:
+            try:
+                from PySide6.QtSvgWidgets import QGraphicsSvgItem
+                svg_item = QGraphicsSvgItem(parent=self)
+                svg_item.setSharedRenderer(renderer)
+                svg_item.setPos(0, 0)
+                svg_item.setZValue(0)
+                # rect base invisible (solo aparece cuando selected)
+                self.rect.setBrush(QBrush(Qt.transparent))
+                self.rect.setPen(QPen(Qt.transparent))
+                self.rect.setZValue(0.5)
+                self.decoration_items.append(svg_item)
+                self._svg_mode = True
+                return
+            except ImportError:
+                # QtSvgWidgets no disponible — caemos al fallback
+                pass
+
+        # 2. Fallback: Qt paths (phase C, simples pero funcionales)
         w, h = BLOCK_W, BLOCK_H
         cx, cy = w / 2, h / 2
 
@@ -805,6 +903,7 @@ class BlockItem(QGraphicsItemGroup):
             ell.setBrush(QBrush(COLOR_PORT_FREE))
             ell.setPen(QPen(QColor("#333333"), 1))
             ell.setData(0, pname)        # guardamos el nombre del puerto
+            ell.setZValue(3)             # encima del SVG/rect y debajo del texto
             self.port_items[pname] = ell
 
     def update_port_colors(self, used_ports: set):
@@ -840,7 +939,13 @@ class BlockItem(QGraphicsItemGroup):
         if selected:
             self.rect.setPen(QPen(COLOR_BLOCK_BORDER_SEL, 3))
         else:
-            self.rect.setPen(QPen(COLOR_BLOCK_BORDER, 2))
+            # En modo SVG el borde queda invisible al deseleccionar
+            # (el ícono SVG ya define la silueta del equipo).
+            # En modo fallback se mantiene el borde índigo.
+            if getattr(self, "_svg_mode", False):
+                self.rect.setPen(QPen(Qt.transparent))
+            else:
+                self.rect.setPen(QPen(COLOR_BLOCK_BORDER, 2))
 
     def itemChange(self, change, value):
         """Sync posición al modelo + refresh streams conectados.
