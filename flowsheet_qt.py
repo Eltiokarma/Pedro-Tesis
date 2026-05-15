@@ -714,6 +714,8 @@ class BlockItem(QGraphicsItemGroup):
         self.text_name.setFont(f_title)
         self.text_name.setBrush(QBrush(COLOR_BLOCK_TEXT))
         br = self.text_name.boundingRect()
+        # Tag siempre dentro del bloque, centrado arriba (estilo Aspen).
+        self.text_name.setPos((BLOCK_W - br.width()) / 2, 4)
         self.text_name.setZValue(2)
 
         self.text_sub = QGraphicsSimpleTextItem(sub_text, parent=self)
@@ -722,14 +724,6 @@ class BlockItem(QGraphicsItemGroup):
         br_s = self.text_sub.boundingRect()
         self.text_sub.setPos((BLOCK_W - br_s.width()) / 2, BLOCK_H - br_s.height() - 4)
         self.text_sub.setZValue(2)
-
-        # En modo SVG (estilo PFD industrial): el tag del equipo va
-        # ARRIBA del símbolo, el "S = ..." sigue al pie del bloque.
-        # En modo fallback: textos dentro del rect (como antes).
-        if getattr(self, "_svg_mode", False):
-            self.text_name.setPos((BLOCK_W - br.width()) / 2, -br.height() - 2)
-        else:
-            self.text_name.setPos((BLOCK_W - br.width()) / 2, 6)
 
         # --- puertos ---
         self.port_items: dict = {}     # port_name → QGraphicsEllipseItem
@@ -788,11 +782,13 @@ class BlockItem(QGraphicsItemGroup):
                 pix_item.setPos(0, 0)
                 pix_item.setZValue(0)
                 pix_item.setTransformationMode(Qt.SmoothTransformation)
-                # rect base: INVISIBLE en modo SVG (estilo PFD industrial).
-                # Sigue siendo hit-target gracias al brush alpha=1 (invisible
-                # al ojo pero captura clicks en zonas vacías del SVG).
-                self.rect.setBrush(QBrush(QColor(0, 0, 0, 1)))
-                self.rect.setPen(Qt.NoPen)
+                # Estilo Aspen Plus / HYSYS: caja blanca con borde fino
+                # gris claro; el ícono SVG queda centrado adentro y
+                # los textos van dentro del bloque (no superpuestos al
+                # ícono, gracias al espacio que dejan los SVGs en sus
+                # bordes superior/inferior).
+                self.rect.setBrush(QBrush(COLOR_BLOCK_FILL))
+                self.rect.setPen(QPen(QColor("#b0bec5"), 1.0))
                 self.rect.setZValue(-0.5)
                 self.decoration_items.append(pix_item)
                 self._svg_mode = True
@@ -1002,16 +998,14 @@ class BlockItem(QGraphicsItemGroup):
     def set_selected_visual(self, selected: bool):
         svg = getattr(self, "_svg_mode", False)
         if selected:
-            if svg:
-                # solo borde punteado al seleccionar; el rect sigue
-                # transparente por dentro.
-                self.rect.setPen(QPen(COLOR_BLOCK_BORDER_SEL, 1.5,
-                                      Qt.DashLine))
-            else:
-                self.rect.setPen(QPen(COLOR_BLOCK_BORDER_SEL, 3))
+            # borde índigo continuo para selección (estilo Aspen).
+            self.rect.setPen(QPen(COLOR_BLOCK_BORDER_SEL,
+                                   2.0 if svg else 3.0))
         else:
+            # borde sutil gris claro en modo SVG, índigo normal en
+            # fallback Qt paths.
             if svg:
-                self.rect.setPen(Qt.NoPen)
+                self.rect.setPen(QPen(QColor("#b0bec5"), 1.0))
             else:
                 self.rect.setPen(QPen(COLOR_BLOCK_BORDER, 2))
 
