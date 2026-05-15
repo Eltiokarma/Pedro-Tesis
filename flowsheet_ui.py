@@ -1701,18 +1701,22 @@ class FlowsheetEditor:
         t101     = self._add_example_block("T-101", "Tower (column shell)",       80.0, 680, 240)  # CDU column alta
 
         e102     = self._add_example_block("E-102", "Heat exch. — floating head",250.0, 820, 100)  # cond top (nafta)
-        e103     = self._add_example_block("E-103", "Heat exch. — air cooler",   180.0, 820, 380)  # cooler kerosene
-        e104     = self._add_example_block("E-104", "Heat exch. — air cooler",   200.0, 820, 580)  # cooler residue
+        e103     = self._add_example_block("E-103", "Heat exch. — air cooler",   180.0, 820, 260)  # cooler kerosene
+        e104     = self._add_example_block("E-104", "Heat exch. — air cooler",   220.0, 820, 420)  # cooler diésel
+        e105     = self._add_example_block("E-105", "Heat exch. — air cooler",   200.0, 820, 580)  # cooler residue
 
         tk_n     = self._add_example_block("TK-102","Storage tank — cone roof", 200.0,1020, 100)  # nafta
-        tk_k     = self._add_example_block("TK-103","Storage tank — cone roof", 150.0,1020, 380)  # querosén
-        tk_r     = self._add_example_block("TK-104","Storage tank — cone roof", 400.0,1020, 580)  # residuo
+        tk_k     = self._add_example_block("TK-103","Storage tank — cone roof", 150.0,1020, 260)  # querosén
+        tk_d     = self._add_example_block("TK-104","Storage tank — cone roof", 200.0,1020, 420)  # diésel (NUEVO)
+        tk_r     = self._add_example_block("TK-105","Storage tank — cone roof", 400.0,1020, 580)  # residuo
 
-        # Composiciones (proxies de cortes).
-        crudo_mix = {"crude_oil": 1.0}
-        nafta_mix = {"naphtha": 0.92, "kerosene": 0.08}
-        kero_mix  = {"kerosene": 0.85, "naphtha": 0.08, "diesel": 0.07}
-        res_mix   = {"atmospheric_residue": 0.78, "diesel": 0.15, "kerosene": 0.07}
+        # Composiciones (proxies de cortes), distribución típica crudo mediano:
+        # 22% nafta + 18% kerosén + 28% diésel + 32% residuo = 100%
+        crudo_mix  = {"crude_oil": 1.0}
+        nafta_mix  = {"naphtha": 0.93, "kerosene": 0.07}
+        kero_mix   = {"kerosene": 0.90, "naphtha": 0.05, "diesel": 0.05}
+        diesel_mix = {"diesel": 0.88, "kerosene": 0.07, "atmospheric_residue": 0.05}
+        res_mix    = {"atmospheric_residue": 0.82, "diesel": 0.18}
 
         # Feed: 100,000 t/yr crudo
         self._add_example_stream(tk_crudo, p101, "S-crudo", 100000, role="feed",
@@ -1738,38 +1742,50 @@ class FlowsheetEditor:
                                  T=360,
                                  composition=crudo_mix,
                                  main_component="crude_oil", phase="vapor")
-        # Tope: nafta vapor
-        self._add_example_stream(t101, e102, "S-nafta-v", 25000,
+        # Tope: nafta vapor (22% del feed)
+        self._add_example_stream(t101, e102, "S-nafta-v", 22000,
                                  src_port="vapor_tope", dst_port="tube_in",
                                  T=130,
                                  composition=nafta_mix,
                                  main_component="naphtha", phase="vapor")
         # Nafta producto (condensada)
-        self._add_example_stream(e102, tk_n, "S-nafta", 25000, role="product",
+        self._add_example_stream(e102, tk_n, "S-nafta", 22000, role="product",
                                  src_port="tube_out", dst_port="entrada",
                                  price=780.0, T=40,
                                  composition=nafta_mix,
                                  main_component="naphtha", phase="liquid")
-        # Extracción lateral: querosén
-        self._add_example_stream(t101, e103, "S-kero-h", 15000,
-                                 src_port="extraccion_lateral", dst_port="proceso_in",
+        # Corte alto: querosén (18% del feed, ~30% desde el tope de la columna)
+        self._add_example_stream(t101, e103, "S-kero-h", 18000,
+                                 src_port="extraccion_alta", dst_port="proceso_in",
                                  T=215,
                                  composition=kero_mix,
                                  main_component="kerosene", phase="liquid")
         # Querosén producto (enfriado)
-        self._add_example_stream(e103, tk_k, "S-kero", 15000, role="product",
+        self._add_example_stream(e103, tk_k, "S-kero", 18000, role="product",
                                  src_port="proceso_out", dst_port="entrada",
                                  price=850.0, T=40,
                                  composition=kero_mix,
                                  main_component="kerosene", phase="liquid")
-        # Fondo: residuo atmosférico
-        self._add_example_stream(t101, e104, "S-res-h", 60000,
+        # Corte medio: diésel (28% del feed, ~50% del lado de la columna)
+        self._add_example_stream(t101, e104, "S-diesel-h", 28000,
+                                 src_port="extraccion_media", dst_port="proceso_in",
+                                 T=290,
+                                 composition=diesel_mix,
+                                 main_component="diesel", phase="liquid")
+        # Diésel producto (enfriado)
+        self._add_example_stream(e104, tk_d, "S-diesel", 28000, role="product",
+                                 src_port="proceso_out", dst_port="entrada",
+                                 price=920.0, T=50,
+                                 composition=diesel_mix,
+                                 main_component="diesel", phase="liquid")
+        # Fondo: residuo atmosférico (32% del feed)
+        self._add_example_stream(t101, e105, "S-res-h", 32000,
                                  src_port="liquido_fondo", dst_port="proceso_in",
                                  T=350,
                                  composition=res_mix,
                                  main_component="atmospheric_residue", phase="liquid")
         # Residuo producto (enfriado)
-        self._add_example_stream(e104, tk_r, "S-residuo", 60000, role="product",
+        self._add_example_stream(e105, tk_r, "S-residuo", 32000, role="product",
                                  src_port="proceso_out", dst_port="entrada",
                                  price=350.0, T=80,
                                  composition=res_mix,
@@ -1852,9 +1868,12 @@ class FlowsheetEditor:
                                  composition=feed_tol,
                                  main_component="toluene", phase="liquid")
         # Post-preheater (HX feed/effluent)
+        # Post feed/effluent HX (cross-exchange): el feed pre-calentado
+        # con el calor recuperado del efluente del reactor.  Ahorro
+        # industrial típico HDA Douglas: ~50% de duty del horno.
         self._add_example_stream(e101, f101, "S-2", 80000,
                                  src_port="tube_out", dst_port="proceso_in",
-                                 T=350,
+                                 T=340,
                                  composition=feed_tol,
                                  main_component="toluene", phase="vapor")
         # Post-horno: T reacción ~620°C
@@ -1863,10 +1882,16 @@ class FlowsheetEditor:
                                  T=620,
                                  composition=feed_tol,
                                  main_component="toluene", phase="vapor")
-        # Post-reactor: efluente con benceno + light ends
-        self._add_example_stream(r101, e102, "S-4", 88000,
-                                 src_port="producto", dst_port="proceso_in",
+        # Efluente del reactor → SHELL del feed/effluent HX (cede calor)
+        self._add_example_stream(r101, e101, "S-4", 88000,
+                                 src_port="producto", dst_port="shell_in",
                                  T=640,
+                                 composition=post_rxn,
+                                 main_component="benzene", phase="vapor")
+        # Efluente ya pre-enfriado por el feed → al cooler final
+        self._add_example_stream(e101, e102, "S-4b", 88000,
+                                 src_port="shell_out", dst_port="proceso_in",
+                                 T=360,
                                  composition=post_rxn,
                                  main_component="benzene", phase="vapor")
         # Post-cooler: parcialmente condensado

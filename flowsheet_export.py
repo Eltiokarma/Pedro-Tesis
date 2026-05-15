@@ -86,8 +86,18 @@ def compute_utilities_from_duties(fs):
     summary = []
     agg = {}
 
+    # detección de cross-exchange (HX proceso-proceso) — no carga utility
+    try:
+        from flowsheet_solver import is_cross_exchange
+    except ImportError:
+        is_cross_exchange = lambda fs, b: False
+
     for b in fs.blocks.values():
         if b.duty == 0:
+            continue
+        if is_cross_exchange(fs, b):
+            # heat integration: el calor lo entrega otra corriente del
+            # proceso, no una utility.  Reporte informativo, sin costo.
             continue
         T_avg = block_avg_temperature(fs, b.id)
         util_key = b.heat_source or ep.autoselect_heat_source(

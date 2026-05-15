@@ -552,6 +552,24 @@ def _solve_energy_iteration(fs, tol_T=0.5, skipped=None):
 #   - Verificar consistencia: si el user declara un duty distinto al
 #     inferido, hay algo mal en T's, fases o composiciones.
 
+
+def is_cross_exchange(fs, b):
+    """Detecta heat exchangers proceso-proceso (cross-exchange).
+
+    Un HX cross-exchange tiene 2 corrientes entrantes y 2 salientes:
+    una corriente caliente que cede calor y una fría que lo recibe.
+    No consume utility — sólo recupera calor entre corrientes.
+    Casos típicos: feed/effluent HX en HDA, lean/rich HX en aminas.
+    """
+    import equipment_costs as _eq_mod
+    spec = _eq_mod.EQUIPMENT_DATA.get(b.eq_type, {})
+    if spec.get("categoria") != "Heat exchangers":
+        return False
+    ins  = [s for s in fs.streams.values() if s.dst == b.id]
+    outs = [s for s in fs.streams.values() if s.src == b.id]
+    return len(ins) >= 2 and len(outs) >= 2
+
+
 def infer_block_duty(fs, b):
     """Devuelve el duty kW que cierra el balance del bloque, o None si
     no se puede inferir (Cp irresoluble, mass_flow=0, sin in/out).
@@ -607,6 +625,14 @@ def auto_set_duties_from_thermo(fs, only_zero=False):
             continue
         d = infer_block_duty(fs, b)
         if d is None:
+            continue
+        # cross-exchange HX: el calor cedido por la corriente caliente
+        # es absorbido por la corriente fría, internamente.  El duty
+        # externo es cero (no consume utility) — el residual numérico
+        # es ruido de redondeo o desbalance de T declaradas.
+        if is_cross_exchange(fs, b):
+            b.duty = 0.0
+            assigned[b.id] = 0.0
             continue
         b.duty = float(d)
         assigned[b.id] = float(d)

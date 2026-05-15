@@ -103,14 +103,26 @@ VESSEL_HORZ_PORTS = {
     "liquido":      ("right",  0.5),
 }
 
-# Tower / columna
+# Tower / columna — con múltiples cortes laterales y alimentaciones
+# (típico en CDU, hidrocracker, FCC).
 TOWER_PORTS = {
+    # entradas / salidas principales
     "alimentacion":      ("left",   0.5),
     "vapor_tope":        ("top",    0.5),
     "liquido_fondo":     ("bottom", 0.5),
     "reflujo":           ("top",    0.20),
     "reboiler":          ("bottom", 0.20),
+    # extracción lateral por defecto (compat con ejemplos viejos)
     "extraccion_lateral":("right",  0.5),
+    # múltiples cortes laterales (alto = liviano, bajo = pesado)
+    "extraccion_alta":   ("right",  0.30),    # ~25-30% desde el tope (nafta pesada)
+    "extraccion_media":  ("right",  0.50),    # mitad (querosén)
+    "extraccion_baja":   ("right",  0.70),    # ~70% (diésel ligero)
+    # alimentaciones secundarias (multi-feed columns)
+    "alimentacion_alta": ("left",   0.30),
+    "alimentacion_baja": ("left",   0.70),
+    # entrada de stripping steam (cerca del fondo)
+    "stripping_steam":   ("bottom", 0.50),
 }
 
 # Storage tank
