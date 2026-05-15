@@ -1090,7 +1090,9 @@ class FlowsheetEditor:
 
     def _add_example_stream(self, src, dst, name, mass_flow=0.0,
                             role="internal", src_port="", dst_port="",
-                            price=0.0, T=25.0, cp=0.0):
+                            price=0.0, T=25.0, cp=0.0,
+                            main_component="", phase="",
+                            composition=None):
         sid = self.fs.new_id()
         s = Stream(
             id=sid, name=name, src=src, dst=dst,
@@ -1098,6 +1100,9 @@ class FlowsheetEditor:
             src_port=src_port, dst_port=dst_port,
             price_usd_per_tm=price,
             temperature=T, cp=cp,
+            main_component=main_component,
+            phase=phase,
+            composition=dict(composition) if composition else {},
         )
         self.fs.streams[sid] = s
         return sid
@@ -1232,49 +1237,69 @@ class FlowsheetEditor:
         # tanque de venteo para purga de gases del flash V-101
         tk3  = self._add_example_block("TK-103","Storage tank — cone roof",       30.0, cx[4], y_top - 100)
 
-        # Precios USD/tm (referencia mercado 2024):
-        #   syngas ~150, metanol ~430, agua de proceso ~5
-        # Cp típicos: syngas 1.1 · metanol líq 2.55 · vap 1.85 · agua 4.18
-        # Flujos: syngas 14000 → crude meoh 10100 → meoh 9500 + agua 600
+        # Streams con composición + fase declarada (modelo extendido).
+        # El solver de energía usa Cp(T) del catálogo + ΔH_vap si hay
+        # cambio de fase explícito.
+
         self._add_example_stream(k101, e101, "S-1", 14000, role="feed",
                                  src_port="descarga", dst_port="tube_in",
-                                 price=150.0, T=40, cp=1.1)
+                                 price=150.0, T=40,
+                                 main_component="syngas", phase="gas")
         self._add_example_stream(e101, r101, "S-2", 14000,
                                  src_port="tube_out", dst_port="alimentacion",
-                                 T=230, cp=1.2)
+                                 T=230,
+                                 main_component="syngas", phase="gas")
+        # post-reactor: gas con metanol formado en vapor
         self._add_example_stream(r101, e102, "S-3", 14000,
                                  src_port="producto", dst_port="proceso_in",
-                                 T=260, cp=2.0)
+                                 T=260,
+                                 main_component="methanol", phase="vapor")
+        # post-cooler: parcialmente condensado (two-phase)
         self._add_example_stream(e102, v101, "S-4", 14000,
                                  src_port="proceso_out", dst_port="alimentacion",
-                                 T=40, cp=2.0)
+                                 T=40,
+                                 main_component="methanol", phase="liquid")
+        # líquido del flash: crude methanol (líquido)
         self._add_example_stream(v101, t101, "S-5", 10100,
                                  src_port="liquido",  dst_port="alimentacion",
-                                 T=60, cp=2.5)
+                                 T=60,
+                                 composition={"methanol": 0.94, "water": 0.06},
+                                 main_component="methanol", phase="liquid")
+        # vapor tope de columna: vapor (componente puro metanol)
         self._add_example_stream(t101, e103, "S-vap-tope", 9500,
                                  src_port="vapor_tope", dst_port="shell_in",
-                                 T=68, cp=1.85)
+                                 T=68,
+                                 main_component="methanol", phase="vapor")
+        # producto líquido condensado
         self._add_example_stream(e103, tk1,  "S-MeOH", 9500, role="product",
                                  src_port="shell_out", dst_port="entrada",
-                                 price=480.0, T=40, cp=2.55)
+                                 price=480.0, T=40,
+                                 main_component="methanol", phase="liquid")
+        # fondo de columna: agua líquida
         self._add_example_stream(t101, e104, "S-fondo", 600,
                                  src_port="liquido_fondo", dst_port="liq_in",
-                                 T=100, cp=4.0)
+                                 T=100,
+                                 main_component="water", phase="liquid")
         self._add_example_stream(e104, tk2,  "S-agua", 600, role="product",
                                  src_port="cond_out", dst_port="entrada",
-                                 price=5.0, T=40, cp=4.18)
-        # venteo de gases no condensados del flash (CO, H2 residual)
+                                 price=5.0, T=40,
+                                 main_component="water", phase="liquid")
+        # venteo: gases no condensados (CO, H2)
         self._add_example_stream(v101, tk3, "S-purge", 3900, role="product",
                                  src_port="vapor", dst_port="entrada",
-                                 price=0.0, T=40, cp=1.1)
+                                 price=0.0, T=40,
+                                 main_component="syngas", phase="gas")
 
         # ---- Duties realistas (síntesis metanol, escala 10000 tm/año) ----
         self._set_block_duty(k101, +800)    # compresor 800 kW eléctricos
         self._set_block_duty(e101, +3000)   # preheater 40→230°C
-        self._set_block_duty(r101, -4000)   # reactor exotérmico ΔH=-90 kJ/mol
-        self._set_block_duty(e102, -3000)   # cooler 260→40°C
+        self._set_block_duty(r101, -4000)   # reactor exotérmico
+        self._set_block_duty(e102, -3000)   # cooler + parcial condensación
         self._set_block_duty(e103, -2000)   # condensador
         self._set_block_duty(e104, +1500)   # reboiler
+        # Calor de reacción para R-101: CO + 2H2 → CH3OH, ΔH = -90 kJ/mol
+        # = -2810 kJ/kg metanol (sobre kg de input syngas, aprox -200 kJ/kg)
+        self.fs.blocks[r101].heat_of_reaction = -200.0   # kJ/kg input
 
         # ---- OPEX extras manuales: SOLO consumibles ----
         # Catalizador CuZnO/Al2O3 (~3 años de vida)

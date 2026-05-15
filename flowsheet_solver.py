@@ -290,12 +290,95 @@ def _check_mass_balance(fs, tol_rel=MASS_TOL_REL):
 # SOLVER DE ENERGÍA — propagación de T por closure
 # ======================================================
 
-def _stream_enthalpy_kW(s):
-    """Entalpía sensible de una corriente, kW."""
-    if s.cp <= 0 or s.mass_flow <= 0:
+def _resolve_cp(s, T_eval=None):
+    """Devuelve el Cp (kJ/kg·K) de un stream a la temperatura T_eval
+    (default = s.temperature).
+
+    Prioridad:
+      1. Si s.composition tiene fracciones → Cp(T) ponderado de
+         components.py.
+      2. Si s.main_component está declarado → Cp(T) puro.
+      3. Si s.cp > 0 (override manual) → constante.
+      4. None (sin datos).
+    """
+    if T_eval is None:
+        T_eval = s.temperature
+    phase = s.phase or "liquid"   # default líquido si no declarado
+
+    try:
+        import components as comp_mod
+    except ImportError:
+        comp_mod = None
+
+    if comp_mod is not None:
+        if s.composition:
+            cp = comp_mod.cp_mix_kJ_kg_K(s.composition, T_eval, phase)
+            if cp > 0:
+                return cp
+        if s.main_component:
+            c = comp_mod.get(s.main_component)
+            if c is not None:
+                return c.cp(T_eval, phase)
+
+    if s.cp > 0:
+        return s.cp
+    return None
+
+
+def _resolve_dh_vap(s):
+    """ΔH_vap de un stream (kJ/kg).  None si no se puede calcular."""
+    if s.delta_h_vap_override > 0:
+        return s.delta_h_vap_override
+    try:
+        import components as comp_mod
+    except ImportError:
         return None
+    if s.composition:
+        dh = comp_mod.delta_h_vap_mix(s.composition)
+        if dh > 0:
+            return dh
+    if s.main_component:
+        c = comp_mod.get(s.main_component)
+        if c is not None:
+            return c.dh_vap
+    return None
+
+
+def _stream_enthalpy_kW(s):
+    """Entalpía total de una corriente referida a T_REF_C, kW.
+    Incluye:
+      · sensible heat: m·Cp·(T - T_REF)
+      · latente: si phase = 'vapor', sumar ΔH_vap completo
+                 si phase = 'two_phase', sumar vapor_fraction × ΔH_vap
+
+    Cp se evalúa a la temperatura promedio entre T_REF y T (mejor
+    aproximación que evaluar en T sola, para Cp(T) variable).
+    """
+    if s.mass_flow <= 0:
+        return None
+
+    # Cp a T promedio (mejora vs evaluar solo en T)
+    T_avg = (s.temperature + T_REF_C) / 2.0
+    cp = _resolve_cp(s, T_eval=T_avg)
+    if cp is None or cp <= 0:
+        return None
+
     m_kg_s = (s.mass_flow * TM_TO_KG) / SEC_PER_YEAR
-    return m_kg_s * s.cp * (s.temperature - T_REF_C)
+    h_sensible = m_kg_s * cp * (s.temperature - T_REF_C)
+
+    # contribución latente si hay cambio de fase respecto al estado
+    # de referencia (líquido a T_REF).
+    h_latent = 0.0
+    if s.phase in ("vapor", "gas"):
+        dh = _resolve_dh_vap(s)
+        if dh is not None:
+            h_latent = m_kg_s * dh
+    elif s.phase == "two_phase":
+        dh = _resolve_dh_vap(s)
+        if dh is not None:
+            h_latent = m_kg_s * s.vapor_fraction * dh
+
+    return h_sensible + h_latent
 
 
 def _solve_energy_iteration(fs, tol_T=0.5, skipped=None):
@@ -370,39 +453,79 @@ def _solve_energy_iteration(fs, tol_T=0.5, skipped=None):
         outs = [s for s in fs.streams.values() if s.src == b.id]
         if not ins or not outs:
             continue
-        if not all(s.cp > 0 and s.mass_flow > 0 for s in ins + outs):
+        # Que cada stream tenga Cp resoluble (manual, composition o
+        # main_component) y mass_flow > 0.
+        def _stream_ok(s):
+            return s.mass_flow > 0 and _resolve_cp(s) is not None
+        if not all(_stream_ok(s) for s in ins + outs):
             continue
-        # bombas, compresores y fans tienen duty ELÉCTRICO (kW al eje),
-        # no térmico.  El balance de entalpía no aplica.  Su consumo
-        # se traduce a electricidad en compute_utilities_from_duties.
+        # bombas, compresores y fans tienen duty ELÉCTRICO.
         if _ep_mod.is_electrical_equipment(b.eq_type):
             continue
 
         duty = b.duty
+        # heat_of_reaction: si declarado, se aplica al balance.
+        # Convención: heat_of_reaction > 0  → endotérmico (consume calor)
+        #             se SUMA al lado izquierdo del balance (como duty
+        #             externo positivo).
+        if b.heat_of_reaction != 0:
+            m_in_total = sum(s.mass_flow * TM_TO_KG / SEC_PER_YEAR for s in ins)
+            q_rxn = -m_in_total * b.heat_of_reaction
+            # signo invertido porque exotérmico (heat_of_reaction < 0)
+            # libera calor → es como un duty positivo.
+            duty += q_rxn
 
         # Passthrough simple: 1 in - 1 out
         if len(ins) == 1 and len(outs) == 1:
             s_in, s_out = ins[0], outs[0]
-            h_in       = _stream_enthalpy_kW(s_in) or 0.0
+            h_in = _stream_enthalpy_kW(s_in) or 0.0
+            # Cp del output a T promedio (mejor estimación)
+            T_guess_avg = (T_REF_C + s_out.temperature) / 2.0
+            cp_out = _resolve_cp(s_out, T_eval=T_guess_avg)
+            if cp_out is None or cp_out <= 0:
+                continue
             m_out_kg_s = (s_out.mass_flow * TM_TO_KG) / SEC_PER_YEAR
-            denom = m_out_kg_s * s_out.cp
+            denom = m_out_kg_s * cp_out
+            # restar contribución latente del output si está en vapor
+            dh_lat_out = 0.0
+            if s_out.phase in ("vapor", "gas"):
+                dh_v = _resolve_dh_vap(s_out)
+                if dh_v is not None:
+                    dh_lat_out = m_out_kg_s * dh_v
+            elif s_out.phase == "two_phase":
+                dh_v = _resolve_dh_vap(s_out)
+                if dh_v is not None:
+                    dh_lat_out = m_out_kg_s * s_out.vapor_fraction * dh_v
             if denom > 0:
-                t_new = T_REF_C + (h_in + duty) / denom
+                # H_out = H_in + duty
+                # H_out_sensible + H_out_lat = H_in + duty
+                # T_out = T_REF + (H_in + duty - H_out_lat) / (m·Cp)
+                t_new = T_REF_C + (h_in + duty - dh_lat_out) / denom
                 _try_set(s_out, t_new, b.name)
             continue
 
         # Mixer: N in - 1 out
         if len(outs) == 1:
-            num = den = 0.0
-            for s in ins:
-                m_kg_s = (s.mass_flow * TM_TO_KG) / SEC_PER_YEAR
-                num += m_kg_s * s.cp * (s.temperature - T_REF_C)
-                den += m_kg_s * s.cp
             s_out = outs[0]
+            # entalpía total de los inputs
+            h_in_total = sum(_stream_enthalpy_kW(s) or 0.0 for s in ins)
+            T_guess_avg = (T_REF_C + s_out.temperature) / 2.0
+            cp_out = _resolve_cp(s_out, T_eval=T_guess_avg)
+            if cp_out is None or cp_out <= 0:
+                continue
             m_out_kg_s = (s_out.mass_flow * TM_TO_KG) / SEC_PER_YEAR
-            denom_out  = m_out_kg_s * s_out.cp
+            denom_out  = m_out_kg_s * cp_out
+            dh_lat_out = 0.0
+            if s_out.phase in ("vapor", "gas"):
+                dh_v = _resolve_dh_vap(s_out)
+                if dh_v is not None:
+                    dh_lat_out = m_out_kg_s * dh_v
+            elif s_out.phase == "two_phase":
+                dh_v = _resolve_dh_vap(s_out)
+                if dh_v is not None:
+                    dh_lat_out = m_out_kg_s * s_out.vapor_fraction * dh_v
             if denom_out > 0:
-                t_new = T_REF_C + (num + duty) / denom_out
+                t_new = T_REF_C + (h_in_total + duty - dh_lat_out) / denom_out
                 _try_set(s_out, t_new, b.name)
             continue
 

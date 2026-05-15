@@ -279,6 +279,28 @@ class BlockEditDialog(QDialog):
         if idx >= 0:
             self.heat_combo.setCurrentIndex(idx)
         gb_layout.addRow("Utility:", self.heat_combo)
+
+        # heat_of_reaction (solo visible para reactores)
+        self.hor_edit = QDoubleSpinBox()
+        self.hor_edit.setRange(-1e5, 1e5)
+        self.hor_edit.setDecimals(1)
+        self.hor_edit.setSingleStep(50.0)
+        self.hor_edit.setValue(block.heat_of_reaction)
+        self.hor_label = QLabel("Calor de reacción (kJ/kg input):")
+        gb_layout.addRow(self.hor_label, self.hor_edit)
+        hint_hor = QLabel(
+            "Sólo aplica a reactores.\n"
+            ">0 endotérmica · <0 exotérmica · =0 sin reacción\n"
+            "Ejemplo Methanol: CO+2H₂→CH₃OH, -200 kJ/kg input syngas"
+        )
+        hint_hor.setStyleSheet("color: #888; font-size: 8pt;")
+        gb_layout.addRow("", hint_hor)
+        # ocultar si NO es reactor
+        is_reactor = "Reactor" in block.eq_type
+        self.hor_label.setVisible(is_reactor)
+        self.hor_edit.setVisible(is_reactor)
+        hint_hor.setVisible(is_reactor)
+
         layout.addRow(gb_duty)
 
         # botones
@@ -299,6 +321,9 @@ class BlockEditDialog(QDialog):
         self.block.duty = float(self.duty_edit.value())
         heat = self.heat_combo.currentText()
         self.block.heat_source = "" if heat == "(auto)" else heat
+        # heat_of_reaction (sólo si visible, i.e. reactor)
+        if self.hor_edit.isVisible():
+            self.block.heat_of_reaction = float(self.hor_edit.value())
 
 
 class StreamEditDialog(QDialog):
@@ -371,16 +396,36 @@ class StreamEditDialog(QDialog):
         self.t_edit.setValue(stream.temperature)
         gb_layout.addRow("Temperatura (°C):", self.t_edit)
 
+        # Componente principal (catálogo)
+        import components as comp_mod
+        self.comp_combo = QComboBox()
+        self.comp_combo.addItem("(personalizado)", "")
+        for key, label in comp_mod.list_labels():
+            self.comp_combo.addItem(label, key)
+        cur_idx = self.comp_combo.findData(stream.main_component)
+        if cur_idx >= 0:
+            self.comp_combo.setCurrentIndex(cur_idx)
+        gb_layout.addRow("Componente principal:", self.comp_combo)
+
+        # Fase
+        self.phase_combo = QComboBox()
+        self.phase_combo.addItems(["", "liquid", "vapor", "gas", "two_phase"])
+        cur = stream.phase or ""
+        self.phase_combo.setCurrentText(cur)
+        gb_layout.addRow("Fase:", self.phase_combo)
+
+        # Cp manual (fallback si no se elige componente)
         self.cp_edit = QDoubleSpinBox()
         self.cp_edit.setRange(0.0, 100.0)
         self.cp_edit.setDecimals(3)
         self.cp_edit.setSingleStep(0.1)
         self.cp_edit.setValue(stream.cp)
-        gb_layout.addRow("Cp (kJ/kg·K):", self.cp_edit)
+        gb_layout.addRow("Cp manual (kJ/kg·K):", self.cp_edit)
 
         cp_hint = QLabel(
-            "Típicos:  agua líq 4.18 · vapor 2.0 · aire 1.0\n"
-            "hidrocarburos líq 1.7-2.2 · Cp=0 omite del balance"
+            "Si elegís 'Componente principal' + 'Fase', el solver usa\n"
+            "Cp(T) del catálogo (más realista que Cp constante).\n"
+            "El Cp manual queda como fallback (si componente = personalizado)."
         )
         cp_hint.setStyleSheet("color: #888; font-size: 8pt;")
         gb_layout.addRow("", cp_hint)
@@ -433,6 +478,8 @@ class StreamEditDialog(QDialog):
             self.stream.price_usd_per_tm = 0.0
         self.stream.temperature = float(self.t_edit.value())
         self.stream.cp = float(self.cp_edit.value())
+        self.stream.main_component = self.comp_combo.currentData() or ""
+        self.stream.phase = self.phase_combo.currentText() or ""
         self.stream.src_port = self.src_port_combo.currentText() or ""
         self.stream.dst_port = self.dst_port_combo.currentText() or ""
 

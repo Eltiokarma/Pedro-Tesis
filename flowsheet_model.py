@@ -80,6 +80,15 @@ class Block:
     # vacío → autoselect según signo de duty y T promedio.
     heat_source: str = ""
 
+    # Calor de reacción para reactores (kJ/kg de input total).
+    #   > 0  reacción endotérmica (consume calor del medio)
+    #   < 0  reacción exotérmica (libera calor al medio)
+    #   = 0  reactor adiabático o sin reacción declarada
+    # Si != 0, el solver de energía suma m_in × heat_of_reaction al
+    # balance del bloque (con signo opuesto al duty, porque consumimos
+    # del medio = positivo en duty).
+    heat_of_reaction: float = 0.0
+
     # caches del canvas Tk (no se serializan, no se usan en Qt)
     canvas_rect: Optional[int] = field(default=None, repr=False)
     canvas_text: Optional[int] = field(default=None, repr=False)
@@ -100,7 +109,22 @@ class Stream:
 
     # termofísicas (balance de energía)
     temperature: float = 25.0    # °C
-    cp:          float = 0.0     # kJ/kg·K — si 0, se omite del balance
+    cp:          float = 0.0     # kJ/kg·K — override manual; si 0 y hay
+                                 # composition, se calcula de components.py
+
+    # ---- Composición y fase (para Cp(T) riguroso y cambio de fase) ----
+    # phase: "liquid" | "vapor" | "gas" | "two_phase" | ""
+    #   "" (vacío) = no declarado, se usa Cp como Cp_liquid (default).
+    phase: str = ""
+    # vapor_fraction: solo aplica si phase == "two_phase".  0..1.
+    vapor_fraction: float = 0.0
+    # composition: Dict[component_name, mass_fraction].  Si vacío y
+    # main_component != "", se asume 100% main_component.  Si ambos
+    # vacíos, el solver usa el Cp manual (campo cp arriba).
+    composition: Dict[str, float] = field(default_factory=dict)
+    main_component: str = ""     # atajo para componente puro
+    # ΔH_vap override (kJ/kg).  Si 0, se calcula de la composition.
+    delta_h_vap_override: float = 0.0
 
     # caches del canvas Tk
     canvas_line:    Optional[int] = field(default=None, repr=False)
