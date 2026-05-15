@@ -223,6 +223,29 @@ EQUIPMENT_DATA = {
         dict(K1=3.3322, K2=0.4838, K3=0.3434,
              S_param="Tray area", S_unit="m²",
              S_min=0.07, S_max=12.3, categoria="Trays / packing"),
+
+    # -------- UTILITIES (planta de servicios auxiliares) --------
+    # Caldera de vapor — equipo industrial que produce steam para el
+    # proceso a partir de combustible y agua tratada.
+    "Boiler — fire tube":
+        dict(K1=6.6940, K2=0.1801, K3=0.0942,
+             S_param="Steam output", S_unit="kg/s",
+             S_min=0.1, S_max=20, categoria="Utilities"),
+    "Boiler — water tube":
+        dict(K1=7.0489, K2=0.4071, K3=0.1296,
+             S_param="Steam output", S_unit="kg/s",
+             S_min=2,   S_max=50, categoria="Utilities"),
+
+    # Torre de enfriamiento — produce agua fría circulante para todos
+    # los HX/condensadores de cooling water del proceso.
+    "Cooling tower — induced draft":
+        dict(K1=4.9090, K2=0.5990, K3=0.0440,
+             S_param="Cooling duty", S_unit="MW",
+             S_min=1,   S_max=80,  categoria="Utilities"),
+    "Cooling tower — natural draft":
+        dict(K1=5.1330, K2=0.6280, K3=0.0480,
+             S_param="Cooling duty", S_unit="MW",
+             S_min=10,  S_max=200, categoria="Utilities"),
 }
 
 

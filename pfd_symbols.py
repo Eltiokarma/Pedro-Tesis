@@ -910,6 +910,11 @@ EQ_TYPE_TO_SYMBOL: Dict[str, str] = {
     'Filter — belt': 'filter-cartridge',
     'Tray — sieve': 'column-tray',
     'Tray — valve': 'column-tray',
+    # Utilities: reusamos símbolos existentes para no inventar SVGs
+    'Boiler — fire tube':              'fired-heater',
+    'Boiler — water tube':             'fired-heater',
+    'Cooling tower — induced draft':   'column-stripper',
+    'Cooling tower — natural draft':   'column-stripper',
 }
 
 

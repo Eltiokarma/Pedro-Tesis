@@ -406,6 +406,27 @@ class StreamEditDialog(QDialog):
         self.t_edit.setValue(stream.temperature)
         gb_layout.addRow("Temperatura (°C):", self.t_edit)
 
+        # Setpoint de T (target_temperature, opcional).  Cuando está
+        # activado, "Setpoints…" del toolbar puede iterar el duty del
+        # bloque upstream para hacer que T real iguale el objetivo.
+        from PySide6.QtWidgets import QHBoxLayout, QWidget
+        sp_row = QWidget()
+        sp_lay = QHBoxLayout(sp_row); sp_lay.setContentsMargins(0,0,0,0)
+        self.sp_check = QCheckBox("Setpoint T")
+        cur_sp = getattr(stream, 'target_temperature', -999.0)
+        has_sp = cur_sp > -273.0
+        self.sp_check.setChecked(has_sp)
+        self.sp_edit = QDoubleSpinBox()
+        self.sp_edit.setRange(-273.0, 2000.0)
+        self.sp_edit.setDecimals(1)
+        self.sp_edit.setSingleStep(5.0)
+        self.sp_edit.setValue(cur_sp if has_sp else stream.temperature)
+        self.sp_edit.setEnabled(has_sp)
+        self.sp_check.toggled.connect(self.sp_edit.setEnabled)
+        sp_lay.addWidget(self.sp_check)
+        sp_lay.addWidget(self.sp_edit)
+        gb_layout.addRow("T objetivo (design):", sp_row)
+
         # Componente principal (catálogo)
         import components as comp_mod
         self.comp_combo = QComboBox()
@@ -487,6 +508,12 @@ class StreamEditDialog(QDialog):
         else:
             self.stream.price_usd_per_tm = 0.0
         self.stream.temperature = float(self.t_edit.value())
+        # Setpoint: si la casilla está marcada, guarda T objetivo;
+        # si no, -999 (centinela "sin setpoint").
+        if self.sp_check.isChecked():
+            self.stream.target_temperature = float(self.sp_edit.value())
+        else:
+            self.stream.target_temperature = -999.0
         self.stream.cp = float(self.cp_edit.value())
         self.stream.main_component = self.comp_combo.currentData() or ""
         self.stream.phase = self.phase_combo.currentText() or ""
@@ -2017,6 +2044,7 @@ class FlowsheetMainWindow(QMainWindow):
 
         add_btn("OPEX extras…",    self.action_opex_extras)
         add_btn("Solve balances",  self.action_solve)
+        add_btn("Setpoints…",      self.action_setpoints)
         # toggle del dock de tabla de corrientes (creado en
         # _build_streams_dock); toggleViewAction() ya viene cableado
         # para mostrar/ocultar y refleja el estado actual.
@@ -2275,6 +2303,64 @@ class FlowsheetMainWindow(QMainWindow):
         """Muestra/oculta el papel de dibujo PFD (marco + cuadro de
         título + leyenda)."""
         self.scene.set_paper_visible(checked)
+
+    def action_setpoints(self):
+        """Verifica los setpoints declarados (target_temperature en
+        streams) y ofrece resolverlos por goal-seek de duty."""
+        if not self.fs.blocks:
+            QMessageBox.information(self, "Setpoints", "El diagrama está vacío.")
+            return
+        results = fsolv.verify_setpoints(self.fs)
+        if not results:
+            QMessageBox.information(
+                self, "Setpoints",
+                "No hay setpoints declarados.\n\n"
+                "Para agregar un setpoint:\n"
+                "1. Doble-click sobre un stream\n"
+                "2. Marcá la casilla 'Setpoint T' y poné la T objetivo\n"
+                "3. Volvé a este menú y resolvé"
+            )
+            return
+        lines = ["Setpoints declarados:\n"]
+        any_off = False
+        for r in results:
+            mark = "✓" if r["within_tol"] else "✗"
+            if r["kind"] == "T":
+                lines.append(
+                    f"  {mark} {r['stream_name']}: T objetivo={r['target']:g}°C  "
+                    f"actual={r['actual']:.1f}°C  Δ={r['deviation']:+.1f}°C"
+                )
+            else:
+                lines.append(
+                    f"  {mark} {r['stream_name']}: pureza {r['component']} "
+                    f"objetivo={r['target']:.3f}  actual={r['actual']:.3f}"
+                )
+            if not r["within_tol"]:
+                any_off = True
+        msg = "\n".join(lines)
+        if not any_off:
+            QMessageBox.information(self, "Setpoints — todo OK", msg)
+            return
+        # Ofrecer resolver los desviados
+        msg += ("\n\n¿Resolver setpoints de T por goal-seek? "
+                "(ajusta duty del bloque upstream de cada stream)")
+        ans = QMessageBox.question(self, "Resolver setpoints", msg)
+        if ans != QMessageBox.Yes:
+            return
+        gs_results = fsolv.solve_setpoints_all(self.fs)
+        report = []
+        for r in gs_results:
+            tag = "✓" if r["success"] else "✗"
+            duty_s = f"{r['duty_found']:+.1f} kW" if r["duty_found"] is not None else "—"
+            report.append(
+                f"  {tag} {r['stream_name']} (block {r['block_name']}): "
+                f"duty={duty_s}, T_final={r['t_final']:.1f}°C  [{r['message']}]"
+            )
+        # refrescar streams en escena
+        for sid, sit in self.scene.stream_items.items():
+            sit.update_path()
+        QMessageBox.information(self, "Goal-seek resultado",
+                                  "\n".join(report))
 
     def action_solve(self):
         if not self.fs.blocks:

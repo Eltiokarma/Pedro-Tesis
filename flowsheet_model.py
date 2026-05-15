@@ -128,6 +128,18 @@ class Stream:
     # ΔH_vap override (kJ/kg).  Si 0, se calcula de la composition.
     delta_h_vap_override: float = 0.0
 
+    # ---- SETPOINTS (design targets) ----
+    # Si target_temperature está seteado (≥ -273), el solver lo trata
+    # como un OBJETIVO de diseño: ajusta el duty del bloque upstream
+    # (vía goal_seek) para hacer que la T real iguale al setpoint.
+    # Si no está seteado (= None internamente, se persiste como -999),
+    # temperature es directo (declarado por user).
+    target_temperature: float = -999.0   # -999 = no setpoint (sentinela)
+    # Setpoint de pureza (mass fraction) de un componente específico
+    # en la corriente.  Vacío = sin setpoint.
+    target_purity_component: str = ""
+    target_purity_fraction:  float = 0.0
+
     # Waypoints intermedios para routing manual del stream.  Cada
     # waypoint es [x, y] en coordenadas absolutas de la escena Qt.
     # Si está vacío, el router calcula la polilínea automáticamente

@@ -640,6 +640,180 @@ def auto_set_duties_from_thermo(fs, only_zero=False):
 
 
 # ======================================================
+# SETPOINTS / GOAL-SEEK (design targets)
+# ======================================================
+# Un setpoint declara qué se QUIERE en una corriente:
+#   - target_temperature: T objetivo (°C)
+#   - target_purity_component + target_purity_fraction: composición objetivo
+#
+# Hay dos modos de uso:
+#   verify_setpoints(fs)     → calcula desviación, NO modifica nada.
+#   goal_seek_duty(fs, ...)  → encuentra el duty de un bloque que hace
+#                              que la T de salida iguale al setpoint.
+
+# valor centinela: stream sin target_temperature seteado
+SETPOINT_TEMP_UNSET = -999.0
+
+
+def _has_temp_setpoint(s):
+    return getattr(s, 'target_temperature', SETPOINT_TEMP_UNSET) > -273.0
+
+
+def _has_purity_setpoint(s):
+    return bool(getattr(s, 'target_purity_component', "")) \
+        and getattr(s, 'target_purity_fraction', 0.0) > 0
+
+
+def verify_setpoints(fs):
+    """Verifica todos los setpoints del flowsheet contra los valores
+    actuales.  No modifica nada.
+
+    Returns:
+        list of dicts: {
+            'stream_id', 'stream_name', 'kind' ('T' | 'purity'),
+            'target', 'actual', 'deviation', 'within_tol'
+        }
+    """
+    results = []
+    for s in fs.streams.values():
+        if _has_temp_setpoint(s):
+            t_target = s.target_temperature
+            t_actual = s.temperature
+            dev = t_actual - t_target
+            results.append({
+                "stream_id": s.id,
+                "stream_name": s.name,
+                "kind": "T",
+                "target": t_target,
+                "actual": t_actual,
+                "deviation": dev,
+                "within_tol": abs(dev) < 1.0,
+                "unit": "°C",
+            })
+        if _has_purity_setpoint(s):
+            comp = s.target_purity_component
+            target = s.target_purity_fraction
+            actual = s.composition.get(comp, 0.0) if s.composition else 0.0
+            dev = actual - target
+            results.append({
+                "stream_id": s.id,
+                "stream_name": s.name,
+                "kind": "purity",
+                "component": comp,
+                "target": target,
+                "actual": actual,
+                "deviation": dev,
+                "within_tol": abs(dev) < 0.005,   # 0.5% absoluto
+                "unit": "frac",
+            })
+    return results
+
+
+def goal_seek_duty(fs, target_stream_id, block_id, t_target, **kwargs):
+    """Encuentra el duty kW del block `block_id` que hace que la T
+    del stream `target_stream_id` iguale a `t_target` (°C).
+
+    Para bloques con 1 entrada/output: resuelve closed-form desde el
+    balance de energía:
+        duty = H_out(@T_target) - H_in_total - Q_rxn
+    Para multi-output: error (goal-seek 1D no aplica a splits).
+
+    Args:
+        fs: Flowsheet (modificado in-place — setea block.duty y
+            target.temperature al valor encontrado).
+        target_stream_id: stream cuyo T queremos controlar.
+        block_id: bloque cuyo duty manipulamos.
+        t_target: T objetivo en °C.
+
+    Returns:
+        dict: success, duty_found, iterations, t_final, message.
+    """
+    block = fs.blocks.get(block_id)
+    target = fs.streams.get(target_stream_id)
+    if block is None or target is None:
+        return {"success": False, "message": "bloque o stream no existe",
+                "iterations": 0, "duty_found": None, "t_final": None}
+
+    ins  = [s for s in fs.streams.values() if s.dst == block_id]
+    outs = [s for s in fs.streams.values() if s.src == block_id]
+
+    if not ins or not outs:
+        return {"success": False, "message": "bloque sin in/out",
+                "iterations": 0, "duty_found": None, "t_final": None}
+    if len(outs) > 1:
+        return {"success": False,
+                "message": "goal-seek 1D no aplica a splits (>1 output)",
+                "iterations": 0, "duty_found": None, "t_final": None}
+    if outs[0].id != target_stream_id:
+        return {"success": False,
+                "message": "target stream no es el único output del bloque",
+                "iterations": 0, "duty_found": None, "t_final": None}
+
+    # H_in total
+    h_in = 0.0
+    for s in ins:
+        e = _stream_enthalpy_kW(s)
+        if e is None:
+            return {"success": False, "message": "Cp no resoluble en inputs",
+                    "iterations": 0, "duty_found": None, "t_final": None}
+        h_in += e
+
+    # Q_rxn (si hay reacción)
+    q_rxn = 0.0
+    if block.heat_of_reaction != 0:
+        m_in_total = sum(s.mass_flow * TM_TO_KG / SEC_PER_YEAR for s in ins)
+        q_rxn = -m_in_total * block.heat_of_reaction
+
+    # H_out @ T_target
+    saved_T = target.temperature
+    target.temperature = t_target
+    h_out = _stream_enthalpy_kW(target)
+    target.temperature = saved_T
+    if h_out is None:
+        return {"success": False, "message": "Cp no resoluble en output",
+                "iterations": 0, "duty_found": None, "t_final": None}
+
+    duty = h_out - h_in - q_rxn
+
+    # Aplicar al modelo
+    block.duty = float(duty)
+    target.temperature = float(t_target)
+
+    return {
+        "success": True,
+        "duty_found": duty,
+        "iterations": 1,
+        "t_final": t_target,
+        "message": "closed-form OK",
+    }
+
+
+def solve_setpoints_all(fs, max_iter=40):
+    """Para CADA stream con target_temperature seteado, ajusta el duty
+    del bloque upstream inmediato (el que produce ese stream) para
+    matchear el setpoint.
+
+    Returns:
+        list of resultados de goal_seek_duty, uno por setpoint resuelto.
+    """
+    results = []
+    for s in list(fs.streams.values()):
+        if not _has_temp_setpoint(s):
+            continue
+        # encontrar bloque upstream (cuyo output es s)
+        block_id = s.src
+        if block_id is None:
+            continue
+        res = goal_seek_duty(fs, s.id, block_id, s.target_temperature,
+                              max_iter=max_iter)
+        res["stream_name"] = s.name
+        res["block_name"]  = fs.blocks.get(block_id).name if fs.blocks.get(block_id) else "?"
+        res["t_target"]    = s.target_temperature
+        results.append(res)
+    return results
+
+
+# ======================================================
 # TEAR STREAM + WEGSTEIN (resolución de reciclos)
 # ======================================================
 # Cuando un SCC tiene > 1 bloque y alguno de sus streams tiene

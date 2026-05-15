@@ -132,6 +132,91 @@ def compute_utilities_from_duties(fs):
 
 
 # ======================================================
+# AUTO-SIZING DE BLOQUES UTILITY (boiler / cooling tower)
+# ======================================================
+# Si el user pone un Boiler block en el flowsheet, se dimensiona
+# automáticamente con la suma de todas las demandas de steam del proceso.
+# Idem cooling tower con la suma de cooling water duty.
+#
+# Una vez sizeado, el CAPEX se calcula con la correlación Turton
+# (equipment_costs.EQUIPMENT_DATA del eq_type).
+
+def aggregate_utility_demand(fs):
+    """Suma duties de todos los bloques del proceso por tipo de utility.
+
+    Returns:
+        dict {util_key: total_duty_kw}
+        Ej: {'steam_LP': 1500.0, 'cooling_water': -3200.0, 'fuel_gas': 5000.0}
+    """
+    # local import para evitar ciclo
+    from flowsheet_solver import is_cross_exchange
+    import equipment_ports as _ep
+
+    agg = {}
+    for b in fs.blocks.values():
+        # los blocks utility (boiler/cooling tower) NO son demanda, son oferta.
+        cat = None
+        try:
+            import equipment_costs as _eq
+            cat = _eq.EQUIPMENT_DATA.get(b.eq_type, {}).get("categoria")
+        except ImportError:
+            pass
+        if cat == "Utilities":
+            continue
+        if b.duty == 0:
+            continue
+        if is_cross_exchange(fs, b):
+            continue
+        T_avg = block_avg_temperature(fs, b.id)
+        util_key = b.heat_source or _ep.autoselect_heat_source(
+            b.eq_type, b.duty, T_avg
+        )
+        if not util_key:
+            continue
+        agg[util_key] = agg.get(util_key, 0.0) + abs(b.duty)
+    return agg
+
+
+def auto_size_utility_blocks(fs):
+    """Para cada bloque del tipo Utilities en el flowsheet, asigna su
+    `S` (capacidad) en función de la demanda total del proceso.
+
+    - Boiler: total steam demand en kg/s (de steam_LP + MP + HP).
+    - Cooling tower: total cooling demand en MW.
+
+    No toca otros campos.  Devuelve dict {block_id: (S, S_unit)}.
+    """
+    import equipment_costs as _eq
+    demand = aggregate_utility_demand(fs)
+
+    # Mapear total demand a las unidades del catálogo
+    # Steam: kg/s = kW / (ΔH_vap en kJ/kg).  Promedio ~2200 kJ/kg.
+    steam_total_kw = (demand.get("steam_LP", 0)
+                      + demand.get("steam_MP", 0)
+                      + demand.get("steam_HP", 0)
+                      + demand.get("fuel_gas", 0))
+    steam_kg_s = steam_total_kw / 2200.0 if steam_total_kw > 0 else 0.0
+    # Cooling: MW = kW / 1000
+    cooling_mw = demand.get("cooling_water", 0) / 1000.0
+    if "refrigeration" in demand:
+        cooling_mw += demand["refrigeration"] / 1000.0
+
+    sized = {}
+    for b in fs.blocks.values():
+        cat = _eq.EQUIPMENT_DATA.get(b.eq_type, {}).get("categoria")
+        if cat != "Utilities":
+            continue
+        S_unit = _eq.EQUIPMENT_DATA[b.eq_type].get("S_unit", "")
+        if b.eq_type.startswith("Boiler") and steam_kg_s > 0:
+            b.S = max(steam_kg_s, 0.1)
+            sized[b.id] = (b.S, S_unit)
+        elif b.eq_type.startswith("Cooling tower") and cooling_mw > 0:
+            b.S = max(cooling_mw, 0.1)
+            sized[b.id] = (b.S, S_unit)
+    return sized
+
+
+# ======================================================
 # LEER XLSX EXISTENTE (formato ANA.py)
 # ======================================================
 

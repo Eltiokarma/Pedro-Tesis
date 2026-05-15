@@ -147,6 +147,26 @@ SOLIDS_PORTS = {
     "venteo":       ("top",    0.20),
 }
 
+# Boiler de vapor (caldera) — recibe agua + combustible, produce
+# vapor a varios niveles + tiene blowdown y chimenea.
+BOILER_PORTS = {
+    "agua_in":      ("left",   0.5),    # boiler feed water tratada
+    "combustible":  ("bottom", 0.30),   # fuel gas o petróleo
+    "vapor_out":    ("right",  0.5),    # steam principal
+    "blowdown":     ("bottom", 0.70),   # purga de sales
+    "chimenea":     ("top",    0.5),    # gases de combustión
+}
+
+# Cooling tower — recibe agua caliente del proceso, devuelve fría;
+# pierde agua por evaporación, requiere makeup y blowdown.
+COOLING_TOWER_PORTS = {
+    "agua_caliente": ("top",   0.30),   # warm return from process
+    "agua_fria":     ("bottom",0.5),    # cold supply to process
+    "makeup":        ("left",  0.5),    # agua de reposición
+    "blowdown":      ("bottom",0.80),   # purga concentración
+    "vapor_loss":    ("top",   0.70),   # pérdida por evaporación
+}
+
 # Fallback (equipos no catalogados)
 DEFAULT_PORTS = {
     "in":  ("left",  0.5),
@@ -195,6 +215,12 @@ EQUIPMENT_PORTS = {
     "Dryer — drum":                 SOLIDS_PORTS,
     "Evaporator — vertical":        SOLIDS_PORTS,
     "Crystallizer":                 SOLIDS_PORTS,
+
+    # Utilities (planta de servicios)
+    "Boiler — fire tube":           BOILER_PORTS,
+    "Boiler — water tube":          BOILER_PORTS,
+    "Cooling tower — induced draft":COOLING_TOWER_PORTS,
+    "Cooling tower — natural draft":COOLING_TOWER_PORTS,
 }
 
 
@@ -246,6 +272,12 @@ ISA_PREFIX = {
 
     "Tray — sieve":                 "TR",
     "Tray — valve":                 "TR",
+
+    # Utilities — caldera B-101, torre CT-101
+    "Boiler — fire tube":           "B",
+    "Boiler — water tube":          "B",
+    "Cooling tower — induced draft":"CT",
+    "Cooling tower — natural draft":"CT",
 }
 
 
