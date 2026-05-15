@@ -43,9 +43,13 @@ _C_FLAME_DK  = "#bf360c"
 
 
 def _svg(body):
-    """Envuelve un body en un SVG bien formado."""
+    """Envuelve un body en un SVG bien formado.
+
+    Sin declaración XML porque QSvgRenderer a veces falla parsearla
+    cuando viene en bytes encoded.  Sin namespace explícito tampoco
+    porque algunos parsers se confunden.
+    """
     return (
-        f'<?xml version="1.0" encoding="UTF-8"?>'
         f'<svg xmlns="http://www.w3.org/2000/svg" '
         f'viewBox="0 0 130 60" width="130" height="60">'
         f'{body}'

@@ -74,6 +74,7 @@ import equipment_icons as eicon
 import flowsheet_solver as fsolv
 import flowsheet_export as fexp
 import flowsheet_validation as fval
+import flowsheet_units as funits
 from flowsheet_model import (
     Block, Stream, Flowsheet,
     STREAM_ROLE_COLORS, STREAM_ROLE_COLORS_SEL,
@@ -710,8 +711,9 @@ class BlockItem(QGraphicsItemGroup):
         Estrategia:
           1. Si hay SVG hardcoded para este eq_type (equipment_icons.py)
              y QtSvg está disponible → renderizar como QGraphicsSvgItem.
-             En este modo, el rect base es transparente; el borde solo
-             aparece cuando el bloque está seleccionado.
+             El rect base queda visible con borde índigo claro (por si
+             el SVG no carga visualmente, al menos vemos la caja del
+             equipo).
           2. Si no → fallback a Qt paths simples (phase C).
         """
         self._svg_mode = False
@@ -721,19 +723,41 @@ class BlockItem(QGraphicsItemGroup):
         if renderer is not None:
             try:
                 from PySide6.QtSvgWidgets import QGraphicsSvgItem
+                from PySide6.QtCore import QRectF
                 svg_item = QGraphicsSvgItem(parent=self)
                 svg_item.setSharedRenderer(renderer)
-                svg_item.setPos(0, 0)
+                # IMPORTANTE: forzar el tamaño del item al viewBox.
+                # Sin esto, QGraphicsSvgItem puede tener boundingRect
+                # vacío y no renderizar nada visible.
+                # El SVG está en viewBox 0 0 130 60 = BLOCK_W × BLOCK_H.
+                vb = renderer.viewBoxF()
+                if vb.isEmpty():
+                    vb = QRectF(0, 0, BLOCK_W, BLOCK_H)
+                # escalar al tamaño del bloque por si el viewBox difiere
+                scale_x = BLOCK_W / max(vb.width(),  1.0)
+                scale_y = BLOCK_H / max(vb.height(), 1.0)
+                scale = min(scale_x, scale_y)
+                svg_item.setScale(scale)
+                # centrar en el bloque si hubo recorte
+                actual_w = vb.width()  * scale
+                actual_h = vb.height() * scale
+                svg_item.setPos((BLOCK_W - actual_w) / 2,
+                                 (BLOCK_H - actual_h) / 2)
                 svg_item.setZValue(0)
-                # rect base invisible (solo aparece cuando selected)
-                self.rect.setBrush(QBrush(Qt.transparent))
-                self.rect.setPen(QPen(Qt.transparent))
-                self.rect.setZValue(0.5)
+                # rect base: visible con borde claro, fill blanco (para
+                # que el texto sea legible).  Si el SVG falla, queda al
+                # menos un rect bonito.
+                self.rect.setBrush(QBrush(COLOR_BLOCK_FILL))
+                self.rect.setPen(QPen(COLOR_BLOCK_BORDER, 1.5))
+                self.rect.setZValue(-0.5)   # detrás del SVG
                 self.decoration_items.append(svg_item)
                 self._svg_mode = True
                 return
             except ImportError:
                 # QtSvgWidgets no disponible — caemos al fallback
+                pass
+            except Exception:
+                # cualquier otro error de renderizado del SVG → fallback
                 pass
 
         # 2. Fallback: Qt paths (phase C, simples pero funcionales)
@@ -939,13 +963,10 @@ class BlockItem(QGraphicsItemGroup):
         if selected:
             self.rect.setPen(QPen(COLOR_BLOCK_BORDER_SEL, 3))
         else:
-            # En modo SVG el borde queda invisible al deseleccionar
-            # (el ícono SVG ya define la silueta del equipo).
-            # En modo fallback se mantiene el borde índigo.
-            if getattr(self, "_svg_mode", False):
-                self.rect.setPen(QPen(Qt.transparent))
-            else:
-                self.rect.setPen(QPen(COLOR_BLOCK_BORDER, 2))
+            # rect base siempre visible para que se vea el outline del
+            # bloque, independiente de si el SVG cargó bien o no.
+            self.rect.setPen(QPen(COLOR_BLOCK_BORDER,
+                                   1.5 if getattr(self, "_svg_mode", False) else 2))
 
     def itemChange(self, change, value):
         """Sync posición al modelo + refresh streams conectados.
@@ -1161,7 +1182,20 @@ class StreamItem(QGraphicsPathItem):
         role_tag = ""
         if s.role == "feed":    role_tag = " [feed]"
         elif s.role == "product": role_tag = " [product]"
-        flow = f"  {s.mass_flow:g} tm/año" if s.mass_flow else ""
+        # unidad de display: la elegida en el dock de streams, default tm/año
+        unit = "tm/año"
+        # intentar leer la unidad activa del editor (puede no existir
+        # durante construcción inicial)
+        try:
+            from PySide6.QtWidgets import QApplication
+            app = QApplication.instance()
+            for w in app.topLevelWidgets() if app else []:
+                if hasattr(w, "streams_dock") and w.streams_dock is not None:
+                    unit = w.streams_dock.current_unit()
+                    break
+        except Exception:
+            pass
+        flow = f"  {funits.format_flow(s.mass_flow, unit)}" if s.mass_flow else ""
         return s.name + role_tag + flow
 
     # ---- helpers de routing (réplica simplificada de flowsheet_ui) ----
@@ -1429,6 +1463,148 @@ class FlowsheetView(QGraphicsView):
 # MAIN WINDOW
 # ======================================================
 
+# ======================================================
+# STREAMS TABLE DOCK — tabla de corrientes con conversión de unidades
+# ======================================================
+
+class StreamsTableDock(QDockWidget):
+    """Dock con tabla de TODAS las corrientes del flowsheet.
+
+    Cada fila muestra: Nombre · From (block.port) · To (block.port)
+    · Role · Flujo (en unidad elegida) · T · Cp · Precio (si feed/product).
+
+    El user puede cambiar la unidad de flujo desde el combo superior:
+    tm/año, kg/h, kg/s, t/d, lb/h.  Los labels en el canvas también
+    se actualizan a la nueva unidad.
+
+    Double-click en una fila abre el StreamEditDialog del stream.
+    """
+
+    COL_NAME, COL_FROM, COL_TO, COL_ROLE, COL_FLOW, COL_T, COL_CP, COL_PRICE = range(8)
+
+    def __init__(self, parent, editor):
+        super().__init__(" Corrientes ", parent)
+        self.editor = editor
+        self.setAllowedAreas(Qt.BottomDockWidgetArea | Qt.RightDockWidgetArea)
+        self.setFeatures(QDockWidget.DockWidgetMovable
+                          | QDockWidget.DockWidgetFloatable
+                          | QDockWidget.DockWidgetClosable)
+
+        widget = QWidget()
+        layout = QVBoxLayout(widget)
+        layout.setContentsMargins(6, 6, 6, 6)
+        layout.setSpacing(4)
+
+        # --- toolbar del dock: unidad de flujo + total in/out ---
+        tb_layout = QHBoxLayout()
+        tb_layout.addWidget(QLabel("Unidad de flujo:"))
+        self.unit_combo = QComboBox()
+        for u in funits.FLOW_UNITS_ORDER:
+            self.unit_combo.addItem(u)
+        self.unit_combo.setCurrentText("tm/año")
+        self.unit_combo.currentTextChanged.connect(self._on_unit_changed)
+        tb_layout.addWidget(self.unit_combo)
+
+        self.lbl_summary = QLabel("")
+        self.lbl_summary.setStyleSheet("color: #555;")
+        tb_layout.addWidget(self.lbl_summary)
+        tb_layout.addStretch()
+        layout.addLayout(tb_layout)
+
+        # --- tabla ---
+        cols = ["Nombre", "Desde", "Hacia", "Rol", "Flujo", "T", "Cp", "Precio"]
+        self.table = QTableWidget(0, len(cols))
+        self.table.setHorizontalHeaderLabels(cols)
+        self.table.setSelectionBehavior(QTableWidget.SelectRows)
+        self.table.setEditTriggers(QTableWidget.NoEditTriggers)
+        self.table.setAlternatingRowColors(True)
+        self.table.horizontalHeader().setStretchLastSection(False)
+        self.table.itemDoubleClicked.connect(self._on_double_click)
+        for col, width in (
+            (self.COL_NAME, 140), (self.COL_FROM, 140), (self.COL_TO, 140),
+            (self.COL_ROLE, 70),  (self.COL_FLOW, 120), (self.COL_T, 70),
+            (self.COL_CP, 70),    (self.COL_PRICE, 90),
+        ):
+            self.table.setColumnWidth(col, width)
+        layout.addWidget(self.table)
+
+        self.setWidget(widget)
+
+    def current_unit(self):
+        return self.unit_combo.currentText()
+
+    def refresh(self):
+        """Reconstruye la tabla desde el flowsheet actual."""
+        fs = self.editor.fs
+        unit = self.current_unit()
+        streams = sorted(fs.streams.values(), key=lambda s: s.name)
+        self.table.setRowCount(len(streams))
+
+        feed_total_tm = 0.0
+        prod_total_tm = 0.0
+        for r, s in enumerate(streams):
+            src_b = fs.blocks.get(s.src)
+            dst_b = fs.blocks.get(s.dst)
+            src_label = (
+                f"{src_b.name}.{s.src_port or '?'}" if src_b else "(borrado)"
+            )
+            dst_label = (
+                f"{dst_b.name}.{s.dst_port or '?'}" if dst_b else "(borrado)"
+            )
+            vals = [
+                s.name,
+                src_label,
+                dst_label,
+                s.role,
+                funits.format_flow(s.mass_flow, unit),
+                f"{s.temperature:g} °C" if s.cp > 0 else "—",
+                f"{s.cp:g}" if s.cp > 0 else "—",
+                (f"${s.price_usd_per_tm:g}/tm"
+                 if s.role in ("feed", "product") and s.price_usd_per_tm
+                 else "—"),
+            ]
+            for c, v in enumerate(vals):
+                item = QTableWidgetItem(str(v))
+                if c in (self.COL_FLOW, self.COL_T, self.COL_CP, self.COL_PRICE):
+                    item.setTextAlignment(Qt.AlignRight | Qt.AlignVCenter)
+                if s.role == "feed":
+                    item.setForeground(QBrush(QColor("#2e7d32")))
+                elif s.role == "product":
+                    item.setForeground(QBrush(QColor("#e65100")))
+                # guardar el sid en la primera columna para edit on dblclick
+                if c == self.COL_NAME:
+                    item.setData(Qt.UserRole, s.id)
+                self.table.setItem(r, c, item)
+
+            if s.role == "feed":
+                feed_total_tm += s.mass_flow
+            elif s.role == "product":
+                prod_total_tm += s.mass_flow
+
+        self.lbl_summary.setText(
+            f"({len(streams)} corrientes · "
+            f"feed: {funits.format_flow(feed_total_tm, unit)} · "
+            f"products: {funits.format_flow(prod_total_tm, unit)})"
+        )
+
+    def _on_unit_changed(self, _unit):
+        """Cambió la unidad de flujo → refresh tabla + labels del canvas."""
+        self.refresh()
+        # también actualizar labels de streams en el canvas
+        for sid, item in self.editor.scene.stream_items.items():
+            item.update_path()
+
+    def _on_double_click(self, item):
+        row = item.row()
+        sid_item = self.table.item(row, self.COL_NAME)
+        if sid_item is None:
+            return
+        sid = sid_item.data(Qt.UserRole)
+        stream = self.editor.fs.streams.get(sid)
+        if stream is not None:
+            self.editor.edit_stream(stream)
+
+
 class FlowsheetMainWindow(QMainWindow):
 
     def __init__(self):
@@ -1455,6 +1631,7 @@ class FlowsheetMainWindow(QMainWindow):
         self._build_toolbar()
         self._build_library_dock()
         self._build_properties_dock()
+        self._build_streams_dock()
         self._build_statusbar()
 
         # selección
@@ -1622,6 +1799,12 @@ class FlowsheetMainWindow(QMainWindow):
         dock.setWidget(widget)
         self.addDockWidget(Qt.RightDockWidgetArea, dock)
 
+    def _build_streams_dock(self):
+        """Tabla de corrientes con cambio de unidades."""
+        self.streams_dock = StreamsTableDock(self, self)
+        self.addDockWidget(Qt.BottomDockWidgetArea, self.streams_dock)
+        self.streams_dock.refresh()
+
     def _build_statusbar(self):
         self.status = QStatusBar()
         self.setStatusBar(self.status)
@@ -1631,6 +1814,10 @@ class FlowsheetMainWindow(QMainWindow):
         self.status.showMessage(
             f"{len(self.fs.blocks)} equipos · {len(self.fs.streams)} corrientes"
         )
+        # refrescar tabla de corrientes (si ya existe; durante __init__
+        # podría no existir todavía)
+        if hasattr(self, "streams_dock") and self.streams_dock is not None:
+            self.streams_dock.refresh()
 
     # ---------------------------------------------------
     # ACCIONES — File
