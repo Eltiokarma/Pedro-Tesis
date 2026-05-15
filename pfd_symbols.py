@@ -931,6 +931,99 @@ EQ_TYPE_TO_SYMBOL: Dict[str, str] = {
 }
 
 
+def _parse_path_endpoints(d: str) -> Tuple[List[float], List[float]]:
+    """Parser SVG path command-aware.  Devuelve (xs, ys) con los
+    endpoints (x, y) de cada comando.
+
+    Maneja correctamente M/L/H/V/A/C/S/Q/T/Z absolutos y relativos.
+    Para Arc (A), también incluye las cotas de los radios (cur ± rx,
+    cur ± ry) para aproximar la extensión real del arco.
+
+    Esto evita el bug del parser ingenuo que trata flags de comando
+    A (large-arc, sweep) como coords.
+    """
+    import re
+    xs: List[float] = []
+    ys: List[float] = []
+    # tokens: comando o número
+    pattern = re.compile(r'([MmLlHhVvCcSsQqTtAaZz])|(-?\d+(?:\.\d+)?)')
+    cur_x = cur_y = 0.0
+    cmd: str = ""
+    nums: List[float] = []
+
+    def flush_cmd():
+        # NOTA: xs.extend() en vez de xs += [...] para evitar que
+        # Python trate a xs/ys como locales (closure binding).
+        nonlocal cur_x, cur_y
+        if not cmd:
+            return
+        c = cmd.upper()
+        rel = cmd.islower()
+        if c in ('M', 'L', 'T'):
+            # Pares (x, y).  M con múltiples pares = M + Ls implícitos.
+            for i in range(0, len(nums) - 1, 2):
+                x, y = nums[i], nums[i+1]
+                if rel:
+                    cur_x += x; cur_y += y
+                else:
+                    cur_x = x; cur_y = y
+                xs.append(cur_x); ys.append(cur_y)
+        elif c == 'H':
+            for v in nums:
+                cur_x = (cur_x + v) if rel else v
+                xs.append(cur_x); ys.append(cur_y)
+        elif c == 'V':
+            for v in nums:
+                cur_y = (cur_y + v) if rel else v
+                xs.append(cur_x); ys.append(cur_y)
+        elif c == 'A':
+            # rx ry x-rot large-arc-flag sweep-flag x y  →  7 nums por arc
+            for i in range(0, len(nums) - 6, 7):
+                rx, ry = nums[i], nums[i+1]
+                ex, ey = nums[i+5], nums[i+6]
+                if rel:
+                    cur_x += ex; cur_y += ey
+                else:
+                    cur_x = ex; cur_y = ey
+                xs.append(cur_x); ys.append(cur_y)
+                # cotas aproximadas del arco
+                xs.extend([cur_x - rx, cur_x + rx])
+                ys.extend([cur_y - ry, cur_y + ry])
+        elif c == 'C':
+            # x1 y1 x2 y2 x y  →  6 nums por bezier
+            for i in range(0, len(nums) - 5, 6):
+                x1, y1, x2, y2, ex, ey = nums[i:i+6]
+                # incluir control points aproximados
+                if rel:
+                    xs.extend([cur_x + x1, cur_x + x2])
+                    ys.extend([cur_y + y1, cur_y + y2])
+                    cur_x += ex; cur_y += ey
+                else:
+                    xs.extend([x1, x2]); ys.extend([y1, y2])
+                    cur_x = ex; cur_y = ey
+                xs.append(cur_x); ys.append(cur_y)
+        elif c in ('S', 'Q'):
+            # 4 nums por segmento
+            for i in range(0, len(nums) - 3, 4):
+                x1, y1, ex, ey = nums[i:i+4]
+                if rel:
+                    cur_x += ex; cur_y += ey
+                else:
+                    cur_x = ex; cur_y = ey
+                xs.append(cur_x); ys.append(cur_y)
+        # Z: no consume nums, no actualiza cur_*
+
+    for m in pattern.finditer(d):
+        if m.group(1):           # nuevo comando → flush el anterior
+            flush_cmd()
+            cmd = m.group(1)
+            nums = []
+        elif m.group(2):
+            nums.append(float(m.group(2)))
+    flush_cmd()
+    return xs, ys
+
+
 def _svg_content_bbox(body: str) -> Optional[Tuple[float, float, float, float]]:
     """Parsea el SVG body y devuelve (x_min, y_min, x_max, y_max) del
     bounding box de TODO lo que se dibuja.  Usado para 'apretar' el
@@ -980,19 +1073,11 @@ def _svg_content_bbox(body: str) -> Optional[Tuple[float, float, float, float]]:
                     xs.append(v)
                 else:
                     ys.append(v)
-    # path d="..."  — parseo simple: extraer pares (x, y) tras letras de comando.
+    # path d="..."  — parser command-aware (skip flags de Arc, etc.)
     for m in re.finditer(r'd="([^"]+)"', body):
-        d = m.group(1)
-        # tokens: comandos (MmLlAaCcSsQqTtZzHhVv) y números
-        nums = re.findall(r'-?\d+(?:\.\d+)?', d)
-        # alternar x/y crudo (ignorando comandos H/V que tienen 1 número).
-        # Para los SVGs del catálogo es suficiente.
-        for i, v_str in enumerate(nums):
-            v = float(v_str)
-            if i % 2 == 0:
-                xs.append(v)
-            else:
-                ys.append(v)
+        path_xs, path_ys = _parse_path_endpoints(m.group(1))
+        xs.extend(path_xs)
+        ys.extend(path_ys)
 
     if not xs or not ys:
         return None
