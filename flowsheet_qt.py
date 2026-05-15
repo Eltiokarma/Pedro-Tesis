@@ -937,11 +937,28 @@ class BlockItem(QGraphicsItemGroup):
     def _render_ports(self):
         r = self.PORT_RADIUS
         coords = pfd.port_coords(self.model.eq_type, self.W, self.H)
+        # Stubs: pequeñas líneas desde el puerto hacia el cuerpo del símbolo,
+        # para que visualmente el puerto se conecte al SVG (los SVGs tienen
+        # margen interno y los puertos quedan al borde del bounding box).
+        cx_blk, cy_blk = self.W / 2, self.H / 2
         for pname, (cx, cy) in coords.items():
+            # vector hacia el centro del bloque
+            dx, dy = cx_blk - cx, cy_blk - cy
+            d = (dx * dx + dy * dy) ** 0.5
+            stub_len = 8.0
+            if d > stub_len:
+                ux, uy = dx / d, dy / d
+                stub = QGraphicsLineItem(
+                    cx, cy, cx + ux * stub_len, cy + uy * stub_len,
+                    parent=self,
+                )
+                stub.setPen(QPen(QColor("#0d0d0d"), 1.6))
+                stub.setZValue(0.5)   # encima del rect, debajo del puerto
+                self.decoration_items.append(stub)
             ell = QGraphicsEllipseItem(cx - r, cy - r, 2*r, 2*r, parent=self)
             ell.setBrush(QBrush(COLOR_PORT_FREE))
             ell.setPen(QPen(QColor("#333333"), 1))
-            ell.setData(0, pname)        # guardamos el nombre del puerto
+            ell.setData(0, pname)
             ell.setZValue(3)
             self.port_items[pname] = ell
 
@@ -1175,13 +1192,23 @@ class StreamItem(QGraphicsPathItem):
         self.setPath(path)
 
         color = self._color()
-        pen = QPen(color, 2.2)
-        pen.setCapStyle(Qt.FlatCap)   # línea termina justo en el puerto
+        # Ancho según rol del stream — líneas más gruesas para procesos
+        # principales, finas para utilities/waste secundarios.
+        role = self.model.role
+        width = {"feed": 2.4, "internal": 2.4, "product": 2.4,
+                 "waste": 1.6, "utility": 1.4}.get(role, 2.0)
+        pen = QPen(color, width)
+        pen.setCapStyle(Qt.FlatCap)
         pen.setJoinStyle(Qt.MiterJoin)
+        # utility / waste con línea punteada para distinguir aún más
+        if role == "utility":
+            pen.setDashPattern([6.0, 4.0])
+        elif role == "waste":
+            pen.setDashPattern([3.0, 3.0])
         self.setPen(pen)
         self._draw_arrow(path, pts[-2], pts[-1], pts[-4], pts[-3])
 
-        # ---- label (pill blanca con borde del color del stream) ----
+        # ---- label (pill compacta: SÓLO número de corriente) ----
         name_text, flow_text = self._label_parts(s)
         self.label_name.setText(name_text)
         self.label_name.setBrush(QBrush(color))
@@ -1303,25 +1330,15 @@ class StreamItem(QGraphicsPathItem):
         super().mouseDoubleClickEvent(event)
 
     def _label_parts(self, s):
-        """Devuelve (nombre_con_tag_de_rol, flujo_con_unidad).
-        Pueden ir en distintos tipos/colores dentro de la pill."""
-        name = s.name
-        if s.role == "feed":      name += " [feed]"
-        elif s.role == "product": name += " [product]"
-        elif s.role == "utility": name += " [util]"
-        # unidad de display: la elegida en el dock de streams, default tm/año
-        unit = "tm/año"
-        try:
-            from PySide6.QtWidgets import QApplication
-            app = QApplication.instance()
-            for w in app.topLevelWidgets() if app else []:
-                if hasattr(w, "streams_dock") and w.streams_dock is not None:
-                    unit = w.streams_dock.current_unit()
-                    break
-        except Exception:
-            pass
-        flow = funits.format_flow(s.mass_flow, unit) if s.mass_flow else ""
-        return name, flow
+        """Devuelve (numero, "").  La pill SÓLO muestra el número de
+        corriente; el rol se distingue por el color del borde, y los
+        detalles (flujo, T, composición) van en el tooltip al hover."""
+        # Display number: usa stream_display_number si está seteado
+        # por sort topológico; si no, cae al ID interno.
+        n = getattr(s, "_display_number", None)
+        if n is None:
+            n = s.id
+        return str(n), ""
 
     # ---- helpers de routing (réplica simplificada de flowsheet_ui) ----
 
@@ -2835,6 +2852,8 @@ class FlowsheetMainWindow(QMainWindow):
 
     def _rebuild_scene(self):
         """Recrea todos los items en la scene desde self.fs."""
+        # numerar streams topológicamente para display en las pills
+        fsolv.assign_stream_numbers(self.fs)
         self.scene.clear_flowsheet()
         for b in self.fs.blocks.values():
             self._render_block(b)

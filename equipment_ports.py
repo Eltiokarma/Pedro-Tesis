@@ -147,6 +147,47 @@ SOLIDS_PORTS = {
     "venteo":       ("top",    0.20),
 }
 
+# Mixer: 2 entradas, 1 salida (no equilibrio químico, solo mezclado)
+MIXER_PORTS = {
+    "alimentacion_1": ("left",  0.30),
+    "alimentacion_2": ("left",  0.70),
+    "producto":       ("right", 0.50),
+}
+
+# Splitter: 1 entrada, 2 salidas (flow divider)
+SPLITTER_PORTS = {
+    "alimentacion":   ("left",  0.50),
+    "producto_1":     ("right", 0.30),
+    "producto_2":     ("right", 0.70),
+}
+
+# Cyclone gas/sólido: feed lateral, gas arriba, sólido abajo
+CYCLONE_PORTS = {
+    "alimentacion":   ("left",   0.30),
+    "venteo":         ("top",    0.50),
+    "producto":       ("bottom", 0.50),
+}
+
+# Decanter: 1 entrada, 2 fases por densidad (liviana arriba, pesada abajo)
+DECANTER_PORTS = {
+    "alimentacion":   ("left",   0.50),
+    "fase_liviana":   ("right",  0.30),
+    "fase_pesada":    ("right",  0.70),
+}
+
+# Centrifuga (disc): líquido + sólido por separado
+CENTRIFUGE_PORTS = {
+    "alimentacion":   ("left",   0.50),
+    "liquido":        ("right",  0.30),
+    "solido":         ("bottom", 0.50),
+}
+
+# Válvulas: simple 1-in / 1-out
+VALVE_PORTS = {
+    "alimentacion":   ("left",   0.50),
+    "producto":       ("right",  0.50),
+}
+
 # Boiler de vapor (caldera) — recibe agua + combustible, produce
 # vapor a varios niveles + tiene blowdown y chimenea.
 BOILER_PORTS = {
@@ -216,6 +257,22 @@ EQUIPMENT_PORTS = {
     "Evaporator — vertical":        SOLIDS_PORTS,
     "Crystallizer":                 SOLIDS_PORTS,
 
+    # Mixers / splitters
+    "Mixer — inline":                MIXER_PORTS,
+    "Mixer — static":                MIXER_PORTS,
+    "Splitter — flow divider":       SPLITTER_PORTS,
+
+    # Separadores adicionales
+    "Centrifuge — disc stack":       CENTRIFUGE_PORTS,
+    "Centrifuge — decanter":         CENTRIFUGE_PORTS,
+    "Cyclone — gas/solid":           CYCLONE_PORTS,
+    "Decanter — gravity":            DECANTER_PORTS,
+
+    # Válvulas
+    "Valve — control globe":         VALVE_PORTS,
+    "Valve — relief":                VALVE_PORTS,
+    "Valve — 3-way":                 SPLITTER_PORTS,  # 1 in, 2 out
+
     # Utilities (planta de servicios)
     "Boiler — fire tube":           BOILER_PORTS,
     "Boiler — water tube":          BOILER_PORTS,
@@ -272,6 +329,20 @@ ISA_PREFIX = {
 
     "Tray — sieve":                 "TR",
     "Tray — valve":                 "TR",
+
+    # Mixers / splitters
+    "Mixer — inline":                "MX",
+    "Mixer — static":                "MX",
+    "Splitter — flow divider":       "SP",
+    # Separadores adicionales
+    "Centrifuge — disc stack":       "CF",
+    "Centrifuge — decanter":         "CF",
+    "Cyclone — gas/solid":           "CY",
+    "Decanter — gravity":            "D",
+    # Válvulas
+    "Valve — control globe":         "FV",
+    "Valve — relief":                "PSV",
+    "Valve — 3-way":                 "FV",
 
     # Utilities — caldera B-101, torre CT-101
     "Boiler — fire tube":           "B",

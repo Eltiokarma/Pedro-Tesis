@@ -788,6 +788,96 @@ def goal_seek_duty(fs, target_stream_id, block_id, t_target, **kwargs):
     }
 
 
+def auto_propagate_compositions(fs):
+    """Para cada bloque NO reactivo, calcula la composición de las
+    salidas como promedio ponderado por mass_flow de las entradas.
+
+    - Bloques con heat_of_reaction != 0 (reactores): NO se tocan,
+      la composición del output la declara el user (estequiometría).
+    - Splitters / mixers / HX / vessels / columnas: si el output no
+      tiene composition declarada (vacío), se hereda de los inputs.
+    - Si el output YA tiene composition, no se sobreescribe.
+
+    Sólo se propaga main_component cuando estaba vacío.
+    """
+    changed = 0
+    for b in fs.blocks.values():
+        if b.heat_of_reaction != 0:
+            continue
+        ins  = [s for s in fs.streams.values() if s.dst == b.id]
+        outs = [s for s in fs.streams.values() if s.src == b.id]
+        if not ins:
+            continue
+        total_m = sum(s.mass_flow for s in ins if s.mass_flow > 0)
+        if total_m <= 0:
+            continue
+        # composición ponderada de inputs
+        agg = {}
+        for s in ins:
+            if s.mass_flow <= 0:
+                continue
+            w_stream = s.mass_flow / total_m
+            comp_dict = s.composition or {}
+            # si solo hay main_component, asumir 100% de ese
+            if not comp_dict and s.main_component:
+                comp_dict = {s.main_component: 1.0}
+            for comp, frac in comp_dict.items():
+                agg[comp] = agg.get(comp, 0.0) + w_stream * frac
+        # renormalizar por seguridad
+        total = sum(agg.values())
+        if total > 0:
+            agg = {k: v/total for k, v in agg.items()}
+        # aplicar a outputs sin composición declarada
+        for s_out in outs:
+            if s_out.composition:
+                continue
+            s_out.composition = dict(agg)
+            if not s_out.main_component and agg:
+                s_out.main_component = max(agg, key=agg.get)
+            changed += 1
+    return changed
+
+
+def assign_stream_numbers(fs):
+    """Numera streams topológicamente (1, 2, 3, …) recorriendo el
+    grafo desde los feeds.  Setea `s._display_number` en cada stream.
+
+    Útil para mostrar números limpios en las pills del PFD en vez
+    de los IDs internos del modelo (que pueden venir salteados).
+    """
+    # adjacency: block_id → out_stream_ids
+    n = 0
+    visited_streams = set()
+    visited_blocks = set()
+    # comenzar por bloques que no tienen entradas (feeds)
+    starting = []
+    for b in fs.blocks.values():
+        has_in = any(s.dst == b.id for s in fs.streams.values())
+        if not has_in:
+            starting.append(b.id)
+    queue = list(starting)
+    while queue:
+        bid = queue.pop(0)
+        if bid in visited_blocks:
+            continue
+        visited_blocks.add(bid)
+        # numerar streams que salen de este bloque
+        out_streams = sorted([s for s in fs.streams.values() if s.src == bid],
+                              key=lambda s: s.id)
+        for s in out_streams:
+            if s.id not in visited_streams:
+                n += 1
+                s._display_number = n
+                visited_streams.add(s.id)
+                if s.dst not in visited_blocks:
+                    queue.append(s.dst)
+    # streams huérfanos (recycles que no se alcanzaron por BFS) → numerar por id
+    for s in fs.streams.values():
+        if s.id not in visited_streams:
+            n += 1
+            s._display_number = n
+
+
 def solve_setpoints_all(fs, max_iter=40):
     """Para CADA stream con target_temperature seteado, ajusta el duty
     del bloque upstream inmediato (el que produce ese stream) para
@@ -1048,6 +1138,10 @@ def solve(fs, max_iter=MAX_ITER):
         if not prop_e:
             break
     result.propagated_temp = total_propagated_temp
+    # auto-propagar composiciones para bloques no-reactivos
+    auto_propagate_compositions(fs)
+    # numerar streams topológicamente (para display en pills)
+    assign_stream_numbers(fs)
     # Mensajes de T omitidas por estar fuera de rango razonable
     # (típicamente porque el duty incluye ΔH_vap/ΔH_rxn que el modelo
     # Cp simple no captura).  Reportamos UNA vez cada uno.

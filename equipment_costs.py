@@ -224,6 +224,52 @@ EQUIPMENT_DATA = {
              S_param="Tray area", S_unit="m²",
              S_min=0.07, S_max=12.3, categoria="Trays / packing"),
 
+    # -------- MIXERS / SPLITTERS --------
+    "Mixer — inline":
+        dict(K1=3.4974, K2=0.4485, K3=0.1074,
+             S_param="Volume", S_unit="m³",
+             S_min=0.1, S_max=10, categoria="Mixers / splitters"),
+    "Mixer — static":
+        dict(K1=3.0566, K2=0.4485, K3=0.1074,
+             S_param="Volume", S_unit="m³",
+             S_min=0.05, S_max=2, categoria="Mixers / splitters"),
+    "Splitter — flow divider":
+        dict(K1=2.5000, K2=0.3500, K3=0.0500,
+             S_param="Flow", S_unit="kg/s",
+             S_min=0.1, S_max=50, categoria="Mixers / splitters"),
+
+    # -------- SEPARADORES sólidos/líquidos extra --------
+    "Centrifuge — disc stack":
+        dict(K1=4.8210, K2=0.6710, K3=0.0780,
+             S_param="Volume", S_unit="m³",
+             S_min=0.05, S_max=2.5, categoria="Solids / sep."),
+    "Centrifuge — decanter":
+        dict(K1=4.4500, K2=0.5990, K3=0.0480,
+             S_param="Flow", S_unit="m³/h",
+             S_min=1, S_max=100, categoria="Solids / sep."),
+    "Cyclone — gas/solid":
+        dict(K1=3.5400, K2=0.3060, K3=0.0260,
+             S_param="Flow", S_unit="m³/s",
+             S_min=0.1, S_max=15, categoria="Solids / sep."),
+    "Decanter — gravity":
+        dict(K1=3.4974, K2=0.4485, K3=0.1074,
+             S_param="Volume", S_unit="m³",
+             S_min=0.3, S_max=520, categoria="Vessels"),
+
+    # -------- VÁLVULAS (proceso) --------
+    "Valve — control globe":
+        dict(K1=2.3700, K2=1.2840, K3=0.0,
+             S_param="Flow", S_unit="m³/h",
+             S_min=0.1, S_max=200, categoria="Valves"),
+    "Valve — relief":
+        dict(K1=2.5670, K2=0.4500, K3=0.0,
+             S_param="Capacity", S_unit="m³/h",
+             S_min=0.5, S_max=100, categoria="Valves"),
+    "Valve — 3-way":
+        dict(K1=2.4500, K2=0.5000, K3=0.0,
+             S_param="Flow", S_unit="m³/h",
+             S_min=0.1, S_max=100, categoria="Valves"),
+
     # -------- UTILITIES (planta de servicios auxiliares) --------
     # Caldera de vapor — equipo industrial que produce steam para el
     # proceso a partir de combustible y agua tratada.

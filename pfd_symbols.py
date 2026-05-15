@@ -910,6 +910,19 @@ EQ_TYPE_TO_SYMBOL: Dict[str, str] = {
     'Filter — belt': 'filter-cartridge',
     'Tray — sieve': 'column-tray',
     'Tray — valve': 'column-tray',
+    # Mixers / splitters / nuevos separadores / válvulas — reuso de
+    # SVGs del catálogo lib-symbols (ya parseados arriba).
+    'Mixer — inline':                  'mixer-inline',
+    'Mixer — static':                  'mixer-static',
+    'Splitter — flow divider':         'mixer-inline',     # proxy
+    'Centrifuge — disc stack':         'centrifuge',
+    'Centrifuge — decanter':           'centrifuge',
+    'Cyclone — gas/solid':             'cyclone',
+    'Decanter — gravity':              'decanter',
+    'Valve — control globe':           'valve-control-pneumatic',
+    'Valve — relief':                  'valve-relief',
+    'Valve — 3-way':                   'valve-3way',
+
     # Utilities: reusamos símbolos existentes para no inventar SVGs
     'Boiler — fire tube':              'fired-heater',
     'Boiler — water tube':             'fired-heater',
