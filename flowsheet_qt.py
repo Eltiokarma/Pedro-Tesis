@@ -691,8 +691,20 @@ class BlockItem(QGraphicsItemGroup):
         self.setFlag(QGraphicsItem.ItemSendsGeometryChanges, True)
         self.setHandlesChildEvents(False)
 
-        # --- cuerpo (rect base + decoración por categoría) ---
-        self.rect = QGraphicsRectItem(0, 0, BLOCK_W, BLOCK_H, parent=self)
+        # --- cuerpo (rect base + sombra + decoración por categoría) ---
+        # Sombra: rect negro translúcido desplazado (2,2) detrás del
+        # bloque, para sensación de objeto elevado tipo HYSYS.
+        shadow_path = QPainterPath()
+        shadow_path.addRoundedRect(2, 2, BLOCK_W, BLOCK_H, 4, 4)
+        self.shadow = QGraphicsPathItem(shadow_path, parent=self)
+        self.shadow.setBrush(QBrush(QColor(0, 0, 0, 28)))
+        self.shadow.setPen(Qt.NoPen)
+        self.shadow.setZValue(-1)
+
+        # Rect base: esquinas redondeadas 4px (estilo HYSYS / Aspen Plus).
+        rect_path = QPainterPath()
+        rect_path.addRoundedRect(0, 0, BLOCK_W, BLOCK_H, 4, 4)
+        self.rect = QGraphicsPathItem(rect_path, parent=self)
         self.rect.setBrush(QBrush(COLOR_BLOCK_FILL))
         self.rect.setPen(QPen(COLOR_BLOCK_BORDER, 2))
 
