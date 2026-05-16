@@ -2716,6 +2716,91 @@ class FlowsheetEditor:
                                  flowrate=80000, price=0.05,
                                  stream="Utilities")
 
+    def _example_hydraulic_plant(self):
+        """Planta hidráulica completa — demo del solver acoplado.
+
+        Demuestra:
+          · Auto-sizing de bombas con P locked en producto
+          · Pérdida de carga en tuberías con K_local (codos, válvulas)
+          · ΔP en HX y columna (declarados)
+          · Cálculo automático de W_elec por equipo rotativo
+
+        Tren:
+          TK-feed @ 1 bar 🔒
+              ↓ (20 m, 4 codos = K=3)
+          P-101 (auto-size)
+              ↓ (15 m)
+          E-101 HX (ΔP=-0.5)
+              ↓ (30 m, válvula gate = K=0.17)
+          T-101 columna (ΔP=-0.3)
+              ↓ (10 m)
+          TK-prod @ 4 bar 🔒
+        """
+        # Layout
+        tk_feed = self._add_example_block("TK-101","Storage tank — cone roof",
+                                            500.0,  60, 280)
+        p101    = self._add_example_block("P-101","Pump — centrifugal",
+                                            10.0, 240, 280)
+        e101    = self._add_example_block("E-101","Heat exch. — floating head",
+                                           250.0, 420, 280)
+        t101    = self._add_example_block("T-101","Tower (column shell)",
+                                            45.0, 620, 280)
+        tk_prod = self._add_example_block("TK-102","Storage tank — cone roof",
+                                            400.0, 840, 280)
+
+        # Configurar bomba P-101 en modo AUTO (delta_p_bar=0 → solver
+        # decide)
+        self.fs.blocks[p101].delta_p_bar = 0.0
+        self.fs.blocks[p101].efficiency = 0.75
+        # Configurar HX y columna con ΔP declarado
+        self.fs.blocks[e101].delta_p_bar = -0.5
+        self.fs.blocks[t101].delta_p_bar = -0.3
+
+        # Streams con tubería declarada
+        s_feed = self._add_example_stream(tk_feed, p101, "S-feed", 5000,
+                                            role="feed",
+                                            src_port="salida", dst_port="succion",
+                                            price=80.0, T=25,
+                                            composition={"water": 1.0},
+                                            phase="liquid")
+        # Configurar P locked en feed (1 bar) y pipe
+        feed_s = self.fs.streams[s_feed]
+        feed_s.pressure_bar = 1.013
+        feed_s.pressure_locked = True
+        feed_s.pipe_length_m = 20.0
+        feed_s.pipe_diameter_m = 0.050
+        feed_s.pipe_K_local = 3.0   # 4 codos
+
+        s_pumped = self._add_example_stream(p101, e101, "S-pumped",
+                                              src_port="descarga", dst_port="tube_in",
+                                              T=26,
+                                              composition={"water": 1.0},
+                                              phase="liquid")
+        self.fs.streams[s_pumped].pipe_length_m = 15.0
+        self.fs.streams[s_pumped].pipe_diameter_m = 0.050
+
+        s_cooled = self._add_example_stream(e101, t101, "S-cooled",
+                                              src_port="tube_out", dst_port="alimentacion",
+                                              T=40,
+                                              composition={"water": 1.0},
+                                              phase="liquid")
+        self.fs.streams[s_cooled].pipe_length_m = 30.0
+        self.fs.streams[s_cooled].pipe_diameter_m = 0.050
+        self.fs.streams[s_cooled].pipe_K_local = 0.17   # 1 válvula gate
+
+        s_prod = self._add_example_stream(t101, tk_prod, "S-product", 5000,
+                                            role="product",
+                                            src_port="liquido_fondo", dst_port="entrada",
+                                            price=120.0, T=40,
+                                            composition={"water": 1.0},
+                                            phase="liquid")
+        # P locked en el producto = target downstream
+        prod_s = self.fs.streams[s_prod]
+        prod_s.pressure_bar = 4.0
+        prod_s.pressure_locked = True
+        prod_s.pipe_length_m = 10.0
+        prod_s.pipe_diameter_m = 0.050
+
     def _example_reactor_flash_column(self):
         """Tren completo AUTOMÁTICO: reactor + flash + columna —
         cada equipo calcula sus outputs sin que el user los declare.

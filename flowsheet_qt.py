@@ -3570,6 +3570,9 @@ class FlowsheetMainWindow(QMainWindow):
         examples_menu.addAction(_ic_az,
             "Reactor + flash + columna AUTOMÁTICOS (FUG + NRTL)",
             make_loader("rxn_flash_col"))
+        examples_menu.addAction(_mk("eq-pump", color="#1565c0", size=18) or QIcon(),
+            "Planta hidráulica con auto-sizing de bomba",
+            make_loader("hydraulic"))
         # Ícono del menú Ejemplos (templates)
         examples_act.setIcon(_mk("act-examples", color=_ICON_COLOR, size=20))
         examples_act.setMenu(examples_menu)
@@ -3928,6 +3931,9 @@ class FlowsheetMainWindow(QMainWindow):
             "rxn_flash_col": (TkEditor._example_reactor_flash_column,
                                "Tren reactor + flash + columna AUTOMÁTICOS",
                                "100 — Demo solver", "PFD-AUTO-001"),
+            "hydraulic":    (TkEditor._example_hydraulic_plant,
+                              "Planta hidráulica — bomba auto-sized",
+                              "200 — Hidráulica", "PFD-HYD-001"),
         }
         entry = builder_map.get(key)
         if entry is None:
