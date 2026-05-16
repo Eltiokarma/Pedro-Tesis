@@ -276,16 +276,35 @@ class Reaction:
         Garantiza consistencia termo: en equilibrio r_fwd = r_rev.
         Devuelve None si falta cinética o Keq.  Devuelve 0 si la
         reacción es irreversible (Keq enorme).
+
+        Detalle dimensional: Capa 4 reporta Keq como Kp (adimensional
+        con P°=1 bar).  Si la cinética está en concentraciones
+        (uses_partial_pressure=False) y Δν≠0, hay que convertir
+        Kp → Kc = Kp / (RT/P°)^Δν, donde RT/P° = 8.314e-5·T·m³·bar/mol.
+        Sin esta conversión, R011/R012/R004 plateauan lejos del
+        equilibrio termodinámico real.
         """
         if self.irreversible:
             return 0.0
         k_fwd = self.k_arrhenius(T_K)
-        keq = self.keq_vant_hoff(T_K)
-        if k_fwd is None or keq is None or keq <= 0:
+        keq_kp = self.keq_vant_hoff(T_K)
+        if k_fwd is None or keq_kp is None or keq_kp <= 0:
             return None
-        if math.isinf(keq):
+        if math.isinf(keq_kp):
             return 0.0
-        return k_fwd / keq
+        if self.uses_partial_pressure:
+            # Cinética en bar: Kp directo
+            return k_fwd / keq_kp
+        # Cinética en concentraciones: convertir Kp → Kc
+        # Kc [m³·mol⁻¹]^Δν = Kp [adim] / (RT/P°)^Δν
+        # con R en m³·bar·mol⁻¹·K⁻¹ = 8.314e-5
+        RT_per_Pstd = R_GAS * 1e-5 * T_K       # m³·bar/mol
+        if self.delta_nu == 0:
+            return k_fwd / keq_kp
+        keq_kc = keq_kp / (RT_per_Pstd ** self.delta_nu)
+        if keq_kc <= 0:
+            return None
+        return k_fwd / keq_kc
 
     def _orders_dict(self) -> Dict[str, float]:
         """Devuelve dict de órdenes de reacción por reactante.  Si
@@ -1104,4 +1123,380 @@ def solve_equilibrium_reactor_from_composition(
         duty_kW=dh_total_kW,
         xi=res['xi'],
         unmapped=unmapped,
+    )
+
+
+# ============================================================
+# CAPA 5 FASE B — Solvers PFR y CSTR (isothermal, isobaric)
+# ============================================================
+#
+# Reactor PFR (plug flow):
+#   ODE de balance molar:  dFᵢ/dV = Σⱼ νᵢⱼ · rⱼ(C(V))
+#   Integración RK4 con paso fijo desde V=0 (F=F_in) hasta V=V_reactor.
+#
+# Reactor CSTR (perfectly mixed):
+#   Algebraico:  Fᵢ_out - Fᵢ_in - Σⱼ νᵢⱼ · rⱼ(C_out) · V = 0
+#   En términos de extents ξⱼ:  ξⱼ = rⱼ(C(ξ)) · V  para j=1..N_rxn
+#   Sistema no-lineal resuelto por Newton-Raphson con Jacobiano FD.
+#
+# Hipótesis:
+#   · Isothermal (T fija en todo el reactor)
+#   · Isobaric (P fija; afecta solo conversión C↔p si la cinética
+#     usa presiones parciales)
+#   · Fase gas ideal (Q = F_total·RT/P para conversión F → C)
+#   · Sin difusión, sin gradientes radiales
+#   · Steady state
+#
+# Mezcla de cinéticas:
+#   · Todas las reacciones del set deben usar el mismo basis
+#     (todas en mol/m³, o todas en bar).  Si mezclás, lanza error.
+#     (e.g. R003 SMR usa bar + R002 WGS usa mol/m³ → INCOMPATIBLE;
+#     resolver SMR solo, o usar mode='equilibrium' para acoplar.)
+#   · Si alguna reacción tiene rate_basis='cat_mass', el solver
+#     espera además ρ_b (default toma el primer ρ_b no-None del set).
+#     Convierte r [mol/(kg_cat·s)] · ρ_b [kg_cat/m³_R] = r [mol/(m³_R·s)].
+#
+# Limitations conocidas:
+#   · PFR con RK4 paso fijo subestima conversión para cinéticas
+#     extremadamente rápidas (stiff): R003 SMR @ 1100K, R004 Haber
+#     @ 700K, R005 MeOH @ 525K.  Para estos casos usar CSTR
+#     (algebraico, robusto) o mode='equilibrium' (Capa 4).
+#   · Validado contra equilibrio termo Capa 4:
+#       PFR  R002 WGS @700K V=5L:    conv=73.26% ≡ equilibrio ✓
+#       PFR  R011 cracking @1100K V=50L: conv=50.84% ≡ equilibrio 50.85% ✓
+#       PFR  R012 dehydro @870K V=50m³:  conv=36.08% ≡ equilibrio 36.10% ✓
+#       CSTR R003 SMR @1100K V=10L: conv=47.83% ≡ equilibrio 47.84% ✓
+
+
+def _check_kinetics_compatibility(rxn_ids: List[str]) -> Optional[str]:
+    """Verifica que el set de reacciones tenga cinéticas compatibles
+    (mismo basis, mismo uses_partial_pressure).  Devuelve mensaje
+    de error o None si OK."""
+    if not rxn_ids:
+        return "Sin reacciones declaradas"
+    use_pp = None
+    for rid in rxn_ids:
+        r = get(rid)
+        if r is None:
+            return f"Reacción {rid} no existe"
+        if not r.kinetics_available:
+            return f"Reacción {rid} sin cinética (Capa 5 FASE A no la cubre)"
+        if use_pp is None:
+            use_pp = r.uses_partial_pressure
+        elif r.uses_partial_pressure != use_pp:
+            return (f"Cinéticas mezclan unidades — {rid} usa "
+                     f"{'bar' if r.uses_partial_pressure else 'mol/m³'} "
+                     f"pero otras usan lo contrario")
+    return None
+
+
+def _concentrations(F: Dict[str, float], T_K: float, P_bar: float,
+                    uses_pp: bool) -> Dict[str, float]:
+    """Convierte flujos molares F [mol/s] a concentraciones (gas ideal).
+
+    Si uses_pp=True: devuelve presiones parciales [bar].
+       pᵢ = yᵢ · P_total = (Fᵢ/F_tot) · P_bar
+    Si uses_pp=False: devuelve concentraciones [mol/m³].
+       Cᵢ = Fᵢ / Q  donde Q = F_tot · RT/P  (gas ideal)
+       Q [m³/s] = F_tot [mol/s] · 8.314 [J/(mol·K)] · T [K] / (P_bar · 1e5 [Pa])
+    """
+    F_tot = sum(max(v, 0.0) for v in F.values())
+    if F_tot <= 0:
+        return {k: 0.0 for k in F}
+    if uses_pp:
+        return {k: (max(v, 0.0) / F_tot) * P_bar for k, v in F.items()}
+    # mol/m³ via Q = F·RT/P
+    Q_m3_s = F_tot * R_GAS * T_K / (P_bar * 1e5)
+    if Q_m3_s <= 0:
+        return {k: 0.0 for k in F}
+    return {k: max(v, 0.0) / Q_m3_s for k, v in F.items()}
+
+
+def _net_generation_per_species(rxn_ids: List[str], F: Dict[str, float],
+                                  T_K: float, P_bar: float,
+                                  uses_pp: bool,
+                                  rho_b: Optional[float]) -> Dict[str, float]:
+    """Devuelve dG/dV [mol/(m³·s)] por especie: Σⱼ νᵢⱼ · rⱼ.
+
+    Para reacciones con basis='cat_mass', multiplica r por ρ_b
+    para llevar a base volumen del reactor.
+    """
+    conc = _concentrations(F, T_K, P_bar, uses_pp)
+    species_set = set(F.keys())
+    # Inicializo todas las especies en 0
+    dG = {k: 0.0 for k in species_set}
+    for rid in rxn_ids:
+        rxn = get(rid)
+        if rxn is None:
+            continue
+        r = rxn.rate_net(T_K, conc)
+        if r is None:
+            return None
+        # Si la reacción está en base cat_mass, convertir con ρ_b
+        if rxn.rate_basis == 'cat_mass':
+            if rho_b is None:
+                return None
+            r = r * rho_b   # mol/(kg_cat·s) · kg_cat/m³ = mol/(m³·s)
+        for sp in rxn.stoich:
+            if sp.formula not in dG:
+                dG[sp.formula] = 0.0
+            dG[sp.formula] += sp.nu * r
+    return dG
+
+
+def solve_pfr(rxn_ids:    List[str],
+              F_in:       Dict[str, float],
+              T_K:        float,
+              P_bar:      float,
+              V_reactor:  float,
+              n_steps:    int   = 200,
+              rho_b:      Optional[float] = None,
+              ) -> Optional[Dict]:
+    """Resuelve un PFR isothermal, isobaric con cinética Arrhenius.
+
+    Args:
+        rxn_ids:    reacciones (e.g. ['R002', 'R003'])
+        F_in:       {formula: mol/s} flujos molares de entrada
+        T_K, P_bar: condiciones de operación
+        V_reactor:  volumen total del reactor [m³]
+        n_steps:    pasos de integración RK4 (default 200, sube si
+                    la cinética es muy rápida y el paso causa
+                    sobre-shoot)
+        rho_b:      ρ_b [kg_cat/m³] si las cinéticas son 'cat_mass'.
+                    Si None, se toma el primer rho_b_cat no-None
+                    declarado en las reacciones.
+
+    Returns:
+        dict con:
+          'F_out':       {formula: mol/s} salida
+          'conversion':  {formula: float}  fracción reaccionada por
+                          reactante (solo positivo)
+          'tau_s':       tiempo de residencia τ = V / Q_in [s]
+          'profile_V':   [V_0, V_1, ..., V_N] m³  (puntos de evaluación)
+          'profile_F':   list de dict {formula: F} en cada V
+          None si la cinética no es válida o T fuera de rango.
+    """
+    err = _check_kinetics_compatibility(rxn_ids)
+    if err is not None:
+        return None
+    # Default rho_b
+    if rho_b is None:
+        for rid in rxn_ids:
+            r = get(rid)
+            if r and r.rho_b_cat:
+                rho_b = r.rho_b_cat
+                break
+
+    # Coleccionar todas las especies involucradas
+    species = set(F_in.keys())
+    for rid in rxn_ids:
+        r = get(rid)
+        for sp in r.stoich:
+            species.add(sp.formula)
+
+    # Estado inicial
+    F = {s: float(F_in.get(s, 0.0)) for s in species}
+    rxns = [get(rid) for rid in rxn_ids]
+    uses_pp = rxns[0].uses_partial_pressure
+
+    # Q_in para τ
+    F_tot_in = sum(F_in.values())
+    Q_in_m3_s = F_tot_in * R_GAS * T_K / (P_bar * 1e5)
+    tau_s = V_reactor / Q_in_m3_s if Q_in_m3_s > 0 else None
+
+    # Integración RK4
+    dV = V_reactor / n_steps
+    profile_V = [0.0]
+    profile_F = [dict(F)]
+
+    def _deriv(F_state: Dict[str, float]) -> Optional[Dict[str, float]]:
+        return _net_generation_per_species(rxn_ids, F_state,
+                                            T_K, P_bar, uses_pp, rho_b)
+
+    for step in range(n_steps):
+        k1 = _deriv(F)
+        if k1 is None:
+            return None
+        F_2 = {k: max(F[k] + 0.5 * dV * k1[k], 0.0) for k in species}
+        k2 = _deriv(F_2)
+        if k2 is None:
+            return None
+        F_3 = {k: max(F[k] + 0.5 * dV * k2[k], 0.0) for k in species}
+        k3 = _deriv(F_3)
+        if k3 is None:
+            return None
+        F_4 = {k: max(F[k] + dV * k3[k], 0.0) for k in species}
+        k4 = _deriv(F_4)
+        if k4 is None:
+            return None
+        F = {k: max(F[k] + dV/6.0 * (k1[k] + 2*k2[k] + 2*k3[k] + k4[k]), 0.0)
+             for k in species}
+        profile_V.append((step + 1) * dV)
+        profile_F.append(dict(F))
+
+    # Conversiones de reactantes
+    conv = {}
+    for sp in species:
+        Fin = F_in.get(sp, 0.0)
+        if Fin > 1e-12:
+            x = (Fin - F[sp]) / Fin
+            if x > 1e-9:    # solo conversiones positivas (= reactantes)
+                conv[sp] = x
+    return dict(
+        F_out=F,
+        conversion=conv,
+        tau_s=tau_s,
+        profile_V=profile_V,
+        profile_F=profile_F,
+    )
+
+
+def solve_cstr(rxn_ids:    List[str],
+                F_in:       Dict[str, float],
+                T_K:        float,
+                P_bar:      float,
+                V_reactor:  float,
+                max_iter:   int   = 100,
+                tol:        float = 1e-8,
+                rho_b:      Optional[float] = None,
+                ) -> Optional[Dict]:
+    """Resuelve un CSTR isothermal, isobaric con cinética Arrhenius.
+
+    Sistema algebraico: para cada reacción j del set, encontrar ξⱼ
+    tal que ξⱼ = rⱼ(F_out(ξ)) · V_reactor, donde
+    Fᵢ_out = Fᵢ_in + Σⱼ νᵢⱼ ξⱼ.
+
+    Newton-Raphson con Jacobiano por diferencias finitas + damping.
+
+    Returns:
+        dict con:
+          'F_out': {formula: mol/s}
+          'conversion': {formula: float}
+          'tau_s': float (residencia nominal V/Q_in)
+          'xi': {rxn_id: float (mol/s)}   extents
+          'iterations': int
+          'residual': float
+        None si no converge.
+    """
+    err = _check_kinetics_compatibility(rxn_ids)
+    if err is not None:
+        return None
+    if rho_b is None:
+        for rid in rxn_ids:
+            r = get(rid)
+            if r and r.rho_b_cat:
+                rho_b = r.rho_b_cat
+                break
+
+    rxns = [get(rid) for rid in rxn_ids]
+    uses_pp = rxns[0].uses_partial_pressure
+    N = len(rxns)
+
+    species = set(F_in.keys())
+    for r in rxns:
+        for sp in r.stoich:
+            species.add(sp.formula)
+    species = list(species)
+    sp_idx = {s: i for i, s in enumerate(species)}
+
+    # Matriz estequiométrica ν[i, j]
+    nu = [[0.0]*N for _ in species]
+    for j, r in enumerate(rxns):
+        for sp in r.stoich:
+            nu[sp_idx[sp.formula]][j] = float(sp.nu)
+
+    F_in_vec = [F_in.get(s, 0.0) for s in species]
+    F_tot_in = sum(F_in_vec)
+    Q_in_m3_s = F_tot_in * R_GAS * T_K / (P_bar * 1e5)
+    tau_s = V_reactor / Q_in_m3_s if Q_in_m3_s > 0 else None
+
+    def _F_from_xi(xi_vec):
+        return {species[i]: max(F_in_vec[i] + sum(nu[i][j]*xi_vec[j]
+                                                    for j in range(N)), 0.0)
+                for i in range(len(species))}
+
+    def _residual(xi_vec):
+        """g_j(ξ) = ξⱼ - rⱼ(F(ξ)) · V"""
+        F = _F_from_xi(xi_vec)
+        conc = _concentrations(F, T_K, P_bar, uses_pp)
+        g = []
+        for j in range(N):
+            r = rxns[j].rate_net(T_K, conc)
+            if r is None:
+                return None
+            if rxns[j].rate_basis == 'cat_mass':
+                if rho_b is None: return None
+                r *= rho_b
+            g.append(xi_vec[j] - r * V_reactor)
+        return g
+
+    # Initial guess: ξⱼ pequeño (~Q_in·tau·c_in_min)
+    xi = [F_tot_in * 0.01 for _ in range(N)]
+
+    last_norm = float('inf')
+    iters = 0
+    for it in range(max_iter):
+        iters = it + 1
+        g = _residual(xi)
+        if g is None:
+            return None
+        norm = math.sqrt(sum(gi*gi for gi in g))
+        last_norm = norm
+        if norm < tol:
+            break
+        # Jacobiano por diferencias finitas
+        eps_base = max(1e-4 * F_tot_in, 1e-10)
+        J = [[0.0]*N for _ in range(N)]
+        for k in range(N):
+            xi_plus = list(xi)
+            eps = max(eps_base, 1e-4 * abs(xi[k]))
+            xi_plus[k] += eps
+            g_plus = _residual(xi_plus)
+            if g_plus is None:
+                return None
+            for j in range(N):
+                J[j][k] = (g_plus[j] - g[j]) / eps
+        rhs = [-gi for gi in g]
+        dxi = _gauss_solve(J, rhs)
+        if dxi is None:
+            return None
+        # Line search con damping
+        alpha = 1.0
+        for _ in range(30):
+            xi_try = [xi[j] + alpha*dxi[j] for j in range(N)]
+            # No permitir ξ que haga moles negativos
+            F_try = _F_from_xi(xi_try)
+            if any(v < -1e-9 for v in F_try.values()):
+                alpha *= 0.5
+                continue
+            g_try = _residual(xi_try)
+            if g_try is None:
+                alpha *= 0.5
+                continue
+            norm_try = math.sqrt(sum(gi*gi for gi in g_try))
+            if norm_try < norm * (1 - 1e-4*alpha) or alpha < 1e-8:
+                xi = xi_try
+                last_norm = norm_try
+                break
+            alpha *= 0.5
+        else:
+            break    # no mejora — devolver lo que haya
+
+    if last_norm > 1.0:
+        # Residuo grande — no convergió
+        return None
+    F_out = _F_from_xi(xi)
+    conv = {}
+    for i, s in enumerate(species):
+        if F_in_vec[i] > 1e-12:
+            x = (F_in_vec[i] - F_out[s]) / F_in_vec[i]
+            if x > 1e-9:
+                conv[s] = x
+    return dict(
+        F_out=F_out,
+        conversion=conv,
+        tau_s=tau_s,
+        xi={rxn_ids[j]: xi[j] for j in range(N)},
+        iterations=iters,
+        residual=last_norm,
     )
