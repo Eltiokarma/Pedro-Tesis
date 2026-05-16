@@ -147,6 +147,42 @@ class Reaction:
     # Notas y refs
     comments: str = ""
 
+    # ============================================================
+    # CAPA 5 — CINÉTICA (Arrhenius)
+    # ============================================================
+    # Cargada desde data/kinetics_db.md.  Si kinetics_available=False
+    # esta reacción no tiene cinética validada → usar mode='equilibrium'
+    # en el reactor del flowsheet.
+    kinetics_available: bool = False
+    # Parámetros Arrhenius: k(T) = k0 · exp(-Ea/RT)
+    # Unidades de k0 dependen del orden global y del basis (volumen vs
+    # masa de catalizador).  Documentadas en data/kinetics_db.md.
+    k0:           Optional[float] = None
+    Ea_kJ_mol:    Optional[float] = None
+    # Ley de velocidad: 'elemental' | 'first_order' | 'global' |
+    # 'lh_xu_froment' | 'lh_bussche' | 'temkin_pyzhev' | etc.
+    rate_law:     str = ""
+    # Orden de reacción por especie (formula → exponente).  Por
+    # ejemplo R002 WGS: {'CO': 1, 'H2O': 1}.  Si vacío, asume
+    # estequiométrico (|νᵢ| para reactantes).
+    orders:       Dict[str, float] = field(default_factory=dict)
+    # Basis de la velocidad:
+    #   'volume'  → r en mol/(m³_reactor·s)
+    #   'cat_mass' → r en mol/(kg_cat·s); convertir a volume con ρ_b
+    rate_basis:   str = "volume"
+    # Densidad de empaque de catalizador (kg_cat/m³_reactor).
+    # Solo aplica si rate_basis='cat_mass'.
+    rho_b_cat:    Optional[float] = None
+    # Rango T válido específico de la cinética (puede ser más
+    # estrecho que el termo).
+    kin_T_min_K:  Optional[float] = None
+    kin_T_max_K:  Optional[float] = None
+    # Concentraciones se expresan en mol/m³ por default. Algunas
+    # cinéticas catalíticas usan presión parcial (bar) — flag aparte.
+    uses_partial_pressure: bool = False
+    # Catalizador típico (string descriptivo, no usado en cálculos)
+    catalyst:     str = ""
+
     def keq_vant_hoff(self, T_K: float) -> Optional[float]:
         """Keq(T) usando 2 parámetros (asume ΔCp_rxn = 0).
         Válido en rango cercano a 298 K, error crece a alta T."""
@@ -213,12 +249,158 @@ class Reaction:
     def products(self) -> List[StoichEntry]:
         return [s for s in self.stoich if s.nu > 0]
 
+    # ============================================================
+    # CINÉTICA — Arrhenius forward + reversa por equilibrio detallado
+    # ============================================================
+
+    def k_arrhenius(self, T_K: float) -> Optional[float]:
+        """Constante de velocidad k(T) = k₀ · exp(-Ea/RT).
+
+        Unidades de retorno = unidades de k₀ (ver data/kinetics_db.md
+        por reacción).  Devuelve None si no hay cinética cargada.
+        """
+        if not self.kinetics_available or self.k0 is None or self.Ea_kJ_mol is None:
+            return None
+        Ea_J = self.Ea_kJ_mol * 1000.0
+        # Cap del exponente para evitar overflow numérico
+        exponent = -Ea_J / (R_GAS * T_K)
+        if exponent < -700:
+            return 0.0
+        if exponent > 700:
+            return float('inf')
+        return self.k0 * math.exp(exponent)
+
+    def k_reverse(self, T_K: float) -> Optional[float]:
+        """k_rev por equilibrio detallado: k_rev = k_fwd / Keq.
+
+        Garantiza consistencia termo: en equilibrio r_fwd = r_rev.
+        Devuelve None si falta cinética o Keq.  Devuelve 0 si la
+        reacción es irreversible (Keq enorme).
+        """
+        if self.irreversible:
+            return 0.0
+        k_fwd = self.k_arrhenius(T_K)
+        keq = self.keq_vant_hoff(T_K)
+        if k_fwd is None or keq is None or keq <= 0:
+            return None
+        if math.isinf(keq):
+            return 0.0
+        return k_fwd / keq
+
+    def _orders_dict(self) -> Dict[str, float]:
+        """Devuelve dict de órdenes de reacción por reactante.  Si
+        self.orders está vacío, asume estequiométrico (|νᵢ|)."""
+        if self.orders:
+            return dict(self.orders)
+        return {s.formula: float(abs(s.nu)) for s in self.reactants()}
+
+    def _product_orders(self) -> Dict[str, float]:
+        """Órdenes de productos (para el término reverso). Asume
+        estequiométrico (|νⱼ|) — Capa 5 v1.0 no permite órdenes
+        reversos personalizados (raramente reportados)."""
+        return {s.formula: float(abs(s.nu)) for s in self.products()}
+
+    def rate_forward(self, T_K: float,
+                      concentrations: Dict[str, float]) -> Optional[float]:
+        """Velocidad de reacción forward: r_fwd = k(T) · ∏ [Cᵢ]^nᵢ
+
+        concentrations: dict {formula: valor}.  Las unidades deben
+        coincidir con uses_partial_pressure: si True → bar, si False
+        → mol/m³ (default).  Devuelve r en las unidades de k₀.
+        Componentes faltantes se asumen [C]=0 → r_fwd=0.
+        """
+        k = self.k_arrhenius(T_K)
+        if k is None:
+            return None
+        orders = self._orders_dict()
+        r = k
+        for formula, n in orders.items():
+            c = concentrations.get(formula, 0.0)
+            if c < 0:
+                return None
+            if c == 0 and n > 0:
+                return 0.0
+            r *= c ** n
+        return r
+
+    def rate_reverse(self, T_K: float,
+                      concentrations: Dict[str, float]) -> Optional[float]:
+        """Velocidad reversa via equilibrio detallado: r_rev =
+        k_rev(T) · ∏ [Pⱼ]^|νⱼ|.  Devuelve 0 si irreversible."""
+        if self.irreversible:
+            return 0.0
+        k_rev = self.k_reverse(T_K)
+        if k_rev is None:
+            return None
+        orders = self._product_orders()
+        r = k_rev
+        for formula, n in orders.items():
+            c = concentrations.get(formula, 0.0)
+            if c < 0:
+                return None
+            if c == 0 and n > 0:
+                return 0.0
+            r *= c ** n
+        return r
+
+    def rate_net(self, T_K: float,
+                  concentrations: Dict[str, float]) -> Optional[float]:
+        """Velocidad neta: r_net = r_fwd - r_rev.  Positivo → la
+        reacción avanza hacia productos; negativo → hacia reactantes
+        (caso productos en exceso de equilibrio)."""
+        rf = self.rate_forward(T_K, concentrations)
+        if rf is None:
+            return None
+        rr = self.rate_reverse(T_K, concentrations)
+        if rr is None:
+            return rf      # irreversible o sin Keq → solo forward
+        return rf - rr
+
+    def is_kinetic_T_valid(self, T_K: float) -> bool:
+        """True si T_K está dentro del rango de validez de la cinética
+        publicada.  Fuera del rango la Arrhenius extrapolada puede ser
+        irrealista — el caller decide qué hacer (warning, error)."""
+        if not self.kinetics_available:
+            return False
+        if self.kin_T_min_K is not None and T_K < self.kin_T_min_K:
+            return False
+        if self.kin_T_max_K is not None and T_K > self.kin_T_max_K:
+            return False
+        return True
+
+    def is_thermodynamically_consistent(self) -> bool:
+        """True si los órdenes cinéticos coinciden con la estequiometría
+        (|νᵢ| para reactantes).  Solo en ese caso el equilibrio
+        detallado simple `k_rev = k_fwd/Keq` da r_net=0 en equilibrio.
+
+        Falsea para cinéticas no-estequiométricas como Temkin-Pyzhev
+        (R004 Haber: orden N2=1, H2=1.5 vs ν=1, 3) o Eley-Rideal con
+        adsorción saturada.  En esos casos:
+          · el modelo Arrhenius simple captura el ORDEN de magnitud
+          · pero r_net en (cerca de) equilibrio tiene desvío sistemático
+          · NO usar para diseño fino de reactores cerca de equilibrio
+            (usar el modelo cinético completo publicado).
+
+        El módulo solo lo marca como flag — no rechaza el cálculo.
+        """
+        if not self.kinetics_available or not self.orders:
+            return False
+        for sp in self.reactants():
+            expected = float(abs(sp.nu))
+            actual = self.orders.get(sp.formula, expected)
+            if abs(actual - expected) > 1e-9:
+                return False
+        return True
+
 
 # ============================================================
 # Parser
 # ============================================================
 _DB: Optional[Dict[str, Reaction]] = None
 _DB_PATH = Path(__file__).parent / "data" / "reactions_db.md"
+
+
+_KINETICS_PATH = Path(__file__).parent / "data" / "kinetics_db.md"
 
 
 def _parse_db() -> Dict[str, Reaction]:
@@ -234,7 +416,86 @@ def _parse_db() -> Dict[str, Reaction]:
         rxn = _parse_one(rxn_id, body)
         if rxn:
             out[rxn_id] = rxn
+    # Merge cinéticas Capa 5 si el archivo existe
+    if _KINETICS_PATH.is_file():
+        _merge_kinetics(out, _KINETICS_PATH.read_text(encoding="utf-8"))
     return out
+
+
+def _merge_kinetics(reactions: Dict[str, Reaction], text: str) -> None:
+    """Lee el .md de cinéticas y rellena los campos de cada Reaction
+    (k0, Ea, orders, rate_law, etc).  Reacciones no listadas en el
+    .md cinético quedan con kinetics_available=False."""
+    sections = re.split(r"^## (R\d{3})", text, flags=re.MULTILINE)
+    for i in range(1, len(sections), 2):
+        rxn_id = sections[i].strip()
+        body = sections[i + 1] if i + 1 < len(sections) else ""
+        # Cortar body en la siguiente sección ## que NO sea Rxxx
+        # (para que la última Rxxx no absorba texto explicativo del
+        # final del .md, donde aparecen 'orden X=N' como ejemplos).
+        next_section = re.search(r"^## ", body, flags=re.MULTILINE)
+        if next_section:
+            body = body[:next_section.start()]
+        rxn = reactions.get(rxn_id)
+        if rxn is None:
+            continue
+        _parse_kinetics_section(rxn, body)
+
+
+def _parse_kinetics_section(rxn: Reaction, body: str) -> None:
+    """Parsea una sección Rxxx del .md cinético y popula rxn."""
+    # Catalizador
+    m = re.search(r"\*\*Catalizador:\*\*\s*([^\n]+)", body)
+    if m: rxn.catalyst = m.group(1).strip()
+
+    # Tipo (rate_law), formato: **Tipo:** `elemental` ...
+    m = re.search(r"\*\*Tipo:\*\*\s*`([^`]+)`", body)
+    if m: rxn.rate_law = m.group(1).strip()
+
+    # Rango T válido: '600–800 K' o '600-800 K'
+    m = re.search(r"\*\*Rango T válido:\*\*\s*(\d+)\s*[-–]\s*(\d+)\s*K", body)
+    if m:
+        rxn.kin_T_min_K = float(m.group(1))
+        rxn.kin_T_max_K = float(m.group(2))
+
+    # k₀: bullet point '- k₀ = X.Y[e+N]  unit'
+    # Captura número en notación científica y la unidad para detectar
+    # rate_basis y uses_partial_pressure.
+    m = re.search(r"-\s*k₀\s*=\s*([+-]?[\d.]+(?:[eE][+-]?\d+)?)\s*([^\n]*)", body)
+    if m:
+        rxn.k0 = float(m.group(1))
+        unit_str = m.group(2).strip().lower()
+        # Basis: 'kg_cat' en unidades → rate_basis='cat_mass'
+        if 'kg_cat' in unit_str:
+            rxn.rate_basis = 'cat_mass'
+        else:
+            rxn.rate_basis = 'volume'
+        # uses_partial_pressure: 'bar' presente y no 'bar^0'
+        if 'bar' in unit_str:
+            rxn.uses_partial_pressure = True
+
+    # Ea: '- Ea = Z kJ/mol'
+    m = re.search(r"-\s*Ea\s*=\s*([+-]?[\d.]+)\s*kJ/mol", body)
+    if m: rxn.Ea_kJ_mol = float(m.group(1))
+
+    # Órdenes: '- orden XXX = N' (puede ser varios)
+    # Acepta enteros y decimales. Múltiples en la misma línea separados
+    # por coma: '- orden CO = 1, orden H2O = 1'
+    orders = {}
+    for om in re.finditer(r"orden\s+([A-Za-z0-9_()]+)\s*=\s*([+-]?[\d.]+)",
+                           body, flags=re.IGNORECASE):
+        formula = om.group(1).strip()
+        order   = float(om.group(2))
+        orders[formula] = order
+    if orders:
+        rxn.orders = orders
+
+    # ρ_b: '- ρ_b = N kg_cat/m³_reactor' (o '≈' en vez de '=')
+    m = re.search(r"ρ_b\s*[≈=]\s*([+-]?[\d.]+)\s*kg_cat", body)
+    if m: rxn.rho_b_cat = float(m.group(1))
+
+    # Marca como disponible si tiene al menos k0 y Ea
+    rxn.kinetics_available = (rxn.k0 is not None and rxn.Ea_kJ_mol is not None)
 
 
 def _parse_one(rxn_id: str, body: str) -> Optional[Reaction]:
