@@ -1660,6 +1660,155 @@ def solve_flashes(fs):
     return msgs
 
 
+def solve_pressure_hydraulic(fs, max_iter=8):
+    """Solver hidráulico iterativo — acopla bombas + tuberías +
+    downstream para auto-dimensionar bombas/compresores.
+
+    Workflow:
+      1. Forward pass: solve_pressure_propagation(fs) — propaga P
+         desde feeds locked usando los ΔP DECLARADOS.
+      2. Para cada pump/compressor SIN delta_p_bar declarado, busca
+         el próximo stream locked downstream.  Calcula el ΔP que la
+         bomba debe levantar:
+            ΔP_pump_needed = P_target - P_in_available + Σ ΔP_pipe_intermedios
+                              + Σ ΔP_block_intermedios (HX/cols con ΔP<0)
+      3. Setea block.delta_p_bar y recalcula propagación.
+      4. Itera hasta convergencia (ΔP_pipe cambia poco con ΔP_pump,
+         pero gases tienen densidad variable).
+
+    USE CASE típico:
+      Feed (P=1 bar locked) → Pump (no spec) → 50 m tubería con K=5
+      → HX (-0.5) → 30 m tubería → Producto (P=3 bar locked)
+    El solver calcula automáticamente ΔP necesaria de la bomba.
+
+    Returns list de mensajes (✓/⚠/✗).
+    """
+    # Check si vale la pena
+    has_locked = any(getattr(s, "pressure_locked", False)
+                      for s in fs.streams.values())
+    if not has_locked:
+        return []
+
+    try:
+        import pressure_drop as _pd
+    except ImportError:
+        return []
+
+    msgs = []
+    sized_pumps = set()
+    for outer in range(max_iter):
+        # 1) Propagación forward con ΔP declarados
+        solve_pressure_propagation(fs)
+
+        # 2) Para cada bomba/compresor sin ΔP, calcular el que falta
+        any_sized = False
+        for b in fs.blocks.values():
+            eq_lower = b.eq_type.lower()
+            is_rotative = ("pump" in eq_lower or "compressor" in eq_lower
+                            or "fan" in eq_lower or "bomba" in eq_lower)
+            if not is_rotative:
+                continue
+            # Skip si ya tiene ΔP declarado (no None, no 0) Y no fue auto-sized
+            # antes (queremos re-iterar los auto-sized si cambia ΔP_pipe).
+            if (abs(b.delta_p_bar) > 1e-6 and b.id not in sized_pumps):
+                continue
+            ins  = [s for s in fs.streams.values() if s.dst == b.id]
+            outs = [s for s in fs.streams.values() if s.src == b.id]
+            if not ins or not outs:
+                continue
+            # P de entrada
+            P_in_min = min(s.pressure_bar for s in ins if s.pressure_bar > 0)
+            # Buscar próximo stream locked downstream — BFS
+            target_P, accumulated_dp = _find_downstream_target(fs, b.id,
+                                                                _pd)
+            if target_P is None:
+                continue
+            # ΔP que la bomba debe entregar para llegar al target
+            # considerando ΔP positivos (que también suben) y negativos
+            # (HX, columnas) downstream.
+            # accumulated_dp = Σ (ΔP_pipe + ΔP_blocks downstream del bloque
+            #                       hasta el target).  Si downstream hay
+            #                       bombas, sus ΔP también suman.
+            dp_needed = (target_P - P_in_min) + accumulated_dp
+            if dp_needed <= 0.05:
+                continue   # downstream P_target ya está cubierto
+            new_dp = round(dp_needed, 3)
+            old_dp = b.delta_p_bar
+            if abs(new_dp - old_dp) > 0.05:
+                b.delta_p_bar = new_dp
+                sized_pumps.add(b.id)
+                any_sized = True
+                msgs.append(
+                    f"✓ {b.name} auto-sized: ΔP={new_dp:.2f} bar "
+                    f"(P_in={P_in_min:.2f}, target_dn={target_P:.2f}, "
+                    f"Σ losses={accumulated_dp:.2f})"
+                )
+        if not any_sized:
+            break
+        # 3) Re-propagar con las ΔP nuevas
+        solve_pressure_propagation(fs)
+    return msgs
+
+
+def _find_downstream_target(fs, start_block_id, _pd):
+    """BFS desde el bloque start_block_id buscando el próximo stream
+    con pressure_locked=True.  Devuelve (target_P_bar, accumulated_dp)
+    donde accumulated_dp es la suma de pérdidas (ΔP_pipe + ΔP_block
+    negativos) entre el start y el target.
+
+    Si no hay target locked downstream, retorna (None, 0).
+    """
+    visited_blocks = {start_block_id}
+    visited_streams = set()
+    accumulated = 0.0
+    target_P = None
+    # Cola: list de tuples (stream_to_visit, dp_acc_until_now)
+    queue = []
+    for s in fs.streams.values():
+        if s.src == start_block_id:
+            queue.append((s, 0.0))
+    while queue:
+        stream, dp_acc = queue.pop(0)
+        if stream.id in visited_streams:
+            continue
+        visited_streams.add(stream.id)
+        # ΔP_pipe del propio stream
+        try:
+            pd_res = _pd.stream_pressure_drop(stream)
+            dp_pipe = pd_res["delta_P_bar"] if pd_res else 0.0
+        except Exception:
+            dp_pipe = 0.0
+        dp_acc_new = dp_acc + dp_pipe
+        # Si el stream está locked → es nuestro target
+        if getattr(stream, "pressure_locked", False):
+            target_P = stream.pressure_bar
+            accumulated = dp_acc_new
+            return (target_P, accumulated)
+        # Sino, continuar BFS al destino
+        dst_block_id = stream.dst
+        if dst_block_id in visited_blocks or dst_block_id not in fs.blocks:
+            continue
+        visited_blocks.add(dst_block_id)
+        dst_block = fs.blocks[dst_block_id]
+        # ΔP del bloque destino (negativo = pérdida, positivo = otra bomba)
+        dp_block = getattr(dst_block, "delta_p_bar", 0.0)
+        # Si dst es OTRA bomba con ΔP positivo: para por ahí (esa bomba
+        # se encarga del resto downstream); no agregamos su contribución
+        eq_dst = dst_block.eq_type.lower()
+        is_pump_compr = ("pump" in eq_dst or "compressor" in eq_dst
+                          or "fan" in eq_dst or "bomba" in eq_dst)
+        if is_pump_compr and dp_block > 0:
+            continue   # la siguiente bomba auto-sizing se encarga
+        # Agregar ΔP del bloque (negativo = perdida = sumamos su valor abs)
+        if dp_block < 0:
+            dp_acc_new += abs(dp_block)
+        # Continuar BFS por outs del bloque destino
+        for s2 in fs.streams.values():
+            if s2.src == dst_block_id and s2.id not in visited_streams:
+                queue.append((s2, dp_acc_new))
+    return (None, 0.0)
+
+
 def solve_pressure_propagation(fs):
     """Propaga presión P a través del flowsheet.
 
@@ -2275,11 +2424,11 @@ def solve(fs, max_iter=MAX_ITER):
     #     antes no podían calcularse porque les faltaba T del input.
     auto_set_duties_from_thermo(fs, only_zero=True, respect_locks=True)
 
-    # 4e. Propagación de presión (Darcy-Weisbach + ΔP de equipos).
-    #     OPT-IN: solo se ejecuta si hay specs de P (P locked o
-    #     algún block con delta_p_bar != 0).  Para bombas/compresores
-    #     calcula además duty eléctrico desde W_hyd / η.
-    p_msgs = solve_pressure_propagation(fs)
+    # 4e. Solver hidráulico acoplado: bombas/compresores se auto-
+    #     dimensionan iterativamente para cubrir ΔP de tuberías +
+    #     equipos downstream hasta el próximo stream con P locked.
+    #     Si no hay nada locked, usa los ΔP declarados directamente.
+    p_msgs = solve_pressure_hydraulic(fs)
     for m in p_msgs:
         if m.startswith("✗"):
             result.energy_balance_errors.append(m)
