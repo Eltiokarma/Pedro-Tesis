@@ -1753,18 +1753,24 @@ class BlockItem(QGraphicsItemGroup):
             self.editor._drag_before_snapshot = None
 
     def contextMenuEvent(self, event):
-        """Click derecho → menú contextual."""
+        """Click derecho → menú contextual con íconos HYSYS."""
         if self.editor is None:
             return
         menu = QMenu()
         title = menu.addAction(self.model.name)
         title.setEnabled(False)
         menu.addSeparator()
-        menu.addAction("Conectar desde acá…",
+        # Íconos del set HYSYS (color text-primary)
+        mk = getattr(self.editor, "_mk_icon", None)
+        icol = getattr(self.editor, "_icon_color", "#3a3a3a")
+        ic_connect = mk("act-connect", color=icol, size=16) if mk else QIcon()
+        ic_edit    = mk("act-edit",    color=icol, size=16) if mk else QIcon()
+        ic_delete  = mk("edit-delete", color="#c41e3a", size=16) if mk else QIcon()
+        menu.addAction(ic_connect or QIcon(), "Conectar desde acá…",
                        lambda: self.editor.start_connection(self.model.id))
-        menu.addAction("Editar propiedades… (doble-click)",
+        menu.addAction(ic_edit or QIcon(), "Editar propiedades… (doble-click)",
                        lambda: self.editor.edit_block(self.model))
-        menu.addAction("Borrar",
+        menu.addAction(ic_delete or QIcon(), "Borrar",
                        lambda: self.editor.delete_block(self.model.id))
         menu.exec(event.screenPos())
         event.accept()
@@ -2081,14 +2087,35 @@ class StreamItem(QGraphicsPathItem):
         return super().itemChange(change, value)
 
     def contextMenuEvent(self, event):
-        """Menú right-click: insertar waypoint, resetear auto-routing."""
+        """Menú right-click: insertar waypoint, editar, borrar, etc."""
         from PySide6.QtWidgets import QMenu
         menu = QMenu()
         click_pos = event.scenePos()
-        a_add = menu.addAction("Insertar waypoint acá")
-        a_reset = menu.addAction("Resetear auto-routing")
+        # Íconos del set HYSYS
+        ed = getattr(self, "editor", None)
+        mk = getattr(ed, "_mk_icon", None) if ed else None
+        icol = getattr(ed, "_icon_color", "#3a3a3a") if ed else "#3a3a3a"
+        ic_wp     = mk("act-waypoint", color=icol, size=16) if mk else QIcon()
+        ic_reset  = mk("sim-reset",    color=icol, size=16) if mk else QIcon()
+        ic_edit   = mk("act-edit",     color=icol, size=16) if mk else QIcon()
+        ic_delete = mk("edit-delete",  color="#c41e3a", size=16) if mk else QIcon()
+        a_edit = menu.addAction(ic_edit or QIcon(),
+                                  "Editar propiedades… (doble-click)")
+        menu.addSeparator()
+        a_add = menu.addAction(ic_wp or QIcon(), "Insertar waypoint acá")
+        a_reset = menu.addAction(ic_reset or QIcon(), "Resetear auto-routing")
         a_reset.setEnabled(bool(self.model.waypoints))
+        menu.addSeparator()
+        a_del = menu.addAction(ic_delete or QIcon(), "Borrar")
         chosen = menu.exec_(event.screenPos())
+        if chosen is a_edit and ed is not None:
+            ed.edit_stream(self.model)
+            event.accept()
+            return
+        if chosen is a_del and ed is not None:
+            ed._delete_stream(self.model.id)
+            event.accept()
+            return
         if chosen is a_add:
             # snap a la grilla
             wx = round(click_pos.x() / GRID_STEP) * GRID_STEP
