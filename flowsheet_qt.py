@@ -43,6 +43,7 @@ import sys
 import os
 import json
 import subprocess
+from typing import List
 
 from PySide6.QtCore import (
     Qt, QRectF, QPointF, QLineF, QSize,
@@ -330,6 +331,75 @@ class BlockEditDialog(QDialog):
 
         layout.addRow(gb_duty)
 
+        # ---- Reactor de equilibrio (Capa 4) ----
+        # Solo visible si es Reactor.  Permite seleccionar reacciones
+        # del catálogo reactions_db; si hay >=1 marcada, el solver
+        # computa heat_of_reaction automáticamente y oculta el
+        # campo manual de arriba.
+        self.gb_eq = QGroupBox("Reactor de equilibrio (Capa 4)")
+        self.gb_eq.setVisible(is_reactor)
+        eq_layout = QFormLayout(self.gb_eq)
+
+        # T_op
+        self.t_op_edit = QDoubleSpinBox()
+        self.t_op_edit.setRange(0.0, 3000.0)
+        self.t_op_edit.setDecimals(1)
+        self.t_op_edit.setSingleStep(25.0)
+        self.t_op_edit.setSuffix(" K")
+        self.t_op_edit.setValue(getattr(block, "T_op_K", 0.0))
+        eq_layout.addRow("T operación:", self.t_op_edit)
+        hint_t = QLabel("0 = usa T promedio del input.  Si marcás\n"
+                         "reacciones, esta T determina los Keq y ΔH.")
+        hint_t.setStyleSheet("color: #888; font-size: 8pt;")
+        eq_layout.addRow("", hint_t)
+
+        # P_op
+        self.p_op_edit = QDoubleSpinBox()
+        self.p_op_edit.setRange(0.001, 1000.0)
+        self.p_op_edit.setDecimals(2)
+        self.p_op_edit.setSingleStep(1.0)
+        self.p_op_edit.setSuffix(" bar")
+        self.p_op_edit.setValue(getattr(block, "P_op_bar", 1.0))
+        eq_layout.addRow("P operación:", self.p_op_edit)
+
+        # Lista de reacciones (multi-check)
+        from PySide6.QtWidgets import QListWidget, QListWidgetItem
+        self.rxn_list = QListWidget()
+        self.rxn_list.setSelectionMode(QListWidget.NoSelection)
+        self.rxn_list.setMaximumHeight(180)
+        try:
+            import reactions_db as _rdb
+            current = set(getattr(block, "reactions", []) or [])
+            for rid in _rdb.list_ids():
+                rxn = _rdb.get(rid)
+                label = f"{rid} — {rxn.name}"
+                item = QListWidgetItem(label)
+                item.setFlags(item.flags() | Qt.ItemIsUserCheckable)
+                item.setCheckState(Qt.Checked if rid in current else Qt.Unchecked)
+                if not rxn.derivable_capa3:
+                    # R022-R025: termo no validable contra Capa 3, sin Keq formal.
+                    item.setToolTip(rxn.comments[:200] if rxn.comments else
+                                     "Reacción sin Van't Hoff — no usable en este reactor.")
+                    item.setFlags(item.flags() & ~Qt.ItemIsEnabled)
+                else:
+                    item.setToolTip(f"Categoría: {rxn.category}\n"
+                                     f"Δν={rxn.delta_nu}, fase={rxn.phase_global}\n"
+                                     f"Rango T válido: {rxn.T_min_K:.0f}-{rxn.T_max_K:.0f} K\n"
+                                     f"ΔH(298) = {rxn.dh_rxn_298_kJ_mol or 0:+.1f} kJ/mol")
+                self.rxn_list.addItem(item)
+        except Exception as e:
+            self.rxn_list.addItem(f"[error cargando reactions_db: {e}]")
+        eq_layout.addRow("Reacciones:", self.rxn_list)
+        hint_rxn = QLabel(
+            "Marcá las reacciones que ocurren en este reactor.\n"
+            "Si hay ≥1: el solver computa composición de salida\n"
+            "y heat_of_reaction automáticamente (oculta el manual\n"
+            "de arriba). Si vacío: modo manual con kJ/kg declarado."
+        )
+        hint_rxn.setStyleSheet("color: #888; font-size: 8pt;")
+        eq_layout.addRow("", hint_rxn)
+        layout.addRow(self.gb_eq)
+
         # botones
         buttons = QDialogButtonBox(
             QDialogButtonBox.Ok | QDialogButtonBox.Cancel
@@ -352,6 +422,17 @@ class BlockEditDialog(QDialog):
         # heat_of_reaction (sólo si visible, i.e. reactor)
         if self.hor_edit.isVisible():
             self.block.heat_of_reaction = float(self.hor_edit.value())
+        # Reactor de equilibrio (Capa 4): persistir reactions, T_op, P_op
+        if hasattr(self, "gb_eq") and self.gb_eq.isVisible():
+            picked: List[str] = []
+            for i in range(self.rxn_list.count()):
+                item = self.rxn_list.item(i)
+                if item.checkState() == Qt.Checked:
+                    rid = item.text().split("—")[0].strip()
+                    picked.append(rid)
+            self.block.reactions = picked
+            self.block.T_op_K   = float(self.t_op_edit.value())
+            self.block.P_op_bar = float(self.p_op_edit.value())
 
 
 class StreamEditDialog(QDialog):
@@ -2239,6 +2320,9 @@ class FlowsheetMainWindow(QMainWindow):
         examples_menu.addAction("HDA completo (Douglas, escala industrial)", make_loader("hda_full"))
         examples_menu.addAction("Endulzamiento de gas natural (MDEA)",       make_loader("gas_sweet"))
         examples_menu.addAction("Planta de azúcar (caña)",                   make_loader("sugar"))
+        examples_menu.addSeparator()
+        examples_menu.addAction("⚛ Reformado SMR + WGS (reactor de equilibrio Capa 4)",
+                                  make_loader("smr_eq"))
         examples_act.setMenu(examples_menu)
         tb.addAction(examples_act)
         # workaround: QAction con menu necesita un QToolButton para mostrar el dropdown
@@ -2483,6 +2567,9 @@ class FlowsheetMainWindow(QMainWindow):
             "sugar":        (TkEditor._example_sugar_mill,
                               "Planta de azúcar (caña → cristalización)",
                               "100 — Cristalización", "PFD-SUGAR-001"),
+            "smr_eq":       (TkEditor._example_smr_equilibrium,
+                              "Reformado SMR + WGS — reactor de equilibrio (Capa 4)",
+                              "100 — Reacción", "PFD-SMR-EQ-001"),
         }
         entry = builder_map.get(key)
         if entry is None:

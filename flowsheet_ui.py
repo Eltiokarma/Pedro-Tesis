@@ -2328,6 +2328,127 @@ class FlowsheetEditor:
         self._add_example_extra("Sacos de polipropileno", flowrate=500,
                                 price=600.0, stream="Consumables")
 
+    def _example_smr_equilibrium(self):
+        """Reformado de metano con vapor (SMR + WGS) — REACTOR DE
+        EQUILIBRIO Capa 4.  Demuestra el solver multi-reacción.
+
+        Reacciones:
+          R003: CH4 + H2O → CO + 3H2     (SMR, endotérmica fuerte)
+          R002: CO + H2O → CO2 + H2      (Water-Gas Shift, exotérmica)
+
+        Operación: T = 1100 K (827°C), P = 25 bar.  S/C = 3 (relación
+        molar vapor/carbono típica industrial).  Conversión CH4 ≈ 49%
+        a estas condiciones (Le Chatelier: P alta penaliza Δν=+2).
+
+        Tren:  feed CH4 + vapor → mezclador → precalentador → reactor
+               SMR+WGS → enfriador → knockout drum → syngas seco /
+               agua condensada.
+
+        Este ejemplo NO declara composición de salida del reactor —
+        el solver Capa 4 la calcula automáticamente y la propaga
+        downstream.  El user puede cambiar T_op_K/P_op_bar y ver
+        cómo cambia todo el balance.
+        """
+        # Layout PFD industrial (1600×960 paper)
+        # Top row y=200: TK-CH4 → M-101 → F-101 → R-101 → E-101 → V-101
+        # Right side: TK-syngas (top), TK-agua (bottom)
+        tk_ch4   = self._add_example_block("TK-101","Storage tank — cone roof",  500.0,  60, 220)
+        tk_steam = self._add_example_block("TK-102","Storage tank — cone roof", 1000.0,  60, 460)
+        m101     = self._add_example_block("M-101", "Mixer — static",              5.0, 240, 320)
+        f101     = self._add_example_block("F-101", "Fired heater — non-reformer",
+                                            8000.0, 400, 320)   # precalentador
+        r101     = self._add_example_block("R-101", "Reactor — jacketed non-agit.",
+                                            50.0, 600, 320)   # SMR+WGS reformer
+        e101     = self._add_example_block("E-101", "Heat exch. — air cooler",
+                                           400.0, 800, 320)   # syngas cooler
+        v101     = self._add_example_block("V-101", "Vessel — vertical",
+                                            25.0, 980, 320)   # KO drum
+        tk_syn   = self._add_example_block("TK-103","Storage tank — cone roof",
+                                           300.0,1180, 220)   # syngas seco producto
+        tk_h2o   = self._add_example_block("TK-104","Storage tank — cone roof",
+                                           400.0,1180, 460)   # agua condensada
+
+        # ---- Configurar R-101 como REACTOR DE EQUILIBRIO Capa 4 ----
+        # Las dos reacciones del SMR industrial: reformado + WGS.
+        self.fs.blocks[r101].reactions = ["R003", "R002"]
+        self.fs.blocks[r101].T_op_K   = 1100.0    # 827°C, típico tubo SMR
+        self.fs.blocks[r101].P_op_bar = 25.0      # 25 bar, presión moderada
+
+        # ---- Streams ----
+        # Basis: 1000 tm/año CH4 puro.  Para S/C=3 molar:
+        #   moles vapor = 3 · moles CH4
+        #   masa  vapor = 3 · (18.015/16.04) · masa CH4 = 3.37 · masa CH4
+        #   → vapor = 3370 tm/año
+        # Total mix = 4370 tm/año (conservación a través del reactor).
+        # Después del KO drum a ~40°C, el agua condensa y se separa.
+
+        # Feed CH4 (asumimos gas natural ≈ 100% metano para el ejemplo)
+        self._add_example_stream(tk_ch4, m101, "S-CH4", 1000, role="feed",
+                                  src_port="salida", dst_port="entrada1",
+                                  price=120.0, T=25,
+                                  main_component="methane", phase="gas")
+        # Vapor de proceso a alta T (sale de un boiler upstream, no
+        # modelamos el boiler para no complicar)
+        self._add_example_stream(tk_steam, m101, "S-vapor", 3370, role="feed",
+                                  src_port="salida", dst_port="entrada2",
+                                  price=12.0, T=200,
+                                  main_component="water", phase="vapor")
+        # Mezcla → precalentador
+        self._add_example_stream(m101, f101, "S-mix",
+                                  src_port="salida", dst_port="alimentacion",
+                                  T=180,
+                                  composition={"methane": 0.2289, "water": 0.7711},
+                                  main_component="water", phase="vapor")
+        # Mezcla precalentada → reactor (T elevada por el horno)
+        self._add_example_stream(f101, r101, "S-precal",
+                                  src_port="salida", dst_port="alimentacion",
+                                  T=600,                  # 873 K, entra al reactor
+                                  composition={"methane": 0.2289, "water": 0.7711},
+                                  main_component="water", phase="vapor")
+        # Salida del reactor: SYNGAS CRUDO.
+        # NO declaramos composición ni mass_flow — el solver Capa 4
+        # los computa.  T = T_op del reactor (1100 K = 827°C).
+        self._add_example_stream(r101, e101, "S-syngas-hot",
+                                  src_port="producto", dst_port="proceso_in",
+                                  T=827,                  # = T_op_K - 273
+                                  main_component="hydrogen", phase="gas")
+        # Syngas enfriado (parcialmente condensado)
+        self._add_example_stream(e101, v101, "S-syngas-cool",
+                                  src_port="proceso_out", dst_port="alimentacion",
+                                  T=40,                   # cerca del rocío del agua
+                                  main_component="water", phase="two_phase")
+        # KO drum: vapor (syngas seco) → tanque producto
+        # A 1100K/25bar el equilibrio da ~59% mass de agua.  Después
+        # del KO drum a 40°C ~todo el agua condensa.  Syngas seco
+        # ≈ 4370 × 0.408 = 1783 tm/año (CH4 + CO + H2 + CO2).
+        self._add_example_stream(v101, tk_syn, "S-syngas",  1783, role="product",
+                                  src_port="vapor", dst_port="entrada",
+                                  price=180.0, T=40,
+                                  composition={"methane": 0.288, "co": 0.266,
+                                                "hydrogen": 0.118, "co2": 0.330},
+                                  main_component="hydrogen", phase="gas")
+        # KO drum: líquido (agua) → tanque agua.  mass_flow se DEDUCE
+        # del balance: 4370 - 1783 = 2587 tm/año.
+        self._add_example_stream(v101, tk_h2o, "S-condensado", role="product",
+                                  src_port="liquido", dst_port="entrada",
+                                  price=2.0, T=40,
+                                  main_component="water", phase="liquid",
+                                  composition={"water": 1.0})
+
+        # ---- Duties: el solver Capa 4 setea heat_of_reaction de R-101
+        # automáticamente desde Σξ·ΔH(T).  El precalentador F-101 y
+        # el cooler E-101 se infieren por balance de energía. ----
+        from flowsheet_solver import auto_set_duties_from_thermo
+        auto_set_duties_from_thermo(self.fs)
+
+        # OPEX extras: catalizador NiO/Al2O3 (vida ~5 años)
+        self._add_example_extra("Catalizador NiO/Al2O3 (SMR)",
+                                 flowrate=3, price=25_000.0,
+                                 stream="Consumables")
+        self._add_example_extra("Catalizador Fe2O3/Cr2O3 (HT-WGS)",
+                                 flowrate=2, price=8_000.0,
+                                 stream="Consumables")
+
     def open_json(self):
         path = filedialog.askopenfilename(
             title="Abrir diagrama",

@@ -103,6 +103,12 @@ class SolverResult:
     unresolved_streams: List[str]           = field(default_factory=list)
     mass_balance_errors: List[str]          = field(default_factory=list)
     energy_balance_errors: List[str]        = field(default_factory=list)
+    # Warnings informativos (no afectan success):
+    #   - T computada vs declarada difiere pero ambas razonables
+    #     (probable cambio de fase parcial, ΔH_vap o ΔH_rxn que el
+    #      modelo Cp simple no captura).  El solver respeta la T
+    #      declarada del user.
+    energy_warnings:     List[str]          = field(default_factory=list)
     cycles_detected:    List[List[str]]     = field(default_factory=list)
     recycle_solutions:  List[RecycleSolution] = field(default_factory=list)
 
@@ -155,6 +161,12 @@ class SolverResult:
             lines.append(f"\nBalance de energía con error:")
             for e in self.energy_balance_errors:
                 lines.append(f"  · {e}")
+
+        if self.energy_warnings:
+            lines.append(f"\nWarnings de energía (no críticos, "
+                          f"{len(self.energy_warnings)}):")
+            for w in self.energy_warnings:
+                lines.append(f"  · {w}")
 
         return "\n".join(lines)
 
@@ -1118,15 +1130,22 @@ def solve_equilibrium_reactors(fs):
                          f"(rxns={b.reactions}, T={T_K:.0f}K, P={b.P_op_bar}bar).")
             continue
 
-        # Aplicar resultados a los outlets (todos comparten composición;
-        # mass_flow se distribuye según fracción declarada o se reparte
-        # uniformemente).
+        # Aplicar resultados a los outlets.  En reactores de equilibrio
+        # Capa 4 la composición de salida ESTÁ DETERMINADA por la termo
+        # — sobreescribimos siempre, ignorando composition_locked.
+        # (composition_locked en outputs de reactor pierde sentido: si
+        # el user quiere otra composición, debe vaciar block.reactions
+        # y declarar todo manual.)
+        # Excepción: outlets con role=='product' que ya tengan composition
+        # explícita la respetamos como hint estequiométrico DOWNSTREAM
+        # (e.g. para un KO drum cuya separación es declarada por el user).
         out_comp = res['outlet_composition']
         for s_out in outs:
-            if not _is_comp_locked(s_out):
-                s_out.composition = dict(out_comp)
-                if not s_out.main_component and out_comp:
-                    s_out.main_component = max(out_comp, key=out_comp.get)
+            if s_out.role == "product" and s_out.composition:
+                continue   # respetamos override en outputs declarados
+            s_out.composition = dict(out_comp)
+            if out_comp:
+                s_out.main_component = max(out_comp, key=out_comp.get)
 
         # heat_of_reaction se computa SIEMPRE desde el solver de
         # equilibrio (no hay flag de lock para este campo todavía;
@@ -1528,9 +1547,19 @@ def solve(fs, max_iter=MAX_ITER):
     if skipped_temp:
         seen = set()
         for msg in skipped_temp:
-            if msg not in seen:
+            if msg in seen:
+                continue
+            seen.add(msg)
+            # Distinguir errores reales de warnings:
+            # - "fuera de rango físico" → ERROR (T absurda, indica
+            #   que el modelo Cp simple no captura algo serio).
+            # - "T calc... pero T declarada..." → WARNING (informativo:
+            #   probable cambio de fase o ΔH_rxn que el solver no
+            #   captura; se respeta la T del user).
+            if "fuera de rango físico" in msg:
                 result.energy_balance_errors.append(msg)
-                seen.add(msg)
+            else:
+                result.energy_warnings.append(msg)
 
     # 4. Validación + listado de unresolved
     for s in fs.streams.values():
