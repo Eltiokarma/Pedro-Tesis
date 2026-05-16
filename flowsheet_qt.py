@@ -1933,6 +1933,10 @@ class StreamItem(QGraphicsPathItem):
         # al final).  QGraphicsPolygonItems separados, z entre línea
         # y label.  Se actualizan en update_path.
         self.direction_arrows: list = []
+        # Offset acumulado para animación — los chevrons se "mueven"
+        # a lo largo del path cuando el editor está en modo animado.
+        # Lo modula EditorMainWindow._animate_streams (timer).
+        self._anim_offset: float = 0.0
 
         # label estilo PFD industrial: pill (rounded rect blanco con
         # borde del color del stream) + nombre + flujo en mono.
@@ -2034,8 +2038,9 @@ class StreamItem(QGraphicsPathItem):
         if total < SPACING:
             return    # path corto: solo la flecha del final basta
         # Colocar chevrons cada SPACING desde 0.4·SPACING (offset
-        # para no chocar con la pill central)
-        offset_dist = SPACING * 0.5
+        # para no chocar con la pill central).  _anim_offset
+        # permite que se desplacen para animación de flujo.
+        offset_dist = (SPACING * 0.5 + self._anim_offset) % SPACING
         while offset_dist < total - 30:    # 30px margen al final
             # Encontrar el segmento donde cae offset_dist
             d_remaining = offset_dist
@@ -3147,6 +3152,40 @@ class FlowsheetMainWindow(QMainWindow):
         # Esc cancela conexión pendiente
         self._setup_shortcuts()
 
+        # Timer de animación de chevrons en streams (efecto de flujo).
+        # Cada 80ms avanza el offset de todos los streams.  Visual sutil
+        # estilo Aspen "siga el flujo".
+        from PySide6.QtCore import QTimer
+        self._anim_timer = QTimer(self)
+        self._anim_timer.setInterval(80)   # 12.5 fps, sutil
+        self._anim_timer.timeout.connect(self._tick_stream_animation)
+        self._anim_enabled = True
+        self._anim_timer.start()
+
+    def _tick_stream_animation(self):
+        """Avanza el offset de chevrons en cada stream y los re-renderiza.
+        Llamado por self._anim_timer cada 80ms."""
+        if not self._anim_enabled:
+            return
+        STEP = 3.0   # px por frame
+        for sid, item in self.scene.stream_items.items():
+            item._anim_offset = (item._anim_offset + STEP) % 130.0
+            # Solo re-dibujar chevrons (no recalcular path completo)
+            pts = getattr(item, '_last_pts', None)
+            if pts:
+                item._draw_direction_arrows(pts)
+
+    def toggle_animation(self, enabled: bool):
+        """Activa/desactiva animación de chevrons (toolbar toggle)."""
+        self._anim_enabled = enabled
+        if not enabled:
+            # Reset offsets a 0 para que queden quietos
+            for sid, item in self.scene.stream_items.items():
+                item._anim_offset = 0.0
+                pts = getattr(item, '_last_pts', None)
+                if pts:
+                    item._draw_direction_arrows(pts)
+
     def _setup_shortcuts(self):
         from PySide6.QtGui import QShortcut
         # navegación / archivo
@@ -3311,6 +3350,15 @@ class FlowsheetMainWindow(QMainWindow):
         paper_act.setIcon(_mk("act-frame-pfd", color=_ICON_COLOR, size=20))
         tb.addAction(paper_act)
         self._paper_action = paper_act
+        # toggle de animación de flujo (chevrons que avanzan)
+        anim_act = QAction("Anim. flujo", self)
+        anim_act.setCheckable(True)
+        anim_act.setChecked(True)
+        anim_act.setToolTip("Activar/desactivar animación de flechas\n"
+                              "direccionales en los streams.")
+        anim_act.setIcon(_mk("sim-active", color=_ICON_COLOR, size=20))
+        anim_act.triggered.connect(self.toggle_animation)
+        tb.addAction(anim_act)
         add_btn("Calcular",        self.action_compute,           "sim-refresh")
         add_btn("Análisis económico →", self.action_launch_analysis, "an-case-study")
         tb.addSeparator()
