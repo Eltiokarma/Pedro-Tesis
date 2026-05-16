@@ -67,6 +67,12 @@ class ComponentThermo:
     dh_f_liq_kJ_mol: Optional[float] = None
     # Calidad de la data
     quality: str = ""              # 'NIST', 'DIPPR', 'FIT', 'Joback', 'estim'
+    # Override de densidad (Capa 7) — si vienen de la segunda db de
+    # densidades experimentales, calibran Spencer-Danner-Yamada para
+    # matchear un punto experimental.
+    rho_ref_kg_m3: Optional[float] = None   # densidad experimental
+    rho_ref_T_C:   Optional[float] = None   # T del punto experimental
+    z_ra_override: Optional[float] = None   # Z_RA pre-calibrado
 
     # ---- Métodos ----
     def cp_J_mol_K(self, T_K: float, phase: str = "liquid") -> Optional[float]:
@@ -129,6 +135,71 @@ class ComponentThermo:
             return None
         # kJ/mol ÷ MW(g/mol) = kJ/g = kJ/kg (el factor 1000 cancela)
         return dh_kJ_mol * 1000.0 / self.mw
+
+    # --- Capa 7: densidad líquida (Spencer-Danner-Rackett) ---
+    def density_kg_m3(self, T_C: float) -> Optional[float]:
+        """Densidad del líquido saturado a T (°C), en kg/m³.
+
+        Ecuación de Spencer-Danner (Rackett modificada):
+            V_sat = (R·Tc/Pc) · Z_RA ^ [1 + (1 - Tr)^(2/7)]
+            ρ_L  = MW / V_sat
+        Z_RA = 0.29056 - 0.08775·ω   (Spencer-Danner)
+
+        Requiere Tc, Pc, ω, MW. Devuelve None si falta algo.
+
+        Precisión típica:
+          · Hidrocarburos no polares: 1-3% error.
+          · Polares ligeros (alcoholes): 3-7% error.
+          · Agua / ácidos / aminas (puente H fuerte): hasta 15% error
+            — Rackett subestima por no capturar bien el puente H.
+
+        Para T > Tc, devuelve None (no hay líquido saturado).
+
+        Calibración Spencer-Danner-Yamada (cuando hay data experimental):
+            Si rho_ref_kg_m3 + rho_ref_T_C están definidos (vienen de la
+            segunda db de densidades experimentales), se recalcula un
+            Z_RA "efectivo" que matchea ese punto exacto.  Esto baja
+            errores de 12% → <2% para agua, alcoholes, etc.
+        """
+        if (self.tc_c is None or self.pc_bar is None
+                or self.mw <= 0):
+            return None
+        T_K = T_C + 273.15
+        Tc_K = self.tc_c + 273.15
+        if T_K >= Tc_K:
+            return None   # supercrítico, no hay líquido
+        Pc_Pa = self.pc_bar * 1e5
+        Tr = T_K / Tc_K
+
+        # --- Determinar Z_RA: override, calibrado o calculado de ω ---
+        if self.z_ra_override is not None:
+            Z_RA = self.z_ra_override
+        elif (self.rho_ref_kg_m3 is not None
+                and self.rho_ref_T_C is not None
+                and self.rho_ref_kg_m3 > 0):
+            # Backsolve Z_RA del punto experimental (Spencer-Danner-Yamada)
+            T_ref_K = self.rho_ref_T_C + 273.15
+            Tr_ref = T_ref_K / Tc_K
+            if Tr_ref >= 1.0:
+                return None
+            mw_kg_mol_ = self.mw / 1000.0
+            V_ref = mw_kg_mol_ / self.rho_ref_kg_m3      # m³/mol
+            base = V_ref * Pc_Pa / (R_GAS * Tc_K)
+            exp_ref = 1.0 + (1.0 - Tr_ref) ** (2.0 / 7.0)
+            if base <= 0 or exp_ref <= 0:
+                return None
+            Z_RA = base ** (1.0 / exp_ref)
+        else:
+            if self.omega is None:
+                return None
+            Z_RA = 0.29056 - 0.08775 * self.omega   # Spencer-Danner default
+        if Z_RA <= 0:
+            return None
+
+        exponent = 1.0 + (1.0 - Tr) ** (2.0 / 7.0)
+        V_sat = (R_GAS * Tc_K / Pc_Pa) * (Z_RA ** exponent)   # m³/mol
+        mw_kg_mol = self.mw / 1000.0
+        return mw_kg_mol / V_sat   # kg/m³
 
 
 # ======================================================
@@ -242,6 +313,26 @@ def _parse_db() -> Dict[str, ComponentThermo]:
         m = re.search(r"dH_f_liq_298K\s*=\s*([\-\d.]+)", body)
         if m: comp.dh_f_liq_kJ_mol = float(m.group(1))
 
+        # Capa 7 — densidad experimental opcional (segunda db).
+        # Formato A (dos líneas):
+        #     rho_ref_kg_m3 = 997.0
+        #     rho_ref_T_C   = 25
+        # Formato B (una línea, más compacto):
+        #     rho_ref = 997.0 kg/m3 @ 25 °C
+        # Formato C (Z_RA pre-calibrado):
+        #     z_ra = 0.2374
+        m = re.search(r"rho_ref_kg_m3\s*=\s*([\d.]+)", body)
+        if m: comp.rho_ref_kg_m3 = float(m.group(1))
+        m = re.search(r"rho_ref_T_C\s*=\s*([\-\d.]+)", body)
+        if m: comp.rho_ref_T_C = float(m.group(1))
+        # Formato compacto (sobrescribe si presente)
+        m = re.search(r"rho_ref\s*=\s*([\d.]+)\s*kg/m[3³]?\s*@\s*([\-\d.]+)", body)
+        if m:
+            comp.rho_ref_kg_m3 = float(m.group(1))
+            comp.rho_ref_T_C   = float(m.group(2))
+        m = re.search(r"z_ra\s*=\s*([\d.]+)", body)
+        if m: comp.z_ra_override = float(m.group(1))
+
         out[name] = comp
 
     return out
@@ -336,6 +427,54 @@ def delta_h_vap_mix_kJ_kg(comp_dict: Dict[str, float], T_C: float) -> float:
         if v is not None:
             dh += w * v
     return dh
+
+
+def density_kg_m3(name: str, T_C: float) -> Optional[float]:
+    """Densidad líquida del componente puro a T (°C), kg/m³.
+    Spencer-Danner-Rackett. None si faltan Tc/Pc/ω."""
+    c = get(name)
+    if c is None:
+        return None
+    return c.density_kg_m3(T_C)
+
+
+def density_mix_kg_m3(comp_dict: Dict[str, float], T_C: float,
+                       phase: str = "liquid") -> Optional[float]:
+    """Densidad de la mezcla líquida a T (°C), kg/m³.
+
+    Usa la regla de volúmenes aditivos (Amagat — más rigurosa que
+    promedio ponderado de densidades cuando las densidades difieren):
+
+        1 / ρ_mix = Σᵢ wᵢ / ρᵢ
+
+    donde wᵢ es la fracción MÁSICA del componente i.  El razonamiento:
+    1 kg de mezcla ocupa Σᵢ wᵢ/ρᵢ m³, así ρ_mix = 1 / (Σᵢ wᵢ/ρᵢ).
+
+    Para gases la cosa cambia (ley de gas ideal o EOS), así que si
+    phase != 'liquid' devuelve None.  Densidad de gas se calcula en
+    otra función si hace falta.
+
+    Si algún componente no tiene Rackett (le faltan Tc/Pc/ω), se lo
+    omite de la suma (sus wᵢ se redistribuyen implícitamente).
+    """
+    if phase != "liquid":
+        return None
+    if not comp_dict:
+        return None
+    inv_rho_sum = 0.0
+    w_used = 0.0
+    for name, w in comp_dict.items():
+        if w <= 0:
+            continue
+        rho = density_kg_m3(name, T_C)
+        if rho is None or rho <= 0:
+            continue
+        inv_rho_sum += w / rho
+        w_used += w
+    if w_used <= 0 or inv_rho_sum <= 0:
+        return None
+    # Si solo algunos componentes tenían data, normalizo a esos
+    return w_used / inv_rho_sum
 
 
 def bubble_T_C(comp_dict: Dict[str, float], P_kPa: float = P_ATM_KPA,
