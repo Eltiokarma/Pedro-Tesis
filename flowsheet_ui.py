@@ -2898,6 +2898,282 @@ class FlowsheetEditor:
         self._add_example_extra("Levaduras (Saccharomyces)",
                                  flowrate=20, price=400.0, stream="Consumables")
 
+    def _example_industrial_complete(self):
+        """Planta industrial COMPLETA con servicios — flagship example.
+
+        Síntesis de metanol con BOP (Balance of Plant) industrial real:
+          · Sección 100: REACCIÓN (compresor + intercooler + mixer +
+            preheater + reactor equilibrio Cu/ZnO + WHB)
+          · Sección 200: SEPARACIÓN (flash flash NRTL + columna FUG MeOH/
+            water + condensador + KO drum post-condensador + reboiler
+            con steam-side)
+          · Sección 300: SERVICIOS (boiler con BFW + steam drum + header
+            MP + cooling water tower)
+          · Sección 400: TRATAMIENTO (purge gas, vent gas KO, blowdown,
+            water bottoms, condensate del ciclo de vapor)
+
+        Demuestra:
+          · CICLO DE VAPOR CERRADO: BFW → P-301 → F-301 (boiler) →
+            V-301 (drum) → TK-305 (header MP) → E-202 (reboiler shell
+            side) → TK-306 (condensate) — utility como stream real.
+          · KNOCK-OUT DRUM V-202 post-condensador para separar gases
+            co-destilados del producto metanol (vent gas → flare).
+          · Residuos visibles: S-purge, S-vent, S-blowdown, S-water.
+          · Layout con spacing 300 px ≥ 2× tamaño de bloque para que
+            los streams se vean bien separados y no se solapen.
+        """
+        # ============ SECCIÓN 100 — REACCIÓN ============
+        # Coords: y=300, spacing 300 px ≥ 2× tamaño de bloque (≈100 default)
+        # → streams largos y bien separados para lectura.
+        tk_fresh = self._add_example_block("TK-101","Storage tank — cone roof",
+                                              500.0,   60, 300)
+        k101 = self._add_example_block("K-101","Compressor — centrifugal",
+                                          1200.0,  360, 300)
+        e101 = self._add_example_block("E-101","Heat exch. — air cooler",
+                                          250.0,   660, 300)
+        m101 = self._add_example_block("M-101","Mixer",
+                                              5.0,  960, 300)
+        e102 = self._add_example_block("E-102","Heat exch. — floating head",
+                                          180.0,  1260, 300)
+        r101 = self._add_example_block("R-101","Reactor — jacketed non-agit.",
+                                          80.0,   1560, 300)
+        self.fs.blocks[r101].reactions = ["R005"]   # CO+2H2→CH3OH
+        self.fs.blocks[r101].reactor_mode = "equilibrium"
+        self.fs.blocks[r101].T_op_K = 525.0
+        self.fs.blocks[r101].P_op_bar = 80.0
+        # Post-reactor cooler (genera VAPOR HP en WHB)
+        e103 = self._add_example_block("E-103","Heat exch. — kettle reboiler",
+                                          400.0,  1860, 300)
+
+        # ============ SECCIÓN 200 — SEPARACIÓN ============
+        v201 = self._add_example_block("V-201","Vessel — vertical",
+                                          50.0,   2160, 300)
+        self.fs.blocks[v201].flash_active = True
+        self.fs.blocks[v201].flash_T_K = 313.15
+        self.fs.blocks[v201].flash_P_bar = 80.0
+        # Flare arriba de V-201 (recibe gases del flash y del KO drum)
+        tk_flare = self._add_example_block("TK-203","Storage tank — cone roof",
+                                              100.0, 2160,  60)
+        # Columna abajo de V-201
+        t201 = self._add_example_block("T-201","Tower (column shell)",
+                                          45.0,   2160, 720)
+        self.fs.blocks[t201].column_active = True
+        self.fs.blocks[t201].column_LK = "methanol"
+        self.fs.blocks[t201].column_HK = "water"
+        self.fs.blocks[t201].column_x_D_LK = 0.99
+        self.fs.blocks[t201].column_x_B_LK = 0.005
+        self.fs.blocks[t201].column_R_factor = 1.4
+        # Condensador del tope
+        e201 = self._add_example_block("E-201","Heat exch. — air cooler",
+                                          200.0,  2460, 540)
+        # Knock-out drum: separa gases co-destilados del MeOH líquido
+        # (en planta real es un vessel vertical con demister)
+        v202 = self._add_example_block("V-202","Vessel — vertical",
+                                          25.0,   2760, 540)
+        self.fs.blocks[v202].splitter_active = True
+        self.fs.blocks[v202].splitter_fractions = [0.85, 0.15]
+        # Producto metanol (líquido limpio post-KO)
+        tk_meoh = self._add_example_block("TK-201","Storage tank — floating roof",
+                                            800.0, 3060, 540)
+        # Reboiler de la cola — tendrá 4 ports (proceso + steam side)
+        e202 = self._add_example_block("E-202","Heat exch. — kettle reboiler",
+                                          250.0,  2460, 900)
+        # Producto agua (descarga)
+        tk_h2o = self._add_example_block("TK-202","Storage tank — cone roof",
+                                           300.0, 2760, 900)
+        # Tanque de condensado (recupera el vapor que condensó en E-202;
+        # en planta real se bombea de vuelta a TK-301 cerrando lazo BFW)
+        tk_cond = self._add_example_block("TK-306","Storage tank — cone roof",
+                                              400.0, 3060, 900)
+
+        # ============ SECCIÓN 300 — SERVICIOS ============
+        # Ciclo de vapor (y=1200, spacing 300 px)
+        tk_bfw = self._add_example_block("TK-301","Storage tank — cone roof",
+                                            600.0,   60,1200)
+        p301 = self._add_example_block("P-301","Pump — centrifugal",
+                                          10.0,   360,1200)
+        self.fs.blocks[p301].efficiency = 0.75
+        boil = self._add_example_block("F-301","Fired heater — non-reformer",
+                                          12000.0, 660,1200)
+        v_steam = self._add_example_block("V-301","Vessel — horizontal",
+                                              100.0, 960,1200)
+        tk_blowdown = self._add_example_block("TK-302","Storage tank — cone roof",
+                                                  50.0, 960,1440)
+        # Header de vapor MP — alimenta a E-202 como utility (ciclo cerrado)
+        tk_steam = self._add_example_block("TK-305","Storage tank — cone roof",
+                                              200.0,1260,1200)
+
+        # Cooling tower loop (y=1560)
+        tk_cw = self._add_example_block("TK-303","Storage tank — cone roof",
+                                            500.0,   60,1560)
+        p302 = self._add_example_block("P-302","Pump — centrifugal",
+                                          10.0,   360,1560)
+        self.fs.blocks[p302].efficiency = 0.75
+        tk_cwret = self._add_example_block("TK-304","Storage tank — cone roof",
+                                              300.0, 660,1560)
+
+        # ============ STREAMS — PROCESO PRINCIPAL ============
+        # Feed fresh syngas
+        # Syngas industrial real lleva ~5% vapor de agua (inyectado río
+        # arriba para shift/WGS o como subproducto del reformado).  Se
+        # comporta como inerte en R005 pero permite que T-201 separe
+        # MeOH/H2O cuando el reactor alcanza equilibrio.
+        self._add_example_stream(tk_fresh, k101, "S-fresh", 50000, role="feed",
+                                  src_port="salida", dst_port="succion",
+                                  price=180.0, T=25,
+                                  composition={"co": 0.38, "hydrogen": 0.52,
+                                                 "methane": 0.05,
+                                                 "water": 0.05},
+                                  phase="gas")
+        # Post-compresor (T sube a 200°C, ΔP=80 bar)
+        self._add_example_stream(k101, e101, "S-1", 50000,
+                                  src_port="descarga", dst_port="proceso_in",
+                                  T=200, phase="gas")
+        # Post-intercooler
+        self._add_example_stream(e101, m101, "S-2", 50000,
+                                  src_port="proceso_out", dst_port="entrada1",
+                                  T=40, phase="gas")
+        # Mix → pre-heater
+        self._add_example_stream(m101, e102, "S-3",
+                                  src_port="salida", dst_port="tube_in",
+                                  T=80, phase="gas")
+        # Pre-heat → reactor
+        self._add_example_stream(e102, r101, "S-4",
+                                  src_port="tube_out", dst_port="alimentacion",
+                                  T=200, phase="gas")
+        # Reactor → WHB (waste heat boiler) — composición la calcula el solver
+        self._add_example_stream(r101, e103, "S-5",
+                                  src_port="producto", dst_port="liq_in",
+                                  T=252, phase="vapor")
+        # WHB → flash (enfriado)
+        self._add_example_stream(e103, v201, "S-6",
+                                  src_port="cond_out", dst_port="alimentacion",
+                                  T=40, phase="two_phase")
+        # Flash → líquido crudo (a columna).  Lock masa para cerrar el
+        # balance aun si NRTL no separa los gases sub-críticos a 80 bar.
+        self._add_example_stream(v201, t201, "S-crude", 20000,
+                                  src_port="liquido", dst_port="alimentacion",
+                                  T=40, phase="liquid")
+
+        # Columna → tope → condensador
+        self._add_example_stream(t201, e201, "S-vap",
+                                  src_port="vapor_tope", dst_port="shell_in",
+                                  T=65, phase="vapor")
+        # Condensador → KO drum (masa heredada del FUG, ≈19000 kg/h
+        # con gases co-destilados — el KO los separa)
+        self._add_example_stream(e201, v202, "S-MeOH-mix",
+                                  src_port="shell_out", dst_port="alimentacion",
+                                  T=40, phase="liquid")
+        # KO drum → tanque MeOH (líquido limpio, 85% del flujo)
+        self._add_example_stream(v202, tk_meoh, "S-MeOH", role="product",
+                                  src_port="liquido", dst_port="entrada",
+                                  price=520.0, T=40, phase="liquid",
+                                  composition={"methanol": 0.98, "water": 0.02})
+        # KO drum → flare (gases co-destilados, 15% del flujo)
+        self._add_example_stream(v202, tk_flare, "S-vent", role="waste",
+                                  src_port="vapor", dst_port="entrada",
+                                  price=0.0, T=40, phase="gas",
+                                  composition={"hydrogen": 0.55, "methane": 0.20,
+                                                 "co": 0.15, "methanol": 0.10})
+        # Columna → cola → reboiler (proceso side)
+        self._add_example_stream(t201, e202, "S-bot",
+                                  src_port="liquido_fondo", dst_port="liq_in",
+                                  T=100, phase="liquid")
+        # Reboiler proceso-side → tanque water (masa heredada del FUG,
+        # ≈950 kg/h del bottom de T-201, mayormente water)
+        self._add_example_stream(e202, tk_h2o, "S-water", role="waste",
+                                  src_port="cond_out", dst_port="entrada",
+                                  price=0.0, T=40, phase="liquid")
+
+        # Gases del flash → flare (planta real haría recycle 95% +
+        # purga 5%; acá linealizado para didáctica)
+        self._add_example_stream(v201, tk_flare, "S-purge", 30000, role="waste",
+                                  src_port="vapor", dst_port="entrada",
+                                  price=0.0, T=40, phase="gas",
+                                  composition={"co": 0.30, "hydrogen": 0.40,
+                                                 "methane": 0.20, "co2": 0.10})
+        # NOTA: en planta industrial real este flowsheet tendría además:
+        #   - K-202 compresor de recycle de gases hacia M-101
+        #   - V-203 splitter purga 5% / recycle 95% del syngas
+        # Aquí se linealiza (todo a flare) para evitar loops
+        # indeterminados sin tear-stream explícito.
+
+        # ============ STREAMS — SERVICIOS ============
+        # Boiler feed water
+        self._add_example_stream(tk_bfw, p301, "S-BFW-feed", 80000, role="feed",
+                                  src_port="salida", dst_port="succion",
+                                  price=1.5, T=25,
+                                  composition={"water": 1.0}, phase="liquid")
+        # BFW pumped to boiler
+        self._add_example_stream(p301, boil, "S-BFW",
+                                  src_port="descarga", dst_port="alimentacion",
+                                  T=30, phase="liquid",
+                                  composition={"water": 1.0})
+        # Boiler → drum vapor
+        self._add_example_stream(boil, v_steam, "S-steam-raw",
+                                  src_port="salida", dst_port="alimentacion",
+                                  T=250, phase="two_phase",
+                                  composition={"water": 1.0})
+        # Drum → blowdown (purga sólidos disueltos, ~2% del feed)
+        self._add_example_stream(v_steam, tk_blowdown, "S-blowdown", 1500,
+                                  role="waste",
+                                  src_port="liquido_fondo", dst_port="entrada",
+                                  price=0.0, T=100, phase="liquid",
+                                  composition={"water": 1.0})
+        # Drum → header MP (cierra V-301: 80000 = 1500 + 78500)
+        self._add_example_stream(v_steam, tk_steam, "S-MP-steam", 78500,
+                                  role="utility",
+                                  src_port="vapor", dst_port="entrada",
+                                  price=18.0, T=250, phase="vapor",
+                                  composition={"water": 1.0})
+        # ── CICLO DE VAPOR CERRADO ────────────────────────────
+        # Header MP → reboiler E-202 (utility, shell-side del kettle)
+        self._add_example_stream(tk_steam, e202, "S-MP-supply", 78500,
+                                  role="utility",
+                                  src_port="salida", dst_port="steam_in",
+                                  price=0.0, T=250, phase="vapor",
+                                  composition={"water": 1.0})
+        # Reboiler shell-side → tanque de condensado (en planta real
+        # vuelve a TK-301 cerrando el lazo BFW completamente; acá
+        # termina en TK-306 para evitar el SCC indeterminado)
+        self._add_example_stream(e202, tk_cond, "S-cond", 78500,
+                                  role="utility",
+                                  src_port="steam_out", dst_port="entrada",
+                                  price=0.0, T=140, phase="liquid",
+                                  composition={"water": 1.0})
+
+        # Cooling water loop
+        self._add_example_stream(tk_cw, p302, "S-CW-feed", 200000, role="feed",
+                                  src_port="salida", dst_port="succion",
+                                  price=0.05, T=25,
+                                  composition={"water": 1.0}, phase="liquid")
+        # CW pumped → return (loop simplificado; en planta real iría a cada HX)
+        self._add_example_stream(p302, tk_cwret, "S-CW-supply", 200000, role="utility",
+                                  src_port="descarga", dst_port="entrada",
+                                  T=30, phase="liquid",
+                                  composition={"water": 1.0})
+
+        # ============ DUTIES INFERIDOS ============
+        from flowsheet_solver import auto_set_duties_from_thermo
+        auto_set_duties_from_thermo(self.fs)
+
+        # ============ OPEX EXTRAS ============
+        self._add_example_extra("Catalizador Cu/ZnO/Al2O3 (MeOH)",
+                                 flowrate=5, price=22000.0,
+                                 stream="Consumables")
+        self._add_example_extra("Reposición de catalizador shift",
+                                 flowrate=2, price=12000.0,
+                                 stream="Consumables")
+        self._add_example_extra("Make-up BFW chemicals",
+                                 flowrate=200, price=80.0,
+                                 stream="Utilities")
+        self._add_example_extra("Tratamiento agua refrigeración",
+                                 flowrate=50, price=200.0,
+                                 stream="Utilities")
+        self._add_example_extra("Fuel gas (combustible boiler)",
+                                 flowrate=1500, price=150.0,
+                                 stream="Utilities")
+
     def open_json(self):
         path = filedialog.askopenfilename(
             title="Abrir diagrama",

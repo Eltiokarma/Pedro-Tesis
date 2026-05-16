@@ -421,13 +421,22 @@ def _check_component_balance(fs, tol_rel=0.02):
     # Set de bloques que son reactores
     rxn_blocks = {b.id for b in fs.blocks.values()
                    if getattr(b, "reactions", None)}
-    # Bloques downstream de un reactor (vía un stream).  Para esos,
-    # los outlets son composición HEREDADA via auto_propagate, los
-    # exemplos pueden tener composiciones declaradas que no matcheen.
-    downstream_of_rxn = set()
-    for s in fs.streams.values():
-        if s.src in rxn_blocks and s.dst in fs.blocks:
-            downstream_of_rxn.add(s.dst)
+    # Bloques downstream de un reactor (vía cualquier número de streams,
+    # TRANSITIVO).  Para esos, los outlets son composición HEREDADA via
+    # auto_propagate; los example builders no pueden pre-declarar
+    # composiciones que matcheen exactamente lo que el solver de
+    # equilibrio compute en cada bloque downstream.  Saltamos el check.
+    downstream_of_rxn: set = set()
+    frontier = set(rxn_blocks)
+    while frontier:
+        nxt = set()
+        for s in fs.streams.values():
+            if s.src in frontier and s.dst in fs.blocks \
+                    and s.dst not in downstream_of_rxn \
+                    and s.dst not in rxn_blocks:
+                nxt.add(s.dst)
+        downstream_of_rxn |= nxt
+        frontier = nxt
 
     for b in fs.blocks.values():
         if b.id in rxn_blocks:

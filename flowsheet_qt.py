@@ -3673,6 +3673,12 @@ class FlowsheetMainWindow(QMainWindow):
         examples_menu.addAction(_mk("eq-pump", color="#1565c0", size=18) or QIcon(),
             "Planta hidráulica con auto-sizing de bomba",
             make_loader("hydraulic"))
+        examples_menu.addSeparator()
+        # ⭐ Flagship example
+        _ic_flag = _mk("an-case-study", color="#e65100", size=18) or QIcon()
+        examples_menu.addAction(_ic_flag,
+            "⭐ PLANTA INDUSTRIAL COMPLETA (MeOH + servicios + BOP)",
+            make_loader("industrial"))
         # Ícono del menú Ejemplos (templates)
         examples_act.setIcon(_mk("act-examples", color=_ICON_COLOR, size=20))
         examples_act.setMenu(examples_menu)
@@ -4034,6 +4040,10 @@ class FlowsheetMainWindow(QMainWindow):
             "hydraulic":    (TkEditor._example_hydraulic_plant,
                               "Planta hidráulica — bomba auto-sized",
                               "200 — Hidráulica", "PFD-HYD-001"),
+            "industrial":   (TkEditor._example_industrial_complete,
+                              "PLANTA INDUSTRIAL COMPLETA — MeOH + servicios + BOP",
+                              "100/200/300 — Plant Integration",
+                              "PFD-INDUSTRIAL-001"),
         }
         entry = builder_map.get(key)
         if entry is None:

@@ -56,6 +56,7 @@ def run_all_examples():
         '_example_smr_equilibrium', '_example_ethane_cracker_pfr',
         '_example_haber_recycle', '_example_distillation_ethanol_water',
         '_example_reactor_flash_column', '_example_hydraulic_plant',
+        '_example_industrial_complete',
     ]
     print(f"\n{'='*92}")
     print("VALIDACIÓN HEADLESS — todos los ejemplos del flowsheet")
