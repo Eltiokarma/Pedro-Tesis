@@ -1040,6 +1040,171 @@ class _GhostStreamHandle(QGraphicsEllipseItem):
         event.accept()
 
 
+class _EndpointHandle(QGraphicsEllipseItem):
+    """Handle draggable de un endpoint del stream (START o END).
+
+    A diferencia del waypoint handle (_StreamHandle), este puede
+    DESCONECTAR del bloque al ser arrastrado lejos de cualquier puerto,
+    o CONECTAR/RECONECTAR a un puerto distinto al soltarlo cerca.
+
+    role: 'start' (controla src/start_xy) | 'end' (controla dst/end_xy)
+    """
+
+    RADIUS_OUTER = 7
+    RADIUS_INNER = 4
+    SNAP_RADIUS  = 22.0     # px scene: rango de snap a un puerto
+
+    def __init__(self, stream_item: "StreamItem", role: str):
+        r = self.RADIUS_OUTER
+        super().__init__(-r, -r, 2*r, 2*r)
+        self._stream_item = stream_item
+        self._role = role           # 'start' | 'end'
+        self.setFlag(QGraphicsItem.ItemIsMovable, True)
+        self.setFlag(QGraphicsItem.ItemIsSelectable, True)
+        self.setFlag(QGraphicsItem.ItemSendsGeometryChanges, True)
+        # estilo: doble anillo (afuera blanco, dentro naranja) para
+        # distinguir endpoints de waypoints regulares (azules)
+        self.setBrush(QBrush(QColor("#ffffff")))
+        self.setPen(QPen(QColor("#ef6c00"), 2.0))   # naranja
+        self.setZValue(8.5)
+        self.setCursor(Qt.SizeAllCursor)
+        # snap target visual (círculo verde que aparece sobre el puerto
+        # al que vamos a snappear)
+        self._snap_marker = None
+
+        # Setear posición desde el modelo o desde el puerto
+        self._sync_pos_from_model()
+
+    def _sync_pos_from_model(self):
+        """Lee la pos actual del endpoint (puerto si conectado, xy si
+        flotante) y posiciona el handle ahí."""
+        si = self._stream_item
+        s  = si.model
+        if self._role == "start":
+            b = si.fs.blocks.get(s.src)
+            if b is not None:
+                _, x, y = si._resolve_port(b, s.src_port, "right")
+                self.setPos(x, y)
+            elif s.start_xy and len(s.start_xy) >= 2:
+                self.setPos(float(s.start_xy[0]), float(s.start_xy[1]))
+        else:
+            b = si.fs.blocks.get(s.dst)
+            if b is not None:
+                _, x, y = si._resolve_port(b, s.dst_port, "left")
+                self.setPos(x, y)
+            elif s.end_xy and len(s.end_xy) >= 2:
+                self.setPos(float(s.end_xy[0]), float(s.end_xy[1]))
+
+    def _find_snap_target(self, scene_pos: QPointF):
+        """Busca un puerto de un bloque cercano (dentro de SNAP_RADIUS).
+        Devuelve (block_id, port_name, port_xy) o None si no hay match.
+
+        Excluye el bloque que ya está conectado al OTRO endpoint del
+        stream (no permite conectar src y dst al mismo bloque) y
+        excluye puertos ya ocupados por otro stream — para no formar
+        conexiones que validate_connection considera 'puerto duplicado'.
+        """
+        si = self._stream_item
+        editor = getattr(si, "editor", None)
+        if editor is None:
+            return None
+        # bloque del OTRO endpoint (para no conectar a sí mismo)
+        s = si.model
+        other_bid = s.dst if self._role == "start" else s.src
+        best = None
+        best_d2 = self.SNAP_RADIUS ** 2
+        for bid, bitem in editor.block_items_iter():
+            if bid == other_bid:
+                continue
+            for port_name, port_ell in bitem.port_items.items():
+                # coords absolutas del puerto en la escena
+                p_scene = port_ell.mapToScene(port_ell.boundingRect().center())
+                dx = p_scene.x() - scene_pos.x()
+                dy = p_scene.y() - scene_pos.y()
+                d2 = dx*dx + dy*dy
+                if d2 < best_d2:
+                    best_d2 = d2
+                    best = (bid, port_name, p_scene)
+        return best
+
+    def _show_snap_marker(self, scene_pos: QPointF):
+        """Pinta un círculo verde sobre el puerto al que vamos a snappear,
+        para feedback visual durante el drag."""
+        from PySide6.QtWidgets import QGraphicsEllipseItem as _E
+        if self._snap_marker is None:
+            self._snap_marker = _E(-10, -10, 20, 20)
+            self._snap_marker.setBrush(QBrush(QColor(46, 125, 50, 80)))
+            self._snap_marker.setPen(QPen(QColor("#2e7d32"), 2.0))
+            self._snap_marker.setZValue(9)
+            if self.scene():
+                self.scene().addItem(self._snap_marker)
+        self._snap_marker.setPos(scene_pos)
+        self._snap_marker.setVisible(True)
+
+    def _hide_snap_marker(self):
+        if self._snap_marker is not None:
+            self._snap_marker.setVisible(False)
+
+    def itemChange(self, change, value):
+        if change == QGraphicsItem.ItemPositionChange and self.scene():
+            # Snap a grilla durante el drag (suave)
+            nx = round(value.x() / GRID_STEP) * GRID_STEP
+            ny = round(value.y() / GRID_STEP) * GRID_STEP
+            value = QPointF(nx, ny)
+        elif change == QGraphicsItem.ItemPositionHasChanged and self.scene():
+            # Durante el drag: actualizar xy y refrescar el path.
+            # Si hay puerto cerca, mostrar feedback verde.
+            si = self._stream_item
+            s = si.model
+            new_xy = [self.pos().x(), self.pos().y()]
+            if self._role == "start":
+                s.src = -1
+                s.src_port = ""
+                s.start_xy = new_xy
+            else:
+                s.dst = -1
+                s.dst_port = ""
+                s.end_xy = new_xy
+            # snap target visual
+            tgt = self._find_snap_target(QPointF(*new_xy))
+            if tgt is not None:
+                self._show_snap_marker(tgt[2])
+            else:
+                self._hide_snap_marker()
+            si.update_path(rebuild_handles=False)
+        return super().itemChange(change, value)
+
+    def mouseReleaseEvent(self, event):
+        """Al soltar el handle: si hay un puerto cerca, snap+conectar.
+        Si no, dejar flotante con las coords actuales."""
+        si = self._stream_item
+        s  = si.model
+        scene_pos = self.pos()    # ya está en scene coords (handle es scene-level)
+        tgt = self._find_snap_target(scene_pos)
+        if tgt is not None:
+            bid, port_name, p_scene = tgt
+            if self._role == "start":
+                s.src = bid
+                s.src_port = port_name
+                s.start_xy = []
+            else:
+                s.dst = bid
+                s.dst_port = port_name
+                s.end_xy = []
+            self.setPos(p_scene)
+        else:
+            # Mantener flotante: xy ya quedó guardado en itemChange
+            pass
+        self._hide_snap_marker()
+        # Refresh
+        si.update_path()
+        # Notificar al editor que algo cambió (mark_dirty)
+        editor = getattr(si, "editor", None)
+        if editor is not None and hasattr(editor, "_mark_dirty"):
+            editor._mark_dirty()
+        super().mouseReleaseEvent(event)
+
+
 class BlockItem(QGraphicsItemGroup):
     """Bloque del flowsheet renderizado en el canvas.
 
@@ -1461,21 +1626,35 @@ class StreamItem(QGraphicsPathItem):
         s = self.model
         b_src = self.fs.blocks.get(s.src)
         b_dst = self.fs.blocks.get(s.dst)
-        if b_src is None or b_dst is None:
+        # Endpoint START: si block_src existe, lo tomamos del puerto;
+        # si no, lo tomamos de s.start_xy (endpoint flotante).
+        if b_src is not None:
+            _, x1, y1 = self._resolve_port(b_src, s.src_port, "right")
+        elif s.start_xy and len(s.start_xy) >= 2:
+            x1, y1 = float(s.start_xy[0]), float(s.start_xy[1])
+        else:
+            return   # stream sin punto de inicio definido, no se puede dibujar
+        # Endpoint END
+        if b_dst is not None:
+            _, x2, y2 = self._resolve_port(b_dst, s.dst_port, "left")
+        elif s.end_xy and len(s.end_xy) >= 2:
+            x2, y2 = float(s.end_xy[0]), float(s.end_xy[1])
+        else:
             return
         # Si hay waypoints declarados, usar routing manual.
         # Si no, autoroute con _compute_polyline.
         if s.waypoints:
-            side1, x1, y1 = self._resolve_port(b_src, s.src_port, "right")
-            side2, x2, y2 = self._resolve_port(b_dst, s.dst_port, "left")
             pts = [x1, y1]
             for wp in s.waypoints:
                 pts.append(float(wp[0]))
                 pts.append(float(wp[1]))
             pts.append(x2)
             pts.append(y2)
-        else:
+        elif b_src is not None and b_dst is not None:
             pts = self._compute_polyline(b_src, b_dst, s)
+        else:
+            # Sin waypoints y al menos un endpoint flotante: línea recta
+            pts = [x1, y1, x2, y2]
         if not pts:
             return
         # Gap entre la flecha y el bloque destino: acortar el último
@@ -1566,23 +1745,36 @@ class StreamItem(QGraphicsPathItem):
     # ---------------------------------------------------
 
     def _rebuild_handles(self):
-        """Recrea los handles de waypoints.  Solo visibles cuando el
+        """Recrea los handles del stream.  Solo visibles cuando el
         stream está seleccionado.
 
-        · Si model.waypoints está poblado: handles reales draggables
-          (azul sólido, snap a grilla).
-        · Si no: handles fantasma en los bend points del auto-route
-          (azul translúcido).  Click → bakea los bends en waypoints
-          y aparecen handles reales.
+        Tres tipos:
+          1. _EndpointHandle (naranja, doble anillo) en start y end —
+             draggable para desconectar del bloque o re-conectar a otro
+             puerto cercano (snap radius ~22px).
+          2. _StreamHandle (azul sólido) en cada waypoint declarado.
+          3. _GhostStreamHandle (azul translúcido) en bend points del
+             auto-route — click bakea el bend como waypoint editable.
         """
         scene = self.scene()
         for h in self._handles:
             if scene is not None and h.scene() is scene:
                 scene.removeItem(h)
+            # también remover snap_marker auxiliar de _EndpointHandle
+            sm = getattr(h, "_snap_marker", None)
+            if sm is not None and scene is not None and sm.scene() is scene:
+                scene.removeItem(sm)
         self._handles.clear()
 
         if not self.isSelected() or scene is None:
             return
+
+        # Endpoints SIEMPRE (start y end) — son la novedad principal
+        for role in ("start", "end"):
+            h = _EndpointHandle(self, role)
+            scene.addItem(h)
+            self._handles.append(h)
+
         if self.model.waypoints:
             for i in range(len(self.model.waypoints)):
                 h = _StreamHandle(self, i)

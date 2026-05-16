@@ -1576,7 +1576,12 @@ def solve(fs, max_iter=MAX_ITER):
                 result.energy_warnings.append(msg)
 
     # 4. Validación + listado de unresolved
+    #    Streams con endpoint flotante (src=-1 o dst=-1) se skipean —
+    #    son borradores no conectados, no entran en ningún balance ni
+    #    se reportan como problema.
     for s in fs.streams.values():
+        if s.src not in fs.blocks or s.dst not in fs.blocks:
+            continue
         if s.mass_flow <= 0:
             result.unresolved_streams.append(s.name)
     result.mass_balance_errors    = _check_mass_balance(fs)

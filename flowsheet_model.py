@@ -186,6 +186,20 @@ class Stream:
     #   src_port → waypoints[0] → … → waypoints[N] → dst_port
     waypoints: List[List[float]] = field(default_factory=list)
 
+    # ---- ENDPOINTS FLOTANTES (streams desconectados) ----
+    # Convención:
+    #   src == -1  ⇒  endpoint START desconectado, usa start_xy
+    #   dst == -1  ⇒  endpoint END desconectado,   usa end_xy
+    # Cuando un endpoint está flotante, el solver SKIPEA el stream del
+    # balance de masa (no entra en Σ in ni Σ out de ningún bloque).
+    # El stream se sigue mostrando en la UI con status 'unrun' (azul
+    # punteado).  Útil para borradores o conexiones pendientes durante
+    # la edición.
+    # Si src != -1 (conectado), start_xy se ignora y la posición se
+    # calcula del puerto del bloque.  Lo mismo end_xy.
+    start_xy: List[float] = field(default_factory=list)  # [x,y] o []
+    end_xy:   List[float] = field(default_factory=list)  # [x,y] o []
+
     # caches del canvas Tk
     canvas_line:    Optional[int] = field(default=None, repr=False)
     canvas_label:   Optional[int] = field(default=None, repr=False)
