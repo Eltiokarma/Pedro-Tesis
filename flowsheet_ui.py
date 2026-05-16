@@ -2936,7 +2936,7 @@ class FlowsheetEditor:
         e101 = self._add_example_block("E-101","Heat exch. — air cooler",
                                           250.0,   660, 300)
         # Mixer (fresh + recycle de syngas)
-        m101 = self._add_example_block("M-101","Mixer",
+        m101 = self._add_example_block("M-101","Mixer — static",
                                               5.0,  960, 300)
         # K-202 — compresor de RECYCLE (sube P de la corriente de
         # gases sin reaccionar después del flash hasta P de M-101).
@@ -3238,7 +3238,7 @@ class FlowsheetEditor:
         tk_reac  = self._add_example_block("TK-103","Storage tank — cone roof",
                                              100.0,    60, 960)
         # Saturador / mezclador: sal + agua + recycle
-        m101     = self._add_example_block("M-101","Mixer",
+        m101     = self._add_example_block("M-101","Mixer — static",
                                                 5.0,  360, 480)
 
         # ============ PURIFICACIÓN ============
@@ -3262,7 +3262,7 @@ class FlowsheetEditor:
         # Acidificación con HCl (pH ≈ 2.7 antes de celda)
         tk_hcl   = self._add_example_block("TK-105","Storage tank — cone roof",
                                              100.0, 1260, 240)
-        m102     = self._add_example_block("M-102","Mixer",
+        m102     = self._add_example_block("M-102","Mixer — static",
                                                 5.0, 1560, 480)
 
         # ============ CELDA DE ELECTRÓLISIS ============
@@ -3519,7 +3519,7 @@ class FlowsheetEditor:
         k101     = self._add_example_block("K-101","Compressor — centrifugal",
                                             1500.0,  360, 600)
         # Mezclador NH3 + aire (10% NH3 molar)
-        m101     = self._add_example_block("M-101","Mixer",
+        m101     = self._add_example_block("M-101","Mixer — static",
                                                 5.0,  660, 450)
 
         # ============ SECCIÓN 200 — COMBUSTIÓN + RECUP CALOR ============
@@ -3819,7 +3819,7 @@ class FlowsheetEditor:
                                             1200.0,   60, 480)
         tk_agua  = self._add_example_block("TK-102","Storage tank — cone roof",
                                              500.0,   60, 720)
-        m101     = self._add_example_block("M-101","Mixer",
+        m101     = self._add_example_block("M-101","Mixer — static",
                                                 5.0,  360, 600)
         # Desaladora electrostática
         v101     = self._add_example_block("V-101","Vessel — horizontal",

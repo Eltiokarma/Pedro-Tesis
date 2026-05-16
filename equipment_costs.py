@@ -309,6 +309,131 @@ LANG_DEFAULT = "Fluid processing"
 
 
 # ======================================================
+# BARE MODULE FACTORS (Turton App A.5)
+# ======================================================
+# FBM = B1 + B2·FM·FP — acá usamos valores típicos a CS / atm
+# como base.  FP se computa aparte de la presión de operación.
+# FM=1 (carbon steel) por default; user puede override por material
+# de construcción si tiene servicio corrosivo (Cl2, HNO3, etc.).
+FBM_BY_CATEGORIA = {
+    # Keys exactos como aparecen en EQUIPMENT_DATA["categoria"]
+    "Heat exchangers":     3.17,   # shell & tube CS
+    "Fired heaters":       2.19,
+    "Pumps":               3.30,   # centrifugal CS
+    "Compressors":         2.70,   # motor-driven
+    "Reactors":            4.00,   # autoclave / jacketed CS
+    "Storage":             1.50,   # tanques cone/floating
+    "Vessels":             4.16,   # process vessels horiz/vert
+    "Trays / packing":     1.00,
+    "Mixers / splitters":  2.10,
+    "Solids / sep.":       2.50,   # filtros, ciclones, decantadores
+    "Fans / blowers":      2.40,
+    "Valves":              1.50,
+    "Utilities":           3.50,   # boiler, cooling tower
+    # Aliases por si el user usa nombres alt
+    "Towers":              4.16,
+    "Tanks":               1.50,
+    "Filters":             2.50,
+    "Dryers":              2.06,
+    "Evaporators":         2.45,
+    "Crystallizers":       2.06,
+    "Turbines":            6.10,
+}
+FBM_DEFAULT = 3.17     # fallback genérico (≈ HX)
+
+
+def bare_module_factor(eq_nombre, P_op_bar=1.0):
+    """Devuelve FBM corregido por presión para un equipo.
+
+    Usa la categoría del equipo (Turton App A.5 mean) y aplica un
+    factor de presión simplificado:
+      · vessels/towers/reactors:  FP_v = 1 + 0.0175·(P - 1)
+      · heat exchangers:          FP_hx = 1 + 0.012·(P - 1)
+      · otros (pumps, compres, tanks): no FP correction
+    Cap a P=200 bar (correlaciones Turton son válidas hasta ~150).
+
+    Es una APROXIMACIÓN — la Eq 7.5 de Turton tiene coeficientes
+    específicos por D, MoC, tipo de servicio; acá damos un primer
+    orden razonable para visualización en el xlsx de costing."""
+    spec = EQUIPMENT_DATA.get(eq_nombre, {})
+    cat  = spec.get("categoria", "")
+    fbm_base = FBM_BY_CATEGORIA.get(cat, FBM_DEFAULT)
+    p = max(1.0, min(200.0, float(P_op_bar)))
+    if cat in ("Vessels", "Towers", "Reactors"):
+        fp = 1.0 + 0.0175 * (p - 1.0)
+    elif cat == "Heat exchangers":
+        fp = 1.0 + 0.012 * (p - 1.0)
+    else:
+        fp = 1.0
+    return fbm_base * fp, fbm_base, fp
+
+
+def bare_module_cost(eq_nombre, S, P_op_bar=1.0, year_target=None):
+    """Costo del módulo desnudo (CBM) Turton = Cp × FBM.
+
+    Returns:
+        dict con Cp_target, FBM, FP, FBM_base, CBM, fuera_rango, ...
+
+    Si el equipo no está en EQUIPMENT_DATA (custom type, mock o
+    typo), devuelve costos cero con flag 'unknown'=True para no
+    romper el costing global.  El user ve el warning en el xlsx."""
+    if eq_nombre not in EQUIPMENT_DATA:
+        return {
+            "Cp_base": 0.0, "Cp_target": 0.0,
+            "year_base": 2001,
+            "year_target": year_target or 2001,
+            "cepci_factor": 1.0, "fuera_rango": False,
+            "S": S, "S_min": 0, "S_max": 0, "S_unit": "",
+            "FBM": 0.0, "FBM_base": 0.0, "FP": 1.0,
+            "CBM": 0.0, "unknown": True,
+        }
+    pc = purchased_cost(eq_nombre, S, year_target=year_target)
+    fbm, fbm_base, fp = bare_module_factor(eq_nombre, P_op_bar=P_op_bar)
+    cbm = pc["Cp_target"] * fbm
+    pc["FBM"]      = fbm
+    pc["FBM_base"] = fbm_base
+    pc["FP"]       = fp
+    pc["CBM"]      = cbm
+    pc["unknown"]  = False
+    return pc
+
+
+# ======================================================
+# COST OF MANUFACTURE — Turton Eq 8.2 (with depreciation)
+# ======================================================
+def cost_of_manufacture(FCI_usd, COL_usd, CUT_usd, CRM_usd, CWT_usd):
+    """Calcula COM (Cost of Manufacture) según Turton Eq 8.2:
+
+        COM_d  =  0.180·FCI + 2.73·COL + 1.23·(CUT + CRM + CWT)
+
+    Y la versión sin depreciación (COM):
+        COM    =  0.305·FCI + 2.73·COL + 1.23·(CUT + CRM + CWT)
+
+    Inputs todos en USD/año (excepto FCI que es one-time CAPEX).
+
+    Returns:
+        dict con COM_d, COM, breakdown por componente.
+    """
+    base = 1.23 * (CUT_usd + CRM_usd + CWT_usd)
+    labor_term = 2.73 * COL_usd
+    com_d  = 0.180 * FCI_usd + labor_term + base
+    com    = 0.305 * FCI_usd + labor_term + base
+    return {
+        "FCI":     FCI_usd,
+        "COL":     COL_usd,
+        "CUT":     CUT_usd,
+        "CRM":     CRM_usd,
+        "CWT":     CWT_usd,
+        "0.180·FCI": 0.180 * FCI_usd,
+        "0.305·FCI": 0.305 * FCI_usd,
+        "2.73·COL":  labor_term,
+        "1.23·(CUT+CRM+CWT)": base,
+        "COM_d":   com_d,   # con depreciación (recomendado)
+        "COM":     com,     # sin depreciación
+    }
+
+
+# ======================================================
 # CONSULTAS
 # ======================================================
 

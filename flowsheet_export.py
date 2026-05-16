@@ -36,18 +36,35 @@ import templates as tmpl
 # EQUIPOS DEL PFD
 # ======================================================
 
-def collect_equipment_rows(fs):
+def collect_equipment_rows(fs, year_target=2026):
     """Lista de dicts con la info de cada bloque del PFD, para
     escribir como pestaña 'Equipment' en el xlsx.
 
     Incluye specs operacionales (T_op, P_op, duty, ΔP, η) y de unit
-    op (reacciones, column LK/HK, flash T/P, splitter fractions) —
-    para que el analista económico vea TODO el contexto del diseño,
-    no solo el sizing nominal.
+    op (reacciones, column LK/HK, flash T/P, splitter fractions) +
+    COSTING TURTON por equipo individual (Cp escalado a year_target,
+    FBM con factor de presión, CBM = Cp × FBM).
+
+    El analista económico ve TODO el contexto del diseño y puede
+    identificar qué equipos dominan el capital sin recomputar nada.
     """
     rows = []
     for b in sorted(fs.blocks.values(), key=lambda b: b.name):
         spec = eq.EQUIPMENT_DATA.get(b.eq_type, {})
+        # Costing Turton individual
+        cp_usd, fbm, cbm = 0.0, 0.0, 0.0
+        fuera_rango = False
+        try:
+            p_op = float(getattr(b, "P_op_bar", 0.0) or 0.0) or 1.0
+            res = eq.bare_module_cost(b.eq_type, b.S, P_op_bar=p_op,
+                                       year_target=year_target)
+            cp_usd      = res["Cp_target"] * b.n
+            cbm         = res["CBM"] * b.n
+            fbm         = res["FBM"]
+            fuera_rango = res["fuera_rango"]
+        except Exception:
+            pass
+
         row = {
             "Tag":        b.name,
             "Type":       b.eq_type,
@@ -62,6 +79,11 @@ def collect_equipment_rows(fs):
             "η":          float(getattr(b, "efficiency", 0.0) or 0.0),
             "Reactions":  ",".join(getattr(b, "reactions", []) or []),
             "Heat source": str(getattr(b, "heat_source", "") or ""),
+            # ── Costing Turton (CEPCI year_target) ──
+            f"Cp USD ({year_target})":  cp_usd,
+            "FBM":                      fbm,
+            f"CBM USD ({year_target})": cbm,
+            "S fuera rango":            "⚠" if fuera_rango else "",
         }
         # Column specs (FUG-resueltos por solve_columns)
         if getattr(b, "column_active", False):
@@ -81,6 +103,130 @@ def collect_equipment_rows(fs):
             row["Splitter fracs"] = ",".join(f"{f:.3f}" for f in fracs)
         rows.append(row)
     return rows
+
+
+def compute_turton_costing(fs, df_variable, df_fixed, fci_musd,
+                            year_target=2026):
+    """Calcula resumen de costing tipo Turton para escribir como
+    pestaña 'Costing Turton' del xlsx.
+
+    Reúne:
+      · ΣCBM por categoría (capital bare module breakdown)
+      · CRM (Cost of Raw Materials) = Σ price·flowrate de Raw Materials
+      · CUT (Cost of Utilities)     = Σ de Utilities
+      · CWT (Cost of Waste Treatment) = Σ price·flowrate negativos
+                                         o positivos de Waste/Byproduct
+      · COL (Cost of Operating Labor) = del df_fixed
+      · COM_d / COM Turton Eq 8.2
+
+    Returns:
+        dict {summary, by_category, totals} listos para serializar.
+    """
+    # CBM agregado por categoría
+    by_cat = {}     # categoria → (cbm_usd, n_equipos)
+    sum_cp = 0.0
+    sum_cbm = 0.0
+    for b in fs.blocks.values():
+        spec = eq.EQUIPMENT_DATA.get(b.eq_type, {})
+        cat  = spec.get("categoria", "Otros")
+        p_op = float(getattr(b, "P_op_bar", 0.0) or 0.0) or 1.0
+        try:
+            res = eq.bare_module_cost(b.eq_type, b.S, P_op_bar=p_op,
+                                       year_target=year_target)
+            cp  = res["Cp_target"] * b.n
+            cbm = res["CBM"]      * b.n
+            by_cat.setdefault(cat, [0.0, 0])
+            by_cat[cat][0] += cbm
+            by_cat[cat][1] += 1
+            sum_cp  += cp
+            sum_cbm += cbm
+        except Exception:
+            continue
+
+    # CRM, CUT, CWT desde df_variable
+    crm = cut = cwt = 0.0
+    if df_variable is not None and not df_variable.empty:
+        for _, row in df_variable.iterrows():
+            stream = str(row.get("stream", "")).strip()
+            flow   = float(row.get("flowrate", 0.0) or 0.0)
+            price  = float(row.get("price usd/units", 0.0) or 0.0)
+            cost   = flow * price
+            if stream == "Raw Materials":
+                crm += cost
+            elif stream == "Utilities":
+                cut += cost
+            elif stream == "Waste / Byproduct":
+                # Convención: price>0 → byproduct vendible (resta como
+                # ingreso; en CWT contamos solo treatment cost positivo).
+                # Para simplicidad, tomamos |precio|·flow como overhead.
+                # Si el user pone price<0, eso ya cuenta como gasto.
+                cwt += abs(cost) if price < 0 else 0.0
+
+    # COL desde df_fixed (fila Labor)
+    col = 0.0
+    if df_fixed is not None and not df_fixed.empty \
+       and "Concept" in df_fixed.columns:
+        mask = df_fixed["Concept"].astype(str).str.strip() == "Labor"
+        if mask.any():
+            col = float(df_fixed.loc[mask, "Value"].iloc[0] or 0.0)
+
+    fci_usd = fci_musd * 1e6 if fci_musd else sum_cbm
+    com = eq.cost_of_manufacture(
+        FCI_usd=fci_usd, COL_usd=col,
+        CUT_usd=cut, CRM_usd=crm, CWT_usd=cwt,
+    )
+
+    # Build rows
+    rows = []
+    rows.append(("CAPITAL — Bare Module Cost by Category", "", ""))
+    for cat, (cbm, n) in sorted(by_cat.items(),
+                                   key=lambda kv: -kv[1][0]):
+        rows.append((f"  · {cat}", f"{n} equipo(s)",
+                      f"{cbm:>14,.0f} USD"))
+    rows.append(("  Σ Cp purchased (FOB)", "",
+                  f"{sum_cp:>14,.0f} USD"))
+    rows.append(("  Σ CBM bare module",    "",
+                  f"{sum_cbm:>14,.0f} USD"))
+    rows.append(("  FCI usado",            "",
+                  f"{fci_usd:>14,.0f} USD"))
+    rows.append(("", "", ""))
+    rows.append(("OPEX COMPONENTS (USD/year)", "", ""))
+    rows.append(("  CRM (Raw Materials)",   "",
+                  f"{crm:>14,.0f} USD/yr"))
+    rows.append(("  CUT (Utilities)",       "",
+                  f"{cut:>14,.0f} USD/yr"))
+    rows.append(("  CWT (Waste Treatment)", "",
+                  f"{cwt:>14,.0f} USD/yr"))
+    rows.append(("  COL (Operating Labor)", "",
+                  f"{col:>14,.0f} USD/yr"))
+    rows.append(("", "", ""))
+    rows.append(("COST OF MANUFACTURE (Turton Eq 8.2)", "", ""))
+    rows.append(("  0.180·FCI",               "",
+                  f"{com['0.180·FCI']:>14,.0f}"))
+    rows.append(("  2.73·COL",                "",
+                  f"{com['2.73·COL']:>14,.0f}"))
+    rows.append(("  1.23·(CUT+CRM+CWT)",       "",
+                  f"{com['1.23·(CUT+CRM+CWT)']:>14,.0f}"))
+    rows.append(("  COM_d (con depreciación)","",
+                  f"{com['COM_d']:>14,.0f} USD/yr"))
+    rows.append(("  COM   (sin depreciación)","",
+                  f"{com['COM']:>14,.0f} USD/yr"))
+    rows.append(("", "", ""))
+    rows.append(("Año CEPCI", "", str(year_target)))
+    rows.append(("Año base Turton", "", "2001 (CEPCI=397)"))
+
+    return {
+        "rows":       rows,
+        "by_category": by_cat,
+        "sum_cp":     sum_cp,
+        "sum_cbm":    sum_cbm,
+        "fci":        fci_usd,
+        "col":        col,
+        "crm":        crm,
+        "cut":        cut,
+        "cwt":        cwt,
+        "com":        com,
+    }
 
 
 def collect_stream_rows(fs):
@@ -324,7 +470,7 @@ def read_project_xlsx(path):
 # ======================================================
 
 def write_3sections_xlsx(path, df_capital, df_fixed, df_variable,
-                         equipment=None, streams=None):
+                         equipment=None, streams=None, costing=None):
     """Escribe un xlsx con las 3 secciones lado a lado:
       cols A-C  → Capital Costs
       col  D    → vacía
@@ -388,6 +534,19 @@ def write_3sections_xlsx(path, df_capital, df_fixed, df_variable,
                 if isinstance(v, float) and v == 0.0:
                     v = ""    # cell vacío en lugar de 0 ruidoso
                 ws_eq.cell(row=2 + i, column=j + 1, value=v)
+
+    if costing and costing.get("rows"):
+        ws_c = wb.create_sheet("Costing Turton")
+        ws_c.cell(row=1, column=1, value="Concepto")
+        ws_c.cell(row=1, column=2, value="Detalle")
+        ws_c.cell(row=1, column=3, value="Valor")
+        for i, (a, b, c) in enumerate(costing["rows"]):
+            ws_c.cell(row=2 + i, column=1, value=a)
+            ws_c.cell(row=2 + i, column=2, value=b)
+            ws_c.cell(row=2 + i, column=3, value=c)
+        ws_c.column_dimensions["A"].width = 38
+        ws_c.column_dimensions["B"].width = 18
+        ws_c.column_dimensions["C"].width = 28
 
     if streams:
         ws_s = wb.create_sheet("Streams")
@@ -560,9 +719,13 @@ def write_project_xlsx(path, fs, isbl, feeds, products, base_xlsx=None):
             ignore_index=True,
         )
 
-    # escribir xlsx con 3 secciones + pestañas Equipment y Streams
-    equipment_rows = collect_equipment_rows(fs)
+    # escribir xlsx con 3 secciones + pestañas Equipment, Streams,
+    # Costing Turton (resumen CBM por categoría + COM Eq 8.2)
+    equipment_rows = collect_equipment_rows(fs, year_target=2026)
     stream_rows    = collect_stream_rows(fs)
+    costing_data   = compute_turton_costing(
+        fs, df_variable, df_fixed, fci_musd=isbl, year_target=2026)
     write_3sections_xlsx(path, df_capital, df_fixed, df_variable,
                          equipment=equipment_rows,
-                         streams=stream_rows)
+                         streams=stream_rows,
+                         costing=costing_data)
