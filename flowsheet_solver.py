@@ -863,6 +863,11 @@ def auto_set_duties_from_thermo(fs, only_zero=False, respect_locks=True):
             continue
         if only_zero and b.duty != 0:
             continue
+        # Skipear reactores: su duty ya lo seteó solve_equilibrium_reactors
+        # (sea Q externo de horno isothermal, o 0 de adiabático).
+        # Sobreescribirlo aquí lleva a duties absurdos.
+        if getattr(b, "reactions", None):
+            continue
         d = infer_block_duty(fs, b)
         if d is None:
             continue
@@ -1218,12 +1223,108 @@ def solve_equilibrium_reactors(fs):
         if total > 0:
             agg = {k: v/total for k, v in agg.items()}
         # T de operación: explicit o promedio ponderado del inlet
-        T_K = b.T_op_K if b.T_op_K > 0 else (
-            sum(s.temperature * s.mass_flow for s in ins if s.mass_flow > 0)
-              / m_in_total + 273.15)
+        T_in_avg_K = (sum(s.temperature * s.mass_flow
+                            for s in ins if s.mass_flow > 0)
+                       / m_in_total + 273.15)
+        T_K = b.T_op_K if b.T_op_K > 0 else T_in_avg_K
         # mass_flow del flowsheet está en tm/año → kg/s
         from flowsheet_model import SEC_PER_YEAR, TM_TO_KG
         m_in_kg_s = m_in_total * TM_TO_KG / SEC_PER_YEAR
+
+        # CAPA 7 — REACTOR ADIABÁTICO:
+        # Si T_op_K = 0 (no isothermal) y el bloque tiene reactions,
+        # el solver itera T y composición acopladas:
+        #   T_out = T_in + (-Q_rxn) / (m·Cp_mix(T_avg))
+        # con Q_rxn > 0 endo → enfría; Q_rxn < 0 exo → calienta.
+        # En ese caso usamos T_in como T_op inicial y refinamos.
+        is_adiabatic = (not b.T_op_K or b.T_op_K < 100)
+        if is_adiabatic:
+            # T inicial = T promedio del input
+            T_K = T_in_avg_K
+            # Iterar T ↔ composición hasta convergencia
+            for adiab_it in range(8):
+                # Llamar al solver con T actual
+                mode = getattr(b, "reactor_mode", "equilibrium") or "equilibrium"
+                try:
+                    if mode == "equilibrium":
+                        res_iter = _rdb.solve_equilibrium_reactor_from_composition(
+                            rxn_ids=b.reactions, inlet_composition=agg,
+                            inlet_mass_kg_s=m_in_kg_s,
+                            T_K=T_K, P_bar=b.P_op_bar)
+                    elif mode in ("pfr", "cstr"):
+                        V_L = getattr(b, "reactor_volume_L", 0.0) or 0.0
+                        if V_L <= 0:
+                            break
+                        res_iter = _rdb.solve_kinetic_reactor_from_composition(
+                            mode=mode, rxn_ids=b.reactions,
+                            inlet_composition=agg, inlet_mass_kg_s=m_in_kg_s,
+                            T_K=T_K, P_bar=b.P_op_bar, V_reactor_L=V_L)
+                    else:
+                        break
+                except Exception:
+                    res_iter = None
+                if res_iter is None:
+                    break
+                # Cp promedio del input (kJ/kg·K).
+                # Para reactores adiabáticos, el feed casi siempre es
+                # gas (T > 100°C, presiones moderadas).  Forzamos
+                # phase='gas' al consultar Cp para evitar valores
+                # absurdos del Cp líquido extrapolado fuera de su rango.
+                cp_avg = 0.0; mw = 0.0
+                try:
+                    import thermo_db as _td_cp
+                    for s_in_ in ins:
+                        if s_in_.mass_flow <= 0: continue
+                        comp_in = s_in_.composition or (
+                            {s_in_.main_component: 1.0}
+                            if s_in_.main_component else {})
+                        # Phase: 'gas' si T > 80°C o phase declarado
+                        # contiene 'gas'/'vapor', sino respetar.
+                        ph = (s_in_.phase or "").lower()
+                        if "gas" in ph or "vap" in ph:
+                            use_phase = "gas"
+                        elif (s_in_.temperature + 273.15) > 353:
+                            use_phase = "gas"   # > 80°C → asumir vapor
+                        else:
+                            use_phase = "liquid"
+                        cp_i = _td_cp.cp_mix_kJ_kg_K(comp_in,
+                                                        T_K - 273.15,
+                                                        use_phase)
+                        if cp_i is None or cp_i <= 0 or cp_i > 50:
+                            # Fallback agua vapor / aire
+                            cp_i = 2.0 if use_phase == "gas" else 4.18
+                        cp_avg += cp_i * s_in_.mass_flow
+                        mw += s_in_.mass_flow
+                except ImportError:
+                    pass
+                if mw > 0:
+                    cp_avg /= mw
+                else:
+                    cp_avg = 2.0    # fallback ~ vapor genérico
+                # Q_rxn [kW] = res_iter['duty_kW'] (positivo endo)
+                Q_rxn_kW = res_iter.get('duty_kW', 0.0) or 0.0
+                # Adiabatic: T_out = T_in + (-Q_rxn)/(m·Cp)
+                # Q_rxn > 0 (endo): T baja → -Q_rxn negativo → ΔT<0
+                # Q_rxn < 0 (exo): T sube → -Q_rxn positivo → ΔT>0
+                delta_T = -Q_rxn_kW / (m_in_kg_s * cp_avg)
+                T_new = T_in_avg_K + delta_T
+                # Cap T en rango físico
+                T_new = max(min(T_new, 2500.0), 100.0)
+                if abs(T_new - T_K) < 2.0:
+                    T_K = T_new
+                    break
+                # Damping para estabilidad (50% del paso)
+                T_K = 0.5 * (T_K + T_new)
+            # Usar el res_iter de la última iter como res
+            res = res_iter if 'res_iter' in dir() else None
+            if res is None:
+                msgs.append(f"✗ Reactor adiabático {b.name}: no convergió T")
+                continue
+            # Marcar que el reactor es adiabático: duty externo = 0
+            b._adiabatic_T_final_K = T_K
+        else:
+            # Comportamiento isothermal (T_op_K declarado): igual que antes
+            T_K = b.T_op_K
 
         # Despacho según reactor_mode (Capas 4 vs 5):
         mode = getattr(b, "reactor_mode", "equilibrium") or "equilibrium"
@@ -1297,9 +1398,7 @@ def solve_equilibrium_reactors(fs):
         # no captura el T_op isothermal del reactor.
         from flowsheet_model import T_REF_C
         Q_rxn_kW = res['duty_kW']
-        T_in_avg_K = (sum(s.temperature * s.mass_flow
-                           for s in ins if s.mass_flow > 0)
-                       / m_in_total + 273.15)
+        # T_in_avg_K ya calculado arriba (en el setup del bloque)
         # Cp ponderado del input (kJ/kg·K)
         cp_in_avg = 0.0
         m_with_cp = 0.0
@@ -1315,24 +1414,26 @@ def solve_equilibrium_reactors(fs):
             cp_in_avg /= m_with_cp
         Q_sensible_kW = m_in_kg_s * cp_in_avg * (T_K - T_in_avg_K)
 
-        Q_total_kW = Q_sensible_kW + Q_rxn_kW
+        # Capa 7 — reactor ADIABÁTICO: no hay duty externo (Q_total=0).
+        # T_out se ajustó iterando hasta que Q_sensible compensa Q_rxn.
+        # Para isothermal (T_op_K declarado): Q_total = Q_sens + Q_rxn,
+        # el horno/jacket provee/extrae ese calor.
+        if is_adiabatic:
+            Q_total_kW = 0.0
+            adiab_tag = " [ADIABÁTICO]"
+        else:
+            Q_total_kW = Q_sensible_kW + Q_rxn_kW
+            adiab_tag = ""
 
-        # Setear duty si no está locked por el user (sudoku).
         if not _is_duty_locked(b):
             b.duty = Q_total_kW
-            # No lo lockeamos — es un valor calculado, el solver lo
-            # recalcula en próximas iteraciones si las condiciones
-            # cambian (T_in, composición input, etc).
 
-        # Propagar T_op_C a los outlet streams no-lockeados, para que
-        # el solver de energía downstream tenga T inicial coherente y
-        # no calcule valores absurdos.
         T_op_C = T_K - 273.15
         for s_out in outs:
             if not _is_temp_locked(s_out):
                 s_out.temperature = T_op_C
 
-        msgs.append(f"✓ Reactor {b.name}: ΔH_rxn={Q_rxn_kW:+.2f} kW, "
+        msgs.append(f"✓ Reactor {b.name}{adiab_tag}: ΔH_rxn={Q_rxn_kW:+.2f} kW, "
                      f"Q_sens={Q_sensible_kW:+.2f} kW, "
                      f"Q_total={Q_total_kW:+.2f} kW, T_out={T_op_C:.0f}°C, "
                      f"ξ={res['xi']}")
