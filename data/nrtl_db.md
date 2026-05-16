@@ -224,6 +224,153 @@ Separación crítica en refinería (propileno polymer grade requiere 99.5%). Cas
 
 ---
 
+## water-ethylene_glycol
+
+Sin azeotropo pero glycol es solvente extractivo típico — agregando glycol al sistema etanol-agua se rompe el azeotropo etanol-agua (proceso TEG en gas natural, MEG en etanol absoluto).
+
+| Param | Valor | Comentario |
+|---|---:|---|
+| A_12 (water→ethylene_glycol) | -635.0 | K |
+| B_12 | 0.0 | adim |
+| A_21 (ethylene_glycol→water) | 1175.0 | K |
+| B_21 | 0.0 | adim |
+| α_12 = α_21 | 0.3000 | — |
+
+**Sin azeotropo, miscible total.** Volatilidad relativa α agua/glycol ≈ 50+ → separación trivial.
+
+---
+
+## ethanol-cyclohexane
+
+Azeotropo positivo importante en destilación azeotrópica para deshidratar etanol absoluto (alternativa al benceno por toxicidad).
+
+| Param | Valor | Comentario |
+|---|---:|---|
+| A_12 (ethanol→cyclohexane) | 890.0 | K |
+| B_12 | 0.0 | adim |
+| A_21 (cyclohexane→ethanol) | 540.0 | K |
+| B_21 | 0.0 | adim |
+| α_12 = α_21 | 0.4000 | — |
+
+**Azeotropo:** ~30% mol etanol a 64.9°C, 1 atm
+
+---
+
+## methanol-benzene
+
+Azeotropo positivo. Sistema clásico en deshidrocarburización de aromáticos.
+
+| Param | Valor | Comentario |
+|---|---:|---|
+| A_12 (methanol→benzene) | 1230.0 | K |
+| B_12 | 0.0 | adim |
+| A_21 (benzene→methanol) | 440.0 | K |
+| B_21 | 0.0 | adim |
+| α_12 = α_21 | 0.5000 | — |
+
+**Azeotropo:** ~61% mol metanol a 57.5°C
+
+---
+
+## acetone-chloroform
+
+**Azeotropo NEGATIVO** (max-boiling) — uno de los pocos pares industriales que lo presenta. Útil para testing del solver.
+
+| Param | Valor | Comentario |
+|---|---:|---|
+| A_12 (acetone→chloroform) | -450.0 | K |
+| B_12 | 0.0 | adim |
+| A_21 (chloroform→acetone) | -150.0 | K |
+| B_21 | 0.0 | adim |
+| α_12 = α_21 | 0.3000 | — |
+
+**Azeotropo negativo:** ~35% mol acetona a 64.5°C, 1 atm (T más alta que ambos puros)
+
+---
+
+## water-furfural
+
+Sistema con miscibilidad parcial (LLE) + azeotropo heterogéneo. Industrial: separación de furfural en procesos de pulpa de papel y refinación de aromáticos.
+
+| Param | Valor | Comentario |
+|---|---:|---|
+| A_12 (water→furfural) | 1480.0 | K |
+| B_12 | 0.0 | adim |
+| A_21 (furfural→water) | 350.0 | K |
+| B_21 | 0.0 | adim |
+| α_12 = α_21 | 0.3500 | — |
+
+**Azeotropo heterogéneo:** ~38% mol agua a 97.9°C
+**Limitación v1.0:** flash homogéneo — LLE no separa fases.
+
+---
+
+## water-benzene  *(LLE — fuerte inmiscibilidad)*
+
+Sistema **casi totalmente inmiscible** a temperatura ambiente. Industrial: solvente en deshidratación azeotrópica de etanol (proceso Cottrell). Parámetros ajustados para reproducir las solubilidades mutuas experimentales.
+
+| Param | Valor | Comentario |
+|---|---:|---|
+| A_12 (water→benzene) | 2540.0 | K |
+| B_12 | 0.0 | adim |
+| A_21 (benzene→water) | 1310.0 | K |
+| B_21 | 0.0 | adim |
+| α_12 = α_21 | 0.2000 | — (típico LLE) |
+
+**Solubilidad mutua @ 25°C (experimental):**
+- agua en benceno: ~0.06% peso
+- benceno en agua: ~0.18% peso
+
+**Uso:** flash_LLE() separa en fase acuosa + fase orgánica.
+
+---
+
+## water-cyclohexane  *(LLE — inmiscibilidad casi total)*
+
+Aún más inmiscible que water-benzene. Alternativa no-tóxica al benceno en deshidratación azeotrópica de etanol.
+
+| Param | Valor | Comentario |
+|---|---:|---|
+| A_12 (water→cyclohexane) | 2280.0 | K |
+| B_12 | 0.0 | adim |
+| A_21 (cyclohexane→water) | 860.0 | K |
+| B_21 | 0.0 | adim |
+| α_12 = α_21 | 0.2000 | — |
+
+**Solubilidad mutua @ 25°C:** <0.01% peso en ambas direcciones.
+
+---
+
+## water-toluene  *(LLE)*
+
+Similar a water-benzene pero con toluene (menos tóxico, mayor BP).
+
+| Param | Valor | Comentario |
+|---|---:|---|
+| A_12 (water→toluene) | 2460.0 | K |
+| B_12 | 0.0 | adim |
+| A_21 (toluene→water) | 1280.0 | K |
+| B_21 | 0.0 | adim |
+| α_12 = α_21 | 0.2000 | — |
+
+---
+
+## ethanol-ethylene_glycol
+
+Sin azeotropo, miscible. Sistema para destilación extractiva.
+
+| Param | Valor | Comentario |
+|---|---:|---|
+| A_12 (ethanol→ethylene_glycol) | 150.0 | K |
+| B_12 | 0.0 | adim |
+| A_21 (ethylene_glycol→ethanol) | 350.0 | K |
+| B_21 | 0.0 | adim |
+| α_12 = α_21 | 0.3000 | — |
+
+**Sin azeotropo.** Volatilidad relativa eth/glycol ≈ 100 → muy fácil separación.
+
+---
+
 ## Implementación en Python
 
 El módulo `nrtl.py` provee:

@@ -41,8 +41,11 @@ def _parse_nrtl_db() -> Dict[Tuple[str, str], dict]:
         return {}
     text = _NRTL_PATH.read_text(encoding="utf-8")
     out: Dict[Tuple[str, str], dict] = {}
-    # Cada sección de par empieza con '## name1-name2'
-    sections = re.split(r"^## ([a-z_]+)-([a-z_]+)\s*$", text, flags=re.MULTILINE)
+    # Cada sección de par empieza con '## name1-name2' (con opcional
+    # nota inline después, e.g. '## water-benzene  *(LLE — ...)*').
+    # El regex captura los 2 nombres y deja el resto del header como
+    # parte del body (no se parsea).
+    sections = re.split(r"^## ([a-z_]+)-([a-z_]+)\b", text, flags=re.MULTILINE)
     # sections[0] = preamble; después tuplas (name1, name2, body)
     for i in range(1, len(sections), 3):
         if i + 2 > len(sections):
@@ -412,6 +415,155 @@ def _solve_rr(z: List[float], K: List[float]) -> Optional[float]:
         mid = 0.5 * (lo + hi)
         Fm = F(mid)
         if abs(Fm) < 1e-10:
+            return mid
+        if Fm > 0:
+            lo = mid
+        else:
+            hi = mid
+    return 0.5 * (lo + hi)
+
+
+# ============================================================
+# Flash heterogéneo LLE (líquido-líquido)
+# ============================================================
+#
+# Para sistemas con inmiscibilidad parcial (water-benzene, water-CHX,
+# water-toluene), una mezcla puede separar en dos fases líquidas α y β.
+# Condiciones de equilibrio:
+#   1) Iso-actividad por componente:  x_iα · γ_iα = x_iβ · γ_iβ ∀i
+#   2) Balance global:  z = L_α·x_α + L_β·x_β,  L_α + L_β = 1
+#   3) Σ x_iα = Σ x_iβ = 1
+#
+# Resuelto por iteración alternada (successive substitution con
+# acceleration cuando converge lento):
+#   a) dadas xα, xβ → calcular γα, γβ
+#   b) actualizar K_LL_i = γ_iα / γ_iβ (split coefficient)
+#   c) resolver Rachford-Rice-LLE para fracción de fase α: L_α
+#   d) recalcular xα, xβ desde L_α y K_LL
+#   e) repeat hasta convergencia
+#
+# Si converge a una sola fase (Lα ~ 0 ó 1), retornar single-phase.
+
+def flash_LLE(names: List[str], z_vec: List[float], T_K: float,
+               max_iter: int = 100, tol: float = 1e-6,
+               x_alpha_init: Optional[List[float]] = None,
+               x_beta_init:  Optional[List[float]] = None) -> Optional[Dict]:
+    """Flash líquido-líquido isotérmico (binario sólido, multicomp
+    experimental).  Detecta si una mezcla z se separa en 2 fases
+    líquidas a T_K.
+
+    Returns:
+      dict {'two_phase', 'L_alpha', 'x_alpha', 'x_beta', 'iterations'}
+        two_phase: bool
+        L_alpha:   fracción molar de la fase α (0 < L < 1)
+        x_alpha:   composición de la fase rica-1
+        x_beta:    composición de la fase rica-2
+      Si single-phase, two_phase=False y x_alpha = z.
+      None si falta data o no converge.
+    """
+    n = len(names)
+    if n < 2 or n != len(z_vec):
+        return None
+    s = sum(z_vec)
+    if s <= 0:
+        return None
+    z = [zi / s for zi in z_vec]
+    # Verificar que los pares tengan parámetros
+    for i in range(n):
+        for j in range(i+1, n):
+            if not has_params(names[i], names[j]):
+                return None
+
+    # Initial guess: separación máxima (composiciones casi puras).
+    # Esto evita que el solver se quede atrapado en single-phase.
+    if x_alpha_init is None:
+        # Fase α: rica en componente 0
+        x_alpha = [0.99 if i == 0 else 0.01/(n-1) for i in range(n)]
+    else:
+        x_alpha = list(x_alpha_init)
+    if x_beta_init is None:
+        # Fase β: rica en componente 1 (o el 2do dominante)
+        major_other = max(range(n), key=lambda i: z[i] if i != 0 else -1)
+        x_beta = [0.99 if i == major_other else 0.01/(n-1) for i in range(n)]
+    else:
+        x_beta = list(x_beta_init)
+
+    L_alpha = 0.5    # fracción inicial de la fase α
+    for it in range(max_iter):
+        g_alpha = gamma(names, x_alpha, T_K)
+        g_beta  = gamma(names, x_beta, T_K)
+        if g_alpha is None or g_beta is None:
+            return None
+        # K_LL_i = γ_iα / γ_iβ  → ratio de fugacidades líquido en cada fase
+        # En equilibrio: x_iα·γ_iα = x_iβ·γ_iβ → x_iβ = x_iα · K_LL_i
+        K_LL = [g_alpha[i] / g_beta[i] for i in range(n)]
+        # Rachford-Rice para LLE:
+        #   z_i = L_α · x_iα + (1-L_α) · x_iβ
+        #   x_iα = z_i / (L_α + (1-L_α)/K_LL_i)
+        #   x_iβ = z_i / (L_α · K_LL_i + (1-L_α))
+        # F(L_α) = Σ x_iα - Σ x_iβ = Σ z_i · (K_LL_i - 1)/(L_α·(K_LL_i-1) + 1) = 0
+        L_new = _solve_rr_LLE(z, K_LL)
+        if L_new is None:
+            return None
+        # Convergencia trivial: L→0 o L→1 indica single-phase
+        if L_new < 1e-5:
+            return dict(two_phase=False, L_alpha=0.0,
+                         x_alpha=list(z), x_beta=list(z),
+                         iterations=it+1)
+        if L_new > 1 - 1e-5:
+            return dict(two_phase=False, L_alpha=1.0,
+                         x_alpha=list(z), x_beta=list(z),
+                         iterations=it+1)
+        # Calcular xα, xβ desde z y K_LL
+        x_alpha_new = [z[i] / (L_new + (1 - L_new) / K_LL[i]) for i in range(n)]
+        x_beta_new  = [z[i] / (L_new * K_LL[i] + (1 - L_new)) for i in range(n)]
+        # Renormalizar (Rachford-Rice no garantiza Σ=1 exacto)
+        s_a = sum(x_alpha_new)
+        s_b = sum(x_beta_new)
+        if s_a <= 0 or s_b <= 0:
+            return None
+        x_alpha_new = [xi / s_a for xi in x_alpha_new]
+        x_beta_new  = [xi / s_b for xi in x_beta_new]
+        # Check convergencia
+        max_dx = max(abs(x_alpha_new[i] - x_alpha[i])
+                      for i in range(n))
+        max_dx = max(max_dx, max(abs(x_beta_new[i] - x_beta[i])
+                                   for i in range(n)))
+        x_alpha = x_alpha_new
+        x_beta  = x_beta_new
+        L_alpha = L_new
+        if max_dx < tol:
+            break
+    return dict(
+        two_phase=True,
+        L_alpha=L_alpha,
+        x_alpha=x_alpha,
+        x_beta=x_beta,
+        iterations=it+1,
+    )
+
+
+def _solve_rr_LLE(z: List[float], K_LL: List[float]) -> Optional[float]:
+    """Rachford-Rice para LLE: encontrar L_α tal que
+        Σᵢ zᵢ (K_LL_i − 1) / (L_α·(K_LL_i − 1) + 1) = 0
+    en L_α ∈ [0, 1].  Bisección."""
+    n = len(z)
+    def F(L):
+        try:
+            return sum(z[i] * (K_LL[i] - 1) / (L * (K_LL[i] - 1) + 1)
+                       for i in range(n))
+        except ZeroDivisionError:
+            return float('nan')
+    F0, F1 = F(0.0), F(1.0)
+    if F0 <= 0:
+        return 0.0
+    if F1 >= 0:
+        return 1.0
+    lo, hi = 0.0, 1.0
+    for _ in range(80):
+        mid = 0.5 * (lo + hi)
+        Fm = F(mid)
+        if abs(Fm) < 1e-12:
             return mid
         if Fm > 0:
             lo = mid
