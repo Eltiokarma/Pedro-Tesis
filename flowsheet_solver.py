@@ -327,21 +327,37 @@ def _resolve_cp(s, T_eval=None):
     (default = s.temperature).
 
     Prioridad:
-      1. Si s.composition tiene fracciones → Cp(T) ponderado de
-         components.py.
-      2. Si s.main_component está declarado → Cp(T) puro.
-      3. Si s.cp > 0 (override manual) → constante.
-      4. None (sin datos).
+      1. THERMO_DB (DIPPR-100 polinomio cuártico, mucho más preciso a
+         alta T) — si el componente está cubierto.
+      2. components.py legacy (Cp lineal) — fallback para componentes
+         no en thermo_db (genéricos, etc.).
+      3. s.cp > 0 (override manual) — constante.
+      4. None.
     """
     if T_eval is None:
         T_eval = s.temperature
-    phase = s.phase or "liquid"   # default líquido si no declarado
+    phase = s.phase or "liquid"
 
+    # --- Prioridad 1: thermo_db (DIPPR) ---
+    try:
+        import thermo_db as _td
+    except ImportError:
+        _td = None
+    if _td is not None:
+        if s.composition:
+            cp = _td.cp_mix_kJ_kg_K(s.composition, T_eval, phase)
+            if cp > 0:
+                return cp
+        if s.main_component:
+            cp = _td.cp_kJ_kg_K(s.main_component, T_eval, phase)
+            if cp is not None and cp > 0:
+                return cp
+
+    # --- Prioridad 2: components.py legacy (Cp lineal) ---
     try:
         import components as comp_mod
     except ImportError:
         comp_mod = None
-
     if comp_mod is not None:
         if s.composition:
             cp = comp_mod.cp_mix_kJ_kg_K(s.composition, T_eval, phase)
@@ -358,9 +374,34 @@ def _resolve_cp(s, T_eval=None):
 
 
 def _resolve_dh_vap(s):
-    """ΔH_vap de un stream (kJ/kg).  None si no se puede calcular."""
+    """ΔH_vap de un stream (kJ/kg).  None si no se puede calcular.
+
+    Prioridad:
+      1. s.delta_h_vap_override (manual del user).
+      2. THERMO_DB (Clausius-Clapeyron derivado de Antoine — varía con T).
+      3. components.py legacy (constante en Tb).
+    """
     if s.delta_h_vap_override > 0:
         return s.delta_h_vap_override
+
+    T_eval = s.temperature
+
+    # --- Prioridad 1: thermo_db (Clausius-Clapeyron) ---
+    try:
+        import thermo_db as _td
+    except ImportError:
+        _td = None
+    if _td is not None:
+        if s.composition:
+            dh = _td.delta_h_vap_mix_kJ_kg(s.composition, T_eval)
+            if dh > 0:
+                return dh
+        if s.main_component:
+            dh = _td.delta_h_vap_kJ_kg(s.main_component, T_eval)
+            if dh is not None and dh > 0:
+                return dh
+
+    # --- Prioridad 2: components.py legacy ---
     try:
         import components as comp_mod
     except ImportError:
