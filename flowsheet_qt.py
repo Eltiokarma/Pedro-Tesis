@@ -1727,23 +1727,42 @@ class StreamItem(QGraphicsPathItem):
         s = self.model
         b_src = self.fs.blocks.get(s.src)
         b_dst = self.fs.blocks.get(s.dst)
-        if b_src is None or b_dst is None:
-            return
+        src_label = (f"{b_src.name} ({s.src_port or 'auto'})"
+                      if b_src else "(sin conectar)")
+        dst_label = (f"{b_dst.name} ({s.dst_port or 'auto'})"
+                      if b_dst else "(sin conectar)")
         lines = [
             f"<b>{s.name}</b>",
-            f"<span style='color:#666;'>"
-            f"{b_src.name} ({s.src_port or 'auto'}) → "
-            f"{b_dst.name} ({s.dst_port or 'auto'})</span>",
-            f"Rol: {s.role}",
-            f"Flujo: {s.mass_flow:g} tm/año",
+            f"<span style='color:#666;'>{src_label} → {dst_label}</span>",
+            f"Rol: {s.role}  ·  Fase: {s.phase or '—'}",
+            f"Flujo: <b>{s.mass_flow:g}</b> tm/año",
+            f"T = {s.temperature:g} °C",
         ]
+        # Composición — pieza nueva, antes faltaba.  Muestra cada
+        # componente con su fracción másica > 0.1%.
+        comp = s.composition or {}
+        if not comp and s.main_component:
+            comp = {s.main_component: 1.0}
+        if comp:
+            rows = []
+            for k, v in sorted(comp.items(), key=lambda kv: -kv[1]):
+                if v < 0.001:
+                    continue
+                # Color de barra: gris si tiny, naranja si principal
+                color = "#c41e3a" if v > 0.5 else "#3a3a3a"
+                pct = v * 100
+                rows.append(f"<span style='color:{color};'>"
+                             f"&nbsp;&nbsp;{k}: {pct:.1f}%</span>")
+            if rows:
+                lines.append("<b>Composición (mass frac):</b>")
+                lines.extend(rows)
         if s.role in ("feed", "product") and s.price_usd_per_tm:
             total = s.mass_flow * s.price_usd_per_tm
             lbl = "Ingreso" if s.role == "product" else "Costo MP"
-            lines.append(f"Precio: {s.price_usd_per_tm:g} USD/tm")
-            lines.append(f"{lbl}: $ {total:,.0f}/año")
+            lines.append(f"Precio: {s.price_usd_per_tm:g} USD/tm  ·  "
+                          f"{lbl}: $ {total:,.0f}/año")
         if s.cp > 0:
-            lines.append(f"T = {s.temperature:g} °C, Cp = {s.cp:g} kJ/kg·K")
+            lines.append(f"Cp = {s.cp:g} kJ/kg·K (override manual)")
         self.setToolTip("<br>".join(lines))
 
     def update_path(self, rebuild_handles=True):
@@ -2504,7 +2523,8 @@ class StreamsTableDock(QDockWidget):
     Double-click en una fila abre el StreamEditDialog del stream.
     """
 
-    COL_NAME, COL_FROM, COL_TO, COL_ROLE, COL_FLOW, COL_T, COL_CP, COL_PRICE = range(8)
+    (COL_NAME, COL_FROM, COL_TO, COL_ROLE, COL_FLOW, COL_T,
+     COL_PHASE, COL_COMP, COL_CP, COL_PRICE) = range(10)
 
     def __init__(self, parent, editor):
         super().__init__(" Corrientes ", parent)
@@ -2536,18 +2556,20 @@ class StreamsTableDock(QDockWidget):
         layout.addLayout(tb_layout)
 
         # --- tabla ---
-        cols = ["Nombre", "Desde", "Hacia", "Rol", "Flujo", "T", "Cp", "Precio"]
+        cols = ["Nombre", "Desde", "Hacia", "Rol", "Flujo", "T",
+                "Fase", "Composición (mass frac)", "Cp", "Precio"]
         self.table = QTableWidget(0, len(cols))
         self.table.setHorizontalHeaderLabels(cols)
         self.table.setSelectionBehavior(QTableWidget.SelectRows)
         self.table.setEditTriggers(QTableWidget.NoEditTriggers)
         self.table.setAlternatingRowColors(True)
-        self.table.horizontalHeader().setStretchLastSection(False)
+        self.table.horizontalHeader().setStretchLastSection(True)
         self.table.itemDoubleClicked.connect(self._on_double_click)
         for col, width in (
-            (self.COL_NAME, 140), (self.COL_FROM, 140), (self.COL_TO, 140),
-            (self.COL_ROLE, 70),  (self.COL_FLOW, 120), (self.COL_T, 70),
-            (self.COL_CP, 70),    (self.COL_PRICE, 90),
+            (self.COL_NAME, 130), (self.COL_FROM, 130), (self.COL_TO, 130),
+            (self.COL_ROLE, 65),  (self.COL_FLOW, 110), (self.COL_T, 65),
+            (self.COL_PHASE, 70), (self.COL_COMP, 280),
+            (self.COL_CP, 60),    (self.COL_PRICE, 90),
         ):
             self.table.setColumnWidth(col, width)
         layout.addWidget(self.table)
@@ -2575,13 +2597,26 @@ class StreamsTableDock(QDockWidget):
             dst_label = (
                 f"{dst_b.name}.{s.dst_port or '?'}" if dst_b else "(borrado)"
             )
+            # Composición compacta: "compA 82.4% · compB 17.6%" para
+            # streams multicomponente; "(compA)" si solo main_component.
+            comp = s.composition or {}
+            if not comp and s.main_component:
+                comp = {s.main_component: 1.0}
+            comp_parts = []
+            for k, v in sorted(comp.items(), key=lambda kv: -kv[1]):
+                if v < 0.001:
+                    continue
+                comp_parts.append(f"{k} {v*100:.1f}%")
+            comp_str = " · ".join(comp_parts) if comp_parts else "—"
             vals = [
                 s.name,
                 src_label,
                 dst_label,
                 s.role,
                 funits.format_flow(s.mass_flow, unit),
-                f"{s.temperature:g} °C" if s.cp > 0 else "—",
+                f"{s.temperature:g} °C",
+                s.phase or "—",
+                comp_str,
                 f"{s.cp:g}" if s.cp > 0 else "—",
                 (f"${s.price_usd_per_tm:g}/tm"
                  if s.role in ("feed", "product") and s.price_usd_per_tm
@@ -2591,6 +2626,15 @@ class StreamsTableDock(QDockWidget):
                 item = QTableWidgetItem(str(v))
                 if c in (self.COL_FLOW, self.COL_T, self.COL_CP, self.COL_PRICE):
                     item.setTextAlignment(Qt.AlignRight | Qt.AlignVCenter)
+                # Tooltip de composición completa (todos los componentes)
+                if c == self.COL_COMP and comp:
+                    tooltip_lines = [f"<b>{s.name} — composición</b>"]
+                    for k, v_ in sorted(comp.items(), key=lambda kv: -kv[1]):
+                        m_i = v_ * s.mass_flow
+                        tooltip_lines.append(
+                            f"&nbsp;&nbsp;{k}: {v_*100:.2f}%  "
+                            f"({m_i:.1f} tm/año)")
+                    item.setToolTip("<br>".join(tooltip_lines))
                 if s.role == "feed":
                     item.setForeground(QBrush(QColor("#2e7d32")))
                 elif s.role == "product":
@@ -2698,9 +2742,12 @@ class FlowsheetMainWindow(QMainWindow):
     # ---------------------------------------------------
 
     def _build_toolbar(self):
-        tb = self.addToolBar("Workflow")
+        # Dos toolbars apiladas vertical (siempre visibles, sin overflow).
+        # Top:   archivo / ejemplos / edición / zoom / vista
+        # Bottom: análisis / solve / exportar
+        tb = self.addToolBar("Workflow — Archivo y edición")
         tb.setMovable(False)
-        # Tamaño de íconos consistente en toda la toolbar
+        # break para forzar la segunda toolbar abajo en una NUEVA línea
         from PySide6.QtCore import QSize
         tb.setIconSize(QSize(20, 20))
         tb.setToolButtonStyle(Qt.ToolButtonTextBesideIcon)
@@ -2709,17 +2756,22 @@ class FlowsheetMainWindow(QMainWindow):
         # primario del estilo para que combine con el resto de la UI.
         from icons import make_qicon as _mk
         _ICON_COLOR = "#3a3a3a"
+        # Guardamos el helper como atributo de la ventana para usarlo
+        # en otros lugares (menús contextuales, dialogs).
+        self._mk_icon = _mk
+        self._icon_color = _ICON_COLOR
 
-        def add_btn(text, slot, icon_id=None, sep=False):
+        def add_btn(text, slot, icon_id=None, sep=False, toolbar=None):
+            tb_target = toolbar if toolbar is not None else tb
             act = QAction(text, self)
             act.triggered.connect(slot)
             if icon_id is not None:
                 ic = _mk(icon_id, color=_ICON_COLOR, size=20)
                 if ic is not None:
                     act.setIcon(ic)
-            tb.addAction(act)
+            tb_target.addAction(act)
             if sep:
-                tb.addSeparator()
+                tb_target.addSeparator()
 
         add_btn("Nuevo",     self.action_new,  "file-new")
         add_btn("Abrir…",    self.action_open, "file-open")
@@ -2784,12 +2836,22 @@ class FlowsheetMainWindow(QMainWindow):
         add_btn("100 %",      self.view.zoom_reset, "zoom-100")
         add_btn("Zoom +",     self.view.zoom_in,    "zoom-in")
         add_btn("Ajustar",    self.view.zoom_fit,   "zoom-fit")
-        tb.addSeparator()
 
-        add_btn("OPEX extras…",    self.action_opex_extras, "act-money")
-        add_btn("Solve balances",  self.action_solve,       "sim-run")
-        add_btn("Setpoints…",      self.action_setpoints,   "act-setpoint")
-        add_btn("DOF / Balance…",  self.action_dof,         "act-dof")
+        # ---- SEGUNDA FILA ----
+        # addToolBarBreak fuerza que la siguiente toolbar se renderice
+        # debajo, no a la derecha.  Ambas filas son siempre visibles.
+        self.addToolBarBreak()
+        tb2 = self.addToolBar("Workflow — Cálculo y análisis")
+        tb2.setMovable(False)
+        tb2.setIconSize(QSize(20, 20))
+        tb2.setToolButtonStyle(Qt.ToolButtonTextBesideIcon)
+
+        add_btn("OPEX extras…",    self.action_opex_extras, "act-money",     toolbar=tb2)
+        add_btn("Solve balances",  self.action_solve,       "sim-run",       toolbar=tb2)
+        add_btn("Setpoints…",      self.action_setpoints,   "act-setpoint",  toolbar=tb2)
+        add_btn("DOF / Balance…",  self.action_dof,         "act-dof",       toolbar=tb2)
+        # Re-bind tb a tb2 para el resto de los add que vienen abajo
+        tb = tb2
         # toggle del dock de tabla de corrientes (creado en
         # _build_streams_dock); toggleViewAction() ya viene cableado
         # para mostrar/ocultar y refleja el estado actual.
@@ -3882,12 +3944,32 @@ class FlowsheetMainWindow(QMainWindow):
                 f"Desde      {b_src}  ({sp})\n"
                 f"Hacia      {b_dst}  ({dp})\n"
                 f"Rol        {s.role}\n"
+                f"Fase       {s.phase or '—'}\n"
                 f"Flujo      {s.mass_flow:g} tm/año\n"
-                f"T          {s.temperature:g} °C\n"
-                f"Cp         {s.cp:g} kJ/kg·K"
+                f"T          {s.temperature:g} °C"
             )
+            if s.cp > 0:
+                txt += f"\nCp         {s.cp:g} kJ/kg·K (manual)"
+            # Composición — siempre visible, ANTES no se mostraba.
+            comp = s.composition or {}
+            if not comp and s.main_component:
+                comp = {s.main_component: 1.0}
+            if comp:
+                txt += "\n\nComposición (% masa):"
+                for k, v in sorted(comp.items(), key=lambda kv: -kv[1]):
+                    if v < 0.0005:
+                        continue
+                    # Calcular caudal másico individual del componente
+                    m_i = v * s.mass_flow
+                    txt += f"\n  {k:14s} {v*100:6.2f}%   ({m_i:>10.1f} tm/año)"
+            else:
+                txt += "\n\nComposición: no declarada"
             if s.role in ("feed", "product"):
-                txt += f"\nPrecio     {s.price_usd_per_tm:g} USD/tm"
+                txt += f"\n\nPrecio     {s.price_usd_per_tm:g} USD/tm"
+                if s.mass_flow > 0 and s.price_usd_per_tm > 0:
+                    total = s.mass_flow * s.price_usd_per_tm
+                    lbl = "Ingreso" if s.role == "product" else "Costo"
+                    txt += f"\n{lbl}    $ {total:,.0f}/año"
             self.prop_label.setText(txt)
 
     # ---------------------------------------------------
