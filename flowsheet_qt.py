@@ -944,7 +944,24 @@ class _StreamHandle(QGraphicsEllipseItem):
     Se renderiza solo cuando el stream está seleccionado.  Al moverlo,
     snap a la grilla y se actualiza model.waypoints[idx]."""
 
-    RADIUS = 5
+    RADIUS = 5            # tamaño VISUAL del círculo
+    HIT_RADIUS = 14       # tamaño de HIT AREA (invisible, más generoso)
+                          # — el handle visible es chico para no estorbar,
+                          # pero el área clickeable cubre ~28px diámetro
+
+    def shape(self):
+        """Hit area más grande que el visual para que el user no
+        necesite acertar pixel-perfect."""
+        from PySide6.QtCore import QRectF
+        path = QPainterPath()
+        r = self.HIT_RADIUS
+        path.addEllipse(QRectF(-r, -r, 2*r, 2*r))
+        return path
+
+    def boundingRect(self):
+        from PySide6.QtCore import QRectF
+        r = self.HIT_RADIUS
+        return QRectF(-r, -r, 2*r, 2*r)
 
     def __init__(self, stream_item: "StreamItem", waypoint_idx: int):
         r = self.RADIUS
@@ -1035,6 +1052,19 @@ class _GhostStreamHandle(QGraphicsEllipseItem):
     draggables.  Visualmente más chico y traslúcido que los reales."""
 
     RADIUS = 4
+    HIT_RADIUS = 12   # hit area más generosa que el visual
+
+    def shape(self):
+        from PySide6.QtCore import QRectF
+        path = QPainterPath()
+        r = self.HIT_RADIUS
+        path.addEllipse(QRectF(-r, -r, 2*r, 2*r))
+        return path
+
+    def boundingRect(self):
+        from PySide6.QtCore import QRectF
+        r = self.HIT_RADIUS
+        return QRectF(-r, -r, 2*r, 2*r)
 
     def __init__(self, stream_item: "StreamItem", x: float, y: float):
         r = self.RADIUS
@@ -1074,9 +1104,25 @@ class _EndpointHandle(QGraphicsEllipseItem):
     role: 'start' (controla src/start_xy) | 'end' (controla dst/end_xy)
     """
 
-    RADIUS_OUTER = 7
+    RADIUS_OUTER = 7        # tamaño VISUAL (anillo naranja)
     RADIUS_INNER = 4
+    HIT_RADIUS   = 18       # HIT AREA invisible — el endpoint cae sobre el
+                            # puerto del bloque, así que sin un área grande
+                            # los clicks al lado activan el bloque (movable)
     SNAP_RADIUS  = 22.0     # px scene: rango de snap a un puerto
+
+    def shape(self):
+        """Hit area ~36px diámetro para fácil agarre del handle."""
+        from PySide6.QtCore import QRectF
+        path = QPainterPath()
+        r = self.HIT_RADIUS
+        path.addEllipse(QRectF(-r, -r, 2*r, 2*r))
+        return path
+
+    def boundingRect(self):
+        from PySide6.QtCore import QRectF
+        r = self.HIT_RADIUS
+        return QRectF(-r, -r, 2*r, 2*r)
 
     def __init__(self, stream_item: "StreamItem", role: str):
         r = self.RADIUS_OUTER
