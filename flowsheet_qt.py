@@ -3536,13 +3536,32 @@ class FlowsheetMainWindow(QMainWindow):
         Llamado por self._anim_timer cada 80ms."""
         if not self._anim_enabled:
             return
+        # Skip si ventana no visible (minimizada / ocultada por otra app):
+        # no tiene sentido gastar CPU re-dibujando lo que nadie ve.
+        if not self.isVisible():
+            return
         STEP = 3.0   # px por frame
-        for sid, item in self.scene.stream_items.items():
-            item._anim_offset = (item._anim_offset + STEP) % 130.0
-            # Solo re-dibujar chevrons (no recalcular path completo)
-            pts = getattr(item, '_last_pts', None)
-            if pts:
-                item._draw_direction_arrows(pts)
+        # Snapshot defensivo: si el user elimina un stream MIENTRAS el
+        # timer está ticando, el dict cambia bajo nuestros pies → crash.
+        for sid, item in list(self.scene.stream_items.items()):
+            try:
+                item._anim_offset = (item._anim_offset + STEP) % 130.0
+                pts = getattr(item, '_last_pts', None)
+                if pts:
+                    item._draw_direction_arrows(pts)
+            except RuntimeError:
+                # Qt C++ object deleted underneath (item destroyed)
+                continue
+
+    def closeEvent(self, event):
+        """Detiene el timer de animación al cerrar la ventana.
+        Sin esto el QTimer seguía ticando aún después de close(),
+        manteniendo viva la ventana y consumiendo CPU."""
+        try:
+            self._anim_timer.stop()
+        except Exception:
+            pass
+        super().closeEvent(event)
 
     def toggle_animation(self, enabled: bool):
         """Activa/desactiva animación de chevrons (toolbar toggle)."""
