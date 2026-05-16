@@ -1258,6 +1258,111 @@ def _detect_path_crossings(pts_self, pts_other):
 HOP_RADIUS = 6.0   # radio de la curvita en el cruce
 
 
+def _segment_intersects_rect(x1, y1, x2, y2, rx, ry, rw, rh):
+    """True si el segmento (x1,y1)-(x2,y2) CRUZA el rect (entra/sale,
+    no solo toca el borde).  Usado para detectar streams que atraviesan
+    bloques ajenos en el routing automático.
+
+    Tolerancia: 1px de margen para evitar falsos positivos cuando el
+    segmento solo roza el borde."""
+    EPS = 1.0
+    # Quick reject: ambos endpoints en el mismo lado externo
+    if (x1 < rx - EPS and x2 < rx - EPS): return False
+    if (x1 > rx + rw + EPS and x2 > rx + rw + EPS): return False
+    if (y1 < ry - EPS and y2 < ry - EPS): return False
+    if (y1 > ry + rh + EPS and y2 > ry + rh + EPS): return False
+    # Endpoint dentro (strict)?
+    if (rx + EPS < x1 < rx + rw - EPS) and (ry + EPS < y1 < ry + rh - EPS):
+        return True
+    if (rx + EPS < x2 < rx + rw - EPS) and (ry + EPS < y2 < ry + rh - EPS):
+        return True
+    # Cruce con alguno de los 4 bordes del rect
+    edges = [
+        (rx, ry,       rx + rw, ry),       # top
+        (rx, ry + rh,  rx + rw, ry + rh),  # bottom
+        (rx, ry,       rx,      ry + rh),  # left
+        (rx + rw, ry,  rx + rw, ry + rh),  # right
+    ]
+    for (x3, y3, x4, y4) in edges:
+        if _segments_intersect(x1, y1, x2, y2, x3, y3, x4, y4) is not None:
+            return True
+    return False
+
+
+def _detour_around_rect(x1, y1, x2, y2, rx, ry, rw, rh):
+    """Genera puntos intermedios ortogonales para rodear el rect.
+
+    Devuelve la lista de puntos a INSERTAR entre (x1,y1) y (x2,y2)
+    (sin incluir esos endpoints).  Elige rodear por arriba/abajo/
+    izquierda/derecha según cuál sea más corto en distancia Manhattan.
+    """
+    # Las 4 posibles vías (sobre/bajo/izq/der) con sus puntos extra:
+    options = [
+        # Por arriba del rect
+        ([x1, ry - 1, x2, ry - 1],
+         abs(y1 - (ry - 1)) + abs(x2 - x1) + abs(y2 - (ry - 1))),
+        # Por abajo
+        ([x1, ry + rh + 1, x2, ry + rh + 1],
+         abs(y1 - (ry + rh + 1)) + abs(x2 - x1) + abs(y2 - (ry + rh + 1))),
+        # Por izquierda
+        ([rx - 1, y1, rx - 1, y2],
+         abs(x1 - (rx - 1)) + abs(y2 - y1) + abs(x2 - (rx - 1))),
+        # Por derecha
+        ([rx + rw + 1, y1, rx + rw + 1, y2],
+         abs(x1 - (rx + rw + 1)) + abs(y2 - y1) + abs(x2 - (rx + rw + 1))),
+    ]
+    # Elegir la de menor costo Manhattan
+    options.sort(key=lambda opt: opt[1])
+    return options[0][0]
+
+
+def _avoid_obstacles(pts, obstacles, padding=12, max_iter=8):
+    """Modifica pts (polyline) para que no atraviese ningún rect en
+    obstacles.  obstacles: list of (x, y, w, h).
+
+    Algoritmo: iterativo.  En cada pasada busca el primer segmento
+    que cruza un obstáculo, inserta un detour ortogonal alrededor del
+    bloque, y reintenta.  max_iter cap por seguridad.
+
+    El padding se aplica al rect del obstáculo (le agrega margen).
+    Default 12 px ≈ 3× grosor de stream típico — suficiente para que
+    el handle del bloque (selección border) no toque el stream.
+    """
+    if not obstacles or len(pts) < 4:
+        return pts
+    for _ in range(max_iter):
+        modified = False
+        new_pts: List[float] = []
+        i = 0
+        while i < len(pts):
+            new_pts.append(pts[i])
+            new_pts.append(pts[i + 1])
+            if i + 2 >= len(pts):
+                i += 2
+                continue
+            x1, y1 = pts[i], pts[i + 1]
+            x2, y2 = pts[i + 2], pts[i + 3]
+            # Chequear contra cada obstáculo
+            detour_added = False
+            for (bx, by, bw, bh) in obstacles:
+                rx = bx - padding
+                ry = by - padding
+                rw = bw + 2 * padding
+                rh = bh + 2 * padding
+                if _segment_intersects_rect(x1, y1, x2, y2, rx, ry, rw, rh):
+                    detour = _detour_around_rect(x1, y1, x2, y2,
+                                                   rx, ry, rw, rh)
+                    new_pts.extend(detour)
+                    detour_added = True
+                    modified = True
+                    break
+            i += 2
+        pts = new_pts
+        if not modified:
+            break
+    return pts
+
+
 def _build_path_with_hops(pts, hops):
     """Construye un QPainterPath siguiendo `pts`, insertando un arc
     (semicírculo) en cada punto de cruce listado en `hops`.
@@ -2170,6 +2275,20 @@ class StreamItem(QGraphicsPathItem):
             pts.append(y2)
         elif b_src is not None and b_dst is not None:
             pts = self._compute_polyline(b_src, b_dst, s)
+            # PADDING-AWARE ROUTING — modificar pts para que NO atraviese
+            # los SVGs de los bloques ajenos (no src ni dst).  Las
+            # tuberías rodean por arriba/abajo/izq/der según menor
+            # costo Manhattan.  Padding 12px ≈ 3× ancho de stream.
+            if self.editor is not None:
+                obstacles = []
+                for bid, item in self.editor.block_items_iter():
+                    if bid == s.src or bid == s.dst:
+                        continue
+                    bm = item.model
+                    w, h = pfd.block_dims(bm.eq_type)
+                    obstacles.append((bm.x, bm.y, w, h))
+                if obstacles:
+                    pts = _avoid_obstacles(pts, obstacles, padding=12)
         else:
             # Sin waypoints y al menos un endpoint flotante: línea recta
             pts = [x1, y1, x2, y2]
