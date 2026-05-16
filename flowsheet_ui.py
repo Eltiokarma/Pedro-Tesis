@@ -3221,13 +3221,13 @@ class FlowsheetEditor:
           · Tren NaOH: evaporador 32% → 50% (vapor de agua a venteo).
 
         Recycle obligatorio de salmuera agotada (anolito sale a 17-21%
-        NaCl, vuelve al saturador).  Ratio 5× fresh (basis 1000 kg/h
-        NaCl fresco).
+        NaCl, vuelve al saturador).  Ratio 5× fresh (basis 1000 tm/año
+        NaCl fresco — small pilot, escalable linealmente).
 
         Reactivos auxiliares: NaOH+Na2CO3 (purificación de Ca/Mg),
         HCl (acidificación pH≈2.7), H2SO4 98% (secado de Cl2 húmedo).
 
-        Basis: 1000 kg/h NaCl fresco.  Layout 1.8× spacing.
+        Basis: 1000 tm/año NaCl fresco (≈ 114 kg/h).  Layout 1.8×.
         """
         # ============ FEEDS Y SATURADOR ============
         tk_sal   = self._add_example_block("TK-101","Storage tank — cone roof",
@@ -3501,7 +3501,7 @@ class FlowsheetEditor:
           · Compresor NOx entre ambas etapas
           · Turbina de cola recupera energía del gas a baja P
 
-        Basis: 1000 kg/h NH3 → ~6200 kg/h HNO3 60% (~3700 kg/h HNO3 puro).
+        Basis: 1000 tm/año NH3 → ~6200 tm/año HNO3 60% (~3700 tm/año HNO3 puro).
 
         Layout 1.8× spacing.  Acceso: menú Examples → ⚗️ HNO3 Ostwald.
         """
@@ -3812,7 +3812,7 @@ class FlowsheetEditor:
         Las columnas DP1/DV3 modeladas como splitters con fracciones
         típicas de cortes (TBP empírica).
 
-        Caudales orientativos (basis 500 000 kg/h crudo).
+        Caudales orientativos (basis 500 000 tm/año crudo ≈ 57 t/h).
         """
         # ============ ALIMENTACIÓN ============
         tk_crudo = self._add_example_block("TK-101","Storage tank — floating roof",

@@ -315,68 +315,139 @@ LANG_DEFAULT = "Fluid processing"
 # como base.  FP se computa aparte de la presión de operación.
 # FM=1 (carbon steel) por default; user puede override por material
 # de construcción si tiene servicio corrosivo (Cl2, HNO3, etc.).
-FBM_BY_CATEGORIA = {
-    # Keys exactos como aparecen en EQUIPMENT_DATA["categoria"]
-    "Heat exchangers":     3.17,   # shell & tube CS
-    "Fired heaters":       2.19,
-    "Pumps":               3.30,   # centrifugal CS
-    "Compressors":         2.70,   # motor-driven
-    "Reactors":            4.00,   # autoclave / jacketed CS
-    "Storage":             1.50,   # tanques cone/floating
-    "Vessels":             4.16,   # process vessels horiz/vert
-    "Trays / packing":     1.00,
-    "Mixers / splitters":  2.10,
-    "Solids / sep.":       2.50,   # filtros, ciclones, decantadores
-    "Fans / blowers":      2.40,
-    "Valves":              1.50,
-    "Utilities":           3.50,   # boiler, cooling tower
-    # Aliases por si el user usa nombres alt
-    "Towers":              4.16,
-    "Tanks":               1.50,
-    "Filters":             2.50,
-    "Dryers":              2.06,
-    "Evaporators":         2.45,
-    "Crystallizers":       2.06,
-    "Turbines":            6.10,
+# Turton Eq 7.6:  FBM = B1 + B2·FM·FP
+# B1, B2 typical CS values from Turton App A.5 (3rd ed mean).
+# B1 captura el costo "estructural" (cuerpo, cimentación, etc.);
+# B2 captura el costo "material-dependent" (recipiente, tubos, etc.)
+# que se multiplica por FM (material) y FP (presión).
+B1_B2_BY_CATEGORIA = {
+    "Heat exchangers":     (1.74, 1.55),
+    "Fired heaters":       (0.96, 1.21),
+    "Pumps":               (1.89, 1.35),
+    "Compressors":         (0.00, 2.70),   # sold modular: FBM = B2·FM·FP
+    "Reactors":            (4.00, 0.00),   # custom — FBM ≈ 4.0 CS
+    "Storage":             (1.00, 0.50),
+    "Vessels":             (2.25, 1.82),
+    "Trays / packing":     (1.00, 1.00),
+    "Mixers / splitters":  (1.38, 0.96),
+    "Solids / sep.":       (1.40, 1.00),
+    "Fans / blowers":      (1.70, 1.50),
+    "Valves":              (1.50, 0.00),
+    "Utilities":           (2.50, 1.00),
+    "Towers":              (2.25, 1.82),
+    "Tanks":               (1.00, 0.50),
+    "Filters":             (1.40, 1.00),
+    "Dryers":              (1.00, 1.00),
+    "Evaporators":         (1.00, 1.45),
+    "Crystallizers":       (1.00, 1.45),
+    "Turbines":            (3.50, 1.50),
 }
-FBM_DEFAULT = 3.17     # fallback genérico (≈ HX)
+B1_B2_DEFAULT = (1.74, 1.55)   # fallback genérico (HX)
 
 
-def bare_module_factor(eq_nombre, P_op_bar=1.0):
-    """Devuelve FBM corregido por presión para un equipo.
+# Material factors FM (Turton App A.6, typical values).
+# Para servicios corrosivos / alta T / alta P, se sube de CS al material
+# necesario.  Auto-detección heurística vía corrosive_species_in_stream.
+MATERIAL_FACTORS = {
+    "CS":          1.00,   # Carbon Steel — default
+    "CS galv":     1.20,
+    "SS304":       2.50,   # Stainless 304 (HNO3 diluido, alcoholes)
+    "SS316":       3.10,   # Stainless 316 (HNO3, H2SO4 < 70%)
+    "Cu":          1.85,
+    "Ni":          5.40,   # NaOH conc 50%+
+    "Monel":       4.10,   # HF, sales fundidas
+    "Hastelloy":   5.50,   # HCl conc, mezclas oxidantes severas
+    "Inconel":     6.50,
+    "Titanium":    8.00,   # Cl2 húmedo, agua de mar, hipoclorito
+    "Glass-lined": 2.30,   # H2SO4 conc
+    "Tantalum":    9.50,
+}
+MATERIAL_DEFAULT = "CS"
 
-    Usa la categoría del equipo (Turton App A.5 mean) y aplica un
-    factor de presión simplificado:
-      · vessels/towers/reactors:  FP_v = 1 + 0.0175·(P - 1)
-      · heat exchangers:          FP_hx = 1 + 0.012·(P - 1)
-      · otros (pumps, compres, tanks): no FP correction
-    Cap a P=200 bar (correlaciones Turton son válidas hasta ~150).
+# Heurística: si en las corrientes de un bloque hay X componente con
+# fracción ≥ 1%, sugerir material Y.  El "ranking" usa el FM del
+# material para elegir el más severo.
+CORROSIVE_SPECIES = {
+    "chlorine":          "Titanium",
+    "hydrogen chloride": "Hastelloy",
+    "hydrochloric":      "Hastelloy",
+    "nitric acid":       "SS316",
+    "sulfuric acid":     "Glass-lined",
+    "hydrogen sulfide":  "SS316",
+    "hydrogen fluoride": "Monel",
+    "sodium hydroxide":  "Ni",         # solo si conc > 50%
+    "ammonia":           "SS304",
+    "fluorine":          "Monel",
+    "hypochlorite":      "Titanium",
+    "phosphoric":        "SS316",
+}
 
-    Es una APROXIMACIÓN — la Eq 7.5 de Turton tiene coeficientes
-    específicos por D, MoC, tipo de servicio; acá damos un primer
-    orden razonable para visualización en el xlsx de costing."""
+
+def suggested_material(composition_dicts, p_op_bar=1.0):
+    """Heurística: dado una lista de composition dicts {comp:frac}
+    de las corrientes adjuntas al bloque, devuelve el material más
+    severo necesario según CORROSIVE_SPECIES.
+
+    Si presión > 50 bar y feed tiene H2 → upgrade a SS304 mínimo
+    (H2 embrittlement at high P)."""
+    best   = MATERIAL_DEFAULT
+    best_f = MATERIAL_FACTORS[best]
+    for comp in composition_dicts:
+        if not comp:
+            continue
+        # H2 a alta presión
+        if p_op_bar >= 50 and comp.get("hydrogen", 0) >= 0.05:
+            if MATERIAL_FACTORS["SS304"] > best_f:
+                best, best_f = "SS304", MATERIAL_FACTORS["SS304"]
+        # Especies corrosivas
+        for sp, frac in comp.items():
+            if frac < 0.01:
+                continue
+            spl = sp.lower()
+            for kw, mat in CORROSIVE_SPECIES.items():
+                if kw in spl:
+                    fm = MATERIAL_FACTORS.get(mat, 1.0)
+                    if fm > best_f:
+                        best, best_f = mat, fm
+                    break
+    return best
+
+
+def bare_module_factor(eq_nombre, P_op_bar=1.0, material="CS"):
+    """Devuelve FBM Turton = B1 + B2·FM·FP.
+
+    Args:
+        eq_nombre:  nombre en EQUIPMENT_DATA
+        P_op_bar:   presión de operación (para FP)
+        material:   string en MATERIAL_FACTORS (default CS)
+
+    Returns:
+        (FBM, FBM_CS_atm, FP, FM) tuple."""
     spec = EQUIPMENT_DATA.get(eq_nombre, {})
     cat  = spec.get("categoria", "")
-    fbm_base = FBM_BY_CATEGORIA.get(cat, FBM_DEFAULT)
-    p = max(1.0, min(200.0, float(P_op_bar)))
+    b1, b2 = B1_B2_BY_CATEGORIA.get(cat, B1_B2_DEFAULT)
+    fm = MATERIAL_FACTORS.get(material, 1.0)
+    p  = max(1.0, min(200.0, float(P_op_bar)))
     if cat in ("Vessels", "Towers", "Reactors"):
         fp = 1.0 + 0.0175 * (p - 1.0)
     elif cat == "Heat exchangers":
         fp = 1.0 + 0.012 * (p - 1.0)
     else:
         fp = 1.0
-    return fbm_base * fp, fbm_base, fp
+    fbm        = b1 + b2 * fm * fp
+    fbm_cs_atm = b1 + b2                 # base CS, atm
+    return fbm, fbm_cs_atm, fp, fm
 
 
-def bare_module_cost(eq_nombre, S, P_op_bar=1.0, year_target=None):
-    """Costo del módulo desnudo (CBM) Turton = Cp × FBM.
+def bare_module_cost(eq_nombre, S, P_op_bar=1.0, year_target=None,
+                       material="CS"):
+    """Costo del módulo desnudo (CBM) Turton = Cp · FBM.
 
     Returns:
-        dict con Cp_target, FBM, FP, FBM_base, CBM, fuera_rango, ...
+        dict con Cp_target, FBM, FP, FM, FBM_CS_atm, CBM, ...
 
-    Si el equipo no está en EQUIPMENT_DATA (custom type, mock o
-    typo), devuelve costos cero con flag 'unknown'=True para no
-    romper el costing global.  El user ve el warning en el xlsx."""
+    Si el equipo no está en EQUIPMENT_DATA → devuelve ceros con
+    flag 'unknown'=True para no romper costing global."""
     if eq_nombre not in EQUIPMENT_DATA:
         return {
             "Cp_base": 0.0, "Cp_target": 0.0,
@@ -384,18 +455,129 @@ def bare_module_cost(eq_nombre, S, P_op_bar=1.0, year_target=None):
             "year_target": year_target or 2001,
             "cepci_factor": 1.0, "fuera_rango": False,
             "S": S, "S_min": 0, "S_max": 0, "S_unit": "",
-            "FBM": 0.0, "FBM_base": 0.0, "FP": 1.0,
-            "CBM": 0.0, "unknown": True,
+            "FBM": 0.0, "FBM_CS_atm": 0.0, "FP": 1.0, "FM": 1.0,
+            "CBM": 0.0, "unknown": True, "material": material,
         }
     pc = purchased_cost(eq_nombre, S, year_target=year_target)
-    fbm, fbm_base, fp = bare_module_factor(eq_nombre, P_op_bar=P_op_bar)
+    fbm, fbm_cs, fp, fm = bare_module_factor(
+        eq_nombre, P_op_bar=P_op_bar, material=material)
     cbm = pc["Cp_target"] * fbm
-    pc["FBM"]      = fbm
-    pc["FBM_base"] = fbm_base
-    pc["FP"]       = fp
-    pc["CBM"]      = cbm
-    pc["unknown"]  = False
+    pc["FBM"]        = fbm
+    pc["FBM_CS_atm"] = fbm_cs
+    pc["FP"]         = fp
+    pc["FM"]         = fm
+    pc["CBM"]        = cbm
+    pc["unknown"]    = False
+    pc["material"]   = material
     return pc
+
+
+# ======================================================
+# GRASS ROOTS CAPITAL (Turton Eq 7.10)
+# ======================================================
+def grass_roots_capital(sum_cbm_usd, contingency_frac=0.18,
+                         aux_facilities_frac=0.50):
+    """Turton 7.10:  CGR = ΣCBM + contingency + auxiliary facilities
+
+    Defaults:
+      · contingency = 18 % de ΣCBM (Turton estándar)
+      · auxiliary   = 50 % de ΣCBM (site prep, services, offsites)
+
+    El valor de grass roots representa el capital total para
+    construir la planta desde cero en sitio virgen (vs. retrofit).
+
+    Returns:
+        dict con breakdown y CGR total."""
+    contingency    = contingency_frac    * sum_cbm_usd
+    aux_facilities = aux_facilities_frac * sum_cbm_usd
+    cgr            = sum_cbm_usd + contingency + aux_facilities
+    return {
+        "ΣCBM":                  sum_cbm_usd,
+        "Contingency":           contingency,
+        "Aux facilities":        aux_facilities,
+        "CGR (Grass Roots)":     cgr,
+        "contingency_frac":      contingency_frac,
+        "aux_facilities_frac":   aux_facilities_frac,
+    }
+
+
+# ======================================================
+# INDICADORES DE RENTABILIDAD (Turton Ch 9-10)
+# ======================================================
+def profitability_indicators(revenue_usd_yr, com_d_usd_yr, fci_usd,
+                              years_op=10, tax_rate=0.30,
+                              disc_rate=0.10):
+    """Calcula indicadores económicos clásicos a partir de:
+        revenue_usd_yr:  ingresos anuales (Σ products + byproducts vendibles)
+        com_d_usd_yr:    cost of manufacture con depreciación (Turton 8.2)
+        fci_usd:         fixed capital investment (CGR o ISBL+OSBL)
+
+    Defaults razonables:
+        years_op=10 yr, tax_rate=30 %, disc_rate=10 % (hurdle típico)
+
+    Returns:
+        dict con Gross/Net profit, Cash flow, Payback, ROI, NPV."""
+    gross_profit = revenue_usd_yr - com_d_usd_yr
+    # Depreciación lineal (Turton § 9.3 usa MACRS, acá simple)
+    depreciation = fci_usd / max(years_op, 1)
+    taxable      = gross_profit - depreciation
+    tax          = max(0.0, taxable) * tax_rate
+    net_profit   = gross_profit - tax
+    cash_flow    = net_profit + depreciation
+    # Indicadores
+    if cash_flow > 0:
+        pbp_simple = fci_usd / cash_flow
+    else:
+        pbp_simple = float("inf")
+    roi_simple = (net_profit / fci_usd * 100.0) if fci_usd > 0 else 0.0
+    # NPV (discounted cash flow over years_op)
+    npv = -fci_usd
+    for yr in range(1, years_op + 1):
+        npv += cash_flow / (1.0 + disc_rate) ** yr
+    # IRR aproximado por Newton (busca r tal que NPV=0)
+    irr = _solve_irr(cash_flow, fci_usd, years_op)
+    return {
+        "Revenue":         revenue_usd_yr,
+        "COM_d":           com_d_usd_yr,
+        "Gross profit":    gross_profit,
+        "Depreciation":    depreciation,
+        "Tax (30%)":       tax,
+        "Net profit":      net_profit,
+        "Cash flow":       cash_flow,
+        "Payback simple":  pbp_simple,
+        "ROI %":           roi_simple,
+        "NPV":             npv,
+        "IRR %":           irr * 100.0 if irr is not None else None,
+        "years_op":        years_op,
+        "disc_rate":       disc_rate,
+        "tax_rate":        tax_rate,
+    }
+
+
+def _solve_irr(cash_flow_yr, fci_usd, years_op, max_iter=50):
+    """Bisección para encontrar IRR (r tal que NPV=0).
+    Range r ∈ [-0.99, 5.0]."""
+    if cash_flow_yr <= 0:
+        return None
+    def npv_at(r):
+        v = -fci_usd
+        for yr in range(1, years_op + 1):
+            v += cash_flow_yr / (1.0 + r) ** yr
+        return v
+    lo, hi = -0.99, 5.0
+    f_lo, f_hi = npv_at(lo), npv_at(hi)
+    if f_lo * f_hi > 0:
+        return None       # no zero en el rango
+    for _ in range(max_iter):
+        mid = 0.5 * (lo + hi)
+        f_mid = npv_at(mid)
+        if abs(f_mid) < 1.0:
+            return mid
+        if f_mid * f_lo < 0:
+            hi, f_hi = mid, f_mid
+        else:
+            lo, f_lo = mid, f_mid
+    return 0.5 * (lo + hi)
 
 
 # ======================================================
