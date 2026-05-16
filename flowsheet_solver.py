@@ -1197,9 +1197,63 @@ def solve_equilibrium_reactors(fs):
         # ya lo dejó en 0 al inicio del solve.
         b.heat_of_reaction = res['heat_of_reaction_kJ_per_kg']
 
-        msgs.append(f"✓ Reactor {b.name}: ΔH={res['duty_kW']:+.2f} kW, "
-                     f"ξ={res['xi']}, "
-                     f"unmapped={res['unmapped'] if res['unmapped'] else 'none'}")
+        # ---- AUTO-DUTY: calor que el horno/jacket externo provee ----
+        # Para mantener el reactor isothermal a T_op_K, el horno debe
+        # aportar (o extraer):
+        #   Q_externo = Q_sensible_in→T_op + Q_rxn
+        # donde:
+        #   Q_sensible = m·Cp̄·(T_op − T_in_avg)   [kW]
+        #   Q_rxn      = res['duty_kW']            [kW, positivo = endo]
+        #
+        # Q > 0 → horno aporta calor (SMR endotérmico, cracking)
+        # Q < 0 → jacket extrae calor (Haber exotérmico)
+        #
+        # Esto reemplaza el duty actual del bloque (si no está locked
+        # por el user) para que aparezca en el cálculo de utilities.
+        # T_out de los outlets se propaga a T_op_C — sin esto, el
+        # solver de energía downstream calcula T's absurdas porque
+        # no captura el T_op isothermal del reactor.
+        from flowsheet_model import T_REF_C
+        Q_rxn_kW = res['duty_kW']
+        T_in_avg_K = (sum(s.temperature * s.mass_flow
+                           for s in ins if s.mass_flow > 0)
+                       / m_in_total + 273.15)
+        # Cp ponderado del input (kJ/kg·K)
+        cp_in_avg = 0.0
+        m_with_cp = 0.0
+        for s in ins:
+            if s.mass_flow <= 0:
+                continue
+            cp = _resolve_cp(s)
+            if cp is None:
+                continue
+            cp_in_avg += cp * s.mass_flow
+            m_with_cp += s.mass_flow
+        if m_with_cp > 0:
+            cp_in_avg /= m_with_cp
+        Q_sensible_kW = m_in_kg_s * cp_in_avg * (T_K - T_in_avg_K)
+
+        Q_total_kW = Q_sensible_kW + Q_rxn_kW
+
+        # Setear duty si no está locked por el user (sudoku).
+        if not _is_duty_locked(b):
+            b.duty = Q_total_kW
+            # No lo lockeamos — es un valor calculado, el solver lo
+            # recalcula en próximas iteraciones si las condiciones
+            # cambian (T_in, composición input, etc).
+
+        # Propagar T_op_C a los outlet streams no-lockeados, para que
+        # el solver de energía downstream tenga T inicial coherente y
+        # no calcule valores absurdos.
+        T_op_C = T_K - 273.15
+        for s_out in outs:
+            if not _is_temp_locked(s_out):
+                s_out.temperature = T_op_C
+
+        msgs.append(f"✓ Reactor {b.name}: ΔH_rxn={Q_rxn_kW:+.2f} kW, "
+                     f"Q_sens={Q_sensible_kW:+.2f} kW, "
+                     f"Q_total={Q_total_kW:+.2f} kW, T_out={T_op_C:.0f}°C, "
+                     f"ξ={res['xi']}")
     return msgs
 
 
@@ -1570,6 +1624,13 @@ def solve(fs, max_iter=MAX_ITER):
     for m in rxn_msgs:
         if m.startswith("✗") or m.startswith("⚠"):
             result.energy_balance_errors.append(m)
+
+    # 4c. Auto-inferir duties de HX/equipos sin duty declarado, ahora
+    #     que el reactor escribió T_out y composition.  only_zero=True
+    #     respeta los duties que el user ya seteó.  Esto cierra el
+    #     balance de los coolers/heaters downstream del reactor que
+    #     antes no podían calcularse porque les faltaba T del input.
+    auto_set_duties_from_thermo(fs, only_zero=True, respect_locks=True)
 
     # 5. Solver de energía
     total_propagated_temp = []
