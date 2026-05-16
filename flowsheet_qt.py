@@ -3673,6 +3673,11 @@ class FlowsheetMainWindow(QMainWindow):
             _mk("eq-reactor", color="#1976d2", size=18) or QIcon(),
             "🇵🇪 QUIMPAC — cloro-álcali (membrana, estilo Oquendo)",
             make_loader("quimpac"))
+        # ⚗️ HNO3 Ostwald (DuPont)
+        examples_menu.addAction(
+            _mk("eq-reactor", color="#c62828", size=18) or QIcon(),
+            "⚗️ HNO3 Ostwald (dual-presión, estilo DuPont 1920s)",
+            make_loader("hno3"))
         # Ícono del menú Ejemplos (templates)
         examples_act.setIcon(_mk("act-examples", color=_ICON_COLOR, size=20))
         examples_act.setMenu(examples_menu)
@@ -4042,6 +4047,10 @@ class FlowsheetMainWindow(QMainWindow):
                               "QUIMPAC — Cloro-álcali (celda de membrana)",
                               "100/200/300 — Chlor-Alkali Plant",
                               "PFD-QUIMPAC-001"),
+            "hno3":         (TkEditor._example_hno3_ostwald,
+                              "HNO3 Ostwald — DuPont dual-presión",
+                              "100/200/300/400/500 — Ostwald Plant",
+                              "PFD-OSTWALD-001"),
         }
         entry = builder_map.get(key)
         if entry is None:

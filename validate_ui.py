@@ -58,6 +58,7 @@ def run_all_examples():
         '_example_reactor_flash_column', '_example_hydraulic_plant',
         '_example_industrial_complete',
         '_example_quimpac_chloralkali',
+        '_example_hno3_ostwald',
     ]
     print(f"\n{'='*92}")
     print("VALIDACIÓN HEADLESS — todos los ejemplos del flowsheet")

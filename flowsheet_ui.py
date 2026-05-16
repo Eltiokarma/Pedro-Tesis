@@ -3482,6 +3482,313 @@ class FlowsheetEditor:
                                  flowrate=1, price=25000.0,
                                  stream="Consumables")
 
+    def _example_hno3_ostwald(self):
+        """HNO3 — Proceso Ostwald dual-presión (estilo DuPont 1920s).
+
+        Producción de ácido nítrico al 60% por oxidación catalítica de
+        amoníaco.  Tres etapas químicas en serie + recuperación
+        intensiva de calor + turbina de gas de cola.
+
+        Reacciones (placeholders — chemistry vía outputs locked):
+          1. 4 NH3 + 5 O2  → 4 NO + 6 H2O   (combustión Pt-Rh, 900°C)
+          2. 2 NO  + O2    → 2 NO2          (oxidación gas, 40°C, 11 bar)
+          3. 3 NO2 + H2O   → 2 HNO3 + NO    (absorción columna)
+
+        Configuración dual-presión:
+          · Combustión a 4.5 bar (más segura, menos parásitas)
+          · Absorción a 11 bar (favorece reacción 3 NO2 + H2O)
+          · Compresor NOx entre ambas etapas
+          · Turbina de cola recupera energía del gas a baja P
+
+        Basis: 1000 kg/h NH3 → ~6200 kg/h HNO3 60% (~3700 kg/h HNO3 puro).
+
+        Layout 1.8× spacing.  Acceso: menú Examples → ⚗️ HNO3 Ostwald.
+        """
+        # ============ SECCIÓN 100 — ALIMENTACIÓN ============
+        # NH3 líquido (12 bar, 25 °C)
+        tk_nh3   = self._add_example_block("TK-101","Storage tank — cone roof",
+                                              500.0,   60, 300)
+        # Vaporizador NH3 (líq → vapor sobrecalentado)
+        e101     = self._add_example_block("E-101","Heat exch. — floating head",
+                                             200.0,  360, 300)
+        # Fuente aire (atmósfera, fila inferior)
+        tk_aire  = self._add_example_block("TK-102","Storage tank — cone roof",
+                                            2000.0,   60, 600)
+        # Compresor aire 1 → 4.8 bar
+        k101     = self._add_example_block("K-101","Compressor — centrifugal",
+                                            1500.0,  360, 600)
+        # Mezclador NH3 + aire (10% NH3 molar)
+        m101     = self._add_example_block("M-101","Mixer",
+                                                5.0,  660, 450)
+
+        # ============ SECCIÓN 200 — COMBUSTIÓN + RECUP CALOR ============
+        # Reactor combustión catalítica (Pt-Rh malla, adiabático)
+        r201     = self._add_example_block("R-201","Reactor — autoclave",
+                                              100.0, 960, 450)
+        self.fs.blocks[r201].reactions = ["R_OSTWALD_BURN"]
+        self.fs.blocks[r201].T_op_K = 1173.15   # 900 °C
+        self.fs.blocks[r201].P_op_bar = 4.4
+        # WHB (waste heat boiler) — genera vapor AP
+        e201     = self._add_example_block("E-201","Heat exch. — kettle reboiler",
+                                              800.0, 1260, 450)
+        # Economizador (gas 400 → 200 °C, calienta otra corriente)
+        e202     = self._add_example_block("E-202","Heat exch. — fixed tube",
+                                              300.0, 1560, 450)
+        # Enfriador-condensador (200 → 50 °C, condensa H2O + HNO3 débil)
+        e203     = self._add_example_block("E-203","Heat exch. — air cooler",
+                                              250.0, 1860, 450)
+        # Separador líquido/gas
+        v201     = self._add_example_block("V-201","Vessel — vertical",
+                                              60.0,  2160, 450)
+        self.fs.blocks[v201].splitter_active = True
+        self.fs.blocks[v201].splitter_fractions = [0.053, 0.947]  # cond / gas
+
+        # ============ SECCIÓN 300 — COMPRESIÓN + OXIDACIÓN NOx ============
+        # K-301 — compresor NOx (4 → 11 bar)
+        k301     = self._add_example_block("K-301","Compressor — centrifugal",
+                                            1200.0, 2160, 180)
+        # R-301 — cámara de oxidación (NO + O2 → NO2)
+        r301     = self._add_example_block("R-301","Reactor — jacketed non-agit.",
+                                              60.0,  2460, 180)
+        self.fs.blocks[r301].reactions = ["R_OXIDATION_NO"]
+        self.fs.blocks[r301].T_op_K = 313.15   # 40 °C
+        self.fs.blocks[r301].P_op_bar = 10.8
+
+        # ============ SECCIÓN 400 — ABSORCIÓN ============
+        # Agua desmin (tope columna)
+        tk_h2o   = self._add_example_block("TK-103","Storage tank — cone roof",
+                                            500.0,  2460, 540)
+        # Aire bleaching secundario (re-oxida NO liberado en columna)
+        tk_bleach = self._add_example_block("TK-104","Storage tank — cone roof",
+                                            500.0,  2460, 750)
+        # Columna de absorción reactiva
+        t401     = self._add_example_block("T-401","Tower (column shell)",
+                                              60.0, 2760, 540)
+        self.fs.blocks[t401].reactions = ["R_ABSORB_NO2"]
+        self.fs.blocks[t401].T_op_K = 308.15   # 35 °C, plate cooled
+        self.fs.blocks[t401].P_op_bar = 10.5
+
+        # ============ SECCIÓN 500 — PRODUCTO + TAIL GAS ============
+        # Bleacher (strip de NOx disuelto del HNO3)
+        v501     = self._add_example_block("V-501","Vessel — vertical",
+                                              40.0, 3060, 720)
+        self.fs.blocks[v501].splitter_active = True
+        self.fs.blocks[v501].splitter_fractions = [0.984, 0.016]  # producto / vent
+        # Producto HNO3 60%
+        tk_hno3  = self._add_example_block("TK-201","Storage tank — floating roof",
+                                            800.0, 3360, 720)
+        # Vent del bleacher (NOx stripped, va a chimenea via expander)
+        tk_vent  = self._add_example_block("TK-105","Storage tank — cone roof",
+                                              50.0, 3060, 960)
+
+        # Precalentador tail gas (calienta gas de cola con calor residual)
+        e501     = self._add_example_block("E-501","Heat exch. — fixed tube",
+                                             150.0, 3060, 360)
+        # Turbina de expansión (recupera energía, 10 → 1 bar)
+        t501     = self._add_example_block("K-501","Compressor — axial",
+                                            1000.0, 3360, 360)
+        # Chimenea (post-DeNOx, atmósfera)
+        tk_stack = self._add_example_block("TK-301","Storage tank — cone roof",
+                                              50.0, 3660, 360)
+
+        # ============ STREAMS — ALIMENTACIÓN ============
+        # NH3 líquido (12 bar, 25 °C)
+        self._add_example_stream(tk_nh3, e101, "A1-NH3-liq", 1000, role="feed",
+                                  src_port="salida", dst_port="tube_in",
+                                  price=420.0, T=25,
+                                  composition={"ammonia": 1.0},
+                                  phase="liquid")
+        # NH3 vapor sobrecalentado a mixer
+        self._add_example_stream(e101, m101, "A2-NH3-vap", 1000,
+                                  src_port="tube_out", dst_port="entrada1",
+                                  T=120, phase="gas",
+                                  composition={"ammonia": 1.0})
+        # Aire filtrado (gratis, atmósfera)
+        self._add_example_stream(tk_aire, k101, "A3-aire", 14000, role="feed",
+                                  src_port="salida", dst_port="succion",
+                                  price=0.0, T=25,
+                                  composition={"oxygen": 0.232,
+                                                 "nitrogen": 0.768},
+                                  phase="gas")
+        # Aire comprimido
+        self._add_example_stream(k101, m101, "A4-aire-hp", 14000,
+                                  src_port="descarga", dst_port="entrada2",
+                                  T=200, phase="gas",
+                                  composition={"oxygen": 0.232,
+                                                 "nitrogen": 0.768})
+        # Mezcla al reactor (10% NH3 molar ≈ 6.7% peso, dentro de
+        # límites de inflamabilidad)
+        self._add_example_stream(m101, r201, "A5-mix", 15000,
+                                  src_port="salida", dst_port="alimentacion",
+                                  T=230, phase="gas",
+                                  composition={"ammonia": 0.0667,
+                                                 "oxygen": 0.217,
+                                                 "nitrogen": 0.717})
+
+        # ============ STREAMS — COMBUSTIÓN + RECUP ============
+        # Gas post-quemador (NO, H2O, N2 inerte, O2 exceso, trazas N2O)
+        self._add_example_stream(r201, e201, "A6-gas-hot", 15000,
+                                  src_port="producto", dst_port="liq_in",
+                                  T=900, phase="gas",
+                                  composition={"nitric oxide": 0.112,
+                                                 "water": 0.106,
+                                                 "nitrogen": 0.719,
+                                                 "oxygen": 0.062,
+                                                 "nitrous oxide": 0.001})
+        # Gas tras WHB (900 → 400 °C, vapor recuperado en duty E-201)
+        self._add_example_stream(e201, e202, "A7-gas-whb", 15000,
+                                  src_port="cond_out", dst_port="tube_in",
+                                  T=400, phase="gas",
+                                  composition={"nitric oxide": 0.112,
+                                                 "water": 0.106,
+                                                 "nitrogen": 0.719,
+                                                 "oxygen": 0.062,
+                                                 "nitrous oxide": 0.001})
+        # Gas tras economizador (400 → 200 °C)
+        self._add_example_stream(e202, e203, "A7b-gas-eco", 15000,
+                                  src_port="tube_out", dst_port="proceso_in",
+                                  T=200, phase="gas",
+                                  composition={"nitric oxide": 0.112,
+                                                 "water": 0.106,
+                                                 "nitrogen": 0.719,
+                                                 "oxygen": 0.062,
+                                                 "nitrous oxide": 0.001})
+        # Gas tras enfriador (200 → 50 °C, parcialmente condensado)
+        self._add_example_stream(e203, v201, "A8-gas-cool", 15000,
+                                  src_port="proceso_out", dst_port="alimentacion",
+                                  T=50, phase="two_phase",
+                                  composition={"nitric oxide": 0.080,
+                                                 "nitrogen dioxide": 0.032,
+                                                 "water": 0.106,
+                                                 "nitrogen": 0.719,
+                                                 "oxygen": 0.062,
+                                                 "nitrous oxide": 0.001})
+        # Separador → condensado ácido débil (HNO3 25-40%)
+        self._add_example_stream(v201, t401, "A9-cond-debil", 795, role="internal",
+                                  src_port="liquido_fondo", dst_port="alimentacion",
+                                  T=50, phase="liquid",
+                                  composition={"nitric acid": 0.32,
+                                                 "water": 0.68})
+        # Separador → gas NOx (al compresor)
+        self._add_example_stream(v201, k301, "A9b-gas-NOx", 14205,
+                                  src_port="vapor", dst_port="succion",
+                                  T=50, phase="gas",
+                                  composition={"nitric oxide": 0.085,
+                                                 "nitrogen dioxide": 0.034,
+                                                 "water": 0.054,
+                                                 "nitrogen": 0.760,
+                                                 "oxygen": 0.066,
+                                                 "nitrous oxide": 0.001})
+
+        # ============ STREAMS — COMPRESIÓN + OXIDACIÓN ============
+        # Gas comprimido a 11 bar
+        self._add_example_stream(k301, r301, "A10-NOx-hp", 14205,
+                                  src_port="descarga", dst_port="alimentacion",
+                                  T=120, phase="gas",
+                                  composition={"nitric oxide": 0.085,
+                                                 "nitrogen dioxide": 0.034,
+                                                 "water": 0.054,
+                                                 "nitrogen": 0.760,
+                                                 "oxygen": 0.066,
+                                                 "nitrous oxide": 0.001})
+        # Gas oxidado (NO → NO2, 90% conv)
+        self._add_example_stream(r301, t401, "A11-NOx-ox", 14205,
+                                  src_port="producto", dst_port="vapor_tope",
+                                  T=40, phase="gas",
+                                  composition={"nitric oxide": 0.009,
+                                                 "nitrogen dioxide": 0.150,
+                                                 "water": 0.054,
+                                                 "nitrogen": 0.760,
+                                                 "oxygen": 0.026,
+                                                 "nitrous oxide": 0.001})
+
+        # ============ STREAMS — ABSORCIÓN ============
+        # Agua desmin al tope de columna
+        self._add_example_stream(tk_h2o, t401, "A12-agua", 3000, role="feed",
+                                  src_port="salida", dst_port="reflujo",
+                                  price=1.5, T=30,
+                                  composition={"water": 1.0},
+                                  phase="liquid")
+        # Aire bleaching (re-oxida NO en columna)
+        self._add_example_stream(tk_bleach, t401, "A12b-bleach-air", 500,
+                                  role="feed",
+                                  src_port="salida", dst_port="aux_in",
+                                  price=0.0, T=30,
+                                  composition={"oxygen": 0.232,
+                                                 "nitrogen": 0.768},
+                                  phase="gas")
+        # Fondo: HNO3 60% con NOx disuelto, al bleacher
+        self._add_example_stream(t401, v501, "A13-HNO3-crudo", 6200,
+                                  src_port="liquido_fondo", dst_port="alimentacion",
+                                  T=60, phase="liquid",
+                                  composition={"nitric acid": 0.60,
+                                                 "water": 0.39,
+                                                 "nitrogen dioxide": 0.01})
+        # Tope: gas de cola (N2 mayor, O2, NOx residual <200 ppm)
+        self._add_example_stream(t401, e501, "A14-tail-gas", 12300,
+                                  src_port="vapor_tope", dst_port="tube_in",
+                                  T=25, phase="gas",
+                                  composition={"nitrogen": 0.880,
+                                                 "oxygen": 0.090,
+                                                 "water": 0.029,
+                                                 "nitric oxide": 0.0008,
+                                                 "nitrogen dioxide": 0.0002})
+
+        # ============ STREAMS — PRODUCTO + TAIL ============
+        # Bleacher: HNO3 limpio (producto) + vent con NOx stripped
+        self._add_example_stream(v501, tk_hno3, "A13b-HNO3-60", 6100,
+                                  role="product",
+                                  src_port="liquido_fondo", dst_port="entrada",
+                                  price=320.0, T=60, phase="liquid",
+                                  composition={"nitric acid": 0.60,
+                                                 "water": 0.40})
+        self._add_example_stream(v501, tk_vent, "A13c-bleach-vent", 100,
+                                  role="waste",
+                                  src_port="vapor", dst_port="entrada",
+                                  price=0.0, T=60, phase="gas",
+                                  composition={"nitrogen dioxide": 0.60,
+                                                 "water": 0.40})
+        # Tail gas precalentado → expander → chimenea
+        self._add_example_stream(e501, t501, "A14b-tail-hot", 12300,
+                                  src_port="tube_out", dst_port="succion",
+                                  T=200, phase="gas",
+                                  composition={"nitrogen": 0.880,
+                                                 "oxygen": 0.090,
+                                                 "water": 0.029,
+                                                 "nitric oxide": 0.0008,
+                                                 "nitrogen dioxide": 0.0002})
+        self._add_example_stream(t501, tk_stack, "A15-stack", 12300,
+                                  role="waste",
+                                  src_port="descarga", dst_port="entrada",
+                                  price=0.0, T=-10, phase="gas",
+                                  composition={"nitrogen": 0.880,
+                                                 "oxygen": 0.090,
+                                                 "water": 0.029,
+                                                 "nitric oxide": 0.0008,
+                                                 "nitrogen dioxide": 0.0002})
+
+        # ============ DUTIES INFERIDOS ============
+        from flowsheet_solver import auto_set_duties_from_thermo
+        auto_set_duties_from_thermo(self.fs)
+        # Reactor combustión: adiabático, libera ~226 kJ/mol NH3 ×
+        # 58.8 kmol/h = 13290 MJ/h = 3692 kW.  Como adiabático,
+        # ese calor calienta el gas (de 230 a 900 °C en una etapa).
+        # No le seteamos duty; el reactor lo absorbe internamente.
+        # K-501 (turbina expansión) consume W negativo (genera).
+        self.fs.blocks[t501].duty = -700.0
+        self.fs.blocks[t501].duty_locked = True
+
+        # ============ OPEX EXTRAS ============
+        self._add_example_extra("Catalizador Pt-Rh (gauze, reposición)",
+                                 flowrate=25, price=85000.0,
+                                 stream="Consumables")
+        self._add_example_extra("Agua desmineralizada (utility)",
+                                 flowrate=24000, price=2.5,
+                                 stream="Utilities")
+        self._add_example_extra("Vapor AP recuperado (crédito WHB)",
+                                 flowrate=4000, price=-25.0,  # negativo = ingreso
+                                 stream="Utilities")
+
     def open_json(self):
         path = filedialog.askopenfilename(
             title="Abrir diagrama",
