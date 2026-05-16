@@ -2809,6 +2809,12 @@ class FlowsheetMainWindow(QMainWindow):
                                   make_loader("ethane_pfr"))
         examples_menu.addAction(_ic_rxn, "Haber-Bosch con recycle (NH3, loop reactivo)",
                                   make_loader("haber_rec"))
+        examples_menu.addSeparator()
+        # Capa 6 NRTL — destilación azeotrópica
+        _ic_az = _mk("an-pinch", color="#1565c0", size=18) or QIcon()
+        examples_menu.addAction(_ic_az,
+            "Destilación azeotrópica etanol-agua (NRTL Capa 6)",
+            make_loader("dist_eth_az"))
         # Ícono del menú Ejemplos (templates)
         examples_act.setIcon(_mk("act-examples", color=_ICON_COLOR, size=20))
         examples_act.setMenu(examples_menu)
@@ -3142,6 +3148,9 @@ class FlowsheetMainWindow(QMainWindow):
             "haber_rec":    (TkEditor._example_haber_recycle,
                               "Haber-Bosch con recycle — NH3 con loop reactivo",
                               "100 — Síntesis NH3", "PFD-NH3-REC-001"),
+            "dist_eth_az":  (TkEditor._example_distillation_ethanol_water,
+                              "Destilación azeotrópica etanol-agua (NRTL Capa 6)",
+                              "200 — Separación", "PFD-ETH-AZ-001"),
         }
         entry = builder_map.get(key)
         if entry is None:
@@ -3970,6 +3979,56 @@ class FlowsheetMainWindow(QMainWindow):
                     total = s.mass_flow * s.price_usd_per_tm
                     lbl = "Ingreso" if s.role == "product" else "Costo"
                     txt += f"\n{lbl}    $ {total:,.0f}/año"
+
+            # ---- Análisis NRTL (Capa 6) si hay >=2 componentes con
+            # parámetros y la fase es líquido o two-phase ----
+            comp_clean = {k: v for k, v in (s.composition or {}).items() if v > 0.005}
+            if (len(comp_clean) >= 2 and
+                s.phase in ("liquid", "two_phase", "vapor", "gas", "")):
+                top = sorted(comp_clean.items(), key=lambda kv: -kv[1])
+                # Tomar los 2 componentes mayores
+                n1, _ = top[0]
+                n2, _ = top[1]
+                try:
+                    import nrtl
+                    if nrtl.has_params(n1, n2):
+                        T_K = s.temperature + 273.15
+                        nrtl_txt = ["\n─ Análisis NRTL (par dominante) ─"]
+                        nrtl_txt.append(f"Par:       {n1} / {n2}")
+                        # Convertir a binario normalizado
+                        x1 = top[0][1] / (top[0][1] + top[1][1])
+                        g = nrtl.activity_coeff_binary([n1, n2], x1, T_K)
+                        if g:
+                            nrtl_txt.append(f"γ {n1}: {g[0]:.3f}")
+                            nrtl_txt.append(f"γ {n2}: {g[1]:.3f}")
+                        # T_bub binario a 1 atm
+                        bp = nrtl.bubble_point([n1, n2], [x1, 1-x1], 1.013)
+                        if bp:
+                            T_bub_C = bp[0] - 273.15
+                            y1 = bp[1][0]
+                            nrtl_txt.append(
+                                f"T_bub @1atm: {T_bub_C:.1f}°C  "
+                                f"(y_{n1}={y1*100:.1f}%)")
+                        # Azeotropo si existe
+                        az = nrtl.find_azeotrope([n1, n2], 1.013)
+                        if az:
+                            T_az_C = az["T_az_K"] - 273.15
+                            kind_label = ("min-boiling" if az["kind"] == "positive"
+                                            else "max-boiling")
+                            nrtl_txt.append(
+                                f"⚠ AZEOTROPO {kind_label} @1atm:")
+                            nrtl_txt.append(
+                                f"   x_{n1} = {az['x_az']:.3f}  "
+                                f"T = {T_az_C:.1f}°C")
+                            # Advertencia si la composición está cerca
+                            if abs(x1 - az["x_az"]) < 0.05:
+                                nrtl_txt.append(
+                                    "   ⚠ stream está CERCA del azeo —")
+                                nrtl_txt.append(
+                                    "     destilación simple no puede pasar.")
+                        txt += "\n" + "\n".join(nrtl_txt)
+                except Exception as e:
+                    pass    # falta thermo_db / Antoine → skip silencioso
             self.prop_label.setText(txt)
 
     # ---------------------------------------------------

@@ -2625,6 +2625,97 @@ class FlowsheetEditor:
                                  flowrate=5, price=15_000.0,
                                  stream="Consumables")
 
+    def _example_distillation_ethanol_water(self):
+        """Destilación etanol-agua — DEMO DEL AZEOTROPO (Capa 6).
+
+        Sistema clásico no-ideal: etanol forma azeotropo positivo con
+        agua a 89.4% mol etanol (95.6% peso) y 78.15°C @ 1 atm.  Una
+        columna de destilación simple NO puede pasar de esa pureza.
+
+        Tren:
+          TK-feed (fermentación, 12% peso eth) → P-101 (bomba) →
+          E-101 (precalentador) → T-101 (columna destilación) →
+            ├─ E-102 (condensador) → TK-eth (azeo, 95.6% peso máx)
+            └─ E-103 (reboiler)    → TK-water (residuo agua)
+
+        El feed simula caldo de fermentación industrial (12% mass eth).
+        El destilado sale al límite azeotrópico (95.6% mass eth) — NO
+        se puede alcanzar etanol absoluto (99.5%+) sin destilación
+        azeotrópica o extractive con benceno/glicol/MSP.
+
+        Al seleccionar S-distillate verás en el panel '⚠ AZEOTROPO':
+        el solver Capa 6 detecta y advierte.
+        """
+        # Layout
+        tk_feed = self._add_example_block("TK-101","Storage tank — cone roof", 800.0,  60, 320)
+        p101    = self._add_example_block("P-101", "Pump — centrifugal",         5.0, 240, 320)
+        e101    = self._add_example_block("E-101", "Heat exch. — floating head", 80.0, 380, 320)
+        t101    = self._add_example_block("T-101", "Tower (column shell)",       45.0, 540, 280)
+        e102    = self._add_example_block("E-102", "Heat exch. — air cooler",   120.0, 720, 200)
+        e103    = self._add_example_block("E-103", "Heat exch. — kettle reboiler", 110.0, 700, 460)
+        tk_eth  = self._add_example_block("TK-102","Storage tank — cone roof",  200.0, 900, 200)
+        tk_h2o  = self._add_example_block("TK-103","Storage tank — cone roof",  400.0, 900, 460)
+
+        # Composiciones — TODAS multicomponente para que el análisis
+        # NRTL del stream tenga 2 componentes.
+        # Feed: caldo de fermentación industrial 12% mass eth (~5% mol)
+        feed_comp = {"ethanol": 0.12, "water": 0.88}
+        # Pre-calentado al BP del feed (~96°C, mezcla eth/water)
+        # Distillate: límite azeotrópico = 95.6% mass eth = 89.4% mol
+        # (mol→mass: x_mol_eth=0.894 · 46.07 / (0.894·46.07 + 0.106·18.015)
+        #  = 41.2 / 43.1 = 0.956)
+        # En este ejemplo declaramos en mol equivalente (Capa 6 trabaja en mol)
+        # 95.6% mass eth para mantener consistencia con resto del flowsheet.
+        distillate_comp = {"ethanol": 0.956, "water": 0.044}
+        # Bottom: agua casi pura (residuos sólidos no modelados)
+        bottom_comp = {"water": 0.998, "ethanol": 0.002}
+
+        # Feed → bomba (asumimos 12% mass eth en caldo, 10000 tm/año)
+        self._add_example_stream(tk_feed, p101, "S-caldo", 10000, role="feed",
+                                  src_port="salida", dst_port="succion",
+                                  price=80.0, T=30,
+                                  composition=feed_comp, phase="liquid")
+        # Bomba → pre-heater
+        self._add_example_stream(p101, e101, "S-pumped",
+                                  src_port="descarga", dst_port="tube_in",
+                                  T=32, phase="liquid")
+        # Pre-heater → columna
+        self._add_example_stream(e101, t101, "S-feed-hot",
+                                  src_port="tube_out", dst_port="alimentacion",
+                                  T=85, phase="two_phase")
+        # Columna tope → condensador
+        self._add_example_stream(t101, e102, "S-vap-tope",
+                                  src_port="vapor_tope", dst_port="shell_in",
+                                  T=78,           # = T_az aprox
+                                  composition=distillate_comp, phase="vapor")
+        # Condensador → producto etanol (azeo)
+        # Balance: feed 12% mass eth × 10000 = 1200 tm/año eth.
+        # Si distillate = 95.6% mass eth y captura 99% del eth feed:
+        # m_dist = (0.99 · 1200) / 0.956 = 1242 tm/año
+        self._add_example_stream(e102, tk_eth, "S-distillate", 1242, role="product",
+                                  src_port="shell_out", dst_port="entrada",
+                                  price=900.0, T=40,
+                                  composition=distillate_comp, phase="liquid")
+        # Columna fondo → reboiler
+        self._add_example_stream(t101, e103, "S-fondo-liq",
+                                  src_port="liquido_fondo", dst_port="liq_in",
+                                  T=100,
+                                  composition=bottom_comp, phase="liquid")
+        # Reboiler → bottom product (agua)
+        # m_bottom = feed - distillate = 10000 - 1242 = 8758 tm/año
+        self._add_example_stream(e103, tk_h2o, "S-bottom", 8758, role="waste",
+                                  src_port="cond_out", dst_port="entrada",
+                                  price=0.0, T=40,
+                                  composition=bottom_comp, phase="liquid")
+
+        # OPEX extras
+        self._add_example_extra("Vapor MP (reboiler)",
+                                 flowrate=5000, price=12.0,
+                                 stream="Utilities")
+        self._add_example_extra("Agua de enfriamiento (condensador)",
+                                 flowrate=80000, price=0.05,
+                                 stream="Utilities")
+
     def open_json(self):
         path = filedialog.askopenfilename(
             title="Abrir diagrama",
