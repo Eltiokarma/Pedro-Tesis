@@ -1645,6 +1645,27 @@ class BlockItem(QGraphicsItemGroup):
         self.duty_badge.setZValue(3)
         self._update_duty_badge()
 
+        # ---- Badge HYSYS icon (esquina inferior izquierda) ----
+        # Pequeño ícono del tipo de equipo (estilo HYSYS line-art) para
+        # identificar visualmente el bloque rápido — sin reemplazar el
+        # símbolo PFD detallado que dibuja pfd_symbols.
+        try:
+            from icons import icon_for_eq_type, make_qicon
+            from PySide6.QtWidgets import QGraphicsPixmapItem
+            icon_id = icon_for_eq_type(block.eq_type)
+            ic = make_qicon(icon_id, color="#9aa5b1", size=16)
+            if ic is not None:
+                self.type_badge = QGraphicsPixmapItem(
+                    ic.pixmap(14, 14), parent=self)
+                self.type_badge.setPos(2, self.H - 16)
+                self.type_badge.setZValue(2.5)
+                self.type_badge.setAcceptedMouseButtons(Qt.NoButton)
+                self.type_badge.setOpacity(0.7)
+            else:
+                self.type_badge = None
+        except Exception:
+            self.type_badge = None
+
         # --- puertos ---
         self.port_items: dict = {}     # port_name → QGraphicsEllipseItem
         self._render_ports()

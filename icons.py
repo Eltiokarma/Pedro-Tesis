@@ -149,6 +149,45 @@ CATEGORIES = ["file", "edit", "view", "sim", "actions", "equip",
               "stream", "workbook", "analysis", "nav", "config", "help"]
 
 
+# Mapeo eq_type → icon_id del set HYSYS equip
+# Conecta los nombres de equipment_costs.EQUIPMENT_DATA con los íconos
+# 'equip' para mostrar en paneles, tooltips y diálogos.
+EQ_TYPE_TO_ICON = {
+    "Reactor — jacketed agitated":      "eq-cstr",
+    "Reactor — jacketed non-agit.":     "eq-pfr",
+    "Reactor — fluidized bed":          "eq-cstr",
+    "Crystallizer":                     "eq-cstr",
+    "Tower (column shell)":             "eq-column",
+    "Heat exch. — floating head":       "eq-hx",
+    "Heat exch. — air cooler":          "eq-cooler",
+    "Heat exch. — kettle reboiler":     "eq-heater",
+    "Heat exch. — fixed tube":          "eq-hx",
+    "Heat exch. — U-tube":              "eq-hx",
+    "Evaporator — vertical":            "eq-heater",
+    "Fired heater — non-reformer":      "eq-heater",
+    "Vessel — vertical":                "eq-separator-v",
+    "Vessel — horizontal":              "eq-separator-h",
+    "Storage tank — cone roof":         "eq-tank",
+    "Storage tank — floating roof":     "eq-tank",
+    "Pump — centrifugal":               "eq-pump",
+    "Pump — positive displacement":     "eq-pump",
+    "Compressor — centrifugal":         "eq-compressor",
+    "Compressor — reciprocating":       "eq-compressor",
+    "Fan":                              "eq-compressor",
+    "Filter — belt":                    "eq-separator-h",
+    "Filter — rotary drum":             "eq-separator-h",
+    "Dryer — drum":                     "eq-tank-cyl",
+    "Dryer — rotary":                   "eq-tank-cyl",
+    "Mixer — static":                   "eq-mixer",
+    "Mixer":                            "eq-mixer",
+}
+
+
+def icon_for_eq_type(eq_type: str) -> str:
+    """Devuelve icon_id HYSYS para un eq_type. Fallback eq-mixer."""
+    return EQ_TYPE_TO_ICON.get(eq_type, "eq-mixer")
+
+
 def list_by_cat(cat: str):
     """Devuelve lista de (id, name) en una categoría."""
     return [(iid, ICONS[iid][0])
