@@ -1198,6 +1198,105 @@ class _StreamHandle(QGraphicsEllipseItem):
         return super().itemChange(change, value)
 
 
+# =============================================================
+# JUMPERS — cruces de streams con arc (convención PFD industrial)
+# =============================================================
+
+def _segments_intersect(x1, y1, x2, y2, x3, y3, x4, y4):
+    """Devuelve (xc, yc) si los segmentos (1-2) y (3-4) se cruzan
+    estrictamente (no en endpoints).  None si no se cruzan."""
+    denom = (x1 - x2) * (y3 - y4) - (y1 - y2) * (x3 - x4)
+    if abs(denom) < 1e-9:
+        return None    # paralelos
+    t = ((x1 - x3) * (y3 - y4) - (y1 - y3) * (x3 - x4)) / denom
+    u = -((x1 - x2) * (y1 - y3) - (y1 - y2) * (x1 - x3)) / denom
+    eps = 1e-3   # tolerancia para descartar cruces en esquinas
+    if eps < t < 1 - eps and eps < u < 1 - eps:
+        return (x1 + t * (x2 - x1), y1 + t * (y2 - y1))
+    return None
+
+
+def _detect_path_crossings(pts_self, pts_other):
+    """Detecta los puntos donde el path 'self' cruza al path 'other'.
+    Cada punto retornado es (x_cross, y_cross, seg_idx_self) donde
+    seg_idx_self es el índice del segmento en pts_self (par i,
+    de pts[2i:2i+4])."""
+    crossings = []
+    if len(pts_self) < 4 or len(pts_other) < 4:
+        return crossings
+    n_self = (len(pts_self) - 2) // 2
+    n_other = (len(pts_other) - 2) // 2
+    for i in range(n_self):
+        x1, y1 = pts_self[2*i], pts_self[2*i+1]
+        x2, y2 = pts_self[2*i+2], pts_self[2*i+3]
+        for j in range(n_other):
+            x3, y3 = pts_other[2*j], pts_other[2*j+1]
+            x4, y4 = pts_other[2*j+2], pts_other[2*j+3]
+            cross = _segments_intersect(x1, y1, x2, y2, x3, y3, x4, y4)
+            if cross is not None:
+                crossings.append((cross[0], cross[1], i))
+    return crossings
+
+
+HOP_RADIUS = 6.0   # radio de la curvita en el cruce
+
+
+def _build_path_with_hops(pts, hops):
+    """Construye un QPainterPath siguiendo `pts`, insertando un arc
+    (semicírculo) en cada punto de cruce listado en `hops`.
+
+    Cada hop: (x_cross, y_cross, seg_idx).
+    El path queda: lineTo hasta (cross − r·u), cubicTo (apex + offset
+    perpendicular), lineTo (cross + r·u), continuar al siguiente pt.
+    """
+    import math
+    path = QPainterPath(QPointF(pts[0], pts[1]))
+    n_segs = (len(pts) - 2) // 2
+
+    # Agrupar hops por segmento.  Ordenarlos a lo largo del segmento.
+    hops_by_seg: dict = {}
+    for (xc, yc, idx) in hops:
+        hops_by_seg.setdefault(idx, []).append((xc, yc))
+
+    for i in range(n_segs):
+        x1, y1 = pts[2*i],   pts[2*i+1]
+        x2, y2 = pts[2*i+2], pts[2*i+3]
+        seg_hops = hops_by_seg.get(i, [])
+        if not seg_hops:
+            path.lineTo(x2, y2)
+            continue
+        # Ordenar hops por distancia desde (x1, y1)
+        dx, dy = x2 - x1, y2 - y1
+        seg_L = math.hypot(dx, dy)
+        if seg_L < 1e-3:
+            path.lineTo(x2, y2)
+            continue
+        ux, uy = dx / seg_L, dy / seg_L
+        nx, ny = -uy, ux  # perpendicular hacia "arriba"
+        def _dist_from_start(p):
+            return (p[0] - x1) * ux + (p[1] - y1) * uy
+        seg_hops_sorted = sorted(seg_hops, key=_dist_from_start)
+        # Dibujar lineTo hasta cada hop, hop con arc, y continuar
+        for (xc, yc) in seg_hops_sorted:
+            # Punto antes del cruce
+            px = xc - HOP_RADIUS * ux
+            py = yc - HOP_RADIUS * uy
+            path.lineTo(px, py)
+            # Punto después
+            qx = xc + HOP_RADIUS * ux
+            qy = yc + HOP_RADIUS * uy
+            # Control points del cubicTo para aproximar un arc de 180°.
+            # Factor 0.55 hace que el control sea apex del semicírculo.
+            cp1x = px + HOP_RADIUS * nx * 1.3
+            cp1y = py + HOP_RADIUS * ny * 1.3
+            cp2x = qx + HOP_RADIUS * nx * 1.3
+            cp2y = qy + HOP_RADIUS * ny * 1.3
+            path.cubicTo(cp1x, cp1y, cp2x, cp2y, qx, qy)
+        # Después de todos los hops, lineTo al final del segmento
+        path.lineTo(x2, y2)
+    return path
+
+
 class _GhostStreamHandle(QGraphicsEllipseItem):
     """Handle fantasma en un bend point del auto-routing.  Click → bakea
     los bends del auto-route en model.waypoints y aparecen handles reales
@@ -2061,9 +2160,27 @@ class StreamItem(QGraphicsPathItem):
         # guardar para que los handles fantasma puedan leer los bend points
         self._last_pts = pts
 
-        path = QPainterPath(QPointF(pts[0], pts[1]))
-        for i in range(2, len(pts), 2):
-            path.lineTo(pts[i], pts[i+1])
+        # ---- JUMPERS: detectar cruces con OTROS streams y dibujar
+        #      pequeños arcs (semicírculos) en los puntos de cruce
+        #      para que las flechas no se "toquen".  Solo el stream
+        #      con id MAYOR dibuja el hop — así cada cruce tiene
+        #      solo una curvita, no dos superpuestas.
+        hops = []
+        if self.scene() is not None and self.editor is not None:
+            try:
+                for other_sid, other_item in self.editor.stream_items_iter():
+                    if other_item is self:
+                        continue
+                    if self.model.id < other_item.model.id:
+                        continue   # el otro dibujará el hop
+                    other_pts = getattr(other_item, '_last_pts', None) or []
+                    crosses = _detect_path_crossings(pts, other_pts)
+                    hops.extend(crosses)
+            except Exception:
+                pass
+
+        # Construir el path con hops insertados
+        path = _build_path_with_hops(pts, hops)
         self.setPath(path)
 
         color = self._color()
@@ -4183,12 +4300,29 @@ class FlowsheetMainWindow(QMainWindow):
             bitem.update_port_colors(used)
 
     def refresh_streams_of(self, block_id):
-        """Llamado por BlockItem.itemChange cuando un bloque se mueve."""
+        """Llamado por BlockItem.itemChange cuando un bloque se mueve.
+
+        Hace dos pasadas para que los jumpers (cruces) queden consistentes:
+          1. Actualizar streams CONECTADOS al bloque movido.
+          2. Re-render TODOS los streams para que detecten nuevos cruces
+             con los actualizados.  O(n²) pero los flowsheets son chicos
+             (<50 streams típico).
+        """
+        # Pass 1: streams del bloque
         for s in self.fs.streams.values():
             if s.src == block_id or s.dst == block_id:
                 item = self.scene.stream_items.get(s.id)
                 if item is not None:
-                    item.update_path()
+                    item.update_path(rebuild_handles=False)
+        # Pass 2: refresh global de paths para que jumpers se recalculen
+        self._refresh_all_stream_paths()
+
+    def _refresh_all_stream_paths(self):
+        """Re-renderiza el path de TODOS los streams.  Necesario después
+        de mover bloques o de un solve, para que los cruces (jumpers)
+        queden coherentes."""
+        for sid, item in self.scene.stream_items.items():
+            item.update_path(rebuild_handles=False)
 
     def _delete_block(self, bid):
         item = self.scene.block_items.pop(bid, None)
