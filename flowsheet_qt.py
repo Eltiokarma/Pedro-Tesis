@@ -3678,6 +3678,11 @@ class FlowsheetMainWindow(QMainWindow):
             _mk("eq-reactor", color="#c62828", size=18) or QIcon(),
             "⚗️ HNO3 Ostwald (dual-presión, estilo DuPont 1920s)",
             make_loader("hno3"))
+        # 🏭 Refinería Talara (Petroperú)
+        examples_menu.addAction(
+            _mk("eq-tower", color="#5d4037", size=18) or QIcon(),
+            "🏭 REFINERÍA TALARA — PMRT (95k BPD, conversión profunda)",
+            make_loader("talara"))
         # Ícono del menú Ejemplos (templates)
         examples_act.setIcon(_mk("act-examples", color=_ICON_COLOR, size=20))
         examples_act.setMenu(examples_menu)
@@ -4051,6 +4056,10 @@ class FlowsheetMainWindow(QMainWindow):
                               "HNO3 Ostwald — DuPont dual-presión",
                               "100/200/300/400/500 — Ostwald Plant",
                               "PFD-OSTWALD-001"),
+            "talara":       (TkEditor._example_talara_refinery,
+                              "REFINERÍA TALARA — PMRT Petroperú",
+                              "100-900 — Conversión Profunda",
+                              "PFD-TALARA-001"),
         }
         entry = builder_map.get(key)
         if entry is None:

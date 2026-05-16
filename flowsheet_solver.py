@@ -443,6 +443,12 @@ def _check_component_balance(fs, tol_rel=0.02):
             continue   # reactores cambian composición
         if b.id in downstream_of_rxn:
             continue   # primera fila después del reactor, hereda
+        # Splitters DISTRIBUYEN (no transforman): si el user lockeó
+        # composiciones distintas por output (ej. cortes de petróleo
+        # en una columna), el per-component check es engañoso.  El
+        # mass balance total se chequea aparte vía _check_mass_balance.
+        if getattr(b, "splitter_active", False):
+            continue
         ins  = [s for s in fs.streams.values() if s.dst == b.id]
         outs = [s for s in fs.streams.values() if s.src == b.id]
         if not ins or not outs:

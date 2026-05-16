@@ -3789,6 +3789,401 @@ class FlowsheetEditor:
                                  flowrate=4000, price=-25.0,  # negativo = ingreso
                                  stream="Utilities")
 
+    def _example_talara_refinery(self):
+        """Nueva Refinería Talara (PMRT — Petroperú) — esquema integrado.
+
+        95 000 BPD de crudo pesado de selva (≈ 500 000 kg/h), conversión
+        profunda, primera refinería de LatAm con Flexicoking.  Acceso:
+        menú Examples → 🏭 REFINERÍA TALARA.
+
+        Representación de las 16 unidades de proceso vía 28 bloques:
+          · DESAL → DP1 (atm) → DV3 (vacío)
+          · FCC + FCK Flexicoking (conversión profunda)
+          · HTN + HTD + HTF (hidrotratamientos con H2 de planta SMR)
+          · RCA reformación catalítica (gasolina 97 + H2 subproducto)
+          · Planta H2 (SMR) auxiliar
+
+        Reactores con placeholders (chemistry de refino fuera de DB):
+          R_DESAL, R_FCC, R_FCK, R_HDS, R_REFORM, R_SMR
+        Las columnas DP1/DV3 modeladas como splitters con fracciones
+        típicas de cortes (TBP empírica).
+
+        Caudales orientativos (basis 500 000 kg/h crudo).
+        """
+        # ============ ALIMENTACIÓN ============
+        tk_crudo = self._add_example_block("TK-101","Storage tank — floating roof",
+                                            1200.0,   60, 480)
+        tk_agua  = self._add_example_block("TK-102","Storage tank — cone roof",
+                                             500.0,   60, 720)
+        m101     = self._add_example_block("M-101","Mixer",
+                                                5.0,  360, 600)
+        # Desaladora electrostática
+        v101     = self._add_example_block("V-101","Vessel — horizontal",
+                                              80.0,  660, 600)
+        self.fs.blocks[v101].splitter_active = True
+        self.fs.blocks[v101].splitter_fractions = [0.952, 0.048]  # crude / brine
+        # Horno de carga DP1
+        f101     = self._add_example_block("F-101","Fired heater — non-reformer",
+                                          15000.0,  960, 480)
+        # Brine descarga (residuo desalado)
+        tk_brine = self._add_example_block("TK-103","Storage tank — cone roof",
+                                              80.0,  660, 840)
+
+        # ============ DESTILACIÓN PRIMARIA (DP1) ============
+        # Columna atmosférica, modelada como splitter de 6 cortes
+        t101     = self._add_example_block("T-101","Tower (column shell)",
+                                             150.0, 1260, 480)
+        self.fs.blocks[t101].splitter_active = True
+        # Cortes típicos de crudo medio-pesado: gas, nafta, kero, diésel,
+        # gasóleo atm, residuo atm
+        self.fs.blocks[t101].splitter_fractions = [0.02, 0.18, 0.13,
+                                                     0.22, 0.08, 0.37]
+        # Tanques de cortes inmediatos (algunos van a downstream, otros directo)
+        tk_fuel_gas = self._add_example_block("TK-201","Storage tank — cone roof",
+                                              150.0, 1260, 120)
+        tk_turbo = self._add_example_block("TK-202","Storage tank — floating roof",
+                                            600.0, 1860, 660)
+
+        # ============ HIDROTRATAMIENTOS ============
+        # HTN — Hidrotratamiento de Nafta (a RCA)
+        r_htn    = self._add_example_block("R-HTN","Reactor — autoclave",
+                                              80.0, 1560, 300)
+        self.fs.blocks[r_htn].reactions = ["R_HDS"]
+        self.fs.blocks[r_htn].T_op_K = 623.15
+        self.fs.blocks[r_htn].P_op_bar = 50.0
+        # HTD — Hidrotratamiento de Diésel (a ULSD <50 ppm S)
+        r_htd    = self._add_example_block("R-HTD","Reactor — autoclave",
+                                             120.0, 1560, 840)
+        self.fs.blocks[r_htd].reactions = ["R_HDS"]
+        self.fs.blocks[r_htd].T_op_K = 653.15
+        self.fs.blocks[r_htd].P_op_bar = 80.0
+        # HTF — Hidrotratamiento de Nafta FCC
+        r_htf    = self._add_example_block("R-HTF","Reactor — autoclave",
+                                              60.0, 2460, 540)
+        self.fs.blocks[r_htf].reactions = ["R_HDS"]
+        self.fs.blocks[r_htf].T_op_K = 593.15
+        self.fs.blocks[r_htf].P_op_bar = 40.0
+
+        # ============ RCA — REFORMACIÓN CATALÍTICA ============
+        # Cascada de reactores: aquí modelado como uno solo
+        r_rca    = self._add_example_block("R-RCA","Reactor — jacketed agitated",
+                                             100.0, 1860, 300)
+        self.fs.blocks[r_rca].reactions = ["R_REFORM"]
+        self.fs.blocks[r_rca].T_op_K = 793.15
+        self.fs.blocks[r_rca].P_op_bar = 10.0
+        # Tanque gasolina 97 octano (producto final reformado)
+        tk_gaso97 = self._add_example_block("TK-203","Storage tank — floating roof",
+                                            800.0, 2160, 300)
+        # Tanque ULSD (diésel limpio)
+        tk_ulsd  = self._add_example_block("TK-204","Storage tank — floating roof",
+                                            800.0, 1860, 840)
+
+        # ============ DESTILACIÓN AL VACÍO (DV3) ============
+        # Procesa el residuo atmosférico (~37% del crudo)
+        t201     = self._add_example_block("T-201","Tower (column shell)",
+                                             100.0, 1560,1080)
+        self.fs.blocks[t201].splitter_active = True
+        # LVGO+HVGO (45%) / residuo vacío (55%)
+        self.fs.blocks[t201].splitter_fractions = [0.55, 0.45]
+
+        # ============ FCC — CRAQUEO CATALÍTICO ============
+        # 6 productos: gasolina FCC, LCO, GLP, gas seco, slurry, coque
+        r_fcc    = self._add_example_block("R-FCC","Reactor — autoclave",
+                                             250.0, 1860,1080)
+        self.fs.blocks[r_fcc].reactions = ["R_FCC"]
+        self.fs.blocks[r_fcc].splitter_active = True
+        self.fs.blocks[r_fcc].splitter_fractions = [0.48, 0.14, 0.18,
+                                                     0.03, 0.07, 0.10]
+        # Tanques productos FCC
+        tk_naft_fcc_raw = self._add_example_block("TK-301","Storage tank — cone roof",
+                                            150.0, 2160, 540)
+        tk_lco   = self._add_example_block("TK-205","Storage tank — floating roof",
+                                            400.0, 2160, 720)
+        tk_glp_fcc = self._add_example_block("TK-206","Storage tank — cone roof",
+                                            200.0, 2160, 900)
+        tk_slurry = self._add_example_block("TK-207","Storage tank — cone roof",
+                                            100.0, 2160,1080)
+        tk_gasseco = self._add_example_block("TK-208","Storage tank — cone roof",
+                                              80.0, 2160,1260)
+        tk_coque_fcc = self._add_example_block("TK-209","Storage tank — cone roof",
+                                              50.0, 2460,1080)
+
+        # ============ FCK — FLEXICOKING ============
+        # 4 productos: flexigas, nafta + gasóleos, coque neto
+        r_fck    = self._add_example_block("R-FCK","Reactor — autoclave",
+                                             300.0, 1860,1440)
+        self.fs.blocks[r_fck].reactions = ["R_FCK"]
+        self.fs.blocks[r_fck].splitter_active = True
+        self.fs.blocks[r_fck].splitter_fractions = [0.40, 0.25, 0.30, 0.05]
+        tk_flexigas = self._add_example_block("TK-210","Storage tank — cone roof",
+                                              100.0, 2160,1440)
+        tk_naft_fck = self._add_example_block("TK-211","Storage tank — cone roof",
+                                              150.0, 2160,1620)
+        tk_gasoleo_fck = self._add_example_block("TK-212","Storage tank — cone roof",
+                                              200.0, 2460,1620)
+        tk_coque_neto = self._add_example_block("TK-213","Storage tank — cone roof",
+                                              100.0, 2460,1440)
+
+        # ============ PLANTA H2 (SMR) — auxiliar ============
+        # CH4 + H2O → CO + 3 H2 ; CO + H2O → CO2 + H2  (PSA al final)
+        tk_ch4   = self._add_example_block("TK-104","Storage tank — cone roof",
+                                            200.0, 2760,  60)
+        r_smr    = self._add_example_block("R-SMR","Reactor — autoclave",
+                                             80.0, 3060,  60)
+        self.fs.blocks[r_smr].reactions = ["R_SMR"]
+        tk_h2_makeup = self._add_example_block("TK-214","Storage tank — cone roof",
+                                            200.0, 3360,  60)
+        tk_co2   = self._add_example_block("TK-215","Storage tank — cone roof",
+                                              50.0, 3360, 240)
+        # NOTA: el H2 de planta H2 + el H2 subproducto del RCA cubren la
+        # demanda de HTD+HTN+HTF.  En este ejemplo no cerramos el balance
+        # de H2 con recycle (ya el ejemplo es complejo); cada HT toma su
+        # H2 makeup como feed local.
+
+        # ============ STREAMS — Alimentación ============
+        # Crudo pesado de selva (~21° API, 1.2% S)
+        self._add_example_stream(tk_crudo, m101, "C0-crudo", 500000, role="feed",
+                                  src_port="salida", dst_port="entrada1",
+                                  price=350.0, T=25,
+                                  composition={"crude_oil": 1.0},
+                                  phase="liquid")
+        # Agua de lavado (5% del crudo)
+        self._add_example_stream(tk_agua, m101, "S-agua-lav", 25000, role="feed",
+                                  src_port="salida", dst_port="entrada2",
+                                  price=1.5, T=80,
+                                  composition={"water": 1.0},
+                                  phase="liquid")
+        self._add_example_stream(m101, v101, "S-mix-desal", 525000,
+                                  src_port="salida", dst_port="alimentacion",
+                                  T=130, phase="liquid",
+                                  composition={"crude_oil": 0.952,
+                                                 "water": 0.048})
+        # Brine descarga (~5% del feed con sales)
+        self._add_example_stream(v101, tk_brine, "S-brine", 25000, role="waste",
+                                  src_port="liquido_fondo", dst_port="entrada",
+                                  price=0.0, T=130, phase="liquid",
+                                  composition={"water": 0.95,
+                                                 "sodium chloride": 0.05})
+        # Crudo desalado → horno
+        self._add_example_stream(v101, f101, "C1-desalado", 500000,
+                                  src_port="vapor", dst_port="alimentacion",
+                                  T=130, phase="liquid",
+                                  composition={"crude_oil": 1.0})
+        # Carga DP1 (precalentada a 360°C)
+        self._add_example_stream(f101, t101, "C1b-feed-DP1", 500000,
+                                  src_port="salida", dst_port="alimentacion",
+                                  T=360, phase="two_phase",
+                                  composition={"crude_oil": 1.0})
+
+        # ============ STREAMS — Cortes DP1 ============
+        # Orden = splitter_fractions: gas, naphtha, kero, diésel, gasóleo, residuo
+        self._add_example_stream(t101, tk_fuel_gas, "C2a-gas", role="product",
+                                  src_port="vapor_tope", dst_port="entrada",
+                                  price=200.0, T=80, phase="gas",
+                                  composition={"methane": 0.45,
+                                                 "ethane": 0.30,
+                                                 "propane": 0.15,
+                                                 "hydrogen sulfide": 0.10})
+        # Nafta → HTN
+        self._add_example_stream(t101, r_htn, "C2-nafta",
+                                  src_port="salida", dst_port="alimentacion",
+                                  T=110, phase="liquid",
+                                  composition={"naphtha": 0.97,
+                                                 "hydrogen sulfide": 0.03})
+        # Kerosene/Turbo A-1 (directo a tanque)
+        self._add_example_stream(t101, tk_turbo, "C3-turbo", role="product",
+                                  src_port="salida", dst_port="entrada",
+                                  price=620.0, T=180, phase="liquid",
+                                  composition={"kerosene": 0.99,
+                                                 "hydrogen sulfide": 0.01})
+        # Diésel → HTD
+        self._add_example_stream(t101, r_htd, "C4-diesel",
+                                  src_port="salida", dst_port="alimentacion",
+                                  T=250, phase="liquid",
+                                  composition={"diesel": 0.97,
+                                                 "hydrogen sulfide": 0.03})
+        # Gasóleo atmosférico → mezcla con LCO (a diésel pool)
+        self._add_example_stream(t101, r_htd, "C5-gasoleo-atm",
+                                  src_port="salida", dst_port="aux_in",
+                                  T=300, phase="liquid",
+                                  composition={"diesel": 0.90,
+                                                 "hydrogen sulfide": 0.10})
+        # Residuo atmosférico → DV3
+        self._add_example_stream(t101, t201, "C6-residuo-atm",
+                                  src_port="liquido_fondo", dst_port="alimentacion",
+                                  T=350, phase="liquid",
+                                  composition={"crude_oil": 1.0})
+
+        # ============ STREAMS — DV3 cortes ============
+        # LVGO+HVGO juntos → FCC
+        self._add_example_stream(t201, r_fcc, "C7-VGO",
+                                  src_port="salida", dst_port="alimentacion",
+                                  T=320, phase="liquid",
+                                  composition={"crude_oil": 1.0})
+        # Residuo vacío → FCK
+        self._add_example_stream(t201, r_fck, "C8-resid-vac",
+                                  src_port="liquido_fondo", dst_port="alimentacion",
+                                  T=360, phase="liquid",
+                                  composition={"crude_oil": 1.0})
+
+        # ============ STREAMS — FCC outputs (6) ============
+        self._add_example_stream(r_fcc, tk_naft_fcc_raw, "C9-nafta-FCC",
+                                  src_port="vapor", dst_port="entrada",
+                                  T=120, phase="liquid",
+                                  composition={"naphtha": 0.97,
+                                                 "hydrogen sulfide": 0.03})
+        self._add_example_stream(r_fcc, tk_lco, "C10-LCO", role="product",
+                                  src_port="salida", dst_port="entrada",
+                                  price=580.0, T=220, phase="liquid",
+                                  composition={"diesel": 0.97,
+                                                 "hydrogen sulfide": 0.03})
+        self._add_example_stream(r_fcc, tk_glp_fcc, "C11-GLP-FCC",
+                                  role="product",
+                                  src_port="aux_out", dst_port="entrada",
+                                  price=480.0, T=45, phase="gas",
+                                  composition={"propane": 0.55,
+                                                 "butane": 0.40,
+                                                 "ethane": 0.05})
+        self._add_example_stream(r_fcc, tk_gasseco, "C11b-gas-seco",
+                                  role="product",
+                                  src_port="vapor_tope", dst_port="entrada",
+                                  price=180.0, T=45, phase="gas",
+                                  composition={"methane": 0.50,
+                                                 "ethane": 0.40,
+                                                 "hydrogen": 0.10})
+        self._add_example_stream(r_fcc, tk_slurry, "C11c-slurry",
+                                  role="product",
+                                  src_port="liquido_fondo", dst_port="entrada",
+                                  price=320.0, T=200, phase="liquid",
+                                  composition={"crude_oil": 1.0})
+        self._add_example_stream(r_fcc, tk_coque_fcc, "C11d-coque-FCC",
+                                  role="waste",
+                                  src_port="cond_out", dst_port="entrada",
+                                  price=0.0, T=600, phase="solid",
+                                  composition={"carbon": 1.0})
+
+        # Nafta FCC → HTF (limpieza S)
+        self._add_example_stream(tk_naft_fcc_raw, r_htf, "C9b-naft-FCC-feed",
+                                  src_port="salida", dst_port="alimentacion",
+                                  T=120, phase="liquid",
+                                  composition={"naphtha": 0.97,
+                                                 "hydrogen sulfide": 0.03})
+
+        # ============ STREAMS — FCK outputs (4) ============
+        self._add_example_stream(r_fck, tk_flexigas, "C17-flexigas",
+                                  role="product",
+                                  src_port="vapor_tope", dst_port="entrada",
+                                  price=80.0, T=200, phase="gas",
+                                  composition={"methane": 0.10,
+                                                 "carbon monoxide": 0.30,
+                                                 "hydrogen": 0.20,
+                                                 "nitrogen": 0.40})
+        self._add_example_stream(r_fck, tk_naft_fck, "C17b-nafta-FCK",
+                                  role="product",
+                                  src_port="salida", dst_port="entrada",
+                                  price=400.0, T=180, phase="liquid",
+                                  composition={"naphtha": 1.0})
+        self._add_example_stream(r_fck, tk_gasoleo_fck, "C17c-gasoleo-FCK",
+                                  role="product",
+                                  src_port="liquido_fondo", dst_port="entrada",
+                                  price=450.0, T=260, phase="liquid",
+                                  composition={"diesel": 1.0})
+        self._add_example_stream(r_fck, tk_coque_neto, "C17d-coque-FCK",
+                                  role="product",
+                                  src_port="cond_out", dst_port="entrada",
+                                  price=120.0, T=400, phase="solid",
+                                  composition={"carbon": 1.0})
+
+        # ============ STREAMS — HTN → RCA → gasolina 97 ============
+        # H2 makeup a HTN (de planta H2)
+        self._add_example_stream(tk_h2_makeup, r_htn, "C15a-H2-HTN", 800,
+                                  src_port="salida", dst_port="aux_in",
+                                  T=40, phase="gas",
+                                  composition={"hydrogen": 0.999,
+                                                 "methane": 0.001})
+        # Nafta limpia → RCA
+        self._add_example_stream(r_htn, r_rca, "C12-nafta-clean",
+                                  src_port="producto", dst_port="alimentacion",
+                                  T=130, phase="liquid",
+                                  composition={"naphtha": 1.0})
+        # Gasolina 97 RON + H2 subproducto → mezcla (modelado como
+        # producto solo, el H2 se considera retornado al pool)
+        self._add_example_stream(r_rca, tk_gaso97, "C13-gasolina97",
+                                  role="product",
+                                  src_port="producto", dst_port="entrada",
+                                  price=720.0, T=40, phase="liquid",
+                                  composition={"gasoline_97": 0.96,
+                                                 "hydrogen": 0.04})
+
+        # ============ STREAMS — HTD → ULSD ============
+        self._add_example_stream(tk_h2_makeup, r_htd, "C15b-H2-HTD", 1500,
+                                  src_port="salida", dst_port="aux_in",
+                                  T=40, phase="gas",
+                                  composition={"hydrogen": 0.999,
+                                                 "methane": 0.001})
+        self._add_example_stream(r_htd, tk_ulsd, "C14-ULSD", role="product",
+                                  src_port="producto", dst_port="entrada",
+                                  price=680.0, T=50, phase="liquid",
+                                  composition={"diesel": 0.9995,
+                                                 "hydrogen sulfide": 0.0005})
+
+        # ============ STREAMS — HTF (limpia nafta FCC) ============
+        self._add_example_stream(tk_h2_makeup, r_htf, "C15c-H2-HTF", 400,
+                                  src_port="salida", dst_port="aux_in",
+                                  T=40, phase="gas",
+                                  composition={"hydrogen": 0.999,
+                                                 "methane": 0.001})
+        # Output HTF: mezcla al pool de gasolinas (al tanque gasolina 97)
+        self._add_example_stream(r_htf, tk_gaso97, "C9c-naft-FCC-clean",
+                                  src_port="producto", dst_port="entrada2",
+                                  T=130, phase="liquid",
+                                  composition={"naphtha": 0.9995,
+                                                 "hydrogen sulfide": 0.0005})
+
+        # ============ STREAMS — Planta H2 (SMR) ============
+        # Gas natural feed
+        self._add_example_stream(tk_ch4, r_smr, "C20-CH4", 3000, role="feed",
+                                  src_port="salida", dst_port="alimentacion",
+                                  price=180.0, T=350,
+                                  composition={"methane": 1.0},
+                                  phase="gas")
+        # H2 purificado (post-PSA)
+        self._add_example_stream(r_smr, tk_h2_makeup, "C15-H2-pure", 2700,
+                                  src_port="producto", dst_port="entrada",
+                                  T=40, phase="gas",
+                                  composition={"hydrogen": 0.999,
+                                                 "methane": 0.001})
+        # CO2 (subproducto venteado)
+        self._add_example_stream(r_smr, tk_co2, "C20b-CO2", 300,
+                                  role="waste",
+                                  src_port="vapor_tope", dst_port="entrada",
+                                  price=0.0, T=40, phase="gas",
+                                  composition={"carbon dioxide": 1.0})
+
+        # ============ DUTIES INFERIDOS ============
+        # F-101 horno y R-RCA endotérmica: dejamos que el solver
+        # calcule el duty desde el ΔT entre input y output (más
+        # robusto que hardcodear y consistente con propiedades del DB).
+        from flowsheet_solver import auto_set_duties_from_thermo
+        auto_set_duties_from_thermo(self.fs)
+
+        # ============ OPEX EXTRAS ============
+        self._add_example_extra("Catalizador HDS CoMo/NiMo (3 HT)",
+                                 flowrate=15, price=18000.0,
+                                 stream="Consumables")
+        self._add_example_extra("Catalizador RCA Pt-Re (reformado)",
+                                 flowrate=2, price=120000.0,
+                                 stream="Consumables")
+        self._add_example_extra("Catalizador FCC zeolítico",
+                                 flowrate=180, price=4500.0,
+                                 stream="Consumables")
+        self._add_example_extra("Energía eléctrica (cogen + red)",
+                                 flowrate=720000, price=0.08,
+                                 stream="Utilities")
+        self._add_example_extra("Vapor proceso (cogen 606 t/h)",
+                                 flowrate=4400000, price=15.0,
+                                 stream="Utilities")
+
     def open_json(self):
         path = filedialog.askopenfilename(
             title="Abrir diagrama",
