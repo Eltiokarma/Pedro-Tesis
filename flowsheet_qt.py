@@ -1398,6 +1398,92 @@ def _detect_path_crossings(pts_self, pts_other):
 HOP_RADIUS = 6.0   # radio de la curvita en el cruce
 
 
+def _segments_too_close(x1, y1, x2, y2,  ax, ay, bx, by,
+                          min_dist: float = 8.0) -> bool:
+    """True si los segmentos (1-2) y (a-b) son COLINEALES y se
+    SOLAPAN dentro de min_dist (líneas paralelas pegadas).
+
+    No detecta cruces (eso ya lo hace _segments_intersect).  Detecta
+    overlap: dos streams ortogonales paralelos pegados verticalmente
+    o horizontalmente.
+    """
+    # Caso horizontal: ambos segmentos son ~horizontales (|dy|<2)
+    if abs(y1 - y2) < 2 and abs(ay - by) < 2:
+        if abs(y1 - ay) > min_dist:
+            return False
+        # Overlap en x?
+        s1_lo, s1_hi = min(x1, x2), max(x1, x2)
+        s2_lo, s2_hi = min(ax, bx), max(ax, bx)
+        if s1_hi < s2_lo or s2_hi < s1_lo:
+            return False
+        return True
+    # Caso vertical: ambos ~verticales
+    if abs(x1 - x2) < 2 and abs(ax - bx) < 2:
+        if abs(x1 - ax) > min_dist:
+            return False
+        s1_lo, s1_hi = min(y1, y2), max(y1, y2)
+        s2_lo, s2_hi = min(ay, by), max(ay, by)
+        if s1_hi < s2_lo or s2_hi < s1_lo:
+            return False
+        return True
+    return False
+
+
+def _apply_lane_offset(pts, other_paths, my_id: int,
+                        lane_step: float = 10.0,
+                        min_dist: float = 8.0) -> list:
+    """Aplica un offset perpendicular a los segmentos del path actual
+    que estén SUPERPUESTOS con otros streams paralelos.
+
+    other_paths: list of (other_id, other_pts).
+    my_id: id del stream actual (para orden determinístico — el de
+           id mayor se desplaza).
+    lane_step: cuánto desplazar cada lane (default 10px).
+    min_dist: distancia mínima entre paralelos antes de aplicar
+              offset (default 8px).
+
+    Devuelve nueva lista de pts.  Si no hay overlap, retorna pts sin
+    cambios.
+    """
+    if len(pts) < 4:
+        return pts
+    new_pts = list(pts)
+    n_segs = (len(pts) - 2) // 2
+    for i in range(n_segs):
+        x1, y1 = pts[2*i], pts[2*i+1]
+        x2, y2 = pts[2*i+2], pts[2*i+3]
+        # Contar cuántos other streams están en la misma "lane"
+        # (overlap dentro de min_dist), considerando solo los con
+        # id menor (los más antiguos dominan, los nuevos se desplazan).
+        lanes_occupied = 0
+        for other_id, other_pts in other_paths:
+            if other_id >= my_id:
+                continue
+            if not other_pts or len(other_pts) < 4:
+                continue
+            n_other = (len(other_pts) - 2) // 2
+            for j in range(n_other):
+                ax, ay = other_pts[2*j], other_pts[2*j+1]
+                bx, by = other_pts[2*j+2], other_pts[2*j+3]
+                if _segments_too_close(x1, y1, x2, y2, ax, ay, bx, by,
+                                         min_dist):
+                    lanes_occupied += 1
+                    break
+        if lanes_occupied == 0:
+            continue
+        # Aplicar offset perpendicular según lane.  Para horizontal:
+        # desplazamiento en y.  Para vertical: en x.  Lane 1, 2, 3...
+        # con steps de lane_step.
+        offset = lane_step * lanes_occupied
+        if abs(y1 - y2) < 2:    # horizontal
+            new_pts[2*i+1]   = y1 + offset
+            new_pts[2*i+3]   = y2 + offset
+        elif abs(x1 - x2) < 2:  # vertical
+            new_pts[2*i]     = x1 + offset
+            new_pts[2*i+2]   = x2 + offset
+    return new_pts
+
+
 def _segment_intersects_rect(x1, y1, x2, y2, rx, ry, rw, rh):
     """True si el segmento (x1,y1)-(x2,y2) CRUZA el rect (entra/sale,
     no solo toca el borde).  Usado para detectar streams que atraviesan
@@ -2429,6 +2515,20 @@ class StreamItem(QGraphicsPathItem):
                     obstacles.append((bm.x, bm.y, w, h))
                 if obstacles:
                     pts = _avoid_obstacles(pts, obstacles, padding=12)
+                # LANE ASSIGNMENT — desplazar perpendicularmente los
+                # segmentos solapados con otros streams para evitar
+                # superposición visual (streams paralelos en lanes
+                # distintos como en planos PFD reales).
+                other_paths = []
+                for other_sid, other_item in self.editor.stream_items_iter():
+                    if other_item is self:
+                        continue
+                    other_pts = getattr(other_item, '_last_pts', None)
+                    if other_pts:
+                        other_paths.append((other_item.model.id, other_pts))
+                if other_paths:
+                    pts = _apply_lane_offset(pts, other_paths, s.id,
+                                               lane_step=10.0, min_dist=8.0)
         else:
             # Sin waypoints y al menos un endpoint flotante: línea recta
             pts = [x1, y1, x2, y2]
