@@ -4633,6 +4633,15 @@ class FlowsheetMainWindow(QMainWindow):
         return self._connecting_from is not None
 
     def start_connection(self, src_block_id: int):
+        # Si ya había una conexión pendiente, avisar al user y
+        # sobreescribir (antes se silenciaba el cambio).
+        if self._connecting_from is not None \
+                and self._connecting_from != src_block_id:
+            prev = self.fs.blocks.get(self._connecting_from)
+            prev_name = prev.name if prev else "?"
+            self.status.showMessage(
+                f"Conexión desde {prev_name} cancelada — nueva desde "
+                f"{self.fs.blocks[src_block_id].name}…", 4000)
         self._connecting_from = src_block_id
         b = self.fs.blocks[src_block_id]
         self.status.showMessage(

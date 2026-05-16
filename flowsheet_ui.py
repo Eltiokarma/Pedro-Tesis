@@ -2948,14 +2948,14 @@ class FlowsheetEditor:
         e102 = self._add_example_block("E-102","Heat exch. — floating head",
                                           180.0,  1260, 300)
         r101 = self._add_example_block("R-101","Reactor — jacketed non-agit.",
-                                          80.0,   1560, 300)
+                                          35.0,   1560, 300)
         self.fs.blocks[r101].reactions = ["R005"]   # CO+2H2→CH3OH
         self.fs.blocks[r101].reactor_mode = "equilibrium"
         self.fs.blocks[r101].T_op_K = 525.0
         self.fs.blocks[r101].P_op_bar = 80.0
         # Post-reactor cooler (genera VAPOR HP en WHB)
         e103 = self._add_example_block("E-103","Heat exch. — kettle reboiler",
-                                          400.0,  1860, 300)
+                                           95.0,  1860, 300)
 
         # ============ SECCIÓN 200 — SEPARACIÓN ============
         v201 = self._add_example_block("V-201","Vessel — vertical",
@@ -2996,7 +2996,7 @@ class FlowsheetEditor:
                                             800.0, 3060, 540)
         # Reboiler de la cola — tendrá 4 ports (proceso + steam side)
         e202 = self._add_example_block("E-202","Heat exch. — kettle reboiler",
-                                          250.0,  2460, 900)
+                                           90.0,  2460, 900)
         # Producto agua (descarga)
         tk_h2o = self._add_example_block("TK-202","Storage tank — cone roof",
                                            300.0, 2760, 900)
@@ -3017,7 +3017,7 @@ class FlowsheetEditor:
         v_steam = self._add_example_block("V-301","Vessel — horizontal",
                                               100.0, 960,1200)
         tk_blowdown = self._add_example_block("TK-302","Storage tank — cone roof",
-                                                  50.0, 960,1440)
+                                                 100.0, 960,1440)
         # Header de vapor MP — alimenta a E-202 como utility (ciclo cerrado)
         tk_steam = self._add_example_block("TK-305","Storage tank — cone roof",
                                               200.0,1260,1200)
@@ -3236,7 +3236,7 @@ class FlowsheetEditor:
                                               500.0,   60, 660)
         # Reactivos de purificación (NaOH + Na2CO3)
         tk_reac  = self._add_example_block("TK-103","Storage tank — cone roof",
-                                              50.0,    60, 960)
+                                             100.0,    60, 960)
         # Saturador / mezclador: sal + agua + recycle
         m101     = self._add_example_block("M-101","Mixer",
                                                 5.0,  360, 480)
@@ -3255,13 +3255,13 @@ class FlowsheetEditor:
         self.fs.blocks[v101].splitter_fractions = [0.002, 0.998]  # lodos / clear
         # Lodos (residuo sólido)
         tk_lodos = self._add_example_block("TK-104","Storage tank — cone roof",
-                                              50.0,  960, 720)
+                                             100.0,  960, 720)
         # Intercambio iónico (pulido final Ca/Mg a ppb) — pass-through
         ix101    = self._add_example_block("IX-101","Filter — belt",
                                               30.0, 1260, 480)
         # Acidificación con HCl (pH ≈ 2.7 antes de celda)
         tk_hcl   = self._add_example_block("TK-105","Storage tank — cone roof",
-                                              50.0, 1260, 240)
+                                             100.0, 1260, 240)
         m102     = self._add_example_block("M-102","Mixer",
                                                 5.0, 1560, 480)
 
@@ -3272,8 +3272,9 @@ class FlowsheetEditor:
         #   - Cl2 húmedo
         #   - H2 húmedo
         #   - NaOH 32% solución
+        # S=14 m³ por celda (planta real tiene ~50 celdas en paralelo)
         r201     = self._add_example_block("R-201","Reactor — autoclave",
-                                              80.0, 1860, 480)
+                                              14.0, 1860, 480)
         self.fs.blocks[r201].reactions = ["R_CELDA_CLORALCALI"]
         self.fs.blocks[r201].T_op_K = 358.15   # 85°C
         self.fs.blocks[r201].P_op_bar = 1.5
@@ -3283,7 +3284,7 @@ class FlowsheetEditor:
                                               80.0, 2160, 180)
         # Secador con H2SO4 98% (tower estructural)
         tk_h2so4 = self._add_example_block("TK-106","Storage tank — cone roof",
-                                              50.0, 2160,   0)
+                                             100.0, 2160,   0)
         abs301   = self._add_example_block("T-301","Tower (column shell)",
                                               30.0, 2460, 180)
         k301     = self._add_example_block("K-301","Compressor — centrifugal",
@@ -3294,7 +3295,7 @@ class FlowsheetEditor:
                                              600.0, 3360, 180)
         # H2SO4 spent (residuo, baja a tanque debajo del secador)
         tk_acid_spent = self._add_example_block("TK-107","Storage tank — cone roof",
-                                              50.0, 2460,   0)
+                                             100.0, 2460,   0)
 
         # ============ TREN DE H2 ============
         e401     = self._add_example_block("E-401","Heat exch. — air cooler",
@@ -3310,7 +3311,7 @@ class FlowsheetEditor:
                                              800.0, 2460, 780)
         # Vapor de agua (waste — al sistema de condensado / atmosfera)
         tk_vapor = self._add_example_block("TK-108","Storage tank — cone roof",
-                                              50.0, 2460,1020)
+                                             100.0, 2460,1020)
 
         # ============ STREAMS — PURIFICACIÓN ============
         # Sal fresca (sólido disuelto)
@@ -3522,15 +3523,18 @@ class FlowsheetEditor:
                                                 5.0,  660, 450)
 
         # ============ SECCIÓN 200 — COMBUSTIÓN + RECUP CALOR ============
-        # Reactor combustión catalítica (Pt-Rh malla, adiabático)
+        # Reactor combustión catalítica (Pt-Rh malla, adiabático).
+        # S=14 m³ — un quemador típico industrial es mayor; usamos el
+        # max del rango de correlación de costos.
         r201     = self._add_example_block("R-201","Reactor — autoclave",
-                                              100.0, 960, 450)
+                                               14.0, 960, 450)
         self.fs.blocks[r201].reactions = ["R_OSTWALD_BURN"]
         self.fs.blocks[r201].T_op_K = 1173.15   # 900 °C
         self.fs.blocks[r201].P_op_bar = 4.4
-        # WHB (waste heat boiler) — genera vapor AP
+        # WHB (waste heat boiler) — genera vapor AP.  S=95 m² (uno de
+        # varios bancos paralelos en planta industrial real).
         e201     = self._add_example_block("E-201","Heat exch. — kettle reboiler",
-                                              800.0, 1260, 450)
+                                               95.0, 1260, 450)
         # Economizador (gas 400 → 200 °C, calienta otra corriente)
         e202     = self._add_example_block("E-202","Heat exch. — fixed tube",
                                               300.0, 1560, 450)
@@ -3549,7 +3553,7 @@ class FlowsheetEditor:
                                             1200.0, 2160, 180)
         # R-301 — cámara de oxidación (NO + O2 → NO2)
         r301     = self._add_example_block("R-301","Reactor — jacketed non-agit.",
-                                              60.0,  2460, 180)
+                                              30.0,  2460, 180)
         self.fs.blocks[r301].reactions = ["R_OXIDATION_NO"]
         self.fs.blocks[r301].T_op_K = 313.15   # 40 °C
         self.fs.blocks[r301].P_op_bar = 10.8
@@ -3579,7 +3583,7 @@ class FlowsheetEditor:
                                             800.0, 3360, 720)
         # Vent del bleacher (NOx stripped, va a chimenea via expander)
         tk_vent  = self._add_example_block("TK-105","Storage tank — cone roof",
-                                              50.0, 3060, 960)
+                                             100.0, 3060, 960)
 
         # Precalentador tail gas (calienta gas de cola con calor residual)
         e501     = self._add_example_block("E-501","Heat exch. — fixed tube",
@@ -3589,7 +3593,7 @@ class FlowsheetEditor:
                                             1000.0, 3360, 360)
         # Chimenea (post-DeNOx, atmósfera)
         tk_stack = self._add_example_block("TK-301","Storage tank — cone roof",
-                                              50.0, 3660, 360)
+                                             100.0, 3660, 360)
 
         # ============ STREAMS — ALIMENTACIÓN ============
         # NH3 líquido (12 bar, 25 °C)
@@ -3827,7 +3831,7 @@ class FlowsheetEditor:
                                           15000.0,  960, 480)
         # Brine descarga (residuo desalado)
         tk_brine = self._add_example_block("TK-103","Storage tank — cone roof",
-                                              80.0,  660, 840)
+                                             100.0,  660, 840)
 
         # ============ DESTILACIÓN PRIMARIA (DP1) ============
         # Columna atmosférica, modelada como splitter de 6 cortes
@@ -3845,29 +3849,31 @@ class FlowsheetEditor:
                                             600.0, 1860, 660)
 
         # ============ HIDROTRATAMIENTOS ============
-        # HTN — Hidrotratamiento de Nafta (a RCA)
+        # HTN — Hidrotratamiento de Nafta (a RCA).  S=12 m³ por reactor;
+        # en planta real son 2-3 en paralelo (S total ≈ 40 m³).
         r_htn    = self._add_example_block("R-HTN","Reactor — autoclave",
-                                              80.0, 1560, 300)
+                                              12.0, 1560, 300)
         self.fs.blocks[r_htn].reactions = ["R_HDS"]
         self.fs.blocks[r_htn].T_op_K = 623.15
         self.fs.blocks[r_htn].P_op_bar = 50.0
         # HTD — Hidrotratamiento de Diésel (a ULSD <50 ppm S)
         r_htd    = self._add_example_block("R-HTD","Reactor — autoclave",
-                                             120.0, 1560, 840)
+                                              14.0, 1560, 840)
         self.fs.blocks[r_htd].reactions = ["R_HDS"]
         self.fs.blocks[r_htd].T_op_K = 653.15
         self.fs.blocks[r_htd].P_op_bar = 80.0
         # HTF — Hidrotratamiento de Nafta FCC
         r_htf    = self._add_example_block("R-HTF","Reactor — autoclave",
-                                              60.0, 2460, 540)
+                                              10.0, 2460, 540)
         self.fs.blocks[r_htf].reactions = ["R_HDS"]
         self.fs.blocks[r_htf].T_op_K = 593.15
         self.fs.blocks[r_htf].P_op_bar = 40.0
 
         # ============ RCA — REFORMACIÓN CATALÍTICA ============
-        # Cascada de reactores: aquí modelado como uno solo
+        # Cascada de reactores: aquí modelado como uno solo (S=30 m³,
+        # en planta real son 3-4 reactores en serie con T~530 °C).
         r_rca    = self._add_example_block("R-RCA","Reactor — jacketed agitated",
-                                             100.0, 1860, 300)
+                                              30.0, 1860, 300)
         self.fs.blocks[r_rca].reactions = ["R_REFORM"]
         self.fs.blocks[r_rca].T_op_K = 793.15
         self.fs.blocks[r_rca].P_op_bar = 10.0
@@ -3888,8 +3894,10 @@ class FlowsheetEditor:
 
         # ============ FCC — CRAQUEO CATALÍTICO ============
         # 6 productos: gasolina FCC, LCO, GLP, gas seco, slurry, coque
+        # S=15 m³ nominal (un FCC industrial real es ~80 m³ pero usamos
+        # el max del rango de correlación de costos)
         r_fcc    = self._add_example_block("R-FCC","Reactor — autoclave",
-                                             250.0, 1860,1080)
+                                              15.0, 1860,1080)
         self.fs.blocks[r_fcc].reactions = ["R_FCC"]
         self.fs.blocks[r_fcc].splitter_active = True
         self.fs.blocks[r_fcc].splitter_fractions = [0.48, 0.14, 0.18,
@@ -3904,14 +3912,14 @@ class FlowsheetEditor:
         tk_slurry = self._add_example_block("TK-207","Storage tank — cone roof",
                                             100.0, 2160,1080)
         tk_gasseco = self._add_example_block("TK-208","Storage tank — cone roof",
-                                              80.0, 2160,1260)
+                                             100.0, 2160,1260)
         tk_coque_fcc = self._add_example_block("TK-209","Storage tank — cone roof",
-                                              50.0, 2460,1080)
+                                             100.0, 2460,1080)
 
         # ============ FCK — FLEXICOKING ============
-        # 4 productos: flexigas, nafta + gasóleos, coque neto
+        # 4 productos: flexigas, nafta + gasóleos, coque neto.  S=15 m³.
         r_fck    = self._add_example_block("R-FCK","Reactor — autoclave",
-                                             300.0, 1860,1440)
+                                              15.0, 1860,1440)
         self.fs.blocks[r_fck].reactions = ["R_FCK"]
         self.fs.blocks[r_fck].splitter_active = True
         self.fs.blocks[r_fck].splitter_fractions = [0.40, 0.25, 0.30, 0.05]
@@ -3929,12 +3937,12 @@ class FlowsheetEditor:
         tk_ch4   = self._add_example_block("TK-104","Storage tank — cone roof",
                                             200.0, 2760,  60)
         r_smr    = self._add_example_block("R-SMR","Reactor — autoclave",
-                                             80.0, 3060,  60)
+                                              14.0, 3060,  60)
         self.fs.blocks[r_smr].reactions = ["R_SMR"]
         tk_h2_makeup = self._add_example_block("TK-214","Storage tank — cone roof",
                                             200.0, 3360,  60)
         tk_co2   = self._add_example_block("TK-215","Storage tank — cone roof",
-                                              50.0, 3360, 240)
+                                             100.0, 3360, 240)
         # NOTA: el H2 de planta H2 + el H2 subproducto del RCA cubren la
         # demanda de HTD+HTN+HTF.  En este ejemplo no cerramos el balance
         # de H2 con recycle (ya el ejemplo es complejo); cada HT toma su
