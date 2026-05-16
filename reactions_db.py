@@ -1,0 +1,448 @@
+"""
+REACTIONS_DB — base de datos de reacciones químicas (Capa 4).
+
+Carga lazy desde data/reactions_db.md (25 reacciones) y expone una
+API estructurada.  Una reacción tiene:
+
+  · estequiometría (especie, fase, coef ν)
+  · ΔH, ΔS, ΔG @ 298.15 K (extraídos de la termodinámica de Capa 3)
+  · coeficientes de Van't Hoff:  ln Keq(T) = A + B/T
+  · Δν, fase global, rango de T válido
+  · flag irreversible (Keq(298) > 10²⁰ ⇒ usar conversión declarada)
+  · flag derivable_de_capa3 (False para R022-R025: almidón, MDEA, Boudouard)
+
+API:
+  list_ids()                              → ['R001', 'R002', ...]
+  get(rxn_id)                             → Reaction | None
+  find_by_species(canonical_name)         → list[Reaction]
+  keq_vant_hoff(rxn_id, T_K)              → float
+  dh_rxn_kJ_mol(rxn_id, T_K)              → float (ΔH a T usando Cp de thermo_db)
+  equilibrium_conversion_gas(rxn_id, feed_moles, T_K, P_bar) → ξ_extent
+
+Mapeo formula→nombre canónico (para conectar con thermo_db):
+  'CH4' → 'methane', 'CO2' → 'co2', 'H2O' → 'water', etc.
+  Componentes sin contraparte en thermo_db (SO3, triolein, starch,
+  C(grafito)) se marcan como 'unmapped' y NO se les puede calcular
+  ΔCp_rxn(T) — la reacción cae a la versión 2-parámetros.
+"""
+
+import math
+import re
+from dataclasses import dataclass, field
+from pathlib import Path
+from typing import Dict, List, Optional, Tuple
+
+R_GAS = 8.314462618          # J/(mol·K)  — CODATA 2018
+T_REF_K = 298.15
+P_REF_BAR = 1.0
+
+
+# ============================================================
+# Mapeo formula química → nombre canónico de thermo_db
+# ============================================================
+# Las reacciones usan fórmulas (CH4, H2O, CO2...). El thermo_db
+# usa nombres (methane, water, co2...). Este mapping conecta los dos.
+FORMULA_TO_THERMO = {
+    # Inorgánicos básicos
+    'CH4':       'methane',
+    'O2':        'oxygen',
+    'H2O':       'water',
+    'CO2':       'co2',
+    'CO':        'co',
+    'H2':        'hydrogen',
+    'N2':        'nitrogen',
+    'NH3':       'ammonia',
+    'SO2':       'so2',
+    'SO3':       None,            # no está en thermo_db
+    'H2S':       'h2s',
+    'MDEA':      'mdea',
+    # Orgánicos
+    'CH3OH':           'methanol',
+    'C2H5OH':          'ethanol',
+    'C2H4':            'ethylene',
+    'C2H6':            'ethane',
+    'C3H8':            'propane',
+    'C3H6':            'propylene',
+    'CH3OCH3':         'dme',
+    'CH3COOH':         'acetic_acid',
+    'CH3CHO':          'acetaldehyde',
+    'C2H4O':           'acetaldehyde',
+    'CH3COOC2H5':      'ethyl_acetate',
+    'C6H6':            'benzene',
+    'C8H10':           'ethylbenzene',
+    # Bioquímica
+    'Glucose':         'glucose',
+    'Sucrose':         'sucrose',
+    'Fructose':        'fructose',
+    # No mapeables (no están en thermo_db actual)
+    'Triolein':        None,
+    'FAME':            None,
+    'Starch_unit':     None,
+    'C(s)':            None,
+}
+
+
+def thermo_name(formula: str) -> Optional[str]:
+    """Devuelve el nombre canónico en thermo_db para una fórmula química.
+    Si la fórmula no está mapeada, intenta lowercase directo.
+    None si no hay forma de conectar."""
+    if formula in FORMULA_TO_THERMO:
+        return FORMULA_TO_THERMO[formula]
+    # Fallback: intento lowercase directo (e.g. 'co' ya es 'co')
+    return formula.lower()
+
+
+# ============================================================
+# Dataclass
+# ============================================================
+@dataclass
+class StoichEntry:
+    formula: str          # formula como aparece en el .md ('CH4')
+    phase:   str          # 'g', 'l', 'aq', 's'
+    nu:      int          # negativo reactante, positivo producto
+
+    @property
+    def thermo_name(self) -> Optional[str]:
+        return thermo_name(self.formula)
+
+
+@dataclass
+class Reaction:
+    id:          str                # 'R001'
+    name:        str                # 'Combustión completa de metano'
+    category:    str = ""           # 'combustión', 'syngas', etc.
+    stoich:      List[StoichEntry] = field(default_factory=list)
+    delta_nu:    int = 0
+    phase_global: str = ""
+    T_min_K:     float = 298.15
+    T_max_K:     float = 2000.0
+    # Termodinámica @ 298.15 K (de Capa 3)
+    dh_rxn_298_kJ_mol: Optional[float] = None
+    ds_rxn_298_J_mol_K: Optional[float] = None
+    dg_rxn_298_kJ_mol: Optional[float] = None
+    # Van't Hoff: ln Keq(T) = A + B/T
+    vant_hoff_A: Optional[float] = None
+    vant_hoff_B: Optional[float] = None     # K
+    # Flags
+    irreversible: bool = False
+    derivable_capa3: bool = True
+    # Notas y refs
+    comments: str = ""
+
+    def keq_vant_hoff(self, T_K: float) -> Optional[float]:
+        """Keq(T) usando 2 parámetros (asume ΔCp_rxn = 0).
+        Válido en rango cercano a 298 K, error crece a alta T."""
+        if self.vant_hoff_A is None or self.vant_hoff_B is None:
+            return None
+        ln_keq = self.vant_hoff_A + self.vant_hoff_B / T_K
+        # Cap para evitar overflow
+        if ln_keq > 700:  return float('inf')
+        if ln_keq < -700: return 0.0
+        return math.exp(ln_keq)
+
+    def dh_rxn_kJ_mol(self, T_K: float) -> Optional[float]:
+        """ΔH_rxn(T) corregido por ΔCp_rxn integrado desde 298 K usando
+        Cp de thermo_db (Capa 2):
+            ΔH(T) = ΔH(298) + ∫_298^T ΔCp_rxn(T') dT'
+        """
+        if self.dh_rxn_298_kJ_mol is None:
+            return None
+        if abs(T_K - T_REF_K) < 1e-6:
+            return self.dh_rxn_298_kJ_mol
+        # Integración numérica de ΔCp_rxn(T) entre 298 y T
+        try:
+            import thermo_db as _td
+        except ImportError:
+            return self.dh_rxn_298_kJ_mol   # sin Cp, devuelvo el de 298
+        # Σ νᵢ · ∫ Cp_i(T) dT  para todas las especies con Cp en thermo_db
+        n_steps = max(20, int(abs(T_K - T_REF_K) / 25))
+        dT = (T_K - T_REF_K) / n_steps
+        integral_J_mol = 0.0
+        for step in range(n_steps):
+            T_a = T_REF_K + step * dT
+            T_b = T_a + dT
+            # ΔCp_rxn(T_mid) trapezoidal
+            T_mid = 0.5 * (T_a + T_b)
+            dcp = self._delta_cp_rxn_J_mol_K(T_mid, _td)
+            if dcp is None:
+                # No puedo integrar — devuelvo ΔH(298)
+                return self.dh_rxn_298_kJ_mol
+            integral_J_mol += dcp * dT
+        return self.dh_rxn_298_kJ_mol + integral_J_mol / 1000.0   # kJ/mol
+
+    def _delta_cp_rxn_J_mol_K(self, T_K: float, _td) -> Optional[float]:
+        """ΔCp_rxn = Σ νᵢ · Cp_i(T) en J/(mol·K).  Devuelve None si
+        algún componente no tiene Cp en thermo_db (Cp_gas ni Cp_liq
+        según la fase de la reacción)."""
+        total = 0.0
+        for sp in self.stoich:
+            tname = sp.thermo_name
+            if tname is None:
+                return None
+            comp = _td.get(tname)
+            if comp is None:
+                return None
+            phase = 'gas' if sp.phase == 'g' else 'liquid'
+            cp = comp.cp_J_mol_K(T_K, phase)
+            if cp is None:
+                return None
+            total += sp.nu * cp
+        return total
+
+    def reactants(self) -> List[StoichEntry]:
+        return [s for s in self.stoich if s.nu < 0]
+
+    def products(self) -> List[StoichEntry]:
+        return [s for s in self.stoich if s.nu > 0]
+
+
+# ============================================================
+# Parser
+# ============================================================
+_DB: Optional[Dict[str, Reaction]] = None
+_DB_PATH = Path(__file__).parent / "data" / "reactions_db.md"
+
+
+def _parse_db() -> Dict[str, Reaction]:
+    if not _DB_PATH.is_file():
+        return {}
+    text = _DB_PATH.read_text(encoding="utf-8")
+    sections = re.split(r"^## (R\d{3})", text, flags=re.MULTILINE)
+    out: Dict[str, Reaction] = {}
+    # sections[0] es preamble, después pares (id, body)
+    for i in range(1, len(sections), 2):
+        rxn_id = sections[i].strip()
+        body = sections[i + 1] if i + 1 < len(sections) else ""
+        rxn = _parse_one(rxn_id, body)
+        if rxn:
+            out[rxn_id] = rxn
+    return out
+
+
+def _parse_one(rxn_id: str, body: str) -> Optional[Reaction]:
+    # Header: '— Combustión completa de metano\n\n**Categoría:** combustión'
+    head_m = re.match(r"\s*—\s*(.+?)(?:\n|$)", body)
+    name = head_m.group(1).strip() if head_m else rxn_id
+
+    rxn = Reaction(id=rxn_id, name=name)
+
+    m = re.search(r"\*\*Categoría:\*\*\s*([^\n⚠]+)", body)
+    if m: rxn.category = m.group(1).strip()
+
+    rxn.derivable_capa3 = "NO DERIVADA DE CAPA 3" not in body
+
+    # Estequiometría: tabla markdown con columnas Especie | Fase | ν
+    # | CH4 | g | -1 |
+    # Si no hay tabla (R022-R025 algunas), parsear de la línea reacción
+    rows = re.findall(r"^\|\s*([A-Za-z0-9_()]+)\s*\|\s*([gqlas]+)\s*\|\s*([+-]?\d+)\s*\|",
+                      body, re.MULTILINE)
+    for formula, phase, nu in rows:
+        rxn.stoich.append(StoichEntry(formula=formula, phase=phase, nu=int(nu)))
+
+    # Δν
+    m = re.search(r"\*\*Δν =\*\*\s*([+-]?\d+)", body)
+    if m: rxn.delta_nu = int(m.group(1))
+
+    # Fase global
+    m = re.search(r"\*\*Fase global:\*\*\s*([^\n*]+)", body)
+    if m: rxn.phase_global = m.group(1).strip()
+
+    # Rango T válido: '300–2000 K' o '300-2000 K'
+    m = re.search(r"\*\*Rango T válido:\*\*\s*(\d+)\s*[-–]\s*(\d+)\s*K", body)
+    if m:
+        rxn.T_min_K = float(m.group(1))
+        rxn.T_max_K = float(m.group(2))
+
+    # ΔH, ΔS, ΔG @ 298.15 K
+    # | ΔH_rxn [kJ/mol] | -802.642 | -802.300 | -0.342 |
+    m = re.search(r"\|\s*ΔH_rxn\s*\[kJ/mol\]\s*\|\s*([+-]?[\d.eE+-]+)\s*\|", body)
+    if m: rxn.dh_rxn_298_kJ_mol = float(m.group(1))
+    m = re.search(r"\|\s*ΔS_rxn\s*\[J/\(mol·K\)\]\s*\|\s*([+-]?[\d.eE+-]+)\s*\|", body)
+    if m: rxn.ds_rxn_298_J_mol_K = float(m.group(1))
+    m = re.search(r"\|\s*ΔG_rxn\s*\[kJ/mol\]\s*\|\s*([+-]?[\d.eE+-]+)\s*\|", body)
+    if m: rxn.dg_rxn_298_kJ_mol = float(m.group(1))
+
+    # Para reacciones no-derivables (R022-R025) los ΔH/ΔG están en bullet:
+    #   - ΔH_rxn = -10.00 kJ/mol  *(...)
+    if rxn.dh_rxn_298_kJ_mol is None:
+        m = re.search(r"ΔH_rxn\s*=\s*([+-]?[\d.]+)\s*kJ/mol", body)
+        if m: rxn.dh_rxn_298_kJ_mol = float(m.group(1))
+    if rxn.dg_rxn_298_kJ_mol is None:
+        m = re.search(r"ΔG_rxn\s*=\s*([+-]?[\d.]+)\s*kJ/mol", body)
+        if m: rxn.dg_rxn_298_kJ_mol = float(m.group(1))
+
+    # Coeficientes Van't Hoff: 'A = -0.6133' y 'B = +96535.64 K'
+    m = re.search(r"^-?\s*A\s*=\s*([+-]?[\d.eE+-]+)", body, re.MULTILINE)
+    if m: rxn.vant_hoff_A = float(m.group(1))
+    m = re.search(r"^-?\s*B\s*=\s*([+-]?[\d.eE+-]+)\s*K", body, re.MULTILINE)
+    if m: rxn.vant_hoff_B = float(m.group(1))
+
+    # Irreversible
+    rxn.irreversible = "Marcado irreversible" in body or "marcado irreversible" in body
+
+    # Comentarios técnicos
+    m = re.search(r"###\s*Comentarios técnicos\s*\n+(.*?)(?=###|---|$)",
+                  body, re.DOTALL)
+    if m: rxn.comments = m.group(1).strip()
+
+    return rxn
+
+
+def _ensure_loaded() -> Dict[str, Reaction]:
+    global _DB
+    if _DB is None:
+        _DB = _parse_db()
+    return _DB
+
+
+# ============================================================
+# API pública
+# ============================================================
+def list_ids() -> List[str]:
+    return sorted(_ensure_loaded().keys())
+
+
+def get(rxn_id: str) -> Optional[Reaction]:
+    return _ensure_loaded().get(rxn_id)
+
+
+def find_by_species(canonical_name: str) -> List[Reaction]:
+    """Devuelve las reacciones donde aparece la especie (por nombre
+    canónico thermo_db, e.g. 'methane').  Útil para encontrar qué
+    reacciones aplican a un componente del flowsheet."""
+    out = []
+    for rxn in _ensure_loaded().values():
+        if any(s.thermo_name == canonical_name for s in rxn.stoich):
+            out.append(rxn)
+    return out
+
+
+def keq_vant_hoff(rxn_id: str, T_K: float) -> Optional[float]:
+    rxn = get(rxn_id)
+    return rxn.keq_vant_hoff(T_K) if rxn else None
+
+
+def dh_rxn_kJ_mol(rxn_id: str, T_K: float) -> Optional[float]:
+    rxn = get(rxn_id)
+    return rxn.dh_rxn_kJ_mol(T_K) if rxn else None
+
+
+# ============================================================
+# Conversión de equilibrio (gas ideal, una reacción)
+# ============================================================
+def equilibrium_conversion_gas(rxn_id: str,
+                                feed_moles: Dict[str, float],
+                                T_K: float,
+                                P_bar: float = 1.0,
+                                xi_init: float = 0.5,
+                                max_iter: int = 100,
+                                tol: float = 1e-8) -> Optional[Dict]:
+    """Resuelve el grado de avance ξ que satisface Kp(T) para una
+    reacción única en fase gas ideal.
+
+    feed_moles: dict {formula: moles_iniciales}.  Ejemplo:
+        {'N2': 1.0, 'H2': 3.0}     para Haber con feed estequiométrico.
+
+    Devuelve dict con:
+        'xi': grado de avance (mol)
+        'conversion_lim': conversión del reactante limitante (0-1)
+        'moles_out': dict {formula: moles_finales}
+        'y_out': dict {formula: fracción_molar_final}
+        'Keq': Kp usado
+        'limiting': formula del reactante limitante
+        None si la reacción no existe, le faltan A/B, o algún
+        reactante no está en el feed.
+
+    Hipótesis:
+      · Gas ideal (válido a P < 30 bar; a 200 bar (Haber) error ~30%)
+      · Una sola reacción (no acoplada)
+      · Sin inertes que afecten Kp (los inertes solo cambian y_i)
+
+    Para sistemas multi-reacción acoplados (SMR+WGS, etc.) hace falta
+    minimización de Gibbs — pendiente para v1.1.
+    """
+    rxn = get(rxn_id)
+    if rxn is None or rxn.vant_hoff_A is None or rxn.vant_hoff_B is None:
+        return None
+
+    # Validar que todos los reactantes estén en el feed
+    reactants = rxn.reactants()
+    for r in reactants:
+        if feed_moles.get(r.formula, 0.0) <= 0:
+            return None
+
+    # Determinar reactante limitante: el que llega a 0 primero
+    # como (n_i / |ν_i|) mínimo
+    lim = min(reactants, key=lambda r: feed_moles[r.formula] / abs(r.nu))
+    xi_max = feed_moles[lim.formula] / abs(lim.nu) - 1e-12  # límite físico
+
+    Keq = rxn.keq_vant_hoff(T_K)
+    if Keq is None or Keq <= 0:
+        return None
+
+    # Si es irreversible (Keq enorme), retornar conversión completa
+    if Keq > 1e30:
+        moles = dict(feed_moles)
+        for s in rxn.stoich:
+            moles[s.formula] = moles.get(s.formula, 0.0) + s.nu * xi_max
+        n_total = sum(moles.values())
+        y = {k: v/n_total for k, v in moles.items()} if n_total > 0 else {}
+        return dict(xi=xi_max, conversion_lim=1.0,
+                    moles_out=moles, y_out=y,
+                    Keq=Keq, limiting=lim.formula)
+
+    n_feed = sum(feed_moles.values())
+
+    def _residual(xi: float) -> float:
+        """Kp_actual(ξ) - Keq.  Buscamos raíz."""
+        moles = dict(feed_moles)
+        for s in rxn.stoich:
+            moles[s.formula] = moles.get(s.formula, 0.0) + s.nu * xi
+        n_tot = sum(moles.values())
+        if n_tot <= 0:
+            return float('inf')
+        # Kp = Π (y_i)^ν_i · (P/P°)^Δν
+        log_kp = 0.0
+        for s in rxn.stoich:
+            y = moles[s.formula] / n_tot
+            if y <= 0:
+                # Si producto, ξ muy chico; si reactante, ξ muy grande
+                return float('inf') if s.nu > 0 else float('-inf')
+            log_kp += s.nu * math.log(y)
+        log_kp += rxn.delta_nu * math.log(P_bar / P_REF_BAR)
+        return log_kp - math.log(Keq)
+
+    # Bisección segura
+    lo, hi = 1e-12, xi_max
+    f_lo, f_hi = _residual(lo), _residual(hi)
+    if f_lo * f_hi > 0:
+        # Sin cambio de signo: o no reacciona casi nada o conversión completa
+        return dict(
+            xi=(lo if abs(f_lo) < abs(f_hi) else hi),
+            conversion_lim=(0.0 if abs(f_lo) < abs(f_hi) else 1.0),
+            moles_out=dict(feed_moles),
+            y_out={k: v/n_feed for k, v in feed_moles.items()},
+            Keq=Keq, limiting=lim.formula)
+
+    for _ in range(max_iter):
+        mid = 0.5 * (lo + hi)
+        f_mid = _residual(mid)
+        if abs(f_mid) < tol:
+            break
+        if f_lo * f_mid < 0:
+            hi, f_hi = mid, f_mid
+        else:
+            lo, f_lo = mid, f_mid
+
+    xi = 0.5 * (lo + hi)
+    moles = dict(feed_moles)
+    for s in rxn.stoich:
+        moles[s.formula] = moles.get(s.formula, 0.0) + s.nu * xi
+    n_total = sum(moles.values())
+    y = {k: v/n_total for k, v in moles.items()} if n_total > 0 else {}
+    return dict(
+        xi=xi,
+        conversion_lim=xi / xi_max if xi_max > 0 else 0.0,
+        moles_out=moles, y_out=y,
+        Keq=Keq, limiting=lim.formula,
+    )
