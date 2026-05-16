@@ -52,7 +52,7 @@ from PySide6.QtCore import (
 from PySide6.QtGui import (
     QAction, QPen, QBrush, QColor, QPainter, QFont, QPainterPath,
     QPolygonF, QPainterPathStroker, QFontMetrics, QKeySequence,
-    QTransform,
+    QTransform, QIcon,
 )
 from PySide6.QtWidgets import (
     QApplication, QMainWindow, QGraphicsScene, QGraphicsView,
