@@ -1411,7 +1411,7 @@ def solve_columns(fs):
                 dist_stream = outs[0]
                 bot_stream = outs[1]
 
-        # Llamar al diseño FUG completo
+        # Llamar al diseño FUG completo (siempre, como reference)
         T_feed_K = feed.temperature + 273.15
         T_top_K  = dist_stream.temperature + 273.15 if dist_stream.temperature else T_feed_K - 10
         T_bot_K  = bot_stream.temperature + 273.15 if bot_stream.temperature else T_feed_K + 20
@@ -1431,6 +1431,60 @@ def solve_columns(fs):
         if res is None or res.get("N") is None:
             msgs.append(f"✗ Column {b.name}: FUG no convergió")
             continue
+
+        # Si el método es 'wanghenke', refinamos los resultados con
+        # el solver riguroso multicomp.  FUG provee N y R como
+        # estimación inicial; WH refina la distribución de no-keys
+        # con balance MESH por etapa.
+        method = getattr(b, "column_method", "fug")
+        if method == "wanghenke":
+            try:
+                import distillation_wanghenke as _wh
+                import thermo_db as _td_wh
+                # Convertir mass → mol para WH (que trabaja en mol)
+                comps = list(feed.composition.keys())
+                z_mass = [feed.composition[c] for c in comps]
+                mws = []
+                for c in comps:
+                    co = _td_wh.get(c)
+                    mws.append(co.mw if co and co.mw > 0 else 1.0)
+                z_mol = [zi / m for zi, m in zip(z_mass, mws)]
+                z_sum = sum(z_mol)
+                if z_sum > 0:
+                    z_mol = [z / z_sum for z in z_mol]
+                F_mol = sum(feed.mass_flow * zi / m * 1000 / (8760 * 3600)
+                              for zi, m in zip(z_mass, mws))
+                N_wh = b.column_N_stages or max(int(res["N"]) + 2, 10)
+                fs_wh = max(2, N_wh // 2)
+                wh_res = _wh.wang_henke(
+                    comps=comps, feed_z=z_mol, F=F_mol,
+                    T_feed_K=T_feed_K, P_bar=1.013,
+                    N=N_wh, feed_stage=fs_wh,
+                    D_over_F=res["D"] / res["F"],
+                    R=res["R"], max_iter=20)
+                if wh_res is not None and wh_res.get("converged"):
+                    # Reemplazar res con composiciones WH
+                    # Convertir x_top, x_bot de mol → mass
+                    x_top_mol = wh_res["x_profile"][0]
+                    x_bot_mol = wh_res["x_profile"][-1]
+                    x_D_mass = {comps[i]: x_top_mol[i] * mws[i]
+                                 for i in range(len(comps))}
+                    s_d = sum(x_D_mass.values())
+                    if s_d > 0:
+                        x_D_mass = {k: v/s_d for k, v in x_D_mass.items()}
+                    x_B_mass = {comps[i]: x_bot_mol[i] * mws[i]
+                                 for i in range(len(comps))}
+                    s_b = sum(x_B_mass.values())
+                    if s_b > 0:
+                        x_B_mass = {k: v/s_b for k, v in x_B_mass.items()}
+                    res["x_D"] = x_D_mass
+                    res["x_B"] = x_B_mass
+                    res["_wanghenke"] = True
+                    res["_wh_iterations"] = wh_res.get("iterations")
+                    msgs.append(f"  Column {b.name}: WH refinó composiciones "
+                                 f"({wh_res.get('iterations')} iter)")
+            except Exception as e:
+                msgs.append(f"⚠ Column {b.name}: WH falló ({e}), usa FUG")
 
         # Extender a multicomponente via Fenske-Hengstebeck si hay >2
         # componentes en el feed

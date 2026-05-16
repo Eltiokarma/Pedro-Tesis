@@ -527,6 +527,21 @@ class BlockEditDialog(QDialog):
         self.col_Rf.setValue(getattr(block, "column_R_factor", 1.3))
         col_layout.addRow("R / R_min:", self.col_Rf)
 
+        # Método: FUG shortcut vs Wang-Henke riguroso
+        self.col_method = QComboBox()
+        self.col_method.addItem("FUG (shortcut)",            "fug")
+        self.col_method.addItem("Wang-Henke (riguroso)",     "wanghenke")
+        cur_method = getattr(block, "column_method", "fug") or "fug"
+        idx = self.col_method.findData(cur_method)
+        if idx >= 0: self.col_method.setCurrentIndex(idx)
+        col_layout.addRow("Método:", self.col_method)
+
+        self.col_N = QSpinBox()
+        self.col_N.setRange(0, 200)
+        self.col_N.setValue(getattr(block, "column_N_stages", 0))
+        self.col_N.setSpecialValueText("auto (FUG)")
+        col_layout.addRow("N etapas (WH):", self.col_N)
+
         hint_col = QLabel(
             "Si activo: el solver usa Fenske-Underwood-Gilliland-Kirkbride\n"
             "para diseñar la columna y escribe outputs automáticamente.\n"
@@ -619,6 +634,8 @@ class BlockEditDialog(QDialog):
             self.block.column_x_D_LK = float(self.col_xD.value())
             self.block.column_x_B_LK = float(self.col_xB.value())
             self.block.column_R_factor = float(self.col_Rf.value())
+            self.block.column_method   = self.col_method.currentData() or "fug"
+            self.block.column_N_stages = int(self.col_N.value())
         # Flash drum
         if hasattr(self, "gb_flash") and self.gb_flash.isVisible():
             self.block.flash_active = bool(self.flash_active_cb.isChecked())

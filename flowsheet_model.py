@@ -137,6 +137,13 @@ class Block:
     column_x_D_LK:    float = 0.95      # pureza objetivo LK en destilado
     column_x_B_LK:    float = 0.05      # frac LK en fondo (= 1 - recovery)
     column_R_factor:  float = 1.3       # ratio R/R_min (1.2-1.5 típico)
+    # Método de cálculo:
+    #   'fug'        — Fenske-Underwood-Gilliland shortcut (default,
+    #                  rápido, válido para binarios y aprox multicomp)
+    #   'wanghenke'  — MESH riguroso multicomp por etapa (Capa 6+).
+    #                  Necesita N (column_N_stages) y feed_stage.
+    column_method:    str   = "fug"
+    column_N_stages:  int   = 0         # solo para 'wanghenke', 0 = usa N de FUG
 
     # ---- FLASH DRUM (vessel con VLE, Capa 6) ----
     # Si flash_active es True y el bloque es tipo Vessel, el solver
