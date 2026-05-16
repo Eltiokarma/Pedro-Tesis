@@ -1204,6 +1204,14 @@ def solve_equilibrium_reactors(fs):
     for b in fs.blocks.values():
         if not getattr(b, "reactions", None):
             continue
+        # Reactor estructural / placeholder: si NINGUNA de las reacciones
+        # declaradas existe en el DB de Capa 4, asumimos que el user usó
+        # IDs simbólicos para marcar el bloque como reactor (chemistry
+        # via outputs locked) — saltamos la chemistry sin error.  El
+        # block sigue siendo "reactor" para el component balance skip.
+        known = [rid for rid in b.reactions if _rdb.get(rid) is not None]
+        if not known:
+            continue
         ins  = [s for s in fs.streams.values() if s.dst == b.id]
         outs = [s for s in fs.streams.values() if s.src == b.id]
         if not ins or not outs:

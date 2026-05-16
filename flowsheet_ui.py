@@ -3203,6 +3203,285 @@ class FlowsheetEditor:
                                  flowrate=1500, price=150.0,
                                  stream="Utilities")
 
+    def _example_quimpac_chloralkali(self):
+        """QUIMPAC — Planta cloro-álcali estilo Oquendo/Paramonga (Perú).
+
+        Electrólisis de sal en celda de membrana.  Producción de soda
+        cáustica, cloro líquido e hidrógeno por electrólisis de NaCl(aq).
+
+        Reacciones (placeholder R_CELDA en el block — la chemistry real
+        del electrolizador no está en el DB de reacciones de Capa 4;
+        se modela con outlets locked siguiendo estequiometría real):
+            2 NaCl + 2 H2O  →  2 NaOH + Cl2 + H2
+
+        Tres trenes paralelos post-celda:
+          · Tren Cl2:  cooler → secador H2SO4 → compresor → condenser
+            → Cl2 líquido (700 kPa, 20 °C).
+          · Tren H2:   cooler → tanque H2 (a venta o quema).
+          · Tren NaOH: evaporador 32% → 50% (vapor de agua a venteo).
+
+        Recycle obligatorio de salmuera agotada (anolito sale a 17-21%
+        NaCl, vuelve al saturador).  Ratio 5× fresh (basis 1000 kg/h
+        NaCl fresco).
+
+        Reactivos auxiliares: NaOH+Na2CO3 (purificación de Ca/Mg),
+        HCl (acidificación pH≈2.7), H2SO4 98% (secado de Cl2 húmedo).
+
+        Basis: 1000 kg/h NaCl fresco.  Layout 1.8× spacing.
+        """
+        # ============ FEEDS Y SATURADOR ============
+        tk_sal   = self._add_example_block("TK-101","Storage tank — cone roof",
+                                              500.0,   60, 360)
+        tk_h2o   = self._add_example_block("TK-102","Storage tank — cone roof",
+                                              500.0,   60, 660)
+        # Reactivos de purificación (NaOH + Na2CO3)
+        tk_reac  = self._add_example_block("TK-103","Storage tank — cone roof",
+                                              50.0,    60, 960)
+        # Saturador / mezclador: sal + agua + recycle
+        m101     = self._add_example_block("M-101","Mixer",
+                                                5.0,  360, 480)
+
+        # ============ PURIFICACIÓN ============
+        # R-101: Mg(2+) + 2 OH- → Mg(OH)2 ↓ ; Ca(2+) + CO3(2-) → CaCO3 ↓
+        # Modelado como reactor con outputs locked (no R en DB,
+        # placeholder R_PURIF para marcar como rxn block).
+        r101     = self._add_example_block("R-101","Reactor — jacketed agitated",
+                                              30.0,  660, 480)
+        self.fs.blocks[r101].reactions = ["R_PURIF"]
+        # Decantador: separa lodos de Mg(OH)2 + CaCO3
+        v101     = self._add_example_block("V-101","Vessel — vertical",
+                                              50.0,  960, 480)
+        self.fs.blocks[v101].splitter_active = True
+        self.fs.blocks[v101].splitter_fractions = [0.002, 0.998]  # lodos / clear
+        # Lodos (residuo sólido)
+        tk_lodos = self._add_example_block("TK-104","Storage tank — cone roof",
+                                              50.0,  960, 720)
+        # Intercambio iónico (pulido final Ca/Mg a ppb) — pass-through
+        ix101    = self._add_example_block("IX-101","Filter — belt",
+                                              30.0, 1260, 480)
+        # Acidificación con HCl (pH ≈ 2.7 antes de celda)
+        tk_hcl   = self._add_example_block("TK-105","Storage tank — cone roof",
+                                              50.0, 1260, 240)
+        m102     = self._add_example_block("M-102","Mixer",
+                                                5.0, 1560, 480)
+
+        # ============ CELDA DE ELECTRÓLISIS ============
+        # R-201: 2 NaCl + 2 H2O → 2 NaOH + Cl2 + H2  (35% conv/pase,
+        # 100% steady-state con recycle).  Cuatro salidas:
+        #   - Anolito agotado (recycle a saturador)
+        #   - Cl2 húmedo
+        #   - H2 húmedo
+        #   - NaOH 32% solución
+        r201     = self._add_example_block("R-201","Reactor — autoclave",
+                                              80.0, 1860, 480)
+        self.fs.blocks[r201].reactions = ["R_CELDA_CLORALCALI"]
+        self.fs.blocks[r201].T_op_K = 358.15   # 85°C
+        self.fs.blocks[r201].P_op_bar = 1.5
+
+        # ============ TREN DE CL2 ============
+        e301     = self._add_example_block("E-301","Heat exch. — air cooler",
+                                              80.0, 2160, 180)
+        # Secador con H2SO4 98% (tower estructural)
+        tk_h2so4 = self._add_example_block("TK-106","Storage tank — cone roof",
+                                              50.0, 2160,   0)
+        abs301   = self._add_example_block("T-301","Tower (column shell)",
+                                              30.0, 2460, 180)
+        k301     = self._add_example_block("K-301","Compressor — centrifugal",
+                                             500.0, 2760, 180)
+        e302     = self._add_example_block("E-302","Heat exch. — floating head",
+                                             120.0, 3060, 180)
+        tk_cl2   = self._add_example_block("TK-201","Storage tank — floating roof",
+                                             600.0, 3360, 180)
+        # H2SO4 spent (residuo, baja a tanque debajo del secador)
+        tk_acid_spent = self._add_example_block("TK-107","Storage tank — cone roof",
+                                              50.0, 2460,   0)
+
+        # ============ TREN DE H2 ============
+        e401     = self._add_example_block("E-401","Heat exch. — air cooler",
+                                              50.0, 2160, 480)
+        tk_h2_prod = self._add_example_block("TK-202","Storage tank — cone roof",
+                                             200.0, 2460, 480)
+
+        # ============ TREN DE NAOH (evaporador 32% → 50%) ============
+        e501     = self._add_example_block("E-501","Evaporator — vertical",
+                                             400.0, 2160, 780)
+        # Producto NaOH 50%
+        tk_naoh  = self._add_example_block("TK-203","Storage tank — floating roof",
+                                             800.0, 2460, 780)
+        # Vapor de agua (waste — al sistema de condensado / atmosfera)
+        tk_vapor = self._add_example_block("TK-108","Storage tank — cone roof",
+                                              50.0, 2460,1020)
+
+        # ============ STREAMS — PURIFICACIÓN ============
+        # Sal fresca (sólido disuelto)
+        self._add_example_stream(tk_sal, m101, "S-sal", 1000, role="feed",
+                                  src_port="salida", dst_port="entrada1",
+                                  price=80.0, T=25,
+                                  composition={"sodium chloride": 1.0},
+                                  phase="solid")
+        # Agua fresca de saturador
+        self._add_example_stream(tk_h2o, m101, "S-h2o", 3000, role="feed",
+                                  src_port="salida", dst_port="entrada2",
+                                  price=1.5, T=25,
+                                  composition={"water": 1.0},
+                                  phase="liquid")
+        # Salmuera cruda al reactor de purificación
+        self._add_example_stream(m101, r101, "S-cruda", 9000,
+                                  src_port="salida", dst_port="alimentacion",
+                                  T=40, phase="liquid",
+                                  composition={"sodium chloride": 0.20,
+                                                 "water": 0.80})
+        # Reactivos (NaOH + Na2CO3) para precipitar Mg, Ca
+        self._add_example_stream(tk_reac, r101, "S-reactivos", 10, role="feed",
+                                  src_port="salida", dst_port="aux_in",
+                                  price=400.0, T=25,
+                                  composition={"sodium hydroxide": 0.5,
+                                                 "sodium carbonate": 0.5},
+                                  phase="liquid")
+        # Salida del reactor: salmuera con lodos en suspensión
+        self._add_example_stream(r101, v101, "S-purif", 9010,
+                                  src_port="producto", dst_port="alimentacion",
+                                  T=60, phase="liquid",
+                                  composition={"sodium chloride": 0.205,
+                                                 "water": 0.793,
+                                                 "calcium carbonate": 0.0011,
+                                                 "magnesium hydroxide": 0.001})
+        # Decantador → lodos (waste sólido) + clear líquido
+        self._add_example_stream(v101, tk_lodos, "S-lodos", 18, role="waste",
+                                  src_port="liquido_fondo", dst_port="entrada",
+                                  price=0.0, T=60, phase="liquid",
+                                  composition={"calcium carbonate": 0.55,
+                                                 "magnesium hydroxide": 0.45})
+        self._add_example_stream(v101, ix101, "S-clear", 8992,
+                                  src_port="vapor", dst_port="alimentacion",
+                                  T=60, phase="liquid",
+                                  composition={"sodium chloride": 0.205,
+                                                 "water": 0.795})
+        # IX-101 pulido pass-through
+        self._add_example_stream(ix101, m102, "S-ultrapur", 8992,
+                                  src_port="salida", dst_port="entrada1",
+                                  T=60, phase="liquid",
+                                  composition={"sodium chloride": 0.205,
+                                                 "water": 0.795})
+        # HCl para acidificación (pH 2.7)
+        self._add_example_stream(tk_hcl, m102, "S-hcl", 8, role="feed",
+                                  src_port="salida", dst_port="entrada2",
+                                  price=120.0, T=25,
+                                  composition={"hydrogen chloride": 1.0},
+                                  phase="liquid")
+        # Alimentación a celda
+        self._add_example_stream(m102, r201, "S-cell-feed", 9000,
+                                  src_port="salida", dst_port="alimentacion",
+                                  T=85, phase="liquid",
+                                  composition={"sodium chloride": 0.205,
+                                                 "water": 0.795})
+
+        # ============ STREAMS — CELDA (4 outputs locked) ============
+        # Anolito agotado (recycle) — NaCl 18%, vuelve a saturador
+        self._add_example_stream(r201, m101, "S-anolito", 5000,
+                                  src_port="liquido_fondo", dst_port="entrada3",
+                                  T=85, phase="liquid",
+                                  composition={"sodium chloride": 0.18,
+                                                 "water": 0.82})
+        # Cloro húmedo (con H2O saturada arrastrada)
+        self._add_example_stream(r201, e301, "S-cl2-wet", 620,
+                                  src_port="vapor", dst_port="proceso_in",
+                                  T=85, phase="gas",
+                                  composition={"chlorine": 0.97,
+                                                 "water": 0.03})
+        # Hidrógeno húmedo
+        self._add_example_stream(r201, e401, "S-h2-wet", 28,
+                                  src_port="aux_out", dst_port="proceso_in",
+                                  T=85, phase="gas",
+                                  composition={"hydrogen": 0.95,
+                                                 "water": 0.05})
+        # NaOH 32% solución
+        self._add_example_stream(r201, e501, "S-naoh-32", 3352,
+                                  src_port="liquido_tope", dst_port="proceso_in",
+                                  T=85, phase="liquid",
+                                  composition={"sodium hydroxide": 0.32,
+                                                 "water": 0.68})
+
+        # ============ STREAMS — TREN CL2 ============
+        self._add_example_stream(e301, abs301, "S-cl2-cold", 620,
+                                  src_port="proceso_out", dst_port="alimentacion",
+                                  T=15, phase="gas",
+                                  composition={"chlorine": 0.97,
+                                                 "water": 0.03})
+        # H2SO4 fresh al secador
+        self._add_example_stream(tk_h2so4, abs301, "S-h2so4", 25, role="feed",
+                                  src_port="salida", dst_port="reflujo",
+                                  price=200.0, T=25,
+                                  composition={"sulfuric acid": 0.98,
+                                                 "water": 0.02},
+                                  phase="liquid")
+        # H2SO4 spent (drena con agua absorbida)
+        self._add_example_stream(abs301, tk_acid_spent, "S-acid-spent", 43,
+                                  role="waste",
+                                  src_port="liquido_fondo", dst_port="entrada",
+                                  price=0.0, T=15, phase="liquid",
+                                  composition={"sulfuric acid": 0.55,
+                                                 "water": 0.45})
+        # Cl2 seco (>99% pureza, <50 ppm H2O)
+        self._add_example_stream(abs301, k301, "S-cl2-dry", 602,
+                                  src_port="vapor_tope", dst_port="succion",
+                                  T=15, phase="gas",
+                                  composition={"chlorine": 0.999,
+                                                 "water": 0.001})
+        # Compresión a 7 bar
+        self._add_example_stream(k301, e302, "S-cl2-hp", 602,
+                                  src_port="descarga", dst_port="tube_in",
+                                  T=80, phase="gas",
+                                  composition={"chlorine": 0.999,
+                                                 "water": 0.001})
+        # Condensación → Cl2 líquido
+        self._add_example_stream(e302, tk_cl2, "S-cl2-liq", 602, role="product",
+                                  src_port="tube_out", dst_port="entrada",
+                                  price=380.0, T=20, phase="liquid",
+                                  composition={"chlorine": 0.999,
+                                                 "water": 0.001})
+
+        # ============ STREAMS — TREN H2 ============
+        self._add_example_stream(e401, tk_h2_prod, "S-h2", 28, role="product",
+                                  src_port="proceso_out", dst_port="entrada",
+                                  price=2000.0, T=25, phase="gas",
+                                  composition={"hydrogen": 0.95,
+                                                 "water": 0.05})
+
+        # ============ STREAMS — TREN NaOH ============
+        # NaOH 50% concentrado (producto comercial)
+        self._add_example_stream(e501, tk_naoh, "S-naoh-50", 2145, role="product",
+                                  src_port="liquido_fondo", dst_port="entrada",
+                                  price=480.0, T=50, phase="liquid",
+                                  composition={"sodium hydroxide": 0.50,
+                                                 "water": 0.50})
+        # Vapor de agua evaporado (waste o a sistema de condensado)
+        self._add_example_stream(e501, tk_vapor, "S-vapor-evap", 1207,
+                                  role="waste",
+                                  src_port="vapor_tope", dst_port="entrada",
+                                  price=0.0, T=100, phase="vapor",
+                                  composition={"water": 1.0})
+
+        # ============ DUTIES INFERIDOS ============
+        from flowsheet_solver import auto_set_duties_from_thermo
+        auto_set_duties_from_thermo(self.fs)
+        # Energía eléctrica de la celda: ~2500 kWh/t Cl2 × 0.602 t/h
+        # = 1505 kW.  Reactor R-201 duty manual (no lo computa Capa 4
+        # porque la rxn está fuera del DB).
+        self.fs.blocks[r201].duty = 1505.0
+        self.fs.blocks[r201].duty_locked = True
+
+        # ============ OPEX EXTRAS ============
+        self._add_example_extra("Membrana celda electrolítica (reposición)",
+                                 flowrate=3, price=18000.0,
+                                 stream="Consumables")
+        self._add_example_extra("Energía eléctrica celda (kWh/t Cl2)",
+                                 flowrate=12000, price=0.08,
+                                 stream="Utilities")
+        self._add_example_extra("Anodos DSA (reposición)",
+                                 flowrate=1, price=25000.0,
+                                 stream="Consumables")
+
     def open_json(self):
         path = filedialog.askopenfilename(
             title="Abrir diagrama",

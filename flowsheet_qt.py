@@ -1236,17 +1236,6 @@ class _StatusHaloItem(QGraphicsRectItem):
         painter.setPen(self.pen())
         painter.drawRoundedRect(self.rect(), 4, 4)
 
-    def shape(self):
-        # SIEMPRE devolver el rect completo como shape de hit-testing,
-        # independiente de pen/brush.  Sin esto, cuando el rect tiene
-        # pen=NoPen y brush con alpha casi 0 (como el hit-target
-        # invisible del BlockItem), Qt podría no registrar clicks en
-        # el interior y los bloques no se podrían mover.
-        from PySide6.QtGui import QPainterPath
-        p = QPainterPath()
-        p.addRect(self.rect())
-        return p
-
 
 class _StreamHandle(QGraphicsEllipseItem):
     """Handle circular azul para arrastrar un waypoint de stream.
@@ -3679,6 +3668,11 @@ class FlowsheetMainWindow(QMainWindow):
         examples_menu.addAction(_ic_flag,
             "⭐ PLANTA INDUSTRIAL COMPLETA (MeOH + servicios + BOP)",
             make_loader("industrial"))
+        # 🇵🇪 QUIMPAC chlor-alkali
+        examples_menu.addAction(
+            _mk("eq-reactor", color="#1976d2", size=18) or QIcon(),
+            "🇵🇪 QUIMPAC — cloro-álcali (membrana, estilo Oquendo)",
+            make_loader("quimpac"))
         # Ícono del menú Ejemplos (templates)
         examples_act.setIcon(_mk("act-examples", color=_ICON_COLOR, size=20))
         examples_act.setMenu(examples_menu)
@@ -4044,6 +4038,10 @@ class FlowsheetMainWindow(QMainWindow):
                               "PLANTA INDUSTRIAL COMPLETA — MeOH + servicios + BOP",
                               "100/200/300 — Plant Integration",
                               "PFD-INDUSTRIAL-001"),
+            "quimpac":      (TkEditor._example_quimpac_chloralkali,
+                              "QUIMPAC — Cloro-álcali (celda de membrana)",
+                              "100/200/300 — Chlor-Alkali Plant",
+                              "PFD-QUIMPAC-001"),
         }
         entry = builder_map.get(key)
         if entry is None:
