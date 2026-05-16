@@ -999,12 +999,109 @@ def find_conflicts(fs, tol_mass_rel=0.01, tol_energy_rel=0.05):
     return conflicts
 
 
+def solve_equilibrium_reactors(fs):
+    """Para cada bloque con `reactions` declaradas (reactor de equilibrio,
+    Capa 4):
+      1. Agrega los inlets en una composición + mass_flow promedio.
+      2. Llama solve_equilibrium_reactor_from_composition (Newton-Raphson
+         multi-reacción en fase gas ideal).
+      3. Setea composición de los outlets a la composición de equilibrio.
+      4. Setea block.heat_of_reaction = ΔH/m_in [kJ/kg input] para que
+         el balance de energía existente lo recoja sin tocar el solver.
+
+    Skip si:
+      - block.reactions == [] (no es reactor de equilibrio)
+      - los inlets no tienen composición ni mass_flow (todavía no
+        resueltos por el balance de masa upstream)
+      - el solver multi-reacción no converge (e.g. Keq inválido o
+        reacciones linealmente dependientes) → reporta y deja
+        heat_of_reaction = 0.
+
+    Devuelve lista de mensajes informativos (success/warning) por
+    reactor procesado.
+    """
+    try:
+        import reactions_db as _rdb
+    except ImportError:
+        return []
+    msgs = []
+    for b in fs.blocks.values():
+        if not getattr(b, "reactions", None):
+            continue
+        ins  = [s for s in fs.streams.values() if s.dst == b.id]
+        outs = [s for s in fs.streams.values() if s.src == b.id]
+        if not ins or not outs:
+            continue
+        m_in_total = sum(s.mass_flow for s in ins if s.mass_flow > 0)
+        if m_in_total <= 0:
+            msgs.append(f"⚠ Reactor {b.name}: inlets sin mass_flow, skip.")
+            continue
+        # Composición agregada (mass-weighted) de los inputs
+        agg: Dict[str, float] = {}
+        for s in ins:
+            if s.mass_flow <= 0:
+                continue
+            comp = s.composition or ({s.main_component: 1.0}
+                                       if s.main_component else {})
+            if not comp:
+                continue
+            w = s.mass_flow / m_in_total
+            for c, f in comp.items():
+                agg[c] = agg.get(c, 0.0) + w * f
+        if not agg:
+            msgs.append(f"⚠ Reactor {b.name}: inlets sin composition.")
+            continue
+        # Renormalizar (mass fractions deben sumar 1)
+        total = sum(agg.values())
+        if total > 0:
+            agg = {k: v/total for k, v in agg.items()}
+        # T de operación: explicit o promedio ponderado del inlet
+        T_K = b.T_op_K if b.T_op_K > 0 else (
+            sum(s.temperature * s.mass_flow for s in ins if s.mass_flow > 0)
+              / m_in_total + 273.15)
+        # mass_flow del flowsheet está en tm/año → kg/s
+        from flowsheet_model import SEC_PER_YEAR, TM_TO_KG
+        m_in_kg_s = m_in_total * TM_TO_KG / SEC_PER_YEAR
+
+        res = _rdb.solve_equilibrium_reactor_from_composition(
+            rxn_ids=b.reactions,
+            inlet_composition=agg,
+            inlet_mass_kg_s=m_in_kg_s,
+            T_K=T_K, P_bar=b.P_op_bar)
+        if res is None:
+            msgs.append(f"✗ Reactor {b.name}: no convergió "
+                         f"(rxns={b.reactions}, T={T_K:.0f}K, P={b.P_op_bar}bar).")
+            continue
+
+        # Aplicar resultados a los outlets (todos comparten composición;
+        # mass_flow se distribuye según fracción declarada o se reparte
+        # uniformemente).
+        out_comp = res['outlet_composition']
+        for s_out in outs:
+            if not _is_comp_locked(s_out):
+                s_out.composition = dict(out_comp)
+                if not s_out.main_component and out_comp:
+                    s_out.main_component = max(out_comp, key=out_comp.get)
+
+        # heat_of_reaction NO se setea si el user lo lockeo manualmente
+        # (override).  Si está en 0 (default), se setea desde el solver.
+        if abs(b.heat_of_reaction) < 1e-9:
+            b.heat_of_reaction = res['heat_of_reaction_kJ_per_kg']
+
+        msgs.append(f"✓ Reactor {b.name}: ΔH={res['duty_kW']:+.2f} kW, "
+                     f"ξ={res['xi']}, "
+                     f"unmapped={res['unmapped'] if res['unmapped'] else 'none'}")
+    return msgs
+
+
 def auto_propagate_compositions(fs):
     """Para cada bloque NO reactivo, calcula la composición de las
     salidas como promedio ponderado por mass_flow de las entradas.
 
     - Bloques con heat_of_reaction != 0 (reactores): NO se tocan,
       la composición del output la declara el user (estequiometría).
+    - Bloques con reactions != [] (reactor de equilibrio Capa 4):
+      tampoco — su outlet lo escribe solve_equilibrium_reactors().
     - Splitters / mixers / HX / vessels / columnas: si el output no
       tiene composition declarada (vacío), se hereda de los inputs.
     - Si el output YA tiene composition, no se sobreescribe.
@@ -1014,6 +1111,8 @@ def auto_propagate_compositions(fs):
     changed = 0
     for b in fs.blocks.values():
         if b.heat_of_reaction != 0:
+            continue
+        if getattr(b, "reactions", None):
             continue
         ins  = [s for s in fs.streams.values() if s.dst == b.id]
         outs = [s for s in fs.streams.values() if s.src == b.id]
@@ -1345,6 +1444,15 @@ def solve(fs, max_iter=MAX_ITER):
         if not prop:
             break
     result.propagated_mass = total_propagated_mass
+
+    # 4b. Reactores de equilibrio (Capa 4): resuelve composición y
+    #     setea heat_of_reaction para que el balance de energía lo
+    #     recoja en el siguiente paso.  Idempotente — solo procesa
+    #     bloques con b.reactions != [].
+    rxn_msgs = solve_equilibrium_reactors(fs)
+    for m in rxn_msgs:
+        if m.startswith("✗") or m.startswith("⚠"):
+            result.energy_balance_errors.append(m)
 
     # 5. Solver de energía
     total_propagated_temp = []

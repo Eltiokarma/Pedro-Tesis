@@ -99,6 +99,20 @@ class Block:
     # desde JSON / examples mediante heurística (duty != 0 → locked).
     duty_locked: bool = False
 
+    # ---- REACTOR DE EQUILIBRIO (Capa 4) ----
+    # Lista de IDs de reactions_db que ocurren en este bloque (e.g.
+    # ['R003','R002'] para un reformador SMR+WGS).  Si está vacía,
+    # el bloque NO es reactor de equilibrio (pero puede seguir siendo
+    # reactor "manual" via heat_of_reaction declarado).
+    # Si tiene reacciones, el solver:
+    #   1. Lee composición del inlet
+    #   2. Resuelve equilibrio multi-reacción a (T_op_K, P_op_bar)
+    #   3. Setea composición del outlet
+    #   4. Setea heat_of_reaction automáticamente desde Σ ξ·ΔH(T)
+    reactions: List[str] = field(default_factory=list)
+    T_op_K:    float = 0.0     # 0 = usar T promedio del input
+    P_op_bar:  float = 1.0
+
     # caches del canvas Tk (no se serializan, no se usan en Qt)
     canvas_rect: Optional[int] = field(default=None, repr=False)
     canvas_text: Optional[int] = field(default=None, repr=False)
