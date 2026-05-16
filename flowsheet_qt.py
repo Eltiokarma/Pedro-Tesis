@@ -2737,6 +2737,8 @@ class FlowsheetMainWindow(QMainWindow):
                                   make_loader("smr_eq"))
         examples_menu.addAction("⚛ Cracking de etano (reactor PFR Capa 5)",
                                   make_loader("ethane_pfr"))
+        examples_menu.addAction("⚛ Haber-Bosch con recycle (NH3, loop reactivo)",
+                                  make_loader("haber_rec"))
         examples_act.setMenu(examples_menu)
         tb.addAction(examples_act)
         # workaround: QAction con menu necesita un QToolButton para mostrar el dropdown
@@ -3047,6 +3049,9 @@ class FlowsheetMainWindow(QMainWindow):
             "ethane_pfr":   (TkEditor._example_ethane_cracker_pfr,
                               "Cracking de etano — reactor PFR cinético (Capa 5)",
                               "100 — Pirólisis", "PFD-ETH-PFR-001"),
+            "haber_rec":    (TkEditor._example_haber_recycle,
+                              "Haber-Bosch con recycle — NH3 con loop reactivo",
+                              "100 — Síntesis NH3", "PFD-NH3-REC-001"),
         }
         entry = builder_map.get(key)
         if entry is None:

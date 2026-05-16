@@ -2520,6 +2520,111 @@ class FlowsheetEditor:
                                  flowrate=200, price=180.0,
                                  stream="Utilities")
 
+    def _example_haber_recycle(self):
+        """Síntesis de amoníaco (Haber-Bosch) con recycle real.
+
+        El reactor industrial Haber convierte solo 15-20% por paso del
+        N2 a NH3 (equilibrio termo a 700K/200bar es 58%, pero cinético
+        en planta es menor).  Para alcanzar conv global 99% se usa
+        recirculación masiva de gases sin reaccionar.
+
+        Reacción:  N2 + 3 H2 → 2 NH3   (R004, Δν=-2, exotérmica)
+
+        Tren:
+          TK-fresh ──> M-101 <── recycle
+                         │
+                         ▼
+                       F-101 (heater)
+                         │
+                         ▼
+                       R-101 (Haber, 700K, 200 bar, equilibrium)
+                         │
+                         ▼
+                       SEP-101 (separador NH3 — condensación)
+                          │       │
+                          ▼       ▼
+                        TK-NH3  PSPLT (split purge/recycle)
+                                │  │
+                                ▼  ▼
+                              TK-purge  → recycle ↩
+
+        Demuestra el LOOP COMPOSICIONAL del solver — el reactor se
+        re-resuelve en cada iteración hasta que la composición del
+        recycle converge.  Cambiar recycle.mass_flow desde la UI
+        ajusta la conversión por pasada (más recycle → mezcla más
+        saturada de NH3 → menos conv por paso, signo Le Chatelier).
+        """
+        # Layout PFD industrial 1600×960
+        tk_fresh = self._add_example_block("TK-101","Storage tank — cone roof", 500.0,  60, 260)
+        m101     = self._add_example_block("M-101", "Mixer — static",            5.0, 240, 320)
+        f101     = self._add_example_block("F-101", "Heat exch. — floating head",
+                                            300.0, 400, 320)
+        r101     = self._add_example_block("R-101", "Reactor — jacketed agitated",
+                                             80.0, 580, 320)
+        sep101   = self._add_example_block("V-101", "Vessel — vertical",         50.0, 780, 320)
+        psplt    = self._add_example_block("V-102", "Vessel — vertical",         20.0, 780, 500)
+        tk_nh3   = self._add_example_block("TK-102","Storage tank — cone roof", 300.0, 980, 260)
+        tk_purge = self._add_example_block("TK-103","Storage tank — cone roof",  50.0, 980, 500)
+
+        # Configurar R-101 como reactor de equilibrio Haber
+        self.fs.blocks[r101].reactions = ["R004"]
+        self.fs.blocks[r101].reactor_mode = "equilibrium"
+        self.fs.blocks[r101].T_op_K = 700.0
+        self.fs.blocks[r101].P_op_bar = 200.0
+
+        # Basis: 1000 tm/año feed fresco N2+H2 estequiométrico
+        # N2:H2 = 1:3 molar → mass = 28+6 = 34 g; mfrac N2=0.824, H2=0.176
+        # NH3 producto ≈ feed − purge = 950 tm/año (95% conv global)
+        # Recycle: 5000 tm/año (5× feed_fresh — ratio típico industrial)
+        # to-rx = 6000 tm/año (M-101 mezcla)
+        # rx-out = 6000 (conservación)
+        # gases = rx-out − NH3 = 5050; gases = purge + recycle ✓
+
+        # Feed fresco (única corriente con composición declarada — todo
+        # lo demás se propaga por mixer + reactor + balance).  Por eso
+        # NO declaramos main_component en streams intermedios: el flag
+        # composition_locked se activaría y bloquearía la propagación.
+        self._add_example_stream(tk_fresh, m101, "S-fresh", 1000, role="feed",
+                                  src_port="salida", dst_port="entrada1",
+                                  price=0.0, T=25,
+                                  composition={"nitrogen": 0.824, "hydrogen": 0.176},
+                                  main_component="nitrogen", phase="gas")
+        # Mezcla → heater
+        self._add_example_stream(m101, f101, "S-mix",
+                                  src_port="salida", dst_port="tube_in",
+                                  T=80, phase="gas")
+        # Heater → Reactor
+        self._add_example_stream(f101, r101, "S-precal",
+                                  src_port="tube_out", dst_port="alimentacion",
+                                  T=400, phase="gas")
+        # Reactor → Separador (composición la setea solve_equilibrium_reactors)
+        self._add_example_stream(r101, sep101, "S-rx-out",
+                                  src_port="producto", dst_port="alimentacion",
+                                  T=427, phase="gas")
+        # Separador → NH3 producto (condensación: NH3 puro)
+        self._add_example_stream(sep101, tk_nh3, "S-NH3", 950, role="product",
+                                  src_port="liquido", dst_port="entrada",
+                                  price=600.0, T=40,
+                                  composition={"ammonia": 1.0},
+                                  main_component="ammonia", phase="liquid")
+        # Separador → splitter purge/recycle (gases sin reaccionar)
+        self._add_example_stream(sep101, psplt, "S-gases",
+                                  src_port="vapor", dst_port="alimentacion",
+                                  T=40, phase="gas")
+        # Splitter → purge (5% del feed_fresh)
+        self._add_example_stream(psplt, tk_purge, "S-purge", 50, role="waste",
+                                  src_port="vapor", dst_port="entrada",
+                                  price=0.0, T=40, phase="gas")
+        # Splitter → recycle ↩ a M-101 (SPEC clave: declara el ratio recycle)
+        self._add_example_stream(psplt, m101, "S-recycle", 5000,
+                                  src_port="liquido", dst_port="entrada2",
+                                  T=40, phase="gas")
+
+        # OPEX: catalizador Fe-K2O Haber
+        self._add_example_extra("Catalizador Fe-K2O (Haber)",
+                                 flowrate=5, price=15_000.0,
+                                 stream="Consumables")
+
     def open_json(self):
         path = filedialog.askopenfilename(
             title="Abrir diagrama",

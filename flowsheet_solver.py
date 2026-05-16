@@ -1616,16 +1616,67 @@ def solve(fs, max_iter=MAX_ITER):
             break
     result.propagated_mass = total_propagated_mass
 
-    # 4b. Reactores de equilibrio (Capa 4): resuelve composición y
-    #     setea heat_of_reaction para que el balance de energía lo
-    #     recoja en el siguiente paso.  Idempotente — solo procesa
-    #     bloques con b.reactions != [].
-    rxn_msgs = solve_equilibrium_reactors(fs)
+    # 4b. Propagar composiciones ANTES del reactor.  Sin esto, mixers
+    #     o splits entre el feed y un reactor no llevan composición
+    #     a los inlets del reactor → solve_equilibrium_reactors falla
+    #     con 'inlets sin composition'.  Crítico para flowsheets con
+    #     mixer-de-feeds o reciclos que pasan por mixers.
+    auto_propagate_compositions(fs)
+
+    # 4c. Reactores (Capas 4 y 5): resuelve composición + auto-duty.
+    #     LOOP COMPOSICIONAL para flowsheets con reciclos donde el
+    #     reactor está en un SCC.  Cada iteración:
+    #       1) propagate composition (mixer aguas arriba del reactor)
+    #       2) solve_equilibrium_reactors con composición actual
+    #       3) propagate composition de los outlets (puede llegar al
+    #          recycle via splitter)
+    #     Convergencia: composición de los streams del SCC no cambia
+    #     más allá de tol.  Para flowsheets sin reciclo o sin reactor
+    #     en SCC, converge en 1 iteración.
+    reactor_in_scc = any(
+        getattr(fs.blocks[bid], "reactions", None)
+        for scc in recycle_sccs for bid in scc
+    )
+    n_outer_iter = 30 if reactor_in_scc else 1
+    rxn_msgs = []
+    for outer in range(n_outer_iter):
+        # Snapshot de composiciones actuales
+        prev_comps = {sid: dict(s.composition or {})
+                       for sid, s in fs.streams.items()}
+        rxn_msgs = solve_equilibrium_reactors(fs)
+        # Propagar composición a los downstream del reactor (split
+        # gases → recycle, etc.)
+        auto_propagate_compositions(fs)
+        # Re-propagar masa por si la composición cambió y eso afecta
+        # algún balance (no debería en mass-balance puro, pero por
+        # seguridad)
+        for _ in range(3):
+            if not _solve_mass_iteration(fs):
+                break
+        # Resolver Wegstein de nuevo si el recycle cambió (composición
+        # alteró el flujo del reactor → tear cambia)
+        if reactor_in_scc:
+            for scc in recycle_sccs:
+                scc_streams = _streams_in_scc(scc, fs)
+                if not all(s.mass_flow > 0 for s in scc_streams):
+                    _solve_recycle_wegstein(fs, scc, max_iter=10)
+        # Check convergencia: compare composiciones
+        if outer > 0:
+            max_diff = 0.0
+            for sid, prev in prev_comps.items():
+                curr = fs.streams[sid].composition or {}
+                all_keys = set(prev) | set(curr)
+                for k in all_keys:
+                    diff = abs(curr.get(k, 0.0) - prev.get(k, 0.0))
+                    if diff > max_diff:
+                        max_diff = diff
+            if max_diff < 1e-4:
+                break
     for m in rxn_msgs:
         if m.startswith("✗") or m.startswith("⚠"):
             result.energy_balance_errors.append(m)
 
-    # 4c. Auto-inferir duties de HX/equipos sin duty declarado, ahora
+    # 4d. Auto-inferir duties de HX/equipos sin duty declarado, ahora
     #     que el reactor escribió T_out y composition.  only_zero=True
     #     respeta los duties que el user ya seteó.  Esto cierra el
     #     balance de los coolers/heaters downstream del reactor que
