@@ -120,6 +120,8 @@ df_capital = pd.DataFrame()
 df_fixed = pd.DataFrame()
 df_variable = pd.DataFrame()
 df_equipment = pd.DataFrame()    # equipos del PFD (si el xlsx viene del flowsheet)
+df_streams   = pd.DataFrame()    # corrientes del PFD: masa, T, P, composición wt%
+                                  # (si el xlsx viene del flowsheet)
 
 
 # ======================================================
@@ -288,6 +290,7 @@ def ImportarProyecto(archivo=None):
     global df_fixed
     global df_variable
     global df_equipment
+    global df_streams
 
     if archivo is None:
         archivo = filedialog.askopenfilename(
@@ -581,23 +584,41 @@ def ImportarProyecto(archivo=None):
         ConsolaResultados.config(state="disabled")
 
         # ==================================================
-        # PESTAÑA OPCIONAL "Equipment" (xlsx generado por PFD)
+        # PESTAÑAS OPCIONALES (xlsx generado por PFD)
+        #   · Equipment: tag, type, S, duty, T_op, P_op, etc.
+        #   · Streams:   masa, T, P, fase, composición wt% por comp.,
+        #                role, precio, pipe specs, locks.
         # ==================================================
         try:
             xls = pd.ExcelFile(archivo)
-            if "Equipment" in xls.sheet_names:
+            sheet_names = set(xls.sheet_names)
+            ConsolaResultados.config(state="normal")
+            if "Equipment" in sheet_names:
                 df_equipment = pd.read_excel(archivo, sheet_name="Equipment")
                 df_equipment = df_equipment.dropna(how="all").reset_index(drop=True)
-                ConsolaResultados.config(state="normal")
                 ConsolaResultados.insert(
                     END,
                     f"Equipment Rows     : {len(df_equipment)}  (from PFD)\n"
                 )
-                ConsolaResultados.config(state="disabled")
             else:
                 df_equipment = pd.DataFrame()
+            if "Streams" in sheet_names:
+                df_streams = pd.read_excel(archivo, sheet_name="Streams")
+                df_streams = df_streams.dropna(how="all").reset_index(drop=True)
+                # Componentes únicos (cols con prefix 'wt% ')
+                comp_cols = [c for c in df_streams.columns
+                             if str(c).startswith("wt% ")]
+                ConsolaResultados.insert(
+                    END,
+                    f"Streams Rows       : {len(df_streams)}  (from PFD, "
+                    f"{len(comp_cols)} componentes)\n"
+                )
+            else:
+                df_streams = pd.DataFrame()
+            ConsolaResultados.config(state="disabled")
         except Exception:
             df_equipment = pd.DataFrame()
+            df_streams = pd.DataFrame()
 
         _actualizar_status_proyecto(
             f"Imported: {os.path.basename(archivo)}"
@@ -789,6 +810,45 @@ def VentanaVisualizarData():
             padx=10,
             pady=10,
         )
+
+    # ==================================================
+    # TAB STREAMS  (sólo si el xlsx vino del PFD)
+    # ==================================================
+    tablaStreams = None
+    if not df_streams.empty:
+        tabStreams = ttk.Frame(notebook)
+        notebook.add(
+            tabStreams,
+            text="Streams (from PFD)"
+        )
+        ttk.Label(
+            tabStreams,
+            text="Tabla de corrientes del PFD (read-only): masa, T, P, "
+                 "fase, composición wt% por componente, role, precio, "
+                 "pipe specs.\nEditá las corrientes desde el Flowsheet Editor.",
+            foreground="#555",
+            justify="left",
+        ).pack(side="top", anchor="w", padx=10, pady=(10, 4))
+        tablaStreams = ttk.Treeview(tabStreams, show="headings")
+        cols_st = list(df_streams.columns)
+        tablaStreams["columns"] = cols_st
+        for c in cols_st:
+            tablaStreams.heading(c, text=str(c))
+            # composiciones wt% más angostas, otras anchas
+            w = 80 if str(c).startswith("wt% ") else 110
+            tablaStreams.column(c, width=w, anchor="w")
+        for _, row in df_streams.iterrows():
+            tablaStreams.insert(
+                "", END,
+                values=[row[c] for c in cols_st],
+            )
+        # Scrollbar horizontal (la tabla es muy ancha)
+        hs = ttk.Scrollbar(tabStreams, orient="horizontal",
+                            command=tablaStreams.xview)
+        tablaStreams.configure(xscrollcommand=hs.set)
+        tablaStreams.pack(side="top", fill="both", expand=True,
+                            padx=10, pady=(10, 0))
+        hs.pack(side="top", fill="x", padx=10, pady=(0, 10))
 
     # ==================================================
     # BLOQUEAR RESIZE COLUMNAS
