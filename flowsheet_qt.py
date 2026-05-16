@@ -905,6 +905,28 @@ class _RoundedRectBody(QGraphicsRectItem):
         painter.setPen(self.pen())
         painter.drawRoundedRect(self.rect(), self.RADIUS, self.RADIUS)
 
+
+class _StatusHaloItem(QGraphicsRectItem):
+    """Halo decorativo NO-HITTABLE.
+
+    Como BlockItem es un QGraphicsItemGroup con handlesChildEvents=True,
+    los clicks en el área de cualquier hijo (incluyendo el halo
+    extendido 6px) van al group entero.  Resultado: si un endpoint
+    handle del stream queda sobre la zona extendida del halo, el click
+    activa el bloque (movable) en vez del handle.
+
+    Solución: shape() vacío y NoButton para que este item NO contribuya
+    al hit region del group.  Sigue pintando normal."""
+
+    def shape(self):
+        return QPainterPath()        # path vacío = no hit area
+
+    def paint(self, painter, option, widget=None):
+        painter.setRenderHint(QPainter.Antialiasing)
+        painter.setBrush(self.brush())
+        painter.setPen(self.pen())
+        painter.drawRoundedRect(self.rect(), 4, 4)
+
     def shape(self):
         # SIEMPRE devolver el rect completo como shape de hit-testing,
         # independiente de pen/brush.  Sin esto, cuando el rect tiene
@@ -934,7 +956,9 @@ class _StreamHandle(QGraphicsEllipseItem):
         self.setFlag(QGraphicsItem.ItemSendsGeometryChanges, True)
         self.setBrush(QBrush(QColor("#1f6feb")))
         self.setPen(QPen(QColor("#ffffff"), 1.2))
-        self.setZValue(8)
+        self.setZValue(20)        # por encima de BlockItem (z=10) — evita
+                                   # que el bloque tape el handle si están
+                                   # encimados
         self.setCursor(Qt.SizeAllCursor)
         # init pos desde el modelo (scene-coords)
         wp = stream_item.model.waypoints[waypoint_idx]
@@ -1018,7 +1042,7 @@ class _GhostStreamHandle(QGraphicsEllipseItem):
         self._stream_item = stream_item
         self.setBrush(QBrush(QColor(31, 111, 235, 130)))
         self.setPen(QPen(QColor("#ffffff"), 1.0))
-        self.setZValue(7.5)
+        self.setZValue(19)        # encima de BlockItem (z=10)
         self.setCursor(Qt.PointingHandCursor)
         self.setToolTip("Click para hacer este bend editable, luego arrastrá")
         self.setPos(x, y)
@@ -1066,7 +1090,10 @@ class _EndpointHandle(QGraphicsEllipseItem):
         # distinguir endpoints de waypoints regulares (azules)
         self.setBrush(QBrush(QColor("#ffffff")))
         self.setPen(QPen(QColor("#ef6c00"), 2.0))   # naranja
-        self.setZValue(8.5)
+        # zValue alto para asegurar que esté POR ENCIMA del BlockItem
+        # (z=10) — sino el bloque al que el stream se conecta tapa el
+        # handle y los clicks van al bloque, no al handle.
+        self.setZValue(21)
         self.setCursor(Qt.SizeAllCursor)
         # snap target visual (círculo verde que aparece sobre el puerto
         # al que vamos a snappear)
@@ -1135,7 +1162,8 @@ class _EndpointHandle(QGraphicsEllipseItem):
             self._snap_marker = _E(-10, -10, 20, 20)
             self._snap_marker.setBrush(QBrush(QColor(46, 125, 50, 80)))
             self._snap_marker.setPen(QPen(QColor("#2e7d32"), 2.0))
-            self._snap_marker.setZValue(9)
+            self._snap_marker.setZValue(22)        # por encima del handle
+            self._snap_marker.setAcceptedMouseButtons(Qt.NoButton)
             if self.scene():
                 self.scene().addItem(self._snap_marker)
         self._snap_marker.setPos(scene_pos)
@@ -1243,16 +1271,21 @@ class BlockItem(QGraphicsItemGroup):
         # según el último solve (verde/azul/amarillo/rojo).  Se pinta
         # ANTES del símbolo (z menor) para que el SVG quede por encima.
         # Default: azul stale (sin solve todavía).
-        from PySide6.QtWidgets import QGraphicsRectItem
         self._status: str = "stale"
         halo_pad = 6
-        self.status_halo = QGraphicsRectItem(
+        # NOTA: usamos _StatusHaloItem (no QGraphicsRectItem) para que
+        # el halo NO contribuya al hit region del bloque.  Sino el
+        # área extendida 6px tapa los endpoint handles de los streams
+        # que se conectan a este bloque y los clicks van al bloque
+        # (movable) en vez de los handles.
+        self.status_halo = _StatusHaloItem(
             -halo_pad, -halo_pad,
             self.W + 2*halo_pad, self.H + 2*halo_pad,
             parent=self)
         self.status_halo.setBrush(Qt.NoBrush)
         self.status_halo.setPen(QPen(COLOR_STATUS_UNRUN, 1.5, Qt.SolidLine))
         self.status_halo.setZValue(-1.0)   # debajo del símbolo
+        self.status_halo.setAcceptedMouseButtons(Qt.NoButton)
 
         # --- rect base (invisible, solo hit-target) ---
         # El símbolo PFD ES el bloque visible; el rect cumple rol de
