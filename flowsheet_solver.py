@@ -109,6 +109,11 @@ class SolverResult:
     #      modelo Cp simple no captura).  El solver respeta la T
     #      declarada del user.
     energy_warnings:     List[str]          = field(default_factory=list)
+    # Warnings sobre balance POR COMPONENTE en blocks no-reactor.
+    # Indica que las composiciones declaradas en los example builders
+    # son inconsistentes con un balance riguroso por componente.
+    # No degrada overall_status — el balance total sigue siendo OK.
+    component_warnings:  List[str]          = field(default_factory=list)
     cycles_detected:    List[List[str]]     = field(default_factory=list)
     recycle_solutions:  List[RecycleSolution] = field(default_factory=list)
 
@@ -180,6 +185,12 @@ class SolverResult:
             lines.append(f"\nWarnings de energía (no críticos, "
                           f"{len(self.energy_warnings)}):")
             for w in self.energy_warnings:
+                lines.append(f"  · {w}")
+
+        if self.component_warnings:
+            lines.append(f"\nWarnings de balance por componente "
+                          f"({len(self.component_warnings)}):")
+            for w in self.component_warnings:
                 lines.append(f"  · {w}")
 
         return "\n".join(lines)
@@ -369,7 +380,8 @@ def _solve_mass_iteration(fs):
 
 
 def _check_mass_balance(fs, tol_rel=MASS_TOL_REL):
-    """Devuelve lista de mensajes para bloques cuyo balance falla."""
+    """Devuelve lista de mensajes para bloques cuyo balance TOTAL falla.
+    El balance por componente se chequea aparte (_check_component_balance)."""
     errors = []
     for b in fs.blocks.values():
         ins  = [s for s in fs.streams.values() if s.dst == b.id]
@@ -387,6 +399,76 @@ def _check_mass_balance(fs, tol_rel=MASS_TOL_REL):
                 f"{b.name}: ent={in_t:g} sal={out_t:g} Δ={diff:g} ({rel*100:.1f}%)"
             )
     return errors
+
+
+def _check_component_balance(fs, tol_rel=0.02):
+    """Verifica balance POR COMPONENTE en cada bloque.  Devuelve lista
+    de mensajes — para WARNINGS (no errores críticos, porque los
+    example builders pueden tener composiciones declaradas
+    inconsistentes que el solver no recalcula).
+
+    Skipea:
+      · Reactores (reactions != []) — la estequiometría cambia comp.
+      · Bloques con streams en mass=0 (no resueltos).
+      · Bloques inmediatamente downstream de un reactor en el mismo
+        flujo (la composición del reactor se propaga, no las specs
+        del example builder).
+
+    Reporta si Σ(mass_in·w_i) ≠ Σ(mass_out·w_i) en >tol_rel para
+    algún componente significativo (>1% del flujo total).
+    """
+    warnings_list = []
+    # Set de bloques que son reactores
+    rxn_blocks = {b.id for b in fs.blocks.values()
+                   if getattr(b, "reactions", None)}
+    # Bloques downstream de un reactor (vía un stream).  Para esos,
+    # los outlets son composición HEREDADA via auto_propagate, los
+    # exemplos pueden tener composiciones declaradas que no matcheen.
+    downstream_of_rxn = set()
+    for s in fs.streams.values():
+        if s.src in rxn_blocks and s.dst in fs.blocks:
+            downstream_of_rxn.add(s.dst)
+
+    for b in fs.blocks.values():
+        if b.id in rxn_blocks:
+            continue   # reactores cambian composición
+        if b.id in downstream_of_rxn:
+            continue   # primera fila después del reactor, hereda
+        ins  = [s for s in fs.streams.values() if s.dst == b.id]
+        outs = [s for s in fs.streams.values() if s.src == b.id]
+        if not ins or not outs:
+            continue
+        if any(s.mass_flow <= 0 for s in ins + outs):
+            continue
+        in_t = sum(s.mass_flow for s in ins)
+        out_t = sum(s.mass_flow for s in outs)
+        comp_in: Dict[str, float] = {}
+        comp_out: Dict[str, float] = {}
+        for s in ins:
+            comp = s.composition or ({s.main_component: 1.0}
+                                       if s.main_component else {})
+            for c, w in comp.items():
+                comp_in[c] = comp_in.get(c, 0.0) + w * s.mass_flow
+        for s in outs:
+            comp = s.composition or ({s.main_component: 1.0}
+                                       if s.main_component else {})
+            for c, w in comp.items():
+                comp_out[c] = comp_out.get(c, 0.0) + w * s.mass_flow
+        # Identificar componentes desbalanceados (>1% del flujo bloque)
+        bad = []
+        for c in set(comp_in) | set(comp_out):
+            ci, co = comp_in.get(c, 0.0), comp_out.get(c, 0.0)
+            if max(ci, co) < 0.01 * max(in_t, out_t):
+                continue
+            d = abs(ci - co)
+            r = d / max(ci, co, 1e-9)
+            if r >= tol_rel:
+                bad.append(f"{c}: in={ci:.0f} out={co:.0f} ({r*100:.0f}%)")
+        if bad:
+            warnings_list.append(
+                f"{b.name} balance por componente: " + "; ".join(bad[:3])
+            )
+    return warnings_list
 
 
 # ======================================================
@@ -1752,6 +1834,7 @@ def solve(fs, max_iter=MAX_ITER):
         if s.mass_flow <= 0:
             result.unresolved_streams.append(s.name)
     result.mass_balance_errors    = _check_mass_balance(fs)
+    result.component_warnings     = _check_component_balance(fs)
     # energy balance errors quedan deshabilitados (no comparables al Cp
     # simple — comentado en _check_energy_balance del editor)
 

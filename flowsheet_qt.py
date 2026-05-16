@@ -1410,6 +1410,18 @@ class BlockItem(QGraphicsItemGroup):
         # referencia (e.g., _update_status, undo); el sub vive en tooltip.
         self.text_sub = None
 
+        # ---- badge de DUTY (kW) — visible siempre que duty != 0 ----
+        # Posición: AL LADO del bloque (derecha, alineado al centro).
+        # Color: rojo si Q > 0 (calienta = consume utility), azul si Q
+        # < 0 (enfría = consume agua/aire).  Permite al user ver de un
+        # golpe los requerimientos energéticos sin abrir tooltips.
+        # Icono: ↑Q heating, ↓Q cooling.
+        self.duty_badge = QGraphicsSimpleTextItem("", parent=self)
+        self.duty_badge.setFont(QFont(mono, 8, QFont.Bold))
+        self.duty_badge.setPos(self.W + 6, self.H / 2 - 7)
+        self.duty_badge.setZValue(3)
+        self._update_duty_badge()
+
         # --- puertos ---
         self.port_items: dict = {}     # port_name → QGraphicsEllipseItem
         self._render_ports()
@@ -1543,6 +1555,30 @@ class BlockItem(QGraphicsItemGroup):
             # sin selección el rect queda invisible — el símbolo SVG
             # es la representación visual del bloque, no la caja.
             self.rect.setPen(Qt.NoPen)
+
+    def _update_duty_badge(self):
+        """Actualiza el badge '↑Q +X kW' al lado del bloque.
+
+        Rojo (↑) si endo/heating (duty > 0).  Azul (↓) si exo/cooling
+        (duty < 0).  Oculto si duty == 0.
+        """
+        if not hasattr(self, "duty_badge") or self.duty_badge is None:
+            return
+        q = self.model.duty
+        if abs(q) < 0.5:
+            self.duty_badge.setText("")
+            return
+        arrow = "↑Q" if q > 0 else "↓Q"
+        color = QColor("#c41e3a") if q > 0 else QColor("#1565c0")
+        # Formato compacto: kW si <1000, MW si mayor
+        if abs(q) >= 1000:
+            val = f"{q/1000:+.2f} MW"
+        elif abs(q) >= 10:
+            val = f"{q:+.0f} kW"
+        else:
+            val = f"{q:+.1f} kW"
+        self.duty_badge.setText(f"{arrow} {val}")
+        self.duty_badge.setBrush(QBrush(color))
 
     def set_status(self, status: str):
         """Aplica color de status (ok / warning / error / unrun / stale)
@@ -1985,17 +2021,57 @@ class StreamItem(QGraphicsPathItem):
         super().mouseDoubleClickEvent(event)
 
     def _label_parts(self, s):
-        """Devuelve (numero, "").  Prioridad para el número:
-            1) display_number CUSTOM seteado por el user (modelo)
-            2) _display_number TOPOLÓGICO (asignado por solver)
-            3) id INTERNO del stream
+        """Devuelve (numero, info_extra) para la pill del stream.
+
+        Pieza 1 (siempre): número topológico/custom/id.
+        Pieza 2 (opcional): caudal másico con unidad de display, o
+        componente principal si la corriente es multicomponente.
+
+        El usuario puede activar el modo "compacto" via setting
+        editor._show_flow_in_pill (default True): muestra "S5 · 100 t/a"
+        en vez de solo "S5".  Si la corriente tiene composición
+        multi-componente, muestra el principal en vez del flujo:
+        "S5 · 95% ETOH"  para destacar visualmente.
         """
         n = getattr(s, "display_number", 0) or None
         if n is None:
             n = getattr(s, "_display_number", None)
         if n is None:
             n = s.id
-        return str(n), ""
+        # Pieza 2: prioridad
+        #   1) multicomp → "X% comp"  (más informativo)
+        #   2) mass_flow > 0 → caudal en unidad seleccionada
+        comp = s.composition or {}
+        extra = ""
+        if comp and len([c for c, v in comp.items() if v > 0.01]) >= 2:
+            # Multicomponente — mostrar componente principal con %
+            top = max(comp.items(), key=lambda kv: kv[1])
+            comp_name = top[0]
+            # Abreviar nombres largos (ethanol→ETOH, methanol→MEOH, etc.)
+            ABBREV = {
+                "ethanol": "ETOH", "methanol": "MEOH", "water": "H₂O",
+                "ammonia": "NH₃", "nitrogen": "N₂", "hydrogen": "H₂",
+                "carbon_dioxide": "CO₂", "co2": "CO₂", "co": "CO",
+                "methane": "CH₄", "ethylene": "C₂H₄", "ethane": "C₂H₆",
+                "propane": "C₃H₈", "propylene": "C₃H₆",
+                "benzene": "C₆H₆", "toluene": "C₇H₈",
+                "h2s": "H₂S", "so2": "SO₂", "mdea": "MDEA",
+                "acetone": "ACT",  "chloroform": "CHCl₃",
+                "isopropanol": "IPA", "cyclohexane": "CHX",
+                "ethyl_acetate": "EtAc", "acetic_acid": "AcOH",
+                "ethylene_glycol": "EG",
+            }
+            short = ABBREV.get(comp_name, comp_name[:5].upper())
+            extra = f"{top[1]*100:.0f}% {short}"
+        elif s.mass_flow > 0:
+            # Componente principal solo (single comp) — mostrar caudal
+            unit = "tm/año"
+            if (hasattr(self, "editor") and self.editor is not None
+                    and hasattr(self.editor, "streams_dock")
+                    and self.editor.streams_dock is not None):
+                unit = self.editor.streams_dock.current_unit()
+            extra = funits.format_flow(s.mass_flow, unit)
+        return str(n), extra
 
     # ---- helpers de routing (réplica simplificada de flowsheet_ui) ----
 
@@ -3008,13 +3084,23 @@ class FlowsheetMainWindow(QMainWindow):
         """Propaga `result.block_status` y `result.stream_status` a los
         items visuales del canvas.  Cada item se colorea según su
         status (verde/azul/amarillo/rojo).  Llamado solo después de
-        action_solve(); editar algo después marca todo como 'stale'."""
+        action_solve(); editar algo después marca todo como 'stale'.
+
+        También refresca los badges de duty (kW) en cada bloque para
+        reflejar duties recién inferidos por auto_set_duties_from_thermo.
+        """
         for bid, item in self.block_items_iter():
             st = result.block_status.get(bid, "unrun")
             item.set_status(st)
+            # Refrescar badge de duty (puede haber cambiado en el solve)
+            if hasattr(item, "_update_duty_badge"):
+                item._update_duty_badge()
         for sid, item in self.stream_items_iter():
             st = result.stream_status.get(sid, "unrun")
             item.set_status(st)
+            # Re-renderizar path para refrescar el label (composición
+            # puede ser nueva post-solve)
+            item.update_path(rebuild_handles=False)
 
     def _mark_dirty(self):
         """Marcar que el flowsheet fue editado después del último solve.
