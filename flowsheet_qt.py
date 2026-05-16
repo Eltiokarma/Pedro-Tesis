@@ -4724,6 +4724,48 @@ class FlowsheetMainWindow(QMainWindow):
                                         txt += f"\n{w[:120]}"
                             except Exception:
                                 pass
+
+            # ---- Dimensionamiento de BOMBA / COMPRESOR ----
+            eq_lower2 = b.eq_type.lower()
+            is_pump = ("pump" in eq_lower2 or "bomba" in eq_lower2)
+            is_compr = ("compressor" in eq_lower2 or "fan" in eq_lower2)
+            if is_pump or is_compr:
+                try:
+                    import equipment_design as _ed
+                    if is_pump:
+                        ps = _ed.design_pump_for_block(b, self.fs)
+                        if ps is not None:
+                            txt += "\n\n─ Dimensionamiento BOMBA ─"
+                            txt += f"\nQ          {ps['Q_m3_h']:.2f} m³/h"
+                            txt += f"\nHead       {ps['head_m']:.1f} m"
+                            txt += f"\nW_hyd      {ps['W_hyd_kW']:.2f} kW"
+                            txt += f"\nW_shaft    {ps['W_shaft_kW']:.2f} kW  (η_h={b.efficiency:.2f})"
+                            txt += f"\nW_elec     {ps['W_elec_kW']:.2f} kW  (η_motor=0.95)"
+                            txt += f"\nNPSHa      {ps['NPSHa_m']:.2f} m"
+                            txt += f"\nNPSHr est. {ps['NPSHr_m_est']:.2f} m"
+                            margin = ps['cavitation_margin_m']
+                            if margin < 1.0:
+                                txt += f"\n⚠ Margen cavitación: {margin:.2f} m (<1 m, riesgo!)"
+                            else:
+                                txt += f"\nMargen cav. {margin:.2f} m  ✓"
+                    elif is_compr:
+                        cs = _ed.design_compressor_for_block(b, self.fs)
+                        if cs is not None:
+                            txt += "\n\n─ Dimensionamiento COMPRESOR ─"
+                            txt += f"\nRatio P_out/P_in: {cs['ratio']:.2f}"
+                            txt += f"\nEtapas rec.:      {cs['n_stages_rec']}"
+                            txt += f"\nQ_in (succión):   {cs['Q_in_m3_h']:.1f} m³/h"
+                            txt += f"\nHead específico:  {cs['head_kJ_kg']:.1f} kJ/kg"
+                            txt += f"\nT descarga:       {cs['T_out_C']:.1f} °C"
+                            txt += f"\nW_isen:           {cs['W_isen_kW']:.1f} kW"
+                            txt += f"\nW_actual:         {cs['W_act_kW']:.1f} kW  (η={cs['eta_total']:.2f})"
+                            if cs['n_stages_rec'] > 1:
+                                txt += f"\n⚠ Ratio {cs['ratio']:.1f} > 4: recomendar {cs['n_stages_rec']} etapas + intercoolers"
+                            if cs['T_out_C'] > 200:
+                                txt += f"\n⚠ T descarga {cs['T_out_C']:.0f}°C > 200°C: necesita enfriamiento intermedio"
+                except Exception:
+                    pass
+
             self.prop_label.setText(txt)
         elif isinstance(it, StreamItem):
             for other in self.scene.block_items.values():
