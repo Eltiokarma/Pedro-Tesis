@@ -99,6 +99,18 @@ class Block:
     # desde JSON / examples mediante heurística (duty != 0 → locked).
     duty_locked: bool = False
 
+    # ---- HIDRÁULICA: ΔP a través del bloque ----
+    # Positivo si el bloque SUMA presión (bomba, compresor).
+    # Negativo si la PIERDE (HX, columna, válvula, filter).
+    # 0 si pasa P inalterada (mixer, splitter, vessel sin pérdida).
+    # Si el block es Pump/Compressor, el solver puede calcular este
+    # delta_p desde efficiency + flow + ΔP target.
+    delta_p_bar: float  = 0.0
+    # Eficiencia para bombas/compresores (η_hidráulica · η_motor).
+    # Default 0.75 (típico bomba centrífuga), 0.70 compresor.
+    # Solver calcula W_elec = m·ΔP/(ρ·η) y la setea como duty.
+    efficiency:  float  = 0.75
+
     # ---- REACTOR DE EQUILIBRIO (Capa 4) ----
     # Lista de IDs de reactions_db que ocurren en este bloque (e.g.
     # ['R003','R002'] para un reformador SMR+WGS).  Si está vacía,
@@ -185,6 +197,14 @@ class Stream:
     temperature: float = 25.0    # °C
     cp:          float = 0.0     # kJ/kg·K — override manual; si 0 y hay
                                  # composition, se calcula de components.py
+
+    # ---- PRESIÓN (Capa de hidráulica) ----
+    # Presión absoluta de la corriente.  Se propaga por el solver:
+    #   bombas/compresores SUMAN delta_p_bar al input
+    #   columnas/HX RESTAN delta_p_bar (pérdida por equipo)
+    #   tuberías RESTAN ΔP calculado por pressure_drop (Darcy-Weisbach)
+    pressure_bar: float = 1.013      # default 1 atm
+    pressure_locked: bool = False    # spec: True si el user la fijó
 
     # ---- Composición y fase (para Cp(T) riguroso y cambio de fase) ----
     # phase: "liquid" | "vapor" | "gas" | "two_phase" | ""

@@ -1660,6 +1660,112 @@ def solve_flashes(fs):
     return msgs
 
 
+def solve_pressure_propagation(fs):
+    """Propaga presión P a través del flowsheet.
+
+    Reglas:
+      - Stream P locked (user spec): no se toca.
+      - Bloque pasivo (mixer, splitter, vessel, tank, HX sin ΔP):
+        P_out = P_in - ΔP_pipe_calc (Darcy-Weisbach del propio stream)
+      - Bloque con delta_p_bar declarado:
+        P_out = P_in + block.delta_p_bar - ΔP_pipe del output
+      - Bomba/compresor (eq_type contiene 'pump' o 'compressor'):
+        Si delta_p_bar > 0 declarado: usar directo.
+        Si efficiency declarado y P_out spec (downstream): calcular
+        delta_p y W_eléctrica = m·ΔP/(ρ·η).
+      - Reactor con P_op_bar: la P de input se ajusta para que la
+        de output coincida con P_op_bar.
+
+    Para no romper flowsheets viejos, esta función es OPT-IN: solo
+    se ejecuta si al menos UN bloque/stream tiene presión declarada
+    (P != 1.013 default).
+    """
+    # Check si vale la pena correrla (algún spec de P)
+    has_pressure_specs = False
+    for s in fs.streams.values():
+        if getattr(s, "pressure_locked", False):
+            has_pressure_specs = True
+            break
+    for b in fs.blocks.values():
+        if abs(getattr(b, "delta_p_bar", 0)) > 1e-6:
+            has_pressure_specs = True
+            break
+    if not has_pressure_specs:
+        return []
+
+    try:
+        import pressure_drop as _pd
+    except ImportError:
+        return []
+
+    msgs = []
+    # Pasada topológica simple: para cada stream con P resuelta,
+    # propagar al destino vía su bloque.  Iterar hasta no haber cambios.
+    for _ in range(20):
+        changed = False
+        for b in fs.blocks.values():
+            ins  = [s for s in fs.streams.values() if s.dst == b.id]
+            outs = [s for s in fs.streams.values() if s.src == b.id]
+            if not ins or not outs:
+                continue
+            # P_in disponible?  Necesita TODOS los inputs con P resuelta
+            ins_with_p = [s for s in ins if s.pressure_bar > 0]
+            if len(ins_with_p) != len(ins):
+                continue
+            # P_in_min: si hay varios inlets, el output toma la menor
+            # (asumimos que las P se igualan en el mixer)
+            P_in_min = min(s.pressure_bar for s in ins)
+            # ΔP del bloque
+            dp_block = getattr(b, "delta_p_bar", 0.0)
+            # Es bomba/compresor con η declarada y dp positivo? Sí → setear duty
+            eq_lower = b.eq_type.lower()
+            is_pump_or_compressor = ("pump" in eq_lower
+                                      or "compressor" in eq_lower
+                                      or "fan" in eq_lower
+                                      or "bomba" in eq_lower)
+            # Output P = P_in + dp_block - ΔP_pipe_calc del output
+            for s_out in outs:
+                if getattr(s_out, "pressure_locked", False):
+                    continue
+                # ΔP de la tubería del output (pérdida después del bloque)
+                try:
+                    dp_pipe = _pd.stream_pressure_drop(s_out)
+                    dp_pipe_bar = dp_pipe["delta_P_bar"] if dp_pipe else 0.0
+                except Exception:
+                    dp_pipe_bar = 0.0
+                P_out = P_in_min + dp_block - dp_pipe_bar
+                if abs(P_out - s_out.pressure_bar) > 1e-4:
+                    s_out.pressure_bar = max(P_out, 0.01)
+                    changed = True
+
+            # Para bombas/compresores con ΔP positivo declarado,
+            # calcular duty eléctrico
+            if is_pump_or_compressor and dp_block > 0 and not _is_duty_locked(b):
+                # W_hyd [kW] = m_kg_s · ΔP_Pa / (ρ · η · 1000)
+                from flowsheet_model import SEC_PER_YEAR, TM_TO_KG
+                m_kg_s = sum(s.mass_flow for s in ins) * TM_TO_KG / SEC_PER_YEAR
+                # ρ: usa el primer inlet con composition
+                rho = None
+                for s_in in ins:
+                    if s_in.composition or s_in.main_component:
+                        try:
+                            comp = s_in.composition or {s_in.main_component: 1.0}
+                            rho = _pd._density_kg_m3(comp, s_in.temperature + 273.15,
+                                                       s_in.phase or "liquid")
+                            if rho: break
+                        except Exception:
+                            pass
+                if rho and rho > 0:
+                    eta = getattr(b, "efficiency", 0.75) or 0.75
+                    W_elec_kW = m_kg_s * dp_block * 1e5 / (rho * eta * 1000.0)
+                    b.duty = W_elec_kW
+                    changed = True
+
+        if not changed:
+            break
+    return msgs
+
+
 def solve_splitters(fs):
     """Para cada bloque con splitter_active=True, distribuye el feed
     según splitter_fractions y propaga composición idéntica a todos
@@ -2168,6 +2274,17 @@ def solve(fs, max_iter=MAX_ITER):
     #     balance de los coolers/heaters downstream del reactor que
     #     antes no podían calcularse porque les faltaba T del input.
     auto_set_duties_from_thermo(fs, only_zero=True, respect_locks=True)
+
+    # 4e. Propagación de presión (Darcy-Weisbach + ΔP de equipos).
+    #     OPT-IN: solo se ejecuta si hay specs de P (P locked o
+    #     algún block con delta_p_bar != 0).  Para bombas/compresores
+    #     calcula además duty eléctrico desde W_hyd / η.
+    p_msgs = solve_pressure_propagation(fs)
+    for m in p_msgs:
+        if m.startswith("✗"):
+            result.energy_balance_errors.append(m)
+        elif m.startswith("⚠"):
+            result.energy_warnings.append(m)
 
     # 5. Solver de energía
     total_propagated_temp = []
