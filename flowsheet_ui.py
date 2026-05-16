@@ -2913,6 +2913,10 @@ class FlowsheetEditor:
             water bottoms, condensate del ciclo de vapor)
 
         Demuestra:
+          · RECYCLE DE SYNGAS: V-201 vapor → V-203 splitter (9% purga
+            / 91% recycle) → K-202 compresor → M-101 (entrada2).
+            Recycle ratio = 5× fresh, típico industrial.  Crea un
+            SCC que el solver detecta y resuelve con Wegstein.
           · CICLO DE VAPOR CERRADO: BFW → P-301 → F-301 (boiler) →
             V-301 (drum) → TK-305 (header MP) → E-202 (reboiler shell
             side) → TK-306 (condensate) — utility como stream real.
@@ -2931,8 +2935,16 @@ class FlowsheetEditor:
                                           1200.0,  360, 300)
         e101 = self._add_example_block("E-101","Heat exch. — air cooler",
                                           250.0,   660, 300)
+        # Mixer (fresh + recycle de syngas)
         m101 = self._add_example_block("M-101","Mixer",
                                               5.0,  960, 300)
+        # K-202 — compresor de RECYCLE (sube P de la corriente de
+        # gases sin reaccionar después del flash hasta P de M-101).
+        # Ubicado arriba del mixer, ruta de retorno por encima del
+        # tren principal.
+        k202 = self._add_example_block("K-202","Compressor — centrifugal",
+                                          800.0,  960,  60)
+        # Pre-heater (vapor LP)
         e102 = self._add_example_block("E-102","Heat exch. — floating head",
                                           180.0,  1260, 300)
         r101 = self._add_example_block("R-101","Reactor — jacketed non-agit.",
@@ -2948,12 +2960,19 @@ class FlowsheetEditor:
         # ============ SECCIÓN 200 — SEPARACIÓN ============
         v201 = self._add_example_block("V-201","Vessel — vertical",
                                           50.0,   2160, 300)
-        self.fs.blocks[v201].flash_active = True
-        self.fs.blocks[v201].flash_T_K = 313.15
-        self.fs.blocks[v201].flash_P_bar = 80.0
-        # Flare arriba de V-201 (recibe gases del flash y del KO drum)
+        # Flash NRTL desactivado en este ejemplo: con recycle, la masa
+        # circulante es ~10× fresh y NRTL no maneja super-críticos a
+        # 80 bar.  V-201 actúa como drum estructural; locks en S-crude
+        # y S-V201-vapor cierran el balance.
+        # V-203 — splitter purge / recycle (arriba de V-201, en lugar
+        # donde estaba el flare antes)
+        v203 = self._add_example_block("V-203","Vessel — vertical",
+                                          25.0,   2160,  60)
+        self.fs.blocks[v203].splitter_active = True
+        self.fs.blocks[v203].splitter_fractions = [0.0909, 0.9091]  # purge / recycle
+        # Flare se corre a la derecha para dejar lugar a V-203
         tk_flare = self._add_example_block("TK-203","Storage tank — cone roof",
-                                              100.0, 2160,  60)
+                                              100.0, 2460,  60)
         # Columna abajo de V-201
         t201 = self._add_example_block("T-201","Tower (column shell)",
                                           45.0,   2160, 720)
@@ -3049,11 +3068,17 @@ class FlowsheetEditor:
         self._add_example_stream(e103, v201, "S-6",
                                   src_port="cond_out", dst_port="alimentacion",
                                   T=40, phase="two_phase")
-        # Flash → líquido crudo (a columna).  Lock masa para cerrar el
-        # balance aun si NRTL no separa los gases sub-críticos a 80 bar.
-        self._add_example_stream(v201, t201, "S-crude", 20000,
+        # V-201 → líquido crudo a columna.  Balance con recycle:
+        #   M-101 in = 50000 fresh + 250000 recycle = 300000.
+        #   V-201 in = 300000.  V-201 liquid (S-crude) = 25000.
+        #   V-201 vapor (S-V201-vapor) = 275000 → V-203 splitter.
+        self._add_example_stream(v201, t201, "S-crude", 25000,
                                   src_port="liquido", dst_port="alimentacion",
                                   T=40, phase="liquid")
+        # V-201 vapor (gases sin reaccionar) → V-203 splitter
+        self._add_example_stream(v201, v203, "S-V201-vapor", 275000,
+                                  src_port="vapor", dst_port="alimentacion",
+                                  T=40, phase="gas")
 
         # Columna → tope → condensador
         self._add_example_stream(t201, e201, "S-vap",
@@ -3085,18 +3110,22 @@ class FlowsheetEditor:
                                   src_port="cond_out", dst_port="entrada",
                                   price=0.0, T=40, phase="liquid")
 
-        # Gases del flash → flare (planta real haría recycle 95% +
-        # purga 5%; acá linealizado para didáctica)
-        self._add_example_stream(v201, tk_flare, "S-purge", 30000, role="waste",
+        # ── RECYCLE DE SYNGAS ────────────────────────────────
+        # V-203 splitter: 9.1% al flare como purga (limita acumulación
+        # de CH4 inerte), 90.9% se recicla.  Ratio recycle/fresh = 5×
+        # — típico de plantas MeOH industriales (5-10×).
+        # Orden de creación = orden de splitter_fractions [purge, recycle].
+        self._add_example_stream(v203, tk_flare, "S-purge", 25000, role="waste",
                                   src_port="vapor", dst_port="entrada",
-                                  price=0.0, T=40, phase="gas",
-                                  composition={"co": 0.30, "hydrogen": 0.40,
-                                                 "methane": 0.20, "co2": 0.10})
-        # NOTA: en planta industrial real este flowsheet tendría además:
-        #   - K-202 compresor de recycle de gases hacia M-101
-        #   - V-203 splitter purga 5% / recycle 95% del syngas
-        # Aquí se linealiza (todo a flare) para evitar loops
-        # indeterminados sin tear-stream explícito.
+                                  price=0.0, T=40, phase="gas")
+        # V-203 → K-202 (recycle frío, baja P por ΔP del flash)
+        self._add_example_stream(v203, k202, "S-rec-cold", 250000,
+                                  src_port="liquido", dst_port="succion",
+                                  T=40, phase="gas")
+        # K-202 → M-101 (recycle comprimido, segunda entrada del mixer)
+        self._add_example_stream(k202, m101, "S-recycle", 250000,
+                                  src_port="descarga", dst_port="entrada2",
+                                  T=80, phase="gas")
 
         # ============ STREAMS — SERVICIOS ============
         # Boiler feed water
