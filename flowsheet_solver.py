@@ -1696,6 +1696,17 @@ def solve_pressure_hydraulic(fs, max_iter=8):
 
     msgs = []
     sized_pumps = set()
+    # Detectar SCCs (reciclos) — útil para indicar al user que la bomba
+    # está dentro de un loop y su auto-sizing implica balance del recycle.
+    try:
+        sccs = _strongly_connected_components(fs)
+        recycle_sccs = [scc for scc in sccs if _is_recycle_scc(scc, fs)]
+        blocks_in_recycle = set()
+        for scc in recycle_sccs:
+            for bid in scc:
+                blocks_in_recycle.add(bid)
+    except Exception:
+        blocks_in_recycle = set()
     for outer in range(max_iter):
         # 1) Propagación forward con ΔP declarados
         solve_pressure_propagation(fs)
@@ -1738,8 +1749,10 @@ def solve_pressure_hydraulic(fs, max_iter=8):
                 b.delta_p_bar = new_dp
                 sized_pumps.add(b.id)
                 any_sized = True
+                in_recycle = b.id in blocks_in_recycle
+                rec_tag = " (en recycle)" if in_recycle else ""
                 msgs.append(
-                    f"✓ {b.name} auto-sized: ΔP={new_dp:.2f} bar "
+                    f"✓ {b.name}{rec_tag} auto-sized: ΔP={new_dp:.2f} bar "
                     f"(P_in={P_in_min:.2f}, target_dn={target_P:.2f}, "
                     f"Σ losses={accumulated_dp:.2f})"
                 )
