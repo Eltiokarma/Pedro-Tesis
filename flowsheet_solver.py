@@ -112,6 +112,20 @@ class SolverResult:
     cycles_detected:    List[List[str]]     = field(default_factory=list)
     recycle_solutions:  List[RecycleSolution] = field(default_factory=list)
 
+    # Estados por bloque y por stream para colorización en la UI.
+    # Llave: id del bloque/stream.  Valor: 'ok' | 'warning' | 'error' |
+    # 'unrun'.  unrun = bloque/stream no participa del balance (e.g.
+    # tanque sin streams) o el solver no lo procesó.  Los populamos
+    # al final de solve().
+    block_status:  Dict[int, str]           = field(default_factory=dict)
+    stream_status: Dict[int, str]           = field(default_factory=dict)
+    # Estado global del flowsheet:
+    #   'ok'      = balance correcto sin warnings
+    #   'warning' = balance correcto con warnings de T/ΔH no modelado
+    #   'error'   = mass imbalance o streams sin resolver
+    #   'empty'   = no hay bloques/streams
+    overall_status: str                     = "ok"
+
     def summary(self):
         lines = []
         if self.success:
@@ -1573,4 +1587,103 @@ def solve(fs, max_iter=MAX_ITER):
         not result.unresolved_streams and
         not result.mass_balance_errors
     )
+
+    # 5. Calcular estados visuales (color UI: verde/azul/amarillo/rojo)
+    _compute_status_per_item(fs, result)
     return result
+
+
+def _compute_status_per_item(fs, result):
+    """Asigna a cada bloque y stream un status según el resultado del
+    solver.  Lo escribe en `result.block_status` y `result.stream_status`
+    para que la UI lo consulte y coloree.
+
+    Reglas streams:
+      'error'   = listado en unresolved_streams (mass_flow=0 después
+                  del solve) o el bloque destino tiene mass error.
+      'warning' = pertenece a un bloque listado en energy_warnings.
+      'ok'      = mass_flow > 0 y sin issues.
+      'unrun'   = mass_flow = 0 sin estar en unresolved (raro;
+                  típicamente streams sin src/dst conectados).
+
+    Reglas bloques:
+      'error'   = aparece en mass_balance_errors o energy_balance_errors.
+      'warning' = aparece en energy_warnings o tiene reciclo no convergido.
+      'ok'      = todos sus streams tienen mass_flow > 0 y sin errors.
+      'unrun'   = no tiene streams in y out (orfanato).
+    """
+    # Set rápido de nombres con error
+    err_block_names: set = set()
+    for msg in result.mass_balance_errors:
+        # mensaje formato: "B-NAME: ent=X sal=Y Δ=Z (W%)"
+        name = msg.split(":", 1)[0].strip()
+        err_block_names.add(name)
+    for msg in result.energy_balance_errors:
+        # mensaje formato: "B-NAME → S-name: T calc..."
+        name = msg.split("→")[0].strip() if "→" in msg else msg.split(":")[0].strip()
+        err_block_names.add(name)
+
+    warn_block_names: set = set()
+    for msg in result.energy_warnings:
+        name = msg.split("→")[0].strip() if "→" in msg else msg.split(":")[0].strip()
+        warn_block_names.add(name)
+    for rs in result.recycle_solutions:
+        if not rs.converged:
+            for bname in rs.cycle_blocks:
+                warn_block_names.add(bname)
+
+    unresolved_set = set(result.unresolved_streams)
+
+    # Streams primero
+    for s in fs.streams.values():
+        if s.name in unresolved_set or s.mass_flow <= 0:
+            # ¿Realmente unresolved (orfanato) o solo no procesado?
+            has_src = s.src in fs.blocks
+            has_dst = s.dst in fs.blocks
+            if not (has_src and has_dst):
+                result.stream_status[s.id] = "unrun"
+            else:
+                result.stream_status[s.id] = "error"
+            continue
+        # Mass_flow > 0.  Verificar status del bloque destino.
+        dst_block = fs.blocks.get(s.dst)
+        if dst_block:
+            if dst_block.name in err_block_names:
+                result.stream_status[s.id] = "error"
+                continue
+            if dst_block.name in warn_block_names:
+                result.stream_status[s.id] = "warning"
+                continue
+        result.stream_status[s.id] = "ok"
+
+    # Bloques
+    for b in fs.blocks.values():
+        ins  = [s for s in fs.streams.values() if s.dst == b.id]
+        outs = [s for s in fs.streams.values() if s.src == b.id]
+        if not ins and not outs:
+            result.block_status[b.id] = "unrun"
+            continue
+        if b.name in err_block_names:
+            result.block_status[b.id] = "error"
+            continue
+        # Si algún stream conectado tiene error, el bloque también
+        if any(result.stream_status.get(s.id) == "error"
+               for s in ins + outs):
+            result.block_status[b.id] = "error"
+            continue
+        if b.name in warn_block_names:
+            result.block_status[b.id] = "warning"
+            continue
+        result.block_status[b.id] = "ok"
+
+    # Estado global
+    if not fs.blocks:
+        result.overall_status = "empty"
+    elif result.mass_balance_errors or result.unresolved_streams \
+            or result.energy_balance_errors:
+        result.overall_status = "error"
+    elif result.energy_warnings or any(not rs.converged
+                                        for rs in result.recycle_solutions):
+        result.overall_status = "warning"
+    else:
+        result.overall_status = "ok"

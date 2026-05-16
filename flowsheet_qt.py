@@ -180,6 +180,45 @@ COLOR_PORT_FREE     = QColor("#bbbbbb")
 COLOR_PORT_CONN     = QColor("#1565c0")
 COLOR_LABEL_BG      = QColor(255, 255, 255, 220)
 
+# ---- Status visual (semáforo del solver) ----
+# Cuatro estados que pinta cada bloque/stream según el último solve.
+# Coordinado con SolverResult.{block_status, stream_status, overall_status}.
+COLOR_STATUS_OK      = QColor("#2e7d32")   # verde — balance OK
+COLOR_STATUS_WARN    = QColor("#f9a825")   # ámbar — warnings
+COLOR_STATUS_ERROR   = QColor("#c62828")   # rojo — error / desbalance
+COLOR_STATUS_UNRUN   = QColor("#1976d2")   # azul — no ejecutado / stale
+COLOR_STATUS_DIRTY   = QColor("#7b1fa2")   # violeta — flowsheet editado
+                                            # post-solve (datos stale)
+
+# Mapeo status string → color
+STATUS_COLORS = {
+    "ok":      COLOR_STATUS_OK,
+    "warning": COLOR_STATUS_WARN,
+    "error":   COLOR_STATUS_ERROR,
+    "unrun":   COLOR_STATUS_UNRUN,
+    "stale":   COLOR_STATUS_DIRTY,
+    "empty":   COLOR_STATUS_UNRUN,
+}
+
+# Iconos texto para indicar status global en la barra
+STATUS_ICONS = {
+    "ok":      "✓",
+    "warning": "⚠",
+    "error":   "✗",
+    "unrun":   "●",
+    "stale":   "◌",
+    "empty":   "○",
+}
+
+STATUS_LABELS = {
+    "ok":      "Balance OK",
+    "warning": "Balance con warnings",
+    "error":   "Errores en el balance",
+    "unrun":   "Sin ejecutar (apretá F5)",
+    "stale":   "Datos stale — re-ejecutar (F5)",
+    "empty":   "Diagrama vacío",
+}
+
 
 # ======================================================
 # UNDO / REDO — SnapshotCommand
@@ -1034,6 +1073,22 @@ class BlockItem(QGraphicsItemGroup):
         # tamaño legacy 130×60 si el eq_type no tiene símbolo nuevo.
         self.W, self.H = pfd.block_dims(block.eq_type)
 
+        # --- halo de status (semáforo solver) ---
+        # Rectángulo redondeado AFUERA del símbolo, con borde coloreado
+        # según el último solve (verde/azul/amarillo/rojo).  Se pinta
+        # ANTES del símbolo (z menor) para que el SVG quede por encima.
+        # Default: azul stale (sin solve todavía).
+        from PySide6.QtWidgets import QGraphicsRectItem
+        self._status: str = "stale"
+        halo_pad = 6
+        self.status_halo = QGraphicsRectItem(
+            -halo_pad, -halo_pad,
+            self.W + 2*halo_pad, self.H + 2*halo_pad,
+            parent=self)
+        self.status_halo.setBrush(Qt.NoBrush)
+        self.status_halo.setPen(QPen(COLOR_STATUS_UNRUN, 1.5, Qt.SolidLine))
+        self.status_halo.setZValue(-1.0)   # debajo del símbolo
+
         # --- rect base (invisible, solo hit-target) ---
         # El símbolo PFD ES el bloque visible; el rect cumple rol de
         # hit-box para clicks en zonas vacías del símbolo.
@@ -1200,6 +1255,23 @@ class BlockItem(QGraphicsItemGroup):
             # es la representación visual del bloque, no la caja.
             self.rect.setPen(Qt.NoPen)
 
+    def set_status(self, status: str):
+        """Aplica color de status (ok / warning / error / unrun / stale)
+        al halo de status del bloque.  Default 'stale' = azul (sin
+        solve corrido o flowsheet editado posteriormente)."""
+        self._status = status or "stale"
+        color = STATUS_COLORS.get(self._status, COLOR_STATUS_UNRUN)
+        # Línea más gruesa para error, sólida para ok, punteada para stale
+        if self._status == "error":
+            pen = QPen(color, 2.5, Qt.SolidLine)
+        elif self._status == "warning":
+            pen = QPen(color, 2.0, Qt.SolidLine)
+        elif self._status == "ok":
+            pen = QPen(color, 1.2, Qt.SolidLine)
+        else:    # stale / unrun
+            pen = QPen(color, 1.2, Qt.DashLine)
+        self.status_halo.setPen(pen)
+
     def itemChange(self, change, value):
         """Sync posición al modelo + refresh streams conectados.
 
@@ -1295,6 +1367,10 @@ class StreamItem(QGraphicsPathItem):
         # solo cuando el stream está seleccionado.
         self._handles: list = []
 
+        # status del solver (verde/ámbar/rojo/azul).  Default "stale"
+        # hasta que solve() corra y populé el status.
+        self._status: str = "stale"
+
         # label estilo PFD industrial: pill (rounded rect blanco con
         # borde del color del stream) + nombre + flujo en mono.
         self.label_bg = _RoundedRectBody(0, 0, 10, 10)
@@ -1334,9 +1410,29 @@ class StreamItem(QGraphicsPathItem):
                 scene.removeItem(item)
 
     def _color(self):
+        # Selección siempre tiene prioridad para feedback inmediato.
         if self.isSelected():
             return QColor(STREAM_ROLE_COLORS_SEL.get(self.model.role, "#c62828"))
+        # Status crítico sobreescribe el color por role (error o warning
+        # vienen del último solve y son los más informativos para el user).
+        if self._status == "error":
+            return COLOR_STATUS_ERROR
+        if self._status == "warning":
+            return COLOR_STATUS_WARN
+        if self._status in ("stale", "unrun"):
+            # gris-azul tenue para indicar "no resuelto / sin verificar"
+            return QColor("#9aa5b1")
+        # status == "ok" o cualquier otro: color normal por role
         return QColor(STREAM_ROLE_COLORS.get(self.model.role, "#37474f"))
+
+    def set_status(self, status: str):
+        """Aplica status del solver y fuerza repintado (color de la línea
+        y del label se derivan de _color, que ahora chequea status)."""
+        new = status or "stale"
+        if new == self._status:
+            return
+        self._status = new
+        self.update_path(rebuild_handles=False)
 
     def _update_tooltip(self):
         s = self.model
@@ -2457,13 +2553,73 @@ class FlowsheetMainWindow(QMainWindow):
         self._update_status()
 
     def _update_status(self):
-        self.status.showMessage(
-            f"{len(self.fs.blocks)} equipos · {len(self.fs.streams)} corrientes"
-        )
+        # Status global del último solve.  Si el flowsheet fue editado
+        # después del último solve, prepend "◌" indicando datos stale.
+        st = getattr(self, "_last_overall_status", None)
+        dirty = getattr(self, "_dirty_after_solve", True)
+        if st is None or not self.fs.blocks:
+            chip = ""
+        else:
+            if dirty:
+                # Datos stale: violeta + label específica
+                icon = STATUS_ICONS["stale"]
+                label = STATUS_LABELS["stale"]
+                color = COLOR_STATUS_DIRTY
+            else:
+                icon = STATUS_ICONS.get(st, "")
+                label = STATUS_LABELS.get(st, "")
+                color = STATUS_COLORS.get(st, COLOR_STATUS_UNRUN)
+            # Wrappear el chip con color via HTML (statusbar acepta richtext)
+            chip = (f'<span style="color:{color.name()}; '
+                     f'font-weight:bold;">{icon} {label}</span>  ·  ')
+        msg = (chip +
+                f"{len(self.fs.blocks)} equipos · "
+                f"{len(self.fs.streams)} corrientes")
+        # QStatusBar.showMessage no acepta richtext directo — usamos un
+        # QLabel permanente al status bar, lazy-init.
+        if not hasattr(self, "_status_label_rich"):
+            from PySide6.QtWidgets import QLabel as _QL
+            self._status_label_rich = _QL()
+            self._status_label_rich.setTextFormat(Qt.RichText)
+            self.status.addWidget(self._status_label_rich, 1)
+        self._status_label_rich.setText(msg)
         # refrescar tabla de corrientes (si ya existe; durante __init__
         # podría no existir todavía)
         if hasattr(self, "streams_dock") and self.streams_dock is not None:
             self.streams_dock.refresh()
+
+    def _apply_solver_status(self, result):
+        """Propaga `result.block_status` y `result.stream_status` a los
+        items visuales del canvas.  Cada item se colorea según su
+        status (verde/azul/amarillo/rojo).  Llamado solo después de
+        action_solve(); editar algo después marca todo como 'stale'."""
+        for bid, item in self.block_items_iter():
+            st = result.block_status.get(bid, "unrun")
+            item.set_status(st)
+        for sid, item in self.stream_items_iter():
+            st = result.stream_status.get(sid, "unrun")
+            item.set_status(st)
+
+    def _mark_dirty(self):
+        """Marcar que el flowsheet fue editado después del último solve.
+        Llamado desde edit dialogs, drag end, delete, etc.
+
+        Efecto visual:
+          - status bar muestra '◌ Datos stale — re-ejecutar (F5)' violeta
+          - todos los halos de bloques + lineas de streams pasan a azul
+            stale, para que el user vea inmediatamente que los colores
+            verde/amarillo/rojo previos YA no reflejan el estado actual.
+        """
+        if not getattr(self, "_dirty_after_solve", True):
+            self._dirty_after_solve = True
+            # Repinta TODO el flowsheet como stale.  Cualquier edit
+            # invalida los colores del último solve.
+            for bid, item in self.block_items_iter():
+                item.set_status("stale")
+            for sid, item in self.stream_items_iter():
+                item.set_status("stale")
+            if hasattr(self, "_update_status"):
+                self._update_status()
 
     # ---------------------------------------------------
     # ACCIONES — File
@@ -2576,6 +2732,11 @@ class FlowsheetMainWindow(QMainWindow):
             return
         builder, title, area, dwg_no = entry
         builder(shim)
+        # Estado inicial: stale (azul). El user ve los bloques en azul
+        # hasta que apriete F5 para correr el solver y verificar el
+        # balance del ejemplo.
+        self._last_overall_status = None
+        self._dirty_after_solve = True
         self._rebuild_scene()
 
         # Auto-mostrar el marco PFD con los datos del ejemplo
@@ -2604,6 +2765,7 @@ class FlowsheetMainWindow(QMainWindow):
                 self._delete_block(it.model.id)
             elif isinstance(it, StreamItem):
                 self._delete_stream(it.model.id)
+        self._mark_dirty()
         self._update_status()
         self.end_action(f"Borrar selección ({len(selected)})", before)
 
@@ -2732,9 +2894,13 @@ class FlowsheetMainWindow(QMainWindow):
             QMessageBox.information(self, "Solve", "El diagrama está vacío.")
             return
         result = fsolv.solve(self.fs)
+        # Aplicar status visual (semáforo) a cada bloque y stream
+        self._apply_solver_status(result)
         # refrescar streams (mass_flow / T pueden haber cambiado)
         for sid, item in self.stream_items_iter():
             item.update_path()
+        self._dirty_after_solve = False
+        self._last_overall_status = result.overall_status
         self._update_status()
         # auditar conexiones semánticas
         sem_issues = fval.validate_all_streams(self.fs)
@@ -3056,6 +3222,7 @@ class FlowsheetMainWindow(QMainWindow):
         if dlg.exec() == QDialog.Accepted:
             before = self.begin_action()
             dlg.apply_to_model()
+            self._mark_dirty()
             item = self.scene.block_items.get(block.id)
             if item is not None:
                 self.scene.removeItem(item)
@@ -3080,6 +3247,7 @@ class FlowsheetMainWindow(QMainWindow):
         before = self.begin_action()
         # aplicar al modelo
         dlg.apply_to_model()
+        self._mark_dirty()
         # validar la conexión actualizada (puertos pueden haber cambiado)
         sev, msg = fval.validate_connection(
             self.fs, stream.src, stream.dst,
@@ -3197,6 +3365,9 @@ class FlowsheetMainWindow(QMainWindow):
 
     def stream_items_iter(self):
         return self.scene.stream_items.items()
+
+    def block_items_iter(self):
+        return self.scene.block_items.items()
 
     def _rebuild_scene(self):
         """Recrea todos los items en la scene desde self.fs."""
