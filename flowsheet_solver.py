@@ -262,13 +262,54 @@ def _is_duty_locked(b):
     return getattr(b, "duty_locked", False)
 
 
+def _reset_propagated_values(fs):
+    """Limpia todos los valores que el solver propagó en corridas
+    anteriores.  Idempotente sobre lo que el USER fijó (sudoku locks):
+      - mass_flow → 0 si NOT mass_flow_locked
+      - temperature → T_REF_C si NOT temperature_locked
+      - composition → {} si NOT composition_locked AND no main_component
+      - heat_of_reaction → 0 en bloques con reactions != [] (lo
+        recomputa solve_equilibrium_reactors() desde cero).
+
+    Sin este reset, valores propagados en un solve anterior persisten
+    como "conocidos" (mass_flow > 0) y el solver no puede distinguirlos
+    de specs del user → al editar un input lockeado, los downstream no
+    se re-propagan correctamente.
+    """
+    from flowsheet_model import T_REF_C
+    for s in fs.streams.values():
+        if not _is_mass_locked(s):
+            s.mass_flow = 0.0
+        if not _is_temp_locked(s):
+            s.temperature = T_REF_C
+        # composition: solo limpiar si no está locked Y no hay main_component
+        # declarado (que actúa como spec implícita "100% de X").
+        if not _is_comp_locked(s) and not s.main_component:
+            s.composition = {}
+    for b in fs.blocks.values():
+        # En reactores de equilibrio (Capa 4) heat_of_reaction lo
+        # computa el solver desde 0 — limpiamos antes para que el
+        # nuevo cálculo no se mezcle con el viejo.
+        if getattr(b, "reactions", None):
+            b.heat_of_reaction = 0.0
+
+
 def _solve_mass_iteration(fs):
     """Una pasada sobre todos los bloques.  Devuelve lista de tuplas
     (stream_name, new_mass_flow) con lo que se propagó esta pasada.
 
-    Reglas sudoku: si todos los streams in/out están LOCKED, se
-    verifica balance.  Si uno está unlocked, se computa.  Si más de
-    uno está unlocked, se difiere (esperando que otro paso resuelva)."""
+    Reglas sudoku: un stream se considera "no resuelto" si:
+       NOT mass_flow_locked  AND  mass_flow == 0
+    Es decir, ni el user lo fijó NI el solver lo propagó todavía.
+
+    Si en un bloque hay un único stream no resuelto y el resto está
+    resuelto (lock o ya propagado), se deduce desde el balance Σ in =
+    Σ out.  Si hay >1 no resuelto, se difiere para próxima pasada
+    (otro bloque puede haber propagado para entonces).
+
+    Importante: confiar en mass_flow > 0 como señal de "resuelto"
+    requiere que `_reset_propagated_values()` haya corrido al inicio
+    de solve(), si no los valores viejos persisten."""
     propagated = []
     for b in fs.blocks.values():
         ins  = [s for s in fs.streams.values() if s.dst == b.id]
@@ -276,12 +317,15 @@ def _solve_mass_iteration(fs):
         if not ins or not outs:
             continue
 
-        unknown_ins   = [s for s in ins  if not _is_mass_locked(s)]
-        unknown_outs  = [s for s in outs if not _is_mass_locked(s)]
+        unknown_ins   = [s for s in ins
+                          if not _is_mass_locked(s) and s.mass_flow == 0]
+        unknown_outs  = [s for s in outs
+                          if not _is_mass_locked(s) and s.mass_flow == 0]
 
         if not unknown_ins and len(unknown_outs) == 1:
             sum_in        = sum(s.mass_flow for s in ins)
-            sum_known_out = sum(s.mass_flow for s in outs if _is_mass_locked(s))
+            sum_known_out = sum(s.mass_flow for s in outs
+                                 if s is not unknown_outs[0])
             deduced = sum_in - sum_known_out
             if deduced >= 0:    # permitir flujo cero (caso bypass cerrado)
                 unknown_outs[0].mass_flow = deduced
@@ -289,7 +333,8 @@ def _solve_mass_iteration(fs):
 
         elif not unknown_outs and len(unknown_ins) == 1:
             sum_out       = sum(s.mass_flow for s in outs)
-            sum_known_in  = sum(s.mass_flow for s in ins if _is_mass_locked(s))
+            sum_known_in  = sum(s.mass_flow for s in ins
+                                 if s is not unknown_ins[0])
             deduced = sum_out - sum_known_in
             if deduced >= 0:
                 unknown_ins[0].mass_flow = deduced
@@ -1083,10 +1128,12 @@ def solve_equilibrium_reactors(fs):
                 if not s_out.main_component and out_comp:
                     s_out.main_component = max(out_comp, key=out_comp.get)
 
-        # heat_of_reaction NO se setea si el user lo lockeo manualmente
-        # (override).  Si está en 0 (default), se setea desde el solver.
-        if abs(b.heat_of_reaction) < 1e-9:
-            b.heat_of_reaction = res['heat_of_reaction_kJ_per_kg']
+        # heat_of_reaction se computa SIEMPRE desde el solver de
+        # equilibrio (no hay flag de lock para este campo todavía;
+        # el user que quiera override puede vaciar block.reactions
+        # y declarar heat_of_reaction manual).  _reset_propagated_values
+        # ya lo dejó en 0 al inicio del solve.
+        b.heat_of_reaction = res['heat_of_reaction_kJ_per_kg']
 
         msgs.append(f"✓ Reactor {b.name}: ΔH={res['duty_kW']:+.2f} kW, "
                      f"ξ={res['xi']}, "
@@ -1410,6 +1457,14 @@ def solve(fs, max_iter=MAX_ITER):
         SolverResult.
     """
     result = SolverResult()
+
+    # 0. Reset de valores propagados en corridas anteriores.  Sin esto,
+    #    al editar un valor lockeado y volver a llamar solve(), los
+    #    streams downstream que se habían propagado quedan con valores
+    #    viejos y la propagación nueva no los re-deduce porque los
+    #    encuentra "ya resueltos" (mass_flow > 0).  Idempotente sobre
+    #    locks del user.
+    _reset_propagated_values(fs)
 
     # 1. Detectar SCCs y reciclos
     sccs = _strongly_connected_components(fs)
