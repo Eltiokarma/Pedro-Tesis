@@ -591,6 +591,67 @@ class BlockEditDialog(QDialog):
         flash_layout.addRow("", hint_flash)
         layout.addRow(self.gb_flash)
 
+        # ---- Equipo rotativo (bomba / compresor) ----
+        is_pump_or_compr = ("pump" in block.eq_type.lower()
+                             or "bomba" in block.eq_type.lower()
+                             or "compressor" in block.eq_type.lower()
+                             or "fan" in block.eq_type.lower())
+        self.gb_rot = QGroupBox("Equipo rotativo (bomba / compresor)")
+        self.gb_rot.setVisible(is_pump_or_compr)
+        rot_layout = QFormLayout(self.gb_rot)
+
+        # ΔP del equipo + checkbox auto-size
+        self.rot_dp = QDoubleSpinBox()
+        self.rot_dp.setRange(-50.0, 500.0); self.rot_dp.setDecimals(3)
+        self.rot_dp.setSingleStep(0.5); self.rot_dp.setSuffix(" bar")
+        self.rot_dp.setValue(getattr(block, "delta_p_bar", 0.0))
+        self.rot_dp.setToolTip(
+            "ΔP que el equipo entrega.\n"
+            "Bomba/Compresor: positivo.\n"
+            "Si está en 0 y hay P locked downstream, el solver lo\n"
+            "auto-dimensiona para llegar a ese target."
+        )
+        self.rot_auto = QCheckBox("Auto-dimensionar (usa P_locked downstream)")
+        self.rot_auto.setChecked(abs(getattr(block, "delta_p_bar", 0.0)) < 1e-6)
+        self.rot_auto.setToolTip("Si está marcado, el solver calcula ΔP\n"
+                                  "automáticamente para llegar al target.")
+        def _on_auto_toggle(checked):
+            self.rot_dp.setEnabled(not checked)
+            if checked:
+                self.rot_dp.setValue(0.0)
+        self.rot_auto.toggled.connect(_on_auto_toggle)
+        if self.rot_auto.isChecked():
+            self.rot_dp.setEnabled(False)
+        rot_layout.addRow("ΔP:", self.rot_dp)
+        rot_layout.addRow("", self.rot_auto)
+
+        # Eficiencia hidráulica/isentrópica + motor
+        self.rot_eta = QDoubleSpinBox()
+        self.rot_eta.setRange(0.3, 0.95); self.rot_eta.setDecimals(3)
+        self.rot_eta.setSingleStep(0.05)
+        # Default por tipo de equipo
+        eta_default = 0.70 if "compressor" in block.eq_type.lower() else 0.75
+        self.rot_eta.setValue(getattr(block, "efficiency", 0) or eta_default)
+        if "compressor" in block.eq_type.lower():
+            label_eta = "η isentrópica:"
+        else:
+            label_eta = "η hidráulica:"
+        rot_layout.addRow(label_eta, self.rot_eta)
+
+        hint_rot = QLabel(
+            "<b>Default η por tipo:</b><br>"
+            "&nbsp;&nbsp;Bomba centrífuga: 0.65-0.85 (default 0.75)<br>"
+            "&nbsp;&nbsp;Bomba PD:         0.85-0.95<br>"
+            "&nbsp;&nbsp;Compresor centr.: 0.70-0.80 (default 0.70)<br>"
+            "&nbsp;&nbsp;Compresor recip:  0.75-0.85<br>"
+            "η_motor adicional: 0.95 (eléctrico AC)<br>"
+            "W_elec = m·ΔP / (ρ·η_hyd·η_motor)"
+        )
+        hint_rot.setStyleSheet("color: #888; font-size: 8pt;")
+        hint_rot.setTextFormat(Qt.RichText)
+        rot_layout.addRow("", hint_rot)
+        layout.addRow(self.gb_rot)
+
         # botones
         buttons = QDialogButtonBox(
             QDialogButtonBox.Ok | QDialogButtonBox.Cancel
@@ -641,6 +702,14 @@ class BlockEditDialog(QDialog):
             self.block.flash_active = bool(self.flash_active_cb.isChecked())
             self.block.flash_T_K = float(self.flash_T.value())
             self.block.flash_P_bar = float(self.flash_P.value())
+
+        # Equipo rotativo (pump / compressor)
+        if hasattr(self, "gb_rot") and self.gb_rot.isVisible():
+            if self.rot_auto.isChecked():
+                self.block.delta_p_bar = 0.0   # solver lo auto-calcula
+            else:
+                self.block.delta_p_bar = float(self.rot_dp.value())
+            self.block.efficiency = float(self.rot_eta.value())
 
 
 class StreamEditDialog(QDialog):
