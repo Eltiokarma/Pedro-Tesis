@@ -146,6 +146,16 @@ class Block:
     flash_T_K:     float = 298.15
     flash_P_bar:   float = 1.013
 
+    # ---- SPLITTER automático (mezcla pasa, mass distribuido) ----
+    # Si splitter_active=True, el solver distribuye mass_flow del
+    # input según splitter_fractions (deben sumar 1.0 entre los
+    # outputs en el orden que aparezcan en fs.streams).
+    # La composición se PROPAGA idéntica a todos los outputs (split
+    # físico, no separación).
+    # Aplica a bloques tipo Mixer, splitter genérico, manifold.
+    splitter_active:    bool       = False
+    splitter_fractions: List[float] = field(default_factory=list)
+
     # caches del canvas Tk (no se serializan, no se usan en Qt)
     canvas_rect: Optional[int] = field(default=None, repr=False)
     canvas_text: Optional[int] = field(default=None, repr=False)

@@ -1606,6 +1606,45 @@ def solve_flashes(fs):
     return msgs
 
 
+def solve_splitters(fs):
+    """Para cada bloque con splitter_active=True, distribuye el feed
+    según splitter_fractions y propaga composición idéntica a todos
+    los outputs (separación física, no termodinámica).
+
+    Si splitter_fractions está vacío o no suma 1: split uniforme.
+    """
+    msgs = []
+    for b in fs.blocks.values():
+        if not getattr(b, "splitter_active", False):
+            continue
+        ins  = [s for s in fs.streams.values() if s.dst == b.id]
+        outs = [s for s in fs.streams.values() if s.src == b.id]
+        if not ins or len(outs) < 2:
+            continue
+        feed = next((s for s in ins if s.mass_flow > 0), None)
+        if feed is None:
+            continue
+        # Fracciones: validar
+        fracs = list(getattr(b, "splitter_fractions", []) or [])
+        if len(fracs) != len(outs):
+            # Uniform split como fallback
+            fracs = [1.0 / len(outs)] * len(outs)
+        total = sum(fracs)
+        if total <= 0:
+            continue
+        fracs = [f / total for f in fracs]
+        # Distribuir mass_flow y propagar composición
+        for s_out, frac in zip(outs, fracs):
+            if not _is_mass_locked(s_out):
+                s_out.mass_flow = feed.mass_flow * frac
+            if not _is_comp_locked(s_out):
+                s_out.composition = dict(feed.composition or {})
+                if feed.main_component:
+                    s_out.main_component = feed.main_component
+        msgs.append(f"✓ Splitter {b.name}: fracs={fracs}")
+    return msgs
+
+
 def auto_propagate_compositions(fs):
     """Para cada bloque NO reactivo, calcula la composición de las
     salidas como promedio ponderado por mass_flow de las entradas.
@@ -1632,6 +1671,8 @@ def auto_propagate_compositions(fs):
         if getattr(b, "column_active", False):
             continue
         if getattr(b, "flash_active", False):
+            continue
+        if getattr(b, "splitter_active", False):
             continue
         ins  = [s for s in fs.streams.values() if s.dst == b.id]
         outs = [s for s in fs.streams.values() if s.src == b.id]
@@ -2032,20 +2073,26 @@ def solve(fs, max_iter=MAX_ITER):
         if m.startswith("✗") or m.startswith("⚠"):
             result.energy_balance_errors.append(m)
 
-    # 4cb. Unit ops automáticos (flashes y columnas) — loop topológico
-    #      para que cada unit op tenga su feed resuelto cuando se
-    #      ejecuta.  Repetimos hasta no haber cambios.
+    # 4cb. Unit ops automáticos (splitters, flashes, columnas) — loop
+    #      topológico para que cada unit op tenga su feed resuelto
+    #      cuando se ejecuta.  Repetimos hasta no haber cambios.
     flash_msgs = []
     col_msgs = []
+    split_msgs = []
     for outer in range(5):
         prev_count = sum(1 for s in fs.streams.values() if s.composition)
-        # Flash drums primero (típicamente downstream del reactor)
+        # Splitters: distribuyen mass, propagan composición igual
+        split_msgs = solve_splitters(fs)
+        for _ in range(3):
+            if not _solve_mass_iteration(fs):
+                break
+        # Flash drums (separación VLE)
         flash_msgs = solve_flashes(fs)
         for _ in range(3):
             if not _solve_mass_iteration(fs):
                 break
         auto_propagate_compositions(fs)
-        # Columnas después (típicamente downstream del flash)
+        # Columnas (separación FUG)
         col_msgs = solve_columns(fs)
         for _ in range(3):
             if not _solve_mass_iteration(fs):
@@ -2055,7 +2102,7 @@ def solve(fs, max_iter=MAX_ITER):
         if new_count == prev_count:
             break
 
-    for m in flash_msgs + col_msgs:
+    for m in split_msgs + flash_msgs + col_msgs:
         if m.startswith("✗"):
             result.energy_balance_errors.append(m)
         elif m.startswith("⚠"):
