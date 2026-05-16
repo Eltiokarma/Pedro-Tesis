@@ -1500,3 +1500,155 @@ def solve_cstr(rxn_ids:    List[str],
         iterations=iters,
         residual=last_norm,
     )
+
+
+# ============================================================
+# Wrapper alto-nivel para PFR/CSTR desde composición másica
+# ============================================================
+# Paralelo a solve_equilibrium_reactor_from_composition().  Toma
+# mass fractions + mass_kg/s + nombres canónicos thermo_db, hace
+# las conversiones y devuelve mass fractions out + heat_of_reaction.
+#
+# El caller del flowsheet usa solve_reactor_from_composition() que
+# despacha al modo correcto ('equilibrium' / 'pfr' / 'cstr').
+
+
+def solve_kinetic_reactor_from_composition(
+        mode:              str,             # 'pfr' | 'cstr'
+        rxn_ids:           List[str],
+        inlet_composition: Dict[str, float],
+        inlet_mass_kg_s:   float,
+        T_K:               float,
+        P_bar:             float,
+        V_reactor_L:       float,
+        rho_b:             Optional[float] = None) -> Optional[Dict]:
+    """Wrapper de solve_pfr/solve_cstr para usar desde el flowsheet.
+
+    mode:               'pfr' o 'cstr'
+    inlet_composition:  {thermo_name: mass_fraction}
+    inlet_mass_kg_s:    kg/s
+    V_reactor_L:        volumen en litros
+    rho_b:              ρ_b cat (kg/m³_R), opcional
+
+    Returns dict con la misma forma que
+    solve_equilibrium_reactor_from_composition:
+        outlet_composition: {thermo_name: mass_fraction}
+        outlet_mass_kg_s
+        heat_of_reaction_kJ_per_kg   (consistente con Block.heat_of_reaction)
+        duty_kW
+        xi
+        unmapped
+        tau_s                        (extra: residencia)
+        conversion                   (extra: fracción reaccionada por especie)
+    None si la cinética no se puede aplicar (T fuera de rango,
+    inlets sin composition, mezcla incompatible de basis...).
+    """
+    if mode not in ("pfr", "cstr"):
+        return None
+    if V_reactor_L <= 0:
+        return None
+    try:
+        import thermo_db as _td
+    except ImportError:
+        return None
+
+    # Validar cinética disponible para todas las rxns
+    err = _check_kinetics_compatibility(rxn_ids)
+    if err is not None:
+        return None
+    # Validar T en rango
+    for rid in rxn_ids:
+        r = get(rid)
+        if r and not r.is_kinetic_T_valid(T_K):
+            return None
+
+    # Convertir composición másica → flujos molares F_in [mol/s]
+    F_in: Dict[str, float] = {}
+    inert_mass_per_s: Dict[str, float] = {}
+    unmapped: List[str] = []
+    total_frac = sum(inlet_composition.values())
+    if total_frac <= 0:
+        return None
+    norm_comp = {k: v/total_frac for k, v in inlet_composition.items() if v > 0}
+
+    for thermo_n, frac in norm_comp.items():
+        m_kg_per_s = frac * inlet_mass_kg_s
+        formula = formula_for(thermo_n)
+        comp_obj = _td.get(thermo_n)
+        if comp_obj is None or comp_obj.mw <= 0 or formula is None:
+            inert_mass_per_s[thermo_n] = m_kg_per_s
+            if formula is None:
+                unmapped.append(thermo_n)
+            continue
+        moles_per_s = m_kg_per_s * 1000.0 / comp_obj.mw    # mol/s
+        F_in[formula] = F_in.get(formula, 0.0) + moles_per_s
+
+    if not F_in:
+        return None
+
+    V_m3 = V_reactor_L / 1000.0
+    if mode == "pfr":
+        res = solve_pfr(rxn_ids, F_in, T_K, P_bar, V_m3,
+                         n_steps=500, rho_b=rho_b)
+    else:    # cstr
+        res = solve_cstr(rxn_ids, F_in, T_K, P_bar, V_m3, rho_b=rho_b)
+    if res is None:
+        return None
+
+    # Convertir F_out → mass kg/s + composition
+    outlet_mass_per_s: Dict[str, float] = {}
+    for formula, mol_per_s in res['F_out'].items():
+        if mol_per_s < 1e-15:
+            continue
+        thermo_n = thermo_name(formula)
+        if thermo_n is None:
+            continue
+        comp_obj = _td.get(thermo_n)
+        if comp_obj is None or comp_obj.mw <= 0:
+            continue
+        outlet_mass_per_s[thermo_n] = mol_per_s * comp_obj.mw / 1000.0
+    # Sumar inertes
+    for thermo_n, m in inert_mass_per_s.items():
+        outlet_mass_per_s[thermo_n] = outlet_mass_per_s.get(thermo_n, 0.0) + m
+
+    total_out = sum(outlet_mass_per_s.values())
+    outlet_composition = ({k: v/total_out for k, v in outlet_mass_per_s.items()}
+                           if total_out > 0 else {})
+
+    # Calcular dh_total: para cada reacción, ΔH(T) · ξ (en mol/s = kJ/s = kW)
+    dh_total_kW = 0.0
+    if mode == "pfr":
+        # ξⱼ = ∫₀ᵛ rⱼ dV ≈ generación neta de productos clave
+        # Simplificación: ΔF_i / νᵢ del primer producto puro
+        for j, rid in enumerate(rxn_ids):
+            rxn = get(rid)
+            # ξ inferido: tomar la especie con mayor |ΔF|/|ν|
+            xi_inferred = 0.0
+            for sp in rxn.stoich:
+                dF = res['F_out'].get(sp.formula, 0.0) - F_in.get(sp.formula, 0.0)
+                if abs(sp.nu) > 0:
+                    xi_inferred = dF / sp.nu
+                    break
+            dh = rxn.dh_rxn_kJ_mol(T_K) or rxn.dh_rxn_298_kJ_mol or 0.0
+            dh_total_kW += xi_inferred * dh
+        xi_dict = {}
+    else:    # cstr: ξⱼ directo
+        xi_dict = res['xi']
+        for rid, xi in xi_dict.items():
+            rxn = get(rid)
+            dh = rxn.dh_rxn_kJ_mol(T_K) or rxn.dh_rxn_298_kJ_mol or 0.0
+            dh_total_kW += xi * dh
+
+    heat_of_reaction_kJ_per_kg = (dh_total_kW / inlet_mass_kg_s
+                                   if inlet_mass_kg_s > 0 else 0.0)
+
+    return dict(
+        outlet_composition=outlet_composition,
+        outlet_mass_kg_s=total_out,
+        heat_of_reaction_kJ_per_kg=heat_of_reaction_kJ_per_kg,
+        duty_kW=dh_total_kW,
+        xi=xi_dict,
+        unmapped=unmapped,
+        tau_s=res.get('tau_s'),
+        conversion=res.get('conversion', {}),
+    )

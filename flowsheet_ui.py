@@ -2449,6 +2449,77 @@ class FlowsheetEditor:
                                  flowrate=2, price=8_000.0,
                                  stream="Consumables")
 
+    def _example_ethane_cracker_pfr(self):
+        """Cracker de etano (R011) — REACTOR PFR Capa 5 con cinética
+        Arrhenius real.  Demuestra solve_pfr integrado al flowsheet.
+
+        Reacción:
+          R011: C2H6 → C2H4 + H2     (Δν=+1, endotérmica fuerte)
+
+        Operación: T = 1100 K (~827 °C, horno típico), P = 2 bar.
+        Cinética: k₀=4.65e13 s⁻¹, Ea=273 kJ/mol (Froment-Bischoff).
+        Equilibrio termo a 1100K/2bar: conv_C2H6 ≈ 51%.
+
+        Tren:  feed C2H6 → horno-precalentador F-101 → reactor PFR
+               R-101 → enfriador rápido E-101 → tanque producto
+               (mezcla C2H6 sin reaccionar + C2H4 + H2)
+
+        El user puede cambiar V_reactor desde la UI y ver cómo varía
+        la conversión hacia el límite de equilibrio termodinámico.
+        """
+        # Layout: línea horizontal
+        tk_in   = self._add_example_block("TK-101","Storage tank — cone roof",  400.0,  60, 280)
+        f101    = self._add_example_block("F-101", "Fired heater — non-reformer",
+                                            3000.0, 260, 280)
+        r101    = self._add_example_block("R-101", "Reactor — jacketed non-agit.",
+                                             80.0, 460, 280)
+        e101    = self._add_example_block("E-101", "Heat exch. — air cooler",
+                                           300.0, 660, 280)
+        tk_out  = self._add_example_block("TK-102","Storage tank — cone roof",
+                                           400.0, 860, 280)
+
+        # Configurar R-101 como REACTOR PFR Capa 5
+        self.fs.blocks[r101].reactions = ["R011"]
+        self.fs.blocks[r101].reactor_mode = "pfr"
+        self.fs.blocks[r101].T_op_K = 1100.0          # 827°C
+        self.fs.blocks[r101].P_op_bar = 2.0
+        self.fs.blocks[r101].reactor_volume_L = 50.0   # 50 L típico horno chico
+
+        # Streams.
+        # Basis: 1000 tm/año C2H6 puro = 30.07 kg/h = 0.00836 kg/s
+        # = 0.278 mol/s C2H6 entrante (MW C2H6 = 30.07 g/mol)
+        # A 1100K/2bar, Q_in = 0.278·8.314·1100/2e5 = 0.0127 m³/s
+        # τ con V=50L: τ = 0.050/0.0127 = 3.94 s
+        # Conv esperada a 1100K, V=50L: ~50% (cerca del equilibrio termo)
+
+        self._add_example_stream(tk_in, f101, "S-C2H6", 1000, role="feed",
+                                  src_port="salida", dst_port="alimentacion",
+                                  price=600.0, T=25,
+                                  main_component="ethane", phase="gas",
+                                  composition={"ethane": 1.0})
+        # Precalentado al horno
+        self._add_example_stream(f101, r101, "S-precal",
+                                  src_port="salida", dst_port="alimentacion",
+                                  T=600,
+                                  main_component="ethane", phase="gas",
+                                  composition={"ethane": 1.0})
+        # Salida del reactor — composition se calcula automáticamente
+        self._add_example_stream(r101, e101, "S-cracked",
+                                  src_port="producto", dst_port="proceso_in",
+                                  T=827,
+                                  main_component="ethylene", phase="gas")
+        # Producto enfriado
+        self._add_example_stream(e101, tk_out, "S-product", 1000, role="product",
+                                  src_port="proceso_out", dst_port="entrada",
+                                  price=900.0, T=40,
+                                  main_component="ethylene", phase="gas")
+
+        # OPEX: catalizador no aplica (cracking térmico sin catalizador)
+        # pero sí gas natural para el horno:
+        self._add_example_extra("Gas natural (F-101 horno)",
+                                 flowrate=200, price=180.0,
+                                 stream="Utilities")
+
     def open_json(self):
         path = filedialog.askopenfilename(
             title="Abrir diagrama",

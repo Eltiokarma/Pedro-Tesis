@@ -604,6 +604,15 @@ def _solve_energy_iteration(fs, tol_T=0.5, skipped=None):
         # bombas, compresores y fans tienen duty ELÉCTRICO.
         if _ep_mod.is_electrical_equipment(b.eq_type):
             continue
+        # Reactores con cinética/equilibrio (Capas 4 y 5): la T del
+        # outlet está fijada por el modo del reactor (T_op_K).  El
+        # balance de energía sensible + ΔH_rxn no puede captar la
+        # realidad isothermal/adiabatic-with-duty del reactor — el
+        # solver de energía debería skipearlo.  Heat_of_reaction
+        # ya se setea via solve_equilibrium_reactors() y el balance
+        # del flowsheet downstream lo recoge.
+        if getattr(b, "reactions", None):
+            continue
 
         duty = b.duty
         # heat_of_reaction: si declarado, se aplica al balance.
@@ -1134,14 +1143,34 @@ def solve_equilibrium_reactors(fs):
         from flowsheet_model import SEC_PER_YEAR, TM_TO_KG
         m_in_kg_s = m_in_total * TM_TO_KG / SEC_PER_YEAR
 
-        res = _rdb.solve_equilibrium_reactor_from_composition(
-            rxn_ids=b.reactions,
-            inlet_composition=agg,
-            inlet_mass_kg_s=m_in_kg_s,
-            T_K=T_K, P_bar=b.P_op_bar)
+        # Despacho según reactor_mode (Capas 4 vs 5):
+        mode = getattr(b, "reactor_mode", "equilibrium") or "equilibrium"
+        if mode == "equilibrium":
+            res = _rdb.solve_equilibrium_reactor_from_composition(
+                rxn_ids=b.reactions,
+                inlet_composition=agg,
+                inlet_mass_kg_s=m_in_kg_s,
+                T_K=T_K, P_bar=b.P_op_bar)
+        elif mode in ("pfr", "cstr"):
+            V_L = getattr(b, "reactor_volume_L", 0.0) or 0.0
+            if V_L <= 0:
+                msgs.append(f"✗ Reactor {b.name} ({mode}): falta declarar "
+                             f"reactor_volume_L > 0.")
+                continue
+            res = _rdb.solve_kinetic_reactor_from_composition(
+                mode=mode,
+                rxn_ids=b.reactions,
+                inlet_composition=agg,
+                inlet_mass_kg_s=m_in_kg_s,
+                T_K=T_K, P_bar=b.P_op_bar,
+                V_reactor_L=V_L)
+        else:
+            msgs.append(f"✗ Reactor {b.name}: modo desconocido '{mode}'.")
+            continue
         if res is None:
-            msgs.append(f"✗ Reactor {b.name}: no convergió "
-                         f"(rxns={b.reactions}, T={T_K:.0f}K, P={b.P_op_bar}bar).")
+            msgs.append(f"✗ Reactor {b.name} ({mode}): no convergió "
+                         f"(rxns={b.reactions}, T={T_K:.0f}K, "
+                         f"P={b.P_op_bar}bar).")
             continue
 
         # Aplicar resultados a los outlets.  En reactores de equilibrio
@@ -1559,19 +1588,45 @@ def solve(fs, max_iter=MAX_ITER):
     # (típicamente porque el duty incluye ΔH_vap/ΔH_rxn que el modelo
     # Cp simple no captura).  Reportamos UNA vez cada uno.
     if skipped_temp:
+        # Set de bloques que son reactores Capa 4/5 con T_op fija — sus
+        # downstream tienen balance de energía menos confiable porque el
+        # Cp simple no capta ΔH_rxn correctamente con T isothermal.
+        rxn_block_names = {b.name for b in fs.blocks.values()
+                            if getattr(b, "reactions", None)}
+        # Construir set de bloques que están downstream de reactor
+        # (BFS desde reactores siguiendo streams).
+        downstream_of_rxn = set(rxn_block_names)
+        changed = True
+        while changed:
+            changed = False
+            for s in fs.streams.values():
+                src_b = fs.blocks.get(s.src)
+                dst_b = fs.blocks.get(s.dst)
+                if src_b is None or dst_b is None:
+                    continue
+                if src_b.name in downstream_of_rxn and dst_b.name not in downstream_of_rxn:
+                    downstream_of_rxn.add(dst_b.name)
+                    changed = True
+
         seen = set()
         for msg in skipped_temp:
             if msg in seen:
                 continue
             seen.add(msg)
-            # Distinguir errores reales de warnings:
-            # - "fuera de rango físico" → ERROR (T absurda, indica
-            #   que el modelo Cp simple no captura algo serio).
-            # - "T calc... pero T declarada..." → WARNING (informativo:
-            #   probable cambio de fase o ΔH_rxn que el solver no
-            #   captura; se respeta la T del user).
+            # Extraer nombre del bloque del mensaje (formato 'B-NAME → ...')
+            block_name = msg.split("→")[0].strip() if "→" in msg else ""
+            # Reglas de categorización:
+            # - "T calc... pero T declarada..." → siempre WARNING
+            #   (informativo: cambio de fase o ΔH no modelado).
+            # - "fuera de rango físico" → ERROR, EXCEPTO si el bloque
+            #   está downstream de un reactor con reactions != [], en
+            #   cuyo caso el Cp simple no puede capturar T_op del reactor
+            #   y el "fuera de rango" es consecuencia esperada.
             if "fuera de rango físico" in msg:
-                result.energy_balance_errors.append(msg)
+                if block_name in downstream_of_rxn:
+                    result.energy_warnings.append(msg)
+                else:
+                    result.energy_balance_errors.append(msg)
             else:
                 result.energy_warnings.append(msg)
 

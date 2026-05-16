@@ -370,14 +370,31 @@ class BlockEditDialog(QDialog):
 
         layout.addRow(gb_duty)
 
-        # ---- Reactor de equilibrio (Capa 4) ----
+        # ---- Reactor (Capas 4 y 5) ----
         # Solo visible si es Reactor.  Permite seleccionar reacciones
-        # del catálogo reactions_db; si hay >=1 marcada, el solver
-        # computa heat_of_reaction automáticamente y oculta el
-        # campo manual de arriba.
-        self.gb_eq = QGroupBox("Reactor de equilibrio (Capa 4)")
+        # del catálogo + modo de solver (equilibrium / pfr / cstr).
+        self.gb_eq = QGroupBox("Reactor con reacciones (Capas 4 y 5)")
         self.gb_eq.setVisible(is_reactor)
         eq_layout = QFormLayout(self.gb_eq)
+
+        # Modo del reactor
+        self.mode_combo = QComboBox()
+        self.mode_combo.addItem("equilibrium  —  Newton Gibbs (Capa 4)", "equilibrium")
+        self.mode_combo.addItem("pfr          —  RK4 cinética (Capa 5)", "pfr")
+        self.mode_combo.addItem("cstr         —  Newton cinética (Capa 5)", "cstr")
+        current_mode = getattr(block, "reactor_mode", "equilibrium") or "equilibrium"
+        idx = self.mode_combo.findData(current_mode)
+        if idx >= 0:
+            self.mode_combo.setCurrentIndex(idx)
+        eq_layout.addRow("Modo:", self.mode_combo)
+        hint_mode = QLabel(
+            "• equilibrium: minimización Gibbs multi-reacción\n"
+            "  (ignora volumen, recomendado si V grande o cinética rápida)\n"
+            "• pfr: flujo pistón con RK4 (requiere V > 0)\n"
+            "• cstr: tanque agitado, robusto para cinéticas stiff (requiere V > 0)"
+        )
+        hint_mode.setStyleSheet("color: #888; font-size: 8pt;")
+        eq_layout.addRow("", hint_mode)
 
         # T_op
         self.t_op_edit = QDoubleSpinBox()
@@ -387,8 +404,7 @@ class BlockEditDialog(QDialog):
         self.t_op_edit.setSuffix(" K")
         self.t_op_edit.setValue(getattr(block, "T_op_K", 0.0))
         eq_layout.addRow("T operación:", self.t_op_edit)
-        hint_t = QLabel("0 = usa T promedio del input.  Si marcás\n"
-                         "reacciones, esta T determina los Keq y ΔH.")
+        hint_t = QLabel("0 = usa T promedio del input.")
         hint_t.setStyleSheet("color: #888; font-size: 8pt;")
         eq_layout.addRow("", hint_t)
 
@@ -400,6 +416,33 @@ class BlockEditDialog(QDialog):
         self.p_op_edit.setSuffix(" bar")
         self.p_op_edit.setValue(getattr(block, "P_op_bar", 1.0))
         eq_layout.addRow("P operación:", self.p_op_edit)
+
+        # Volumen del reactor (solo visible si mode != equilibrium)
+        self.vol_edit = QDoubleSpinBox()
+        self.vol_edit.setRange(0.0, 1e7)
+        self.vol_edit.setDecimals(2)
+        self.vol_edit.setSingleStep(10.0)
+        self.vol_edit.setSuffix(" L")
+        self.vol_edit.setValue(getattr(block, "reactor_volume_L", 0.0))
+        self.vol_label_widget = QLabel("Volumen reactor:")
+        eq_layout.addRow(self.vol_label_widget, self.vol_edit)
+        hint_vol = QLabel(
+            "Volumen interno del reactor en litros.\n"
+            "Solo aplica en modo PFR o CSTR (ignorado en equilibrium)."
+        )
+        hint_vol.setStyleSheet("color: #888; font-size: 8pt;")
+        eq_layout.addRow("", hint_vol)
+        self._vol_hint_widget = hint_vol
+
+        # Toggle de visibilidad del volumen según modo
+        def _on_mode_change():
+            m = self.mode_combo.currentData()
+            show = (m in ("pfr", "cstr"))
+            self.vol_label_widget.setVisible(show)
+            self.vol_edit.setVisible(show)
+            self._vol_hint_widget.setVisible(show)
+        self.mode_combo.currentIndexChanged.connect(lambda _: _on_mode_change())
+        _on_mode_change()
 
         # Lista de reacciones (multi-check)
         from PySide6.QtWidgets import QListWidget, QListWidgetItem
@@ -472,6 +515,8 @@ class BlockEditDialog(QDialog):
             self.block.reactions = picked
             self.block.T_op_K   = float(self.t_op_edit.value())
             self.block.P_op_bar = float(self.p_op_edit.value())
+            self.block.reactor_mode = self.mode_combo.currentData() or "equilibrium"
+            self.block.reactor_volume_L = float(self.vol_edit.value())
 
 
 class StreamEditDialog(QDialog):
@@ -2690,6 +2735,8 @@ class FlowsheetMainWindow(QMainWindow):
         examples_menu.addSeparator()
         examples_menu.addAction("⚛ Reformado SMR + WGS (reactor de equilibrio Capa 4)",
                                   make_loader("smr_eq"))
+        examples_menu.addAction("⚛ Cracking de etano (reactor PFR Capa 5)",
+                                  make_loader("ethane_pfr"))
         examples_act.setMenu(examples_menu)
         tb.addAction(examples_act)
         # workaround: QAction con menu necesita un QToolButton para mostrar el dropdown
@@ -2997,6 +3044,9 @@ class FlowsheetMainWindow(QMainWindow):
             "smr_eq":       (TkEditor._example_smr_equilibrium,
                               "Reformado SMR + WGS — reactor de equilibrio (Capa 4)",
                               "100 — Reacción", "PFD-SMR-EQ-001"),
+            "ethane_pfr":   (TkEditor._example_ethane_cracker_pfr,
+                              "Cracking de etano — reactor PFR cinético (Capa 5)",
+                              "100 — Pirólisis", "PFD-ETH-PFR-001"),
         }
         entry = builder_map.get(key)
         if entry is None:

@@ -112,6 +112,18 @@ class Block:
     reactions: List[str] = field(default_factory=list)
     T_op_K:    float = 0.0     # 0 = usar T promedio del input
     P_op_bar:  float = 1.0
+    # Modo del solver (Capas 4 y 5):
+    #   'equilibrium' — Newton-Raphson minimización Gibbs (Capa 4).
+    #                    Ignora reactor_volume_L.  Default backward-compat.
+    #   'pfr'         — integración RK4 con cinética Arrhenius (Capa 5).
+    #                    Requiere reactor_volume_L > 0 y cinética
+    #                    disponible para todas las reacciones del set.
+    #   'cstr'        — algebraico Newton-Raphson con cinética (Capa 5).
+    #                    Robusto incluso para cinéticas stiff.
+    reactor_mode: str = "equilibrium"
+    # Volumen del reactor en LITROS (no m³, para valores amigables).
+    # Solo aplica si reactor_mode ∈ {'pfr', 'cstr'}.
+    reactor_volume_L: float = 0.0
 
     # caches del canvas Tk (no se serializan, no se usan en Qt)
     canvas_rect: Optional[int] = field(default=None, repr=False)
