@@ -834,6 +834,40 @@ class StreamEditDialog(QDialog):
         gb_layout.addRow(f"Puerto en {b_dst.name}:", self.dst_port_combo)
         layout.addRow(gb_ports)
 
+        # ---- Tubería: pérdida de carga (Darcy-Weisbach) ----
+        gb_pipe = QGroupBox("Tubería (pérdida de carga)")
+        pipe_layout = QFormLayout(gb_pipe)
+
+        self.pipe_L = QDoubleSpinBox()
+        self.pipe_L.setRange(0.0, 10000.0); self.pipe_L.setDecimals(2)
+        self.pipe_L.setSingleStep(1.0); self.pipe_L.setSuffix(" m")
+        self.pipe_L.setValue(getattr(stream, "pipe_length_m", 0) or 10.0)
+        pipe_layout.addRow("Longitud:", self.pipe_L)
+
+        self.pipe_D = QDoubleSpinBox()
+        self.pipe_D.setRange(1.0, 5000.0); self.pipe_D.setDecimals(1)
+        self.pipe_D.setSingleStep(5.0); self.pipe_D.setSuffix(" mm")
+        # Convertir de m a mm para display, default 50mm
+        D_mm = (getattr(stream, "pipe_diameter_m", 0) or 0.050) * 1000.0
+        self.pipe_D.setValue(D_mm)
+        pipe_layout.addRow("Diámetro interno:", self.pipe_D)
+
+        self.pipe_eps = QDoubleSpinBox()
+        self.pipe_eps.setRange(0.001, 5.0); self.pipe_eps.setDecimals(3)
+        self.pipe_eps.setSingleStep(0.01); self.pipe_eps.setSuffix(" mm")
+        eps_mm = (getattr(stream, "pipe_roughness_m", 4.5e-5) or 4.5e-5) * 1000.0
+        self.pipe_eps.setValue(eps_mm)
+        pipe_layout.addRow("Rugosidad ε:", self.pipe_eps)
+
+        hint_pipe = QLabel(
+            "Defaults: 10 m, 50 mm (2\" Sch40), 0.045 mm (acero comercial).\n"
+            "ΔP se calcula con Darcy-Weisbach + Colebrook-White, usando\n"
+            "ρ y μ de la composición declarada.  Visible en panel de propiedades."
+        )
+        hint_pipe.setStyleSheet("color: #888; font-size: 8pt;")
+        pipe_layout.addRow("", hint_pipe)
+        layout.addRow(gb_pipe)
+
         # botones
         buttons = QDialogButtonBox(
             QDialogButtonBox.Ok | QDialogButtonBox.Cancel
@@ -862,6 +896,10 @@ class StreamEditDialog(QDialog):
         self.stream.temperature = float(self.t_edit.value())
         self.stream.temperature_locked = bool(self.t_lock.isChecked())
         self.stream.composition_locked = bool(self.comp_lock.isChecked())
+        # Pipe geometry para pressure drop
+        self.stream.pipe_length_m = float(self.pipe_L.value())
+        self.stream.pipe_diameter_m = float(self.pipe_D.value()) / 1000.0
+        self.stream.pipe_roughness_m = float(self.pipe_eps.value()) / 1000.0
         # Setpoint: si la casilla está marcada, guarda T objetivo;
         # si no, -999 (centinela "sin setpoint").
         if self.sp_check.isChecked():
@@ -4748,6 +4786,25 @@ class FlowsheetMainWindow(QMainWindow):
                         txt += "\n" + "\n".join(nrtl_txt)
                 except Exception as e:
                     pass    # falta thermo_db / Antoine → skip silencioso
+
+            # ---- Pérdida de carga (Darcy-Weisbach) ----
+            if s.mass_flow > 0 and (comp_clean or s.main_component):
+                try:
+                    import pressure_drop as _pd
+                    dp_res = _pd.stream_pressure_drop(s)
+                    if dp_res is not None:
+                        txt += "\n\n─ Pérdida de carga (Darcy-Weisbach) ─"
+                        L = s.pipe_length_m or 10.0
+                        D = s.pipe_diameter_m or 0.050
+                        txt += f"\nL          {L:.1f} m"
+                        txt += f"\nD          {D*1000:.0f} mm  ({D*39.37:.1f}\")"
+                        txt += f"\nv          {dp_res['velocity_m_s']:.2f} m/s"
+                        txt += f"\nRe         {dp_res['Re']:.0f}  ({dp_res['regime']})"
+                        txt += f"\nf_Darcy    {dp_res['f_Darcy']:.4f}"
+                        txt += f"\nΔP         {dp_res['delta_P_bar']:.3f} bar  ({dp_res['delta_P_Pa']/1000:.1f} kPa)"
+                except Exception:
+                    pass
+
             self.prop_label.setText(txt)
 
     # ---------------------------------------------------

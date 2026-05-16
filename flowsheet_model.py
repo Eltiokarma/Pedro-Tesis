@@ -250,6 +250,13 @@ class Stream:
     start_xy: List[float] = field(default_factory=list)  # [x,y] o []
     end_xy:   List[float] = field(default_factory=list)  # [x,y] o []
 
+    # ---- Pérdida de carga (tubería del stream) ----
+    # Para calcular ΔP via Darcy-Weisbach.  Si pipe_length_m=0 (default),
+    # el cálculo asume 10 m, suficiente para un primer estimado.
+    pipe_length_m:    float = 0.0     # longitud equivalente m (0 = default 10)
+    pipe_diameter_m:  float = 0.0     # diámetro interno m (0 = default 0.05 = 2")
+    pipe_roughness_m: float = 4.5e-5  # rugosidad — acero comercial default
+
     # caches del canvas Tk
     canvas_line:    Optional[int] = field(default=None, repr=False)
     canvas_label:   Optional[int] = field(default=None, repr=False)
