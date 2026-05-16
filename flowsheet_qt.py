@@ -2700,17 +2700,30 @@ class FlowsheetMainWindow(QMainWindow):
     def _build_toolbar(self):
         tb = self.addToolBar("Workflow")
         tb.setMovable(False)
+        # Tamaño de íconos consistente en toda la toolbar
+        from PySide6.QtCore import QSize
+        tb.setIconSize(QSize(20, 20))
+        tb.setToolButtonStyle(Qt.ToolButtonTextBesideIcon)
 
-        def add_btn(text, slot, sep=False):
+        # Helper para crear QIcon desde el set HYSYS — color del texto
+        # primario del estilo para que combine con el resto de la UI.
+        from icons import make_qicon as _mk
+        _ICON_COLOR = "#3a3a3a"
+
+        def add_btn(text, slot, icon_id=None, sep=False):
             act = QAction(text, self)
             act.triggered.connect(slot)
+            if icon_id is not None:
+                ic = _mk(icon_id, color=_ICON_COLOR, size=20)
+                if ic is not None:
+                    act.setIcon(ic)
             tb.addAction(act)
             if sep:
                 tb.addSeparator()
 
-        add_btn("Nuevo",     self.action_new)
-        add_btn("Abrir…",    self.action_open)
-        add_btn("Guardar…",  self.action_save)
+        add_btn("Nuevo",     self.action_new,  "file-new")
+        add_btn("Abrir…",    self.action_open, "file-open")
+        add_btn("Guardar…",  self.action_save, "file-save")
 
         # menú de ejemplos
         examples_act = QAction("Ejemplos ▾", self)
@@ -2719,26 +2732,33 @@ class FlowsheetMainWindow(QMainWindow):
         # reusar los example builders del editor legacy
         def make_loader(key):
             return lambda: self.action_load_example(key)
-        examples_menu.addAction("HDA — Hidrodealquilación de tolueno",  make_loader("hda"))
-        examples_menu.addAction("Síntesis de metanol",                   make_loader("methanol"))
-        examples_menu.addAction("Destilación binaria benceno/tolueno",   make_loader("distillation"))
+        # Ícono compartido para todos los ejemplos legacy (equipo genérico)
+        _ic_ex = _mk("act-examples", color=_ICON_COLOR, size=18) or QIcon()
+        # Reactor para los 3 ejemplos con reacciones (Capas 4-5)
+        _ic_rxn = _mk("cfg-rxn", color="#c41e3a", size=18) or QIcon()
+
+        examples_menu.addAction(_ic_ex, "HDA — Hidrodealquilación de tolueno",  make_loader("hda"))
+        examples_menu.addAction(_ic_ex, "Síntesis de metanol",                  make_loader("methanol"))
+        examples_menu.addAction(_ic_ex, "Destilación binaria benceno/tolueno",  make_loader("distillation"))
         examples_menu.addSeparator()
-        examples_menu.addAction("Síntesis de amoníaco (Haber-Bosch)",    make_loader("ammonia"))
-        examples_menu.addAction("Producción de etanol",                  make_loader("ethanol"))
-        examples_menu.addAction("Producción de biodiesel",               make_loader("biodiesel"))
-        examples_menu.addAction("Refinería atmosférica simplificada",    make_loader("cdu"))
+        examples_menu.addAction(_ic_ex, "Síntesis de amoníaco (Haber-Bosch)",   make_loader("ammonia"))
+        examples_menu.addAction(_ic_ex, "Producción de etanol",                 make_loader("ethanol"))
+        examples_menu.addAction(_ic_ex, "Producción de biodiesel",              make_loader("biodiesel"))
+        examples_menu.addAction(_ic_ex, "Refinería atmosférica simplificada",   make_loader("cdu"))
         examples_menu.addSeparator()
         # ---- Procesos industriales completos ----
-        examples_menu.addAction("HDA completo (Douglas, escala industrial)", make_loader("hda_full"))
-        examples_menu.addAction("Endulzamiento de gas natural (MDEA)",       make_loader("gas_sweet"))
-        examples_menu.addAction("Planta de azúcar (caña)",                   make_loader("sugar"))
+        examples_menu.addAction(_ic_ex, "HDA completo (Douglas, escala industrial)", make_loader("hda_full"))
+        examples_menu.addAction(_ic_ex, "Endulzamiento de gas natural (MDEA)",       make_loader("gas_sweet"))
+        examples_menu.addAction(_ic_ex, "Planta de azúcar (caña)",                   make_loader("sugar"))
         examples_menu.addSeparator()
-        examples_menu.addAction("⚛ Reformado SMR + WGS (reactor de equilibrio Capa 4)",
+        examples_menu.addAction(_ic_rxn, "Reformado SMR + WGS (reactor de equilibrio Capa 4)",
                                   make_loader("smr_eq"))
-        examples_menu.addAction("⚛ Cracking de etano (reactor PFR Capa 5)",
+        examples_menu.addAction(_ic_rxn, "Cracking de etano (reactor PFR Capa 5)",
                                   make_loader("ethane_pfr"))
-        examples_menu.addAction("⚛ Haber-Bosch con recycle (NH3, loop reactivo)",
+        examples_menu.addAction(_ic_rxn, "Haber-Bosch con recycle (NH3, loop reactivo)",
                                   make_loader("haber_rec"))
+        # Ícono del menú Ejemplos (templates)
+        examples_act.setIcon(_mk("act-examples", color=_ICON_COLOR, size=20))
         examples_act.setMenu(examples_menu)
         tb.addAction(examples_act)
         # workaround: QAction con menu necesita un QToolButton para mostrar el dropdown
@@ -2748,26 +2768,28 @@ class FlowsheetMainWindow(QMainWindow):
             btn.setPopupMode(QToolButton.InstantPopup)
         tb.addSeparator()
 
-        add_btn("Borrar selección", self.action_delete)
+        add_btn("Borrar selección", self.action_delete, "edit-delete")
         # undo/redo
         self.undo_action = self.undo_stack.createUndoAction(self, "↶ Deshacer")
         self.undo_action.setShortcut(QKeySequence.Undo)
+        self.undo_action.setIcon(_mk("edit-undo", color=_ICON_COLOR, size=20))
         tb.addAction(self.undo_action)
         self.redo_action = self.undo_stack.createRedoAction(self, "↷ Rehacer")
         self.redo_action.setShortcut(QKeySequence.Redo)
+        self.redo_action.setIcon(_mk("edit-redo", color=_ICON_COLOR, size=20))
         tb.addAction(self.redo_action)
         tb.addSeparator()
 
-        add_btn("Zoom −",     self.view.zoom_out)
-        add_btn("100 %",      self.view.zoom_reset)
-        add_btn("Zoom +",     self.view.zoom_in)
-        add_btn("Ajustar",    self.view.zoom_fit)
+        add_btn("Zoom −",     self.view.zoom_out,   "zoom-out")
+        add_btn("100 %",      self.view.zoom_reset, "zoom-100")
+        add_btn("Zoom +",     self.view.zoom_in,    "zoom-in")
+        add_btn("Ajustar",    self.view.zoom_fit,   "zoom-fit")
         tb.addSeparator()
 
-        add_btn("OPEX extras…",    self.action_opex_extras)
-        add_btn("Solve balances",  self.action_solve)
-        add_btn("Setpoints…",      self.action_setpoints)
-        add_btn("DOF / Balance…",  self.action_dof)
+        add_btn("OPEX extras…",    self.action_opex_extras, "act-money")
+        add_btn("Solve balances",  self.action_solve,       "sim-run")
+        add_btn("Setpoints…",      self.action_setpoints,   "act-setpoint")
+        add_btn("DOF / Balance…",  self.action_dof,         "act-dof")
         # toggle del dock de tabla de corrientes (creado en
         # _build_streams_dock); toggleViewAction() ya viene cableado
         # para mostrar/ocultar y refleja el estado actual.
@@ -2775,24 +2797,30 @@ class FlowsheetMainWindow(QMainWindow):
             toggle = self.streams_dock.toggleViewAction()
             toggle.setText("Tabla de corrientes")
             toggle.setShortcut("Ctrl+T")
+            toggle.setIcon(_mk("wb-table", color=_ICON_COLOR, size=20))
             tb.addAction(toggle)
         # toggle del papel de dibujo PFD (marco + leyenda + cuadro de título)
         paper_act = QAction("Marco PFD", self)
         paper_act.setCheckable(True)
         paper_act.setShortcut("Ctrl+M")
         paper_act.triggered.connect(self.action_toggle_paper)
+        paper_act.setIcon(_mk("act-frame-pfd", color=_ICON_COLOR, size=20))
         tb.addAction(paper_act)
         self._paper_action = paper_act
-        add_btn("Calcular",        self.action_compute)
-        add_btn("Análisis económico →", self.action_launch_analysis)
+        add_btn("Calcular",        self.action_compute,           "sim-refresh")
+        add_btn("Análisis económico →", self.action_launch_analysis, "an-case-study")
         tb.addSeparator()
 
         # menú Exportar
         export_act = QAction("Exportar ▾", self)
+        export_act.setIcon(_mk("file-export", color=_ICON_COLOR, size=20))
         export_menu = QMenu(self)
-        export_menu.addAction("PDF…", self.action_export_pdf)
-        export_menu.addAction("SVG (vectorial)…", self.action_export_svg)
-        export_menu.addAction("PNG (alta resolución)…", self.action_export_png)
+        export_menu.addAction(_mk("file-print", color=_ICON_COLOR, size=18) or QIcon(),
+                                "PDF…", self.action_export_pdf)
+        export_menu.addAction(_mk("file-export", color=_ICON_COLOR, size=18) or QIcon(),
+                                "SVG (vectorial)…", self.action_export_svg)
+        export_menu.addAction(_mk("file-export", color=_ICON_COLOR, size=18) or QIcon(),
+                                "PNG (alta resolución)…", self.action_export_png)
         export_act.setMenu(export_menu)
         tb.addAction(export_act)
         ebtn = tb.widgetForAction(export_act)
