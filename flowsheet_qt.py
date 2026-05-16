@@ -1809,6 +1809,15 @@ class StreamItem(QGraphicsPathItem):
         # hasta que solve() corra y populé el status.
         self._status: str = "stale"
 
+        # Flag de hover para engrosar la línea al pasar mouse.
+        self._hovered: bool = False
+
+        # Flechas direccionales intermedias: pequeñas chevrons '>>' a
+        # lo largo del path indicando dirección del flujo (no solo
+        # al final).  QGraphicsPolygonItems separados, z entre línea
+        # y label.  Se actualizan en update_path.
+        self.direction_arrows: list = []
+
         # label estilo PFD industrial: pill (rounded rect blanco con
         # borde del color del stream) + nombre + flujo en mono.
         self.label_bg = _RoundedRectBody(0, 0, 10, 10)
@@ -1842,6 +1851,11 @@ class StreamItem(QGraphicsPathItem):
             if h.scene() is scene:
                 scene.removeItem(h)
         self._handles.clear()
+        # remover chevrons direccionales
+        for arr in self.direction_arrows:
+            if arr.scene() is scene:
+                scene.removeItem(arr)
+        self.direction_arrows.clear()
         for item in (self, self.arrow_head, self.label_bg,
                       self.label_name, self.label_flow):
             if item.scene() is scene:
@@ -1862,6 +1876,76 @@ class StreamItem(QGraphicsPathItem):
             return QColor("#9aa5b1")
         # status == "ok" o cualquier otro: color normal por role
         return QColor(STREAM_ROLE_COLORS.get(self.model.role, "#37474f"))
+
+    def hoverEnterEvent(self, event):
+        """Engrosa la línea al hover para feedback visual."""
+        self._hovered = True
+        self.update_path(rebuild_handles=False)
+        super().hoverEnterEvent(event)
+
+    def hoverLeaveEvent(self, event):
+        self._hovered = False
+        self.update_path(rebuild_handles=False)
+        super().hoverLeaveEvent(event)
+
+    def _draw_direction_arrows(self, pts: list):
+        """Dibuja pequeños chevrons '>' a lo largo del path indicando
+        dirección del flujo.  Espaciado aproximado: cada 130 px.
+
+        Limpia los chevrons previos y crea nuevos según los segmentos.
+        """
+        import math
+        # Limpiar previos
+        scene = self.scene()
+        for arr in self.direction_arrows:
+            if scene is not None and arr.scene() is scene:
+                scene.removeItem(arr)
+        self.direction_arrows.clear()
+        if scene is None or len(pts) < 4:
+            return
+        color = self._color()
+        # Calcular puntos cada ~130 px a lo largo del path
+        SPACING = 130.0
+        ARROW_SIZE = 5.0
+        WING = 3.5
+        # Acumular distancia y posicionar
+        seg_lengths = []
+        for i in range(0, len(pts) - 2, 2):
+            dx = pts[i+2] - pts[i]
+            dy = pts[i+3] - pts[i+1]
+            seg_lengths.append((math.hypot(dx, dy), dx, dy))
+        total = sum(L for L, _, _ in seg_lengths)
+        if total < SPACING:
+            return    # path corto: solo la flecha del final basta
+        # Colocar chevrons cada SPACING desde 0.4·SPACING (offset
+        # para no chocar con la pill central)
+        offset_dist = SPACING * 0.5
+        while offset_dist < total - 30:    # 30px margen al final
+            # Encontrar el segmento donde cae offset_dist
+            d_remaining = offset_dist
+            for i, (L, dx, dy) in enumerate(seg_lengths):
+                if d_remaining <= L:
+                    if L < 1e-3:
+                        continue
+                    ux, uy = dx / L, dy / L
+                    cx = pts[2*i] + ux * d_remaining
+                    cy = pts[2*i+1] + uy * d_remaining
+                    # chevron triangular apuntando en (ux, uy)
+                    nx, ny = -uy, ux  # perpendicular
+                    tip = QPointF(cx + ARROW_SIZE * ux, cy + ARROW_SIZE * uy)
+                    b1  = QPointF(cx - ARROW_SIZE * ux + WING * nx,
+                                    cy - ARROW_SIZE * uy + WING * ny)
+                    b2  = QPointF(cx - ARROW_SIZE * ux - WING * nx,
+                                    cy - ARROW_SIZE * uy - WING * ny)
+                    arr = QGraphicsPolygonItem(QPolygonF([tip, b1, b2]))
+                    arr.setBrush(QBrush(color))
+                    arr.setPen(QPen(Qt.NoPen))
+                    arr.setZValue(5.3)
+                    scene.addItem(arr)
+                    self.direction_arrows.append(arr)
+                    break
+                d_remaining -= L
+            offset_dist += SPACING
 
     def set_status(self, status: str):
         """Aplica status del solver y fuerza repintado (color de la línea
@@ -1988,6 +2072,9 @@ class StreamItem(QGraphicsPathItem):
         role = self.model.role
         width = {"feed": 2.4, "internal": 2.4, "product": 2.4,
                  "waste": 1.6, "utility": 1.4}.get(role, 2.0)
+        # Hover: engrosar línea +50% para feedback visual
+        if self._hovered:
+            width *= 1.5
         pen = QPen(color, width)
         pen.setCapStyle(Qt.FlatCap)
         pen.setJoinStyle(Qt.MiterJoin)
@@ -1998,6 +2085,8 @@ class StreamItem(QGraphicsPathItem):
             pen.setDashPattern([3.0, 3.0])
         self.setPen(pen)
         self._draw_arrow(path, pts[-2], pts[-1], pts[-4], pts[-3])
+        # Direction arrows intermedios (chevrons cada ~130 px)
+        self._draw_direction_arrows(pts)
 
         # ---- label (pill compacta: SÓLO número de corriente) ----
         name_text, flow_text = self._label_parts(s)
