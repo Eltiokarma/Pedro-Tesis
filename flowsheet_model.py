@@ -276,6 +276,18 @@ class Stream:
     pipe_length_m:    float = 0.0     # longitud equivalente m (0 = default 10)
     pipe_diameter_m:  float = 0.0     # diámetro interno m (0 = default 0.05 = 2")
     pipe_roughness_m: float = 4.5e-5  # rugosidad — acero comercial default
+    # Suma de K de accesorios (codos, válvulas, T, reducciones, etc).
+    # ΔP_local = K_total · ρ · v² / 2  (suma al ΔP friccional).
+    # Valores típicos (suma manual):
+    #   Codo 90° estándar: 0.75
+    #   Codo 45°: 0.35
+    #   Tee (paso recto): 0.6
+    #   Válvula globo abierta: 10
+    #   Válvula gate abierta: 0.17
+    #   Reducción gradual: 0.04
+    #   Expansión brusca: 1
+    #   Entrada brusca a tanque: 1
+    pipe_K_local:     float = 0.0     # K total de accesorios
 
     # caches del canvas Tk
     canvas_line:    Optional[int] = field(default=None, repr=False)

@@ -859,10 +859,40 @@ class StreamEditDialog(QDialog):
         self.pipe_eps.setValue(eps_mm)
         pipe_layout.addRow("Rugosidad ε:", self.pipe_eps)
 
+        self.pipe_K = QDoubleSpinBox()
+        self.pipe_K.setRange(0.0, 1000.0); self.pipe_K.setDecimals(2)
+        self.pipe_K.setSingleStep(0.5)
+        self.pipe_K.setValue(getattr(stream, "pipe_K_local", 0.0))
+        self.pipe_K.setToolTip(
+            "Σ de coeficientes K de accesorios (codos, válvulas, etc).\n"
+            "Valores típicos:\n"
+            "  Codo 90°: 0.75 | Tee paso: 0.6\n"
+            "  Vál. gate: 0.17 | Vál. globo: 10\n"
+            "  Reducción: 0.04 | Expansión: 1\n"
+            "Ej: 3 codos + 2 gates → K = 3·0.75 + 2·0.17 = 2.6"
+        )
+        pipe_layout.addRow("K local (accesorios):", self.pipe_K)
+
+        # Presión de la corriente (spec o calculada por solver)
+        self.p_edit = QDoubleSpinBox()
+        self.p_edit.setRange(0.001, 500.0); self.p_edit.setDecimals(3)
+        self.p_edit.setSingleStep(0.1); self.p_edit.setSuffix(" bar")
+        self.p_edit.setValue(getattr(stream, "pressure_bar", 1.013))
+        self.p_lock = QCheckBox("🔒")
+        self.p_lock.setToolTip("Marcar para FIJAR P (spec).  Sin marcar:\n"
+                                "el solver la calcula propagando ΔP por el flowsheet.")
+        self.p_lock.setChecked(getattr(stream, "pressure_locked", False))
+        from PySide6.QtWidgets import QHBoxLayout, QWidget
+        p_row = QWidget(); p_lay = QHBoxLayout(p_row)
+        p_lay.setContentsMargins(0,0,0,0)
+        p_lay.addWidget(self.p_lock); p_lay.addWidget(self.p_edit, 1)
+        pipe_layout.addRow("Presión:", p_row)
+
         hint_pipe = QLabel(
             "Defaults: 10 m, 50 mm (2\" Sch40), 0.045 mm (acero comercial).\n"
-            "ΔP se calcula con Darcy-Weisbach + Colebrook-White, usando\n"
-            "ρ y μ de la composición declarada.  Visible en panel de propiedades."
+            "ΔP = ΔP_fric + ΔP_local (K·ρ·v²/2).  ρ y μ de la composición.\n"
+            "Si declarás P lock, el solver propaga downstream por las\n"
+            "tuberías + ΔP de bombas/HX/columnas."
         )
         hint_pipe.setStyleSheet("color: #888; font-size: 8pt;")
         pipe_layout.addRow("", hint_pipe)
@@ -900,6 +930,9 @@ class StreamEditDialog(QDialog):
         self.stream.pipe_length_m = float(self.pipe_L.value())
         self.stream.pipe_diameter_m = float(self.pipe_D.value()) / 1000.0
         self.stream.pipe_roughness_m = float(self.pipe_eps.value()) / 1000.0
+        self.stream.pipe_K_local = float(self.pipe_K.value())
+        self.stream.pressure_bar = float(self.p_edit.value())
+        self.stream.pressure_locked = bool(self.p_lock.isChecked())
         # Setpoint: si la casilla está marcada, guarda T objetivo;
         # si no, -999 (centinela "sin setpoint").
         if self.sp_check.isChecked():
@@ -4796,12 +4829,24 @@ class FlowsheetMainWindow(QMainWindow):
                         txt += "\n\n─ Pérdida de carga (Darcy-Weisbach) ─"
                         L = s.pipe_length_m or 10.0
                         D = s.pipe_diameter_m or 0.050
+                        K = getattr(s, "pipe_K_local", 0) or 0
                         txt += f"\nL          {L:.1f} m"
                         txt += f"\nD          {D*1000:.0f} mm  ({D*39.37:.1f}\")"
+                        if K > 0:
+                            txt += f"\nK_local    {K:.2f}  (accesorios)"
                         txt += f"\nv          {dp_res['velocity_m_s']:.2f} m/s"
                         txt += f"\nRe         {dp_res['Re']:.0f}  ({dp_res['regime']})"
                         txt += f"\nf_Darcy    {dp_res['f_Darcy']:.4f}"
-                        txt += f"\nΔP         {dp_res['delta_P_bar']:.3f} bar  ({dp_res['delta_P_Pa']/1000:.1f} kPa)"
+                        dp_fric = dp_res.get('delta_P_fric_Pa', dp_res['delta_P_Pa']) / 1000
+                        dp_local = dp_res.get('delta_P_local_Pa', 0) / 1000
+                        if dp_local > 0:
+                            txt += f"\nΔP fric    {dp_fric:.2f} kPa"
+                            txt += f"\nΔP local   {dp_local:.2f} kPa"
+                        txt += f"\nΔP total   {dp_res['delta_P_bar']:.3f} bar  ({dp_res['delta_P_Pa']/1000:.1f} kPa)"
+                        if s.pressure_bar > 0 and s.pressure_bar != 1.013:
+                            txt += f"\nP corriente {s.pressure_bar:.3f} bar"
+                            if s.pressure_locked:
+                                txt += "  🔒"
                 except Exception:
                     pass
 

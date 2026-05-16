@@ -97,30 +97,37 @@ def pipe_pressure_drop(mass_flow_kg_s: float,
                         mu_Pa_s:       float,
                         diameter_m:    float,
                         length_m:      float,
-                        roughness_m:   float = 4.5e-5) -> Optional[Dict]:
+                        roughness_m:   float = 4.5e-5,
+                        K_local:       float = 0.0) -> Optional[Dict]:
     """Calcula la pérdida de carga ΔP en una tubería con flujo
-    mass_flow_kg_s, fluido (ρ, μ), geometría (D, L) y rugosidad ε.
+    mass_flow_kg_s, fluido (ρ, μ), geometría (D, L), rugosidad ε
+    y pérdidas locales K_local (Σ de Ks de accesorios).
 
-    Returns dict {ΔP_Pa, ΔP_bar, velocity_m_s, Re, f_Darcy} o None
-    si los inputs son inválidos.
+    ΔP_total = ΔP_fricción + ΔP_local
+      ΔP_fricción = f · (L/D) · (ρ v²/2)         (Darcy-Weisbach)
+      ΔP_local    = K_local · (ρ v²/2)           (pérdidas menores)
+
+    Returns dict {ΔP_Pa, ΔP_bar, ΔP_fric_Pa, ΔP_local_Pa,
+                    velocity_m_s, Re, f_Darcy, regime}.
     """
     if (mass_flow_kg_s <= 0 or rho_kg_m3 <= 0 or mu_Pa_s <= 0
             or diameter_m <= 0 or length_m <= 0):
         return None
-    # Velocidad: v = Q/A = (m/ρ) / (π D²/4)
     area_m2 = math.pi * diameter_m ** 2 / 4.0
     volumetric_flow_m3_s = mass_flow_kg_s / rho_kg_m3
     velocity = volumetric_flow_m3_s / area_m2
-    # Reynolds
     Re = reynolds(rho_kg_m3, velocity, diameter_m, mu_Pa_s)
-    # Factor de fricción
     eps_over_D = roughness_m / diameter_m
     f = colebrook_white(Re, eps_over_D)
-    # Darcy-Weisbach: ΔP = f · (L/D) · (ρ · v²/2)
-    dp_Pa = f * (length_m / diameter_m) * (rho_kg_m3 * velocity ** 2 / 2.0)
+    dyn_pressure = rho_kg_m3 * velocity ** 2 / 2.0
+    dp_fric = f * (length_m / diameter_m) * dyn_pressure
+    dp_local = K_local * dyn_pressure if K_local > 0 else 0.0
+    dp_total = dp_fric + dp_local
     return dict(
-        delta_P_Pa=dp_Pa,
-        delta_P_bar=dp_Pa / 1e5,
+        delta_P_Pa=dp_total,
+        delta_P_bar=dp_total / 1e5,
+        delta_P_fric_Pa=dp_fric,
+        delta_P_local_Pa=dp_local,
         velocity_m_s=velocity,
         Re=Re,
         f_Darcy=f,
@@ -247,4 +254,48 @@ def stream_pressure_drop(stream, pipe_length_m: float = None,
     if rho is None or rho <= 0:
         return None
     mu = _viscosity_Pa_s(comp, T_K, phase)
-    return pipe_pressure_drop(m_kg_s, rho, mu, D, L, eps)
+    K_local = getattr(stream, "pipe_K_local", 0.0) or 0.0
+    return pipe_pressure_drop(m_kg_s, rho, mu, D, L, eps, K_local)
+
+
+# ============================================================
+# Referencia de Ks típicos (para que el user los sume manualmente)
+# ============================================================
+
+K_TYPICAL = {
+    # Codos
+    "codo 90° estándar":         0.75,
+    "codo 90° radio largo":      0.45,
+    "codo 45°":                  0.35,
+    # Tees
+    "tee paso recto":            0.60,
+    "tee paso lateral":          1.80,
+    # Válvulas (totalmente abiertas)
+    "válvula gate":              0.17,
+    "válvula globo":            10.00,
+    "válvula angular":           5.00,
+    "válvula check (swing)":     2.50,
+    "válvula bola":              0.05,
+    "válvula mariposa":          0.45,
+    # Reducciones / expansiones
+    "reducción gradual":         0.04,
+    "reducción brusca":          0.50,
+    "expansión gradual":         0.20,
+    "expansión brusca":          1.00,
+    # Entradas / salidas
+    "entrada brusca a tanque":   1.00,
+    "entrada chamfered":         0.25,
+    "salida a tanque":           1.00,
+}
+
+
+def sum_K_from_accesories(accesories: dict) -> float:
+    """Helper para que el user sume K_local desde un dict de
+    accesorios:  {'codo 90° estándar': 3, 'válvula gate': 2}
+    → K_total = 3·0.75 + 2·0.17 = 2.59
+    """
+    total = 0.0
+    for name, count in accesories.items():
+        K = K_TYPICAL.get(name.lower(), 0.0)
+        total += K * count
+    return total
