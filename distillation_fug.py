@@ -467,3 +467,240 @@ def design_column(feed_composition: Dict[str, float],
         # Warnings
         warnings=warnings_list,
     )
+
+
+# ============================================================
+# Fenske-Hengstebeck — Distribución multicomponente
+# ============================================================
+
+def fenske_hengstebeck(alphas_to_HK: Dict[str, float],
+                       z: Dict[str, float],
+                       N_min: float,
+                       LK: str, HK: str,
+                       x_D_LK: float, x_B_LK: float) -> Dict[str, Dict[str, float]]:
+    """Distribución de todos los componentes entre destilado y fondo
+    usando Fenske-Hengstebeck.
+
+    Para los KEYS (LK, HK): las specs del user determinan la fracción
+    en cada producto (vía balance de materia).
+    Para los NO-KEYS: la fracción se calcula desde
+        log10(d_i/b_i) = log10(d_HK/b_HK) + N_min · log10(α_i,HK)
+
+    Args:
+        alphas_to_HK: {comp: α_i_to_HK}  (α_HK = 1.0 por convención)
+        z:           {comp: mol_frac feed}
+        N_min:       (from Fenske on keys)
+        LK, HK:      nombres de los key components
+        x_D_LK, x_B_LK: composición de LK en distillate y bottoms
+
+    Returns:
+        {'x_D': {comp: frac}, 'x_B': {comp: frac},
+         'D_over_F': float, 'B_over_F': float}
+    """
+    # Balance overall de LK: F·z_LK = D·x_D_LK + B·x_B_LK, F=D+B
+    #   → D/F = (z_LK - x_B_LK) / (x_D_LK - x_B_LK)
+    z_LK = z[LK]
+    if abs(x_D_LK - x_B_LK) < 1e-9:
+        return None
+    D_over_F = (z_LK - x_B_LK) / (x_D_LK - x_B_LK)
+    B_over_F = 1.0 - D_over_F
+    if D_over_F <= 0 or B_over_F <= 0:
+        return None
+    # Para HK: idéntico balance.  Necesitamos x_D_HK, x_B_HK.
+    # Asumimos que el resto del HK no se "pierde": x_B_HK = ?
+    # Si solo damos x_D_LK, x_B_LK, el HK queda determinado por balance:
+    #   z_HK = D_over_F · x_D_HK + B_over_F · x_B_HK
+    # Pero faltan x_D_HK y x_B_HK individualmente.  Usamos Hengstebeck:
+    # ratio d_HK/b_HK se obtiene del LK por Fenske inverso:
+    # (d_LK/b_LK) / (d_HK/b_HK) = α_LK_HK ^ N_min
+    # → d_HK/b_HK = (d_LK/b_LK) / α_LK_HK^N_min
+    alpha_LK = alphas_to_HK.get(LK, 1.0)
+    d_LK = D_over_F * x_D_LK
+    b_LK = B_over_F * x_B_LK
+    if b_LK <= 0 or d_LK <= 0:
+        return None
+    ratio_LK = d_LK / b_LK
+    ratio_HK = ratio_LK / (alpha_LK ** N_min)
+    # Componentes no-keys: ratio_i = α_i^N_min · ratio_HK
+    d_i = {}
+    b_i = {}
+    for c, alpha in alphas_to_HK.items():
+        if c == LK:
+            d_i[c] = d_LK
+            b_i[c] = b_LK
+            continue
+        r_i = (alpha ** N_min) * ratio_HK
+        # d_i + b_i = z_i (en feed basis F=1)
+        # d_i / b_i = r_i  →  d_i = r_i·b_i  →  b_i·(r_i+1) = z_i
+        z_i = z.get(c, 0.0)
+        if z_i <= 0:
+            d_i[c] = 0.0
+            b_i[c] = 0.0
+            continue
+        b_i[c] = z_i / (1 + r_i)
+        d_i[c] = r_i * b_i[c]
+
+    # Normalizar dentro de cada producto (D y B)
+    total_D = sum(d_i.values())
+    total_B = sum(b_i.values())
+    x_D_dict = {c: d / total_D for c, d in d_i.items() if total_D > 0}
+    x_B_dict = {c: b / total_B for c, b in b_i.items() if total_B > 0}
+    return dict(
+        x_D=x_D_dict,
+        x_B=x_B_dict,
+        D_over_F=total_D,        # = D/F real recalculado
+        B_over_F=total_B,
+    )
+
+
+# ============================================================
+# McCabe-Thiele — Solver riguroso binario stage-by-stage
+# ============================================================
+# Para sistema binario con NRTL: traza la línea de operación de
+# rectificación + stripping, y avanza etapa por etapa desde x_D
+# hasta x_B contando los saltos.  Devuelve N entero + tabla con
+# composiciones (x, y, T) por etapa.
+
+def mccabe_thiele(LK: str, HK: str,
+                   z_LK: float, x_D_LK: float, x_B_LK: float,
+                   R: float, q: float, P_bar: float,
+                   max_stages: int = 200) -> Optional[Dict]:
+    """Solver McCabe-Thiele binario con curva de equilibrio NRTL.
+
+    Args:
+        LK, HK:       componentes
+        z_LK:         frac mol feed LK
+        x_D_LK:       frac mol distillate LK (mayor que z)
+        x_B_LK:       frac mol bottoms LK (menor que z)
+        R:            reflux ratio operativo
+        q:            factor de feed (1=sat liq, 0=sat vap)
+        P_bar:        presión columna
+        max_stages:   límite máximo (default 200, para evitar bucles
+                      en specs imposibles)
+
+    Returns:
+        dict {N, N_feed, stages: list of (x_LK, y_LK, T_K)} o None.
+        N: etapas reales incluyendo reboiler
+        N_feed: etapa óptima del feed (1 = tope)
+        stages: tabla detallada del perfil de la columna
+    """
+    if not (x_B_LK < z_LK < x_D_LK):
+        return None
+    if R <= 0:
+        return None
+    # Línea de operación rectificación: y = (R/(R+1))·x + x_D/(R+1)
+    m_rect = R / (R + 1.0)
+    b_rect = x_D_LK / (R + 1.0)
+    # q-line: y = (q/(q-1))·x − z/(q-1)  si q≠1
+    # Intersección rect-line y q-line:
+    #   x_int = (b_rect + z_LK / (q-1)) / (q/(q-1) - m_rect)
+    # Caso q=1 (líquido sat): q-line vertical en x = z. Intersección
+    # rect-line a x=z: y = m_rect·z + b_rect.
+    if abs(q - 1.0) < 1e-6:
+        x_int = z_LK
+        y_int = m_rect * z_LK + b_rect
+    else:
+        m_q = q / (q - 1.0)
+        b_q = -z_LK / (q - 1.0)
+        # m_rect·x + b_rect = m_q·x + b_q → x = (b_q - b_rect)/(m_rect - m_q)
+        if abs(m_rect - m_q) < 1e-9:
+            return None
+        x_int = (b_q - b_rect) / (m_rect - m_q)
+        y_int = m_rect * x_int + b_rect
+    # Línea de stripping: pasa por (x_int, y_int) y (x_B, x_B)
+    if abs(x_int - x_B_LK) < 1e-9:
+        return None
+    m_strip = (y_int - x_B_LK) / (x_int - x_B_LK)
+    b_strip = x_B_LK - m_strip * x_B_LK
+    # Avanzar etapa por etapa desde (x_D, x_D) bajando por la curva de eq
+    try:
+        import nrtl
+    except ImportError:
+        return None
+    stages = []
+    x = x_D_LK
+    y = x_D_LK   # tope: y_top = x_D (condensador total)
+    N_feed = None
+    for step in range(max_stages):
+        # Etapa actual: dado y, encontrar x_equilibrium (curva NRTL inversa)
+        # Resolvemos: P_bar · y = γ_LK(x) · P_LK_sat(T_bub) · x_LK donde
+        # T_bub se ajusta a la composición x.
+        # Approach: dado y_LK = y, buscar x_LK tal que el bubble_point
+        # de [x_LK, 1-x_LK] dé y_LK = y.  Bisección.
+        if not (0 < y < 1):
+            return None
+        x_new = _find_x_from_y_eq(LK, HK, y, P_bar)
+        if x_new is None:
+            return None
+        # Get T de la etapa para tabla
+        T_stage = nrtl.bubble_point([LK, HK], [x_new, 1-x_new], P_bar)
+        T_stage_K = T_stage[0] if T_stage else None
+        stages.append((x_new, y, T_stage_K))
+        x = x_new
+        # ¿Llegamos al fondo?
+        if x <= x_B_LK + 1e-4:
+            break
+        # ¿Cambio de sección? Si x cae debajo de x_int, pasar a stripping
+        # y registrar N_feed si no se hizo antes.
+        if N_feed is None and x < x_int:
+            N_feed = len(stages)
+        # Próximo y desde la línea de operación apropiada
+        if x >= x_int:
+            y = m_rect * x + b_rect
+        else:
+            y = m_strip * x + b_strip
+    else:
+        # No llegó al x_B → specs imposibles (probable azeo)
+        return dict(N=max_stages, N_feed=N_feed or max_stages,
+                     stages=stages, converged=False)
+    return dict(
+        N=len(stages),
+        N_feed=N_feed or len(stages),
+        stages=stages,
+        converged=True,
+    )
+
+
+def _find_x_from_y_eq(LK: str, HK: str, y_LK: float,
+                       P_bar: float) -> Optional[float]:
+    """Inversa de y(x) en la curva VLE: dado y_LK, encontrar x_LK
+    tal que en equilibrio yL_K(x_LK) = y_LK.
+
+    Usa bubble_point + bisección.  Asume que la curva es monotónica
+    en x ∈ [x_B, x_D] (cierto fuera del azeotropo)."""
+    try:
+        import nrtl
+    except ImportError:
+        return None
+    # f(x) = y_predicted(x) - y_LK
+    def y_at_x(x):
+        if not (0 < x < 1):
+            return None
+        bp = nrtl.bubble_point([LK, HK], [x, 1 - x], P_bar)
+        if bp is None:
+            return None
+        return bp[1][0]   # y_LK
+
+    # Bisección en x ∈ (0.001, 0.999)
+    lo, hi = 0.001, 0.999
+    y_lo = y_at_x(lo); y_hi = y_at_x(hi)
+    if y_lo is None or y_hi is None:
+        return None
+    # y_LK creciente con x_LK (normal) o puede no ser monótona si azeo
+    # Asegurar que y_LK esté en el rango
+    if y_LK <= y_lo:
+        return lo
+    if y_LK >= y_hi:
+        return hi
+    for _ in range(60):
+        mid = 0.5 * (lo + hi)
+        y_mid = y_at_x(mid)
+        if y_mid is None:
+            return None
+        if abs(y_mid - y_LK) < 1e-5:
+            return mid
+        if y_mid < y_LK:
+            lo = mid
+        else:
+            hi = mid
+    return 0.5 * (lo + hi)
