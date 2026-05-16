@@ -4128,56 +4128,29 @@ class FlowsheetMainWindow(QMainWindow):
         self.scene.set_paper_visible(checked)
 
     def action_dof(self):
-        """Muestra análisis de grados de libertad + conflictos detectados.
-        Es el panel de diagnóstico del sudoku: te dice si tenés specs
-        suficientes, faltan, o sobran (y si las que pusiste son consistentes)."""
+        """Análisis estructural de grados de libertad (DOF audit).
+
+        Usa propagación topológica de masa + composición desde locks
+        del user: detecta streams que NO pueden determinarse, bloques
+        con ecuaciones de balance incompletas, y reactores isotermales
+        sin T_op_K.  Detecta REAL under-spec (a diferencia del análisis
+        per-bloque que sobre-estimaba)."""
         if not self.fs.blocks:
             QMessageBox.information(self, "DOF", "El diagrama está vacío.")
             return
-        rows = fsolv.analyze_dof(self.fs)
-        conflicts = fsolv.find_conflicts(self.fs)
+        import dof_audit as _da
+        report = _da.analyze_flowsheet(self.fs)
+        text = _da.format_report(report)
 
-        # Resumen general
-        n_ok       = sum(1 for r in rows if r["dof"] == 0)
-        n_under    = sum(1 for r in rows if r["dof"] > 0)
-        n_redund   = sum(1 for r in rows if r["dof"] < 0)
-        total_locked = sum(r["n_locked"] for r in rows)
-
-        lines = []
-        lines.append(f"=== RESUMEN ===")
-        lines.append(f"Bloques: {len(rows)}  · Locks totales: {total_locked}")
-        lines.append(f"  ✓ determinados: {n_ok}")
-        lines.append(f"  ⚠ underspec:    {n_under}  (faltan specs)")
-        lines.append(f"  ℹ redundantes:  {n_redund}  (specs extra, OK si consistentes)")
-        lines.append(f"  ✗ conflictos:   {len(conflicts)}")
-        lines.append("")
-        lines.append("=== POR BLOQUE ===")
-        for r in rows:
-            mark = {"OK (determined)":"✓",
-                    "underspec":"⚠",
-                    "redundant":"ℹ"}.get(r["status"].split(" ")[0] if " " in r["status"] else r["status"], "?")
-            # mejor:
-            if r["dof"] == 0:    mark = "✓"
-            elif r["dof"] > 0:   mark = "⚠"
-            else:                mark = "ℹ"
-            lines.append(f"  {mark} {r['block_name']:10} {r['eq_type'][:28]:28}  "
-                          f"locked={r['n_locked']:2}  {r['status']}")
-        if conflicts:
-            lines.append("")
-            lines.append("=== CONFLICTOS NUMÉRICOS ===")
-            for c in conflicts:
-                lines.append(f"  ✗ {c}")
-
-        # Mostrar en QMessageBox grande
         from PySide6.QtWidgets import QDialog, QVBoxLayout, QTextEdit, QDialogButtonBox
         dlg = QDialog(self)
-        dlg.setWindowTitle("DOF / Balance — análisis sudoku")
-        dlg.resize(720, 480)
+        dlg.setWindowTitle("Análisis estructural — DOF")
+        dlg.resize(820, 540)
         v = QVBoxLayout(dlg)
         txt = QTextEdit()
         txt.setReadOnly(True)
         txt.setStyleSheet("font-family: Consolas, monospace; font-size: 9pt;")
-        txt.setPlainText("\n".join(lines))
+        txt.setPlainText(text)
         v.addWidget(txt)
         btns = QDialogButtonBox(QDialogButtonBox.Close)
         btns.rejected.connect(dlg.reject)
