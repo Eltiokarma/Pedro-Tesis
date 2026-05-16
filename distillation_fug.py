@@ -230,14 +230,21 @@ def relative_volatility(LK: str, HK: str, x_vec: Dict[str, float],
         return None
     comp_LK = _td.get(LK)
     comp_HK = _td.get(HK)
-    if comp_LK is None or comp_HK is None:
+    # Si falta thermo_db para el LK: asumir no-volátil (P_LK = 0).
+    # Si falta para el HK: no podemos calcular α (división por 0).
+    if comp_HK is None:
         return None
-    # Pᵢ_sat en bar
     T_C = T_K - 273.15
-    P_LK = comp_LK.vapor_pressure_kPa(T_C)
     P_HK = comp_HK.vapor_pressure_kPa(T_C)
-    if P_LK is None or P_HK is None or P_HK <= 0:
+    if P_HK is None or P_HK <= 0:
         return None
+    if comp_LK is None:
+        # LK no en thermo_db: tratar como no-volátil
+        P_LK = 1e-10
+    else:
+        P_LK = comp_LK.vapor_pressure_kPa(T_C)
+        if P_LK is None or P_LK <= 0:
+            P_LK = 1e-10
     P_LK /= 100.0   # kPa → bar
     P_HK /= 100.0
     # γ via NRTL si hay parámetros, sino Raoult ideal (γ=1)

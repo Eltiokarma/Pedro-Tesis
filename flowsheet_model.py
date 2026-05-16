@@ -125,6 +125,27 @@ class Block:
     # Solo aplica si reactor_mode ∈ {'pfr', 'cstr'}.
     reactor_volume_L: float = 0.0
 
+    # ---- COLUMNA DE DESTILACIÓN (FUG / McCabe-Thiele, Capa 6) ----
+    # Si column_active es True y el bloque es tipo Tower/column, el
+    # solver computa AUTOMÁTICAMENTE las composiciones de los outputs
+    # (distillate y bottom) y los duties (Q_cond, Q_reb) desde el
+    # feed via FUG + Fenske-Hengstebeck.  Sin esto, el user debe
+    # declarar manualmente.
+    column_active:    bool  = False
+    column_LK:        str   = ""        # light key (más volátil)
+    column_HK:        str   = ""        # heavy key
+    column_x_D_LK:    float = 0.95      # pureza objetivo LK en destilado
+    column_x_B_LK:    float = 0.05      # frac LK en fondo (= 1 - recovery)
+    column_R_factor:  float = 1.3       # ratio R/R_min (1.2-1.5 típico)
+
+    # ---- FLASH DRUM (vessel con VLE, Capa 6) ----
+    # Si flash_active es True y el bloque es tipo Vessel, el solver
+    # calcula AUTOMÁTICAMENTE las composiciones de los outputs
+    # (vapor y líquido) usando flash isotérmico NRTL (γ·P_sat).
+    flash_active:  bool  = False
+    flash_T_K:     float = 298.15
+    flash_P_bar:   float = 1.013
+
     # caches del canvas Tk (no se serializan, no se usan en Qt)
     canvas_rect: Optional[int] = field(default=None, repr=False)
     canvas_text: Optional[int] = field(default=None, repr=False)

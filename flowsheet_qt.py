@@ -482,6 +482,100 @@ class BlockEditDialog(QDialog):
         eq_layout.addRow("", hint_rxn)
         layout.addRow(self.gb_eq)
 
+        # ---- Diseño de COLUMNA (FUG, Capa 6) ----
+        # Solo visible si el bloque es Tower/column.  Si activo, el
+        # solver computa automáticamente outputs y duties.
+        is_column = ("tower" in block.eq_type.lower()
+                      or "column" in block.eq_type.lower()
+                      or "destil" in block.eq_type.lower())
+        self.gb_col = QGroupBox("Columna de destilación (FUG/NRTL)")
+        self.gb_col.setVisible(is_column)
+        col_layout = QFormLayout(self.gb_col)
+
+        self.col_active = QCheckBox("Activar diseño automático (FUG)")
+        self.col_active.setToolTip(
+            "Si está activo, el solver computa composiciones de\n"
+            "distillate/bottom + Q_reb automáticamente desde el feed.\n"
+            "Si no: declarar outputs manualmente como hasta ahora."
+        )
+        self.col_active.setChecked(getattr(block, "column_active", False))
+        col_layout.addRow(self.col_active)
+
+        self.col_LK = QLineEdit(getattr(block, "column_LK", ""))
+        self.col_LK.setPlaceholderText("ethanol, methanol, propane, ...")
+        col_layout.addRow("Light key (LK):", self.col_LK)
+
+        self.col_HK = QLineEdit(getattr(block, "column_HK", ""))
+        self.col_HK.setPlaceholderText("water, butane, ...")
+        col_layout.addRow("Heavy key (HK):", self.col_HK)
+
+        self.col_xD = QDoubleSpinBox()
+        self.col_xD.setRange(0.01, 0.999); self.col_xD.setDecimals(4)
+        self.col_xD.setSingleStep(0.05)
+        self.col_xD.setValue(getattr(block, "column_x_D_LK", 0.95))
+        col_layout.addRow("x_D_LK (pureza dist):", self.col_xD)
+
+        self.col_xB = QDoubleSpinBox()
+        self.col_xB.setRange(0.0001, 0.5); self.col_xB.setDecimals(4)
+        self.col_xB.setSingleStep(0.01)
+        self.col_xB.setValue(getattr(block, "column_x_B_LK", 0.05))
+        col_layout.addRow("x_B_LK (en fondo):", self.col_xB)
+
+        self.col_Rf = QDoubleSpinBox()
+        self.col_Rf.setRange(1.05, 5.0); self.col_Rf.setDecimals(2)
+        self.col_Rf.setSingleStep(0.1)
+        self.col_Rf.setValue(getattr(block, "column_R_factor", 1.3))
+        col_layout.addRow("R / R_min:", self.col_Rf)
+
+        hint_col = QLabel(
+            "Si activo: el solver usa Fenske-Underwood-Gilliland-Kirkbride\n"
+            "para diseñar la columna y escribe outputs automáticamente.\n"
+            "Para multicomp (>2 keys), aplica Fenske-Hengstebeck.\n"
+            "Detecta azeotropos via NRTL (Capa 6)."
+        )
+        hint_col.setStyleSheet("color: #888; font-size: 8pt;")
+        col_layout.addRow("", hint_col)
+        layout.addRow(self.gb_col)
+
+        # ---- Flash drum (Vessel con VLE, Capa 6) ----
+        is_vessel = ("vessel" in block.eq_type.lower()
+                      or "tanque" in block.eq_type.lower()
+                      or "flash" in block.eq_type.lower())
+        self.gb_flash = QGroupBox("Flash isotérmico (VLE / NRTL)")
+        self.gb_flash.setVisible(is_vessel)
+        flash_layout = QFormLayout(self.gb_flash)
+
+        self.flash_active_cb = QCheckBox("Activar flash automático")
+        self.flash_active_cb.setToolTip(
+            "Si activo: el solver calcula V/F + composiciones x, y\n"
+            "usando flash isotérmico NRTL (Capa 6) a T_K, P_bar."
+        )
+        self.flash_active_cb.setChecked(getattr(block, "flash_active", False))
+        flash_layout.addRow(self.flash_active_cb)
+
+        self.flash_T = QDoubleSpinBox()
+        self.flash_T.setRange(200, 800); self.flash_T.setDecimals(2)
+        self.flash_T.setSingleStep(5.0)
+        self.flash_T.setSuffix(" K")
+        self.flash_T.setValue(getattr(block, "flash_T_K", 298.15))
+        flash_layout.addRow("T_flash:", self.flash_T)
+
+        self.flash_P = QDoubleSpinBox()
+        self.flash_P.setRange(0.01, 200.0); self.flash_P.setDecimals(3)
+        self.flash_P.setSingleStep(0.1)
+        self.flash_P.setSuffix(" bar")
+        self.flash_P.setValue(getattr(block, "flash_P_bar", 1.013))
+        flash_layout.addRow("P_flash:", self.flash_P)
+
+        hint_flash = QLabel(
+            "El solver separa vapor / líquido usando γ·P_sat (NRTL).\n"
+            "Asignación por puerto: 'vapor' → vapor output, 'liquido'\n"
+            "→ liquid output (sino, primer/segundo output)."
+        )
+        hint_flash.setStyleSheet("color: #888; font-size: 8pt;")
+        flash_layout.addRow("", hint_flash)
+        layout.addRow(self.gb_flash)
+
         # botones
         buttons = QDialogButtonBox(
             QDialogButtonBox.Ok | QDialogButtonBox.Cancel
@@ -517,6 +611,19 @@ class BlockEditDialog(QDialog):
             self.block.P_op_bar = float(self.p_op_edit.value())
             self.block.reactor_mode = self.mode_combo.currentData() or "equilibrium"
             self.block.reactor_volume_L = float(self.vol_edit.value())
+        # Column FUG
+        if hasattr(self, "gb_col") and self.gb_col.isVisible():
+            self.block.column_active = bool(self.col_active.isChecked())
+            self.block.column_LK = self.col_LK.text().strip()
+            self.block.column_HK = self.col_HK.text().strip()
+            self.block.column_x_D_LK = float(self.col_xD.value())
+            self.block.column_x_B_LK = float(self.col_xB.value())
+            self.block.column_R_factor = float(self.col_Rf.value())
+        # Flash drum
+        if hasattr(self, "gb_flash") and self.gb_flash.isVisible():
+            self.block.flash_active = bool(self.flash_active_cb.isChecked())
+            self.block.flash_T_K = float(self.flash_T.value())
+            self.block.flash_P_bar = float(self.flash_P.value())
 
 
 class StreamEditDialog(QDialog):
@@ -2891,6 +2998,9 @@ class FlowsheetMainWindow(QMainWindow):
         examples_menu.addAction(_ic_az,
             "Destilación azeotrópica etanol-agua (NRTL Capa 6)",
             make_loader("dist_eth_az"))
+        examples_menu.addAction(_ic_az,
+            "Reactor + flash + columna AUTOMÁTICOS (FUG + NRTL)",
+            make_loader("rxn_flash_col"))
         # Ícono del menú Ejemplos (templates)
         examples_act.setIcon(_mk("act-examples", color=_ICON_COLOR, size=20))
         examples_act.setMenu(examples_menu)
@@ -3237,6 +3347,9 @@ class FlowsheetMainWindow(QMainWindow):
             "dist_eth_az":  (TkEditor._example_distillation_ethanol_water,
                               "Destilación azeotrópica etanol-agua (NRTL Capa 6)",
                               "200 — Separación", "PFD-ETH-AZ-001"),
+            "rxn_flash_col": (TkEditor._example_reactor_flash_column,
+                               "Tren reactor + flash + columna AUTOMÁTICOS",
+                               "100 — Demo solver", "PFD-AUTO-001"),
         }
         entry = builder_map.get(key)
         if entry is None:

@@ -1339,6 +1339,273 @@ def solve_equilibrium_reactors(fs):
     return msgs
 
 
+def solve_columns(fs):
+    """Para cada bloque tipo Tower con column_active=True, computa
+    automáticamente las composiciones del distillate y el bottom usando
+    FUG + Fenske-Hengstebeck (Capa 6 NRTL).
+
+    El user declara solo: LK, HK, x_D_LK, x_B_LK, R_factor.
+    El solver calcula y escribe:
+      · x_D (composición multicomponente del distillate)
+      · x_B (composición del bottom)
+      · mass_flow de D y B (balance global)
+      · block.duty (= Q_reb + Q_cond, total externo)
+      · attribs informativos: column_N, column_R, column_N_feed
+
+    Skipea si:
+      · column_active = False
+      · falta LK o HK
+      · feed no tiene composición / mass_flow
+
+    Devuelve lista de mensajes.
+    """
+    try:
+        import distillation_fug as _fug
+    except ImportError:
+        return []
+    msgs = []
+    for b in fs.blocks.values():
+        if not getattr(b, "column_active", False):
+            continue
+        LK = getattr(b, "column_LK", "")
+        HK = getattr(b, "column_HK", "")
+        if not LK or not HK or LK == HK:
+            continue
+        ins  = [s for s in fs.streams.values() if s.dst == b.id]
+        outs = [s for s in fs.streams.values() if s.src == b.id]
+        if not ins or len(outs) < 2:
+            continue
+        # Feed: el primer input con composición y mass_flow > 0
+        feed = next((s for s in ins
+                       if s.mass_flow > 0 and (s.composition or {})),
+                      None)
+        if feed is None or LK not in feed.composition or HK not in feed.composition:
+            msgs.append(f"⚠ Column {b.name}: feed sin composición de "
+                         f"{LK} y {HK}, skip.")
+            continue
+
+        # Identificar distillate vs bottom — por nombre del puerto o
+        # por la composición declarada (más rica en LK → distillate).
+        # Si los outputs no tienen composition declarada, usar port:
+        #   src_port == 'vapor' o 'destilado' o 'tope' → distillate
+        dist_stream = None
+        bot_stream = None
+        for s_out in outs:
+            port = (s_out.src_port or "").lower()
+            if any(k in port for k in ("vapor", "dest", "tope", "top",
+                                          "shell_in", "cond_in")):
+                dist_stream = s_out
+            elif any(k in port for k in ("liq", "fondo", "bot", "reb",
+                                            "liq_in")):
+                bot_stream = s_out
+        if dist_stream is None or bot_stream is None:
+            # Fallback: si las composiciones declaradas tienen más LK,
+            # ese es el distillate
+            outs_with_comp = [s for s in outs if (s.composition or {}).get(LK, 0) > 0]
+            if len(outs_with_comp) >= 2:
+                outs_sorted = sorted(outs, key=lambda s: -((s.composition or {}).get(LK, 0)))
+                dist_stream = outs_sorted[0]
+                bot_stream = outs_sorted[1]
+            else:
+                # Heurística final: primer output = distillate, segundo = bottom
+                dist_stream = outs[0]
+                bot_stream = outs[1]
+
+        # Llamar al diseño FUG completo
+        T_feed_K = feed.temperature + 273.15
+        T_top_K  = dist_stream.temperature + 273.15 if dist_stream.temperature else T_feed_K - 10
+        T_bot_K  = bot_stream.temperature + 273.15 if bot_stream.temperature else T_feed_K + 20
+        try:
+            res = _fug.design_column(
+                feed_composition=feed.composition,
+                F=feed.mass_flow,
+                T_K=T_feed_K, P_bar=1.013,
+                light_key=LK, heavy_key=HK,
+                x_D_LK=b.column_x_D_LK,
+                x_B_LK=b.column_x_B_LK,
+                R_factor=b.column_R_factor,
+                q=1.0, T_top_K=T_top_K, T_bot_K=T_bot_K)
+        except Exception as e:
+            msgs.append(f"✗ Column {b.name}: error {type(e).__name__}: {e}")
+            continue
+        if res is None or res.get("N") is None:
+            msgs.append(f"✗ Column {b.name}: FUG no convergió")
+            continue
+
+        # Extender a multicomponente via Fenske-Hengstebeck si hay >2
+        # componentes en el feed
+        full_comp = feed.composition
+        if len(full_comp) > 2:
+            # Calcular α_i_to_HK para todos los componentes
+            alphas = {}
+            for comp in full_comp:
+                if comp == HK:
+                    alphas[comp] = 1.0
+                else:
+                    a = _fug.relative_volatility(comp, HK, full_comp,
+                                                   T_feed_K, 1.013)
+                    if a is not None:
+                        alphas[comp] = a
+                    else:
+                        alphas[comp] = 1.0   # fallback si NRTL falta
+            fh = _fug.fenske_hengstebeck(alphas, full_comp,
+                                            res["N_min"], LK, HK,
+                                            b.column_x_D_LK, b.column_x_B_LK)
+            if fh is not None:
+                x_D_full = fh["x_D"]
+                x_B_full = fh["x_B"]
+                D_F = fh["D_over_F"]
+                B_F = fh["B_over_F"]
+            else:
+                # Fallback binario
+                x_D_full = {LK: b.column_x_D_LK, HK: 1 - b.column_x_D_LK}
+                x_B_full = {LK: b.column_x_B_LK, HK: 1 - b.column_x_B_LK}
+                D_F = res["D"] / res["F"]
+                B_F = res["B"] / res["F"]
+        else:
+            x_D_full = res["x_D"]
+            x_B_full = res["x_B"]
+            D_F = res["D"] / res["F"]
+            B_F = res["B"] / res["F"]
+
+        # Escribir composiciones de outputs (sobreescribe ya que es
+        # auto-calculado por el solver — análogo a reactor)
+        dist_stream.composition = dict(x_D_full)
+        dist_stream.main_component = max(x_D_full, key=x_D_full.get)
+        if not _is_mass_locked(dist_stream):
+            dist_stream.mass_flow = feed.mass_flow * D_F
+
+        bot_stream.composition = dict(x_B_full)
+        bot_stream.main_component = max(x_B_full, key=x_B_full.get)
+        if not _is_mass_locked(bot_stream):
+            bot_stream.mass_flow = feed.mass_flow * B_F
+
+        # Duty del bloque: Q_reb + Q_cond (Q_cond es negativo).  Para
+        # columna adiabática, el "duty externo total" es Q_reb (el
+        # condensador es un HX separado en el flowsheet típicamente).
+        # Aquí asignamos Q_reb al bloque Tower (representa el calor
+        # neto consumido).
+        Q_total = (res.get("Q_reb_kW", 0) or 0)
+        if not _is_duty_locked(b):
+            b.duty = Q_total
+
+        # Atributos informativos (no persistidos, runtime)
+        b._column_N = res.get("N")
+        b._column_R = res.get("R")
+        b._column_N_feed = res.get("N_feed")
+        b._column_alpha_avg = res.get("alpha_avg")
+
+        msgs.append(
+            f"✓ Column {b.name}: N={res['N']:.1f}, R={res['R']:.2f}, "
+            f"Q_reb={Q_total:+.1f}kW, "
+            f"D={feed.mass_flow*D_F:.0f} B={feed.mass_flow*B_F:.0f}"
+        )
+        if res.get("warnings"):
+            for w in res["warnings"]:
+                msgs.append(f"⚠ Column {b.name}: {w[:120]}")
+    return msgs
+
+
+def solve_flashes(fs):
+    """Para cada bloque tipo Vessel con flash_active=True, computa
+    automáticamente las composiciones de salida vapor/líquido usando
+    flash isotérmico NRTL (Capa 6).
+
+    El user declara solo: T_K, P_bar.
+    El solver calcula:
+      · V/F (fracción vapor)
+      · x (líquido), y (vapor)
+      · mass_flow distribuido según VLE
+    """
+    try:
+        import nrtl as _nrtl
+    except ImportError:
+        return []
+    msgs = []
+    for b in fs.blocks.values():
+        if not getattr(b, "flash_active", False):
+            continue
+        ins  = [s for s in fs.streams.values() if s.dst == b.id]
+        outs = [s for s in fs.streams.values() if s.src == b.id]
+        if not ins or len(outs) < 2:
+            continue
+        feed = next((s for s in ins
+                       if s.mass_flow > 0 and (s.composition or {})), None)
+        if feed is None:
+            continue
+        names = list(feed.composition.keys())
+        if len(names) < 2:
+            continue
+        z = [feed.composition[c] for c in names]
+        T_K = b.flash_T_K or (feed.temperature + 273.15)
+        P_bar = b.flash_P_bar or 1.013
+        try:
+            res = _nrtl.flash_TP(names, z, T_K, P_bar)
+        except Exception as e:
+            msgs.append(f"✗ Flash {b.name}: {type(e).__name__}: {e}")
+            continue
+        if res is None:
+            msgs.append(f"⚠ Flash {b.name}: NRTL no convergió "
+                         f"(falta par binario?)")
+            continue
+
+        # Identificar vapor vs líquido por port o phase declarada
+        vap_out = next((s for s in outs
+                         if "vap" in (s.src_port or "").lower()
+                         or s.phase in ("vapor", "gas")), None)
+        liq_out = next((s for s in outs if s is not vap_out), None)
+        if vap_out is None:
+            vap_out, liq_out = outs[0], outs[1]
+        # Convertir mass fractions → mass_flow
+        V_frac = res["V_frac"]
+        # Para masa: necesitamos MW para convertir mol→mass
+        try:
+            import thermo_db as _td
+            mws = []
+            for c in names:
+                comp = _td.get(c)
+                mws.append(comp.mw if comp and comp.mw > 0 else 1.0)
+        except ImportError:
+            mws = [1.0] * len(names)
+        # Masas en cada fase (relativas a F mol totales = 1)
+        L_mass = sum((1 - V_frac) * res["x"][i] * mws[i] for i in range(len(names)))
+        V_mass = sum(V_frac * res["y"][i] * mws[i] for i in range(len(names)))
+        total_mass = L_mass + V_mass
+        if total_mass <= 0:
+            continue
+        L_frac_mass = L_mass / total_mass
+        V_frac_mass = V_mass / total_mass
+
+        # Composiciones de salida en mass fractions
+        x_mass = {names[i]: ((1 - V_frac) * res["x"][i] * mws[i] / L_mass)
+                   for i in range(len(names))} if L_mass > 0 else {}
+        y_mass = {names[i]: (V_frac * res["y"][i] * mws[i] / V_mass)
+                   for i in range(len(names))} if V_mass > 0 else {}
+
+        if vap_out is not None:
+            vap_out.composition = y_mass
+            vap_out.main_component = max(y_mass, key=y_mass.get) if y_mass else ""
+            vap_out.phase = "vapor"
+            if not _is_mass_locked(vap_out):
+                vap_out.mass_flow = feed.mass_flow * V_frac_mass
+            if not _is_temp_locked(vap_out):
+                vap_out.temperature = T_K - 273.15
+        if liq_out is not None:
+            liq_out.composition = x_mass
+            liq_out.main_component = max(x_mass, key=x_mass.get) if x_mass else ""
+            liq_out.phase = "liquid"
+            if not _is_mass_locked(liq_out):
+                liq_out.mass_flow = feed.mass_flow * L_frac_mass
+            if not _is_temp_locked(liq_out):
+                liq_out.temperature = T_K - 273.15
+
+        msgs.append(
+            f"✓ Flash {b.name}: V/F_mass={V_frac_mass:.3f}  T={T_K-273.15:.1f}°C  "
+            f"P={P_bar:.2f}bar"
+        )
+    return msgs
+
+
 def auto_propagate_compositions(fs):
     """Para cada bloque NO reactivo, calcula la composición de las
     salidas como promedio ponderado por mass_flow de las entradas.
@@ -1358,6 +1625,13 @@ def auto_propagate_compositions(fs):
         if b.heat_of_reaction != 0:
             continue
         if getattr(b, "reactions", None):
+            continue
+        # Skip columnas y flashes activos — sus outputs los escriben
+        # solve_columns / solve_flashes con composiciones específicas
+        # (no promedio ponderado).
+        if getattr(b, "column_active", False):
+            continue
+        if getattr(b, "flash_active", False):
             continue
         ins  = [s for s in fs.streams.values() if s.dst == b.id]
         outs = [s for s in fs.streams.values() if s.src == b.id]
@@ -1757,6 +2031,35 @@ def solve(fs, max_iter=MAX_ITER):
     for m in rxn_msgs:
         if m.startswith("✗") or m.startswith("⚠"):
             result.energy_balance_errors.append(m)
+
+    # 4cb. Unit ops automáticos (flashes y columnas) — loop topológico
+    #      para que cada unit op tenga su feed resuelto cuando se
+    #      ejecuta.  Repetimos hasta no haber cambios.
+    flash_msgs = []
+    col_msgs = []
+    for outer in range(5):
+        prev_count = sum(1 for s in fs.streams.values() if s.composition)
+        # Flash drums primero (típicamente downstream del reactor)
+        flash_msgs = solve_flashes(fs)
+        for _ in range(3):
+            if not _solve_mass_iteration(fs):
+                break
+        auto_propagate_compositions(fs)
+        # Columnas después (típicamente downstream del flash)
+        col_msgs = solve_columns(fs)
+        for _ in range(3):
+            if not _solve_mass_iteration(fs):
+                break
+        auto_propagate_compositions(fs)
+        new_count = sum(1 for s in fs.streams.values() if s.composition)
+        if new_count == prev_count:
+            break
+
+    for m in flash_msgs + col_msgs:
+        if m.startswith("✗"):
+            result.energy_balance_errors.append(m)
+        elif m.startswith("⚠"):
+            result.energy_warnings.append(m)
 
     # 4d. Auto-inferir duties de HX/equipos sin duty declarado, ahora
     #     que el reactor escribió T_out y composition.  only_zero=True

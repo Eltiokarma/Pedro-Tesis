@@ -144,7 +144,11 @@ def gamma(names: List[str], x_vec: List[float], T_K: float) -> List[float]:
     n = len(names)
     if n != len(x_vec) or n < 1:
         return None
-    # Construir matrices τ y G (n×n)
+    # Construir matrices τ y G (n×n).  Para pares sin NRTL, asumimos
+    # γ ≈ 1 (Raoult ideal): τ=0, G=1.  Esto degrada graciosamente
+    # cuando algún componente no tiene par binario en el catálogo
+    # — en vez de retornar None, devuelve γ_NRTL para los pares
+    # conocidos y γ=1 para los desconocidos.
     tau = [[0.0]*n for _ in range(n)]
     G   = [[1.0]*n for _ in range(n)]
     for i in range(n):
@@ -155,7 +159,8 @@ def gamma(names: List[str], x_vec: List[float], T_K: float) -> List[float]:
                 continue
             pair = _get_pair(names[i], names[j])
             if pair is None:
-                return None    # no hay datos para este par
+                # Sin par NRTL: τ=0, G=1 (asume Raoult para este par)
+                continue
             # _get_pair retorna A_12, A_21 con convención 1=i, 2=j
             # τ_ij usa A_12 (dirección i→j)
             tau[i][j] = pair['A_12'] / T_K + pair['B_12']
@@ -204,19 +209,26 @@ def activity_coeff_binary(names: List[str], x1: float, T_K: float) -> Optional[T
 
 def _Psat_bar(comp_name: str, T_K: float) -> Optional[float]:
     """Presión de saturación en bar para componente a T_K, usando
-    Antoine de thermo_db."""
+    Antoine de thermo_db.
+
+    Para componentes SIN Antoine (glucose, polímeros, sales, etc),
+    retorna 1e-10 — es decir, asume no-volátil.  En flash_TP esto
+    los manda 100% al líquido (V/F=0 contribution).  Mucho más útil
+    que retornar None y abortar el flash entero.
+    """
     try:
         import thermo_db as _td
     except ImportError:
         return None
     c = _td.get(comp_name)
     if c is None:
-        return None
-    # thermo_db.vapor_pressure_kPa(T_C)
+        # Componente no en thermo_db: tratar como no-volátil
+        return 1e-10
     T_C = T_K - 273.15
     p_kpa = c.vapor_pressure_kPa(T_C)
     if p_kpa is None or p_kpa <= 0:
-        return None
+        # Sin Antoine válido: no-volátil
+        return 1e-10
     return p_kpa / 100.0   # kPa → bar
 
 
