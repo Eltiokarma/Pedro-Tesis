@@ -4020,6 +4020,71 @@ class FlowsheetMainWindow(QMainWindow):
                 f"Entradas:  {len(ins)}  ({in_t:g} tm/año)\n"
                 f"Salidas:   {len(outs)} ({out_t:g} tm/año)"
             )
+            # ---- Diseño FUG automático para columnas ----
+            # Si el bloque es tipo Tower (column) y tiene streams in/out
+            # multicomponentes, llama a distillation_fug.design_column
+            # para mostrar N, R, duties estimados.
+            eq_lower = b.eq_type.lower()
+            is_column = ("tower" in eq_lower or "column" in eq_lower
+                          or "destil" in eq_lower)
+            if is_column and ins and outs:
+                feed = ins[0]
+                # Buscar dos productos con composición distinta para
+                # identificar el destilado y el fondo.
+                if (feed.composition and len(feed.composition) >= 2
+                        and len(outs) >= 2):
+                    dist_out = max(outs, key=lambda s: (s.composition or {}).get(
+                        max((feed.composition or {}).items(),
+                             key=lambda kv: kv[1])[0], 0.0))
+                    bot_out = next((s for s in outs if s is not dist_out), None)
+                    if bot_out and dist_out.composition and bot_out.composition:
+                        # Identificar LK (mayor en distillate) y HK (mayor en
+                        # bottom)
+                        d_top = max(dist_out.composition.items(),
+                                     key=lambda kv: kv[1])
+                        b_top = max(bot_out.composition.items(),
+                                     key=lambda kv: kv[1])
+                        LK = d_top[0]
+                        HK = b_top[0]
+                        if LK != HK and LK in feed.composition and HK in feed.composition:
+                            try:
+                                import distillation_fug as fug
+                                res = fug.design_column(
+                                    feed_composition=feed.composition,
+                                    F=feed.mass_flow,
+                                    T_K=feed.temperature + 273.15,
+                                    P_bar=1.013,
+                                    light_key=LK, heavy_key=HK,
+                                    x_D_LK=dist_out.composition.get(LK, 0.9),
+                                    x_B_LK=bot_out.composition.get(LK, 0.05),
+                                    R_factor=1.3,
+                                    T_top_K=dist_out.temperature + 273.15,
+                                    T_bot_K=bot_out.temperature + 273.15,
+                                )
+                                if res:
+                                    txt += "\n\n─ DISEÑO FUG (NRTL) ─"
+                                    txt += f"\nLK / HK    {LK} / {HK}"
+                                    txt += f"\nα tope     {res.get('alpha_top',0):.2f}"
+                                    txt += f"\nα fondo    {res.get('alpha_bot',0):.2f}"
+                                    txt += f"\nα promedio {res.get('alpha_avg',0):.2f}"
+                                    if res.get("N_min") is not None:
+                                        txt += f"\nN_min      {res['N_min']:.1f}  (Fenske)"
+                                    if res.get("R_min") is not None:
+                                        txt += f"\nR_min      {res['R_min']:.2f}  (Underwood)"
+                                    if res.get("R") is not None:
+                                        txt += f"\nR (1.3×min){res['R']:.2f}"
+                                    if res.get("N") is not None:
+                                        txt += f"\nN real     {res['N']:.1f}  (Gilliland)"
+                                    if res.get("N_feed") is not None:
+                                        txt += f"\nN_feed     {res['N_feed']:.1f}  (Kirkbride)"
+                                    if res.get("Q_cond_kW") is not None:
+                                        txt += f"\nQ_cond     {res['Q_cond_kW']:+.1f} kW"
+                                    if res.get("Q_reb_kW") is not None:
+                                        txt += f"\nQ_reb      {res['Q_reb_kW']:+.1f} kW"
+                                    for w in res.get("warnings", [])[:2]:
+                                        txt += f"\n{w[:120]}"
+                            except Exception:
+                                pass
             self.prop_label.setText(txt)
         elif isinstance(it, StreamItem):
             for other in self.scene.block_items.values():
