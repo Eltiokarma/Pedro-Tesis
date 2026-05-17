@@ -720,14 +720,36 @@ class StreamEditDialog(QDialog):
         self.stream = stream
         self.fs = fs
         self.setWindowTitle(f"Editar corriente — {stream.name}")
-        self.resize(500, 560)
+        # Tamaño: se ajusta al screen (max 90% del alto disponible),
+        # con scroll interno para ver TODAS las secciones aunque la
+        # pantalla sea chica.  Los botones OK/Cancel quedan fijos abajo.
+        from PySide6.QtWidgets import QScrollArea, QApplication
+        try:
+            scr = QApplication.primaryScreen().availableGeometry()
+            max_h = int(scr.height() * 0.90)
+        except Exception:
+            max_h = 600
+        self.resize(540, min(720, max_h))
+        self.setMinimumHeight(360)
 
         b_src = fs.blocks[stream.src]
         b_dst = fs.blocks[stream.dst]
         ports_src = list(ep.get_ports(b_src.eq_type).keys())
         ports_dst = list(ep.get_ports(b_dst.eq_type).keys())
 
-        layout = QFormLayout(self)
+        # Outer layout: vertical con scroll arriba + botones abajo
+        outer = QVBoxLayout(self)
+        outer.setContentsMargins(0, 0, 0, 0)
+        scroll = QScrollArea()
+        scroll.setWidgetResizable(True)
+        scroll.setFrameShape(QScrollArea.NoFrame)
+        outer.addWidget(scroll, 1)
+
+        # Form que vivirá dentro del scroll
+        form_widget = QWidget()
+        scroll.setWidget(form_widget)
+        layout = QFormLayout(form_widget)
+        layout.setContentsMargins(12, 12, 12, 12)
 
         # info read-only
         info = QLabel(f"<b>{stream.name}</b>:  {b_src.name}  →  {b_dst.name}")
@@ -967,13 +989,22 @@ class StreamEditDialog(QDialog):
         pipe_layout.addRow("", hint_pipe)
         layout.addRow(gb_pipe)
 
-        # botones
+        # ─── Botones OK/Cancel FUERA del scroll, siempre visibles ───
+        # antes estaban dentro del QFormLayout y se cortaban en
+        # pantallas chicas.  Ahora viven en el outer QVBoxLayout, así
+        # que se mantienen visibles aunque el contenido crezca.
         buttons = QDialogButtonBox(
             QDialogButtonBox.Ok | QDialogButtonBox.Cancel
         )
         buttons.accepted.connect(self.accept)
         buttons.rejected.connect(self.reject)
-        layout.addRow(buttons)
+        from PySide6.QtWidgets import QFrame
+        sep = QFrame()
+        sep.setFrameShape(QFrame.HLine)
+        sep.setStyleSheet("color: #ddd;")
+        outer.addWidget(sep)
+        outer.addWidget(buttons)
+        outer.setContentsMargins(0, 0, 0, 10)
 
     def _toggle_price(self, role_text):
         visible = role_text in ("feed", "product")

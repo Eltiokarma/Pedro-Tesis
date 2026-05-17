@@ -2124,33 +2124,66 @@ def auto_propagate_compositions(fs):
         outs = [s for s in fs.streams.values() if s.src == b.id]
         if not ins:
             continue
-        total_m = sum(s.mass_flow for s in ins if s.mass_flow > 0)
-        if total_m <= 0:
-            continue
-        # composición ponderada de inputs
-        agg = {}
-        for s in ins:
-            if s.mass_flow <= 0:
-                continue
-            w_stream = s.mass_flow / total_m
-            comp_dict = s.composition or {}
-            # si solo hay main_component, asumir 100% de ese
-            if not comp_dict and s.main_component:
-                comp_dict = {s.main_component: 1.0}
-            for comp, frac in comp_dict.items():
-                agg[comp] = agg.get(comp, 0.0) + w_stream * frac
-        # renormalizar por seguridad
-        total = sum(agg.values())
-        if total > 0:
-            agg = {k: v/total for k, v in agg.items()}
-        # aplicar a outputs sin composición declarada (sudoku: respeta locks)
-        for s_out in outs:
-            if _is_comp_locked(s_out):
-                continue
-            s_out.composition = dict(agg)
-            if not s_out.main_component and agg:
-                s_out.main_component = max(agg, key=agg.get)
-            changed += 1
+        # SEPARAR inputs proceso de inputs utility.  En un HX 4-port
+        # (cool_in/cool_out separados de proceso_in/proceso_out), o
+        # un reboiler con steam shell-side, los streams utility NO
+        # deben mezclarse con los del proceso al calcular composición
+        # del output proceso — sino contamina (ej. CW agua mezclada
+        # con syngas reactor genera comp con 80 % water absurdo).
+        ins_proc = [s for s in ins if s.role != "utility"]
+        ins_util = [s for s in ins if s.role == "utility"]
+        # outputs análogos (por nombre de puerto típico)
+        utility_port_kw = ("cool_out", "steam_out", "cool_in",
+                            "steam_in", "shell_in", "shell_out")
+        outs_util = [s for s in outs
+                       if any(k in (s.src_port or "").lower()
+                                for k in utility_port_kw)
+                       or s.role == "utility"]
+        outs_proc = [s for s in outs if s not in outs_util]
+
+        def _agg_comp(streams):
+            total_m = sum(s.mass_flow for s in streams if s.mass_flow > 0)
+            if total_m <= 0:
+                return None
+            agg = {}
+            for s in streams:
+                if s.mass_flow <= 0:
+                    continue
+                w_stream = s.mass_flow / total_m
+                comp_dict = s.composition or {}
+                if not comp_dict and s.main_component:
+                    comp_dict = {s.main_component: 1.0}
+                for comp, frac in comp_dict.items():
+                    agg[comp] = agg.get(comp, 0.0) + w_stream * frac
+            total = sum(agg.values())
+            if total > 0:
+                agg = {k: v/total for k, v in agg.items()}
+            return agg
+
+        # Propagar proceso → outputs proceso
+        agg_proc = _agg_comp(ins_proc) if ins_proc else _agg_comp(ins)
+        if agg_proc:
+            for s_out in outs_proc:
+                if _is_comp_locked(s_out):
+                    continue
+                s_out.composition = dict(agg_proc)
+                if not s_out.main_component and agg_proc:
+                    s_out.main_component = max(agg_proc, key=agg_proc.get)
+                changed += 1
+
+        # Propagar utility → outputs utility (mass-weighted de inputs
+        # utility solamente)
+        if outs_util and ins_util:
+            agg_util = _agg_comp(ins_util)
+            if agg_util:
+                for s_out in outs_util:
+                    if _is_comp_locked(s_out):
+                        continue
+                    s_out.composition = dict(agg_util)
+                    if not s_out.main_component and agg_util:
+                        s_out.main_component = max(agg_util,
+                                                     key=agg_util.get)
+                    changed += 1
     return changed
 
 
