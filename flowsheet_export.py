@@ -55,7 +55,7 @@ def _block_material(fs, block_id):
     return eq.suggested_material(comps, p_op_bar=p_op)
 
 
-def collect_equipment_rows(fs, year_target=2026):
+def collect_equipment_rows(fs, year_target=2024):
     """Lista de dicts con la info de cada bloque del PFD, para
     escribir como pestaña 'Equipment' en el xlsx.
 
@@ -135,7 +135,7 @@ def collect_equipment_rows(fs, year_target=2026):
 
 
 def compute_turton_costing(fs, df_variable, df_fixed, fci_musd,
-                            year_target=2026):
+                            year_target=2024):
     """Calcula resumen de costing Turton para sheet 'Costing Turton'.
 
     Reúne:
@@ -1008,10 +1008,10 @@ def write_project_xlsx(path, fs, isbl, feeds, products, base_xlsx=None):
     # escribir xlsx con 3 secciones + pestañas Equipment, Streams,
     # Costing Turton (resumen CBM por categoría + COM Eq 8.2) +
     # Income Statement año por año (P&L Turton Ch 9-10)
-    equipment_rows = collect_equipment_rows(fs, year_target=2026)
+    equipment_rows = collect_equipment_rows(fs, year_target=2024)
     stream_rows    = collect_stream_rows(fs)
     costing_data   = compute_turton_costing(
-        fs, df_variable, df_fixed, fci_musd=isbl, year_target=2026)
+        fs, df_variable, df_fixed, fci_musd=isbl, year_target=2024)
     income_rows    = compute_income_statement(
         revenue_usd_yr=costing_data["revenue"],
         crm=costing_data["crm"], cut=costing_data["cut"],

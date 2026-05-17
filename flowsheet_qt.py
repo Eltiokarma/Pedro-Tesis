@@ -4345,7 +4345,7 @@ class FlowsheetMainWindow(QMainWindow):
                 for b in self.fs.blocks.values()
             ]
             res = eq.lang_fci(equipos, plant_type="Fluid processing",
-                              year_target=2026)
+                              year_target=2024)
             isbl_mm = eq.isbl_implicito(res["FCI_MMUSD"], 0.30, 0.10, 0.10)
             feeds    = [s for s in self.fs.streams.values() if s.role == "feed"]
             products = [s for s in self.fs.streams.values() if s.role == "product"]
@@ -4515,7 +4515,7 @@ class FlowsheetMainWindow(QMainWindow):
                     for b in self.fs.blocks.values()
                 ]
                 res = eq.lang_fci(equipos, plant_type="Fluid processing",
-                                   year_target=2026)
+                                   year_target=2024)
                 isbl = eq.isbl_implicito(res["FCI_MMUSD"], 0.30, 0.10, 0.10)
             except Exception as e:
                 QMessageBox.critical(self, "Error de cálculo",

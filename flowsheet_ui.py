@@ -5553,7 +5553,7 @@ class FlowsheetEditor:
                         {"nombre": b.eq_type, "S": b.S, "n": b.n}
                         for b in self.fs.blocks.values()
                     ]
-                    res = eq.lang_fci(equipos, plant_type="Fluid processing", year_target=2026)
+                    res = eq.lang_fci(equipos, plant_type="Fluid processing", year_target=2024)
                     self._last_isbl = eq.isbl_implicito(res["FCI_MMUSD"], 0.30, 0.10, 0.10)
                     self._last_feeds    = [s for s in self.fs.streams.values() if s.role == "feed"]
                     self._last_products = [s for s in self.fs.streams.values() if s.role == "product"]

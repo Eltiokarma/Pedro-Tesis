@@ -11,14 +11,23 @@
 #   Turton et al. §7 (Estimation of Capital Costs).
 #   Towler & Sinnott §7.3 (Cost Indices).
 #
-# Los valores hasta 2022 son los publicados oficialmente
-# por Chemical Engineering Magazine.  Para años recientes
-# (2023+) los valores son los más actuales conocidos al
-# momento de escribir esto; verificalo con la publicación
-# anual de CE antes de defender tu tesis.
+# FUENTES de los valores:
+#   1985–2022: publicaciones anuales de Chemical Engineering
+#              Magazine (https://www.chemengonline.com).
+#   2023:      promedio anual oficial publicado en CE Magazine
+#              (consultado 2025-02).
+#   2024+:     NO hay valor anual oficial publicado al momento.
+#              Se utiliza nearest-neighbor (último anual oficial
+#              conocido) con warning explícito.  El usuario puede
+#              sobreescribir CEPCI[año] con un valor de mercado
+#              actualizado.
 # ======================================================
 
-# Annual average CEPCI values
+import warnings
+
+
+# Annual average CEPCI values — sólo cifras oficiales publicadas
+# por Chemical Engineering Magazine.  Sin estimados/placeholders.
 CEPCI = {
     1985: 325.0,
     1990: 357.6,
@@ -44,20 +53,23 @@ CEPCI = {
     2018: 603.1,
     2019: 607.5,
     2020: 596.2,
-    2021: 708.0,
-    2022: 816.0,
-    2023: 797.9,
-    2024: 800.0,   # estimado preliminar
-    2025: 810.0,   # estimado
-    2026: 820.0,   # proyectado (placeholder — actualizar)
+    2021: 708.0,    # final anual oficial CE Mag
+    2022: 816.0,    # final anual oficial CE Mag
+    2023: 797.9,    # final anual oficial CE Mag (consultado 2025-02)
+    # 2024+: SIN VALOR OFICIAL DISPONIBLE.  Cuando CE publique el
+    # promedio anual, agregar acá.  Mientras tanto _valor_cepci
+    # devuelve el último conocido (2023 = 797.9) con warning.
 }
 
 
-AÑO_BASE_DEFAULT = 2026
+# Año por defecto para escalar costos del proyecto.  Si tu
+# análisis requiere el año actual, sobreescribir o pasarlo
+# como year_target en las funciones de costing.
+AÑO_BASE_DEFAULT = 2024
 
 
 def años_disponibles():
-    """Lista de años con CEPCI disponible, ascendente."""
+    """Lista de años con CEPCI oficial disponible, ascendente."""
     return sorted(CEPCI.keys())
 
 
@@ -65,17 +77,15 @@ def factor_cepci(año_origen, año_destino):
     """Factor multiplicativo para llevar un costo del año
     origen al año destino.
 
-    Si alguno de los años no está en la tabla, hace
-    extrapolación lineal con el año más cercano (warning
-    silencioso; revisar la tabla manualmente para precisión).
+    Para años fuera de la tabla oficial:
+      · Entre años conocidos: interpolación lineal.
+      · Antes del primer año o después del último: nearest-neighbor
+        con warning explícito.
     """
-
     if año_origen == año_destino:
         return 1.0
-
     val_origen  = _valor_cepci(año_origen)
     val_destino = _valor_cepci(año_destino)
-
     return val_destino / val_origen
 
 
@@ -85,20 +95,42 @@ def ajustar_costo(costo, año_origen, año_destino):
 
 
 def _valor_cepci(año):
-    """Devuelve CEPCI[año].  Si no existe, hace lookup del
-    más cercano (sin interpolación lineal entre años
-    intermedios)."""
+    """Devuelve CEPCI[año] usando lookup directo si existe,
+    interpolación lineal entre años vecinos si está dentro del
+    rango oficial, o nearest-neighbor con warning si está fuera.
 
+    (Antes el docstring decía "sin interpolación lineal" pero el
+    código sí interpolaba — contradicción ahora resuelta:
+    interpola por defecto, documenta el comportamiento real, y
+    advierte explícitamente cuando hace nearest-neighbor en los
+    extremos.  Instrucciones §2.1.)
+    """
     if año in CEPCI:
         return CEPCI[año]
 
-    # nearest neighbor
     años = años_disponibles()
     if año < años[0]:
+        warnings.warn(
+            f"CEPCI: año {año} < primer año disponible ({años[0]}).  "
+            f"Usando valor de {años[0]} = {CEPCI[años[0]]} "
+            f"(nearest-neighbor, NO oficial para {año}).",
+            stacklevel=2,
+        )
         return CEPCI[años[0]]
     if año > años[-1]:
+        warnings.warn(
+            f"CEPCI: año {año} > último valor oficial ({años[-1]}).  "
+            f"Usando valor de {años[-1]} = {CEPCI[años[-1]]} "
+            f"(nearest-neighbor; Chemical Engineering Magazine no ha "
+            f"publicado promedio anual para {año} aún).  "
+            f"Para precisión, sobreescribir CEPCI[{año}] con un valor "
+            f"mensual reciente.",
+            stacklevel=2,
+        )
         return CEPCI[años[-1]]
-    # interpolación lineal entre años vecinos
+
+    # Interpolación lineal entre años vecinos (caso intermedio:
+    # años con valor oficial existente arriba y abajo).
     año_lo = max(a for a in años if a < año)
     año_hi = min(a for a in años if a > año)
     val_lo = CEPCI[año_lo]
