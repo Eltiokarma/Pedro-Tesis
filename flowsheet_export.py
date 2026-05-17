@@ -211,18 +211,35 @@ def compute_turton_costing(fs, df_variable, df_fixed, fci_musd,
         CUT_usd=cut, CRM_usd=crm, CWT_usd=cwt,
     )
 
+    # Defaults financieros y sensibilidad — desde econ_defaults
+    # (perfil activo: PE_2024 / USA_2024 / etc.)
+    try:
+        import econ_defaults as _ed
+        _fin  = _ed.get_financial()
+        _sens = _ed.get_sensitivity()
+        _years   = _fin["project_years"]
+        _tax     = _fin["tax_rate"]
+        _disc    = _fin["discount_rate"]
+        _f_low   = _sens["low_factor"]
+        _f_high  = _sens["high_factor"]
+    except Exception:
+        _years, _tax, _disc = 10, 0.30, 0.10
+        _f_low, _f_high     = 0.75, 1.25
+
     # Rentabilidad
     prof = eq.profitability_indicators(
         revenue_usd_yr=revenue, com_d_usd_yr=com["COM_d"],
-        fci_usd=fci_usd, years_op=10, tax_rate=0.30, disc_rate=0.10,
+        fci_usd=fci_usd, years_op=_years, tax_rate=_tax, disc_rate=_disc,
     )
 
-    # Sensibilidad ±25% en CAPEX y OPEX (AACE Class 4)
+    # Sensibilidad AACE Class 4 (±low/high del perfil)
     sens = {}
+    _pct_lo = int(round((1 - _f_low) * 100))
+    _pct_hi = int(round((_f_high - 1) * 100))
     for scen, cap_f, op_f in [
-        ("Bajo  (-25 % cap, -25 % op)", 0.75, 0.75),
-        ("Base  (mid case)",              1.00, 1.00),
-        ("Alto  (+25 % cap, +25 % op)", 1.25, 1.25),
+        (f"Bajo  (-{_pct_lo} % cap, -{_pct_lo} % op)", _f_low,  _f_low),
+        ("Base  (mid case)",                            1.00,   1.00),
+        (f"Alto  (+{_pct_hi} % cap, +{_pct_hi} % op)", _f_high, _f_high),
     ]:
         fci_s = fci_usd * cap_f
         com_s = (eq.cost_of_manufacture(
@@ -233,7 +250,7 @@ def compute_turton_costing(fs, df_variable, df_fixed, fci_musd,
         rev_s = revenue * op_f
         prof_s = eq.profitability_indicators(
             revenue_usd_yr=rev_s, com_d_usd_yr=com_s, fci_usd=fci_s,
-            years_op=10, tax_rate=0.30, disc_rate=0.10,
+            years_op=_years, tax_rate=_tax, disc_rate=_disc,
         )
         sens[scen] = prof_s
 
@@ -287,9 +304,9 @@ def compute_turton_costing(fs, df_variable, df_fixed, fci_musd,
                   f"{revenue:>14,.0f} USD/yr"))
     rows.append(("  Gross profit (Rev - COM_d)", "",
                   f"{prof['Gross profit']:>14,.0f} USD/yr"))
-    rows.append(("  Depreciación (lineal 10 yr)", "",
+    rows.append((f"  Depreciación (lineal {_years} yr)", "",
                   f"{prof['Depreciation']:>14,.0f} USD/yr"))
-    rows.append(("  Tax (30 %)",         "",
+    rows.append((f"  Tax ({_tax*100:.0f} %)",         "",
                   f"{prof['Tax (30%)']:>14,.0f} USD/yr"))
     rows.append(("  Net profit (post-tax)", "",
                   f"{prof['Net profit']:>14,.0f} USD/yr"))
@@ -300,7 +317,7 @@ def compute_turton_costing(fs, df_variable, df_fixed, fci_musd,
                   f"{pbp:>14.2f} años" if pbp != float('inf') else "n/a"))
     rows.append(("  ROI %",                "",
                   f"{prof['ROI %']:>14.1f} %"))
-    rows.append(("  NPV (10 yr, 10 %)",      "",
+    rows.append((f"  NPV ({_years} yr, {_disc*100:.0f} %)", "",
                   f"{prof['NPV']:>14,.0f} USD"))
     irr = prof['IRR %']
     rows.append(("  IRR %",                "",
@@ -317,11 +334,18 @@ def compute_turton_costing(fs, df_variable, df_fixed, fci_musd,
                       f"{ps['NPV']:>14,.0f}",
                       f"{pbp_str} / {irr_str}"))
     rows.append(("", "", ""))
+    # Footer con parámetros usados — desde econ_defaults perfil activo
+    try:
+        import econ_defaults as _ed
+        _prof_name = _ed.active_profile()
+    except Exception:
+        _prof_name = "PE_2024"
     rows.append(("Año CEPCI", "", str(year_target)))
     rows.append(("Año base Turton", "", "2001 (CEPCI=397)"))
-    rows.append(("Hurdle rate (NPV)", "", "10 %"))
-    rows.append(("Horizonte (NPV)",   "", "10 años"))
-    rows.append(("Tax rate",          "", "30 %"))
+    rows.append(("Hurdle rate (NPV)", "", f"{_disc*100:.0f} %"))
+    rows.append(("Horizonte (NPV)",   "", f"{_years} años"))
+    rows.append(("Tax rate",          "", f"{_tax*100:.0f} %"))
+    rows.append(("Perfil econ.",      "", _prof_name))
 
     return {
         "rows":       rows,

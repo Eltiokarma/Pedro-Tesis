@@ -3773,6 +3773,7 @@ class FlowsheetMainWindow(QMainWindow):
         anim_act.triggered.connect(self.toggle_animation)
         tb.addAction(anim_act)
         add_btn("Calcular",        self.action_compute,           "sim-refresh")
+        add_btn("Perfil econ.…",         self.action_econ_profile,    "act-money")
         add_btn("Análisis económico →", self.action_launch_analysis, "an-case-study")
         tb.addSeparator()
 
@@ -4345,6 +4346,84 @@ class FlowsheetMainWindow(QMainWindow):
         # los cambios se reflejan en self.fs.opex_extras dentro del dialog
         self._update_status()
         self.end_action("Editar OPEX extras", before)
+
+    def action_econ_profile(self):
+        """Selector de perfil económico (Perú / USA / Chile / EU /
+        custom).  Reemplaza los hardcodes de Labor, prices y tasas.
+        Los cambios afectan el próximo "Análisis económico →"."""
+        import econ_defaults as ed
+        from PySide6.QtWidgets import (QDialog, QVBoxLayout, QFormLayout,
+                                          QComboBox, QDoubleSpinBox, QLabel,
+                                          QDialogButtonBox, QGroupBox,
+                                          QTextEdit)
+        dlg = QDialog(self)
+        dlg.setWindowTitle("Perfil económico activo")
+        dlg.resize(560, 540)
+        v = QVBoxLayout(dlg)
+
+        # Selector de perfil
+        v.addWidget(QLabel(
+            "El perfil define salario/operador, precios de utilities y "
+            "tasas financieras.\nAfecta a todos los costing/profitability "
+            "calcs.  Editá econ_defaults.py para ajustar tu mercado real."))
+        form = QFormLayout()
+        combo = QComboBox()
+        combo.addItems(list(ed.PROFILES.keys()))
+        combo.setCurrentText(ed.active_profile())
+        form.addRow("Perfil:", combo)
+        v.addLayout(form)
+
+        # Preview del perfil
+        preview = QTextEdit()
+        preview.setReadOnly(True)
+        preview.setStyleSheet("font-family: Consolas, monospace; "
+                                "font-size: 9pt;")
+
+        def _refresh_preview(name):
+            p = ed.load_profile(name)
+            lines = [f"PERFIL: {name}\n" + "─" * 50,
+                      "\nLABOR"]
+            for k, val in p["labor"].items():
+                lines.append(f"  {k:32} = {val}")
+            lines.append("\nFINANCIAL")
+            for k, val in p["financial"].items():
+                lines.append(f"  {k:32} = {val}")
+            lines.append("\nUTILITY PRICES")
+            for k, vd in p["utility_prices"].items():
+                lines.append(f"  {k:14} = {vd['price']:>10} {vd.get('unit','')}/u")
+            lines.append("\nCAPITAL FRACTIONS")
+            for k, val in p["capital_fracs"].items():
+                lines.append(f"  {k:32} = {val*100:>5.1f} %")
+            lines.append("\nFCOP FRACTIONS (Turton §8.2)")
+            for k, val in p["fcop_fracs"].items():
+                lines.append(f"  {k:32} = {val*100:>5.1f} %")
+            lines.append("\nSENSITIVITY")
+            for k, val in p["sensitivity"].items():
+                lines.append(f"  {k:32} = {val}")
+            preview.setPlainText("\n".join(lines))
+
+        _refresh_preview(ed.active_profile())
+        combo.currentTextChanged.connect(_refresh_preview)
+        v.addWidget(preview)
+
+        btns = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
+        btns.accepted.connect(dlg.accept)
+        btns.rejected.connect(dlg.reject)
+        v.addWidget(btns)
+
+        if dlg.exec() == QDialog.Accepted:
+            new_profile = combo.currentText()
+            ed.set_active_profile(new_profile)
+            # Refrescar precios en equipment_ports.UTILITIES
+            try:
+                import equipment_ports as ep
+                ep.refresh_utility_prices()
+            except Exception:
+                pass
+            self.status.showMessage(
+                f"Perfil económico cambiado a {new_profile}.  El "
+                f"próximo análisis económico usará los nuevos valores.",
+                6000)
 
     def action_launch_analysis(self):
         """Genera xlsx temporal y lanza ANA.py como subprocess.

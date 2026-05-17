@@ -475,11 +475,11 @@ def bare_module_cost(eq_nombre, S, P_op_bar=1.0, year_target=None,
 # ======================================================
 # GRASS ROOTS CAPITAL (Turton Eq 7.10)
 # ======================================================
-def grass_roots_capital(sum_cbm_usd, contingency_frac=0.18,
-                         aux_facilities_frac=0.50):
+def grass_roots_capital(sum_cbm_usd, contingency_frac=None,
+                         aux_facilities_frac=None):
     """Turton 7.10:  CGR = ΣCBM + contingency + auxiliary facilities
 
-    Defaults:
+    Defaults (desde econ_defaults perfil activo):
       · contingency = 18 % de ΣCBM (Turton estándar)
       · auxiliary   = 50 % de ΣCBM (site prep, services, offsites)
 
@@ -488,6 +488,17 @@ def grass_roots_capital(sum_cbm_usd, contingency_frac=0.18,
 
     Returns:
         dict con breakdown y CGR total."""
+    if contingency_frac is None or aux_facilities_frac is None:
+        try:
+            import econ_defaults as _ed
+            cf = _ed.get_capital_fracs()
+            if contingency_frac is None:
+                contingency_frac = cf["cgr_contingency_pct"]
+            if aux_facilities_frac is None:
+                aux_facilities_frac = cf["cgr_aux_facilities_pct"]
+        except Exception:
+            if contingency_frac is None:    contingency_frac    = 0.18
+            if aux_facilities_frac is None: aux_facilities_frac = 0.50
     contingency    = contingency_frac    * sum_cbm_usd
     aux_facilities = aux_facilities_frac * sum_cbm_usd
     cgr            = sum_cbm_usd + contingency + aux_facilities
@@ -505,18 +516,29 @@ def grass_roots_capital(sum_cbm_usd, contingency_frac=0.18,
 # INDICADORES DE RENTABILIDAD (Turton Ch 9-10)
 # ======================================================
 def profitability_indicators(revenue_usd_yr, com_d_usd_yr, fci_usd,
-                              years_op=10, tax_rate=0.30,
-                              disc_rate=0.10):
+                              years_op=None, tax_rate=None,
+                              disc_rate=None):
     """Calcula indicadores económicos clásicos a partir de:
         revenue_usd_yr:  ingresos anuales (Σ products + byproducts vendibles)
         com_d_usd_yr:    cost of manufacture con depreciación (Turton 8.2)
         fci_usd:         fixed capital investment (CGR o ISBL+OSBL)
 
-    Defaults razonables:
-        years_op=10 yr, tax_rate=30 %, disc_rate=10 % (hurdle típico)
+    Defaults (desde econ_defaults perfil activo):
+        years_op=10 yr, tax_rate=30 %, disc_rate=10 % (hurdle típico PE)
 
     Returns:
         dict con Gross/Net profit, Cash flow, Payback, ROI, NPV."""
+    if years_op is None or tax_rate is None or disc_rate is None:
+        try:
+            import econ_defaults as _ed
+            fin = _ed.get_financial()
+            if years_op  is None: years_op  = fin["project_years"]
+            if tax_rate  is None: tax_rate  = fin["tax_rate"]
+            if disc_rate is None: disc_rate = fin["discount_rate"]
+        except Exception:
+            if years_op  is None: years_op  = 10
+            if tax_rate  is None: tax_rate  = 0.30
+            if disc_rate is None: disc_rate = 0.10
     gross_profit = revenue_usd_yr - com_d_usd_yr
     # Depreciación lineal (Turton § 9.3 usa MACRS, acá simple)
     depreciation = fci_usd / max(years_op, 1)

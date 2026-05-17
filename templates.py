@@ -19,6 +19,16 @@ import pandas as pd
 # ======================================================
 
 def template_capital():
+    # Defaults desde econ_defaults.py (perfil activo) — antes hardcoded.
+    try:
+        import econ_defaults as _ed
+        cf = _ed.get_capital_fracs()
+        osbl_pct = cf["OSBL_pct_of_ISBL"]   * 100
+        eng_pct  = cf["engineering_pct"]    * 100
+        cont_pct = cf["contingency_pct"]    * 100
+        wc_pct   = cf["working_capital_pct"] * 100
+    except Exception:
+        osbl_pct, eng_pct, cont_pct, wc_pct = 30.0, 10.0, 10.0, 15.0
     return pd.DataFrame({
         "Concept": [
             "ISBL Capital Cost",
@@ -35,11 +45,9 @@ def template_capital():
             "% of FCI",
         ],
         "Value": [
-            10.0,   # ISBL típico para planta MYPE
-            30.0,   # Towler: 0.3 × ISBL para projects estándar
-            10.0,   # Towler: 0.10 × (ISBL+OSBL)
-            10.0,   # Towler: 0.10 × (ISBL+OSBL) (clase 4)
-            15.0,   # Towler: 0.15 × FCI (planta continua)
+            10.0,        # ISBL placeholder — el PFD lo sobrescribe con
+                          # el valor de lang_fci / CGR cuando importa.
+            osbl_pct, eng_pct, cont_pct, wc_pct,
         ],
     })
 
@@ -52,6 +60,27 @@ def template_capital():
 # ======================================================
 
 def template_fixed():
+    # Labor placeholder: el PFD inyecta el valor Turton-real
+    # (operadores × salario del perfil activo) via write_project_xlsx.
+    # Si no se importa de PFD, el user puede editar.  Los %
+    # vienen de econ_defaults perfil activo.
+    try:
+        import econ_defaults as _ed
+        f = _ed.get_fcop_fracs()
+        sup  = f["supervision_pct"]      * 100
+        ovh  = f["salary_overhead_pct"]  * 100
+        maint= f["maintenance_pct"]      * 100
+        po   = f["plant_overhead_pct"]   * 100
+        ti   = f["tax_insurance_pct"]    * 100
+        int_ = f["interest_pct"]         * 100
+        ge   = f["general_expenses_pct"] * 100
+        roy  = f["royalties_pct"]        * 100
+        # Labor placeholder = 10 operadores × salario perfil activo
+        labor_placeholder = 10 * _ed.get_labor()["salary_per_operator_usd_yr"]
+    except Exception:
+        sup, ovh, maint, po, ti, int_, ge, roy = (
+            25.0, 50.0, 4.0, 50.0, 2.0, 8.0, 1.0, 0.0)
+        labor_placeholder = 250_000.0
     return pd.DataFrame({
         "Concept": [
             "Labor",
@@ -76,15 +105,8 @@ def template_fixed():
             "% of Revenue",
         ],
         "Value": [
-            500_000.0,   # labor (Turton: ~50 operadores × $20-30k típico)
-            25.0,        # Turton: 0.25 × Labor
-            50.0,        # Turton: 0.5 × (Labor + Supervision)
-            4.0,         # Turton: 0.04 × FCI (planta continua)
-            50.0,        # Turton: 0.5 × (Labor + Maintenance)
-            2.0,         # Turton: 0.02 × (ISBL + OSBL)
-            8.0,         # Towler: 8% costo de capital
-            1.0,         # Turton: 1% de WC
-            0.0,         # Royalties: 0% default (variable según licencia)
+            labor_placeholder,
+            sup, ovh, maint, po, ti, int_, ge, roy,
         ],
     })
 

@@ -446,9 +446,16 @@ LABOR_CLASSIFICATION = {
 # default para los que no estén en el dict arriba: non-particulate
 DEFAULT_LABOR_CLASS = "non-particulate"
 
-# parámetros Turton
-TURTON_SHIFT_FACTOR  = 4.5     # turnos × cobertura para operación 24/7
-TURTON_SALARY_USD_YR = 25_000  # salario operador industrial Perú (sueldo + cargas)
+# parámetros Turton — defaults vienen de econ_defaults.py (perfil activo).
+# Acá quedan como aliases para back-compat con código que importaba estos
+# nombres directo; las funciones de costing los releen del profile.
+try:
+    import econ_defaults as _econ
+    TURTON_SHIFT_FACTOR  = _econ.get_labor()["shift_factor"]
+    TURTON_SALARY_USD_YR = _econ.get_labor()["salary_per_operator_usd_yr"]
+except Exception:
+    TURTON_SHIFT_FACTOR  = 4.5
+    TURTON_SALARY_USD_YR = 25_000
 
 
 def labor_class_for(eq_type):
@@ -475,8 +482,12 @@ def count_for_labor(blocks):
     return P, Nnp, excl
 
 
-def turton_operators(blocks):
+def turton_operators(blocks, shift_factor=None):
     """Operadores por turno (Nol) y totales año.
+
+    Args:
+        blocks:        iterable de bloques con .eq_type y .n
+        shift_factor:  default desde econ_defaults (4.5 PE)
 
     Returns:
         dict con keys:
@@ -485,9 +496,14 @@ def turton_operators(blocks):
           'n_total'                     — operadores totales año (int)
     """
     import math
+    if shift_factor is None:
+        try:
+            shift_factor = _econ.get_labor()["shift_factor"]
+        except Exception:
+            shift_factor = TURTON_SHIFT_FACTOR
     P, Nnp, excluded = count_for_labor(blocks)
     Nol = math.sqrt(6.29 + 31.7 * P * P + 0.23 * Nnp)
-    n_total = math.ceil(Nol * TURTON_SHIFT_FACTOR)
+    n_total = math.ceil(Nol * shift_factor)
     return {
         "P":         P,
         "Nnp":       Nnp,
@@ -497,13 +513,25 @@ def turton_operators(blocks):
     }
 
 
-def turton_labor_cost(blocks, salary_per_op=TURTON_SALARY_USD_YR):
+def turton_labor_cost(blocks, salary_per_op=None, shift_factor=None):
     """Costo anual de mano de obra según Turton.
 
+    Args:
+        blocks:        iterable de bloques
+        salary_per_op: USD/yr por operador.  Default: econ_defaults
+                       (perfil activo).
+        shift_factor:  default: econ_defaults.
+
     Returns:
-        dict con keys de turton_operators + 'labor_usd_yr'.
+        dict con keys de turton_operators + 'salary_per_op' +
+        'labor_usd_yr'.
     """
-    res = turton_operators(blocks)
+    if salary_per_op is None:
+        try:
+            salary_per_op = _econ.get_labor()["salary_per_operator_usd_yr"]
+        except Exception:
+            salary_per_op = TURTON_SALARY_USD_YR
+    res = turton_operators(blocks, shift_factor=shift_factor)
     res["salary_per_op"] = salary_per_op
     res["labor_usd_yr"]  = res["n_total"] * salary_per_op
     return res
@@ -587,6 +615,37 @@ UTILITIES = {
         "efficiency": 0.85,    # eficiencia eléctrica del motor + driver
     },
 }
+
+
+# Re-inyectar PRECIOS desde econ_defaults.py (perfil activo) — así el
+# user cambia de PE_2024 a USA_2024 y los precios se actualizan sin
+# tocar este módulo.  Las propiedades termodinámicas (delta_h, T_range,
+# efficiency) son leyes físicas y permanecen hardcoded acá.
+try:
+    _prices_overrides = _econ.get_utility_prices()
+    for _k, _pdict in _prices_overrides.items():
+        if _k in UTILITIES:
+            UTILITIES[_k]["price"] = float(_pdict.get("price",
+                                                       UTILITIES[_k]["price"]))
+            if "unit" in _pdict and UTILITIES[_k].get("units") != _pdict["unit"]:
+                UTILITIES[_k]["units"] = _pdict["unit"]
+except Exception:
+    pass
+
+
+def refresh_utility_prices():
+    """Re-aplica precios desde econ_defaults (perfil activo).  Llamar
+    si el usuario cambia el perfil en runtime."""
+    try:
+        prices = _econ.get_utility_prices()
+        for k, pdict in prices.items():
+            if k in UTILITIES:
+                UTILITIES[k]["price"] = float(pdict.get("price",
+                                                         UTILITIES[k]["price"]))
+                if "unit" in pdict and UTILITIES[k].get("units") != pdict["unit"]:
+                    UTILITIES[k]["units"] = pdict["unit"]
+    except Exception:
+        pass
 
 
 # Equipos cuyo "duty" es POTENCIA ELÉCTRICA (kW eléctricos),
