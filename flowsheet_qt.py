@@ -4557,9 +4557,14 @@ class FlowsheetMainWindow(QMainWindow):
             return
 
         # lanzar ANA.py como subprocess
-        cmd = [sys.executable, "ANA.py", "--import", tmp_path]
+        # Preferir el nuevo ana_qt (PySide6, look unificado con SVG icons).
+        # Fallback a ANA.py (Tkinter legacy) si ana_qt no está disponible.
+        cwd = os.path.dirname(os.path.abspath(__file__))
+        if os.path.exists(os.path.join(cwd, "ana_qt.py")):
+            cmd = [sys.executable, "ana_qt.py", "--import", tmp_path]
+        else:
+            cmd = [sys.executable, "ANA.py", "--import", tmp_path]
         try:
-            cwd = os.path.dirname(os.path.abspath(__file__))
             subprocess.Popen(cmd, cwd=cwd)
         except Exception as e:
             QMessageBox.critical(self, "Falló el lanzamiento",
