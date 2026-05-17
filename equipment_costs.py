@@ -332,7 +332,13 @@ B1_B2_BY_CATEGORIA = {
     "Fired heaters":       (0.96, 1.21),
     "Pumps":               (1.89, 1.35),
     "Compressors":         (0.00, 2.70),   # sold modular: FBM = B2·FM·FP
-    "Reactors":            (4.00, 0.00),   # custom — FBM ≈ 4.0 CS
+    # Reactors: Turton 5ª trata reactores químicos como recipientes
+    # a presión (process vessels) — su FBM depende de FM y FP, no es
+    # constante.  Usamos los B1/B2 de "Vessels" (vertical/horizontal)
+    # según Tabla A.4.  Antes era (4.00, 0.00) → FBM constante = 4.0
+    # subestimaba reactores a alta presión / material corrosivo.
+    # (Instrucciones §1.2)
+    "Reactors":            (2.25, 1.82),   # = vessels Tabla A.4
     "Storage":             (1.00, 0.50),
     "Vessels":             (2.25, 1.82),
     "Trays / packing":     (1.00, 1.00),
@@ -801,15 +807,27 @@ def info(nombre):
 # ======================================================
 
 def purchased_cost(nombre, S, year_target=None):
-    """Calcula Cp° (purchased cost a CS y atm) para `nombre`
-    con tamaño S.
+    """Calcula Cp° (purchased cost a CS y atm) para `nombre` con
+    tamaño S, usando log10(Cp°) = K1 + K2·log10(S) + K3·log10(S)²
+    (Turton 5ª Ec. 7.1, Apéndice A.1).
 
-    Si year_target es dado, el resultado queda escalado
-    por CEPCI al año destino.  Default: año base (2001).
+    IMPORTANTE — extrapolación fuera de rango:
+        Turton publica K1/K2/K3 con un rango de validez (S_min, S_max)
+        — las regresiones log-cuadráticas NO son válidas fuera de ese
+        rango (pueden dar costos negativos o irrealmente altos).
+        Cuando S ∈/ [S_min, S_max] se computa el valor de todos modos
+        para no romper el pipeline, pero el flag `fuera_rango=True`
+        se propaga y se emite UserWarning explícito.  El user puede
+        atrapar el warning con `warnings.catch_warnings()` o leer el
+        flag en el dict de retorno.  (Instrucciones §1.4)
 
-    Devuelve dict con:
-        Cp_base, Cp_target, year_base, year_target,
-        cepci_factor, fuera_rango (bool), S, S_min, S_max
+    Si year_target es dado, el resultado se escala por CEPCI al
+    año destino.  Default: año base (2001, CEPCI=397).
+
+    Returns:
+        dict con Cp_base, Cp_target, year_base, year_target,
+        cepci_factor, fuera_rango (bool), warning_msg (str si fuera
+        de rango), S, S_min, S_max, S_unit.
     """
 
     spec = EQUIPMENT_DATA[nombre]
@@ -822,6 +840,16 @@ def purchased_cost(nombre, S, year_target=None):
     Cp_base = 10 ** log_cp  # USD a CEPCI=397
 
     fuera = (S < spec["S_min"]) or (S > spec["S_max"])
+    warning_msg = ""
+    if fuera:
+        warning_msg = (
+            f"{nombre}: S={S} {spec['S_unit']} fuera del rango "
+            f"Turton 5ª válido [{spec['S_min']}, {spec['S_max']}] "
+            f"{spec['S_unit']}.  Cp° extrapolado — costo NO confiable. "
+            f"Considerar usar otra clase de equipo o N unidades en paralelo."
+        )
+        import warnings
+        warnings.warn(warning_msg, UserWarning, stacklevel=2)
 
     if year_target is None:
         year_target = 2001
@@ -838,6 +866,7 @@ def purchased_cost(nombre, S, year_target=None):
         "year_target":  year_target,
         "cepci_factor": factor,
         "fuera_rango":  fuera,
+        "warning_msg":  warning_msg,
         "S":            S,
         "S_min":        spec["S_min"],
         "S_max":        spec["S_max"],
