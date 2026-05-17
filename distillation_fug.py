@@ -387,15 +387,23 @@ def design_column(feed_composition: Dict[str, float],
         return dict(warnings=warnings_list + ["Fenske falló"])
 
     # ---- Underwood: R_min ----
-    # Para versión binaria simplificada:
-    #   R_min = (1/(α-1)) · (x_D_LK / z_LK - α · x_D_HK / z_HK)
-    # Para multicomp: Σ αᵢ·x_D_i / (αᵢ-θ) = R_min + 1
-    # Usamos versión simplificada binaria (más robusta sin solver)
+    # Fórmula binaria correcta (Henley-Seader / Turton 5ª §11.4)
+    # para feed saturated liquid q=1:
+    #
+    #   R_min = (1/(α-1)) · [ x_D / z_F − α·(1-x_D) / (1-z_F) ]
+    #
+    # expresada en términos del componente ligero (LK), donde x_D y
+    # z_F son fracciones del LK en distillate y feed respectivamente.
+    # (Instrucciones §5.1: la versión "simplificada" anterior mezclaba
+    # x_D_LK, x_D_HK, z_LK, z_HK incorrectamente.)
+    #
+    # Para feed no saturado (q≠1) y para multicomp usar underwood(...)
+    # multicomponente — siempre correcto para 2+ componentes.
     R_min_bin = (1.0 / (alpha_avg - 1.0)) * (
-        x_D_LK / z_LK - alpha_avg * x_D_HK / z_HK
+        x_D_LK / z_LK - alpha_avg * (1.0 - x_D_LK) / (1.0 - z_LK)
     )
     if R_min_bin < 0:
-        R_min_bin = 0.05    # mínimo práctico
+        R_min_bin = 0.05    # caso límite: separación trivial
 
     # ---- R real = R_factor × R_min ----
     R = R_factor * R_min_bin

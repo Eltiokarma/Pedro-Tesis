@@ -105,6 +105,40 @@ class TestUnderwoodBinario(unittest.TestCase):
         )
 
 
+class TestUnderwoodBinarioDesignColumn(unittest.TestCase):
+    """Verifica la versión binaria simplificada DENTRO de design_column
+    (la que se usa en el flujo standard del solver).
+
+    Caso: benceno/tolueno, z_LK=0.50, x_D_LK=0.95, x_B_LK=0.05,
+    α_avg=2.5, feed sat. liq. q=1.
+
+    Fórmula correcta (Henley-Seader / Turton 5ª §11.4):
+        R_min = (1/(α-1)) · [ x_D/z − α·(1-x_D)/(1-z) ]
+              = (1/1.5)   · [ 0.95/0.5 − 2.5·0.05/0.5 ]
+              = (1/1.5)   · [ 1.90 − 0.25 ]
+              = 1.10
+    """
+
+    def test_design_column_binario(self):
+        import distillation_fug as df
+        res = df.design_column(
+            feed_composition={"benzene": 0.50, "toluene": 0.50},
+            F=1000.0, T_K=370.0, P_bar=1.013,
+            light_key="benzene", heavy_key="toluene",
+            x_D_LK=0.95, x_B_LK=0.05, R_factor=1.5, q=1.0,
+        )
+        if res is None or res.get("R_min") is None:
+            self.skipTest("design_column requiere NRTL pairs benzene/toluene")
+            return
+        R_min = res["R_min"]
+        R_min_expected = 1.10
+        self.assertTrue(
+            abs(R_min - R_min_expected) / R_min_expected < 0.05,
+            f"R_min design_column: esperado {R_min_expected:.3f}, "
+            f"obtenido {R_min:.3f}"
+        )
+
+
 class TestFenske(unittest.TestCase):
     """Turton 5ª ed Ec. 11.55: Fenske N_min para alta pureza.
 
