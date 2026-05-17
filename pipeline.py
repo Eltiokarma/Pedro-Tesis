@@ -39,12 +39,13 @@ import indicators
 
 
 _STREAM_TO_BUCKET = {
-    "Key Products": "key_products",
-    "By-products": "byproducts",
-    "Waste Streams": "byproducts",
-    "Raw Materials": "raw_materials",
-    "Consumables": "consumables",
-    "Utilities": "utilities",
+    "Key Products":      "key_products",
+    "By-products":       "byproducts",
+    "Waste Streams":     "byproducts",
+    "Waste / Byproduct": "byproducts",     # nuevo: bucket del export PFD
+    "Raw Materials":     "raw_materials",
+    "Consumables":       "consumables",
+    "Utilities":         "utilities",
 }
 
 

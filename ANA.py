@@ -468,14 +468,15 @@ def ImportarProyecto(archivo=None):
         # ==================================================
 
         STREAM_MAP = {
-
+            # Códigos A-F del formato legacy
             "A": "Key Products",
             "B": "By-products",
             "C": "Waste Streams",
             "D": "Raw Materials",
             "E": "Consumables",
-            "F": "Utilities"
-
+            "F": "Utilities",
+            # Aliases del export PFD nuevo (write_project_xlsx)
+            "Waste / Byproduct": "Waste Streams",   # → bucket byproducts
         }
 
         df_variable["stream"] = (
@@ -580,6 +581,36 @@ def ImportarProyecto(archivo=None):
             END,
             f"Workspace Rows     : {len(engine.df_internal)}\n"
         )
+
+        # ── Breakdown por bucket (sanity check post-import) ─────
+        # Antes el user no veía si los productos llegaron como
+        # Key Products o si se perdieron en mapping de streams.
+        # Acá se muestra el conteo y revenue total por bucket.
+        try:
+            bucket_count = {}
+            bucket_value = {}
+            for _, _row in df_variable.iterrows():
+                _stream = str(_row.get("stream", "")).strip()
+                _flow   = float(_row.get("flowrate", 0) or 0)
+                _price  = float(_row.get("price usd/units", 0) or 0)
+                bucket_count[_stream] = bucket_count.get(_stream, 0) + 1
+                bucket_value[_stream] = bucket_value.get(_stream, 0) + _flow * _price
+            ConsolaResultados.insert(
+                END, "\nStream buckets imported:\n")
+            for _bk in sorted(bucket_count.keys()):
+                ConsolaResultados.insert(
+                    END,
+                    f"  · {_bk:22} {bucket_count[_bk]:>3} rows  "
+                    f"= ${bucket_value[_bk]:>14,.0f}/yr\n"
+                )
+            if "Key Products" not in bucket_count:
+                ConsolaResultados.insert(
+                    END,
+                    "  ⚠ NO 'Key Products' → revenue=0, todos los "
+                    "indicadores económicos saldrán negativos.\n",
+                )
+        except Exception:
+            pass
 
         ConsolaResultados.config(state="disabled")
 
