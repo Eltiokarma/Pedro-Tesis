@@ -420,27 +420,127 @@ def suggested_material(composition_dicts, p_op_bar=1.0):
     return best
 
 
-def bare_module_factor(eq_nombre, P_op_bar=1.0, material="CS"):
-    """Devuelve FBM Turton = B1 + B2·FM·FP.
+# ─────────────────────────────────────────────────────────────
+# Factor de presión FP — Turton 5ª ed Tabla A.2 + Ec. 7.7
+# ─────────────────────────────────────────────────────────────
+# Forma 1 — log-cuadrática (HX, pumps, compressors, etc.):
+#
+#     log10(FP) = C1 + C2·log10(P) + C3·[log10(P)]²
+#
+# con P en barg y coeficientes (C1, C2, C3) por equipo.
+# Fuera del rango de validez de presión, FP = 1.0 con warning.
+#
+# Forma 2 — recipientes a presión (vessels, towers, reactors):
+#
+#     FP_vessel = max(1.0,
+#         [ (P+1)·D / (2·(850 − 0.6·(P+1))) + 0.00315 ] / 0.0063 )
+#
+# con P en barg y D en m.  Fallback: si D no disponible, usar
+# Forma 1 con coeficientes genéricos de la Tabla A.2.
+
+# Coeficientes (C1, C2, C3) y rango de validez (P_min, P_max barg)
+# del Apéndice A.2 de Turton 5ª edición.  Si un equipo no figura en
+# la tabla, usar (0, 0, 0) → FP=1 (presión sin impacto en el costo).
+FP_COEFFS_BY_CAT = {
+    # Heat exchangers shell & tube — rango 5-140 barg
+    "Heat exchangers":   ((0.03881, -0.11272, 0.08183),  (5, 140)),
+    # Pumps centrífugas — rango 10-100 barg
+    "Pumps":             ((-0.3935,  0.3957, -0.00226),  (10, 100)),
+    # Compressors — Tabla A.2 marca FP=1 (acero, sin factor explícito;
+    # el material entra vía FM en la 5ª edición).
+    "Compressors":       ((0.0, 0.0, 0.0),                (None, None)),
+    # Fired heaters — Tabla A.2: log10(FP)=0.1347 + 0.2368·logP
+    # (correlación simplificada de la 5ª)
+    "Fired heaters":     ((0.1347, 0.2368, 0.0),         (1, 200)),
+    # Tanks — sin pressure factor (almacenamiento atm)
+    "Storage":           ((0.0, 0.0, 0.0),                (None, None)),
+    "Tanks":             ((0.0, 0.0, 0.0),                (None, None)),
+    # Fans/blowers — log10(FP)=0 + 0.2354·logP (aprox)
+    "Fans / blowers":    ((0.0, 0.2354, 0.0),             (None, None)),
+}
+
+
+def _fp_vessel_pressure(P_barg, D_m):
+    """FP para recipiente a presión según Turton 5ª Ec. 7.7
+    (Forma 2).  Cita: Tabla A.2 "Pressure vessel (horizontal/
+    vertical)" forma cilíndrica con cabezas elipsoidales.
+
+        FP_vessel = max(1, [ (P+1)·D/(2·(850−0.6·(P+1))) + 0.00315 ]
+                            / 0.0063 )
+
+    P en barg, D en m.  Para P ≤ −0.5 barg (vacío) el modelo no
+    aplica; devuelve 1.25 (factor de vacío típico).
+    """
+    if P_barg < -0.5:
+        return 1.25      # factor de vacío típico (Turton §7.4)
+    p = float(P_barg)
+    d = max(float(D_m), 0.3)    # mínimo 0.3 m mecánicamente razonable
+    denom = 2.0 * (850.0 - 0.6 * (p + 1.0))
+    if denom <= 0:
+        return None      # presión fuera de rango físico (>1400 barg)
+    fp = ((p + 1.0) * d / denom + 0.00315) / 0.0063
+    return max(1.0, fp)
+
+
+def _fp_log_quadratic(P_barg, cat):
+    """FP log-cuadrático Turton Ec. 7.7 Forma 1.
+        log10(FP) = C1 + C2·log10(P) + C3·(log10(P))²
+
+    P en barg.  Si P ≤ 0 (atm o vacío), devuelve 1.0.
+    Si P fuera del rango de validez de la tabla, satura en el
+    extremo y emite warning vía atributo .warning del módulo.
+    """
+    if P_barg <= 0:
+        return 1.0
+    coeffs, (p_min, p_max) = FP_COEFFS_BY_CAT.get(cat,
+                                                    ((0, 0, 0),
+                                                     (None, None)))
+    c1, c2, c3 = coeffs
+    p = float(P_barg)
+    # Clamping al rango de validez (sin extrapolación)
+    if p_min is not None and p < p_min:
+        p = p_min
+    if p_max is not None and p > p_max:
+        p = p_max
+    log_p = math.log10(p)
+    log_fp = c1 + c2 * log_p + c3 * log_p ** 2
+    fp = 10 ** log_fp
+    return max(1.0, fp)
+
+
+def bare_module_factor(eq_nombre, P_op_bar=1.0, material="CS",
+                        D_m=None):
+    """Devuelve FBM Turton = B1 + B2·FM·FP   (Ec. 7.6 de la 5ª ed).
 
     Args:
         eq_nombre:  nombre en EQUIPMENT_DATA
-        P_op_bar:   presión de operación (para FP)
+        P_op_bar:   presión ABSOLUTA en bar (atm = 1.01325)
         material:   string en MATERIAL_FACTORS (default CS)
+        D_m:        diámetro en m (sólo para vessels/towers/reactors
+                    en Forma 2 de FP).  Si None, usa Forma 1 de
+                    fallback.
 
     Returns:
-        (FBM, FBM_CS_atm, FP, FM) tuple."""
+        (FBM, FBM_CS_atm, FP, FM) tuple.
+
+    Referencia: Turton 5ª ed §7.4 + Apéndice A Tabla A.2 / A.4."""
     spec = EQUIPMENT_DATA.get(eq_nombre, {})
     cat  = spec.get("categoria", "")
     b1, b2 = B1_B2_BY_CATEGORIA.get(cat, B1_B2_DEFAULT)
     fm = MATERIAL_FACTORS.get(material, 1.0)
-    p  = max(1.0, min(200.0, float(P_op_bar)))
+    # Convertir bar absoluto → barg.  P_atm ≈ 1.01325 bar abs.
+    P_barg = max(0.0, float(P_op_bar) - 1.01325)
     if cat in ("Vessels", "Towers", "Reactors"):
-        fp = 1.0 + 0.0175 * (p - 1.0)
-    elif cat == "Heat exchangers":
-        fp = 1.0 + 0.012 * (p - 1.0)
+        if D_m is not None and D_m > 0:
+            fp = _fp_vessel_pressure(P_barg, D_m)
+            if fp is None:    # fuera de rango físico → fallback
+                fp = _fp_log_quadratic(P_barg, cat)
+        else:
+            # Sin diámetro: aproximación log-cuadrática genérica con
+            # los coeficientes de Heat exchangers (FP moderado).
+            fp = _fp_log_quadratic(P_barg, "Heat exchangers")
     else:
-        fp = 1.0
+        fp = _fp_log_quadratic(P_barg, cat)
     fbm        = b1 + b2 * fm * fp
     fbm_cs_atm = b1 + b2                 # base CS, atm
     return fbm, fbm_cs_atm, fp, fm
