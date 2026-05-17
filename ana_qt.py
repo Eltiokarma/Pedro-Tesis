@@ -828,28 +828,69 @@ class AnaMainWindow(QMainWindow):
             mask = self.df_fixed["Concept"].astype(str).str.strip() == "Labor"
             if mask.any():
                 col = float(self.df_fixed.loc[mask, "Value"].iloc[0] or 0)
-        # FCI desde capital row 0
-        fci = 0.0
+        # FCI vía capex.compute_fci — ÚNICA FUENTE.  Si el flowsheet
+        # está disponible, computa por bloque; sino usa el ISBL del
+        # Capital tab como override.  ELIMINADO el "×1.45" inventado.
+        import capex as _capex
+        try:
+            import econ_defaults as _ed
+            _fin = _ed.get_financial()
+            _years = _fin["project_years"]
+            _tax   = _fin["tax_rate"]
+            _disc  = _fin["discount_rate"]
+        except Exception:
+            _years, _tax, _disc = 10, 0.30, 0.10
+        fs_ref = getattr(self, "_flowsheet", None)
+        isbl_override_usd = None
         if not self.df_capital.empty:
-            isbl_val = float(self.df_capital.iat[0, 2] or 0)
-            fci = isbl_val * 1e6 * 1.45    # rough multiplier OSBL+ENG+CONT
+            try:
+                isbl_val = float(self.df_capital.iat[0, 2] or 0)
+                if isbl_val > 0:
+                    isbl_override_usd = isbl_val * 1e6
+            except Exception:
+                pass
+        if fs_ref is not None:
+            capex_data = _capex.compute_fci(
+                fs_ref, year_target=2024,
+                isbl_override_usd=isbl_override_usd,
+            )
+        else:
+            # Modo standalone: sin flowsheet, usa solo el ISBL como CBM
+            # y aplica las fracciones canónicas.
+            class _StubFs:  blocks = {}; streams = {}
+            capex_data = _capex.compute_fci(
+                _StubFs(), year_target=2024,
+                isbl_override_usd=isbl_override_usd or 0.0,
+            )
+        fci          = capex_data["FCI_grass_roots"]
+        wc_usd       = capex_data["working_capital"]
+        dep_base     = capex_data["depreciable_base"]
 
-        com  = ec.cost_of_manufacture(FCI_usd=fci, COL_usd=col,
-                                         CUT_usd=cut, CRM_usd=crm,
-                                         CWT_usd=cwt)
+        com  = ec.cost_of_manufacture_components(
+            FCI_usd=fci, COL_usd=col,
+            CUT_usd=cut, CRM_usd=crm, CWT_usd=cwt,
+            depreciable_base_usd=dep_base, useful_life_yr=_years,
+        )
         prof = ec.profitability_indicators(
             revenue_usd_yr=revenue, com_d_usd_yr=com["COM_d"],
-            fci_usd=fci)
+            fci_usd=fci,
+            depreciable_base_usd=dep_base,
+            working_capital_usd=wc_usd,
+            useful_life_yr=_years,
+            years_op=_years, tax_rate=_tax, disc_rate=_disc,
+        )
 
-        # ── Income Statement año por año (tabla detallada) ──
-        # Usa Revenue - CRM - CUT - CWT - COL - Depreciation directo
-        # (sin los multipliers Turton 0.180/2.73/1.23).  Es el desglose
-        # "líneas" para visualizar dónde está el dinero.
+        # ── Income Statement año por año, CONSISTENTE con prof.
         try:
             import flowsheet_export as fexp
             income_rows = fexp.compute_income_statement(
                 revenue_usd_yr=revenue, crm=crm, cut=cut,
                 cwt=cwt, col=col, fci_usd=fci,
+                depreciable_base_usd=dep_base,
+                working_capital_usd=wc_usd,
+                useful_life_yr=_years,
+                years_op=_years, tax_rate=_tax,
+                maintenance_tax_insurance_usd_yr=com["Maintenance_Tax_Insurance"],
             )
             self.df_income = pd.DataFrame(income_rows)
             df_to_table(self._table_for_tab("Income Statement"),
@@ -871,7 +912,10 @@ class AnaMainWindow(QMainWindow):
             disc, yrs = 0.10, 10
         cf_const = prof["Cash flow"]
         cf_years  = list(range(0, yrs + 1))
-        cf_values = [-fci] + [cf_const] * yrs
+        # Year 0 = -(FCI + WC); último año suma WC recovery.
+        cf_values = [-(fci + wc_usd)] + [cf_const] * yrs
+        if wc_usd > 0:
+            cf_values[-1] += wc_usd
         cum = []
         running = 0.0
         for yr, cf in zip(cf_years, cf_values):
@@ -895,7 +939,11 @@ class AnaMainWindow(QMainWindow):
         pbp  = prof["Payback simple"]
         irr  = prof["IRR %"]
         rows = [
-            ("FCI",              f"{fci:,.0f} USD",            ""),
+            ("ΣCBM bare module", f"{capex_data['sum_cbm']:,.0f} USD",  ""),
+            ("FCI Grass Roots",  f"{fci:,.0f} USD",                     ""),
+            ("Working Capital",  f"{wc_usd:,.0f} USD",                  ""),
+            ("CAPEX total y0",   f"{capex_data['CAPEX_total']:,.0f} USD",
+                                                                         ""),
             ("Revenue",          f"{revenue:,.0f} USD/yr",     ""),
             ("CRM (Raw Mat)",    f"{crm:,.0f} USD/yr",         ""),
             ("CUT (Utilities)",  f"{cut:,.0f} USD/yr",         ""),
@@ -903,18 +951,25 @@ class AnaMainWindow(QMainWindow):
             ("COL (Labor)",      f"{col:,.0f} USD/yr",         ""),
             ("",                 "",                            ""),
             ("COM_d Turton 8.2", f"{com['COM_d']:,.0f} USD/yr", ""),
+            ("  ─ Dep SL real",  f"{com['Depreciation_SL']:,.0f} USD/yr",
+                                                                         ""),
+            ("  ─ Maint+Tax+Ins",f"{com['Maintenance_Tax_Insurance']:,.0f} USD/yr",
+                                                                         ""),
             ("Gross profit",     f"{prof['Gross profit']:,.0f} USD/yr",
              "✓" if prof['Gross profit'] > 0 else "✗"),
             ("Net profit",       f"{prof['Net profit']:,.0f} USD/yr",
              "✓" if prof['Net profit'] > 0 else "✗"),
             ("Cash flow / yr",   f"{prof['Cash flow']:,.0f} USD/yr",   ""),
             ("",                 "",                            ""),
-            ("NPV (10yr, 10%)",  f"{npv:,.0f} USD",
+            (f"NPV ({_years}yr, {_disc*100:.0f}%)", f"{npv:,.0f} USD",
              "✓" if npv > 0 else "✗"),
-            ("Payback simple",   f"{pbp:.2f} años" if pbp != float('inf') else "n/a",
+            ("Payback simple",   prof['Payback str'],
              "✓" if pbp != float('inf') and pbp < 7 else "⚠"),
-            ("IRR",              f"{irr:.1f} %" if irr else "n/a",
+            ("IRR",              f"{prof['IRR str']} %" if irr else prof['IRR str'],
              "✓" if irr and irr > 15 else "⚠"),
+            ("",                 "",                            ""),
+            ("VEREDICTO",        f"PROYECTO {prof['Veredicto']}",
+             "✓" if prof['Veredicto'] == "VIABLE" else "✗"),
         ]
         df_results = pd.DataFrame(rows, columns=["Concepto", "Valor", ""])
         table_r = self._table_for_tab("Results")

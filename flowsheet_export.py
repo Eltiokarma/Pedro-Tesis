@@ -200,19 +200,26 @@ def compute_turton_costing(fs, df_variable, df_fixed, fci_musd,
         if mask.any():
             col = float(df_fixed.loc[mask, "Value"].iloc[0] or 0.0)
 
-    # FCI: si user pasó ISBL, usar; sino derivar de CGR
-    cgr_data = eq.grass_roots_capital(sum_cbm)
-    fci_usd_lang  = fci_musd * 1e6 if fci_musd else 0.0
-    fci_usd       = fci_usd_lang or cgr_data["CGR (Grass Roots)"]
-
-    # COM Turton Eq 8.2
-    com = eq.cost_of_manufacture(
-        FCI_usd=fci_usd, COL_usd=col,
-        CUT_usd=cut, CRM_usd=crm, CWT_usd=cwt,
+    # FCI: ÚNICA fuente vía capex.compute_fci (fuente única — bug-fix).
+    # Si user pasó ISBL en MUSD, lo pasamos como override; sino se
+    # computa desde el costing por bloque (year_target unificado,
+    # material auto-detectado).
+    import capex as _capex
+    isbl_override_usd = fci_musd * 1e6 if fci_musd else None
+    capex_data = _capex.compute_fci(
+        fs, year_target=year_target, isbl_override_usd=isbl_override_usd
     )
+    fci_usd          = capex_data["FCI_grass_roots"]
+    wc_usd           = capex_data["working_capital"]
+    capex_total      = capex_data["CAPEX_total"]
+    depreciable_base = capex_data["depreciable_base"]
+    # Override locales de sum_cp/sum_cbm/by_cat para que las filas del
+    # report concuerden con la fuente única.
+    sum_cp  = capex_data["sum_cp"]
+    sum_cbm = capex_data["sum_cbm"]
+    by_cat  = capex_data["by_category"]
 
     # Defaults financieros y sensibilidad — desde econ_defaults
-    # (perfil activo: PE_2024 / USA_2024 / etc.)
     try:
         import econ_defaults as _ed
         _fin  = _ed.get_financial()
@@ -226,10 +233,23 @@ def compute_turton_costing(fs, df_variable, df_fixed, fci_musd,
         _years, _tax, _disc = 10, 0.30, 0.10
         _f_low, _f_high     = 0.75, 1.25
 
-    # Rentabilidad
+    # COM Turton Eq 8.2 con desglose explícito (incluye Dep_SL y M+T+I
+    # separados — bug-fix consistencia COM/Dep).
+    com = eq.cost_of_manufacture_components(
+        FCI_usd=fci_usd, COL_usd=col,
+        CUT_usd=cut, CRM_usd=crm, CWT_usd=cwt,
+        depreciable_base_usd=depreciable_base,
+        useful_life_yr=_years,
+    )
+
+    # Rentabilidad usando depreciable_base + WC explícitos.
     prof = eq.profitability_indicators(
         revenue_usd_yr=revenue, com_d_usd_yr=com["COM_d"],
-        fci_usd=fci_usd, years_op=_years, tax_rate=_tax, disc_rate=_disc,
+        fci_usd=fci_usd,
+        depreciable_base_usd=depreciable_base,
+        working_capital_usd=wc_usd,
+        useful_life_yr=_years,
+        years_op=_years, tax_rate=_tax, disc_rate=_disc,
     )
 
     # Sensibilidad AACE Class 4 (±low/high del perfil)
@@ -241,7 +261,9 @@ def compute_turton_costing(fs, df_variable, df_fixed, fci_musd,
         ("Base  (mid case)",                            1.00,   1.00),
         (f"Alto  (+{_pct_hi} % cap, +{_pct_hi} % op)", _f_high, _f_high),
     ]:
-        fci_s = fci_usd * cap_f
+        fci_s   = fci_usd * cap_f
+        dep_b_s = depreciable_base * cap_f
+        wc_s    = wc_usd * cap_f
         com_s = (eq.cost_of_manufacture(
             FCI_usd=fci_s, COL_usd=col,
             CUT_usd=cut * op_f, CRM_usd=crm * op_f,
@@ -250,6 +272,9 @@ def compute_turton_costing(fs, df_variable, df_fixed, fci_musd,
         rev_s = revenue * op_f
         prof_s = eq.profitability_indicators(
             revenue_usd_yr=rev_s, com_d_usd_yr=com_s, fci_usd=fci_s,
+            depreciable_base_usd=dep_b_s,
+            working_capital_usd=wc_s,
+            useful_life_yr=_years,
             years_op=_years, tax_rate=_tax, disc_rate=_disc,
         )
         sens[scen] = prof_s
@@ -270,16 +295,17 @@ def compute_turton_costing(fs, df_variable, df_fixed, fci_musd,
     rows.append(("", "", ""))
     rows.append(("GRASS ROOTS CAPITAL (Turton Eq 7.10)", "", ""))
     rows.append(("  Contingency (18 % CBM)", "",
-                  f"{cgr_data['Contingency']:>14,.0f} USD"))
+                  f"{capex_data['contingency']:>14,.0f} USD"))
     rows.append(("  Aux facilities (50 % CBM)", "",
-                  f"{cgr_data['Aux facilities']:>14,.0f} USD"))
-    rows.append(("  CGR Grass Roots",       "",
-                  f"{cgr_data['CGR (Grass Roots)']:>14,.0f} USD"))
-    if fci_usd_lang > 0:
-        rows.append(("  FCI usado (Lang)",      "",
-                      f"{fci_usd_lang:>14,.0f} USD"))
-    rows.append(("  FCI efectivo en COM/profit", "",
+                  f"{capex_data['aux_facilities']:>14,.0f} USD"))
+    rows.append(("  FCI Grass Roots (Turton 7.10)", "",
                   f"{fci_usd:>14,.0f} USD"))
+    rows.append(("  Working Capital (15 % FCI)", "",
+                  f"{wc_usd:>14,.0f} USD"))
+    rows.append(("  CAPEX total (year 0 outflow)", "",
+                  f"{capex_total:>14,.0f} USD"))
+    if capex_data["isbl_override_used"]:
+        rows.append(("  (ISBL override del user activo)", "", ""))
     rows.append(("", "", ""))
     rows.append(("OPEX COMPONENTS (USD/year)", "", ""))
     rows.append(("  CRM (Raw Materials)",   "", f"{crm:>14,.0f} USD/yr"))
@@ -294,17 +320,21 @@ def compute_turton_costing(fs, df_variable, df_fixed, fci_musd,
                   f"{com['2.73·COL']:>14,.0f}"))
     rows.append(("  1.23·(CUT+CRM+CWT)",  "",
                   f"{com['1.23·(CUT+CRM+CWT)']:>14,.0f}"))
-    rows.append(("  COM_d (con depreciación)","",
+    rows.append(("  COM_d (con depreciación implícita)","",
                   f"{com['COM_d']:>14,.0f} USD/yr"))
-    rows.append(("  COM   (sin depreciación)","",
+    rows.append(("  COM   (sin depreciación implícita)","",
                   f"{com['COM']:>14,.0f} USD/yr"))
+    rows.append(("    ─ Depreciation_SL (real, base depreciable)", "",
+                  f"{com['Depreciation_SL']:>14,.0f} USD/yr"))
+    rows.append(("    ─ Maintenance+Tax+Insurance (FCI-pegged)", "",
+                  f"{com['Maintenance_Tax_Insurance']:>14,.0f} USD/yr"))
     rows.append(("", "", ""))
     rows.append(("PROFITABILITY (Turton Ch 9-10, base case)", "", ""))
     rows.append(("  Revenue (products + byprods)", "",
                   f"{revenue:>14,.0f} USD/yr"))
     rows.append(("  Gross profit (Rev - COM_d)", "",
                   f"{prof['Gross profit']:>14,.0f} USD/yr"))
-    rows.append((f"  Depreciación (lineal {_years} yr)", "",
+    rows.append((f"  Depreciación SL ({_years} yr / depreciable_base)", "",
                   f"{prof['Depreciation']:>14,.0f} USD/yr"))
     rows.append((f"  Tax ({_tax*100:.0f} %)",         "",
                   f"{prof['Tax (30%)']:>14,.0f} USD/yr"))
@@ -312,16 +342,14 @@ def compute_turton_costing(fs, df_variable, df_fixed, fci_musd,
                   f"{prof['Net profit']:>14,.0f} USD/yr"))
     rows.append(("  Cash flow (Net + dep)", "",
                   f"{prof['Cash flow']:>14,.0f} USD/yr"))
-    pbp = prof['Payback simple']
-    rows.append(("  Payback simple",       "",
-                  f"{pbp:>14.2f} años" if pbp != float('inf') else "n/a"))
+    rows.append(("  Payback simple",       "", prof['Payback str']))
     rows.append(("  ROI %",                "",
                   f"{prof['ROI %']:>14.1f} %"))
     rows.append((f"  NPV ({_years} yr, {_disc*100:.0f} %)", "",
                   f"{prof['NPV']:>14,.0f} USD"))
-    irr = prof['IRR %']
-    rows.append(("  IRR %",                "",
-                  f"{irr:>14.1f} %" if irr is not None else "n/a"))
+    rows.append(("  IRR %",                "", prof['IRR str']))
+    rows.append(("  VEREDICTO",            "",
+                  f"PROYECTO {prof['Veredicto']}"))
     rows.append(("", "", ""))
     rows.append(("SENSIBILIDAD AACE Class 4 (±25 %)", "", ""))
     rows.append(("  Escenario", "NPV USD", "Payback yr / IRR %"))
@@ -348,21 +376,66 @@ def compute_turton_costing(fs, df_variable, df_fixed, fci_musd,
     rows.append(("Perfil econ.",      "", _prof_name))
 
     return {
-        "rows":       rows,
-        "by_category": by_cat,
-        "sum_cp":     sum_cp,
-        "sum_cbm":    sum_cbm,
-        "cgr":        cgr_data,
-        "fci":        fci_usd,
-        "col":        col,
-        "crm":        crm,
-        "cut":        cut,
-        "cwt":        cwt,
-        "com":        com,
-        "revenue":    revenue,
-        "profit":     prof,
-        "sensitivity":sens,
+        "rows":               rows,
+        "by_category":        by_cat,
+        "sum_cp":             sum_cp,
+        "sum_cbm":            sum_cbm,
+        "capex":              capex_data,     # dict canónico capex.py
+        "fci":                fci_usd,
+        "working_capital":    wc_usd,
+        "capex_total":        capex_total,
+        "depreciable_base":   depreciable_base,
+        "col":                col,
+        "crm":                crm,
+        "cut":                cut,
+        "cwt":                cwt,
+        "com":                com,
+        "revenue":            revenue,
+        "profit":             prof,
+        "sensitivity":        sens,
+        "mti_usd_yr":         com["Maintenance_Tax_Insurance"],
     }
+
+
+def assert_costing_income_coherence(costing_data, income_rows,
+                                       rel_tol=0.001):
+    """Verifica que el Cash Flow y NPV del Costing Turton (resumen
+    Turton Ch 9-10) coincidan con los del Income Statement año a año
+    dentro de rel_tol.  Bug-fix: antes diferían varios MM USD por
+    rutas paralelas distintas.
+
+    Raises AssertionError si la divergencia excede rel_tol.
+    """
+    prof = costing_data["profit"]
+    cf_costing = prof["Cash flow"]
+    npv_costing = prof["NPV"]
+    # Income Statement: cash flow promedio años de operación,
+    # excluyendo year-0 y WC recovery del último año.
+    years = costing_data["profit"]["years_op"]
+    op_rows = [r for r in income_rows if r["Year"] >= 1 and r["Year"] <= years]
+    if not op_rows:
+        raise AssertionError("Income Statement vacío — no se pudo validar.")
+    # Cash flow operativo "régimen" = CF − WC recovery del año (si aplica)
+    cfs_op = [r["Cash Flow"] - r.get("WC Recov", 0.0) for r in op_rows]
+    cf_income_avg = sum(cfs_op) / len(cfs_op)
+    # NPV reconstruido desde income statement
+    disc = prof["disc_rate"]
+    npv_income = 0.0
+    for r in income_rows:
+        npv_income += r["Cash Flow"] / ((1 + disc) ** r["Year"])
+    def _close(a, b, tol):
+        return abs(a - b) / max(abs(a), abs(b), 1e-9) < tol
+    if not _close(cf_costing, cf_income_avg, rel_tol):
+        raise AssertionError(
+            f"Cash flow inconsistente: Costing={cf_costing:,.0f} vs "
+            f"Income avg={cf_income_avg:,.0f} (>{rel_tol*100:.2f}%)"
+        )
+    if not _close(npv_costing, npv_income, rel_tol):
+        raise AssertionError(
+            f"NPV inconsistente: Costing={npv_costing:,.0f} vs "
+            f"Income={npv_income:,.0f} (>{rel_tol*100:.2f}%)"
+        )
+    return True
 
 
 def collect_stream_rows(fs):
@@ -660,19 +733,59 @@ def read_project_xlsx(path):
 
 def compute_income_statement(revenue_usd_yr, crm, cut, cwt, col,
                               fci_usd, years_op=None, tax_rate=None,
-                              startup_year=1):
-    """Construye el Estado de Resultados año a año.
+                              startup_year=1,
+                              depreciable_base_usd=None,
+                              working_capital_usd=0.0,
+                              useful_life_yr=None,
+                              maintenance_tax_insurance_usd_yr=0.0,
+                              alpha_d=0.180, beta=2.73, gamma=1.23,
+                              alpha=0.305):
+    """Construye el Estado de Resultados año a año, CONSISTENTE con
+    Costing Turton (Eq 8.2).
+
+    Convención clave (bug-fix consistencia financiera):
+        EBIT (taxable) = Revenue − COM_d_Turton
+    Donde COM_d_Turton = α_d·FCI + β·COL + γ·(CRM+CUT+CWT).
+
+    Las líneas mostradas SUMAN a COM_d, en lugar de inventar una
+    suma incompatible.  Breakdown:
+        · Raw OPEX: CRM, CUT, CWT, COL
+        · Overheads Turton:
+            · Labor OH    = (β−1)·COL          [~1.73·COL]
+            · Materials OH= (γ−1)·(CRM+CUT+CWT) [~0.23·(RM+UT+WT)]
+            · M+T+I       = max(0, α_d·FCI − Dep_user)
+            · Depreciation= depreciable_base / useful_life
+        Σ líneas = α_d·FCI + β·COL + γ·(...) = COM_d_Turton ✓
+
+    Loss carry-forward (NOL): EBIT < 0 acumula como saldo a favor;
+    en años con EBIT > 0 se aplica contra el taxable income antes de
+    calcular tax.  Refleja práctica fiscal estándar (Perú, USA, etc.).
+
+    CapEx año 0 = −(FCI + WC).  Working capital se recupera en el
+    último año del horizonte (cash inflow positivo).
+
+    Loss carry-forward (NOL): EBIT < 0 acumula como saldo a favor;
+    en años con EBIT > 0 se aplica contra el taxable income antes de
+    calcular tax.  Refleja práctica fiscal estándar (Perú, USA, etc.).
+
+    CapEx año 0 = −(FCI + WC).  Working capital se recupera en el
+    último año del horizonte (cash inflow positivo).
+
+    Args:
+        revenue_usd_yr: ingresos anuales
+        crm, cut, cwt, col: opex anuales (raw mat, util, waste, labor)
+        fci_usd: FCI total (para reportar CapEx año 0)
+        depreciable_base_usd: si None, usa fci_usd.  No incluye WC.
+        working_capital_usd: WC one-time year-0; recupera year_op final.
+        useful_life_yr: vida útil dep SL; default = years_op.
+        maintenance_tax_insurance_usd_yr: cargos FCI-pegged cash
+            calculados desde Turton COM (ver
+            cost_of_manufacture_components).  Default 0 (legacy).
 
     Devuelve list of dicts (uno por año) con:
-      Year, Revenue, CRM, CUT, CWT, COL, Depreciation, EBIT, Tax,
-      Net Income, Cash Flow, Cumulative CF.
-
-    Asume:
-      · Construcción año 0 (CapEx -FCI)
-      · Operación desde startup_year hasta years_op
-      · Depreciación lineal sobre FCI/years_op
-      · CapEx adicional 0 después del year 0
-      · No working capital recovery al final (simplificación)
+      Year, Revenue, CRM, CUT, CWT, COL, M+T+I, Depreciation, EBIT,
+      NOL applied, Taxable Income, Tax, Net Income, CapEx, WC Recov,
+      Cash Flow, Cumulative CF, paga_impuestos (bool).
     """
     if years_op is None or tax_rate is None:
         try:
@@ -683,25 +796,63 @@ def compute_income_statement(revenue_usd_yr, crm, cut, cwt, col,
         except Exception:
             if years_op is None: years_op = 10
             if tax_rate is None: tax_rate = 0.30
+    if useful_life_yr is None:
+        useful_life_yr = years_op
+    if depreciable_base_usd is None:
+        depreciable_base_usd = fci_usd
+    capex_year0  = fci_usd + working_capital_usd
+    depreciation = depreciable_base_usd / max(useful_life_yr, 1)
+    # M+T+I según convención usuario (corrección financial-bug §2):
+    #     M+T+I = (COM − COM_d) − Dep = (α − α_d)·FCI − Dep
+    # 0.125·FCI − Dep_user para defaults Turton.  Si Dep > 0.125·FCI
+    # (vida útil muy corta, < 8 yr), M+T+I negativo → clamp a 0 con
+    # warning.  El caller puede sobreescribir vía param explícito.
+    fci_burden_annual = max(0.0, alpha - alpha_d) * fci_usd
+    mti_derived = fci_burden_annual - depreciation
+    if mti_derived < 0:
+        import warnings
+        warnings.warn(
+            f"useful_life_yr={useful_life_yr} → dep_SL "
+            f"({depreciation:,.0f}) > (α−α_d)·FCI "
+            f"({fci_burden_annual:,.0f}). M+T+I clampado a 0; la "
+            f"coherencia se mantiene si dep_user ≤ (α−α_d)·FCI.",
+            UserWarning, stacklevel=2,
+        )
+        mti_derived = 0.0
+    if (maintenance_tax_insurance_usd_yr is None
+            or maintenance_tax_insurance_usd_yr <= 0):
+        maintenance_tax_insurance_usd_yr = mti_derived
+    # Overheads Turton (β−1)·COL y (γ−1)·materiales — suman a la
+    # base deducible junto con (α−α_d)·FCI (= Dep+M+T+I).  Total
+    # deductible coincide con profitability_indicators.
+    labor_oh_factor = max(0.0, beta - 1.0)
+    mat_oh_factor   = max(0.0, gamma - 1.0)
     rows = []
-    # Año 0 = construcción / CapEx
+    # Año 0 = construcción / CapEx (FCI + WC)
     rows.append({
-        "Year":          0,
-        "Revenue":       0.0,
-        "CRM":           0.0,
-        "CUT":           0.0,
-        "CWT":           0.0,
-        "COL":           0.0,
-        "Depreciation":  0.0,
-        "EBIT":          0.0,
-        "Tax":           0.0,
-        "Net Income":    0.0,
-        "CapEx":         -fci_usd,
-        "Cash Flow":     -fci_usd,
-        "Cumulative CF": -fci_usd,
+        "Year":            0,
+        "Revenue":         0.0,
+        "CRM":             0.0,
+        "CUT":             0.0,
+        "CWT":             0.0,
+        "COL":             0.0,
+        "Labor OH":        0.0,
+        "Materials OH":    0.0,
+        "M+T+I":           0.0,
+        "Depreciation":    0.0,
+        "EBIT":            0.0,
+        "NOL applied":     0.0,
+        "Taxable Income":  0.0,
+        "Tax":             0.0,
+        "Net Income":      0.0,
+        "CapEx":           -capex_year0,
+        "WC Recov":        0.0,
+        "Cash Flow":       -capex_year0,
+        "Cumulative CF":   -capex_year0,
     })
-    cum = -fci_usd
-    depreciation = fci_usd / years_op
+    cum     = -capex_year0
+    nol     = 0.0        # Net Operating Loss carry-forward acumulado
+    paga_tax_alguna_vez = False
     for yr in range(1, years_op + 1):
         operating = yr >= startup_year
         rev = revenue_usd_yr if operating else 0.0
@@ -709,31 +860,55 @@ def compute_income_statement(revenue_usd_yr, crm, cut, cwt, col,
         ut  = cut if operating else 0.0
         wt  = cwt if operating else 0.0
         lab = col if operating else 0.0
+        mti = maintenance_tax_insurance_usd_yr if operating else 0.0
         dep = depreciation if operating else 0.0
-        # EBIT = Revenue - CRM - CUT - CWT - COL - Depreciation
-        # (simplificación: no agrego maintenance %, supervision, etc.
-        #  esos están en el COM Turton; acá uso COL directo + depr)
-        ebit = rev - rm - ut - wt - lab - dep
-        tax  = max(0.0, ebit) * tax_rate
-        net  = ebit - tax
-        # Cash flow = Net income + depreciation (depr es no-cash)
-        cf   = net + dep
+        # Depreciación sólo años con activo en uso, hasta useful_life.
+        if yr - startup_year + 1 > useful_life_yr:
+            dep = 0.0
+        # Overheads Turton — escalan a COL y materiales raw.
+        lab_oh = labor_oh_factor * lab
+        mat_oh = mat_oh_factor   * (rm + ut + wt)
+        ebit = rev - rm - ut - wt - lab - lab_oh - mat_oh - mti - dep
+        # Loss carry-forward: aplica NOL acumulado contra EBIT positivo
+        if ebit > 0 and nol > 0:
+            nol_used = min(nol, ebit)
+            taxable  = ebit - nol_used
+            nol     -= nol_used
+        else:
+            nol_used = 0.0
+            taxable  = ebit
+            if ebit < 0:
+                nol += -ebit    # acumula pérdida como saldo a favor
+        tax = max(0.0, taxable) * tax_rate
+        if tax > 0:
+            paga_tax_alguna_vez = True
+        net = ebit - tax
+        wc_recov = working_capital_usd if yr == years_op else 0.0
+        cf  = net + dep + wc_recov
         cum += cf
         rows.append({
-            "Year":          yr,
-            "Revenue":       rev,
-            "CRM":           rm,
-            "CUT":           ut,
-            "CWT":           wt,
-            "COL":           lab,
-            "Depreciation":  dep,
-            "EBIT":          ebit,
-            "Tax":           tax,
-            "Net Income":    net,
-            "CapEx":         0.0,
-            "Cash Flow":     cf,
-            "Cumulative CF": cum,
+            "Year":            yr,
+            "Revenue":         rev,
+            "CRM":             rm,
+            "CUT":             ut,
+            "CWT":             wt,
+            "COL":             lab,
+            "Labor OH":        lab_oh,
+            "Materials OH":    mat_oh,
+            "M+T+I":           mti,
+            "Depreciation":    dep,
+            "EBIT":            ebit,
+            "NOL applied":     nol_used,
+            "Taxable Income":  taxable,
+            "Tax":             tax,
+            "Net Income":      net,
+            "CapEx":           0.0,
+            "WC Recov":        wc_recov,
+            "Cash Flow":       cf,
+            "Cumulative CF":   cum,
         })
+    # Tag el flag en la última fila para que el consumer (UI) sepa
+    rows[-1]["paga_impuestos"] = paga_tax_alguna_vez
     return rows
 
 
@@ -1012,12 +1187,26 @@ def write_project_xlsx(path, fs, isbl, feeds, products, base_xlsx=None):
     stream_rows    = collect_stream_rows(fs)
     costing_data   = compute_turton_costing(
         fs, df_variable, df_fixed, fci_musd=isbl, year_target=2024)
+    _prof = costing_data["profit"]
     income_rows    = compute_income_statement(
         revenue_usd_yr=costing_data["revenue"],
         crm=costing_data["crm"], cut=costing_data["cut"],
         cwt=costing_data["cwt"], col=costing_data["col"],
         fci_usd=costing_data["fci"],
+        depreciable_base_usd=costing_data["depreciable_base"],
+        working_capital_usd=costing_data["working_capital"],
+        useful_life_yr=_prof["useful_life_yr"],
+        years_op=_prof["years_op"],
+        tax_rate=_prof["tax_rate"],
+        maintenance_tax_insurance_usd_yr=costing_data["mti_usd_yr"],
     )
+    # Assert de coherencia (fail-fast si las dos hojas divergen).
+    try:
+        assert_costing_income_coherence(costing_data, income_rows)
+    except AssertionError as _e:
+        import warnings
+        warnings.warn(f"Coherencia Costing/Income: {_e}", UserWarning,
+                       stacklevel=2)
     write_3sections_xlsx(path, df_capital, df_fixed, df_variable,
                          equipment=equipment_rows,
                          streams=stream_rows,

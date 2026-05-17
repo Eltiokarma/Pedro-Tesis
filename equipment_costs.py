@@ -630,17 +630,32 @@ def grass_roots_capital(sum_cbm_usd, contingency_frac=None,
 # ======================================================
 def profitability_indicators(revenue_usd_yr, com_d_usd_yr, fci_usd,
                               years_op=None, tax_rate=None,
-                              disc_rate=None):
+                              disc_rate=None,
+                              depreciable_base_usd=None,
+                              working_capital_usd=0.0,
+                              useful_life_yr=None,
+                              alpha_d=0.180, alpha=0.305):
     """Calcula indicadores económicos clásicos a partir de:
-        revenue_usd_yr:  ingresos anuales (Σ products + byproducts vendibles)
-        com_d_usd_yr:    cost of manufacture con depreciación (Turton 8.2)
-        fci_usd:         fixed capital investment (CGR o ISBL+OSBL)
+        revenue_usd_yr:        ingresos anuales (Σ products + byproducts)
+        com_d_usd_yr:          cost of manufacture con dep (Turton 8.2)
+        fci_usd:               FCI usado para el COM (Grass Roots o fixed)
+        depreciable_base_usd:  base depreciable.  Default = fci_usd.
+                                NO incluye working capital.
+        working_capital_usd:   working capital one-time (year-0 outflow,
+                                recuperado al cierre del horizonte).
+        useful_life_yr:        vida útil para depreciación SL.
+                                Default = years_op.
 
-    Defaults (desde econ_defaults perfil activo):
-        years_op=10 yr, tax_rate=30 %, disc_rate=10 % (hurdle típico PE)
+    NOTA crítica vs versión vieja:
+      · El cash flow anual se computa con DEPRECIACIÓN REAL (SL sobre
+        depreciable_base / useful_life), NO con FCI/years_op suelto.
+      · El CAPEX total (year 0) = fci_usd + working_capital.
+      · WC se recupera en year_op final como cash inflow positivo.
+      · Loss carry-forward NO se aplica acá (es un proxy de cash
+        constante).  Para CF real con LCF usar compute_income_statement.
 
     Returns:
-        dict con Gross/Net profit, Cash flow, Payback, ROI, NPV."""
+        dict con Gross/Net profit, Cash flow, Payback, ROI, NPV, IRR."""
     if years_op is None or tax_rate is None or disc_rate is None:
         try:
             import econ_defaults as _ed
@@ -652,25 +667,47 @@ def profitability_indicators(revenue_usd_yr, com_d_usd_yr, fci_usd,
             if years_op  is None: years_op  = 10
             if tax_rate  is None: tax_rate  = 0.30
             if disc_rate is None: disc_rate = 0.10
-    gross_profit = revenue_usd_yr - com_d_usd_yr
-    # Depreciación lineal (Turton § 9.3 usa MACRS, acá simple)
-    depreciation = fci_usd / max(years_op, 1)
-    taxable      = gross_profit - depreciation
+    if useful_life_yr is None:
+        useful_life_yr = years_op
+    if depreciable_base_usd is None:
+        depreciable_base_usd = fci_usd
+    # Tax-deductible OPEX (consistente con compute_income_statement):
+    #   = β·COL + γ·(CRM+CUT+CWT) + (α−α_d)·FCI
+    #   = [COM_d − α_d·FCI]    + [(α−α_d)·FCI]
+    #   = COM_d + (α − 2·α_d)·FCI
+    # Donde (α−α_d)·FCI = Dep + M+T+I (Turton FCI-pegged burden total).
+    # Dep se reporta separado para CF (add-back no-cash).  Esta
+    # convención da la MISMA NPV que el Income Statement (bug-fix
+    # consistencia financiera).
+    tax_deductible_opex = com_d_usd_yr + (alpha - 2.0 * alpha_d) * fci_usd
+    gross_profit = revenue_usd_yr - com_d_usd_yr      # Turton display
+    depreciation = depreciable_base_usd / max(useful_life_yr, 1)
+    taxable      = revenue_usd_yr - tax_deductible_opex
     tax          = max(0.0, taxable) * tax_rate
-    net_profit   = gross_profit - tax
+    net_profit   = taxable - tax
     cash_flow    = net_profit + depreciation
+    # CAPEX total año 0 = FCI + WC.  WC se recupera year_op final.
+    capex_year0  = fci_usd + working_capital_usd
     # Indicadores
     if cash_flow > 0:
-        pbp_simple = fci_usd / cash_flow
+        pbp_simple = capex_year0 / cash_flow
     else:
         pbp_simple = float("inf")
     roi_simple = (net_profit / fci_usd * 100.0) if fci_usd > 0 else 0.0
-    # NPV (discounted cash flow over years_op)
-    npv = -fci_usd
+    # NPV (discounted cash flow over years_op).  Año 0 = -CAPEX_total
+    # (FCI + WC).  Último año = CF + recuperación WC.
+    npv = -capex_year0
     for yr in range(1, years_op + 1):
-        npv += cash_flow / (1.0 + disc_rate) ** yr
-    # IRR aproximado por Newton (busca r tal que NPV=0)
-    irr = _solve_irr(cash_flow, fci_usd, years_op)
+        cf_yr = cash_flow + (working_capital_usd if yr == years_op else 0.0)
+        npv += cf_yr / (1.0 + disc_rate) ** yr
+    # IRR aproximado por bisección (NPV=0).  Modela WC recovery final.
+    irr = _solve_irr_wc(cash_flow, capex_year0, working_capital_usd, years_op)
+    # Veredicto explícito
+    veredicto = "VIABLE" if npv > 0 else "INVIABLE"
+    pbp_str = (f"{pbp_simple:.2f}" if pbp_simple != float("inf")
+               else "∞ — proyecto no recupera inversión")
+    irr_str = (f"{irr*100.0:.1f}" if irr is not None
+               else "no existe (flujos negativos)")
     return {
         "Revenue":         revenue_usd_yr,
         "COM_d":           com_d_usd_yr,
@@ -679,25 +716,42 @@ def profitability_indicators(revenue_usd_yr, com_d_usd_yr, fci_usd,
         "Tax (30%)":       tax,
         "Net profit":      net_profit,
         "Cash flow":       cash_flow,
+        "CAPEX year 0":    capex_year0,
+        "Working capital": working_capital_usd,
         "Payback simple":  pbp_simple,
+        "Payback str":     pbp_str,
         "ROI %":           roi_simple,
         "NPV":             npv,
         "IRR %":           irr * 100.0 if irr is not None else None,
+        "IRR str":         irr_str,
+        "Veredicto":       veredicto,
         "years_op":        years_op,
+        "useful_life_yr":  useful_life_yr,
         "disc_rate":       disc_rate,
         "tax_rate":        tax_rate,
+        "depreciable_base":depreciable_base_usd,
     }
 
 
 def _solve_irr(cash_flow_yr, fci_usd, years_op, max_iter=50):
-    """Bisección para encontrar IRR (r tal que NPV=0).
+    """Legacy: IRR sin WC recovery (mantenido para compat).  Usar
+    _solve_irr_wc() en código nuevo."""
+    return _solve_irr_wc(cash_flow_yr, fci_usd, 0.0, years_op, max_iter)
+
+
+def _solve_irr_wc(cash_flow_yr, capex_year0, wc_recovery, years_op,
+                   max_iter=50):
+    """Bisección para encontrar IRR con recuperación de WC al final.
+    NPV(r) = -capex_year0 + Σ_{yr=1..N} CF/(1+r)^yr + wc/(1+r)^N
     Range r ∈ [-0.99, 5.0]."""
     if cash_flow_yr <= 0:
         return None
     def npv_at(r):
-        v = -fci_usd
+        v = -capex_year0
         for yr in range(1, years_op + 1):
             v += cash_flow_yr / (1.0 + r) ** yr
+        if wc_recovery > 0:
+            v += wc_recovery / (1.0 + r) ** years_op
         return v
     lo, hi = -0.99, 5.0
     f_lo, f_hi = npv_at(lo), npv_at(hi)
@@ -776,6 +830,56 @@ def cost_of_manufacture(FCI_usd, COL_usd, CUT_usd, CRM_usd, CWT_usd,
         # Coeffs efectivos usados
         "alpha_d": alpha_d, "alpha": alpha, "beta": beta, "gamma": gamma,
     }
+
+
+def cost_of_manufacture_components(FCI_usd, COL_usd, CUT_usd, CRM_usd, CWT_usd,
+                                     depreciable_base_usd=None,
+                                     useful_life_yr=10,
+                                     salvage_value_usd=0.0,
+                                     alpha_d=None, alpha=None,
+                                     beta=None, gamma=None,
+                                     fci_base_for_com="fci_fixed"):
+    """Descompone COM en líneas explícitas para Income Statement.
+
+    Devuelve además de COM_d/COM (Turton 8.2):
+      · Depreciation_SL — línea recta REAL sobre depreciable_base
+        (NO la implícita en α_d).  Default useful_life=10 yr.
+      · Maintenance_Tax_Insurance — = (COM − COM_d) − Depreciation_SL.
+        Cargos FCI-pegged según Turton.  Se reporta como línea
+        separada, NO se cuadra a cero.  Permite distinguir
+        depreciación (no-cash) de gastos cash FCI-dependientes.
+
+    fci_base_for_com:
+      · "fci_fixed"   → α_d/α se aplican al FCI fijo (Turton text default).
+      · "grass_roots" → α_d/α se aplican al CGR.
+      Si depreciable_base_usd no se da, se usa FCI_usd directamente.
+
+    Returns dict con todas las claves de cost_of_manufacture() + las
+    nuevas (Depreciation_SL, Maintenance_Tax_Insurance,
+    depreciable_base, useful_life_yr, fci_base_for_com).
+    """
+    com_dict = cost_of_manufacture(
+        FCI_usd=FCI_usd, COL_usd=COL_usd, CUT_usd=CUT_usd,
+        CRM_usd=CRM_usd, CWT_usd=CWT_usd,
+        alpha_d=alpha_d, alpha=alpha, beta=beta, gamma=gamma,
+    )
+    base = depreciable_base_usd if depreciable_base_usd is not None else FCI_usd
+    base = max(0.0, float(base) - float(salvage_value_usd or 0.0))
+    dep_sl = base / float(useful_life_yr) if useful_life_yr > 0 else 0.0
+    # Maintenance + Tax & Insurance (cargos FCI-pegged cash, sin
+    # depreciación).  Es la brecha entre COM y COM_d MENOS la
+    # depreciación real.  Turton's (α − α_d)·FCI = 0.125·FCI engloba
+    # depreciación implícita + mant + tax/seguros; al sacarle la
+    # depreciación real queda el componente cash puro.
+    com   = com_dict["COM"]
+    com_d = com_dict["COM_d"]
+    mti   = (com - com_d) - dep_sl
+    com_dict["Depreciation_SL"]             = dep_sl
+    com_dict["Maintenance_Tax_Insurance"]   = mti
+    com_dict["depreciable_base"]            = base
+    com_dict["useful_life_yr"]              = useful_life_yr
+    com_dict["fci_base_for_com"]            = fci_base_for_com
+    return com_dict
 
 
 # ======================================================
