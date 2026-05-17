@@ -123,6 +123,8 @@ class AnaMainWindow(QMainWindow):
         super().__init__()
         self.setWindowTitle("Análisis Económico — Pedro-Tesis")
         self.resize(1280, 800)
+        self.setAcceptDrops(True)              # drag & drop xlsx
+        self._dark_mode = False
 
         # Estado: dataframes cargados
         self.df_capital   = pd.DataFrame()
@@ -133,10 +135,36 @@ class AnaMainWindow(QMainWindow):
         self.df_income    = pd.DataFrame()
         self.df_costing   = pd.DataFrame()
         self.current_file = None
+        self.last_solve   = None   # cache del último Solve para MC/tornado
 
         self._build_toolbar()
         self._build_central()
         self._build_statusbar()
+
+    # ─── Drag & drop ─────────────────────────────────────────
+    def dragEnterEvent(self, event):
+        mime = event.mimeData()
+        if mime.hasUrls():
+            for url in mime.urls():
+                p = url.toLocalFile()
+                if p and p.lower().endswith((".xlsx", ".xls")):
+                    event.acceptProposedAction()
+                    return
+        event.ignore()
+
+    def dropEvent(self, event):
+        for url in event.mimeData().urls():
+            p = url.toLocalFile()
+            if p.lower().endswith((".xlsx", ".xls")):
+                try:
+                    self._import_xlsx(p)
+                    self.status.showMessage(
+                        f"Importado (drag&drop): {os.path.basename(p)}", 6000)
+                except Exception as e:
+                    QMessageBox.critical(self, "Error al importar",
+                                          f"{type(e).__name__}: {e}")
+                event.acceptProposedAction()
+                return
 
     # ─── Toolbar con íconos SVG ──────────────────────────────
     def _build_toolbar(self):
@@ -179,9 +207,15 @@ class AnaMainWindow(QMainWindow):
         act_montecarlo = QAction(_mk("an-monte-carlo"),
                                     "Monte Carlo…", self)
         act_montecarlo.setToolTip("Análisis Monte Carlo de NPV "
-                                    "con incertidumbre")
+                                    "con incertidumbre en precios + ISBL")
         act_montecarlo.triggered.connect(self.action_montecarlo)
         tb.addAction(act_montecarlo)
+
+        act_tornado = QAction(_mk("an-sensitivity"), "Tornado…", self)
+        act_tornado.setToolTip("Sensibilidad (tornado plot) ±25 % en "
+                                 "precios e ISBL — qué variable mueve más NPV")
+        act_tornado.triggered.connect(self.action_tornado)
+        tb.addAction(act_tornado)
 
         tb.addSeparator()
 
@@ -213,6 +247,18 @@ class AnaMainWindow(QMainWindow):
                                  ", Heat Integration, Turton γ")
         act_profile.triggered.connect(self.action_profile)
         tb.addAction(act_profile)
+
+        act_dark = QAction(_mk("cfg-settings"), "Dark mode", self)
+        act_dark.setToolTip("Alternar tema oscuro / claro")
+        act_dark.setShortcut("Ctrl+D")
+        act_dark.triggered.connect(self.action_toggle_dark)
+        tb.addAction(act_dark)
+
+        act_help = QAction(_mk("help-help"), "Ayuda", self)
+        act_help.setToolTip("Documentación del análisis económico")
+        act_help.setShortcut("F1")
+        act_help.triggered.connect(self.action_help)
+        tb.addAction(act_help)
 
     def _refresh_profile_label(self):
         try:
@@ -444,15 +490,88 @@ class AnaMainWindow(QMainWindow):
         self._run_solver()
 
     def action_montecarlo(self):
-        if self.df_capital.empty:
+        """Dialog para configurar y correr Monte Carlo + plot histograma."""
+        if self.df_variable.empty:
             QMessageBox.warning(self, "Monte Carlo",
                                   "Importá un proyecto primero (Ctrl+O).")
             return
-        QMessageBox.information(
-            self, "Monte Carlo",
-            "Para Monte Carlo, ejecutar:\n\n"
-            "   python -m montecarlo --input <proyecto.xlsx>\n\n"
-            "Integración inline en próxima versión.")
+        # Defaults
+        from PySide6.QtWidgets import QDialog
+        dlg = QDialog(self)
+        dlg.setWindowTitle("Monte Carlo — incertidumbre en precios e ISBL")
+        dlg.resize(440, 280)
+        v = QVBoxLayout(dlg)
+        v.addWidget(QLabel(
+            "Aplica una variación ±X % uniforme sobre precios de\n"
+            "productos, raw materials e ISBL.  Devuelve histograma\n"
+            "de NPVs sobre N runs."))
+        form = QFormLayout()
+        spin_pct = QDoubleSpinBox()
+        spin_pct.setRange(5.0, 50.0); spin_pct.setSingleStep(5.0)
+        spin_pct.setSuffix(" %"); spin_pct.setValue(20.0)
+        form.addRow("Variación (±):", spin_pct)
+        spin_n = QSpinBox()
+        spin_n.setRange(100, 50000); spin_n.setSingleStep(500)
+        spin_n.setValue(2000)
+        form.addRow("N runs:", spin_n)
+        v.addLayout(form)
+        btns = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
+        btns.accepted.connect(dlg.accept)
+        btns.rejected.connect(dlg.reject)
+        v.addWidget(btns)
+        if dlg.exec() != QDialog.Accepted:
+            return
+        pct_var = spin_pct.value() / 100.0
+        n_runs  = spin_n.value()
+        self._run_montecarlo(pct_var, n_runs)
+
+    def action_tornado(self):
+        """Sensibilidad ±25 % en cada variable, ordenado por impacto."""
+        if self.df_variable.empty:
+            QMessageBox.warning(self, "Tornado",
+                                  "Importá un proyecto primero (Ctrl+O).")
+            return
+        self._run_tornado(pct_var=0.25)
+
+    def action_toggle_dark(self):
+        """Alterna entre tema oscuro y claro (Fusion palette)."""
+        from PySide6.QtGui import QPalette, QColor
+        app = QApplication.instance()
+        self._dark_mode = not self._dark_mode
+        if self._dark_mode:
+            pal = QPalette()
+            pal.setColor(QPalette.Window,        QColor(45, 47, 51))
+            pal.setColor(QPalette.WindowText,    Qt.white)
+            pal.setColor(QPalette.Base,          QColor(35, 36, 40))
+            pal.setColor(QPalette.AlternateBase, QColor(45, 47, 51))
+            pal.setColor(QPalette.ToolTipBase,   Qt.white)
+            pal.setColor(QPalette.ToolTipText,   Qt.white)
+            pal.setColor(QPalette.Text,          Qt.white)
+            pal.setColor(QPalette.Button,        QColor(45, 47, 51))
+            pal.setColor(QPalette.ButtonText,    Qt.white)
+            pal.setColor(QPalette.Highlight,     QColor(80, 130, 200))
+            pal.setColor(QPalette.HighlightedText, Qt.white)
+            app.setPalette(pal)
+            self.status.showMessage("Tema oscuro activado.", 4000)
+        else:
+            app.setPalette(app.style().standardPalette())
+            self.status.showMessage("Tema claro activado.", 4000)
+
+    def action_help(self):
+        """Dialog con documentación del análisis económico."""
+        from PySide6.QtWidgets import QDialog, QTextBrowser
+        dlg = QDialog(self)
+        dlg.setWindowTitle("Documentación — Análisis Económico")
+        dlg.resize(720, 600)
+        v = QVBoxLayout(dlg)
+        browser = QTextBrowser()
+        browser.setOpenExternalLinks(True)
+        browser.setHtml(_HELP_HTML)
+        v.addWidget(browser)
+        btns = QDialogButtonBox(QDialogButtonBox.Close)
+        btns.rejected.connect(dlg.reject)
+        v.addWidget(btns)
+        dlg.exec()
 
     def action_open_flowsheet(self):
         """Abre el flowsheet editor en un subprocess (no bloqueante)."""
@@ -815,6 +934,346 @@ class AnaMainWindow(QMainWindow):
             f"Payback={pbp:.1f} yr   IRR={irr:.1f}%" if irr
             else f"NPV={npv/1e6:+.1f} MM USD",
             10000)
+
+
+    # ─── Monte Carlo / Tornado helpers ──────────────────────
+
+    def _build_data_for_mc(self):
+        """Convierte df_capital + df_variable a dict compatible con
+        montecarlo.correr_montecarlo / correr_tornado."""
+        # FCI piezas
+        isbl = float(self.df_capital.iat[0, 2] or 0) if not self.df_capital.empty else 10.0
+        data = {
+            "ISBL": isbl, "OSBL_pct": 0.30, "ENG_pct": 0.10,
+            "CONT_pct": 0.10, "WC_pct": 0.15,
+            "key_products": [], "byproducts": [], "raw_materials": [],
+            "consumables": [], "utilities": [],
+        }
+        for _, row in self.df_variable.iterrows():
+            stream = str(row.get("stream", "")).strip()
+            flow   = float(row.get("flowrate", 0) or 0)
+            price  = float(row.get("price usd/units", 0) or 0)
+            name   = str(row.get("variable operating costs", "")).strip()
+            item = {"concept": name, "unit": "tm/yr", "coef": flow,
+                     "flow": flow, "price": price}
+            if stream == "Key Products":      data["key_products"].append(item)
+            elif stream in ("Waste / Byproduct", "Waste Streams",
+                              "By-products"): data["byproducts"].append(item)
+            elif stream == "Raw Materials":  data["raw_materials"].append(item)
+            elif stream == "Consumables":    data["consumables"].append(item)
+            elif stream == "Utilities":      data["utilities"].append(item)
+        # Neutralizar production en consumables/utilities
+        if data["key_products"] and (data["consumables"] or data["utilities"]):
+            prod_real = data["key_products"][0]["flow"]
+            if prod_real not in (0, 0.0):
+                for item in data["consumables"] + data["utilities"]:
+                    item["coef"] = item["coef"] / prod_real
+        # Fixed costs (Turton §8.2 percentages)
+        fixed_defaults = {
+            "labor": 0.0, "supervision_pct": 0.25,
+            "salary_overhead_pct": 0.50, "maintenance_pct": 0.04,
+            "plant_overhead_pct": 0.50, "tax_insurance_pct": 0.02,
+            "interest_pct": 0.08, "general_expenses_pct": 0.01,
+            "royalties_pct": 0.0,
+        }
+        if not self.df_fixed.empty and "Concept" in self.df_fixed.columns:
+            for _, row in self.df_fixed.iterrows():
+                c = str(row.get("Concept", "")).strip().lower()
+                v = float(row.get("Value", 0) or 0)
+                if c == "labor": fixed_defaults["labor"] = v
+                elif "supervision" in c: fixed_defaults["supervision_pct"] = v/100
+                elif "salary" in c: fixed_defaults["salary_overhead_pct"] = v/100
+                elif "maintenance" in c: fixed_defaults["maintenance_pct"] = v/100
+                elif "plant" in c: fixed_defaults["plant_overhead_pct"] = v/100
+                elif "tax" in c: fixed_defaults["tax_insurance_pct"] = v/100
+                elif "interest" in c: fixed_defaults["interest_pct"] = v/100
+                elif "general" in c: fixed_defaults["general_expenses_pct"] = v/100
+                elif "royalt" in c: fixed_defaults["royalties_pct"] = v/100
+        data["fixed_costs_inputs"] = fixed_defaults
+        # Schedule + params
+        params = {
+            "tasa_impuesto": 0.30, "tasa_descuento": 0.10,
+            "schedule": {
+                "FC":   [1.0] + [0.0]*10,    # CapEx 100% año 0
+                "VCOP": [0.0] + [1.0]*10,    # operación años 1-10
+            },
+        }
+        return data, params
+
+    def _run_montecarlo(self, pct_var: float, n_runs: int):
+        """Corre MC variando precios productos + raw mat + ISBL ±pct_var.
+        Muestra histograma en dialog."""
+        try:
+            import montecarlo as mc
+        except ImportError:
+            QMessageBox.critical(self, "Monte Carlo",
+                                   "montecarlo.py no disponible.")
+            return
+        data, params = self._build_data_for_mc()
+        variables = []
+        # Productos: ±pct
+        for i, kp in enumerate(data["key_products"]):
+            p = kp["price"]
+            if p <= 0: continue
+            variables.append(mc.VariableIncierta(
+                kind=mc.KIND_PRODUCT_PRICE, indice=i,
+                nombre=f"P_{kp['concept'][:20]}",
+                valor_min=p*(1-pct_var), valor_mode=p,
+                valor_max=p*(1+pct_var), dist=mc.DIST_TRIANGULAR,
+            ))
+        # Raw materials: ±pct
+        for i, rm in enumerate(data["raw_materials"]):
+            p = rm["price"]
+            if p <= 0: continue
+            variables.append(mc.VariableIncierta(
+                kind=mc.KIND_RAW_MATERIAL_PRICE, indice=i,
+                nombre=f"RM_{rm['concept'][:20]}",
+                valor_min=p*(1-pct_var), valor_mode=p,
+                valor_max=p*(1+pct_var), dist=mc.DIST_TRIANGULAR,
+            ))
+        # ISBL ±pct
+        isbl = data["ISBL"]
+        variables.append(mc.VariableIncierta(
+            kind=mc.KIND_ISBL, indice=0, nombre="ISBL",
+            valor_min=isbl*(1-pct_var), valor_mode=isbl,
+            valor_max=isbl*(1+pct_var), dist=mc.DIST_TRIANGULAR,
+        ))
+        if not variables:
+            QMessageBox.warning(self, "Monte Carlo",
+                                  "No hay precios > 0 ni ISBL para variar.")
+            return
+        self.status.showMessage(
+            f"Monte Carlo corriendo {n_runs} runs sobre "
+            f"{len(variables)} variables…", 0)
+        QApplication.processEvents()
+        try:
+            result = mc.correr_montecarlo(data, params, variables,
+                                            n_runs=n_runs, seed=42)
+        except Exception as e:
+            QMessageBox.critical(self, "Monte Carlo",
+                                   f"Falló: {type(e).__name__}: {e}")
+            self.status.showMessage("MC falló.", 4000)
+            return
+        st = result["stats"]
+        self.status.showMessage(
+            f"MC OK: NPV media={st['npv_mean']/1e6:+.1f} MM, "
+            f"P10={st['npv_p10']/1e6:+.1f} MM, "
+            f"P90={st['npv_p90']/1e6:+.1f} MM", 10000)
+        self._show_mc_results(result, pct_var, n_runs)
+
+    def _show_mc_results(self, mc_result, pct_var, n_runs):
+        """Dialog con histograma + estadísticos del MC."""
+        from PySide6.QtWidgets import QDialog
+        dlg = QDialog(self)
+        dlg.setWindowTitle(f"Monte Carlo — {n_runs} runs, ±{pct_var*100:.0f}%")
+        dlg.resize(900, 600)
+        v = QVBoxLayout(dlg)
+        if _MPL_OK:
+            fig = Figure(figsize=(10, 5), dpi=100, facecolor=COLOR_BG)
+            ax = fig.add_subplot(1, 1, 1, facecolor="white")
+            npvs = [v_ / 1e6 for v_ in mc_result.get('npvs', [])]
+            if npvs:
+                import numpy as np
+                ax.hist(npvs, bins=50,
+                         color=COLOR_ACCENT, alpha=0.7,
+                         edgecolor="white")
+                ax.axvline(0, color="black", linewidth=1)
+                p10 = np.percentile(npvs, 10)
+                p50 = np.percentile(npvs, 50)
+                p90 = np.percentile(npvs, 90)
+                for p, lbl, c in [(p10,"P10",COLOR_NEGATIVE),
+                                    (p50,"Mediana",COLOR_ACCENT),
+                                    (p90,"P90",COLOR_POSITIVE)]:
+                    ax.axvline(p, color=c, linestyle="--", linewidth=1.5,
+                                 label=f"{lbl}: {p:+.1f} MM")
+                ax.legend(loc="best", fontsize=9)
+            ax.set_title("Distribución NPV (Monte Carlo)",
+                           fontsize=11, fontweight="bold")
+            ax.set_xlabel("NPV (MM USD)")
+            ax.set_ylabel("Frecuencia")
+            ax.grid(True, alpha=0.3, linestyle="--")
+            for spine in ("top", "right"):
+                ax.spines[spine].set_visible(False)
+            fig.tight_layout()
+            canvas = FigureCanvasQTAgg(fig)
+            v.addWidget(canvas)
+        # Stats summary
+        stats = mc_result.get('stats', {})
+        prob_pos = 1.0 - stats.get('p_npv_neg', 0)
+        info = QLabel(
+            f"<b>Resumen NPV ({n_runs} simulaciones)</b><br>"
+            f"Media:    {stats.get('npv_mean',0)/1e6:+.2f} MM USD<br>"
+            f"Mediana:  {stats.get('npv_p50',0)/1e6:+.2f} MM USD<br>"
+            f"σ:        {stats.get('npv_std',0)/1e6:.2f} MM USD<br>"
+            f"P10:      {stats.get('npv_p10',0)/1e6:+.2f} MM USD<br>"
+            f"P90:      {stats.get('npv_p90',0)/1e6:+.2f} MM USD<br>"
+            f"P(NPV > 0): {prob_pos*100:.1f} %"
+        )
+        info.setStyleSheet(f"padding: 8px; background: {COLOR_CARD}; "
+                            f"border: 1px solid #ddd; border-radius: 4px;")
+        v.addWidget(info)
+        btns = QDialogButtonBox(QDialogButtonBox.Close)
+        btns.rejected.connect(dlg.reject)
+        v.addWidget(btns)
+        dlg.exec()
+
+    def _run_tornado(self, pct_var: float):
+        """Sensibilidad: corre 2× por variable (±pct), grafica horizontal."""
+        try:
+            import montecarlo as mc
+        except ImportError:
+            QMessageBox.critical(self, "Tornado",
+                                   "montecarlo.py no disponible.")
+            return
+        data, params = self._build_data_for_mc()
+        variables = []
+        for i, kp in enumerate(data["key_products"]):
+            p = kp["price"]
+            if p > 0:
+                variables.append(mc.VariableIncierta(
+                    kind=mc.KIND_PRODUCT_PRICE, indice=i,
+                    nombre=f"P_{kp['concept'][:20]}",
+                    valor_min=p*(1-pct_var), valor_mode=p,
+                    valor_max=p*(1+pct_var)))
+        for i, rm in enumerate(data["raw_materials"]):
+            p = rm["price"]
+            if p > 0:
+                variables.append(mc.VariableIncierta(
+                    kind=mc.KIND_RAW_MATERIAL_PRICE, indice=i,
+                    nombre=f"RM_{rm['concept'][:20]}",
+                    valor_min=p*(1-pct_var), valor_mode=p,
+                    valor_max=p*(1+pct_var)))
+        isbl = data["ISBL"]
+        variables.append(mc.VariableIncierta(
+            kind=mc.KIND_ISBL, indice=0, nombre="ISBL",
+            valor_min=isbl*(1-pct_var), valor_mode=isbl,
+            valor_max=isbl*(1+pct_var)))
+        if not variables:
+            QMessageBox.warning(self, "Tornado",
+                                  "No hay variables con valor > 0.")
+            return
+        self.status.showMessage(
+            f"Tornado: evaluando {len(variables)} variables…", 0)
+        QApplication.processEvents()
+        try:
+            tornado = mc.correr_tornado(data, params, variables)
+        except Exception as e:
+            QMessageBox.critical(self, "Tornado",
+                                   f"Falló: {type(e).__name__}: {e}")
+            return
+        self._show_tornado(tornado, pct_var)
+
+    def _show_tornado(self, tornado_data, pct_var):
+        """Dialog con plot horizontal de tornado."""
+        from PySide6.QtWidgets import QDialog
+        dlg = QDialog(self)
+        dlg.setWindowTitle(f"Tornado — sensibilidad ±{pct_var*100:.0f}%")
+        dlg.resize(900, 600)
+        v = QVBoxLayout(dlg)
+        if _MPL_OK:
+            fig = Figure(figsize=(10, 6), dpi=100, facecolor=COLOR_BG)
+            ax = fig.add_subplot(1, 1, 1, facecolor="white")
+            # tornado_data: list de dicts con nombre, npv_min, npv_max
+            # tornado list ya viene ordenada por swing descendente
+            items = tornado_data[:15]   # top 15
+            names = [it.get("nombre", "?") for it in items]
+            npv_lo = [it.get("npv_low", 0)/1e6 for it in items]
+            npv_hi = [it.get("npv_high", 0)/1e6 for it in items]
+            npv_base = items[0].get("npv_base", 0)/1e6 if items else 0
+            y_pos = list(range(len(items)))
+            for i, (lo, hi) in enumerate(zip(npv_lo, npv_hi)):
+                left  = min(lo, hi)
+                width = abs(hi - lo)
+                ax.barh(i, width, left=left,
+                         color=COLOR_ACCENT, alpha=0.7,
+                         edgecolor="white")
+            ax.axvline(npv_base, color="black", linewidth=1.2,
+                         label=f"Base NPV: {npv_base:+.1f} MM")
+            ax.set_yticks(y_pos)
+            ax.set_yticklabels(names, fontsize=9)
+            ax.invert_yaxis()
+            ax.set_xlabel("NPV (MM USD)")
+            ax.set_title(f"Tornado plot — top {len(items)} variables",
+                          fontsize=11, fontweight="bold")
+            ax.grid(True, axis="x", alpha=0.3, linestyle="--")
+            ax.legend(loc="best", fontsize=9)
+            for spine in ("top", "right"):
+                ax.spines[spine].set_visible(False)
+            fig.tight_layout()
+            canvas = FigureCanvasQTAgg(fig)
+            v.addWidget(canvas)
+        btns = QDialogButtonBox(QDialogButtonBox.Close)
+        btns.rejected.connect(dlg.reject)
+        v.addWidget(btns)
+        dlg.exec()
+
+
+# ─────────────────────────────────────────────────────────────
+# HELP HTML
+# ─────────────────────────────────────────────────────────────
+
+_HELP_HTML = """
+<h2>Análisis Económico — Guía rápida</h2>
+
+<h3>1. Flujo típico</h3>
+<ol>
+  <li>Diseñá el flowsheet en <i>flowsheet editor</i> (Open Flowsheet…).</li>
+  <li>Click "Análisis económico →" → genera xlsx + abre este ANA.</li>
+  <li>Revisar tabs: Capital, Fixed, Variable, Equipment, Streams.</li>
+  <li>Click <b>Solve (F5)</b> → resultados en Results + Cash Flow Chart.</li>
+  <li>Para incertidumbre: <b>Monte Carlo</b> o <b>Tornado</b>.</li>
+</ol>
+
+<h3>2. Tabs disponibles</h3>
+<ul>
+  <li><b>Capital Costs</b>: ISBL + fracciones Turton (OSBL/ENG/CONT/WC).
+       <i>Editable</i>.</li>
+  <li><b>Fixed Op. Costs</b>: Labor + 8 porcentajes Turton §8.2. <i>Editable</i>.</li>
+  <li><b>Variable Op. Costs</b>: feeds, products, wastes, consumables,
+       utilities con flowrate × price. <i>Editable</i>.</li>
+  <li><b>Equipment</b>: lista del PFD con S, T_op, P_op, FBM, CBM.</li>
+  <li><b>Streams</b>: corrientes del PFD con T, P, composición wt %.</li>
+  <li><b>Costing Turton</b>: CBM por categoría, CGR, COM Eq 8.2,
+       profitability KPIs.</li>
+  <li><b>Income Statement</b>: P&L año por año (Revenue − Costos −
+       Depreciación = EBIT × (1−tax) = Net Income).</li>
+  <li><b>Results</b>: tabla resumen con NPV / IRR / PBP con flags
+       ✓/⚠/✗.</li>
+  <li><b>Cash Flow Chart</b>: bar chart anual + cumulative NPV
+       descontado.</li>
+</ul>
+
+<h3>3. Perfil económico</h3>
+<p>Click <b>Perfil econ…</b> para cambiar perfil regional (PE/USA/CL/EU),
+factor de Heat Integration (0–1), y coeficiente Turton γ (1.05–1.50).
+Cada cambio re-corre el solver automáticamente.</p>
+
+<h3>4. Monte Carlo</h3>
+<p>Aplica una distribución triangular ±X % a precios productos +
+raw materials + ISBL.  Devuelve histograma de NPVs con P5/P50/P95
+y P(NPV>0).  Default: ±20 %, 2000 runs.</p>
+
+<h3>5. Tornado</h3>
+<p>Sensibilidad ±25 % en cada variable individualmente.  Devuelve
+barras horizontales ordenadas por impacto absoluto en NPV — útil
+para identificar las 3-5 variables que mueven la rentabilidad.</p>
+
+<h3>6. Drag & drop</h3>
+<p>Arrastrar un .xlsx sobre la ventana = importarlo.</p>
+
+<h3>7. Shortcuts</h3>
+<ul>
+  <li><b>Ctrl+O</b> — Open</li>
+  <li><b>Ctrl+S</b> — Save</li>
+  <li><b>F5</b> — Solve</li>
+  <li><b>Ctrl+D</b> — Toggle dark mode</li>
+  <li><b>F1</b> — Esta ayuda</li>
+</ul>
+
+<p style="color:#888; font-size:9pt; margin-top:24px;">
+Pedro-Tesis · ana_qt.py · methodology Turton 4th ed Ch 7-10
+</p>
+"""
 
 
 # ─────────────────────────────────────────────────────────────
