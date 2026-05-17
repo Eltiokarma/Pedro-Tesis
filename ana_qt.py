@@ -228,10 +228,10 @@ class AnaMainWindow(QMainWindow):
         tb.addAction(act_flowsheet)
 
         # Spacer + status
-        from PySide6.QtWidgets import QWidget as _W
+        from PySide6.QtWidgets import QWidget as _W, QSizePolicy
         spacer = _W()
-        spacer.setSizePolicy(spacer.sizePolicy().Expanding,
-                              spacer.sizePolicy().Preferred)
+        spacer.setSizePolicy(QSizePolicy.Policy.Expanding,
+                              QSizePolicy.Policy.Preferred)
         tb.addWidget(spacer)
 
         self.profile_label = QLabel("")
