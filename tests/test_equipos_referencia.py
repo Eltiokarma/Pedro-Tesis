@@ -267,6 +267,48 @@ class TestNPSHa(unittest.TestCase):
 
 
 # ─────────────────────────────────────────────────────────────
+# §3.2 — NPSHr por suction specific speed
+# ─────────────────────────────────────────────────────────────
+
+class TestNPSHrSuctionSpecificSpeed(unittest.TestCase):
+    """Verifica la correlación de suction specific speed.
+
+    Perry 8ª §10.4 / Walas §10.3-3 / Karassik Pump Handbook 4ª:
+
+        N_ss = N · sqrt(Q) / NPSHr^(3/4)        (US customary)
+        ⇒  NPSHr[ft] = ( N · sqrt(Q[gpm]) / N_ss )^(4/3)
+
+    Caso de referencia (agua, bomba centrífuga típica):
+       Q = 100 m³/h  →  Q_gpm = 100·4.40287 = 440.287 gpm
+       N = 3550 rpm  (motor 2-polos 60 Hz estándar)
+       N_ss = 9000   (Hydraulic Institute / API 610 conservador)
+
+       NPSHr[ft] = (3550 · sqrt(440.287) / 9000)^(4/3)
+                 = (3550 · 20.983 / 9000)^(4/3)
+                 = (8.276)^(4/3)
+                 = 16.61 ft
+       NPSHr[m]  = 16.61 · 0.3048 = 5.06 m
+    """
+
+    def test_q100_n3550_nss9000(self):
+        import equipment_design as ed
+        # m_kg_s = Q · ρ : 100 m³/h · 1000 kg/m³ / 3600 = 27.78 kg/s
+        res = ed.pump_sizing(
+            m_kg_s=27.78, dp_bar=4.0, rho_kg_m3=1000.0,
+            eta_hyd=0.75,
+            T_K=298.15, p_vap_bar=0.032,
+            p_in_bar=1.0, z_elev_m=2.0,
+            N_rpm=3550.0, N_ss=9000.0,
+        )
+        npshr_expected = 5.06
+        self.assertTrue(
+            _close(res["NPSHr_m_est"], npshr_expected, tol=0.02),
+            f"NPSHr suction specific speed: esperado {npshr_expected:.2f} m, "
+            f"obtenido {res['NPSHr_m_est']:.2f} m"
+        )
+
+
+# ─────────────────────────────────────────────────────────────
 # §6.1 — Energy balance sensible
 # ─────────────────────────────────────────────────────────────
 

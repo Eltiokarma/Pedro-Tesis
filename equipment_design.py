@@ -40,8 +40,25 @@ def pump_sizing(m_kg_s:     float,
                 T_K:        float = 298.15,
                 p_vap_bar:  float = 0.03,
                 p_in_bar:   float = 1.013,
-                z_elev_m:   float = 0.0) -> Optional[Dict]:
+                z_elev_m:   float = 0.0,
+                N_rpm:      float = 3550.0,
+                N_ss:       float = 9000.0) -> Optional[Dict]:
     """Dimensiona una bomba centrífuga.
+
+    NPSHr — Velocidad específica de succión (Perry 8ª §10.4,
+    Walas §10.3-3, Karassik Pump Handbook 4ª §2.3):
+
+        N_ss = N · sqrt(Q) / NPSHr^(3/4)        (US customary)
+        ⇒  NPSHr [ft] = ( N · sqrt(Q[gpm]) / N_ss )^(4/3)
+        ⇒  NPSHr [m]  = NPSHr[ft] · 0.3048
+
+    Donde:
+        N      = velocidad de la bomba (rpm).  Default 3550 = motor
+                 2-polos 60 Hz, estándar industrial centrífuga.
+        N_ss   = velocidad específica de succión.  Valor de diseño
+                 conservador 9000 (Hydraulic Institute API 610);
+                 valores agresivos llegan a 11000-14000 pero
+                 reducen vida útil del impeller.
 
     Args:
         m_kg_s:    caudal másico
@@ -53,6 +70,8 @@ def pump_sizing(m_kg_s:     float,
         p_vap_bar: presión de vapor a T_K (para NPSH)
         p_in_bar:  presión de succión disponible
         z_elev_m:  altura de succión + (negativo si bomba está arriba)
+        N_rpm:     velocidad de rotación (default 3550)
+        N_ss:      suction specific speed (default 9000, conservador)
 
     Returns dict {
         W_hyd_kW:    potencia hidráulica = m·ΔP/ρ
@@ -61,9 +80,10 @@ def pump_sizing(m_kg_s:     float,
         head_m:      = ΔP_Pa / (ρ·g)
         Q_m3_h:      caudal volumétrico
         NPSHa_m:     NPSH disponible = (P_in - P_vap)/(ρg) + z_elev
-        NPSHr_m_est: NPSHr estimado (empírico bomba centrífuga típica)
+        NPSHr_m_est: NPSHr estimado por suction specific speed
+                     (Perry/Walas/Karassik).  None si Q≈0.
         eta_total:   η_hyd · η_motor
-        cavitation_margin_m: NPSHa - NPSHr
+        cavitation_margin_m: NPSHa - NPSHr (None si NPSHr es None)
     }
     """
     if m_kg_s <= 0 or rho_kg_m3 <= 0 or dp_bar <= 0:
@@ -82,10 +102,17 @@ def pump_sizing(m_kg_s:     float,
     head_m = dp_Pa / (rho_kg_m3 * g)
     # NPSH disponible: NPSHa = (P_in - P_vap)/(ρg) + Δz
     npsha = (p_in_bar - p_vap_bar) * 1e5 / (rho_kg_m3 * g) + z_elev_m
-    # NPSHr estimado (correlación Penninger para centrífuga):
-    # NPSHr ≈ 0.0001 · (Q[m³/h] · head[m])^0.5 · (3600/n_rpm)^?
-    # Simplificación empírica: NPSHr ≈ 1-3 m para bombas típicas
-    npshr_est = max(1.5, 0.05 * head_m ** 0.5 + Q_m3_h ** 0.3 / 50)
+    # NPSHr por suction specific speed (Perry 8ª §10.4):
+    #   NPSHr[ft] = ( N · sqrt(Q[gpm]) / N_ss )^(4/3)
+    # Conversiones: 1 m³/h = 4.40287 gpm ; 1 ft = 0.3048 m
+    Q_gpm = Q_m3_h * 4.40287
+    if Q_gpm > 1e-6 and N_ss > 0 and N_rpm > 0:
+        npshr_ft = (N_rpm * math.sqrt(Q_gpm) / N_ss) ** (4.0 / 3.0)
+        npshr_est = npshr_ft * 0.3048
+        cav_margin = npsha - npshr_est
+    else:
+        npshr_est = None
+        cav_margin = None
     return dict(
         W_hyd_kW=W_hyd,
         W_shaft_kW=W_shaft,
@@ -94,7 +121,7 @@ def pump_sizing(m_kg_s:     float,
         Q_m3_h=Q_m3_h,
         NPSHa_m=npsha,
         NPSHr_m_est=npshr_est,
-        cavitation_margin_m=npsha - npshr_est,
+        cavitation_margin_m=cav_margin,
         eta_total=eta_h * eta_m,
     )
 
