@@ -114,14 +114,24 @@ def compressor_sizing(m_kg_s:    float,
                        z:         float = 1.0) -> Optional[Dict]:
     """Dimensiona un compresor centrífugo/axial isentrópico.
 
-    Trabajo isentrópico (ideal, gas ideal):
+    Trabajo isentrópico (ideal, gas ideal — Turton 5ª §6.5):
         W_s = m·z·R·T_in/MW · k/(k-1) · [(P2/P1)^((k-1)/k) - 1]
 
     Trabajo real:
         W_act = W_s / η_isen
 
-    T descarga:
-        T_out = T_in · (P2/P1)^((k-1)/k) / η_isen  +  correction
+    Temperatura de descarga (forma correcta, NO dividir T entera
+    por η).  Derivación: ΔT_real = ΔT_isen / η_isen, donde
+    ΔT_isen = T_in · ((P2/P1)^((k-1)/k) − 1).  Por lo tanto:
+
+        T_out = T_in · [ 1 + ((P2/P1)^((k-1)/k) − 1) / η_isen ]
+
+    Test de referencia (aire k=1.4, T_in=300 K, P1→P2 = 1→5 bar,
+    η_isen=0.75):
+        ΔT_isen = 300·(5^0.2857 − 1) = 175.13 K
+        T_out   = 300 + 175.13/0.75 = 533.50 K   (NO 633 K como
+                                                    daría la división
+                                                    incorrecta de T)
 
     Etapas recomendadas: ratio_per_stage ≤ 4 industrial.  Si
     ratio total > 4, recomendar multi-stage con intercoolers.

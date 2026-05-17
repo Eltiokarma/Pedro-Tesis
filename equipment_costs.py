@@ -1,5 +1,5 @@
 # ======================================================
-# EQUIPMENT PURCHASED COSTS — Turton Apx A correlations
+# EQUIPMENT PURCHASED COSTS — Turton 5th ed Appendix A
 # + Lang factor for FCI estimation
 # ======================================================
 #
@@ -12,10 +12,12 @@
 #          base (CS normalmente), en USD del año base.
 #   S    = parámetro de tamaño (área, volumen, potencia,
 #          flujo) — varía por equipo.
-#   K1,2,3 = coeficientes de regresión del libro.
+#   K1,2,3 = coeficientes de regresión (Tabla A.1).
 #
-# Año base de los Cp°:  CEPCI = 397  (Sept 2001, Turton 4th
-# ed).  Para llevarlo al año actual, usar el módulo cepci.py:
+# Año base de los Cp°:  CEPCI = 397.0  (Sept 2001).  La 5ª
+# edición de Turton mantiene este año base para las
+# correlaciones Cp° del Apéndice A.  Para llevarlo al año
+# actual, usar el módulo cepci.py:
 #
 #     Cp°(año_actual) = Cp°(2001) · CEPCI[año_actual] / 397
 #
@@ -30,16 +32,18 @@
 #   solid processing       → 3.10
 #
 # ------------------------------------------------------
-# Fuentes:
-#   Turton, R.; Bailie, R.C.; Whiting, W.B.; Shaeiwitz,
-#     J.A.; Bhattacharyya, D. (2018).  "Analysis, Synthesis,
-#     and Design of Chemical Processes", 5th ed., Pearson.
-#     Apéndice A, Tabla A.1.
+# Fuente principal:
+#   Turton, R.; Shaeiwitz, J.A.; Bhattacharyya, D.;
+#     Whiting, W.B. (2018).  "Analysis, Synthesis, and
+#     Design of Chemical Processes", 5th ed., Pearson.
+#     Apéndice A, Tablas A.1–A.4.
 #
-# IMPORTANTE: los coeficientes acá listados son del 4th ed
-# (CEPCI base = 397).  Verificalos contra tu edición antes
-# de defender la tesis.  La estructura es la misma; solo
-# actualizá los números si tu edición tiene otros.
+# Los coeficientes K1, K2, K3 de las correlaciones Cp° NO
+# cambian entre la 4ª y la 5ª edición (la 5ª revisó la
+# metodología de FBM y FP pero conservó las regresiones Cp°
+# de la 4ª, año base 2001).  Donde un valor existe sólo en
+# la 4ª (por ejemplo equipos retirados de la 5ª), se anota
+# explícitamente con # [4ª ed — no disponible en 5ª].
 # ======================================================
 
 import math
@@ -50,8 +54,11 @@ import cepci
 # ======================================================
 # CEPCI BASE DE LAS CORRELACIONES
 # ======================================================
-
-CEPCI_BASE_TURTON = 397.0  # Septiembre 2001 (Turton 4th ed)
+# CEPCI base 397 (año 2001) — Turton 5ª ed, Apéndice A.
+# Las correlaciones Cp° = f(K1, K2, K3, S) se publicaron
+# originalmente en la 4ª edición y se preservaron en la
+# 5ª sin re-calibración del año base.
+CEPCI_BASE_TURTON = 397.0
 
 
 # ======================================================
