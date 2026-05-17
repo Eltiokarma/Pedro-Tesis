@@ -26,7 +26,13 @@ import math
 from typing import Optional, List, Tuple
 
 import equipment_costs as ec
+import equipment_design as ed
 from flowsheet_model import SEC_PER_YEAR, TM_TO_KG
+
+try:
+    import thermo_db as _td
+except ImportError:
+    _td = None
 
 
 # ─────────────────────────────────────────────────────────────
@@ -77,14 +83,38 @@ RHO_LIQUID_DEFAULT = 800.0
 RHO_GAS_DEFAULT    = 20.0       # gas comprimido típico
 
 
+def _mw_avg_kg_per_mol(stream) -> float:
+    """MW promedio (kg/mol) del stream desde thermo_db, ponderada por la
+    composición.  §4.3: ya no usamos M=0.030 hardcoded.  Si la composición
+    falta o thermo_db no resuelve, devuelve fallback 0.029 (aire).
+    """
+    comp = getattr(stream, "composition", None) or (
+        {stream.main_component: 1.0} if getattr(stream, "main_component", None) else {}
+    )
+    if not comp or _td is None:
+        return 0.029
+    mw_g = 0.0
+    total = 0.0
+    for c, w in comp.items():
+        co = _td.get(c)
+        if co is None or getattr(co, "mw", 0) <= 0:
+            continue
+        mw_g += w * co.mw
+        total += w
+    if total <= 0:
+        return 0.029
+    return (mw_g / total) * 1e-3      # g/mol → kg/mol
+
+
 def _rho_estimate(stream, T_K=None, P_bar=None):
-    """Densidad grosera del stream.  Gas via ideal P·M/R·T (M=30 g/mol
-    default), liquid 800 kg/m³ default."""
+    """Densidad del stream.  Gas via ideal P·M/(R·T) usando MW real de
+    componentes (§4.3); liquid 800 kg/m³ default si no hay info mejor.
+    """
     phase = (stream.phase or "").lower()
     if "gas" in phase or "vapor" in phase:
         T = T_K or (stream.temperature + 273.15)
         P = P_bar or (getattr(stream, "pressure_bar", 1.0) or 1.0)
-        M = 0.030
+        M = _mw_avg_kg_per_mol(stream)
         return P * 1e5 * M / (8.314 * max(T, 100))
     return RHO_LIQUID_DEFAULT
 
@@ -137,77 +167,72 @@ def size_reactor(block, fs) -> Optional[float]:
 
 
 def size_pump(block, fs) -> Optional[float]:
-    """W [kW] = m·ΔP / (ρ·η)."""
-    ins = [s for s in fs.streams.values() if s.dst == block.id]
-    if not ins:
+    """Delega a equipment_design.design_pump_for_block (§4.1).
+    Una sola fuente de verdad para hidráulica de bombas.  Devuelve
+    potencia eléctrica [kW]."""
+    res = ed.design_pump_for_block(block, fs)
+    if res is None:
         return None
-    m_s = _flow_kg_s(sum(s.mass_flow for s in ins))
-    dp_bar = getattr(block, "delta_p_bar", 0) or 0
-    if dp_bar <= 0 or m_s <= 0:
+    W = res.get("W_elec_kW") or res.get("W_shaft_kW")
+    if W is None or W <= 0:
         return None
-    dp_pa = dp_bar * 1e5
-    eta   = getattr(block, "efficiency", 0) or 0.75
-    rho   = _rho_estimate(ins[0])
-    W = m_s * dp_pa / (rho * eta * 1000)
     return max(W, 1.0)
 
 
 def size_compressor(block, fs) -> Optional[float]:
-    """W [kW] politrópico:
-        W = m·R·T1/(M·η) · n/(n-1) · [(P2/P1)^((n-1)/n) - 1]
-    Si P2 no se conoce, asume ratio = 5 (un solo stage típico)."""
-    ins = [s for s in fs.streams.values() if s.dst == block.id]
-    if not ins:
+    """Delega a equipment_design.design_compressor_for_block (§4.1).
+    Una sola fuente de verdad para isentrópica de compresores.
+    Devuelve potencia real al eje [kW]."""
+    res = ed.design_compressor_for_block(block, fs)
+    if res is None:
         return None
-    s_in = ins[0]
-    m_s = _flow_kg_s(s_in.mass_flow)
-    if m_s <= 0:
+    W = res.get("W_act_kW")
+    if W is None or W <= 0:
         return None
-    T1 = (s_in.temperature or 25.0) + 273.15
-    P1 = getattr(s_in, "pressure_bar", 0) or 1.0
-    outs = [s for s in fs.streams.values() if s.src == block.id]
-    P2 = (getattr(outs[0], "pressure_bar", 0) or 0) if outs else 0
-    if P2 <= P1:
-        # fallback: usar delta_p_bar declarado o ratio 5×
-        dp = getattr(block, "delta_p_bar", 0) or 0
-        P2 = P1 + dp if dp > 0 else P1 * 5.0
-    if P2 <= P1:
-        return None
-    n   = 1.35
-    eta = getattr(block, "efficiency", 0) or 0.75
-    M   = 0.030
-    R   = 8.314
-    r = P2 / P1
-    W_W = (m_s * R * T1 / (M * eta) *
-           (n / (n - 1)) * ((r ** ((n - 1) / n)) - 1))
-    return max(W_W / 1000.0, 5.0)
+    return max(W, 5.0)
 
 
 def size_tower(block, fs) -> Optional[float]:
-    """V = π·D²/4 · H.  D del Souders-Brown approx, H = N · 0.6 + 3."""
+    """V = π·D²/4 · H.  D del Souders-Brown real (§4.2), H = N · 0.6 + 3.
+
+    Souders-Brown (Perry 8ª §14, Walas §13.1):
+
+        v_max = K · sqrt( (ρ_L − ρ_V) / ρ_V )    [m/s]
+
+    Con K en m/s.  Valor típico para platos trayed con 24" tray
+    spacing:  K = 0.05–0.09 m/s (≈ 0.165–0.30 ft/s).  Usamos
+    K = 0.06 (conservador, 24" spacing, sin foaming severo).
+    """
+    K_SB = 0.06             # m/s — Souders-Brown coefficient
     N = (getattr(block, "_column_N", 0)
          or getattr(block, "column_N_stages", 0) or 10)
     H = N * 0.6 + 3.0
-    # Vapor flow approx
+    # Vapor flow (preferir corriente declarada vapor/gas)
     vap = next((s for s in fs.streams.values()
                 if s.dst == block.id
                 and any(k in (s.phase or "").lower()
                           for k in ("vap", "gas"))), None)
     if vap is None:
-        # cualquier feed
         feeds = [s for s in fs.streams.values() if s.dst == block.id]
         if not feeds:
             return None
         vap = feeds[0]
     m_s = _flow_kg_s(vap.mass_flow)
-    rho_v = _rho_estimate(vap)
-    if m_s <= 0 or rho_v <= 0:
+    # ρ_V con MW real (§4.3).  Forzamos fase gas en _rho_estimate.
+    T_vap = (vap.temperature or 25.0) + 273.15
+    P_vap = getattr(vap, "pressure_bar", 1.0) or 1.0
+    M_vap = _mw_avg_kg_per_mol(vap)
+    rho_v = P_vap * 1e5 * M_vap / (8.314 * max(T_vap, 100))
+    # ρ_L: si tenemos stream líquido (bottoms o reflux), tomarlo; si no, 800.
+    liq = next((s for s in fs.streams.values()
+                if s.src == block.id
+                and "liq" in (s.phase or "").lower()), None)
+    rho_l = _rho_estimate(liq) if liq is not None else RHO_LIQUID_DEFAULT
+    if m_s <= 0 or rho_v <= 0 or rho_l <= rho_v:
         D = 1.0
     else:
         Q_v = m_s / rho_v          # m³/s
-        # Souders-Brown: v_max ≈ 0.05·sqrt((ρL−ρV)/ρV).  Para ρL=800,
-        # ρV=10 → v_max ≈ 0.45 m/s.  Usar 0.4 como conservador.
-        v_max = 0.4
+        v_max = K_SB * math.sqrt((rho_l - rho_v) / rho_v)
         D = math.sqrt(4 * Q_v / (math.pi * v_max))
         D = max(D, 0.3)
     V = math.pi * D**2 / 4 * H
