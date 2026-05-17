@@ -3743,6 +3743,7 @@ class FlowsheetMainWindow(QMainWindow):
         add_btn("Solve balances",  self.action_solve,       "sim-run",       toolbar=tb2)
         add_btn("Setpoints…",      self.action_setpoints,   "act-setpoint",  toolbar=tb2)
         add_btn("DOF / Balance…",  self.action_dof,         "act-dof",       toolbar=tb2)
+        add_btn("Auto-size S",     self.action_autosize,    "act-sizing",    toolbar=tb2)
         # Re-bind tb a tb2 para el resto de los add que vienen abajo
         tb = tb2
         # toggle del dock de tabla de corrientes (creado en
@@ -4146,6 +4147,58 @@ class FlowsheetMainWindow(QMainWindow):
         dlg = QDialog(self)
         dlg.setWindowTitle("Análisis estructural — DOF")
         dlg.resize(820, 540)
+        v = QVBoxLayout(dlg)
+        txt = QTextEdit()
+        txt.setReadOnly(True)
+        txt.setStyleSheet("font-family: Consolas, monospace; font-size: 9pt;")
+        txt.setPlainText(text)
+        v.addWidget(txt)
+        btns = QDialogButtonBox(QDialogButtonBox.Close)
+        btns.rejected.connect(dlg.reject)
+        v.addWidget(btns)
+        dlg.exec()
+
+    def action_autosize(self):
+        """Auto-dimensiona S de cada bloque desde resultados del solver.
+
+        HX usa A = Q/(U·ΔTlm), reactores V = m·τ/ρ, bombas W = m·ΔP/(ρη),
+        compresores W politrópico, torres D del Souders-Brown + H = N·0.6,
+        vessels τ_separator, tanques 7 días de buffer.
+
+        Reemplaza el S "manual" inicial por algo derivado del balance.
+        Útil después de Solve balances → da una primera estimación
+        físicamente coherente para CAPEX."""
+        if not self.fs.blocks:
+            QMessageBox.information(self, "Auto-size",
+                                      "El diagrama está vacío.")
+            return
+        ans = QMessageBox.question(
+            self, "Auto-size equipos",
+            "¿Recalcular S de cada bloque desde duty, mass_flow, ΔP y\n"
+            "T_op del último solve?  Sobreescribe los S actuales.\n\n"
+            "Solo bloques con datos suficientes se modifican.",
+            QMessageBox.Yes | QMessageBox.No,
+        )
+        if ans != QMessageBox.Yes:
+            return
+        import equipment_sizing as es
+        # Snapshot para undo
+        before = self.begin_action()
+        try:
+            results = es.auto_size_blocks(self.fs, only_if_unset=False)
+        except Exception as e:
+            QMessageBox.critical(self, "Error de cálculo",
+                                  f"{type(e).__name__}: {e}")
+            return
+        self.end_action("Auto-size equipment", before)
+        # Re-render para que los tooltips/badges reflejen el nuevo S
+        self._rebuild_scene()
+        # Mostrar log
+        text = es.format_sizing_log(results)
+        from PySide6.QtWidgets import QDialog, QVBoxLayout, QTextEdit, QDialogButtonBox
+        dlg = QDialog(self)
+        dlg.setWindowTitle("Auto-size — resultados")
+        dlg.resize(620, 420)
         v = QVBoxLayout(dlg)
         txt = QTextEdit()
         txt.setReadOnly(True)
