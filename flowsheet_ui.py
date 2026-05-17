@@ -3228,6 +3228,12 @@ class FlowsheetEditor:
         HCl (acidificación pH≈2.7), H2SO4 98% (secado de Cl2 húmedo).
 
         Basis: 1000 tm/año NaCl fresco (≈ 114 kg/h).  Layout 1.8×.
+
+        ⚠ PILOT SCALE — NPV negativo esperado.  A 1000 tm/año NaCl
+        la planta produce ~600 tm Cl₂ + ~2000 tm NaOH 50%, revenue
+        ~$1.7M/año.  El FCI + COL absorben más que eso.  Para
+        análisis de planta industrial real (Oquendo procesa miles
+        de t/año), escalar caudales ×50-100 y re-correr.
         """
         # ============ FEEDS Y SATURADOR ============
         tk_sal   = self._add_example_block("TK-101","Storage tank — cone roof",
@@ -3507,6 +3513,12 @@ class FlowsheetEditor:
           · Turbina de cola recupera energía del gas a baja P
 
         Basis: 1000 tm/año NH3 → ~6200 tm/año HNO3 60% (~3700 tm/año HNO3 puro).
+
+        ⚠ PILOT SCALE — NPV negativo esperado.  El FCI fijo y el
+        Labor mínimo no se amortizan a 6200 tm/año.  Para análisis
+        de planta real (escala 80-300 kt/año), escalar todos los
+        caudales 15-50× y re-correr Análisis económico.  FCI escala
+        con S^0.6 (no linealmente) → ratio rev/CAPEX mejora ~2-3×.
 
         Layout 1.8× spacing.  Acceso: menú Examples → ⚗️ HNO3 Ostwald.
         """

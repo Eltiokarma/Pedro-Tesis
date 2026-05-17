@@ -152,6 +152,41 @@ HEAT_INTEGRATION = {
 
 
 # ─────────────────────────────────────────────────────────────
+# COM FORMULA COEFFICIENTS (Turton Eq 8.2)
+# ─────────────────────────────────────────────────────────────
+# COM_d = α·FCI + β·COL + γ·(CUT + CRM + CWT)
+#
+# Defaults Turton (planta química standalone con G&A típicos):
+#   α = 0.180  →  fixed costs sin labor = 18 % de FCI
+#                 (maintenance + supplies + taxes + insurance + overhead)
+#   β = 2.73   →  Labor + supervision + direct salary overhead
+#   γ = 1.23   →  variable costs × 1.23 incluye:
+#                   · ventas y distribución (+10 %)
+#                   · I+D (+5 %)
+#                   · administración general (+5 %)
+#                   · royalties típicos (+3 %)
+#
+# Cuándo BAJAR γ:
+#   1.10  →  refinería integrada (Petroperú): tiene red de
+#            distribución propia, G&A absorbidos en precio venta
+#   1.05  →  commodity bulk con offtake long-term (no spot sales)
+#   1.00  →  internal use (productos consumidos en otra planta del
+#            mismo holding, sin G&A asignable)
+#
+# Cuándo SUBIR γ:
+#   1.30  →  productos farmacéuticos / especialidad (más R+D,
+#            ventas técnicas, regulatorio FDA/EMA)
+#   1.50  →  high-tech / pequeño volumen (semicons, agroquímicos)
+# ─────────────────────────────────────────────────────────────
+COM_COEFFS = {
+    "alpha_fci_d":      0.180,   # CON depreciación (COM_d)
+    "alpha_fci":        0.305,   # SIN depreciación (COM)
+    "beta_col":         2.73,
+    "gamma_variable":   1.23,    # overhead sobre VCOP — el más editable
+}
+
+
+# ─────────────────────────────────────────────────────────────
 # PERFILES REGIONALES — overrides sobre los defaults
 # ─────────────────────────────────────────────────────────────
 PROFILES = {
@@ -270,3 +305,19 @@ def set_heat_integration_factor(f: float):
     if not 0.0 <= f <= 1.0:
         raise ValueError(f"factor debe estar en [0, 1], no {f}")
     HEAT_INTEGRATION["factor"] = float(f)
+
+
+def get_com_coeffs():
+    """Devuelve coeficientes de la ecuación Turton 8.2 (α, β, γ).
+    Permite ajustar γ (default 1.23) para refinerías/commodity/specialty."""
+    return dict(COM_COEFFS)
+
+
+def set_com_gamma(gamma: float):
+    """Setea γ (overhead sobre variable costs).  Rangos típicos:
+        1.05-1.10 → refinería integrada / commodity
+        1.23      → planta química standalone (Turton default)
+        1.30-1.50 → farma / specialty / agroquímicos"""
+    if not 1.0 <= gamma <= 2.0:
+        raise ValueError(f"gamma debe estar en [1.0, 2.0], no {gamma}")
+    COM_COEFFS["gamma_variable"] = float(gamma)

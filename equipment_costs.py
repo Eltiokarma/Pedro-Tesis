@@ -605,35 +605,63 @@ def _solve_irr(cash_flow_yr, fci_usd, years_op, max_iter=50):
 # ======================================================
 # COST OF MANUFACTURE — Turton Eq 8.2 (with depreciation)
 # ======================================================
-def cost_of_manufacture(FCI_usd, COL_usd, CUT_usd, CRM_usd, CWT_usd):
+def cost_of_manufacture(FCI_usd, COL_usd, CUT_usd, CRM_usd, CWT_usd,
+                         alpha_d=None, alpha=None, beta=None, gamma=None):
     """Calcula COM (Cost of Manufacture) según Turton Eq 8.2:
 
-        COM_d  =  0.180·FCI + 2.73·COL + 1.23·(CUT + CRM + CWT)
+        COM_d  =  α_d·FCI + β·COL + γ·(CUT + CRM + CWT)        (con dep)
+        COM    =  α·FCI   + β·COL + γ·(CUT + CRM + CWT)        (sin dep)
 
-    Y la versión sin depreciación (COM):
-        COM    =  0.305·FCI + 2.73·COL + 1.23·(CUT + CRM + CWT)
+    Defaults Turton standalone chemical plant (desde econ_defaults):
+        α_d=0.180, α=0.305, β=2.73, γ=1.23
+
+    γ es el más relevante para tunear según el negocio:
+        1.05-1.10 → refinería integrada / commodity bulk
+        1.23      → planta química standalone (default Turton)
+        1.30-1.50 → farma / specialty / agroquímicos
 
     Inputs todos en USD/año (excepto FCI que es one-time CAPEX).
 
     Returns:
-        dict con COM_d, COM, breakdown por componente.
+        dict con COM_d, COM, breakdown por componente + coeffs usados.
     """
-    base = 1.23 * (CUT_usd + CRM_usd + CWT_usd)
-    labor_term = 2.73 * COL_usd
-    com_d  = 0.180 * FCI_usd + labor_term + base
-    com    = 0.305 * FCI_usd + labor_term + base
+    if any(x is None for x in (alpha_d, alpha, beta, gamma)):
+        try:
+            import econ_defaults as _ed
+            c = _ed.get_com_coeffs()
+            if alpha_d is None: alpha_d = c["alpha_fci_d"]
+            if alpha   is None: alpha   = c["alpha_fci"]
+            if beta    is None: beta    = c["beta_col"]
+            if gamma   is None: gamma   = c["gamma_variable"]
+        except Exception:
+            if alpha_d is None: alpha_d = 0.180
+            if alpha   is None: alpha   = 0.305
+            if beta    is None: beta    = 2.73
+            if gamma   is None: gamma   = 1.23
+    base       = gamma * (CUT_usd + CRM_usd + CWT_usd)
+    labor_term = beta  * COL_usd
+    com_d  = alpha_d * FCI_usd + labor_term + base
+    com    = alpha   * FCI_usd + labor_term + base
     return {
         "FCI":     FCI_usd,
         "COL":     COL_usd,
         "CUT":     CUT_usd,
         "CRM":     CRM_usd,
         "CWT":     CWT_usd,
-        "0.180·FCI": 0.180 * FCI_usd,
-        "0.305·FCI": 0.305 * FCI_usd,
-        "2.73·COL":  labor_term,
-        "1.23·(CUT+CRM+CWT)": base,
-        "COM_d":   com_d,   # con depreciación (recomendado)
-        "COM":     com,     # sin depreciación
+        # Términos individuales — keys actualizados al α/β/γ activo
+        f"{alpha_d:.3f}·FCI":            alpha_d * FCI_usd,
+        f"{alpha:.3f}·FCI (sin dep)":    alpha   * FCI_usd,
+        f"{beta:.2f}·COL":               labor_term,
+        f"{gamma:.2f}·(CUT+CRM+CWT)":    base,
+        # Aliases legacy para no romper código existente
+        "0.180·FCI":                     alpha_d * FCI_usd,
+        "0.305·FCI":                     alpha   * FCI_usd,
+        "2.73·COL":                      labor_term,
+        "1.23·(CUT+CRM+CWT)":            base,
+        "COM_d":   com_d,
+        "COM":     com,
+        # Coeffs efectivos usados
+        "alpha_d": alpha_d, "alpha": alpha, "beta": beta, "gamma": gamma,
     }
 
 

@@ -4348,38 +4348,64 @@ class FlowsheetMainWindow(QMainWindow):
         self.end_action("Editar OPEX extras", before)
 
     def action_econ_profile(self):
-        """Selector de perfil económico (Perú / USA / Chile / EU /
-        custom).  Reemplaza los hardcodes de Labor, prices y tasas.
-        Los cambios afectan el próximo "Análisis económico →"."""
+        """Selector de perfil económico + sliders para HI factor y
+        Turton γ (manufacturing overhead).  Estos tres son las
+        perillas con mayor impacto en NPV/IRR."""
         import econ_defaults as ed
         from PySide6.QtWidgets import (QDialog, QVBoxLayout, QFormLayout,
                                           QComboBox, QDoubleSpinBox, QLabel,
-                                          QDialogButtonBox, QGroupBox,
-                                          QTextEdit)
+                                          QDialogButtonBox, QTextEdit)
         dlg = QDialog(self)
-        dlg.setWindowTitle("Perfil económico activo")
-        dlg.resize(560, 540)
+        dlg.setWindowTitle("Perfil económico + perillas")
+        dlg.resize(620, 640)
         v = QVBoxLayout(dlg)
 
-        # Selector de perfil
         v.addWidget(QLabel(
-            "El perfil define salario/operador, precios de utilities y "
-            "tasas financieras.\nAfecta a todos los costing/profitability "
-            "calcs.  Editá econ_defaults.py para ajustar tu mercado real."))
+            "Estas tres perillas controlan TODO el costing del próximo\n"
+            "'Análisis económico →'.  Editá econ_defaults.py para más fino."))
         form = QFormLayout()
+
+        # 1) Perfil regional
         combo = QComboBox()
         combo.addItems(list(ed.PROFILES.keys()))
         combo.setCurrentText(ed.active_profile())
-        form.addRow("Perfil:", combo)
+        form.addRow("Perfil regional:", combo)
+
+        # 2) Heat integration factor
+        spin_hi = QDoubleSpinBox()
+        spin_hi.setRange(0.0, 1.0); spin_hi.setSingleStep(0.05)
+        spin_hi.setDecimals(2)
+        spin_hi.setValue(ed.get_heat_integration_factor())
+        spin_hi.setToolTip(
+            "Fracción del calor que NO se recupera vía cross-exchange.\n"
+            "1.0 = sin integración (greenfield)\n"
+            "0.5 = típico industrial\n"
+            "0.4 = planta moderna con Pinch (default)\n"
+            "0.2 = best-in-class MINLP-optimizado")
+        form.addRow("Heat integration (0-1):", spin_hi)
+
+        # 3) Turton γ (manufacturing overhead)
+        spin_gamma = QDoubleSpinBox()
+        spin_gamma.setRange(1.00, 2.00); spin_gamma.setSingleStep(0.01)
+        spin_gamma.setDecimals(2)
+        spin_gamma.setValue(ed.get_com_coeffs()["gamma_variable"])
+        spin_gamma.setToolTip(
+            "Multiplicador γ sobre (CUT+CRM+CWT) en Turton Eq 8.2.\n"
+            "1.05 = refinería integrada / commodity bulk\n"
+            "1.10 = planta con offtake long-term\n"
+            "1.23 = standalone chemical plant (Turton default)\n"
+            "1.30+ = farma / specialty / agroquímicos")
+        form.addRow("Turton γ (1.0-2.0):", spin_gamma)
+
         v.addLayout(form)
 
-        # Preview del perfil
         preview = QTextEdit()
         preview.setReadOnly(True)
         preview.setStyleSheet("font-family: Consolas, monospace; "
                                 "font-size: 9pt;")
 
-        def _refresh_preview(name):
+        def _refresh_preview(*_args):
+            name = combo.currentText()
             p = ed.load_profile(name)
             lines = [f"PERFIL: {name}\n" + "─" * 50,
                       "\nLABOR"]
@@ -4394,16 +4420,17 @@ class FlowsheetMainWindow(QMainWindow):
             lines.append("\nCAPITAL FRACTIONS")
             for k, val in p["capital_fracs"].items():
                 lines.append(f"  {k:32} = {val*100:>5.1f} %")
-            lines.append("\nFCOP FRACTIONS (Turton §8.2)")
-            for k, val in p["fcop_fracs"].items():
-                lines.append(f"  {k:32} = {val*100:>5.1f} %")
-            lines.append("\nSENSITIVITY")
-            for k, val in p["sensitivity"].items():
-                lines.append(f"  {k:32} = {val}")
+            lines.append("\nCOM COEFFICIENTS (Turton Eq 8.2)")
+            lines.append(f"  α  (FCI con dep)  = 0.180")
+            lines.append(f"  β  (Labor coef)   = 2.73")
+            lines.append(f"  γ  (overhead)     = {spin_gamma.value():.2f} ← editable")
+            lines.append(f"\nHEAT INTEGRATION  = {spin_hi.value():.2f}  ← editable")
             preview.setPlainText("\n".join(lines))
 
-        _refresh_preview(ed.active_profile())
+        _refresh_preview()
         combo.currentTextChanged.connect(_refresh_preview)
+        spin_hi.valueChanged.connect(_refresh_preview)
+        spin_gamma.valueChanged.connect(_refresh_preview)
         v.addWidget(preview)
 
         btns = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
@@ -4412,17 +4439,17 @@ class FlowsheetMainWindow(QMainWindow):
         v.addWidget(btns)
 
         if dlg.exec() == QDialog.Accepted:
-            new_profile = combo.currentText()
-            ed.set_active_profile(new_profile)
-            # Refrescar precios en equipment_ports.UTILITIES
+            ed.set_active_profile(combo.currentText())
+            ed.set_heat_integration_factor(spin_hi.value())
+            ed.set_com_gamma(spin_gamma.value())
             try:
                 import equipment_ports as ep
                 ep.refresh_utility_prices()
             except Exception:
                 pass
             self.status.showMessage(
-                f"Perfil económico cambiado a {new_profile}.  El "
-                f"próximo análisis económico usará los nuevos valores.",
+                f"Perfil={combo.currentText()}, HI={spin_hi.value():.2f}, "
+                f"γ={spin_gamma.value():.2f}.  Aplicar en próximo análisis.",
                 6000)
 
     def action_launch_analysis(self):
