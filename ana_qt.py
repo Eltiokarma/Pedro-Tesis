@@ -3,19 +3,22 @@ ana_qt.py — Análisis Económico (PySide6 rewrite del ANA.py Tkinter)
 
 Look unificado al flowsheet editor: toolbar con íconos SVG (icons.py),
 notebook con pestañas para Project Data / Equipment / Streams / Income
-Statement / Costing Turton / Results.
+Statement / Costing Turton / Results + Cash Flow chart embebido.
 
 Reemplaza el ANA.py legacy preservando funcionalidad core:
   · Import Excel (incluye xlsx del PFD con Equipment + Streams +
     Income Statement + Costing Turton sheets)
   · View / edit del Project Data (Capital + Fixed + Variable)
+    — Variable Op. Costs es editable inline (doble-click)
   · Solve económico (FCI, FCOP, VCOP, COM, NPV, IRR, PBP)
-  · Display de resultados con tablas formateadas
+  · Display de resultados con plots matplotlib embebidos:
+      · Annual Cash Flow (bar chart)
+      · Cumulative NPV discounted (line chart)
+  · Profile activo (PE/USA/CL/EU) + Heat Integration + Turton γ
 
 Lo que NO incluye (queda en módulos separados, llamable):
   · Monte Carlo (montecarlo.py)
   · Sensitivity tornado plots
-  · Editor inline de filas del Variable costs (usar Excel directo)
 
 CLI:
     python ana_qt.py --import path/to/project.xlsx
@@ -38,6 +41,17 @@ from PySide6.QtWidgets import (
 )
 
 import icons
+
+
+# Matplotlib embebido (opcional — degrada gracefully si no está)
+try:
+    import matplotlib
+    matplotlib.use("QtAgg")
+    from matplotlib.backends.backend_qtagg import FigureCanvasQTAgg
+    from matplotlib.figure import Figure
+    _MPL_OK = True
+except Exception:
+    _MPL_OK = False
 
 
 # ─────────────────────────────────────────────────────────────
@@ -244,6 +258,7 @@ class AnaMainWindow(QMainWindow):
         self._make_tab("Costing Turton",      _mk("an-case-study"))
         self._make_tab("Income Statement",    _mk("an-case-study"))
         self._make_tab("Results",             _mk("an-optimizer"))
+        self._make_chart_tab()
 
     def _make_tab(self, name, icon=None):
         w = QWidget()
@@ -272,6 +287,100 @@ class AnaMainWindow(QMainWindow):
         attr = f"_tab_{name.replace(' ', '_').replace('.', '').lower()}"
         pair = getattr(self, attr, None)
         return pair[1] if pair else None
+
+    def _make_chart_tab(self):
+        """Tab con plots matplotlib embebidos para cash flow + NPV."""
+        w = QWidget()
+        lay = QVBoxLayout(w)
+        lay.setContentsMargins(4, 4, 4, 4)
+        if _MPL_OK:
+            self.chart_figure = Figure(figsize=(11, 5), dpi=100,
+                                          facecolor=COLOR_BG)
+            self.chart_canvas = FigureCanvasQTAgg(self.chart_figure)
+            lay.addWidget(self.chart_canvas)
+            self.chart_msg = QLabel(
+                "Corré Solve (F5) para ver el cash flow año por año.",
+            )
+            self.chart_msg.setStyleSheet(
+                f"color: {COLOR_SUBTLE}; padding: 4px 8px;")
+            self.chart_msg.setAlignment(Qt.AlignCenter)
+            lay.addWidget(self.chart_msg)
+        else:
+            self.chart_canvas = None
+            lay.addWidget(QLabel(
+                "matplotlib no instalado — instalar con:\n"
+                "    pip install matplotlib\n\n"
+                "El cash flow se sigue calculando y aparece en\n"
+                "el tab 'Income Statement' como tabla."
+            ))
+        self.tabs.addTab(w, _mk("an-monte-carlo"), "Cash Flow Chart")
+        self._tab_chart = w
+
+    def _update_chart(self, cf_years, cf_values, npv_cumulative,
+                       payback_yr=None, npv_final=None):
+        """Actualiza el plot embebido con datos de cash flow + cum NPV."""
+        if not _MPL_OK or self.chart_canvas is None:
+            return
+        self.chart_figure.clear()
+        # Plot 1: bars de annual cash flow
+        ax1 = self.chart_figure.add_subplot(1, 2, 1, facecolor="white")
+        colors = [COLOR_POSITIVE if v >= 0 else COLOR_NEGATIVE
+                   for v in cf_values]
+        ax1.bar(cf_years, [v/1e6 for v in cf_values], color=colors,
+                 edgecolor="white")
+        ax1.axhline(0, color="black", linewidth=0.8)
+        ax1.set_title("Annual Cash Flow", fontsize=11, fontweight="bold",
+                       color=COLOR_NEUTRAL)
+        ax1.set_xlabel("Project year")
+        ax1.set_ylabel("CF (MM USD)")
+        ax1.grid(True, axis="y", alpha=0.3, linestyle="--")
+        for spine in ("top", "right"):
+            ax1.spines[spine].set_visible(False)
+
+        # Plot 2: cumulative NPV (discounted)
+        ax2 = self.chart_figure.add_subplot(1, 2, 2, facecolor="white")
+        cum_mm = [v/1e6 for v in npv_cumulative]
+        ax2.plot(cf_years, cum_mm, marker="o", color=COLOR_ACCENT,
+                  linewidth=2)
+        # Sombreado: verde si positivo, rojo si negativo
+        ax2.fill_between(cf_years, cum_mm, 0,
+                         where=[v >= 0 for v in cum_mm],
+                         interpolate=True, alpha=0.20,
+                         color=COLOR_POSITIVE)
+        ax2.fill_between(cf_years, cum_mm, 0,
+                         where=[v < 0 for v in cum_mm],
+                         interpolate=True, alpha=0.20,
+                         color=COLOR_NEGATIVE)
+        ax2.axhline(0, color="black", linewidth=0.8)
+        ax2.set_title("Cumulative NPV (discounted)", fontsize=11,
+                       fontweight="bold", color=COLOR_NEUTRAL)
+        ax2.set_xlabel("Project year")
+        ax2.set_ylabel("Σ PV(CF)  (MM USD)")
+        ax2.grid(True, alpha=0.3, linestyle="--")
+        for spine in ("top", "right"):
+            ax2.spines[spine].set_visible(False)
+        # PBP descontado: punto donde cum NPV cruza 0
+        if payback_yr is not None and 0 < payback_yr < cf_years[-1]:
+            ax2.axvline(payback_yr, color=COLOR_NEGATIVE,
+                         linestyle="--", linewidth=1.5,
+                         label=f"PBP discntd ≈ {payback_yr:.1f} yr")
+            ax2.legend(loc="best", fontsize=9)
+        # Anotar NPV final en el último punto
+        if npv_final is not None:
+            ax2.annotate(
+                f"NPV = {npv_final/1e6:+.1f} MM",
+                xy=(cf_years[-1], cum_mm[-1]),
+                xytext=(-90, 12 if cum_mm[-1] >= 0 else -24),
+                textcoords="offset points",
+                fontsize=10, fontweight="bold",
+                color=COLOR_POSITIVE if cum_mm[-1] >= 0 else COLOR_NEGATIVE,
+            )
+        self.chart_figure.tight_layout()
+        self.chart_canvas.draw()
+        if hasattr(self, "chart_msg"):
+            self.chart_msg.setText(
+                f"NPV(final) = {npv_final/1e6:+.2f} MM USD" if npv_final
+                else "")
 
     def _build_statusbar(self):
         self.status = QStatusBar()
@@ -481,13 +590,26 @@ class AnaMainWindow(QMainWindow):
     # ─── Refresh tabs ─────────────────────────────────────────
 
     def _refresh_tabs(self):
+        # Capital + Fixed: editables las columnas Value (un solo número)
         df_to_table(self._table_for_tab("Capital Costs"),
                      self.df_capital, number_cols={"Value"})
+        self._make_editable(self._table_for_tab("Capital Costs"),
+                              self.df_capital, ["Value"],
+                              self._on_capital_edit)
         df_to_table(self._table_for_tab("Fixed Op. Costs"),
                      self.df_fixed, number_cols={"Value"})
+        self._make_editable(self._table_for_tab("Fixed Op. Costs"),
+                              self.df_fixed, ["Value"],
+                              self._on_fixed_edit)
+        # Variable: editables flowrate + price usd/units
         df_to_table(self._table_for_tab("Variable Op. Costs"),
                      self.df_variable,
                      number_cols={"flowrate", "price usd/units"})
+        self._make_editable(self._table_for_tab("Variable Op. Costs"),
+                              self.df_variable,
+                              ["flowrate", "price usd/units"],
+                              self._on_variable_edit)
+        # Read-only: equipos, streams, costing, income
         df_to_table(self._table_for_tab("Equipment"),
                      self.df_equipment)
         df_to_table(self._table_for_tab("Streams"),
@@ -496,6 +618,66 @@ class AnaMainWindow(QMainWindow):
                      self.df_costing)
         df_to_table(self._table_for_tab("Income Statement"),
                      self.df_income)
+
+    def _make_editable(self, table, df, editable_cols, on_change):
+        """Marca las columnas en `editable_cols` como editables.
+        Conecta `cellChanged` a `on_change(row, col, new_value)`."""
+        if table is None or df is None or df.empty:
+            return
+        cols = list(df.columns)
+        for j, col in enumerate(cols):
+            if col not in editable_cols:
+                continue
+            for i in range(table.rowCount()):
+                item = table.item(i, j)
+                if item is not None:
+                    item.setFlags(item.flags() | Qt.ItemIsEditable)
+        # Conectar señal — desconectar primero para no acumular
+        try:
+            table.cellChanged.disconnect()
+        except Exception:
+            pass
+        table.cellChanged.connect(
+            lambda r, c, t=table, d=df, cl=cols, cb=on_change:
+                self._handle_cell_changed(t, d, cl, r, c, cb))
+
+    def _handle_cell_changed(self, table, df, cols, row, col, cb):
+        item = table.item(row, col)
+        if item is None:
+            return
+        col_name = cols[col]
+        raw = item.text().strip().replace(",", "")
+        try:
+            new_val = float(raw)
+        except ValueError:
+            # revertir al valor original
+            old = df.iat[row, col]
+            table.blockSignals(True)
+            item.setText(f"{old:,.2f}" if isinstance(old, (int, float))
+                          else str(old))
+            table.blockSignals(False)
+            QMessageBox.warning(self, "Valor inválido",
+                                  f"'{raw}' no es número.")
+            return
+        cb(row, col_name, new_val)
+
+    def _on_capital_edit(self, row, col, new_val):
+        self.df_capital.iat[row, list(self.df_capital.columns).index(col)] = new_val
+        self.status.showMessage(
+            f"Capital fila {row+1} {col} actualizado → {new_val:,.2f}", 4000)
+
+    def _on_fixed_edit(self, row, col, new_val):
+        self.df_fixed.iat[row, list(self.df_fixed.columns).index(col)] = new_val
+        self.status.showMessage(
+            f"Fixed fila {row+1} {col} actualizado → {new_val:,.2f}", 4000)
+
+    def _on_variable_edit(self, row, col, new_val):
+        self.df_variable.iat[row,
+            list(self.df_variable.columns).index(col)] = new_val
+        var_name = str(self.df_variable.iat[row, 0])
+        self.status.showMessage(
+            f"{var_name}: {col} = {new_val:,.2f}.  Solve para recalcular.",
+            6000)
 
     # ─── Solver económico ────────────────────────────────────
 
@@ -539,6 +721,55 @@ class AnaMainWindow(QMainWindow):
         prof = ec.profitability_indicators(
             revenue_usd_yr=revenue, com_d_usd_yr=com["COM_d"],
             fci_usd=fci)
+
+        # ── Income Statement año por año (tabla detallada) ──
+        # Usa Revenue - CRM - CUT - CWT - COL - Depreciation directo
+        # (sin los multipliers Turton 0.180/2.73/1.23).  Es el desglose
+        # "líneas" para visualizar dónde está el dinero.
+        try:
+            import flowsheet_export as fexp
+            income_rows = fexp.compute_income_statement(
+                revenue_usd_yr=revenue, crm=crm, cut=cut,
+                cwt=cwt, col=col, fci_usd=fci,
+            )
+            self.df_income = pd.DataFrame(income_rows)
+            df_to_table(self._table_for_tab("Income Statement"),
+                         self.df_income)
+        except Exception as e:
+            self.status.showMessage(f"⚠ income stmt no actualizado: {e}", 6000)
+
+        # ── Chart de cash flow CONSISTENTE CON NPV TURTON ──
+        # Para que el NPV del plot coincida con el del tab Results
+        # (que usa profitability_indicators con COM_d Turton),
+        # construimos un cash flow constante = prof["Cash flow"]
+        # para todos los años de operación, año 0 = -FCI.
+        try:
+            import econ_defaults as _ed
+            fin  = _ed.get_financial()
+            disc = fin["discount_rate"]
+            yrs  = fin["project_years"]
+        except Exception:
+            disc, yrs = 0.10, 10
+        cf_const = prof["Cash flow"]
+        cf_years  = list(range(0, yrs + 1))
+        cf_values = [-fci] + [cf_const] * yrs
+        cum = []
+        running = 0.0
+        for yr, cf in zip(cf_years, cf_values):
+            pv = cf / ((1 + disc) ** yr)
+            running += pv
+            cum.append(running)
+        # Payback descontado (cuando cum cruza 0)
+        pbp_disc = None
+        for i in range(1, len(cum)):
+            if cum[i-1] < 0 <= cum[i]:
+                pbp_disc = (cf_years[i-1] +
+                              (0 - cum[i-1]) / (cum[i] - cum[i-1]) *
+                              (cf_years[i] - cf_years[i-1]))
+                break
+        self._update_chart(cf_years, cf_values, cum,
+                             payback_yr=pbp_disc,
+                             npv_final=cum[-1])
 
         # Build Results table
         npv  = prof["NPV"]
