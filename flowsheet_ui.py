@@ -3498,9 +3498,14 @@ class FlowsheetEditor:
                                   price=620.0, T=50, phase="liquid",
                                   composition={"sodium hydroxide": 0.50,
                                                  "water": 0.50})
-        # Vapor de agua evaporado (waste o a sistema de condensado)
+        # Vapor de agua evaporado del concentrador NaOH.  En planta
+        # real se condensa y recicla como agua del saturador (TK-102),
+        # cerrando el balance hídrico.  Acá se marca como 'utility'
+        # para no contarlo como waste cargable en el opex.
+        # Para el modelo riguroso, agregar un condensador + retorno
+        # a TK-102 (requiere rebalance del saturador).
         self._add_example_stream(e501, tk_vapor, "S-vapor-evap", 1207,
-                                  role="waste",
+                                  role="utility",
                                   src_port="vapor_tope", dst_port="entrada",
                                   price=0.0, T=100, phase="vapor",
                                   composition={"water": 1.0})

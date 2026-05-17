@@ -379,6 +379,86 @@ def _solve_mass_iteration(fs):
     return propagated
 
 
+def _check_stream_roles(fs):
+    """Devuelve warnings para streams con role inconsistente con su
+    comportamiento físico.  Detecta los typos comunes que ensucian
+    el análisis económico:
+
+      · feed/product con composition=agua y precio bajo entrando a
+        un loop cerrado → probablemente es utility recirculante,
+        no Raw Material/Producto.
+      · utility entrando al puerto PROCESO de un HX 4-port
+        (cool_in/steam_in son los correctos para utility).
+      · stream con price > 0 y role='internal' (se pierde en costing).
+    """
+    warnings = []
+    UTILITY_PORTS = {"cool_in", "cool_out", "steam_in", "steam_out",
+                       "shell_in", "shell_out"}
+
+    for s in fs.streams.values():
+        comp  = s.composition or {}
+        is_water = (len(comp) <= 2
+                     and comp.get("water", 0) >= 0.95)
+        is_steam_like = (len(comp) <= 2 and comp.get("water", 0) >= 0.95
+                          and (s.phase or "").lower() in ("vapor", "gas"))
+
+        # Caso A: stream agua/vapor con role feed/product que va a un
+        # tanque de servicios (TK-xxx con BFW/cond/CW/steam en el nombre)
+        if s.role in ("feed", "product") and is_water:
+            b_dst = fs.blocks.get(s.dst)
+            b_src = fs.blocks.get(s.src)
+            dst_name = (b_dst.name if b_dst else "").upper()
+            src_name = (b_src.name if b_src else "").upper()
+            looks_utility = any(
+                k in dst_name + src_name
+                for k in ("BFW", "COND", "CW", "STEAM", "BLOWDOWN",
+                            "MAKEUP", "HEADER")
+            )
+            if looks_utility and not is_steam_like:
+                warnings.append(
+                    f"⚠ {s.name}: role='{s.role}' pero parece make-up "
+                    f"de utility (agua pura, conectado a tanque de "
+                    f"servicios).  Sugerencia: usar role='utility' "
+                    f"para no inflar Raw Materials/Products en opex."
+                )
+
+        # Caso B: stream role='utility' entrando al PROCESO de un HX
+        if s.role == "utility" and s.dst_port:
+            dst_port = s.dst_port.lower()
+            # heurística: si el puerto NO es cool_in/steam_in/shell_in,
+            # probablemente está mal conectado al lado proceso
+            is_util_port = any(k in dst_port for k in
+                                ("cool_in", "steam_in", "shell_in",
+                                 "entrada"))   # entrada de tanque OK
+            b_dst = fs.blocks.get(s.dst)
+            if b_dst and not is_util_port:
+                eq_l = (b_dst.eq_type or "").lower()
+                is_hx = any(k in eq_l for k in
+                              ("exch", "heater", "cooler",
+                               "fired heater", "evap"))
+                if is_hx and dst_port not in ("alimentacion",):
+                    warnings.append(
+                        f"⚠ {s.name}: role='utility' pero entra por "
+                        f"puerto '{s.dst_port}' del HX {b_dst.name}.  "
+                        f"Los HX 4-port tienen puertos separados "
+                        f"(cool_in/steam_in para utility); revisar "
+                        f"para que no contamine composición del proceso."
+                    )
+
+        # Caso C: stream con price > 0 y role='internal' (no llega
+        # ni a feeds ni a products en el costing)
+        if (s.role == "internal" and s.price_usd_per_tm
+                and abs(s.price_usd_per_tm) > 0.01):
+            warnings.append(
+                f"⚠ {s.name}: role='internal' pero price=${s.price_usd_per_tm}/tm.  "
+                f"Los streams 'internal' se IGNORAN en el costing.  "
+                f"Cambiar a role='feed' (compra) o 'product' (venta) "
+                f"para que entre al opex."
+            )
+
+    return warnings
+
+
 def _check_mass_balance(fs, tol_rel=MASS_TOL_REL):
     """Devuelve lista de mensajes para bloques cuyo balance TOTAL falla.
     El balance por componente se chequea aparte (_check_component_balance)."""
@@ -2675,6 +2755,9 @@ def solve(fs, max_iter=MAX_ITER):
             result.unresolved_streams.append(s.name)
     result.mass_balance_errors    = _check_mass_balance(fs)
     result.component_warnings     = _check_component_balance(fs)
+    # role hygiene — warnings (no errors) sobre streams con role
+    # inconsistente que pueden ensuciar costing económico
+    result.component_warnings.extend(_check_stream_roles(fs))
     # energy balance errors quedan deshabilitados (no comparables al Cp
     # simple — comentado en _check_energy_balance del editor)
 
