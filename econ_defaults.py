@@ -147,7 +147,7 @@ SENSITIVITY = {
 # Default 0.5 = razonable para plantas industriales típicas.
 # ─────────────────────────────────────────────────────────────
 HEAT_INTEGRATION = {
-    "factor": 0.5,
+    "factor": 0.4,    # planta moderna con Pinch razonable
 }
 
 

@@ -1462,7 +1462,7 @@ class FlowsheetEditor:
         # NH₃ producto (liquido del flash)
         self._add_example_stream(v101, tk_nh3, "S-NH3", 1500, role="product",
                                  src_port="liquido",  dst_port="entrada",
-                                 price=620.0, T=30,
+                                 price=750.0, T=30,
                                  main_component="ammonia", phase="liquid")
         # Purga (gas del flash)
         self._add_example_stream(v101, tk_purge, "S-purga", 8500, role="product",
@@ -1566,7 +1566,7 @@ class FlowsheetEditor:
         # Etanol producto (condensado)
         self._add_example_stream(e102, tk_eth, "S-EtOH", 612, role="product",
                                  src_port="tube_out", dst_port="entrada",
-                                 price=720.0, T=40,
+                                 price=950.0, T=40,
                                  composition=top,
                                  main_component="ethanol", phase="liquid")
         # Líquido de fondo (mostly water + glucose residual)
@@ -1661,7 +1661,7 @@ class FlowsheetEditor:
         # Biodiesel cooled → tanque producto
         self._add_example_stream(e101, tk_bd, "S-biodiesel", 990, role="product",
                                  src_port="tube_out", dst_port="entrada",
-                                 price=1100.0, T=50,
+                                 price=1350.0, T=50,
                                  composition=bio_dry,
                                  main_component="biodiesel", phase="liquid")
         # Decanter: fase pesada (glicerina + MeOH residual, ~115 kg)
@@ -2604,7 +2604,7 @@ class FlowsheetEditor:
         # Separador → NH3 producto (condensación: NH3 puro)
         self._add_example_stream(sep101, tk_nh3, "S-NH3", 950, role="product",
                                   src_port="liquido", dst_port="entrada",
-                                  price=600.0, T=40,
+                                  price=750.0, T=40,
                                   composition={"ammonia": 1.0},
                                   main_component="ammonia", phase="liquid")
         # Separador → splitter purge/recycle (gases sin reaccionar)
@@ -3438,22 +3438,22 @@ class FlowsheetEditor:
         # Condensación → Cl2 líquido
         self._add_example_stream(e302, tk_cl2, "S-cl2-liq", 602, role="product",
                                   src_port="tube_out", dst_port="entrada",
-                                  price=380.0, T=20, phase="liquid",
+                                  price=480.0, T=20, phase="liquid",
                                   composition={"chlorine": 0.999,
                                                  "water": 0.001})
 
         # ============ STREAMS — TREN H2 ============
         self._add_example_stream(e401, tk_h2_prod, "S-h2", 28, role="product",
                                   src_port="proceso_out", dst_port="entrada",
-                                  price=2000.0, T=25, phase="gas",
+                                  price=2500.0, T=25, phase="gas",
                                   composition={"hydrogen": 0.95,
                                                  "water": 0.05})
 
         # ============ STREAMS — TREN NaOH ============
-        # NaOH 50% concentrado (producto comercial)
+        # NaOH 50% concentrado (producto comercial, mercado 2024)
         self._add_example_stream(e501, tk_naoh, "S-naoh-50", 2145, role="product",
                                   src_port="liquido_fondo", dst_port="entrada",
-                                  price=480.0, T=50, phase="liquid",
+                                  price=620.0, T=50, phase="liquid",
                                   composition={"sodium hydroxide": 0.50,
                                                  "water": 0.50})
         # Vapor de agua evaporado (waste o a sistema de condensado)
@@ -3482,6 +3482,11 @@ class FlowsheetEditor:
         self._add_example_extra("Anodos DSA (reposición)",
                                  flowrate=1, price=25000.0,
                                  stream="Consumables")
+        # Labor override: fórmula Turton sqrt(P²) con P=2 (filter
+        # IX-101 + decantador V-101) da 53 operadores, irreal para
+        # pilot scale 1000 tm/yr.  Override manual a 8 operadores ×
+        # salario del perfil ≈ $200k/yr.
+        self._set_example_labor(200_000)
 
     def _example_hno3_ostwald(self):
         """HNO3 — Proceso Ostwald dual-presión (estilo DuPont 1920s).
@@ -3743,7 +3748,7 @@ class FlowsheetEditor:
         self._add_example_stream(v501, tk_hno3, "A13b-HNO3-60", 6100,
                                   role="product",
                                   src_port="liquido_fondo", dst_port="entrada",
-                                  price=320.0, T=60, phase="liquid",
+                                  price=450.0, T=60, phase="liquid",
                                   composition={"nitric acid": 0.60,
                                                  "water": 0.40})
         self._add_example_stream(v501, tk_vent, "A13c-bleach-vent", 100,
