@@ -712,7 +712,7 @@ def utility_consumption(util_key, duty_kw_abs):
         return duty * 8760.0 / eff
 
     # heating o cooling: convertir kW térmicos a tm/año via ΔH_vap
-    SEC_PER_YEAR = 8760 * 3600
+    from flowsheet_model import SEC_PER_YEAR        # única fuente §6.3
     Q_kJ_per_year = duty * SEC_PER_YEAR              # kJ/año (kW · s = kJ)
     delta_h = util.get("delta_h", 1.0)
     mass_kg = Q_kJ_per_year / delta_h

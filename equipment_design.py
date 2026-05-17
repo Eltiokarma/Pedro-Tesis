@@ -241,8 +241,8 @@ def design_pump_for_block(block, fs) -> Optional[Dict]:
                 if pv_kpa: p_vap_bar = pv_kpa / 100.0
             except Exception:
                 pass
-    SEC_PER_YEAR = 8760 * 3600
-    m_kg_s = feed.mass_flow * 1000.0 / SEC_PER_YEAR
+    from flowsheet_model import SEC_PER_YEAR, TM_TO_KG  # única fuente §6.3
+    m_kg_s = feed.mass_flow * TM_TO_KG / SEC_PER_YEAR
     return pump_sizing(
         m_kg_s=m_kg_s, dp_bar=dp_bar, rho_kg_m3=rho,
         eta_hyd=block.efficiency, T_K=T_K, p_vap_bar=p_vap_bar,
@@ -292,8 +292,8 @@ def design_compressor_for_block(block, fs) -> Optional[Dict]:
     k = 1.4
     if comp.get("co2", 0) > 0.5 or comp.get("water", 0) > 0.3:
         k = 1.30
-    SEC_PER_YEAR = 8760 * 3600
-    m_kg_s = feed.mass_flow * 1000.0 / SEC_PER_YEAR
+    from flowsheet_model import SEC_PER_YEAR, TM_TO_KG  # única fuente §6.3
+    m_kg_s = feed.mass_flow * TM_TO_KG / SEC_PER_YEAR
     return compressor_sizing(
         m_kg_s=m_kg_s, P_in_bar=P_in, P_out_bar=P_out,
         T_in_K=feed.temperature + 273.15, mw_avg=mw_avg, k=k,

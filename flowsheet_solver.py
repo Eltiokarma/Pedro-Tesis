@@ -62,11 +62,16 @@ from typing import Any, Dict, List, Tuple
 
 
 # ======================================================
-# CONSTANTES (deben matchear flowsheet_ui)
+# CONSTANTES — importadas de flowsheet_model (única fuente)
 # ======================================================
-T_REF_C       = 25.0
-SEC_PER_YEAR  = 8760 * 3600
-TM_TO_KG      = 1000.0
+# Antes T_REF_C / SEC_PER_YEAR / TM_TO_KG estaban duplicadas
+# en flowsheet_model.py, flowsheet_solver.py, equipment_design.py
+# y equipment_ports.py.  Si una se editaba, las otras quedaban
+# desactualizadas y los balances + sizing usaban factores distintos
+# silenciosamente.  Ahora todas importan de flowsheet_model.
+# (Instrucciones §6.3)
+from flowsheet_model import T_REF_C, SEC_PER_YEAR, TM_TO_KG  # noqa: E402
+
 MASS_TOL_REL  = 0.005      # 0.5 %  tolerancia de balance de masa
 ENERGY_TOL_REL = 0.05      # 5 %    tolerancia de balance de energía
 MAX_ITER      = 30
