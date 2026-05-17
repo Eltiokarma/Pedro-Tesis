@@ -477,6 +477,23 @@ def compute_utilities_from_duties(fs):
                 and not getattr(b, "duty_locked", False)
                 and not getattr(b, "column_active", False)):
             continue
+        # Skip si el bloque YA tiene un stream de utility entrando
+        # explícitamente (BFW boiler que da steam, CW del cooler, etc.):
+        # el user modeló el ciclo cerrado y no queremos doble-contar.
+        # Detección: input con role='utility' y phase apropiado al duty.
+        has_explicit_util_input = False
+        for s_in in (s for s in fs.streams.values() if s.dst == b.id):
+            if s_in.role == "utility":
+                ph = (s_in.phase or "").lower()
+                # Para heaters (duty > 0): vapor/steam entrando
+                if b.duty > 0 and ("vapor" in ph or "gas" in ph):
+                    has_explicit_util_input = True
+                # Para coolers (duty < 0): liquid (CW o refrigerante)
+                elif b.duty < 0 and "liquid" in ph:
+                    has_explicit_util_input = True
+        if has_explicit_util_input:
+            summary.append((b.name, "(closed loop)", "—", 0.0, 0.0))
+            continue
         T_avg = block_avg_temperature(fs, b.id)
         util_key = b.heat_source or ep.autoselect_heat_source(
             b.eq_type, b.duty, T_avg
@@ -641,8 +658,88 @@ def read_project_xlsx(path):
 # ESCRIBIR XLSX (compatible con ANA.ImportarProyecto)
 # ======================================================
 
+def compute_income_statement(revenue_usd_yr, crm, cut, cwt, col,
+                              fci_usd, years_op=None, tax_rate=None,
+                              startup_year=1):
+    """Construye el Estado de Resultados año a año.
+
+    Devuelve list of dicts (uno por año) con:
+      Year, Revenue, CRM, CUT, CWT, COL, Depreciation, EBIT, Tax,
+      Net Income, Cash Flow, Cumulative CF.
+
+    Asume:
+      · Construcción año 0 (CapEx -FCI)
+      · Operación desde startup_year hasta years_op
+      · Depreciación lineal sobre FCI/years_op
+      · CapEx adicional 0 después del year 0
+      · No working capital recovery al final (simplificación)
+    """
+    if years_op is None or tax_rate is None:
+        try:
+            import econ_defaults as _ed
+            fin = _ed.get_financial()
+            if years_op is None: years_op = fin["project_years"]
+            if tax_rate is None: tax_rate = fin["tax_rate"]
+        except Exception:
+            if years_op is None: years_op = 10
+            if tax_rate is None: tax_rate = 0.30
+    rows = []
+    # Año 0 = construcción / CapEx
+    rows.append({
+        "Year":          0,
+        "Revenue":       0.0,
+        "CRM":           0.0,
+        "CUT":           0.0,
+        "CWT":           0.0,
+        "COL":           0.0,
+        "Depreciation":  0.0,
+        "EBIT":          0.0,
+        "Tax":           0.0,
+        "Net Income":    0.0,
+        "CapEx":         -fci_usd,
+        "Cash Flow":     -fci_usd,
+        "Cumulative CF": -fci_usd,
+    })
+    cum = -fci_usd
+    depreciation = fci_usd / years_op
+    for yr in range(1, years_op + 1):
+        operating = yr >= startup_year
+        rev = revenue_usd_yr if operating else 0.0
+        rm  = crm if operating else 0.0
+        ut  = cut if operating else 0.0
+        wt  = cwt if operating else 0.0
+        lab = col if operating else 0.0
+        dep = depreciation if operating else 0.0
+        # EBIT = Revenue - CRM - CUT - CWT - COL - Depreciation
+        # (simplificación: no agrego maintenance %, supervision, etc.
+        #  esos están en el COM Turton; acá uso COL directo + depr)
+        ebit = rev - rm - ut - wt - lab - dep
+        tax  = max(0.0, ebit) * tax_rate
+        net  = ebit - tax
+        # Cash flow = Net income + depreciation (depr es no-cash)
+        cf   = net + dep
+        cum += cf
+        rows.append({
+            "Year":          yr,
+            "Revenue":       rev,
+            "CRM":           rm,
+            "CUT":           ut,
+            "CWT":           wt,
+            "COL":           lab,
+            "Depreciation":  dep,
+            "EBIT":          ebit,
+            "Tax":           tax,
+            "Net Income":    net,
+            "CapEx":         0.0,
+            "Cash Flow":     cf,
+            "Cumulative CF": cum,
+        })
+    return rows
+
+
 def write_3sections_xlsx(path, df_capital, df_fixed, df_variable,
-                         equipment=None, streams=None, costing=None):
+                         equipment=None, streams=None, costing=None,
+                         income_stmt=None):
     """Escribe un xlsx con las 3 secciones lado a lado:
       cols A-C  → Capital Costs
       col  D    → vacía
@@ -741,6 +838,23 @@ def write_3sections_xlsx(path, df_capital, df_fixed, df_variable,
                 if isinstance(v, float) and v == 0.0:
                     v = ""
                 ws_s.cell(row=2 + i, column=j + 1, value=v)
+
+    if income_stmt:
+        ws_i = wb.create_sheet("Income Statement")
+        cols = ["Year", "Revenue", "CRM", "CUT", "CWT", "COL",
+                 "Depreciation", "EBIT", "Tax", "Net Income",
+                 "CapEx", "Cash Flow", "Cumulative CF"]
+        for j, name in enumerate(cols):
+            ws_i.cell(row=1, column=j + 1, value=name)
+        for i, row in enumerate(income_stmt):
+            for j, key in enumerate(cols):
+                v = row.get(key, "")
+                if isinstance(v, float) and abs(v) < 0.01 and key != "Year":
+                    v = ""
+                ws_i.cell(row=2 + i, column=j + 1, value=v)
+        ws_i.column_dimensions["A"].width = 6
+        for col_letter in "BCDEFGHIJKLM":
+            ws_i.column_dimensions[col_letter].width = 14
 
     wb.save(path)
 
@@ -892,12 +1006,20 @@ def write_project_xlsx(path, fs, isbl, feeds, products, base_xlsx=None):
         )
 
     # escribir xlsx con 3 secciones + pestañas Equipment, Streams,
-    # Costing Turton (resumen CBM por categoría + COM Eq 8.2)
+    # Costing Turton (resumen CBM por categoría + COM Eq 8.2) +
+    # Income Statement año por año (P&L Turton Ch 9-10)
     equipment_rows = collect_equipment_rows(fs, year_target=2026)
     stream_rows    = collect_stream_rows(fs)
     costing_data   = compute_turton_costing(
         fs, df_variable, df_fixed, fci_musd=isbl, year_target=2026)
+    income_rows    = compute_income_statement(
+        revenue_usd_yr=costing_data["revenue"],
+        crm=costing_data["crm"], cut=costing_data["cut"],
+        cwt=costing_data["cwt"], col=costing_data["col"],
+        fci_usd=costing_data["fci"],
+    )
     write_3sections_xlsx(path, df_capital, df_fixed, df_variable,
                          equipment=equipment_rows,
                          streams=stream_rows,
-                         costing=costing_data)
+                         costing=costing_data,
+                         income_stmt=income_rows)

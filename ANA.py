@@ -122,6 +122,8 @@ df_variable = pd.DataFrame()
 df_equipment = pd.DataFrame()    # equipos del PFD (si el xlsx viene del flowsheet)
 df_streams   = pd.DataFrame()    # corrientes del PFD: masa, T, P, composición wt%
                                   # (si el xlsx viene del flowsheet)
+df_income    = pd.DataFrame()    # Estado de Resultados año por año
+                                  # (Revenue, OPEX, depr, EBIT, tax, NI, CF, cum CF)
 
 
 # ======================================================
@@ -291,6 +293,7 @@ def ImportarProyecto(archivo=None):
     global df_variable
     global df_equipment
     global df_streams
+    global df_income
 
     if archivo is None:
         archivo = filedialog.askopenfilename(
@@ -646,10 +649,20 @@ def ImportarProyecto(archivo=None):
                 )
             else:
                 df_streams = pd.DataFrame()
+            if "Income Statement" in sheet_names:
+                df_income = pd.read_excel(archivo, sheet_name="Income Statement")
+                df_income = df_income.dropna(how="all").reset_index(drop=True)
+                ConsolaResultados.insert(
+                    END,
+                    f"Income Stmt Years  : {len(df_income)}  (from PFD)\n"
+                )
+            else:
+                df_income = pd.DataFrame()
             ConsolaResultados.config(state="disabled")
         except Exception:
             df_equipment = pd.DataFrame()
             df_streams = pd.DataFrame()
+            df_income = pd.DataFrame()
 
         _actualizar_status_proyecto(
             f"Imported: {os.path.basename(archivo)}"
@@ -880,6 +893,43 @@ def VentanaVisualizarData():
         tablaStreams.pack(side="top", fill="both", expand=True,
                             padx=10, pady=(10, 0))
         hs.pack(side="top", fill="x", padx=10, pady=(0, 10))
+
+    # ==================================================
+    # TAB INCOME STATEMENT (Estado de Resultados año a año)
+    # ==================================================
+    if not df_income.empty:
+        tabIncome = ttk.Frame(notebook)
+        notebook.add(tabIncome, text="Income Statement (P&L)")
+        ttk.Label(
+            tabIncome,
+            text="Estado de Resultados año por año (Turton Ch 9-10):\n"
+                 "  Revenue - CRM - CUT - CWT - COL - Depreciación = EBIT\n"
+                 "  EBIT × (1-tax) = Net Income.  Cash Flow = NI + Depreciación.",
+            foreground="#555", justify="left",
+        ).pack(side="top", anchor="w", padx=10, pady=(10, 4))
+        tablaIncome = ttk.Treeview(tabIncome, show="headings")
+        cols_i = list(df_income.columns)
+        tablaIncome["columns"] = cols_i
+        for c in cols_i:
+            tablaIncome.heading(c, text=str(c))
+            w = 60 if c == "Year" else 110
+            tablaIncome.column(c, width=w, anchor="e")
+        for _, row in df_income.iterrows():
+            vals = []
+            for c in cols_i:
+                v = row[c]
+                if c == "Year":
+                    vals.append(int(v) if pd.notna(v) else "")
+                elif pd.isna(v) or v == "":
+                    vals.append("")
+                else:
+                    try:
+                        vals.append(f"{float(v):,.0f}")
+                    except (ValueError, TypeError):
+                        vals.append(str(v))
+            tablaIncome.insert("", END, values=vals)
+        tablaIncome.pack(side="top", fill="both", expand=True,
+                         padx=10, pady=10)
 
     # ==================================================
     # BLOQUEAR RESIZE COLUMNAS

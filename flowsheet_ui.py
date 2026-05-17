@@ -3007,6 +3007,9 @@ class FlowsheetEditor:
 
         # ============ SECCIÓN 300 — SERVICIOS ============
         # Ciclo de vapor (y=1200, spacing 300 px)
+        # TK-307 = make-up de agua tratada (compensa blowdown del loop)
+        tk_makeup = self._add_example_block("TK-307","Storage tank — cone roof",
+                                             100.0,  240,1440)
         tk_bfw = self._add_example_block("TK-301","Storage tank — cone roof",
                                             600.0,   60,1200)
         p301 = self._add_example_block("P-301","Pump — centrifugal",
@@ -3128,8 +3131,10 @@ class FlowsheetEditor:
                                   T=80, phase="gas")
 
         # ============ STREAMS — SERVICIOS ============
-        # Boiler feed water
-        self._add_example_stream(tk_bfw, p301, "S-BFW-feed", 80000, role="feed",
+        # Boiler feed water — recirculación interna (no costo Raw Material;
+        # el make-up externo viene de S-BFW-makeup desde TK-307).
+        self._add_example_stream(tk_bfw, p301, "S-BFW-feed", 80000,
+                                  role="utility",
                                   src_port="salida", dst_port="succion",
                                   price=1.5, T=25,
                                   composition={"water": 1.0}, phase="liquid")
@@ -3162,24 +3167,55 @@ class FlowsheetEditor:
                                   src_port="salida", dst_port="steam_in",
                                   price=0.0, T=250, phase="vapor",
                                   composition={"water": 1.0})
-        # Reboiler shell-side → tanque de condensado (en planta real
-        # vuelve a TK-301 cerrando el lazo BFW completamente; acá
-        # termina en TK-306 para evitar el SCC indeterminado)
+        # Reboiler shell-side → tanque de condensado (intermedio
+        # antes de retornar a TK-301 BFW — cierra el ciclo de vapor)
         self._add_example_stream(e202, tk_cond, "S-cond", 78500,
                                   role="utility",
                                   src_port="steam_out", dst_port="entrada",
                                   price=0.0, T=140, phase="liquid",
                                   composition={"water": 1.0})
+        # ── CIERRE DEL CICLO DE VAPOR: condensate → BFW ──────
+        # TK-301 balance: in = makeup (1500) + cond-return (78500) =
+        #                  out = S-BFW-feed (80000) ✓
+        # Solo el 1.9 % del agua del loop es makeup; el resto circula.
+        self._add_example_stream(tk_cond, tk_bfw, "S-cond-return", 78500,
+                                  role="utility",
+                                  src_port="salida", dst_port="entrada",
+                                  price=0.0, T=140, phase="liquid",
+                                  composition={"water": 1.0})
+        # Make-up: agua tratada fresca para reponer las pérdidas por
+        # blowdown del drum V-301 (1500 tm/yr).
+        self._add_example_stream(tk_makeup, tk_bfw, "S-BFW-makeup", 1500,
+                                  role="feed",
+                                  src_port="salida", dst_port="entrada",
+                                  price=2.0, T=25, phase="liquid",
+                                  composition={"water": 1.0})
 
-        # Cooling water loop
-        self._add_example_stream(tk_cw, p302, "S-CW-feed", 200000, role="feed",
+        # ── COOLING WATER LOOP (cerrado) ─────────────────────
+        # TK-303 (basin) → P-302 → distribución a HX → TK-304
+        # (return) → TK-303 con make-up por evap/blowdown.
+        # CW basin → bomba — recirculación interna (loop cerrado por
+        # torre de enfriamiento; no costo Raw Material).
+        self._add_example_stream(tk_cw, p302, "S-CW-feed", 200000,
+                                  role="utility",
                                   src_port="salida", dst_port="succion",
-                                  price=0.05, T=25,
+                                  price=0.0, T=25,
                                   composition={"water": 1.0}, phase="liquid")
-        # CW pumped → return (loop simplificado; en planta real iría a cada HX)
-        self._add_example_stream(p302, tk_cwret, "S-CW-supply", 200000, role="utility",
+        # CW pumped → distribuye a HX (loop INTERNO sin tocar el
+        # proceso — evita contaminar composición de S-2 vía solver
+        # auto-propagation).  TK-303 → P-302 → TK-304 → TK-303.
+        # El costo de CW para los coolers (E-101, E-201, E-301) lo
+        # auto-calcula compute_utilities_from_duties desde block.duty.
+        self._add_example_stream(p302, tk_cwret, "S-CW-supply", 200000,
+                                  role="utility",
                                   src_port="descarga", dst_port="entrada",
                                   T=30, phase="liquid",
+                                  composition={"water": 1.0})
+        # TK-304 → TK-303 cierra el loop (torre de enfriamiento implícita)
+        self._add_example_stream(tk_cwret, tk_cw, "S-CW-cooled", 200000,
+                                  role="utility",
+                                  src_port="salida", dst_port="entrada",
+                                  price=0.0, T=27, phase="liquid",
                                   composition={"water": 1.0})
 
         # ============ DUTIES INFERIDOS ============
