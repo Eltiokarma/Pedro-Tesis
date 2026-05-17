@@ -1300,7 +1300,7 @@ class FlowsheetEditor:
         # producto líquido condensado
         self._add_example_stream(e103, tk1,  "S-MeOH", 9500, role="product",
                                  src_port="shell_out", dst_port="entrada",
-                                 price=480.0, T=40,
+                                 price=1100.0, T=40,
                                  main_component="methanol", phase="liquid")
         # fondo de columna: agua líquida
         self._add_example_stream(t101, e104, "S-fondo", 600,
@@ -3092,7 +3092,7 @@ class FlowsheetEditor:
         # KO drum → tanque MeOH (líquido limpio, 85% del flujo)
         self._add_example_stream(v202, tk_meoh, "S-MeOH", role="product",
                                   src_port="liquido", dst_port="entrada",
-                                  price=520.0, T=40, phase="liquid",
+                                  price=1100.0, T=40, phase="liquid",
                                   composition={"methanol": 0.98, "water": 0.02})
         # KO drum → flare (gases co-destilados, 15% del flujo)
         self._add_example_stream(v202, tk_flare, "S-vent", role="waste",
@@ -3952,7 +3952,7 @@ class FlowsheetEditor:
         # Crudo pesado de selva (~21° API, 1.2% S)
         self._add_example_stream(tk_crudo, m101, "C0-crudo", 500000, role="feed",
                                   src_port="salida", dst_port="entrada1",
-                                  price=350.0, T=25,
+                                  price=470.0, T=25,
                                   composition={"crude_oil": 1.0},
                                   phase="liquid")
         # Agua de lavado (5% del crudo)
@@ -4001,7 +4001,7 @@ class FlowsheetEditor:
         # Kerosene/Turbo A-1 (directo a tanque)
         self._add_example_stream(t101, tk_turbo, "C3-turbo", role="product",
                                   src_port="salida", dst_port="entrada",
-                                  price=620.0, T=180, phase="liquid",
+                                  price=900.0, T=180, phase="liquid",
                                   composition={"kerosene": 0.99,
                                                  "hydrogen sulfide": 0.01})
         # Diésel → HTD
@@ -4119,7 +4119,7 @@ class FlowsheetEditor:
         self._add_example_stream(r_rca, tk_gaso97, "C13-gasolina97",
                                   role="product",
                                   src_port="producto", dst_port="entrada",
-                                  price=720.0, T=40, phase="liquid",
+                                  price=1100.0, T=40, phase="liquid",
                                   composition={"gasoline_97": 0.96,
                                                  "hydrogen": 0.04})
 
@@ -4131,7 +4131,7 @@ class FlowsheetEditor:
                                                  "methane": 0.001})
         self._add_example_stream(r_htd, tk_ulsd, "C14-ULSD", role="product",
                                   src_port="producto", dst_port="entrada",
-                                  price=680.0, T=50, phase="liquid",
+                                  price=950.0, T=50, phase="liquid",
                                   composition={"diesel": 0.9995,
                                                  "hydrogen sulfide": 0.0005})
 

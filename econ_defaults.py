@@ -132,6 +132,26 @@ SENSITIVITY = {
 
 
 # ─────────────────────────────────────────────────────────────
+# HEAT INTEGRATION FACTOR
+# Sin Pinch analysis explícito, el solver asigna utility a CADA
+# bloque con duty != 0 (cooler usa CW, heater usa steam, etc.).
+# En una planta REAL, ~40-60 % del calor se recupera vía cross-
+# exchange (corrientes calientes calientan frías), reduciendo CUT.
+#
+# heat_integration_factor: fracción de CUT que SOBREVIVE después
+# de heat integration típica.
+#   1.0  → sin integración (greenfield, conservador)
+#   0.6  → integración moderada (Pinch básico aplicado)
+#   0.4  → integración alta (planta moderna, MINLP optimizada)
+#   0.2  → integración extrema (industrial best-in-class)
+# Default 0.5 = razonable para plantas industriales típicas.
+# ─────────────────────────────────────────────────────────────
+HEAT_INTEGRATION = {
+    "factor": 0.5,
+}
+
+
+# ─────────────────────────────────────────────────────────────
 # PERFILES REGIONALES — overrides sobre los defaults
 # ─────────────────────────────────────────────────────────────
 PROFILES = {
@@ -237,3 +257,16 @@ def get_fcop_fracs():
 
 def get_sensitivity():
     return load_profile(_ACTIVE_PROFILE)["sensitivity"]
+
+
+def get_heat_integration_factor() -> float:
+    """Factor (0-1) que se aplica al CUT total para reflejar heat
+    integration realista.  Ver HEAT_INTEGRATION dict."""
+    return HEAT_INTEGRATION["factor"]
+
+
+def set_heat_integration_factor(f: float):
+    """Setea factor de heat integration (0-1)."""
+    if not 0.0 <= f <= 1.0:
+        raise ValueError(f"factor debe estar en [0, 1], no {f}")
+    HEAT_INTEGRATION["factor"] = float(f)

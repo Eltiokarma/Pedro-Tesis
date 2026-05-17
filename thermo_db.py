@@ -378,7 +378,18 @@ def cp_kJ_kg_K(name: str, T_C: float, phase: str = "liquid") -> Optional[float]:
 
 def cp_mix_kJ_kg_K(comp_dict: Dict[str, float], T_C: float,
                     phase: str = "liquid") -> float:
-    """Cp de la mezcla ponderado por fracción másica a T (°C)."""
+    """Cp de la mezcla ponderado por fracción másica a T (°C).
+
+    Filtra valores absurdos del polinomio DIPPR cuando se extrapola
+    fuera del rango calibrado.  Cp físicamente posible:
+       gases:  0.5 - 15 kJ/kg·K (H2 ~14, He ~5, CH4 ~2.5, aire ~1)
+       líquidos / sólidos: 0.5 - 7 kJ/kg·K (agua 4.18 es el más alto
+                                              razonable)
+    Si el DIPPR liquid de un componente da > 50 o < 0 a T,P del stream,
+    es señal de que el componente está super-crítico (e.g. H2, CO,
+    CH4 a 40°C nunca son líquidos).  En ese caso se sustituye por su
+    valor en fase gaseosa, que SÍ está dentro del rango DIPPR válido.
+    """
     if not comp_dict:
         return 0.0
     cp = 0.0
@@ -389,8 +400,15 @@ def cp_mix_kJ_kg_K(comp_dict: Dict[str, float], T_C: float,
         if c is None:
             continue
         cp_pure = c.cp_kJ_kg_K(T_C, phase)
-        if cp_pure is None:
-            continue
+        # Sanitize: si el polinomio extrapola a valor absurdo, intentar
+        # con phase='gas' (probablemente el componente es super-crítico
+        # a las condiciones del stream y no existe como líquido).
+        if cp_pure is None or cp_pure < 0.1 or cp_pure > 50.0:
+            cp_gas = c.cp_kJ_kg_K(T_C, "gas")
+            if cp_gas is not None and 0.1 < cp_gas < 50.0:
+                cp_pure = cp_gas
+            else:
+                continue   # skip silently — falta DB para este comp
         cp += w * cp_pure
     return cp
 

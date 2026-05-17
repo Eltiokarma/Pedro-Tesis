@@ -496,13 +496,30 @@ def compute_utilities_from_duties(fs):
         else:
             agg[util_key] = (consumption, cost)
 
+    # Heat integration factor — en una planta real, ~50 % del calor
+    # se recupera vía cross-exchange (Pinch).  Aplicamos al consumption
+    # total para no sobreestimar CUT.  Configurable via econ_defaults.
+    try:
+        import econ_defaults as _ed
+        hi_factor = _ed.get_heat_integration_factor()
+    except Exception:
+        hi_factor = 0.5
+
     for util_key, (cons, _cost) in agg.items():
         util = ep.UTILITIES[util_key]
+        # Solo reducir heating/cooling thermal — la electricidad no se
+        # "recupera" via heat integration.
+        if util.get("type") in ("heating", "cooling"):
+            cons_adjusted = cons * hi_factor
+            tag = f"{util['name']} (PFD-util, HI×{hi_factor:.2f})"
+        else:
+            cons_adjusted = cons
+            tag = f"{util['name']} (PFD-util)"
         rows.append({
-            "name":               f"{util['name']} (PFD-util)",
+            "name":               tag,
             "units":              util["units"],
             "time_basis":         "year",
-            "flowrate":           float(cons),
+            "flowrate":           float(cons_adjusted),
             "price_usd_per_unit": float(util["price"]),
             "stream":             "Utilities",
         })
