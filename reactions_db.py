@@ -622,6 +622,208 @@ def get(rxn_id: str) -> Optional[Reaction]:
     return _ensure_loaded().get(rxn_id)
 
 
+# ============================================================
+# REACCIONES CUSTOM (in-memory, definidas por el usuario)
+# ============================================================
+# Permite que el usuario defina una reacción nueva con su propia
+# estequiometría + ΔH298 + (ΔS298 o Keq298), sin tocar el catálogo
+# read-only data/reactions_db.md.  La instancia Reaction resultante
+# es 100% compatible con solve_multi_reaction_equilibrium (que ya
+# trabaja con cualquier objeto Reaction, no asume que venga del .md).
+# ============================================================
+
+import math as _math
+
+
+def reaction_from_dict(d: dict) -> Reaction:
+    """Construye un objeto Reaction in-memory desde un dict del usuario.
+
+    Esquema del dict:
+        {
+          "id":                 "CUSTOM-1",
+          "name":               "A + B -> C",
+          "stoich":             [{"formula":"A","phase":"g","nu":-1}, ...],
+          "dh_rxn_298_kJ_mol":  float (obligatorio),
+          "ds_rxn_298_J_mol_K": float (opcional — uno de los dos),
+          "keq_298":            float (opcional — uno de los dos),
+          "T_min_K":            float (opcional, default 298.15),
+          "T_max_K":            float (opcional, default 2000.0),
+          "irreversible":       bool  (opcional, default False),
+        }
+
+    Deriva los coeficientes vant_hoff_A/B (ln Keq = A + B/T) desde:
+        B = -ΔH / R                                      [K]
+        A = ΔS / R                                       (si ΔS dado)
+        A = ln(Keq298) + ΔH/(R·298.15)                   (si Keq298 dado)
+
+    Sin requerir thermo_db (las especies pueden ser inventadas; cae a
+    la forma 2-parámetros igual que R022-R025 NO derivadas).
+
+    Validaciones (ValueError con mensaje claro, NO crashear):
+      · stoich no vacía.
+      · Al menos UN reactante (ν<0) y UN producto (ν>0).
+      · ΔH numérico finito.
+      · Exactamente UNO de {ds_rxn_298_J_mol_K, keq_298} provisto.
+      · Estequiometría balanceada por elementos (best-effort: si
+        las fórmulas son parseables como combinación de elementos,
+        chequea Σ nᵢ·νᵢ = 0 por elemento; si los strings son
+        pseudo-componentes no parseables, SOLO advierte en el msg).
+
+    Returns:
+        Reaction con vant_hoff_A/B derivados, derivable_capa3=False
+        (es custom), kinetics_available=False (sin Arrhenius).
+    """
+    R = 8.314462618    # J/(mol·K)
+
+    if not isinstance(d, dict):
+        raise ValueError("reaction_from_dict: argumento debe ser dict.")
+
+    stoich_raw = d.get("stoich") or []
+    if not stoich_raw:
+        raise ValueError("Estequiometría vacía: definir al menos un "
+                          "reactante (ν<0) y un producto (ν>0).")
+    stoich: List[StoichEntry] = []
+    for e in stoich_raw:
+        if not isinstance(e, dict):
+            raise ValueError(f"Stoich entry inválida: {e!r}")
+        try:
+            nu = int(e.get("nu", 0))
+        except (TypeError, ValueError):
+            raise ValueError(f"ν no es entero: {e!r}")
+        if nu == 0:
+            raise ValueError(f"ν=0 no permitido en {e!r}.")
+        formula = str(e.get("formula") or "").strip()
+        phase   = str(e.get("phase")   or "g").strip().lower()
+        if not formula:
+            raise ValueError(f"Falta 'formula' en {e!r}.")
+        if phase not in ("g", "l", "aq", "s"):
+            raise ValueError(f"phase '{phase}' inválida (use g|l|aq|s).")
+        stoich.append(StoichEntry(formula=formula, phase=phase, nu=nu))
+    if not any(s.nu < 0 for s in stoich):
+        raise ValueError("Falta reactante (ningún ν<0).")
+    if not any(s.nu > 0 for s in stoich):
+        raise ValueError("Falta producto (ningún ν>0).")
+
+    # Balance por elementos (best-effort).  Si todas las fórmulas son
+    # parseables → debe cuadrar; si alguna no, advertimos en el msg
+    # del bloque global de validación (no crasheamos).
+    _check_element_balance(stoich)
+
+    # ΔH obligatorio
+    try:
+        dh = float(d["dh_rxn_298_kJ_mol"])
+    except (KeyError, TypeError, ValueError):
+        raise ValueError("dh_rxn_298_kJ_mol obligatorio (kJ/mol, "
+                          "numérico finito).")
+    if not _math.isfinite(dh):
+        raise ValueError("dh_rxn_298_kJ_mol debe ser finito.")
+
+    # Uno de {ΔS, Keq298} mutuamente excluyentes
+    has_ds  = ("ds_rxn_298_J_mol_K" in d and d["ds_rxn_298_J_mol_K"] is not None)
+    has_keq = ("keq_298" in d and d["keq_298"] is not None)
+    if has_ds and has_keq:
+        raise ValueError("Provee ds_rxn_298_J_mol_K O keq_298, no ambos.")
+    if not (has_ds or has_keq) and not d.get("irreversible", False):
+        raise ValueError("Reacción reversible: indicar ds_rxn_298_J_mol_K "
+                          "O keq_298.  (O usar irreversible=True para "
+                          "conversión declarada.)")
+
+    # Derivar vant_hoff_A, B (ln Keq = A + B/T)
+    #   B = -ΔH / R                      en Kelvin
+    #   ΔH viene en kJ/mol → pasar a J
+    dh_J = dh * 1000.0
+    B = -dh_J / R
+    if has_ds:
+        ds = float(d["ds_rxn_298_J_mol_K"])
+        A = ds / R
+        dg = dh - ds * 298.15 / 1000.0       # kJ/mol
+    elif has_keq:
+        keq298 = float(d["keq_298"])
+        if keq298 <= 0:
+            raise ValueError("keq_298 debe ser > 0 para tomar ln.")
+        # ln(Keq298) = A + B/298.15  →  A = ln(K) - B/298.15
+        A = _math.log(keq298) - B / 298.15
+        ds_derived = A * R
+        dg = dh - ds_derived * 298.15 / 1000.0
+    else:
+        # Irreversible: A/B no usados; calcular como Keq → ∞ a 298.
+        A = 0.0
+        ds_derived = None
+        dg = None
+
+    # Build Reaction
+    rxn_id   = str(d.get("id")   or "CUSTOM-?")
+    rxn_name = str(d.get("name") or f"Custom {rxn_id}")
+    T_min    = float(d.get("T_min_K", 298.15))
+    T_max    = float(d.get("T_max_K", 2000.0))
+    irrev    = bool(d.get("irreversible", False))
+
+    # delta_nu = Σ ν_i (cambio de moles totales)
+    delta_nu = sum(s.nu for s in stoich)
+
+    return Reaction(
+        id=rxn_id, name=rxn_name,
+        category="custom",
+        stoich=stoich,
+        delta_nu=delta_nu,
+        phase_global=_global_phase_from_stoich(stoich),
+        T_min_K=T_min, T_max_K=T_max,
+        dh_rxn_298_kJ_mol=dh,
+        ds_rxn_298_J_mol_K=(ds_derived if has_keq else (float(d["ds_rxn_298_J_mol_K"]) if has_ds else None)),
+        dg_rxn_298_kJ_mol=dg,
+        vant_hoff_A=A,
+        vant_hoff_B=B,
+        irreversible=irrev,
+        derivable_capa3=False,
+        comments=("Reacción custom in-memory.  Keq(T) usa forma 2-param "
+                   "(ΔCp=0); error crece a T lejana de 298 K."),
+        kinetics_available=False,
+    )
+
+
+_ELEMENT_RE = None
+def _check_element_balance(stoich: List[StoichEntry]):
+    """Best-effort: parsea fórmulas tipo C2H6, H2O, CaCO3 como dict
+    {element: count} y verifica Σ nᵢ·νᵢ = 0 por elemento.  Si alguna
+    fórmula no es parseable (pseudo-componente "polyethylene", etc.),
+    saltea la validación silenciosamente (responsabilidad del user)."""
+    global _ELEMENT_RE
+    if _ELEMENT_RE is None:
+        import re
+        _ELEMENT_RE = re.compile(r"([A-Z][a-z]?)(\d*)")
+    counts: Dict[str, float] = {}
+    for s in stoich:
+        # Solo parsear fórmulas que se parecen a química real
+        f = s.formula
+        if not f or not f[0].isupper():
+            return     # no parseable → no validar
+        elems = _ELEMENT_RE.findall(f)
+        # findall siempre devuelve algo; verificar que TODO el string
+        # se haya consumido por matches (sino hay caracteres raros).
+        if "".join(e + n for e, n in elems) != f:
+            return
+        for el, n in elems:
+            if not el:
+                continue
+            n_i = int(n) if n else 1
+            counts[el] = counts.get(el, 0) + s.nu * n_i
+    for el, total in counts.items():
+        if abs(total) > 1e-9:
+            raise ValueError(
+                f"Estequiometría desbalanceada en {el}: Σ ν·n = {total} "
+                f"(debe ser 0).  Revisar coeficientes."
+            )
+
+
+def _global_phase_from_stoich(stoich: List[StoichEntry]) -> str:
+    phases = {s.phase for s in stoich}
+    if phases == {"g"}: return "gas"
+    if phases == {"l"}: return "líquido"
+    if phases == {"aq"}: return "acuoso"
+    if phases == {"s"}: return "sólido"
+    return "heterogéneo"
+
+
 def find_by_species(canonical_name: str) -> List[Reaction]:
     """Devuelve las reacciones donde aparece la especie (por nombre
     canónico thermo_db, e.g. 'methane').  Útil para encontrar qué

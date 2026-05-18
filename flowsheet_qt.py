@@ -573,6 +573,33 @@ class BlockEditDialog(QDialog):
         )
         hint_rxn.setStyleSheet("color: #888; font-size: 8pt;")
         eq_layout.addRow("", hint_rxn)
+
+        # ---- Reacciones CUSTOM in-memory (Hallazgo 1) ----
+        # Una QListWidget mostrando las custom existentes + botón para
+        # abrir el sub-diálogo CustomReactionDialog.
+        self._custom_rxns_data = list(getattr(block, "custom_reactions", []) or [])
+        self.custom_rxn_list = QListWidget()
+        self.custom_rxn_list.setSelectionMode(QListWidget.SingleSelection)
+        self.custom_rxn_list.setMaximumHeight(80)
+        self._refresh_custom_rxns_list()
+        eq_layout.addRow("Custom (sin DB):", self.custom_rxn_list)
+        btn_layout = QHBoxLayout()
+        btn_add_custom = QPushButton("+ Reacción custom…")
+        btn_add_custom.clicked.connect(self._on_add_custom_rxn)
+        btn_del_custom = QPushButton("– Eliminar")
+        btn_del_custom.clicked.connect(self._on_del_custom_rxn)
+        btn_layout.addWidget(btn_add_custom)
+        btn_layout.addWidget(btn_del_custom)
+        btn_widget = QWidget(); btn_widget.setLayout(btn_layout)
+        eq_layout.addRow("", btn_widget)
+        hint_custom = QLabel(
+            "⚠ Reacciones custom usan Keq(T) con aprox ΔCp=0 (forma\n"
+            "2-parámetros).  Válida cerca de 298 K; el error crece a T\n"
+            "lejana.  Para química validada usá el catálogo de arriba."
+        )
+        hint_custom.setStyleSheet("color: #888; font-size: 8pt;")
+        eq_layout.addRow("", hint_custom)
+
         layout.addRow(self.gb_eq)
 
         # ---- Diseño de COLUMNA (FUG, Capa 6) ----
@@ -912,6 +939,8 @@ class BlockEditDialog(QDialog):
                     rid = item.text().split("—")[0].strip()
                     picked.append(rid)
             self.block.reactions = picked
+            # Hallazgo 1: persistir custom_reactions (lista de dicts)
+            self.block.custom_reactions = list(self._custom_rxns_data)
             self.block.T_op_K   = float(self.t_op_edit.value())
             self.block.P_op_bar = float(self.p_op_edit.value())
             self.block.reactor_mode = self.mode_combo.currentData() or "equilibrium"
@@ -966,6 +995,186 @@ class BlockEditDialog(QDialog):
             else:
                 self.block.delta_p_bar = float(self.rot_dp.value())
             self.block.efficiency = float(self.rot_eta.value())
+
+    # ─── Custom reactions helpers (Hallazgo 1) ──────────────────────
+
+    def _refresh_custom_rxns_list(self):
+        self.custom_rxn_list.clear()
+        for d in self._custom_rxns_data:
+            name = d.get("name") or d.get("id", "?")
+            self.custom_rxn_list.addItem(f"  ◆ {name}")
+
+    def _on_add_custom_rxn(self):
+        dlg = CustomReactionDialog(self)
+        if dlg.exec() == QDialog.Accepted and dlg.result_dict is not None:
+            self._custom_rxns_data.append(dlg.result_dict)
+            self._refresh_custom_rxns_list()
+
+    def _on_del_custom_rxn(self):
+        idx = self.custom_rxn_list.currentRow()
+        if 0 <= idx < len(self._custom_rxns_data):
+            self._custom_rxns_data.pop(idx)
+            self._refresh_custom_rxns_list()
+
+
+class CustomReactionDialog(QDialog):
+    """Sub-diálogo para definir una reacción custom (Hallazgo 1).
+
+    Campos:
+      · Ecuación libre 'A + 2 B -> C + D' (parsea coeficientes).
+      · Tabla de especies (formula, fase g/l/aq/s, ν) auto-poblada.
+      · ΔH₂₉₈ kJ/mol obligatorio.
+      · Radio: reversible / irreversible.
+      · Si reversible: ΔS₂₉₈ J/(mol·K) O Keq₂₉₈ (mutuamente excluyentes).
+      · Rango T válido [K] default 298–2000.
+
+    Al aceptar: valida vía reactions_db.reaction_from_dict (captura
+    ValueError, muestra QMessageBox.warning, NO cierra hasta OK).
+    El dict resultante queda en self.result_dict.
+    """
+
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.setWindowTitle("Reacción custom")
+        self.result_dict = None
+        layout = QFormLayout(self)
+
+        from PySide6.QtWidgets import (QLineEdit, QTableWidget,
+                                          QTableWidgetItem, QRadioButton,
+                                          QButtonGroup, QHeaderView)
+        # Ecuación libre
+        self.eq_edit = QLineEdit()
+        self.eq_edit.setPlaceholderText("Ej: CO + H2O -> CO2 + H2")
+        self.eq_edit.editingFinished.connect(self._parse_equation)
+        layout.addRow("Ecuación:", self.eq_edit)
+
+        # ID + nombre
+        self.id_edit = QLineEdit("CUSTOM-1")
+        layout.addRow("ID:", self.id_edit)
+        self.name_edit = QLineEdit("Reacción custom")
+        layout.addRow("Nombre:", self.name_edit)
+
+        # Tabla de especies (formula, fase, nu) — 6 filas máximo
+        self.tbl = QTableWidget(6, 3)
+        self.tbl.setHorizontalHeaderLabels(["Fórmula", "Fase", "ν"])
+        self.tbl.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
+        self.tbl.setMaximumHeight(180)
+        for i in range(6):
+            self.tbl.setItem(i, 0, QTableWidgetItem(""))
+            self.tbl.setItem(i, 1, QTableWidgetItem("g"))
+            self.tbl.setItem(i, 2, QTableWidgetItem(""))
+        layout.addRow("Especies:", self.tbl)
+
+        # ΔH₂₉₈
+        self.dh_edit = QDoubleSpinBox()
+        self.dh_edit.setRange(-1e4, 1e4); self.dh_edit.setDecimals(2)
+        self.dh_edit.setSingleStep(1.0); self.dh_edit.setSuffix(" kJ/mol")
+        layout.addRow("ΔH₂₉₈:", self.dh_edit)
+
+        # Modo: reversible / irreversible
+        self.rb_rev = QRadioButton("Reversible (dar ΔS o Keq)")
+        self.rb_irr = QRadioButton("Irreversible (conversión declarada)")
+        self.rb_rev.setChecked(True)
+        rb_grp = QButtonGroup(self)
+        rb_grp.addButton(self.rb_rev); rb_grp.addButton(self.rb_irr)
+        layout.addRow(self.rb_rev)
+        layout.addRow(self.rb_irr)
+
+        # ΔS₂₉₈ o Keq₂₉₈ (mutuamente excluyentes)
+        self.ds_edit = QDoubleSpinBox()
+        self.ds_edit.setRange(-1e4, 1e4); self.ds_edit.setDecimals(2)
+        self.ds_edit.setSuffix(" J/(mol·K)")
+        layout.addRow("ΔS₂₉₈ (o vacío):", self.ds_edit)
+        self.keq_edit = QDoubleSpinBox()
+        self.keq_edit.setRange(0.0, 1e30); self.keq_edit.setDecimals(6)
+        self.keq_edit.setValue(0.0)
+        layout.addRow("Keq₂₉₈ (o 0=usar ΔS):", self.keq_edit)
+
+        # Rango T
+        self.t_min_edit = QDoubleSpinBox()
+        self.t_min_edit.setRange(100, 5000); self.t_min_edit.setValue(298.15)
+        self.t_min_edit.setSuffix(" K")
+        layout.addRow("T_min:", self.t_min_edit)
+        self.t_max_edit = QDoubleSpinBox()
+        self.t_max_edit.setRange(100, 5000); self.t_max_edit.setValue(2000)
+        self.t_max_edit.setSuffix(" K")
+        layout.addRow("T_max:", self.t_max_edit)
+
+        # Buttons
+        buttons = QDialogButtonBox(
+            QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
+        buttons.accepted.connect(self._on_accept)
+        buttons.rejected.connect(self.reject)
+        layout.addRow(buttons)
+
+    def _parse_equation(self):
+        """'A + 2 B -> C + D' → autopopula la tabla de especies."""
+        import re
+        eq = self.eq_edit.text().strip()
+        if "->" not in eq and "→" not in eq:
+            return
+        eq = eq.replace("→", "->")
+        lhs, rhs = eq.split("->", 1)
+        def _parse_side(side, sign):
+            terms = [t.strip() for t in side.split("+") if t.strip()]
+            out = []
+            for t in terms:
+                m = re.match(r"^(\d+\.?\d*)?\s*([A-Za-z][\w\d]*)$", t)
+                if not m:
+                    continue
+                coef = float(m.group(1)) if m.group(1) else 1.0
+                formula = m.group(2)
+                out.append((formula, int(coef * sign)))
+            return out
+        species = _parse_side(lhs, -1) + _parse_side(rhs, +1)
+        for i in range(self.tbl.rowCount()):
+            if i < len(species):
+                f, nu = species[i]
+                self.tbl.item(i, 0).setText(f)
+                self.tbl.item(i, 1).setText("g")
+                self.tbl.item(i, 2).setText(str(nu))
+            else:
+                self.tbl.item(i, 0).setText("")
+                self.tbl.item(i, 2).setText("")
+
+    def _on_accept(self):
+        import reactions_db as _rdb
+        # Construir dict desde inputs
+        stoich = []
+        for i in range(self.tbl.rowCount()):
+            f = (self.tbl.item(i, 0).text() if self.tbl.item(i, 0) else "").strip()
+            if not f:
+                continue
+            ph = (self.tbl.item(i, 1).text() if self.tbl.item(i, 1) else "g").strip()
+            try:
+                nu = int(self.tbl.item(i, 2).text())
+            except (ValueError, AttributeError):
+                continue
+            stoich.append({"formula": f, "phase": ph or "g", "nu": nu})
+        d = {
+            "id":   self.id_edit.text().strip() or "CUSTOM-?",
+            "name": self.name_edit.text().strip() or "Custom",
+            "stoich":              stoich,
+            "dh_rxn_298_kJ_mol":   float(self.dh_edit.value()),
+            "T_min_K":             float(self.t_min_edit.value()),
+            "T_max_K":             float(self.t_max_edit.value()),
+            "irreversible":        bool(self.rb_irr.isChecked()),
+        }
+        if not self.rb_irr.isChecked():
+            keq = float(self.keq_edit.value())
+            ds  = float(self.ds_edit.value())
+            if keq > 0:
+                d["keq_298"] = keq
+            else:
+                d["ds_rxn_298_J_mol_K"] = ds
+        # Validar
+        try:
+            _rdb.reaction_from_dict(d)   # solo validación; descartar resultado
+        except ValueError as e:
+            QMessageBox.warning(self, "Reacción inválida", str(e))
+            return  # NO cerrar
+        self.result_dict = d
+        self.accept()
 
 
 class StreamEditDialog(QDialog):

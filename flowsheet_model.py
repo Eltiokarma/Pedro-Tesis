@@ -259,6 +259,16 @@ class Block:
     batch_role: str = "continuous"
     task_ref:   str = ""
 
+    # ---- REACCIONES CUSTOM (in-memory, NO en data/reactions_db.md) ----
+    # Lista de dicts con esquema reaction_from_dict() (reactions_db.py).
+    # Cada dict: {id, name, stoich, dh_rxn_298_kJ_mol, ds_rxn_298_J_mol_K
+    # ó keq_298, T_min_K, T_max_K, irreversible}.
+    # El solver las fusiona con b.reactions (IDs del catálogo) en
+    # solve_equilibrium_reactors antes de invocar el equilibrio.
+    # Persiste en JSON automáticamente (List[dict] de primitivos).
+    # Default [] → compat con flowsheets viejos.
+    custom_reactions: List[dict] = field(default_factory=list)
+
     # ---- OVERRIDES de transferencia de calor (HX sizing) ----
     # Solo aplican a bloques con categoria='Heat exchangers'.  Cuando
     # están seteados (>0), size_heat_exchanger los usa en lugar de las

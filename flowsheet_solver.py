@@ -1293,7 +1293,10 @@ def solve_equilibrium_reactors(fs):
         return []
     msgs = []
     for b in fs.blocks.values():
-        if not getattr(b, "reactions", None):
+        # Hallazgo 1: aceptar b.reactions (IDs del catálogo) Y/O
+        # b.custom_reactions (definidas por el user, in-memory).
+        if not (getattr(b, "reactions", None)
+                or getattr(b, "custom_reactions", None)):
             continue
         # Reactor estructural / placeholder: si NINGUNA de las reacciones
         # declaradas existe en el DB de Capa 4, asumimos que el user usó
@@ -1301,8 +1304,34 @@ def solve_equilibrium_reactors(fs):
         # via outputs locked) — saltamos la chemistry sin error.  El
         # block sigue siendo "reactor" para el component balance skip.
         known = [rid for rid in b.reactions if _rdb.get(rid) is not None]
-        if not known:
+        # Hallazgo 1: fusionar custom_reactions del bloque.  Las
+        # registramos temporalmente en el cache de reactions_db con
+        # IDs únicos para que solve_*_from_composition (que toma IDs)
+        # las pueda resolver vía _rdb.get().  Después del solve las
+        # desregistramos para no polucionar la DB global.
+        custom_rxn_ids: List[str] = []
+        try:
+            _cache = _rdb._ensure_loaded()    # dict module-level
+            for i, d in enumerate(getattr(b, "custom_reactions", []) or []):
+                try:
+                    rxn_obj = _rdb.reaction_from_dict(d)
+                except (ValueError, KeyError) as _e:
+                    msgs.append(f"⚠ Reactor {b.name}: custom_reactions[{i}] "
+                                 f"inválida ({_e}), saltada.")
+                    continue
+                # ID único in-memory para evitar colisión con catálogo
+                rid_uniq = f"_BLOCK{b.id}_CUSTOM{i}"
+                rxn_obj.id = rid_uniq
+                _cache[rid_uniq] = rxn_obj
+                custom_rxn_ids.append(rid_uniq)
+        except Exception as _e:
+            msgs.append(f"⚠ Reactor {b.name}: error fusionando custom_reactions: {_e}")
+        all_rxn_ids = known + custom_rxn_ids
+        if not all_rxn_ids:
             continue
+        # NOTA: usamos all_rxn_ids (fusión catalog + custom) en las
+        # llamadas downstream a solve_*_from_composition.  NO mutamos
+        # b.reactions para no contaminar el modelo persistido.
         ins  = [s for s in fs.streams.values() if s.dst == b.id]
         outs = [s for s in fs.streams.values() if s.src == b.id]
         if not ins or not outs:
@@ -1356,7 +1385,7 @@ def solve_equilibrium_reactors(fs):
                 try:
                     if mode == "equilibrium":
                         res_iter = _rdb.solve_equilibrium_reactor_from_composition(
-                            rxn_ids=b.reactions, inlet_composition=agg,
+                            rxn_ids=all_rxn_ids, inlet_composition=agg,
                             inlet_mass_kg_s=m_in_kg_s,
                             T_K=T_K, P_bar=b.P_op_bar)
                     elif mode in ("pfr", "cstr"):
@@ -1364,7 +1393,7 @@ def solve_equilibrium_reactors(fs):
                         if V_L <= 0:
                             break
                         res_iter = _rdb.solve_kinetic_reactor_from_composition(
-                            mode=mode, rxn_ids=b.reactions,
+                            mode=mode, rxn_ids=all_rxn_ids,
                             inlet_composition=agg, inlet_mass_kg_s=m_in_kg_s,
                             T_K=T_K, P_bar=b.P_op_bar, V_reactor_L=V_L)
                     else:
@@ -1436,9 +1465,19 @@ def solve_equilibrium_reactors(fs):
 
         # Despacho según reactor_mode (Capas 4 vs 5):
         mode = getattr(b, "reactor_mode", "equilibrium") or "equilibrium"
+        # Hallazgo 1 (nota de scope): si el user eligió pfr/cstr pero
+        # alguna reacción NO tiene cinética Arrhenius (custom o R022-R025
+        # NO derivadas), degradar a 'equilibrium' con aviso.  Evita
+        # crash y refleja la limitación real (no hay k0/Ea para esa rxn).
+        if mode in ("pfr", "cstr") and custom_rxn_ids:
+            # Las custom nunca traen cinética → si hay alguna, degradar.
+            msgs.append(f"⚠ Reactor {b.name}: modo '{mode}' incompatible "
+                         f"con reacciones custom (sin cinética Arrhenius). "
+                         f"Degradando a 'equilibrium'.")
+            mode = "equilibrium"
         if mode == "equilibrium":
             res = _rdb.solve_equilibrium_reactor_from_composition(
-                rxn_ids=b.reactions,
+                rxn_ids=all_rxn_ids,
                 inlet_composition=agg,
                 inlet_mass_kg_s=m_in_kg_s,
                 T_K=T_K, P_bar=b.P_op_bar)
@@ -1450,7 +1489,7 @@ def solve_equilibrium_reactors(fs):
                 continue
             res = _rdb.solve_kinetic_reactor_from_composition(
                 mode=mode,
-                rxn_ids=b.reactions,
+                rxn_ids=all_rxn_ids,
                 inlet_composition=agg,
                 inlet_mass_kg_s=m_in_kg_s,
                 T_K=T_K, P_bar=b.P_op_bar,
