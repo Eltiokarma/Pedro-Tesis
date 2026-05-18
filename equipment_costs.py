@@ -90,10 +90,16 @@ EQUIPMENT_DATA = {
         dict(K1=4.8306, K2=-0.8509, K3=0.3187,
              S_param="Heat transfer area", S_unit="m²",
              S_min=10,  S_max=1000, categoria="Heat exchangers"),
+    # TODO: thermosiphon reboiler como tipo propio (pendiente —
+    # comparte correlación con shell-tube pero usa U/ΔTlm distintos).
     "Heat exch. — kettle reboiler":
+        # S_max extendido 100 → 1000 m² por interpolación práctica
+        # para columnas industriales grandes (rango Turton estricto
+        # es 10-100 m²; entre 100-1000 m² la estimación es menos
+        # precisa pero evita el clampeo/warning de extrapolación).
         dict(K1=4.4646, K2=-0.5277, K3=0.3955,
              S_param="Heat transfer area", S_unit="m²",
-             S_min=10,  S_max=100,  categoria="Heat exchangers"),
+             S_min=10,  S_max=1000, categoria="Heat exchangers"),
     "Heat exch. — double pipe":
         dict(K1=3.3444, K2=0.2745, K3=-0.0472,
              S_param="Heat transfer area", S_unit="m²",
