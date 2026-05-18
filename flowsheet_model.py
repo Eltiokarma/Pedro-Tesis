@@ -175,6 +175,66 @@ class Block:
     splitter_active:    bool       = False
     splitter_fractions: List[float] = field(default_factory=list)
 
+    # ---- SEPARADOR MECÁNICO sólido/líquido (filtro, centrífuga) ----
+    # Si separator_active=True y eq_type es Filter — belt o Centrifuge,
+    # el solver computa AUTOMÁTICAMENTE el split entre torta (cake)
+    # y madre (filtrate/liquor) usando recovery + humedad declaradas.
+    # Sin esto, el user debe declarar manualmente las composiciones.
+    #   solids_recovery:  fracción del sólido (solid_components) que
+    #                     va a la torta.  El resto va a la madre.
+    #   cake_moisture:    fracción másica de líquido (resto de comps)
+    #                     en la torta (humedad residual).
+    #   solid_components: keys de los componentes considerados "sólido"
+    #                     (el resto del catálogo se trata como líquido).
+    separator_active:   bool       = False
+    solids_recovery:    float      = 0.95
+    cake_moisture:      float      = 0.30
+    solid_components:   List[str]  = field(default_factory=list)
+
+    # ---- SECADOR (Dryer — drum) ----
+    # Si dryer_active=True y eq_type es Dryer — drum, el solver computa
+    # AUTOMÁTICAMENTE el producto seco a humedad final + venteo de
+    # vapor del componente humectante.
+    #   final_moisture:     frac másica del moisture_component en producto
+    #   moisture_component: key del componente que se evapora (default
+    #                       "water"; otro: "ethanol" en secado azeotrópico)
+    dryer_active:        bool   = False
+    final_moisture:      float  = 0.02
+    moisture_component:  str    = "water"
+
+    # ---- CRISTALIZADOR (Crystallizer) ----
+    # Si crystallizer_active=True y eq_type es Crystallizer, el solver
+    # extrae solute_component a producto (cristales) según crystal_yield
+    # y manda el resto a la madre (venteo).
+    #   solute_component: key del compuesto que cristaliza
+    #   crystal_yield:    fracción de solute que pasa a cristales
+    crystallizer_active: bool   = False
+    solute_component:    str    = ""
+    crystal_yield:       float  = 0.80
+
+    # ---- EVAPORADOR (Evaporator — vertical) ----
+    # Si evaporator_active=True y eq_type es Evaporator — vertical, el
+    # solver computa AUTOMÁTICAMENTE el concentrado + vapor de salida
+    # usando concentration_factor.
+    #   concentration_factor: ratio de sólidos out/in (e.g. 2.0 → la
+    #                         masa cae a la mitad por evaporación)
+    #   volatile_component:   key del compuesto volátil que se evapora
+    #                         (default "water")
+    evaporator_active:    bool   = False
+    concentration_factor: float  = 2.0
+    volatile_component:   str    = "water"
+
+    # ---- CICLÓN (Cyclone — gas/solid) ----
+    # Si cyclone_active=True y eq_type es Cyclone — gas/solid, el solver
+    # separa sólidos del gas portador según collection_efficiency.
+    #   collection_efficiency: fracción del sólido recolectado en
+    #                          producto (sólido).  El resto + gas → venteo.
+    # Los sólidos se identifican igual que en separator (solid_components),
+    # pero como ciclones suelen tratar UN polvo dominante, también acepta
+    # main_component del feed como sólido si solid_components está vacío.
+    cyclone_active:        bool      = False
+    collection_efficiency: float     = 0.90
+
     # caches del canvas Tk (no se serializan, no se usan en Qt)
     canvas_rect: Optional[int] = field(default=None, repr=False)
     canvas_text: Optional[int] = field(default=None, repr=False)
