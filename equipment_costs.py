@@ -250,6 +250,23 @@ EQUIPMENT_DATA = {
         dict(K1=3.3322, K2=0.4838, K3=0.3434,
              S_param="Tray area", S_unit="m²",
              S_min=0.07, S_max=12.3, categoria="Trays / packing"),
+    # Empaques (random/structured) — alternativa a platos para
+    # columnas con caudales bajos, sensibles a foaming, o de alta
+    # eficiencia (estructurado en separaciones criogénicas, MEG,
+    # CO2 capture).  Correlaciones Turton 4ª ed Apéndice A.
+    # El usuario combina Tower (column shell) + Packing — *
+    # en lugar de Tower + Tray — * para diseñar columnas empacadas.
+    "Packing — random":
+        # Anillos Pall, Raschig — más barato pero HETP mayor.
+        dict(K1=2.4493, K2=0.9744, K3=0.0055,
+             S_param="Volume", S_unit="m³",
+             S_min=0.03, S_max=628, categoria="Trays / packing"),
+    "Packing — structured":
+        # Mellapak, Flexipac, Sulzer — más caro, HETP menor.
+        # K constants ~ Turton ed.5 Tabla A.1 estructurado.
+        dict(K1=3.5565, K2=0.4477, K3=0.0058,
+             S_param="Volume", S_unit="m³",
+             S_min=0.03, S_max=628, categoria="Trays / packing"),
 
     # -------- MIXERS / SPLITTERS --------
     "Mixer — inline":

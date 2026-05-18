@@ -332,6 +332,8 @@ ISA_PREFIX = {
 
     "Tray — sieve":                 "TR",
     "Tray — valve":                 "TR",
+    "Packing — random":             "PK",
+    "Packing — structured":         "PK",
 
     # Mixers / splitters
     "Mixer — inline":                "MX",
@@ -444,6 +446,8 @@ LABOR_CLASSIFICATION = {
     "Fan — centrifugal radial":     "excluded",
     "Tray — sieve":                 "excluded",  # interno de columna
     "Tray — valve":                 "excluded",
+    "Packing — random":             "excluded",  # interno de columna
+    "Packing — structured":         "excluded",
 }
 
 # default para los que no estén en el dict arriba: non-particulate
