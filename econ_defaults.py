@@ -144,7 +144,9 @@ SENSITIVITY = {
 #   0.6  → integración moderada (Pinch básico aplicado)
 #   0.4  → integración alta (planta moderna, MINLP optimizada)
 #   0.2  → integración extrema (industrial best-in-class)
-# Default 0.5 = razonable para plantas industriales típicas.
+# Default 0.4 = planta moderna con Pinch razonable (fuente única
+# de verdad — flowsheet_export y la UI leen via
+# get_heat_integration_factor()).
 # ─────────────────────────────────────────────────────────────
 HEAT_INTEGRATION = {
     "factor": 0.4,    # planta moderna con Pinch razonable

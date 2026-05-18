@@ -593,7 +593,8 @@ def compute_utilities_from_duties(fs):
         import econ_defaults as _ed
         hi_factor = _ed.get_heat_integration_factor()
     except Exception:
-        hi_factor = 0.5
+        # fallback alineado con econ_defaults.HEAT_INTEGRATION["factor"]
+        hi_factor = 0.4
 
     for util_key, (cons, _cost) in agg.items():
         util = ep.UTILITIES[util_key]
