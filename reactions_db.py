@@ -74,6 +74,24 @@ FORMULA_TO_THERMO = {
     'Glucose':         'glucose',
     'Sucrose':         'sucrose',
     'Fructose':        'fructose',
+    # Inorgánicos / electrolitos (ejemplos E10, E06)
+    'Cl2':             'chlorine',
+    'HCl':             'hydrogen_chloride',
+    'NaOH':            'sodium_hydroxide',
+    'NaCl':            'sodium_chloride',
+    'H2SO4':           'sulfuric_acid',
+    'HNO3':            'nitric_acid',
+    # Materiales / cemento / vidrio (E11, E12)
+    'CaCO3':           'limestone',
+    'CaO':             'quicklime',
+    'SiO2':            'silica',
+    'Na2CO3':          'soda_ash',
+    # Pseudo-componentes (química asociada NO derivable de Capa 3)
+    'polyethylene':    'polyethylene',
+    'urea':            'urea',
+    'soap':            'soap',
+    'vegetable_oil':   'vegetable_oil',
+    'glycerin':        'glycerin',
     # No mapeables (no están en thermo_db actual)
     'Triolein':        None,
     'FAME':            None,

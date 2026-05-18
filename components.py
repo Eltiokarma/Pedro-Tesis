@@ -288,6 +288,252 @@ COMPONENTS: Dict[str, Component] = {
         dh_vap=180.0,
     ),
 
+    # ---- Olefinas / monómeros (E08, E09, E20) ----
+    "propylene": Component(
+        name="propylene", label="Propileno (C₃H₆)",
+        mw=42.08, tb_c=-47.6,
+        cp_l_a=2.500, cp_l_b=0.00000,
+        cp_v_a=1.500, cp_v_b=0.00500,
+        dh_vap=438.0,
+    ),
+    "carbon_monoxide": Component(
+        name="carbon_monoxide", label="Monóxido de carbono (CO)",
+        mw=28.01, tb_c=-191.5,
+        cp_l_a=2.000, cp_l_b=0.00000,
+        cp_v_a=1.040, cp_v_b=0.00008,
+        dh_vap=216.0,
+    ),
+    "acetic_acid": Component(
+        name="acetic_acid", label="Ácido acético (C₂H₄O₂)",
+        mw=60.05, tb_c=118.1,
+        cp_l_a=1.960, cp_l_b=0.00240,
+        cp_v_a=1.100, cp_v_b=0.00240,
+        dh_vap=405.0,
+    ),
+    "polyethylene": Component(
+        # No volátil (Tb=99999 marca no-vaporizable, como atmospheric_residue).
+        name="polyethylene", label="Polietileno (−C₂H₄−)ₙ",
+        mw=28000.0, tb_c=99999.0,
+        cp_l_a=2.300, cp_l_b=0.00300,
+        cp_v_a=2.300, cp_v_b=0.00300,
+        dh_vap=0.0,
+    ),
+
+    # ---- Sólidos minerales / materiales (E11, E12) ----
+    "silica": Component(
+        name="silica", label="Sílice / arena (SiO₂)",
+        mw=60.08, tb_c=99999.0,
+        cp_l_a=0.700, cp_l_b=0.00030,
+        cp_v_a=0.700, cp_v_b=0.00030,
+        dh_vap=0.0,
+    ),
+    "soda_ash": Component(
+        name="soda_ash", label="Carbonato de sodio (Na₂CO₃)",
+        mw=105.99, tb_c=99999.0,
+        cp_l_a=1.050, cp_l_b=0.00000,
+        cp_v_a=1.050, cp_v_b=0.00000,
+        dh_vap=0.0,
+    ),
+    "limestone": Component(
+        name="limestone", label="Caliza (CaCO₃)",
+        mw=100.09, tb_c=99999.0,
+        cp_l_a=0.840, cp_l_b=0.00000,
+        cp_v_a=0.840, cp_v_b=0.00000,
+        dh_vap=0.0,
+    ),
+    "quicklime": Component(
+        name="quicklime", label="Cal viva (CaO)",
+        mw=56.08, tb_c=99999.0,
+        cp_l_a=0.750, cp_l_b=0.00000,
+        cp_v_a=0.750, cp_v_b=0.00000,
+        dh_vap=0.0,
+    ),
+    "glass": Component(
+        # Pseudo vidrio sodocálcico (proxy fundido/sólido).
+        name="glass", label="Vidrio sodocálcico (pseudo)",
+        mw=60.0, tb_c=99999.0,
+        cp_l_a=1.000, cp_l_b=0.00020,
+        cp_v_a=1.000, cp_v_b=0.00020,
+        dh_vap=0.0,
+    ),
+    "clinker": Component(
+        name="clinker", label="Clínker de cemento (pseudo)",
+        mw=100.0, tb_c=99999.0,
+        cp_l_a=0.850, cp_l_b=0.00000,
+        cp_v_a=0.850, cp_v_b=0.00000,
+        dh_vap=0.0,
+    ),
+
+    # ---- Sólidos orgánicos / alimentos (E02, E03, E14, E23) ----
+    "starch": Component(
+        # Pseudo (C₆H₁₀O₅)ₙ, sólido no volátil.
+        name="starch", label="Almidón (pseudo C₆H₁₀O₅)ₙ",
+        mw=162.14, tb_c=99999.0,
+        cp_l_a=1.200, cp_l_b=0.00200,
+        cp_v_a=1.200, cp_v_b=0.00200,
+        dh_vap=0.0,
+    ),
+    "urea": Component(
+        name="urea", label="Urea (CH₄N₂O)",
+        mw=60.06, tb_c=99999.0,
+        cp_l_a=1.550, cp_l_b=0.00000,
+        cp_v_a=1.550, cp_v_b=0.00000,
+        dh_vap=0.0,
+    ),
+    "potato_solids": Component(
+        name="potato_solids", label="Sólidos de papa (pseudo)",
+        mw=150.0, tb_c=99999.0,
+        cp_l_a=1.500, cp_l_b=0.00200,
+        cp_v_a=1.500, cp_v_b=0.00200,
+        dh_vap=0.0,
+    ),
+    "pineapple_solids": Component(
+        # Sólidos solubles tipo azúcar (proxy sucrose).
+        name="pineapple_solids", label="Sólidos de piña (pseudo)",
+        mw=180.0, tb_c=99999.0,
+        cp_l_a=1.300, cp_l_b=0.00200,
+        cp_v_a=1.300, cp_v_b=0.00200,
+        dh_vap=0.0,
+    ),
+
+    # ---- Pseudo-componentes lácteos (E04 Leche Gloria) ----
+    # Calibrados para que la mezcla reproduzca Cp_leche entera ≈3.93
+    # y Cp_crema 40% ≈3.35 kJ/kg·K (dossier §6).
+    "milk_fat": Component(
+        name="milk_fat", label="Materia grasa láctea (pseudo)",
+        mw=850.0, tb_c=99999.0,
+        cp_l_a=2.100, cp_l_b=0.00300,
+        cp_v_a=2.100, cp_v_b=0.00300,
+        dh_vap=0.0,
+    ),
+    "milk_protein": Component(
+        name="milk_protein", label="Proteína láctea (pseudo)",
+        mw=25000.0, tb_c=99999.0,
+        cp_l_a=2.000, cp_l_b=0.00200,
+        cp_v_a=2.000, cp_v_b=0.00200,
+        dh_vap=0.0,
+    ),
+    "lactose": Component(
+        # Disacárido (C₁₂H₂₂O₁₁), sólido tipo sacarosa.
+        name="lactose", label="Lactosa (C₁₂H₂₂O₁₁)",
+        mw=342.30, tb_c=99999.0,
+        cp_l_a=1.250, cp_l_b=0.00200,
+        cp_v_a=1.250, cp_v_b=0.00200,
+        dh_vap=0.0,
+    ),
+    "milk_ash": Component(
+        name="milk_ash", label="Minerales lácteos (pseudo cenizas)",
+        mw=100.0, tb_c=99999.0,
+        cp_l_a=0.900, cp_l_b=0.00000,
+        cp_v_a=0.900, cp_v_b=0.00000,
+        dh_vap=0.0,
+    ),
+
+    # ---- Pseudo-componentes biológicos / ambientales (E22, E24) ----
+    "raw_water_solids": Component(
+        name="raw_water_solids", label="Sólidos suspendidos agua cruda (pseudo)",
+        mw=100.0, tb_c=99999.0,
+        cp_l_a=1.000, cp_l_b=0.00000,
+        cp_v_a=1.000, cp_v_b=0.00000,
+        dh_vap=0.0,
+    ),
+    "penicillin": Component(
+        name="penicillin", label="Penicilina (pseudo C₁₆H₁₈N₂O₄S)",
+        mw=334.39, tb_c=99999.0,
+        cp_l_a=1.500, cp_l_b=0.00100,
+        cp_v_a=1.500, cp_v_b=0.00100,
+        dh_vap=0.0,
+    ),
+    "biomass": Component(
+        name="biomass", label="Biomasa / micelio (pseudo)",
+        mw=100.0, tb_c=99999.0,
+        cp_l_a=1.200, cp_l_b=0.00200,
+        cp_v_a=1.200, cp_v_b=0.00200,
+        dh_vap=0.0,
+    ),
+
+    # ⚠ Electrolito/iónico. Propiedades de fase líquida/sólida pura como
+    # proxy. Química asociada NO derivable de Capa 3 — modelar con outputs
+    # locked (Modo B). Mismo régimen documentado para MDEA/H2S en
+    # reactions_db.md.
+    "chlorine": Component(
+        name="chlorine", label="Cloro (Cl₂)",
+        mw=70.91, tb_c=-34.0,
+        cp_l_a=0.950, cp_l_b=0.00000,
+        cp_v_a=0.480, cp_v_b=0.00010,
+        dh_vap=288.0,
+    ),
+    "hydrogen_chloride": Component(
+        name="hydrogen_chloride", label="Cloruro de hidrógeno (HCl)",
+        mw=36.46, tb_c=-85.0,
+        cp_l_a=1.500, cp_l_b=0.00000,
+        cp_v_a=0.800, cp_v_b=0.00002,
+        dh_vap=444.0,
+    ),
+    "sodium_hydroxide": Component(
+        # Tb_C alto (sólido fundido) — no se vaporiza en condiciones de proceso.
+        name="sodium_hydroxide", label="Hidróxido de sodio (NaOH)",
+        mw=40.00, tb_c=1388.0,
+        cp_l_a=1.490, cp_l_b=0.00000,
+        cp_v_a=1.490, cp_v_b=0.00000,
+        dh_vap=0.0,
+    ),
+    "sodium_chloride": Component(
+        name="sodium_chloride", label="Cloruro de sodio (NaCl)",
+        mw=58.44, tb_c=1465.0,
+        cp_l_a=0.850, cp_l_b=0.00000,
+        cp_v_a=0.850, cp_v_b=0.00000,
+        dh_vap=0.0,
+    ),
+    "sulfuric_acid": Component(
+        name="sulfuric_acid", label="Ácido sulfúrico (H₂SO₄)",
+        mw=98.08, tb_c=337.0,
+        cp_l_a=1.380, cp_l_b=0.00000,
+        cp_v_a=1.000, cp_v_b=0.00000,
+        dh_vap=510.0,
+    ),
+    "nitric_acid": Component(
+        name="nitric_acid", label="Ácido nítrico (HNO₃)",
+        mw=63.01, tb_c=83.0,
+        cp_l_a=1.740, cp_l_b=0.00000,
+        cp_v_a=1.200, cp_v_b=0.00000,
+        dh_vap=480.0,
+    ),
+    "sodium_carbonate_sol": Component(
+        # Solución acuosa — Cp y ΔHvap dominados por el agua.
+        name="sodium_carbonate_sol", label="Solución de soda (Na₂CO₃ aq)",
+        mw=105.99, tb_c=102.0,
+        cp_l_a=3.500, cp_l_b=0.00000,
+        cp_v_a=2.000, cp_v_b=0.00000,
+        dh_vap=2200.0,
+    ),
+
+    # ---- Inorgánicos para SO2/SO3 (E06 ácido sulfúrico) ----
+    "sulfur_dioxide": Component(
+        name="sulfur_dioxide", label="Dióxido de azufre (SO₂)",
+        mw=64.07, tb_c=-10.0,
+        cp_l_a=1.350, cp_l_b=0.00000,
+        cp_v_a=0.630, cp_v_b=0.00020,
+        dh_vap=389.0,
+    ),
+    "sulfur_trioxide": Component(
+        name="sulfur_trioxide", label="Trióxido de azufre (SO₃)",
+        mw=80.06, tb_c=45.0,
+        cp_l_a=1.400, cp_l_b=0.00000,
+        cp_v_a=0.760, cp_v_b=0.00020,
+        dh_vap=540.0,
+    ),
+
+    # ---- Jabón (E13) ----
+    "soap": Component(
+        # Pseudo estearato sódico (proxy de jabones de Na).  No volátil.
+        name="soap", label="Jabón (pseudo C₁₈H₃₅O₂Na)",
+        mw=306.46, tb_c=99999.0,
+        cp_l_a=2.000, cp_l_b=0.00200,
+        cp_v_a=2.000, cp_v_b=0.00200,
+        dh_vap=0.0,
+    ),
+
     # ---- Genéricos (fallback si el user no sabe el componente) ----
     "generic_liquid": Component(
         name="generic_liquid", label="Líquido genérico (hidrocarburo)",

@@ -69,6 +69,12 @@ Tolerancias: |ΔH_err| < 2 kJ/mol, |ΔG_err| < 3 kJ/mol.
 | R023 | Absorción de CO2 en MDEA (Kent-Eisenberg) | n/a | n/a | ⚠ no derivable |
 | R024 | Absorción de H2S en MDEA | n/a | n/a | ⚠ no derivable |
 | R025 | Reacción de Boudouard (gasificación de C) | n/a | n/a | ⚠ no derivable |
+| R026 | Carbonilación de metanol a ácido acético | n/a | n/a | ⚠ no derivable |
+| R027 | Polimerización de etileno a PE (LDPE) | n/a | n/a | ⚠ no derivable |
+| R028 | Síntesis directa de HCl (H₂+Cl₂) | n/a | n/a | ⚠ no derivable |
+| R029 | Calcinación de caliza (descarbonatación) | n/a | n/a | ⚠ no derivable |
+| R030 | Saponificación de triglicérido | n/a | n/a | ⚠ no derivable |
+| R031 | Síntesis de urea (Bosch-Meiser) | n/a | n/a | ⚠ no derivable |
 
 ## Limitaciones del motor — ENUNCIADAS EXPLÍCITAMENTE
 
@@ -1513,6 +1519,215 @@ Lit values reportados son ΔH efectivo de absorción medido por calorimetría (M
 
 - NIST JANAF (CO, CO2)
 - Higman & van der Burgt 'Gasification' 2e (2008)
+
+---
+
+## R026 — Carbonilación de metanol a ácido acético
+
+**Categoría:** química fina / C1    ⚠ **NO DERIVADA DE CAPA 3**
+
+### Estequiometría
+
+```
+1 CH3OH(l) + 1 CO(g)  →  1 CH3COOH(l)
+```
+
+| Especie | Fase | ν |
+|---|---|---:|
+| CH3OH | l | -1 |
+| CO | g | -1 |
+| CH3COOH | l | +1 |
+
+**Δν =** -1  **Fase global:** líquido/gas  **Rango T válido:** 420–480 K
+
+### Termodinámica @ 298.15 K (literatura empírica, NO derivable)
+
+- ΔH_rxn = -133.77 kJ/mol  *(valor empírico/estimado, ver comentarios)*
+- ΔG_rxn = -80.00 kJ/mol  *(usar con precaución, idem)*
+
+### Comentarios técnicos
+
+Calculable por Hess desde Capa 3 (CH3OH_l, CO_g, CH3COOH_l todos con dHf°): ΔH≈-133.8 kJ/mol (literatura -135). NO derivada formalmente acá para mantener consistencia con el patrón "convención NO DERIVADA" del catálogo educativo. Proceso Monsanto/Cativa: catalizador Rh/Ir + promotor yoduro de metilo, 150–200 °C, 30–60 bar. Conversión por paso ~99% selectiva, irreversible (Keq>>1). usar conversión declarada en simulación, no resolver equilibrio. La carbonilación NO produce agua — la estequiometría neta es exactamente 1+1→1.
+
+### Referencias
+
+- Paulik F.E. & Roth J.F., Chem. Commun. 1968 (Monsanto)
+- Cativa BP process, Ind. Eng. Chem. Res. 1996
+- Ullmann's Encyclopedia "Acetic Acid"
+
+---
+
+## R027 — Polimerización de etileno a PE (LDPE)
+
+**Categoría:** polímeros    ⚠ **NO DERIVADA DE CAPA 3**
+
+### Estequiometría
+
+```
+1 C2H4(g)  →  1 polyethylene(s)
+```
+
+| Especie | Fase | ν |
+|---|---|---:|
+| C2H4 | g | -1 |
+| polyethylene | s | +1 |
+
+**Δν =** 0  **Fase global:** gas→sólido  **Rango T válido:** 350–600 K
+
+### Termodinámica @ 298.15 K (literatura empírica, NO derivable)
+
+- ΔH_rxn = -93.00 kJ/mol  *(valor empírico/estimado, ver comentarios)*
+- ΔG_rxn = -50.00 kJ/mol  *(usar con precaución, idem)*
+
+### Comentarios técnicos
+
+Polimerización por adición — NO es equilibrio termodinámico, es cinética de cadena (radical libre para LDPE, coordinada Ziegler-Natta para HDPE). polyethylene es pseudo-polímero polidisperso, sin ΔHf° formal. usar conversión declarada en simulación, no resolver equilibrio. Conversión por paso LDPE 20–35% (alta P, ~2000 bar, 200–300 °C, iniciador peróxido); con reciclo del etileno no reaccionado, conversión global ~95%. Calor de polimerización ≈ -93 kJ/mol_etileno (Δ del enlace π de C2H4) — extracción de calor crítica en el reactor. Modelar Modo B con duty grande exotérmico.
+
+### Referencias
+
+- Ullmann's Encyclopedia "Polyethylene"
+- Ziegler K. (LDPE 1953); Natta G. (estereorregular 1954)
+- Brandrup-Immergut "Polymer Handbook" 4e
+
+---
+
+## R028 — Síntesis directa de HCl (H₂+Cl₂)
+
+**Categoría:** inorgánica pesada    ⚠ **NO DERIVADA DE CAPA 3**
+
+### Estequiometría
+
+```
+1 H2(g) + 1 Cl2(g)  →  2 HCl(g)
+```
+
+| Especie | Fase | ν |
+|---|---|---:|
+| H2 | g | -1 |
+| Cl2 | g | -1 |
+| HCl | g | +2 |
+
+**Δν =** 0  **Fase global:** gas  **Rango T válido:** 500–1500 K
+
+### Termodinámica @ 298.15 K (literatura empírica, NO derivable)
+
+- ΔH_rxn = -184.60 kJ/mol  *(valor empírico/estimado, ver comentarios)*
+- ΔG_rxn = -190.55 kJ/mol  *(usar con precaución, idem)*
+
+### Comentarios técnicos
+
+Cl2 y HCl NO están en Capa 3 con ΔHf° (NIST: HCl(g)≈-92.31, Cl2(g)=0). Marcamos NO DERIVADA para mantener consistencia y permitir Modo A con conversión declarada. Reacción explosivamente exotérmica con ignición (luz UV o llama). Keq enormemente favorable a productos en todo el rango — modelar como IRREVERSIBLE con conversión ≥99%. Industrial: quemador con llama H2 en atmósfera de Cl2, T≈800–1000 °C, seguido de absorción del HCl gaseoso en agua para producir HCl(aq) 33–37%.
+
+### Referencias
+
+- NIST WebBook (HCl, H2, Cl2)
+- Ullmann's Encyclopedia "Hydrochloric Acid"
+- Greenwood & Earnshaw "Chemistry of the Elements" 2e
+
+---
+
+## R029 — Calcinación de caliza (descarbonatación)
+
+**Categoría:** materiales / cemento    ⚠ **NO DERIVADA DE CAPA 3**
+
+### Estequiometría
+
+```
+1 CaCO3(s)  →  1 CaO(s) + 1 CO2(g)
+```
+
+| Especie | Fase | ν |
+|---|---|---:|
+| CaCO3 | s | -1 |
+| CaO | s | +1 |
+| CO2 | g | +1 |
+
+**Δν =** +1  **Fase global:** sólido→sólido+gas  **Rango T válido:** 1100–1500 K
+
+### Termodinámica @ 298.15 K (literatura empírica, NO derivable)
+
+- ΔH_rxn = +178.30 kJ/mol  *(valor empírico/estimado, ver comentarios)*
+- ΔG_rxn = +130.40 kJ/mol  *(usar con precaución, idem)*
+
+### Comentarios técnicos
+
+CaCO3 y CaO NO están en Capa 3 (caliza/cal son pseudo-componentes en components.py). ΔH literatura: ΔHf°(CaCO3,s)=-1207.6, ΔHf°(CaO,s)=-635.1, ΔHf°(CO2,g)=-393.5 → ΔH_rxn = -635.1 + -393.5 - (-1207.6) = +179.0 kJ/mol (Boynton 1980 reporta +178.3 ± 1). Endotérmica fuerte — domina el balance energético de los hornos de cal y cemento. A T ≥ 1100 K va a completitud (descomposición térmica irreversible). usar conversión declarada en simulación, no resolver equilibrio (>99% conversión a T de horno). Emisión inherente de CO2 (≈0.44 kg CO2 por kg CaO producido) — punto educativo crítico para la huella de carbono industria de cemento.
+
+### Referencias
+
+- Ullmann's Encyclopedia "Cement"/"Lime"
+- Boynton R.S. "Chemistry and Technology of Lime and Limestone" 2e (1980)
+- NIST JANAF (CO2)
+
+---
+
+## R030 — Saponificación de triglicérido
+
+**Categoría:** consumo / química industrial    ⚠ **NO DERIVADA DE CAPA 3**
+
+### Estequiometría
+
+```
+1 vegetable_oil(l) + 3 NaOH(s)  →  3 soap(s) + 1 glycerin(l)
+```
+
+| Especie | Fase | ν |
+|---|---|---:|
+| vegetable_oil | l | -1 |
+| NaOH | s | -3 |
+| soap | s | +3 |
+| glycerin | l | +1 |
+
+**Δν =** 0  **Fase global:** líquido/sólido  **Rango T válido:** 320–380 K
+
+### Termodinámica @ 298.15 K (literatura empírica, NO derivable)
+
+- ΔH_rxn = -60.00 kJ/mol  *(valor empírico/estimado, ver comentarios)*
+- ΔG_rxn = -100.00 kJ/mol  *(usar con precaución, idem)*
+
+### Comentarios técnicos
+
+NaOH y soap NO están en Capa 3 (pseudo-componentes). Reacción base de fabricación de jabón sólido — hidrólisis alcalina de triglicérido. Conversión >99% con exceso de álcali, T 70–100 °C, agitación intensa. Exotérmica suave (-60 kJ/mol_oil aprox). Subproducto: glicerina (purificable, valor industrial). usar conversión declarada en simulación, no resolver equilibrio. NOTA: vegetable_oil es pseudo (triolein-like, MW~885 g/mol); estequiometría ν=3 NaOH refleja los 3 ésteres del triglicérido.
+
+### Referencias
+
+- Ullmann's Encyclopedia "Soap"
+- Spitz L. "Soap Manufacturing Technology" AOCS Press 2009
+
+---
+
+## R031 — Síntesis de urea (Bosch-Meiser)
+
+**Categoría:** fertilizantes / inorgánica    ⚠ **NO DERIVADA DE CAPA 3**
+
+### Estequiometría
+
+```
+2 NH3(g) + 1 CO2(g)  →  1 urea(l) + 1 H2O(l)
+```
+
+| Especie | Fase | ν |
+|---|---|---:|
+| NH3 | g | -2 |
+| CO2 | g | -1 |
+| urea | l | +1 |
+| H2O | l | +1 |
+
+**Δν =** -2  **Fase global:** gas→líquido  **Rango T válido:** 440–470 K
+
+### Termodinámica @ 298.15 K (literatura empírica, NO derivable)
+
+- ΔH_rxn = -101.00 kJ/mol  *(valor empírico/estimado, ver comentarios)*
+- ΔG_rxn = -27.00 kJ/mol  *(usar con precaución, idem)*
+
+### Comentarios técnicos
+
+urea NO está en Capa 3 (pseudo). Proceso Bosch-Meiser: dos pasos vía carbamato de amonio (2 NH3 + CO2 → NH2COONH4, exotérmica) seguido de deshidratación a urea (NH2COONH4 → urea + H2O, endotérmica). El balance neto global modelado acá. Reactor a 180–200 °C, 130–200 bar. Conversión por paso de CO2 ~50–60% (limitada por equilibrio del carbamato); planta real usa stripping NH3 y reciclo de carbamato a alta presión para conversión global ~99%. usar conversión declarada en simulación, no resolver equilibrio. Para E14 implementar Modo A con conversión declarada + lazo de reciclo simplificado (Wegstein) o purga.
+
+### Referencias
+
+- Ullmann's Encyclopedia "Urea"
+- Meessen J.H. "Urea Production and Manufacture" Wiley 2010
 
 ---
 
