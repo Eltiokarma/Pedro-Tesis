@@ -5691,6 +5691,491 @@ class FlowsheetEditor:
         auto_set_duties_from_thermo(self.fs)
 
 
+    # ==================================================================
+    # Lote 5 — Industrias adicionales (Tier 1, variedad de régimen)
+    # ==================================================================
+
+    def _example_ethylene_cracking(self):
+        """TIER 1 — Etileno por cracking térmico de etano + separación.
+
+        Petroquímica fundamental.  Reacción R011 ya en DB
+        (derivable Capa 3): C2H6(g) → C2H4(g) + H2(g).  Modo A
+        equilibrium a T=1100 K / P=2 bar → conv ~53 %.
+
+        Diferencia con `_example_ethane_cracker_pfr`: este ejemplo
+        agrega el TREN DE SEPARACIÓN downstream (compresor + columna
+        fría) para separar productos finales — más cerca del PFD
+        industrial completo.
+
+        Topología:
+            TK-etano → E-101 (precal) → F-101 (horno pirólisis, Modo A
+            R011 equilibrium) → E-102 (quench) → K-101 (compresor) →
+            T-101 (cold column criogénica) → TK-etileno (vapor_tope)
+                                            + TK-offgas (liquido_fondo)
+
+        Basis 1000 tm/año etano.  Conversión equilibrio ~53 % →
+        ~470 t/y etileno + ~34 t/y H₂ + 496 t/y etano sin reaccionar.
+        """
+        tk_in   = self._add_example_block("TK-101", "Storage tank — cone roof", 200.0,  60, 260)
+        e101    = self._add_example_block("E-101", "Heat exch. — floating head", 100.0, 240, 260)
+        f101    = self._add_example_block("F-101", "Fired heater — non-reformer", 4000.0, 420, 260)
+        r101    = self._add_example_block("R-101", "Reactor — jacketed non-agit.", 80.0, 600, 260)
+        e102    = self._add_example_block("E-102", "Heat exch. — air cooler",   200.0, 780, 260)
+        k101    = self._add_example_block("K-101", "Compressor — centrifugal", 600.0, 960, 260)
+        t101    = self._add_example_block("T-101", "Tower (column shell)",      35.0,1140, 380)
+        tk_eth  = self._add_example_block("TK-102","Storage tank — cone roof", 200.0,1340, 200)
+        tk_off  = self._add_example_block("TK-103","Storage tank — cone roof", 100.0,1340, 540)
+
+        # R-101 Modo A real: R011 (derivable, equilibrium converge)
+        self.fs.blocks[r101].reactions   = ["R011"]
+        self.fs.blocks[r101].T_op_K      = 1100.0
+        self.fs.blocks[r101].P_op_bar    = 2.0
+
+        # Feed etano (1000 t/y puro)
+        self._add_example_stream(tk_in, e101, "S-etano", 1000, role="feed",
+                                 src_port="salida", dst_port="tube_in",
+                                 price=550.0, T=25,
+                                 main_component="ethane", phase="gas",
+                                 composition={"ethane": 1.0})
+        # Precalentado al horno
+        self._add_example_stream(e101, f101, "S-precal", 1000,
+                                 src_port="tube_out", dst_port="proceso_in",
+                                 T=400,
+                                 main_component="ethane", phase="gas",
+                                 composition={"ethane": 1.0})
+        # Post-horno (~700 °C, entrada al reactor)
+        self._add_example_stream(f101, r101, "S-hot", 1000,
+                                 src_port="proceso_out", dst_port="alimentacion",
+                                 T=700,
+                                 main_component="ethane", phase="gas",
+                                 composition={"ethane": 1.0})
+        # Salida reactor — solver Modo A calcula composición (no la declaramos)
+        self._add_example_stream(r101, e102, "S-cracked",
+                                 src_port="producto", dst_port="proceso_in",
+                                 T=827,
+                                 main_component="ethylene", phase="gas")
+        # Quench al compresor
+        self._add_example_stream(e102, k101, "S-quench",
+                                 src_port="proceso_out", dst_port="succion",
+                                 T=40,
+                                 main_component="ethylene", phase="gas")
+        # Comprimido a columna fría
+        self._add_example_stream(k101, t101, "S-comp",
+                                 src_port="descarga", dst_port="alimentacion",
+                                 T=80,
+                                 main_component="ethylene", phase="gas")
+        # Tope: etileno purificado (composición tope criogénica declarada)
+        self._add_example_stream(t101, tk_eth, "S-etileno", 470, role="product",
+                                 src_port="vapor_tope", dst_port="entrada",
+                                 price=950.0, T=-30,
+                                 main_component="ethylene", phase="gas",
+                                 composition={"ethylene": 0.985, "hydrogen": 0.015})
+        # Fondo: etano + offgas (fuel-gas)
+        self._add_example_stream(t101, tk_off, "S-offgas", 530, role="product",
+                                 src_port="liquido_fondo", dst_port="entrada",
+                                 price=300.0, T=-50,
+                                 main_component="ethane", phase="liquid",
+                                 composition={"ethane": 0.92, "hydrogen": 0.06,
+                                              "ethylene": 0.02})
+
+        self._set_example_labor(200_000)
+        self._add_example_extra("Gas natural (horno F-101)",
+                                flowrate=240, price=180.0,
+                                stream="Utilities")
+        from flowsheet_solver import auto_set_duties_from_thermo
+        auto_set_duties_from_thermo(self.fs)
+
+
+    def _example_air_separation(self):
+        """TIER 1 — Separación criogénica de aire (O₂/N₂).
+
+        Gases industriales.  SIN reacción — separación física pura
+        por destilación criogénica.  Didáctica para mostrar columna
+        de destilación en condiciones extremas (~−180 °C).
+
+        Topología:
+            TK-aire → K-101 (compresor multietapa) → E-101 (cooler
+            + purificación H2O/CO2 → Modo B simple) → E-102 (caja
+            fría a −180 °C) → T-101 (columna criogénica) → TK-N2
+            (tope, lighter component) + TK-O2 (fondo, heavier)
+
+        Basis 1000 tm/año aire (composición real, fracciones másicas):
+            N₂ 0.767, O₂ 0.233.  Trazas H₂O/CO₂ removidas como waste.
+
+        Salidas:
+            N₂ líquido 99.9 %: 765 t/y
+            O₂ líquido 99.5 %: 230 t/y
+            Waste (H₂O/CO₂):     5 t/y
+        """
+        tk_in   = self._add_example_block("TK-101", "Storage tank — cone roof", 300.0,  60, 280)
+        k101    = self._add_example_block("K-101", "Compressor — centrifugal", 800.0, 240, 280)
+        e101    = self._add_example_block("E-101", "Heat exch. — floating head", 150.0, 420, 280)
+        purif   = self._add_example_block("V-101", "Vessel — vertical",          30.0, 600, 280)
+        e102    = self._add_example_block("E-102", "Heat exch. — floating head", 250.0, 780, 280)
+        t101    = self._add_example_block("T-101", "Tower (column shell)",       50.0, 960, 400)
+        tk_n2   = self._add_example_block("TK-102","Storage tank — cone roof", 250.0,1160, 220)
+        tk_o2   = self._add_example_block("TK-103","Storage tank — cone roof", 100.0,1160, 580)
+        tk_wst  = self._add_example_block("TK-W",  "Storage tank — cone roof",  30.0, 600, 480)
+
+        # Feed aire (1000 t/y, composición másica real)
+        air_comp = {"nitrogen": 0.767, "oxygen": 0.233}
+        # Sólo N2/O2 en el aire feed; el waste tiene trazas H2O+CO2 abstraídas
+        # como pseudo-mix.
+        self._add_example_stream(tk_in, k101, "S-aire", 1000, role="feed",
+                                 src_port="salida", dst_port="succion",
+                                 price=0.0, T=25,
+                                 main_component="nitrogen", phase="gas",
+                                 composition=air_comp)
+        # Aire comprimido
+        self._add_example_stream(k101, e101, "S-HP", 1000,
+                                 src_port="descarga", dst_port="tube_in",
+                                 T=120,
+                                 composition=air_comp,
+                                 main_component="nitrogen", phase="gas")
+        # Aire enfriado
+        self._add_example_stream(e101, purif, "S-cool", 1000,
+                                 src_port="tube_out", dst_port="alimentacion",
+                                 T=25,
+                                 composition=air_comp,
+                                 main_component="nitrogen", phase="gas")
+        # Purif waste (trazas H2O+CO2 abstraídas, 5 t/y)
+        self._add_example_stream(purif, tk_wst, "S-purif-waste", 5, role="waste",
+                                 src_port="vapor", dst_port="entrada",
+                                 price=0.0, T=25,
+                                 main_component="water", phase="liquid",
+                                 composition={"water": 1.0})
+        # Aire purificado a caja fría
+        self._add_example_stream(purif, e102, "S-pure", 995,
+                                 src_port="liquido", dst_port="tube_in",
+                                 T=25,
+                                 composition=air_comp,
+                                 main_component="nitrogen", phase="gas")
+        # Aire criogénico a columna
+        self._add_example_stream(e102, t101, "S-cryo", 995,
+                                 src_port="tube_out", dst_port="alimentacion",
+                                 T=-95,
+                                 composition=air_comp,
+                                 main_component="nitrogen", phase="liquid")
+        # Tope: N2 ultra-puro (líquido criogénico)
+        self._add_example_stream(t101, tk_n2, "S-N2", 765, role="product",
+                                 src_port="vapor_tope", dst_port="entrada",
+                                 price=120.0, T=-95,
+                                 main_component="nitrogen", phase="liquid",
+                                 composition={"nitrogen": 0.999, "oxygen": 0.001})
+        # Fondo: O2 99.5 %
+        self._add_example_stream(t101, tk_o2, "S-O2", 230, role="product",
+                                 src_port="liquido_fondo", dst_port="entrada",
+                                 price=180.0, T=-90,
+                                 main_component="oxygen", phase="liquid",
+                                 composition={"oxygen": 0.995, "nitrogen": 0.005})
+
+        self._set_example_labor(160_000)
+        self._add_example_extra("Energía eléctrica (compresores multietapa)",
+                                flowrate=480_000, price=0.08,
+                                stream="Utilities")
+        from flowsheet_solver import auto_set_duties_from_thermo
+        auto_set_duties_from_thermo(self.fs)
+
+
+    def _example_water_treatment(self):
+        """TIER 1 — Planta de tratamiento de agua potable.
+
+        Servicios / ambiental.  SIN reacción de DB — operaciones
+        físicas Modo B (coagulación-floculación-sedimentación-
+        filtración-desinfección).  Relevante para todo ingeniero
+        y bajo riesgo de validación.
+
+        Topología:
+            TK-cruda → M-101 (dosifica coag) → R-101 (floculador) →
+            V-101 (sedimentador, separa lodos) → F-101 (filtro) →
+            M-102 (cloración) → TK-potable + TK-lodos
+
+        Basis 1000 tm/año agua cruda {water 0.998, raw_water_solids
+        0.002}.  Lodos: 2 t/y (raw_water_solids concentrado + algo
+        de agua).  Potable: 998 t/y agua pura.
+        """
+        tk_in   = self._add_example_block("TK-101", "Storage tank — cone roof", 300.0,  60, 240)
+        m101    = self._add_example_block("M-101", "Mixer — static",            10.0, 240, 240)
+        r101    = self._add_example_block("R-101", "Reactor — jacketed agitated", 30.0, 420, 240)
+        v101    = self._add_example_block("V-101", "Vessel — vertical",          50.0, 600, 240)
+        f101    = self._add_example_block("F-101", "Filter — belt",              40.0, 780, 240)
+        m102    = self._add_example_block("M-102", "Mixer — static",            10.0, 960, 240)
+        tk_pot  = self._add_example_block("TK-102","Storage tank — cone roof", 300.0,1140, 240)
+        tk_lod  = self._add_example_block("TK-103","Storage tank — cone roof",  50.0, 600, 440)
+
+        # Marcar como sin reacciones (operaciones físicas)
+        self.fs.blocks[r101].reactions = ["R_FLOCULACION"]
+
+        # Composiciones
+        cruda     = {"water": 0.998, "raw_water_solids": 0.002}
+        lodos     = {"water": 0.50,  "raw_water_solids": 0.50}     # lodos 50/50
+        agua_clar = {"water": 1.0}
+        potable   = {"water": 1.0}    # cloro trazas, no se modela
+
+        # Cruda → dosificador
+        self._add_example_stream(tk_in, m101, "S-cruda", 1000, role="feed",
+                                 src_port="salida", dst_port="alimentacion_1",
+                                 price=0.0, T=15,
+                                 composition=cruda,
+                                 main_component="water", phase="liquid")
+        # M-101 → R-101 (floculador)
+        self._add_example_stream(m101, r101, "S-coag", 1000,
+                                 src_port="producto", dst_port="alimentacion",
+                                 T=15,
+                                 composition=cruda,
+                                 main_component="water", phase="liquid")
+        # R-101 → V-101 (sedimentador)
+        self._add_example_stream(r101, v101, "S-floc", 1000,
+                                 src_port="producto", dst_port="alimentacion",
+                                 T=15,
+                                 composition=cruda,
+                                 main_component="water", phase="liquid")
+        # V-101: 4 t lodos por liquido_fondo, 996 agua clarificada por vapor port
+        # Mass-balance: 1000 → 4 lodos (50% solids, 50% agua) + 996 agua casi pura
+        self._add_example_stream(v101, tk_lod, "S-lodos", 4, role="waste",
+                                 src_port="liquido", dst_port="entrada",
+                                 price=0.0, T=15,
+                                 composition=lodos,
+                                 main_component="raw_water_solids", phase="liquid")
+        self._add_example_stream(v101, f101, "S-clar", 996,
+                                 src_port="vapor", dst_port="alimentacion",
+                                 T=15,
+                                 composition=agua_clar,
+                                 main_component="water", phase="liquid")
+        # F-101 → M-102 (cloración)
+        self._add_example_stream(f101, m102, "S-fil", 996,
+                                 src_port="producto", dst_port="alimentacion_1",
+                                 T=15,
+                                 composition=agua_clar,
+                                 main_component="water", phase="liquid")
+        # M-102 → TK potable
+        self._add_example_stream(m102, tk_pot, "S-potable", 996, role="product",
+                                 src_port="producto", dst_port="entrada",
+                                 price=0.5, T=15,
+                                 composition=potable,
+                                 main_component="water", phase="liquid")
+
+        self._set_example_labor(120_000)
+        self._add_example_extra("Sulfato de aluminio (coagulante)",
+                                flowrate=2.0, price=300.0,
+                                stream="Consumables")
+        self._add_example_extra("Cloro (desinfección)",
+                                flowrate=0.5, price=400.0,
+                                stream="Consumables")
+        self._add_example_extra("Energía eléctrica (bombas)",
+                                flowrate=80_000, price=0.08,
+                                stream="Utilities")
+        from flowsheet_solver import auto_set_duties_from_thermo
+        auto_set_duties_from_thermo(self.fs)
+
+
+    def _example_bread_baking(self):
+        """TIER 1 — Panificación industrial.
+
+        ⏱ PROCESO BATCH MODELADO COMO CONTINUO EQUIVALENTE: amasado,
+        fermentación y horneado son batch en la industria.  Aquí se
+        modela como flujo continuo en estado estacionario usando el
+        caudal promedio anual (producción/8760 h).  El balance de
+        masa y energía es correcto; NO se modela la dinámica
+        temporal del lote.
+
+        Sin reacción química explícita — la fermentación es trivial
+        (~2 % de azúcar a CO2+EtOH, ambos casi totalmente evaporados
+        en el horno → se abstrae para mantener foco en el balance
+        energético del horneado, que domina).
+
+        Topología:
+            TK-masa → M-101 (amasadora) → R-101 (fermentador
+            placeholder) → H-101 (horno 220 °C, evapora 12 % agua)
+            → E-101 (enfriador) → TK-pan
+
+        Basis 1000 tm/año masa cruda {starch 0.45, water 0.50,
+        glucose 0.05}.  En el horno se evapora 120 t/y agua → pan
+        880 t/y at {starch 0.51, water 0.43, glucose 0.057}.
+        """
+        tk_in   = self._add_example_block("TK-101", "Storage tank — cone roof", 200.0,  60, 280)
+        m101    = self._add_example_block("M-101", "Mixer — static",            10.0, 240, 280)
+        r101    = self._add_example_block("R-101", "Reactor — jacketed agitated", 30.0, 420, 280)
+        h101    = self._add_example_block("H-101", "Heat exch. — floating head", 80.0, 600, 280)
+        tk_vap  = self._add_example_block("TK-V",  "Storage tank — cone roof", 100.0, 600,  80)
+        e101    = self._add_example_block("E-101", "Heat exch. — air cooler",   80.0, 780, 280)
+        tk_pan  = self._add_example_block("TK-102","Storage tank — cone roof", 250.0, 960, 280)
+
+        # R-101: fermentación placeholder (sin reacción real para mantener
+        # el balance simple).  El alumno ve el bloque etiquetado como
+        # fermentador pero composiciones de salida son ~iguales a entrada.
+        self.fs.blocks[r101].reactions = ["R007_PLACEHOLDER"]
+        self.fs.blocks[r101].T_op_K    = 305.0      # 32 °C leudado
+        self.fs.blocks[r101].P_op_bar  = 1.0
+
+        masa    = {"starch": 0.45, "water": 0.50, "glucose": 0.05}
+        pan     = {"starch": 0.5114, "water": 0.4318, "glucose": 0.0568}
+
+        # Masa cruda (feed: harina + agua + levadura abstraído)
+        self._add_example_stream(tk_in, m101, "S-masa-cruda", 1000, role="feed",
+                                 src_port="salida", dst_port="alimentacion_1",
+                                 price=400.0, T=20,
+                                 composition=masa,
+                                 main_component="starch", phase="liquid")
+        # Amasada → fermentador
+        self._add_example_stream(m101, r101, "S-amasada", 1000,
+                                 src_port="producto", dst_port="alimentacion",
+                                 T=25,
+                                 composition=masa,
+                                 main_component="starch", phase="liquid")
+        # Leudada → horno (composición efectiva igual por simplificación
+        # didáctica; la fermentación real produce trazas de CO2/EtOH)
+        self._add_example_stream(r101, h101, "S-leudada", 1000,
+                                 src_port="producto", dst_port="tube_in",
+                                 T=32,
+                                 composition=masa,
+                                 main_component="starch", phase="liquid")
+        # Vapor de agua del horno (12 % de la masa, role=utility)
+        self._add_example_stream(h101, tk_vap, "S-vapor", 120, role="utility",
+                                 src_port="shell_out", dst_port="entrada",
+                                 price=0.0, T=220,
+                                 main_component="water", phase="vapor",
+                                 composition={"water": 1.0})
+        # Pan caliente al enfriador
+        self._add_example_stream(h101, e101, "S-pan-cal", 880,
+                                 src_port="tube_out", dst_port="proceso_in",
+                                 T=220,
+                                 composition=pan,
+                                 main_component="starch", phase="liquid")
+        # Pan enfriado al silo final
+        self._add_example_stream(e101, tk_pan, "S-pan", 880, role="product",
+                                 src_port="proceso_out", dst_port="entrada",
+                                 price=2200.0, T=25,
+                                 composition=pan,
+                                 main_component="starch", phase="liquid")
+
+        self._set_example_labor(140_000)
+        self._add_example_extra("Levadura (S. cerevisiae)",
+                                flowrate=15.0, price=2_500.0,
+                                stream="Consumables")
+        self._add_example_extra("Gas natural (horno H-101)",
+                                flowrate=80, price=180.0,
+                                stream="Utilities")
+        from flowsheet_solver import auto_set_duties_from_thermo
+        auto_set_duties_from_thermo(self.fs)
+
+
+    def _example_penicillin(self):
+        """TIER 1 — Penicilina por fermentación aeróbica.
+
+        ⏱ PROCESO BATCH MODELADO COMO CONTINUO EQUIVALENTE: la
+        fermentación de Penicillium chrysogenum dura 4–7 días por
+        lote.  Aquí se modela como flujo continuo (producción/8760 h).
+
+        Bioproceso: la biosíntesis enzimática de antibióticos NO es
+        equilibrio termodinámico ni cinética simple — se modela
+        Modo B con conversiones declaradas de literatura (cinética
+        de Monod / Michaelis-Menten queda FUERA del alcance del
+        motor).
+
+        Topología:
+            TK-medio → E-est (esterilizador 121 °C) → R-101
+            (fermentador aireado Modo B) → V-101 (separa micelio
+            sólido) → F-101 (extracción + secado abstraídos) →
+            TK-penicilina (producto) + TK-biomasa (waste) +
+            TK-residual + TK-CO2
+
+        Basis 1000 tm/año medio cultivo {water 0.92, glucose 0.08}.
+        Conversión global (literatura industrial):
+            ~50 % glucosa → biomasa: 30 t/y biomass (micelio)
+            ~5 % glucosa → antibiótico: 5 t/y penicillin (producto
+                                              MUY caro, ~50,000 USD/t)
+            resto a CO2 + agua de metabolismo: 5 t/y CO2 vent + agua
+            in caldo
+        """
+        tk_med  = self._add_example_block("TK-101", "Storage tank — cone roof", 250.0,  60, 300)
+        e_est   = self._add_example_block("E-EST",  "Heat exch. — floating head", 60.0, 240, 300)
+        r101    = self._add_example_block("R-101",  "Reactor — jacketed agitated", 80.0, 420, 300)
+        tk_co2  = self._add_example_block("TK-CO2", "Storage tank — cone roof",  50.0, 420,  80)
+        v101    = self._add_example_block("V-101",  "Vessel — vertical",          40.0, 620, 300)
+        tk_bio  = self._add_example_block("TK-102", "Storage tank — cone roof", 100.0, 620, 520)
+        f101    = self._add_example_block("F-101",  "Filter — belt",              25.0, 820, 300)
+        tk_pen  = self._add_example_block("TK-103", "Storage tank — cone roof",  50.0,1000, 240)
+        tk_res  = self._add_example_block("TK-104", "Storage tank — cone roof", 150.0,1000, 380)
+
+        # R-101: fermentador placeholder
+        self.fs.blocks[r101].reactions = ["R_FERMENT_PEN"]
+        self.fs.blocks[r101].T_op_K    = 297.0     # 24 °C
+        self.fs.blocks[r101].P_op_bar  = 1.0
+
+        # Composiciones
+        medio    = {"water": 0.92, "glucose": 0.08}
+        # Caldo R-101: 1000 in → 5 CO2 vent + 995 caldo (con biomass+pen+glucose+agua)
+        # Caldo: 925 water + 35 glucose remaining + 30 biomass + 5 penicillin = 995
+        caldo    = {"water": 0.9296, "glucose": 0.0352,
+                    "biomass": 0.0302, "penicillin": 0.0050}
+        # Liquido tras V-101 (sin biomass): 965 t
+        # 925 water + 35 glucose + 5 penicillin = 965
+        liquid   = {"water": 0.9585, "glucose": 0.0363, "penicillin": 0.0052}
+
+        # Medio cultivo (feed)
+        self._add_example_stream(tk_med, e_est, "S-medio", 1000, role="feed",
+                                 src_port="salida", dst_port="tube_in",
+                                 price=80.0, T=25,
+                                 composition=medio,
+                                 main_component="water", phase="liquid")
+        # Esterilizado a 121 °C
+        self._add_example_stream(e_est, r101, "S-est", 1000,
+                                 src_port="tube_out", dst_port="alimentacion",
+                                 T=24,
+                                 composition=medio,
+                                 main_component="water", phase="liquid")
+        # CO2 vent del fermentador (metabolismo)
+        self._add_example_stream(r101, tk_co2, "S-CO2", 5, role="waste",
+                                 src_port="util_out", dst_port="entrada",
+                                 price=0.0, T=24,
+                                 main_component="co2", phase="gas",
+                                 composition={"co2": 1.0})
+        # Caldo + biomasa al separador
+        self._add_example_stream(r101, v101, "S-caldo", 995,
+                                 src_port="producto", dst_port="alimentacion",
+                                 T=24,
+                                 composition=caldo,
+                                 main_component="water", phase="liquid")
+        # Biomasa sólida (micelio, waste / secado opcional)
+        self._add_example_stream(v101, tk_bio, "S-biomass", 30, role="waste",
+                                 src_port="liquido", dst_port="entrada",
+                                 price=0.0, T=24,
+                                 main_component="biomass", phase="liquid",
+                                 composition={"biomass": 1.0})
+        # Líquido a extracción
+        self._add_example_stream(v101, f101, "S-liq", 965,
+                                 src_port="vapor", dst_port="alimentacion",
+                                 T=24,
+                                 composition=liquid,
+                                 main_component="water", phase="liquid")
+        # Penicilina pura (producto)
+        self._add_example_stream(f101, tk_pen, "S-pen", 5, role="product",
+                                 src_port="producto", dst_port="entrada",
+                                 price=50_000.0, T=25,
+                                 main_component="penicillin", phase="liquid",
+                                 composition={"penicillin": 1.0})
+        # Caldo residual (waste)
+        self._add_example_stream(f101, tk_res, "S-residual", 960, role="waste",
+                                 src_port="venteo", dst_port="entrada",
+                                 price=0.0, T=25,
+                                 main_component="water", phase="liquid",
+                                 composition={"water": 0.964, "glucose": 0.036})
+
+        self._set_example_labor(300_000)
+        self._add_example_extra("Aireación estéril (oxígeno + filtrado)",
+                                flowrate=120, price=120.0,
+                                stream="Utilities")
+        self._add_example_extra("Solventes de extracción (acetato de butilo)",
+                                flowrate=30, price=2_500.0,
+                                stream="Consumables")
+        self._add_example_extra("Energía eléctrica (agitación + frío)",
+                                flowrate=200_000, price=0.08,
+                                stream="Utilities")
+        from flowsheet_solver import auto_set_duties_from_thermo
+        auto_set_duties_from_thermo(self.fs)
+
+
     def open_json(self):
         path = filedialog.askopenfilename(
             title="Abrir diagrama",

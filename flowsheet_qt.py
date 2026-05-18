@@ -4169,6 +4169,27 @@ class FlowsheetMainWindow(QMainWindow):
                               "LECHE GLORIA — Planta láctea integrada",
                               "100 — Alimentaria (caso integrado)",
                               "PFD-GLORIA-001"),
+            # ── Catálogo educativo Lote 5 (industrias adicionales) ──
+            "ethylene_crk": (TkEditor._example_ethylene_cracking,
+                              "Etileno por cracking de etano (R011 Modo A)",
+                              "100 — Petroquímica",
+                              "PFD-ETH-001"),
+            "air_sep":      (TkEditor._example_air_separation,
+                              "Separación criogénica de aire O₂/N₂",
+                              "100 — Gases industriales",
+                              "PFD-AIRSEP-001"),
+            "water_treat":  (TkEditor._example_water_treatment,
+                              "Tratamiento de agua potable",
+                              "200 — Servicios / ambiental",
+                              "PFD-WATER-001"),
+            "bread":        (TkEditor._example_bread_baking,
+                              "Panificación industrial (batch→continuo)",
+                              "100 — Alimentaria",
+                              "PFD-BREAD-001"),
+            "penicillin":   (TkEditor._example_penicillin,
+                              "Penicilina por fermentación (batch→continuo)",
+                              "100 — Farmacéutica",
+                              "PFD-PEN-001"),
         }
         entry = builder_map.get(key)
         if entry is None:
