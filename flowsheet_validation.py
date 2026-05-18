@@ -99,6 +99,12 @@ PORT_FLUID_TYPES = {
         "proceso_out": "any",
     },
 
+    # ---- Condensadores: agnósticos como sus HX padre ----
+    "Heat exch. — condenser shell-tube": {"tube_in":  "any", "tube_out":  "any",
+                                            "shell_in": "any", "shell_out": "any"},
+    "Heat exch. — condenser air-cooled": {"proceso_in": "any",
+                                            "proceso_out": "any"},
+
     # ---- HX kettle reboiler: roles muy específicos ----
     "Heat exch. — kettle reboiler": {
         "liq_in":     "liquid",       # del fondo de la columna

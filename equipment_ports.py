@@ -225,6 +225,9 @@ EQUIPMENT_PORTS = {
     "Heat exch. — spiral plate":    HX_PORTS,
     "Heat exch. — air cooler":      AIR_COOLER_PORTS,
     "Heat exch. — kettle reboiler": REBOILER_PORTS,
+    # Condensadores (mismos puertos que su HX padre):
+    "Heat exch. — condenser shell-tube":  HX_PORTS,
+    "Heat exch. — condenser air-cooled":  AIR_COOLER_PORTS,
 
     "Pump — centrifugal":           PUMP_PORTS,
     "Pump — positive displacement": PUMP_PORTS,

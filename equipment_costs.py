@@ -106,6 +106,20 @@ EQUIPMENT_DATA = {
         dict(K1=4.0336, K2=0.2341, K3=0.0497,
              S_param="Heat transfer area", S_unit="m²",
              S_min=10,  S_max=10000, categoria="Heat exchangers"),
+    # Condensadores: comparten correlación Turton 4ª ed con su HX
+    # padre (shell-tube fixed, air cooler) pero se SEPARAN como tipos
+    # propios para que el sizing térmico use U/ΔTlm realistas de
+    # condensación (U alto, ΔTlm chico → área correcta).  Sin esto,
+    # un condensador modelado como shell-tube genérico sobre-estima
+    # el área en ~3×.
+    "Heat exch. — condenser shell-tube":
+        dict(K1=4.3247, K2=-0.3030, K3=0.1634,    # = fixed tube
+             S_param="Heat transfer area", S_unit="m²",
+             S_min=10,  S_max=1000, categoria="Heat exchangers"),
+    "Heat exch. — condenser air-cooled":
+        dict(K1=4.0336, K2=0.2341, K3=0.0497,    # = air cooler
+             S_param="Heat transfer area", S_unit="m²",
+             S_min=10,  S_max=10000, categoria="Heat exchangers"),
     "Heat exch. — flat plate":
         dict(K1=4.6656, K2=-0.1557, K3=0.1547,
              S_param="Heat transfer area", S_unit="m²",

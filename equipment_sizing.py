@@ -50,6 +50,9 @@ U_TYPICAL = {
     "Heat exch. — spiral plate":    600,
     "Heat exch. — air cooler":      350,
     "Heat exch. — kettle reboiler": 800,
+    # Condensación: U alto (transición de fase + agua/aire del lado frío).
+    "Heat exch. — condenser shell-tube":  1000,
+    "Heat exch. — condenser air-cooled":  600,
 }
 U_DEFAULT = 400
 
@@ -64,6 +67,10 @@ DTLM_TYPICAL = {
     "Heat exch. — spiral plate":    25.0,
     "Heat exch. — double pipe":     45.0,
     "Heat exch. — multiple pipe":   45.0,
+    # Condensación casi isotérmica → ΔT_lm chico (la T del fluido que
+    # condensa cambia poco; el lado frío hace la mayor variación).
+    "Heat exch. — condenser shell-tube":  15.0,
+    "Heat exch. — condenser air-cooled":  20.0,
 }
 DTLM_DEFAULT = 40.0
 
