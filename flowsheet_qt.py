@@ -4190,6 +4190,19 @@ class FlowsheetMainWindow(QMainWindow):
                               "Penicilina por fermentación (batch→continuo)",
                               "100 — Farmacéutica",
                               "PFD-PEN-001"),
+            # ── Catálogo educativo Lote 6 (Tier 2 ilustrativos) ──
+            "rankine":      (TkEditor._example_rankine_cycle,
+                              "Central térmica — ciclo Rankine (Tier 2)",
+                              "200 — Energía (ilustrativo)",
+                              "PFD-RANK-001"),
+            "nuclear":      (TkEditor._example_nuclear_steam,
+                              "Isla nuclear — circuito 2° (Tier 2)",
+                              "200 — Energía (ilustrativo)",
+                              "PFD-NUC-001"),
+            "desal":        (TkEditor._example_desalination,
+                              "Desalinización MED multi-efecto (Tier 2)",
+                              "200 — Agua (ilustrativo)",
+                              "PFD-DESAL-001"),
         }
         entry = builder_map.get(key)
         if entry is None:

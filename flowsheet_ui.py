@@ -6176,6 +6176,249 @@ class FlowsheetEditor:
         auto_set_duties_from_thermo(self.fs)
 
 
+    # ==================================================================
+    # Lote 6 — Tier 2 ilustrativos (carteles de honestidad obligatorios)
+    # ==================================================================
+
+    def _example_rankine_cycle(self):
+        """TIER 2 — Central térmica (ciclo Rankine).
+
+        ⚠ MODELO ILUSTRATIVO (Tier 2): se modela el CICLO TERMODINÁMICO
+        de vapor (bomba → caldera → turbina → condensador) con balance
+        de energía real.  La FUENTE DE CALOR (combustión de carbón/gas
+        o reactor nuclear) se ABSTRAE como un duty de entrada a la
+        caldera.  Este ejemplo NO modela combustión ni física nuclear.
+
+        Topología (loop "abierto" con makeup + blowdown 1 %):
+            TK-makeup → P-101 (pump) → B-101 (caldera, duty grande) →
+            TUR-101 (turbina, Heat exch con duty negativo = trabajo
+            extraído) → CON-101 (condensador, duty extrae) → TK-blowdown
+            + S-fuel (feed genérico representando el costo energético
+            del combustible/calor abstraído).
+
+        Basis 100 tm/año de makeup water (plant scale piloto).
+        El "combustible abstraído" se mete como _add_example_extra
+        utility con price para reflejar el OPEX energético.
+        """
+        tk_in   = self._add_example_block("TK-001", "Storage tank — cone roof",  50.0,  60, 260)
+        p101    = self._add_example_block("P-101", "Pump — centrifugal",         10.0, 240, 260)
+        b101    = self._add_example_block("B-101", "Boiler — water tube",     20000.0, 420, 260)
+        tur101  = self._add_example_block("TUR-101","Heat exch. — floating head", 150.0, 600, 260)
+        con101  = self._add_example_block("CON-101","Heat exch. — air cooler",   180.0, 780, 260)
+        tk_out  = self._add_example_block("TK-002", "Storage tank — cone roof",  50.0, 960, 260)
+
+        # Makeup water 100 t/y (feed)
+        self._add_example_stream(tk_in, p101, "S-makeup", 100, role="feed",
+                                 src_port="salida", dst_port="succion",
+                                 price=0.5, T=25,
+                                 main_component="water", phase="liquid",
+                                 composition={"water": 1.0})
+        # Bombeada (HP)
+        self._add_example_stream(p101, b101, "S-HP", 100,
+                                 src_port="descarga", dst_port="proceso_in",
+                                 T=30,
+                                 main_component="water", phase="liquid",
+                                 composition={"water": 1.0})
+        # Vapor sobrecalentado (caldera +Q)
+        self._add_example_stream(b101, tur101, "S-steam", 100,
+                                 src_port="proceso_out", dst_port="tube_in",
+                                 T=450,
+                                 main_component="water", phase="vapor",
+                                 composition={"water": 1.0})
+        # Post-turbina (trabajo extraído → T baja drásticamente)
+        self._add_example_stream(tur101, con101, "S-exp", 100,
+                                 src_port="tube_out", dst_port="proceso_in",
+                                 T=120,
+                                 main_component="water", phase="vapor",
+                                 composition={"water": 1.0})
+        # Condensado (líquido a TK)
+        self._add_example_stream(con101, tk_out, "S-cond", 100, role="product",
+                                 src_port="proceso_out", dst_port="entrada",
+                                 price=0.0, T=30,
+                                 main_component="water", phase="liquid",
+                                 composition={"water": 1.0})
+
+        # OPEX: el combustible abstraído + agua de enfriamiento
+        self._add_example_extra("Combustible abstraído (carbón/gas/nuclear)",
+                                flowrate=15, price=200.0,
+                                stream="Utilities")
+        self._add_example_extra("Agua de enfriamiento (condensador)",
+                                flowrate=50_000, price=0.05,
+                                stream="Utilities")
+
+        from flowsheet_solver import auto_set_duties_from_thermo
+        auto_set_duties_from_thermo(self.fs)
+
+
+    def _example_nuclear_steam(self):
+        """TIER 2 — Isla convencional de central nuclear (circuito 2°).
+
+        ⚠ MODELO ILUSTRATIVO (Tier 2): se modela el CIRCUITO SECUNDARIO
+        de vapor (generador de vapor → turbina → condensador).  El
+        núcleo del reactor, la fisión, la criticidad y la
+        radiactividad NO se modelan: el calor del reactor entra como
+        un duty fijo al generador de vapor.  Esto es,
+        termodinámicamente, una central de vapor; la palabra "nuclear"
+        refiere solo al origen abstraído del calor.
+
+        Topología (igual a Rankine pero con un HX adicional simulando
+        el generador de vapor que recibe calor del reactor abstraído):
+            TK-makeup → P-101 (pump) → GV-101 (generador de vapor,
+            recibe Q del "reactor") → TUR-101 (turbina) → CON-101
+            (condensador) → TK-blowdown
+
+        Basis 100 tm/año makeup water (plant scale piloto).
+        """
+        tk_in   = self._add_example_block("TK-001", "Storage tank — cone roof",  50.0,  60, 260)
+        p101    = self._add_example_block("P-101", "Pump — centrifugal",         10.0, 240, 260)
+        gv101   = self._add_example_block("GV-101","Heat exch. — kettle reboiler", 200.0, 420, 260)
+        tur101  = self._add_example_block("TUR-101","Heat exch. — floating head", 150.0, 620, 260)
+        con101  = self._add_example_block("CON-101","Heat exch. — air cooler",   180.0, 820, 260)
+        tk_out  = self._add_example_block("TK-002", "Storage tank — cone roof",  50.0,1000, 260)
+
+        # Makeup water
+        self._add_example_stream(tk_in, p101, "S-makeup", 100, role="feed",
+                                 src_port="salida", dst_port="succion",
+                                 price=0.5, T=25,
+                                 main_component="water", phase="liquid",
+                                 composition={"water": 1.0})
+        # Bombeada HP
+        self._add_example_stream(p101, gv101, "S-HP", 100,
+                                 src_port="descarga", dst_port="liq_in",
+                                 T=30,
+                                 main_component="water", phase="liquid",
+                                 composition={"water": 1.0})
+        # Vapor sobrecalentado del generador
+        self._add_example_stream(gv101, tur101, "S-steam", 100,
+                                 src_port="vap_out", dst_port="tube_in",
+                                 T=280,
+                                 main_component="water", phase="vapor",
+                                 composition={"water": 1.0})
+        # Post-turbina
+        self._add_example_stream(tur101, con101, "S-exp", 100,
+                                 src_port="tube_out", dst_port="proceso_in",
+                                 T=100,
+                                 main_component="water", phase="vapor",
+                                 composition={"water": 1.0})
+        # Condensado
+        self._add_example_stream(con101, tk_out, "S-cond", 100, role="product",
+                                 src_port="proceso_out", dst_port="entrada",
+                                 price=0.0, T=30,
+                                 main_component="water", phase="liquid",
+                                 composition={"water": 1.0})
+
+        # OPEX: calor del reactor + servicios
+        self._add_example_extra("Calor reactor nuclear (abstraído)",
+                                flowrate=12, price=400.0,
+                                stream="Utilities")
+        self._add_example_extra("Agua de enfriamiento (condensador)",
+                                flowrate=50_000, price=0.05,
+                                stream="Utilities")
+
+        from flowsheet_solver import auto_set_duties_from_thermo
+        auto_set_duties_from_thermo(self.fs)
+
+
+    def _example_desalination(self):
+        """TIER 2 — Desalinización por evaporación multi-efecto (MED).
+
+        ⚠ MODELO ILUSTRATIVO (Tier 2): MED modelado como tren de
+        evaporadores con balance de masa/energía real.  Se trata la
+        sal como soluto no volátil (sodium_chloride).  No se modela
+        la termodinámica de soluciones electrolíticas (elevación del
+        punto de ebullición, ΔBPE, simplificada).
+
+        Topología:
+            TK-mar → E-101 (precal) → EV-101 (efecto 1) → EV-102
+            (efecto 2) → EV-103 (efecto 3) → TK-salmuera (waste)
+                                          ↓
+                                       TK-destilada (vapor de cada
+                                       efecto condensado en uno único)
+
+        Basis 1000 tm/año agua de mar {water 0.965, sodium_chloride
+        0.035} → 700 destilada + 300 salmuera concentrada (10 % sal).
+        Sólidos NaCl conservan: 35 t/y en agua de mar, 35 t/y en
+        salmuera concentrada (300 × 0.117 ≈ 35).
+        """
+        tk_in   = self._add_example_block("TK-001", "Storage tank — cone roof", 300.0,  60, 280)
+        e101    = self._add_example_block("E-101",  "Heat exch. — floating head", 60.0, 240, 280)
+        ev1     = self._add_example_block("EV-101", "Evaporator — vertical",     80.0, 420, 280)
+        ev2     = self._add_example_block("EV-102", "Evaporator — vertical",     60.0, 600, 280)
+        ev3     = self._add_example_block("EV-103", "Evaporator — vertical",     40.0, 780, 280)
+        tk_brn  = self._add_example_block("TK-002", "Storage tank — cone roof", 100.0, 960, 380)
+        tk_dst  = self._add_example_block("TK-003", "Storage tank — cone roof", 200.0, 600, 100)
+
+        # Composiciones
+        seawater  = {"water": 0.965, "sodium_chloride": 0.035}
+        # ST conserva (35 t/y): después de EV1 (quita 250 t H2O) → 750 t,
+        # ST_frac = 35/750 = 0.0467 (4.67 %)
+        mid1      = {"water": 0.9533, "sodium_chloride": 0.0467}
+        # Después de EV2 (quita 250 t más) → 500 t, ST = 35/500 = 0.07
+        mid2      = {"water": 0.9300, "sodium_chloride": 0.0700}
+        # Después de EV3 (quita 200 t) → 300 t, ST = 35/300 ≈ 0.117
+        brine     = {"water": 0.883, "sodium_chloride": 0.117}
+
+        # Agua de mar
+        self._add_example_stream(tk_in, e101, "S-seawater", 1000, role="feed",
+                                 src_port="salida", dst_port="tube_in",
+                                 price=0.0, T=20,
+                                 composition=seawater,
+                                 main_component="water", phase="liquid")
+        # Precalentada
+        self._add_example_stream(e101, ev1, "S-precal", 1000,
+                                 src_port="tube_out", dst_port="alimentacion",
+                                 T=60,
+                                 composition=seawater,
+                                 main_component="water", phase="liquid")
+        # EV-101 vapor → destilada (250 t)
+        self._add_example_stream(ev1, tk_dst, "S-dist1", 250, role="product",
+                                 src_port="venteo", dst_port="entrada",
+                                 price=2.0, T=70,
+                                 main_component="water", phase="vapor",
+                                 composition={"water": 1.0})
+        # EV-101 producto → EV-102
+        self._add_example_stream(ev1, ev2, "S-mid1", 750,
+                                 src_port="producto", dst_port="alimentacion",
+                                 T=65,
+                                 composition=mid1,
+                                 main_component="water", phase="liquid")
+        # EV-102 vapor → destilada (250 t)
+        self._add_example_stream(ev2, tk_dst, "S-dist2", 250, role="product",
+                                 src_port="venteo", dst_port="entrada",
+                                 price=2.0, T=60,
+                                 main_component="water", phase="vapor",
+                                 composition={"water": 1.0})
+        # EV-102 producto → EV-103
+        self._add_example_stream(ev2, ev3, "S-mid2", 500,
+                                 src_port="producto", dst_port="alimentacion",
+                                 T=55,
+                                 composition=mid2,
+                                 main_component="water", phase="liquid")
+        # EV-103 vapor → destilada (200 t)
+        self._add_example_stream(ev3, tk_dst, "S-dist3", 200, role="product",
+                                 src_port="venteo", dst_port="entrada",
+                                 price=2.0, T=50,
+                                 main_component="water", phase="vapor",
+                                 composition={"water": 1.0})
+        # EV-103 producto → TK salmuera (waste concentrada)
+        self._add_example_stream(ev3, tk_brn, "S-brine", 300, role="waste",
+                                 src_port="producto", dst_port="entrada",
+                                 price=0.0, T=50,
+                                 composition=brine,
+                                 main_component="water", phase="liquid")
+
+        self._set_example_labor(180_000)
+        self._add_example_extra("Vapor proceso (calderas + economía multi-efecto)",
+                                flowrate=400_000, price=15.0,
+                                stream="Utilities")
+        self._add_example_extra("Electricidad (bombas alta P + vacío)",
+                                flowrate=120_000, price=0.08,
+                                stream="Utilities")
+
+        from flowsheet_solver import auto_set_duties_from_thermo
+        auto_set_duties_from_thermo(self.fs)
+
+
     def open_json(self):
         path = filedialog.askopenfilename(
             title="Abrir diagrama",
