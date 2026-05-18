@@ -2210,6 +2210,9 @@ class FlowsheetEditor:
         tk_az    = self._add_example_block("TK-104","Storage tank — cone roof",  400.0, 920, 500)  # azúcar producto
 
         # Composiciones (fracción másica)
+        # Modo solver: fl101 y dr101 tienen separator_active / dryer_active
+        # → el solver calcula azúcar húmedo, melaza, azúcar seco y vapor
+        # automáticamente desde recovery + moisture (no se declaran acá).
         jugo_in     = {"water": 0.85, "sucrose": 0.135, "glucose": 0.015}
         clarificado = {"water": 0.85, "sucrose": 0.135, "glucose": 0.015}  # mismo (la cal no contabiliza acá)
         cachaza     = {"water": 0.70, "sucrose": 0.05, "glucose": 0.05,
@@ -2218,10 +2221,19 @@ class FlowsheetEditor:
         post_ev2    = {"water": 0.65, "sucrose": 0.315, "glucose": 0.035}
         post_ev3    = {"water": 0.50, "sucrose": 0.45,  "glucose": 0.05}
         post_ev4    = {"water": 0.35, "sucrose": 0.585, "glucose": 0.065}   # miel madre
-        # Cristales: azúcar + miel adherida
+        # Cristales: azúcar + miel adherida (input al separator)
         masa_cocida = {"sucrose": 0.90, "water": 0.06, "glucose": 0.04}
-        azucar_seco = {"sucrose": 1.0}
-        melaza      = {"water": 0.20, "sucrose": 0.45, "glucose": 0.35}
+
+        # Activar separator (centrífuga) y dryer con modelos internos.
+        # FL-101: recovery 75 % de sólidos, 3 % humedad en torta.
+        # DR-101: humedad final del azúcar refinado 0.5 %.
+        self.fs.blocks[fl101].separator_active   = True
+        self.fs.blocks[fl101].solids_recovery    = 0.75
+        self.fs.blocks[fl101].cake_moisture      = 0.03
+        self.fs.blocks[fl101].solid_components   = ["sucrose", "glucose"]
+        self.fs.blocks[dr101].dryer_active       = True
+        self.fs.blocks[dr101].final_moisture     = 0.005
+        self.fs.blocks[dr101].moisture_component = "water"
 
         # --- Streams ---
         # Feed jugo crudo (basis 800,000 t/año caña, 85% es jugo)
@@ -2277,23 +2289,19 @@ class FlowsheetEditor:
                                  composition=masa_cocida,
                                  main_component="sucrose", phase="liquid")
         # Centrífuga: cristales (azúcar húmedo) → secador
-        self._add_example_stream(fl101, dr101, "S-az-humedo", 110000,
+        # mass_flow + composition CALCULADOS por solve_separators
+        # (separator_active=True en fl101 con recovery=0.75, moist=0.03).
+        self._add_example_stream(fl101, dr101, "S-az-humedo",
                                  src_port="producto", dst_port="alimentacion",
-                                 T=60,
-                                 composition={"sucrose": 0.97, "water": 0.03},
-                                 main_component="sucrose", phase="liquid")
-        # Centrífuga: melaza (al tanque sub-producto)
-        self._add_example_stream(fl101, tk_miel, "S-melaza", 45000, role="product",
-                                 src_port="util_in", dst_port="entrada",
-                                 price=180.0, T=60,
-                                 composition=melaza,
-                                 main_component="sucrose", phase="liquid")
-        # Azúcar seco al tanque producto
-        self._add_example_stream(dr101, tk_az, "S-azucar", 107000, role="product",
+                                 T=60, phase="liquid")
+        # Centrífuga: melaza (al tanque sub-producto) — comp calculada
+        self._add_example_stream(fl101, tk_miel, "S-melaza", role="product",
+                                 src_port="venteo", dst_port="entrada",
+                                 price=180.0, T=60, phase="liquid")
+        # Azúcar seco al tanque producto (comp calculada por dr101)
+        self._add_example_stream(dr101, tk_az, "S-azucar", role="product",
                                  src_port="producto", dst_port="entrada",
-                                 price=550.0, T=45,
-                                 composition=azucar_seco,
-                                 main_component="sucrose", phase="liquid")
+                                 price=550.0, T=45, phase="liquid")
 
         # ---- Venteos de vapor (cierran el balance de masa de los EV) ----
         water_vap = {"water": 1.0}
@@ -2313,10 +2321,10 @@ class FlowsheetEditor:
                                  src_port="venteo", dst_port="entrada",
                                  T=70, composition=water_vap,
                                  main_component="water", phase="vapor")
-        self._add_example_stream(dr101, tk_vap, "S-vap-dry", 3000,
+        # S-vap-dry: vapor de agua del secador (mass+comp calculadas)
+        self._add_example_stream(dr101, tk_vap, "S-vap-dry",
                                  src_port="venteo", dst_port="entrada",
-                                 T=80, composition=water_vap,
-                                 main_component="water", phase="vapor")
+                                 T=80, phase="vapor")
 
         # ---- Duties auto ----
         from flowsheet_solver import auto_set_duties_from_thermo
