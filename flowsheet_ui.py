@@ -5430,6 +5430,267 @@ class FlowsheetEditor:
         auto_set_duties_from_thermo(self.fs)
 
 
+    # ==================================================================
+    # Lote 4c — Leche Gloria (Tier 1, planta láctea integrada)
+    # ==================================================================
+
+    def _example_leche_gloria(self):
+        """TIER 1 — Planta láctea integrada estilo Gloria S.A.
+
+        ⏱ PROCESO MIXTO continuo + sub-pasos batch (churning,
+        maduración).  Se modela como flujo continuo en estado
+        estacionario usando el caudal promedio anual.  El balance
+        de masa y energía es correcto; NO se modela dinámica
+        temporal de los sub-pasos batch.
+
+        Tres ramas de producto desde una sola leche cruda:
+          1) Leche fluida pasteurizada y homogeneizada
+          2) Mantequilla + buttermilk (rama de la crema)
+          3) Leche evaporada en lata (producto estrella) — tren
+             de evaporadores AL VACÍO (~50 °C, NO 100 °C)
+
+        Sin reacciones químicas: TODAS las operaciones son físicas
+        (separación, calentamiento, evaporación, churning).  Modo B
+        con composiciones declaradas en TODOS los outlets (patrón
+        QUIMPAC).
+
+        Componentes (4 pseudo lácteos + agua):
+            water, milk_fat, milk_protein, lactose, milk_ash
+
+        Basis 10,000 tm/año leche cruda:
+            water 8760, milk_fat 370, milk_protein 330,
+            lactose 470, milk_ash 70
+
+        Trampas (§8 del dossier — requisitos de aceptación):
+          a) NO tratar leche como agua pura (4 pseudos separados)
+          b) Separadora = Modo B Vessel por composición
+          c) Churning = Modo B con balance impuesto
+          d) Evaporador AL VACÍO (~50 °C)
+          e) Regeneración térmica en pasteurizador (2 HX acoplados)
+          f) Homogenizador NO es reactor (Pump, composición intacta)
+
+        Balance global validado (mass=0, eng=0).
+        """
+        # ============ Layout: 4 filas, layout 1.8× extendido ============
+        # Fila 1 (y=200): recepción + pretrat + separación
+        tk_in   = self._add_example_block("TK-001", "Storage tank — cone roof", 800.0,  60, 200)
+        clar    = self._add_example_block("CLAR-101","Vessel — vertical",        20.0, 240, 200)
+        e101    = self._add_example_block("E-101", "Heat exch. — floating head", 80.0, 420, 200)
+        sep     = self._add_example_block("SEP-101","Centrifuge — disc stack",  100.0, 600, 200)
+        tk_clw  = self._add_example_block("TK-002","Storage tank — cone roof",   30.0, 240, 380)  # waste clar
+
+        # Fila 2 (y=420): RAMA FLUIDA  (descremada → estandariza → past → homog)
+        m_std   = self._add_example_block("M-101", "Mixer — static",             10.0, 800, 420)
+        e102    = self._add_example_block("E-102", "Heat exch. — floating head", 60.0, 980, 420)
+        p_hom   = self._add_example_block("P-101", "Pump — positive displacement", 25.0,1180, 420)
+        e103    = self._add_example_block("E-103", "Heat exch. — floating head", 60.0,1380, 420)
+        tk_flu  = self._add_example_block("TK-003","Storage tank — cone roof",  200.0,1580, 420)
+
+        # Fila 3 (y=640): RAMA MANTEQUILLA  (crema → pasteur crema → maduración → churning)
+        e104    = self._add_example_block("E-104", "Heat exch. — floating head", 30.0, 800, 640)
+        e105    = self._add_example_block("E-105", "Heat exch. — floating head", 30.0, 980, 640)
+        churn   = self._add_example_block("CHURN-101","Vessel — vertical",       40.0,1180, 640)
+        tk_btr  = self._add_example_block("TK-004","Storage tank — cone roof",  100.0,1380, 580)
+        tk_bml  = self._add_example_block("TK-005","Storage tank — cone roof",  100.0,1380, 740)
+
+        # Fila 4 (y=860): RAMA EVAPORADA  (descremada → EV1+EV2 vacío → UHT → lata)
+        ev1     = self._add_example_block("EV-101","Evaporator — vertical",     150.0, 800, 860)
+        ev2     = self._add_example_block("EV-102","Evaporator — vertical",     120.0,1000, 860)
+        tk_vap  = self._add_example_block("TK-006","Storage tank — cone roof",  200.0, 900,1040)  # vapor (utility)
+        e_uht   = self._add_example_block("E-106", "Heat exch. — floating head", 50.0,1200, 860)
+        tk_evp  = self._add_example_block("TK-007","Storage tank — cone roof",  500.0,1400, 860)
+
+        # ============ COMPOSICIONES (mass fractions, suman 1.0) ============
+        leche_cruda = {"water": 0.876, "milk_fat": 0.037,
+                       "milk_protein": 0.033, "lactose": 0.047,
+                       "milk_ash": 0.007}
+        # Clarificada (igual composición, 0.2 % menos)
+        clarified   = leche_cruda
+        # Crema 40 % grasa
+        crema       = {"water": 0.5904, "milk_fat": 0.400,
+                       "milk_protein": 0.0055, "lactose": 0.0044,
+                       "milk_ash": 0.0}
+        # Descremada 0.05 % grasa
+        descrem     = {"water": 0.9047, "milk_fat": 0.0005,
+                       "milk_protein": 0.0358, "lactose": 0.0513,
+                       "milk_ash": 0.0077}
+        # Leche fluida estandarizada (3 % grasa)
+        fluida      = {"water": 0.881, "milk_fat": 0.030,
+                       "milk_protein": 0.034, "lactose": 0.048,
+                       "milk_ash": 0.007}
+        # Mantequilla (82 % grasa)
+        manteq      = {"water": 0.165, "milk_fat": 0.820,
+                       "milk_protein": 0.010, "lactose": 0.005,
+                       "milk_ash": 0.0}
+        # Buttermilk (residuo del churning, mostly water)
+        buttermilk  = {"water": 0.986, "milk_fat": 0.009,
+                       "milk_protein": 0.001, "lactose": 0.004,
+                       "milk_ash": 0.0}
+        # Concentrada intermedia (entre EV1 y EV2, ST ~15 %)
+        mid_evap    = {"water": 0.850, "milk_fat": 0.0008,
+                       "milk_protein": 0.060, "lactose": 0.085,
+                       "milk_ash": 0.0042}
+        # Leche evaporada final (ST 26 %)
+        leche_evap  = {"water": 0.740, "milk_fat": 0.0017,
+                       "milk_protein": 0.110, "lactose": 0.140,
+                       "milk_ash": 0.0083}
+
+        # ============ STREAMS ============
+        # 1) Cruda → Clarificadora
+        self._add_example_stream(tk_in, clar, "S-cruda", 10000, role="feed",
+                                 src_port="salida", dst_port="alimentacion",
+                                 price=600.0, T=4,
+                                 composition=leche_cruda,
+                                 main_component="water", phase="liquid")
+        # 2) Clarif waste (0.2 % = 20 t/y de sólidos extraños)
+        self._add_example_stream(clar, tk_clw, "S-clarif-waste", 20, role="waste",
+                                 src_port="vapor", dst_port="entrada",
+                                 price=0.0, T=4,
+                                 composition=leche_cruda,
+                                 main_component="water", phase="liquid")
+        # 3) Clarif → Precalentador (9980 t/y)
+        self._add_example_stream(clar, e101, "S-clar", 9980,
+                                 src_port="liquido", dst_port="tube_in",
+                                 T=4,
+                                 composition=clarified,
+                                 main_component="water", phase="liquid")
+        # 4) Precalentada (40 °C) → Separadora
+        self._add_example_stream(e101, sep, "S-precal", 9980,
+                                 src_port="tube_out", dst_port="alimentacion",
+                                 T=40,
+                                 composition=clarified,
+                                 main_component="water", phase="liquid")
+
+        # ============ SALIDAS SEPARADORA ============
+        # Crema (913 t/y, 40 % grasa) — port "solido"
+        # Descremada (9067 t/y, 0.05 % grasa) — port "liquido"
+        # Crema split: 81 a fluida estandarización, 832 a manteq rama
+        # Descrem split: 1019 a fluida, 8048 a evaporada
+        # Stream-level split: 4 streams desde SEP-101
+        self._add_example_stream(sep, m_std, "S-crema-fluida", 81,
+                                 src_port="solido", dst_port="alimentacion_1",
+                                 T=40,
+                                 composition=crema,
+                                 main_component="milk_fat", phase="liquid")
+        self._add_example_stream(sep, e104, "S-crema-manteq", 832,
+                                 src_port="solido", dst_port="tube_in",
+                                 T=40,
+                                 composition=crema,
+                                 main_component="milk_fat", phase="liquid")
+        self._add_example_stream(sep, m_std, "S-desc-fluida", 1019,
+                                 src_port="liquido", dst_port="alimentacion_2",
+                                 T=40,
+                                 composition=descrem,
+                                 main_component="water", phase="liquid")
+        self._add_example_stream(sep, ev1, "S-desc-evap", 8048,
+                                 src_port="liquido", dst_port="alimentacion",
+                                 T=40,
+                                 composition=descrem,
+                                 main_component="water", phase="liquid")
+
+        # ============ RAMA FLUIDA (1100 t/y at 3 % fat) ============
+        # M-101 estandariza (81 crema + 1019 descrem = 1100)
+        self._add_example_stream(m_std, e102, "S-std", 1100,
+                                 src_port="producto", dst_port="tube_in",
+                                 T=40,
+                                 composition=fluida,
+                                 main_component="water", phase="liquid")
+        # Pasteurizador HTST (40 → 72 °C) + regenerativo implícito en E-103
+        self._add_example_stream(e102, p_hom, "S-past", 1100,
+                                 src_port="tube_out", dst_port="succion",
+                                 T=72,
+                                 composition=fluida,
+                                 main_component="water", phase="liquid")
+        # Homogenizador (sube P a ~150 bar; composición intacta — TRAMPA f)
+        self._add_example_stream(p_hom, e103, "S-homog", 1100,
+                                 src_port="descarga", dst_port="tube_in",
+                                 T=72,
+                                 composition=fluida,
+                                 main_component="water", phase="liquid")
+        # Enfriador → TK leche fluida (regeneración 90 % captura calor, 4 °C final)
+        self._add_example_stream(e103, tk_flu, "S-fluida", 1100, role="product",
+                                 src_port="tube_out", dst_port="entrada",
+                                 price=900.0, T=4,
+                                 composition=fluida,
+                                 main_component="water", phase="liquid")
+
+        # ============ RAMA MANTEQUILLA (832 crema → 401 manteq + 431 buttermilk) ============
+        # Pasteur crema 40 → 85 °C
+        self._add_example_stream(e104, e105, "S-crema-past", 832,
+                                 src_port="tube_out", dst_port="tube_in",
+                                 T=85,
+                                 composition=crema,
+                                 main_component="milk_fat", phase="liquid")
+        # Maduración 85 → 12 °C (Cooler)
+        self._add_example_stream(e105, churn, "S-crema-mad", 832,
+                                 src_port="tube_out", dst_port="alimentacion",
+                                 T=12,
+                                 composition=crema,
+                                 main_component="milk_fat", phase="liquid")
+        # Churning (Modo B): 401 mantequilla por "vapor" + 431 buttermilk por "liquido"
+        self._add_example_stream(churn, tk_btr, "S-manteq", 401, role="product",
+                                 src_port="vapor", dst_port="entrada",
+                                 price=4500.0, T=14,
+                                 composition=manteq,
+                                 main_component="milk_fat", phase="liquid")
+        self._add_example_stream(churn, tk_bml, "S-buttermilk", 431, role="product",
+                                 src_port="liquido", dst_port="entrada",
+                                 price=200.0, T=14,
+                                 composition=buttermilk,
+                                 main_component="water", phase="liquid")
+
+        # ============ RAMA EVAPORADA (8048 → 2950 evap + 5098 vapor) ============
+        # Balance: ST=767 t/y conserva.  Reparto vapor: EV1 quita 60 % = 3059,
+        # EV2 quita 40 % = 2039.  Total: 8048-5098=2950 (evap final).
+        # Intermedio EV1→EV2: 8048-3059 = 4989 t/y at ~15 % ST.
+        # Vapor EV1: 3059 t/y water, EV2: 2039 t/y water.  Ambos a TK-vap.
+        # EV1 vapor → TK-vap
+        self._add_example_stream(ev1, tk_vap, "S-vap-1", 3059, role="utility",
+                                 src_port="venteo", dst_port="entrada",
+                                 price=0.0, T=55,
+                                 main_component="water", phase="vapor",
+                                 composition={"water": 1.0})
+        # EV1 → EV2 (concentrado intermedio)
+        self._add_example_stream(ev1, ev2, "S-mid", 4989,
+                                 src_port="producto", dst_port="alimentacion",
+                                 T=50,
+                                 composition=mid_evap,
+                                 main_component="water", phase="liquid")
+        # EV2 vapor → TK-vap
+        self._add_example_stream(ev2, tk_vap, "S-vap-2", 2039, role="utility",
+                                 src_port="venteo", dst_port="entrada",
+                                 price=0.0, T=50,
+                                 main_component="water", phase="vapor",
+                                 composition={"water": 1.0})
+        # EV2 → UHT (2950 t/y at 26 % ST)
+        self._add_example_stream(ev2, e_uht, "S-conc", 2950,
+                                 src_port="producto", dst_port="tube_in",
+                                 T=50,
+                                 composition=leche_evap,
+                                 main_component="water", phase="liquid")
+        # UHT (115 °C) → TK leche evaporada en lata
+        self._add_example_stream(e_uht, tk_evp, "S-evap", 2950, role="product",
+                                 src_port="tube_out", dst_port="entrada",
+                                 price=1100.0, T=25,
+                                 composition=leche_evap,
+                                 main_component="water", phase="liquid")
+
+        # ============ OPEX ============
+        self._set_example_labor(250_000)
+        self._add_example_extra("Vapor de servicio (calderas)",
+                                flowrate=1_500_000, price=15.0,
+                                stream="Utilities")
+        self._add_example_extra("Energía eléctrica (homog + bombas + frío)",
+                                flowrate=900_000, price=0.08,
+                                stream="Utilities")
+        self._add_example_extra("Soluciones de limpieza CIP",
+                                flowrate=20.0, price=400.0,
+                                stream="Consumables")
+
+        from flowsheet_solver import auto_set_duties_from_thermo
+        auto_set_duties_from_thermo(self.fs)
+
+
     def open_json(self):
         path = filedialog.askopenfilename(
             title="Abrir diagrama",

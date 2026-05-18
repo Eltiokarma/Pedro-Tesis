@@ -77,6 +77,8 @@ def run_all_examples():
         # ── Catálogo educativo Lote 4b (saponificación + urea) ──
         '_example_soap',
         '_example_urea',
+        # ── Catálogo educativo Lote 4c (planta láctea integrada) ──
+        '_example_leche_gloria',
     ]
     print(f"\n{'='*92}")
     print("VALIDACIÓN HEADLESS — todos los ejemplos del flowsheet")

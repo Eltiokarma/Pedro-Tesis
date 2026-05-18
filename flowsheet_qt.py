@@ -4165,6 +4165,10 @@ class FlowsheetMainWindow(QMainWindow):
                               "Urea (Bosch-Meiser, fertilizante)",
                               "100 — Fertilizantes",
                               "PFD-UREA-001"),
+            "leche_gloria": (TkEditor._example_leche_gloria,
+                              "LECHE GLORIA — Planta láctea integrada",
+                              "100 — Alimentaria (caso integrado)",
+                              "PFD-GLORIA-001"),
         }
         entry = builder_map.get(key)
         if entry is None:
