@@ -4679,6 +4679,235 @@ class FlowsheetEditor:
         auto_set_duties_from_thermo(self.fs)
 
 
+    # ==================================================================
+    # Lote 3 — Química fina + polímeros (Tier 1, R026/R027 Modo B)
+    # ==================================================================
+
+    def _example_acetic_acid(self):
+        """TIER 1 — Ácido acético por carbonilación (Cativa/Monsanto).
+
+        Química asociada (R026, NO DERIVADA DE CAPA 3):
+            1 CH3OH(l) + 1 CO(g) → 1 CH3COOH(l)
+            ΔH ≈ −133.8 kJ/mol  (exotérmica)
+            T ≈ 458 K (185 °C), P ≈ 35 bar.
+            Catalizador: Rh o Ir + promotor yoduro de metilo.
+            Conversión por paso ~99 % selectiva (irreversible).
+            IMPORTANTE: la carbonilación NO produce agua.
+
+        Topología:
+            TK-MeOH + TK-CO → K-101 (compresor CO) → M-101 → E-101
+            → R-101 → V-101 (flash: purga CO no reaccionado)
+                  → T-101 (columna producto) → TK-AcOH + TK-livianos
+
+        Basis 1000 tm/año metanol → ~1856 tm/año ácido (99 % conv,
+        MW 60.05/32.04 = 1.874).  Material esperado: Hastelloy
+        (yoduro corrosivo).
+
+        Modo B: R026 referenciada como placeholder (vant_Hoff no
+        derivada en .md), composición de salida del reactor
+        declarada respetando estequiometría con conversión 99 %.
+        """
+        # Layout 1.8× (planta industrial mediana)
+        tk_meoh = self._add_example_block("TK-101", "Storage tank — cone roof", 200.0,  60, 200)
+        tk_co   = self._add_example_block("TK-102", "Storage tank — cone roof", 150.0,  60, 400)
+        k101    = self._add_example_block("K-101",  "Compressor — centrifugal", 200.0, 260, 400)
+        m101    = self._add_example_block("M-101",  "Mixer — static",            10.0, 460, 300)
+        e101    = self._add_example_block("E-101",  "Heat exch. — floating head", 80.0, 660, 300)
+        r101    = self._add_example_block("R-101",  "Reactor — jacketed agitated", 50.0, 860, 300)
+        v101    = self._add_example_block("V-101",  "Vessel — vertical",          25.0,1060, 300)
+        tk_purg = self._add_example_block("TK-103", "Storage tank — cone roof",  60.0,1060,  80)
+        t101    = self._add_example_block("T-101",  "Tower (column shell)",       45.0,1260, 380)
+        e102    = self._add_example_block("E-102",  "Heat exch. — floating head", 60.0,1460, 200)
+        e103    = self._add_example_block("E-103",  "Heat exch. — kettle reboiler", 80.0,1460, 560)
+        tk_liv  = self._add_example_block("TK-104", "Storage tank — cone roof",   80.0,1640, 200)
+        tk_ac   = self._add_example_block("TK-105", "Storage tank — cone roof",  300.0,1640, 560)
+
+        # R-101 — Modo B con R026 referenciada
+        self.fs.blocks[r101].reactions = ["R026_PLACEHOLDER"]
+        self.fs.blocks[r101].T_op_K    = 458.0
+        self.fs.blocks[r101].P_op_bar  = 35.0
+        # ΔH = -133.8 kJ/mol_MeOH × (990 g/y / 32.04 g/mol) = -4135 GJ/y
+        # = -131 kW continuo.  Por kg input total (1866 t/y): -2216 kJ/kg.
+        self.fs.blocks[r101].heat_of_reaction = -2216.0
+
+        # Composiciones (thermo_db keys: methanol, co, acetic_acid)
+        # In R-101: 1000 MeOH + 866 CO = 1866 → MeOH 0.5357, CO 0.4643
+        feed_mix = {"methanol": 0.5357, "co": 0.4643}
+        # Out R-101 (99 % conv MeOH): 10 MeOH + 9 CO + 1855 AcOH = 1874
+        # (un poco de CO en exceso queda; mass: 10 MeOH consume 10·(28/32)=8.75 CO)
+        rxn_out  = {"methanol": 0.0053, "co": 0.0048, "acetic_acid": 0.9899}
+
+        # Feed metanol líquido (1000 tm/año puro)
+        self._add_example_stream(tk_meoh, m101, "S-MeOH", 1000, role="feed",
+                                 src_port="salida",   dst_port="alimentacion_1",
+                                 price=500.0, T=25,
+                                 main_component="methanol", phase="liquid",
+                                 composition={"methanol": 1.0})
+        # CO succión (gas industrial)
+        self._add_example_stream(tk_co, k101, "S-CO", 866, role="feed",
+                                 src_port="salida",   dst_port="succion",
+                                 price=400.0, T=25,
+                                 main_component="co", phase="gas",
+                                 composition={"co": 1.0})
+        # CO comprimido a 35 bar
+        self._add_example_stream(k101, m101, "S-CO-HP", 866,
+                                 src_port="descarga", dst_port="alimentacion_2",
+                                 T=120,
+                                 main_component="co", phase="gas",
+                                 composition={"co": 1.0})
+        # Mezcla al precalentador
+        self._add_example_stream(m101, e101, "S-1", 1866,
+                                 src_port="producto", dst_port="tube_in",
+                                 T=80,
+                                 composition=feed_mix,
+                                 main_component="methanol", phase="liquid")
+        # Pre-calentado al reactor
+        self._add_example_stream(e101, r101, "S-2", 1866,
+                                 src_port="tube_out", dst_port="alimentacion",
+                                 T=180,
+                                 composition=feed_mix,
+                                 main_component="methanol", phase="liquid")
+        # Salida del reactor (Modo B)
+        self._add_example_stream(r101, v101, "S-3", 1866,
+                                 src_port="producto", dst_port="alimentacion",
+                                 T=185,
+                                 composition=rxn_out,
+                                 main_component="acetic_acid", phase="liquid")
+        # Flash: purga de CO no reaccionado por vapor (9 t/y CO)
+        self._add_example_stream(v101, tk_purg, "S-purga", 9, role="waste",
+                                 src_port="vapor", dst_port="entrada",
+                                 price=0.0, T=185,
+                                 main_component="co", phase="gas",
+                                 composition={"co": 1.0})
+        # Líquido del flash a columna (1857: 10 MeOH + 1847 AcOH)
+        self._add_example_stream(v101, t101, "S-4", 1857,
+                                 src_port="liquido",    dst_port="alimentacion",
+                                 T=180,
+                                 composition={"methanol": 0.0054, "acetic_acid": 0.9946},
+                                 main_component="acetic_acid", phase="liquid")
+        # Tope columna (livianos: metanol residual)
+        self._add_example_stream(t101, e102, "S-vap", 10,
+                                 src_port="vapor_tope", dst_port="tube_in",
+                                 T=65,
+                                 main_component="methanol", phase="vapor",
+                                 composition={"methanol": 1.0})
+        # Livianos condensados a TK (reciclables, role=waste por simplicidad)
+        self._add_example_stream(e102, tk_liv, "S-livianos", 10, role="waste",
+                                 src_port="tube_out", dst_port="entrada",
+                                 price=0.0, T=45,
+                                 main_component="methanol", phase="liquid",
+                                 composition={"methanol": 1.0})
+        # Fondos: ácido acético glacial al producto
+        self._add_example_stream(t101, e103, "S-fondo", 1847,
+                                 src_port="liquido_fondo", dst_port="liq_in",
+                                 T=118,
+                                 main_component="acetic_acid", phase="liquid",
+                                 composition={"acetic_acid": 1.0})
+        # Ácido glacial al tanque (producto principal, ~1847 tm/año)
+        self._add_example_stream(e103, tk_ac, "S-AcOH", 1847, role="product",
+                                 src_port="cond_out", dst_port="entrada",
+                                 price=600.0, T=60,
+                                 main_component="acetic_acid", phase="liquid",
+                                 composition={"acetic_acid": 1.0})
+
+        # Mano de obra y catalizador
+        self._set_example_labor(200_000)
+        self._add_example_extra("Catalizador Rh (carbonilación)",
+                                flowrate=0.1, price=40_000.0,
+                                stream="Consumables")
+        self._add_example_extra("Yoduro de metilo (promotor)",
+                                flowrate=3.0, price=8_000.0,
+                                stream="Consumables")
+
+        from flowsheet_solver import auto_set_duties_from_thermo
+        auto_set_duties_from_thermo(self.fs)
+
+
+    def _example_polyethylene(self):
+        """TIER 1 — Polietileno LDPE (alta presión, autoclave).
+
+        Química (R027, NO DERIVADA DE CAPA 3, conversión declarada):
+            1 C2H4(g) → 1 (-C2H4-)n (polyethylene, sólido)
+            ΔH ≈ -93 kJ/mol etileno (exotérmica fuerte)
+            T ≈ 200-300 °C, P ≈ 1500-2500 bar, iniciador peróxido.
+            Conv por paso 20-35 % (LDPE típico); resto recicla.
+
+        Modo B: poliadición NO es equilibrio termodinámico, es
+        cinética de cadena.  Composiciones de salida declaradas
+        con conv 30 % por paso.  Sin reciclo cerrado (la purga
+        de etileno se vende como fuel-gas, simplificación
+        pedagógica vs. la planta real con compresor de reciclo).
+
+        Topología:
+            TK-etileno → K-101 (compresor alta P) → R-101 (autoclave
+            Modo B) → V-101 (flash HP separa PE de etileno gas)
+                  → TK-PE (producto)
+                  → TK-purga (etileno no reaccionado, fuel-gas)
+
+        Basis 1000 tm/año etileno → 300 PE + 700 etileno purga.
+        Calor a extraer R-101: ΔH × n_PE = -93 × (300e3/28.05·1000)
+        = -993 GJ/año = -31.5 kW continuo.
+        """
+        tk_eth  = self._add_example_block("TK-101", "Storage tank — cone roof", 200.0,  80, 280)
+        k101    = self._add_example_block("K-101",  "Compressor — reciprocating", 400.0, 280, 280)
+        r101    = self._add_example_block("R-101",  "Reactor — autoclave",         5.0, 480, 280)
+        v101    = self._add_example_block("V-101",  "Vessel — vertical",          15.0, 680, 280)
+        tk_pe   = self._add_example_block("TK-102", "Storage tank — cone roof", 200.0, 880, 380)
+        tk_pur  = self._add_example_block("TK-103", "Storage tank — cone roof", 150.0, 880, 180)
+
+        # R-101 — Modo B con R027 placeholder
+        self.fs.blocks[r101].reactions = ["R027_PLACEHOLDER"]
+        self.fs.blocks[r101].T_op_K    = 523.0       # ~250 °C
+        self.fs.blocks[r101].P_op_bar  = 2000.0      # alta P LDPE
+        # ΔH·n_PE = -93 kJ/mol × (300e3 kg/y / 28.05 kg/kmol) = -994 GJ/y
+        # Por kg input total (1000 t/y): -994 kJ/kg.
+        self.fs.blocks[r101].heat_of_reaction = -994.0
+
+        # Out R-101: 30 % PE + 70 % etileno (másica)
+        rxn_out = {"ethylene": 0.700, "polyethylene": 0.300}
+
+        # Feed etileno gas (1000 tm/año puro)
+        self._add_example_stream(tk_eth, k101, "S-eth", 1000, role="feed",
+                                 src_port="salida",   dst_port="succion",
+                                 price=900.0, T=25,
+                                 main_component="ethylene", phase="gas",
+                                 composition={"ethylene": 1.0})
+        # Etileno comprimido alta P
+        self._add_example_stream(k101, r101, "S-HP", 1000,
+                                 src_port="descarga", dst_port="alimentacion",
+                                 T=80,
+                                 main_component="ethylene", phase="gas",
+                                 composition={"ethylene": 1.0})
+        # Salida reactor: mezcla bifásica (PE sólido suspendido + etileno gas)
+        self._add_example_stream(r101, v101, "S-mix", 1000,
+                                 src_port="producto", dst_port="alimentacion",
+                                 T=250,
+                                 composition=rxn_out,
+                                 main_component="polyethylene", phase="two_phase")
+        # Purga etileno no reaccionado (vapor, vendible como fuel)
+        self._add_example_stream(v101, tk_pur, "S-purga-eth", 700, role="product",
+                                 src_port="vapor", dst_port="entrada",
+                                 price=600.0, T=80,
+                                 main_component="ethylene", phase="gas",
+                                 composition={"ethylene": 1.0})
+        # PE sólido al tanque (producto principal)
+        self._add_example_stream(v101, tk_pe, "S-PE", 300, role="product",
+                                 src_port="liquido", dst_port="entrada",
+                                 price=1400.0, T=80,
+                                 main_component="polyethylene", phase="liquid",
+                                 composition={"polyethylene": 1.0})
+
+        # Mano de obra (planta de alta presión, complejidad media)
+        self._set_example_labor(180_000)
+        # Iniciador (peróxido) — consumible
+        self._add_example_extra("Iniciador peróxido orgánico",
+                                flowrate=2.5, price=12_000.0,
+                                stream="Consumables")
+
+        from flowsheet_solver import auto_set_duties_from_thermo
+        auto_set_duties_from_thermo(self.fs)
+
+
     def open_json(self):
         path = filedialog.askopenfilename(
             title="Abrir diagrama",

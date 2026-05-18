@@ -4134,6 +4134,15 @@ class FlowsheetMainWindow(QMainWindow):
                               "Ácido sulfúrico (contacto, V₂O₅)",
                               "100 — Inorgánica pesada",
                               "PFD-H2SO4-001"),
+            # ── Catálogo educativo Lote 3 (química fina + polímeros) ──
+            "acetic":       (TkEditor._example_acetic_acid,
+                              "Ácido acético (carbonilación Cativa)",
+                              "100 — Química fina",
+                              "PFD-AcOH-001"),
+            "ldpe":         (TkEditor._example_polyethylene,
+                              "Polietileno LDPE (autoclave HP)",
+                              "100 — Polímeros",
+                              "PFD-LDPE-001"),
         }
         entry = builder_map.get(key)
         if entry is None:
