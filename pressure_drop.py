@@ -142,13 +142,15 @@ def pipe_pressure_drop(mass_flow_kg_s: float,
 # ============================================================
 
 def _density_kg_m3(composition: dict, T_K: float,
-                    phase: str = "liquid") -> Optional[float]:
+                    phase: str = "liquid",
+                    P_Pa: float = 101325.0) -> Optional[float]:
     """Densidad media ponderada por mass fraction desde thermo_db.
 
     Para mezclas líquidas: ρ_mix ≈ 1 / Σ(wᵢ / ρᵢ)  (volumes additive,
     aprox razonable para mezclas similares).
-    Para gases: ρ ≈ P·MW / (R·T) — pero acá usamos thermo_db si tiene
-    densidad explícita, o estimación por gas ideal con MW promedio.
+    Para gases: ρ ≈ P·MW / (R·T) — usa el P_Pa del caller (default
+    1 atm si no se pasa).  Hallazgo 4-B: antes P_Pa estaba hardcodeado
+    en 1 atm → densidad de gas a 25 bar mal por 25× → ΔP mal por 25×.
     """
     try:
         import thermo_db as _td
@@ -158,8 +160,7 @@ def _density_kg_m3(composition: dict, T_K: float,
         return None
     T_C = T_K - 273.15
     if phase in ("vapor", "gas"):
-        # Gas ideal con MW promedio y P = 1 atm como default
-        # (el caller puede sobreescribir si tiene P)
+        # Gas ideal con MW promedio y P del caller
         mw_avg = 0.0
         total_w = 0.0
         for c, w in composition.items():
@@ -173,8 +174,8 @@ def _density_kg_m3(composition: dict, T_K: float,
         mw_avg /= total_w
         # ρ [kg/m³] = P [Pa] · MW [g/mol] / (R · T)  · 1e-3 (g→kg)
         R = 8.314
-        P_Pa = 101325.0
-        return P_Pa * mw_avg * 1e-3 / (R * T_K)
+        P_use = P_Pa if P_Pa > 0 else 101325.0
+        return P_use * mw_avg * 1e-3 / (R * T_K)
     # Liquid: 1/ρ_mix = Σ wᵢ/ρᵢ
     inv_rho = 0.0
     total_w = 0.0
@@ -250,7 +251,11 @@ def stream_pressure_drop(stream, pipe_length_m: float = None,
         return None
     T_K = stream.temperature + 273.15
     phase = stream.phase or "liquid"
-    rho = _density_kg_m3(comp, T_K, phase)
+    # Pasamos P real del stream (Hallazgo 4-B): la densidad de gas
+    # depende de P; antes era hardcoded en 1 atm y daba 25× error a
+    # 25 bar.  Para líquido P no afecta (incompresible).
+    P_stream_Pa = (getattr(stream, "pressure_bar", 1.013) or 1.013) * 1e5
+    rho = _density_kg_m3(comp, T_K, phase, P_Pa=P_stream_Pa)
     if rho is None or rho <= 0:
         return None
     mu = _viscosity_Pa_s(comp, T_K, phase)
