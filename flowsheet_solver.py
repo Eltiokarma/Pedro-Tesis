@@ -2565,6 +2565,19 @@ def auto_propagate_compositions(fs):
             continue
         if getattr(b, "splitter_active", False):
             continue
+        # Separadores mecánicos (filtro/centrífuga/secador/cristalizador/
+        # evaporador/ciclón) — sus outputs los escriben los solvers
+        # dedicados con composiciones específicas (no promedio ponderado).
+        if getattr(b, "separator_active", False):
+            continue
+        if getattr(b, "dryer_active", False):
+            continue
+        if getattr(b, "crystallizer_active", False):
+            continue
+        if getattr(b, "evaporator_active", False):
+            continue
+        if getattr(b, "cyclone_active", False):
+            continue
         ins  = [s for s in fs.streams.values() if s.dst == b.id]
         outs = [s for s in fs.streams.values() if s.src == b.id]
         if not ins:
@@ -3003,6 +3016,11 @@ def solve(fs, max_iter=MAX_ITER):
     flash_msgs = []
     col_msgs = []
     split_msgs = []
+    sep_msgs = []
+    dry_msgs = []
+    cry_msgs = []
+    evp_msgs = []
+    cyc_msgs = []
     for outer in range(5):
         prev_count = sum(1 for s in fs.streams.values() if s.composition)
         # Splitters: distribuyen mass, propagan composición igual
@@ -3012,6 +3030,29 @@ def solve(fs, max_iter=MAX_ITER):
                 break
         # Flash drums (separación VLE)
         flash_msgs = solve_flashes(fs)
+        for _ in range(3):
+            if not _solve_mass_iteration(fs):
+                break
+        # Separadores mecánicos (sólido/líquido + gas/sólido) — orden:
+        # ciclones primero (gas/polvo) y luego separadores líquidos
+        # (filtros/centrífugas), secadores, cristalizadores, evaporadores.
+        cyc_msgs = solve_cyclones(fs)
+        for _ in range(3):
+            if not _solve_mass_iteration(fs):
+                break
+        sep_msgs = solve_separators(fs)
+        for _ in range(3):
+            if not _solve_mass_iteration(fs):
+                break
+        dry_msgs = solve_dryers(fs)
+        for _ in range(3):
+            if not _solve_mass_iteration(fs):
+                break
+        cry_msgs = solve_crystallizers(fs)
+        for _ in range(3):
+            if not _solve_mass_iteration(fs):
+                break
+        evp_msgs = solve_evaporators(fs)
         for _ in range(3):
             if not _solve_mass_iteration(fs):
                 break
@@ -3026,7 +3067,8 @@ def solve(fs, max_iter=MAX_ITER):
         if new_count == prev_count:
             break
 
-    for m in split_msgs + flash_msgs + col_msgs:
+    for m in (split_msgs + flash_msgs + col_msgs
+              + cyc_msgs + sep_msgs + dry_msgs + cry_msgs + evp_msgs):
         if m.startswith("✗"):
             result.energy_balance_errors.append(m)
         elif m.startswith("⚠"):
