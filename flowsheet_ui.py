@@ -4908,6 +4908,325 @@ class FlowsheetEditor:
         auto_set_duties_from_thermo(self.fs)
 
 
+    # ==================================================================
+    # Lote 4a — Inorgánica + materiales (Tier 1, R028/R029)
+    # ==================================================================
+
+    def _example_chloralkali_hcl(self):
+        """TIER 1 — Cloro-álcali + recuperación de HCl.
+
+        Versión compacta (vs QUIMPAC, que es industrial pesado) con
+        recuperación de HCl 33 % como subproducto.  Dos químicas:
+
+        Celda (R_CELDA placeholder, Modo B):
+            2 NaCl + 2 H2O → 2 NaOH + Cl2 + H2
+            Electrólisis de membrana; el solver no resuelve
+            electroquímica → outputs declarados como QUIMPAC.
+
+        Quemador HCl (R028 placeholder, Modo B — irreversible):
+            1 H2 + 1 Cl2 → 2 HCl
+            Reacción explosivamente exotérmica con ignición UV/llama.
+            Conv ≥99 %, T≈800 °C, ΔH = −184.6 kJ/mol_O2 equiv.
+
+        Topología:
+            TK-NaCl + TK-H2O → CELDA → {NaOH, Cl2×2, H2×2 streams}
+            Cl2_split→ TK-Cl2 (producto)
+                     → R-201 (quemador) → ABS-201 → TK-HCl
+            H2_split → TK-H2 (producto, fuel-gas)
+                     → R-201
+
+        Basis 1000 tm/año NaCl → 685 NaOH + 407 Cl2 + 11.6 H2 +
+        206 HCl 33 % (200 Cl2 + 5.7 H2 reaccionados con 138 H2O).
+        Keys con guión bajo (chlorine, hydrogen_chloride, etc. de
+        components.py Lote 0); QUIMPAC usa strings con espacio —
+        deuda técnica documentada.
+        """
+        # Feeds
+        tk_nacl = self._add_example_block("TK-101", "Storage tank — cone roof", 300.0,  60, 200)
+        tk_h2o  = self._add_example_block("TK-102", "Storage tank — cone roof", 300.0,  60, 400)
+        # Celda de electrólisis
+        celda   = self._add_example_block("R-101",  "Reactor — autoclave",       12.0, 280, 300)
+        # Productos directos de la celda
+        tk_naoh = self._add_example_block("TK-103", "Storage tank — cone roof", 300.0, 480, 540)
+        tk_cl2  = self._add_example_block("TK-104", "Storage tank — cone roof", 200.0, 480, 360)
+        tk_h2p  = self._add_example_block("TK-105", "Storage tank — cone roof", 100.0, 480, 180)
+        # Quemador HCl + absorción
+        r201    = self._add_example_block("R-201",  "Reactor — jacketed non-agit.", 20.0, 720, 280)
+        tk_h2o2 = self._add_example_block("TK-106", "Storage tank — cone roof", 100.0, 720, 480)
+        abs201  = self._add_example_block("ABS-201","Vessel — vertical",          18.0, 920, 380)
+        tk_hcl  = self._add_example_block("TK-107", "Storage tank — cone roof", 150.0,1120, 380)
+
+        # Celda — Modo B (placeholder R_CELDA)
+        self.fs.blocks[celda].reactions = ["R_CELDA_CLORALCALI"]
+        self.fs.blocks[celda].T_op_K    = 358.15
+        self.fs.blocks[celda].P_op_bar  = 1.5
+        # Energía eléctrica de celda: ~2.5 kWh/kg Cl2 → 607 t·2.5e3 kWh
+        # = 1.52e6 kWh/año = 173 kW continuo.  En convención block.duty
+        # es CALOR; para celda eléctrica usamos OPEX extra en lugar.
+        # Aquí setamos duty=0 y declaramos energía como utility-extra.
+
+        # R-201 quemador HCl — Modo B
+        self.fs.blocks[r201].reactions = ["R028_PLACEHOLDER"]
+        self.fs.blocks[r201].T_op_K    = 1073.0
+        self.fs.blocks[r201].P_op_bar  = 1.1
+        # ΔH ≈ -184.6 kJ/mol_H2 × 5.69e3/2.016 kmol/y = -521 GJ/y
+        # = -16.5 kW continuo.  Por kg input (205.7 t/y): -2534 kJ/kg.
+        self.fs.blocks[r201].heat_of_reaction = -2534.0
+
+        # Feed NaCl (sólido o salmuera; aquí líquido por simplicidad)
+        self._add_example_stream(tk_nacl, celda, "S-NaCl", 1000, role="feed",
+                                 src_port="salida", dst_port="alimentacion",
+                                 price=80.0, T=25,
+                                 main_component="sodium_chloride", phase="liquid",
+                                 composition={"sodium_chloride": 1.0})
+        # Feed H2O
+        self._add_example_stream(tk_h2o, celda, "S-H2O", 308, role="feed",
+                                 src_port="salida", dst_port="alimentacion",
+                                 price=0.5, T=25,
+                                 main_component="water", phase="liquid",
+                                 composition={"water": 1.0})
+        # NaOH 100 % (simplificado; planta real es solución 32-50 %)
+        self._add_example_stream(celda, tk_naoh, "S-NaOH", 685, role="product",
+                                 src_port="producto", dst_port="entrada",
+                                 price=400.0, T=80,
+                                 main_component="sodium_hydroxide", phase="liquid",
+                                 composition={"sodium_hydroxide": 1.0})
+        # Cl2 → producto (407 t/y)
+        self._add_example_stream(celda, tk_cl2, "S-Cl2-prod", 407, role="product",
+                                 src_port="producto", dst_port="entrada",
+                                 price=350.0, T=80,
+                                 main_component="chlorine", phase="gas",
+                                 composition={"chlorine": 1.0})
+        # Cl2 → R-201 (200 t/y para HCl)
+        self._add_example_stream(celda, r201, "S-Cl2-rxn", 200,
+                                 src_port="producto", dst_port="alimentacion",
+                                 T=80,
+                                 main_component="chlorine", phase="gas",
+                                 composition={"chlorine": 1.0})
+        # H2 → producto (11.6 t/y, fuel-gas)
+        self._add_example_stream(celda, tk_h2p, "S-H2-prod", 11.57, role="product",
+                                 src_port="producto", dst_port="entrada",
+                                 price=1500.0, T=80,
+                                 main_component="hydrogen", phase="gas",
+                                 composition={"hydrogen": 1.0})
+        # H2 → R-201 (5.69 t/y para HCl)
+        self._add_example_stream(celda, r201, "S-H2-rxn", 5.69,
+                                 src_port="producto", dst_port="alimentacion",
+                                 T=80,
+                                 main_component="hydrogen", phase="gas",
+                                 composition={"hydrogen": 1.0})
+        # Salida quemador: HCl gas (206 t/y)
+        self._add_example_stream(r201, abs201, "S-HCl-gas", 205.69,
+                                 src_port="producto", dst_port="alimentacion",
+                                 T=400,
+                                 main_component="hydrogen_chloride", phase="gas",
+                                 composition={"hydrogen_chloride": 1.0})
+        # Agua de absorción (estequiométrica para HCl 33 %)
+        # HCl 33 % p/p: 206 HCl + 418 H2O = 624 → 33 %
+        self._add_example_stream(tk_h2o2, abs201, "S-H2O-abs", 418, role="feed",
+                                 src_port="salida", dst_port="alimentacion",
+                                 price=0.5, T=25,
+                                 main_component="water", phase="liquid",
+                                 composition={"water": 1.0})
+        # HCl 33 % solución producto
+        self._add_example_stream(abs201, tk_hcl, "S-HCl-33", 624, role="product",
+                                 src_port="liquido", dst_port="entrada",
+                                 price=180.0, T=40,
+                                 main_component="hydrogen_chloride", phase="liquid",
+                                 composition={"hydrogen_chloride": 0.33, "water": 0.67})
+
+        # OPEX
+        self._set_example_labor(200_000)
+        self._add_example_extra("Energía eléctrica celda (2.5 kWh/kg Cl₂)",
+                                flowrate=1_520_000, price=0.08,
+                                stream="Utilities")
+        self._add_example_extra("Membrana ion-selectiva (replazo 5 años)",
+                                flowrate=0.2, price=20_000.0,
+                                stream="Consumables")
+        self._add_example_extra("Ánodos DSA (Ti/RuO₂)",
+                                flowrate=0.1, price=15_000.0,
+                                stream="Consumables")
+
+        from flowsheet_solver import auto_set_duties_from_thermo
+        auto_set_duties_from_thermo(self.fs)
+
+
+    def _example_cement(self):
+        """TIER 1 — Cemento Portland por horno rotatorio.
+
+        Química clave (R029, NO DERIVADA, Modo B):
+            1 CaCO3(s) → 1 CaO(s) + 1 CO2(g)   ΔH ≈ +178 kJ/mol
+            Calcinación endotérmica fuerte (T ≈ 1450 °C / 1723 K).
+            Conv >99 % a T de horno.  La clinkerización (formación
+            de silicatos C3S/C2S) se abstrae al pseudo-componente
+            `clinker`.
+
+        Topología:
+            TK-caliza → FH-101 (precalentador) → R-101 (horno
+            rotatorio Modo B) → E-101 (enfriador clínker) →
+            TK-cemento
+                              → TK-emisión (CO₂ waste)
+
+        Basis 1000 tm/año caliza pura {limestone 1.0}.  Stoich:
+            1000/100.09 = 9.99 kmol → 9.99 kmol CaO (≈560 t/y)
+            + 9.99 kmol CO2 (≈440 t/y).  Modelado:
+                clinker_out = 560 tm/año (CaO + silicatos abstraídos)
+                co2_out     = 440 tm/año (emisión, punto educativo)
+            La emisión inherente de CO₂ es ~0.44 kg CO₂ / kg CaO —
+            huella de carbono crítica para la industria de cemento.
+        """
+        tk_in   = self._add_example_block("TK-101", "Storage tank — cone roof", 300.0,  60, 280)
+        fh101   = self._add_example_block("FH-101", "Fired heater — non-reformer", 8000.0, 260, 280)
+        r101    = self._add_example_block("R-101",  "Reactor — jacketed non-agit.", 25.0, 460, 280)
+        e101    = self._add_example_block("E-101",  "Heat exch. — air cooler",   200.0, 660, 360)
+        tk_cem  = self._add_example_block("TK-102", "Storage tank — cone roof", 300.0, 860, 360)
+        tk_co2  = self._add_example_block("TK-103", "Storage tank — cone roof", 100.0, 460,  60)
+
+        # R-101 — Modo B con R029 placeholder
+        self.fs.blocks[r101].reactions = ["R029_PLACEHOLDER"]
+        self.fs.blocks[r101].T_op_K    = 1723.0
+        self.fs.blocks[r101].P_op_bar  = 1.0
+        # ΔH = +178.3 kJ/mol_CaCO3 × 9.99 kmol/y = +1781 GJ/y
+        # Por kg input (1000 t/y): +1781 kJ/kg (endotérmico fuerte).
+        self.fs.blocks[r101].heat_of_reaction = +1781.0
+
+        # Composición salida horno (mezcla sólido + gas)
+        clk_mix = {"clinker": 0.560, "co2": 0.440}
+
+        # Caliza al precalentador
+        self._add_example_stream(tk_in, fh101, "S-caliza", 1000, role="feed",
+                                 src_port="salida", dst_port="proceso_in",
+                                 price=15.0, T=25,
+                                 main_component="limestone", phase="liquid",
+                                 composition={"limestone": 1.0})
+        # Caliza precalentada (~900 °C, entrada al horno)
+        self._add_example_stream(fh101, r101, "S-1", 1000,
+                                 src_port="proceso_out", dst_port="alimentacion",
+                                 T=900,
+                                 main_component="limestone", phase="liquid",
+                                 composition={"limestone": 1.0})
+        # Salida del horno: clínker + CO2 (Modo B)
+        # Sólido (clínker) por el "liquido" port
+        self._add_example_stream(r101, e101, "S-clinker", 560,
+                                 src_port="producto", dst_port="proceso_in",
+                                 T=1450,
+                                 main_component="clinker", phase="liquid",
+                                 composition={"clinker": 1.0})
+        # CO2 emisión (por puerto distinto — usamos util_in/util_out
+        # del REACTOR_PORTS para el venteo de gases)
+        self._add_example_stream(r101, tk_co2, "S-CO2-emit", 440, role="waste",
+                                 src_port="util_out", dst_port="entrada",
+                                 price=0.0, T=1450,
+                                 main_component="co2", phase="gas",
+                                 composition={"co2": 1.0})
+        # Clínker enfriado al silo (la molienda se abstrae)
+        self._add_example_stream(e101, tk_cem, "S-cemento", 560, role="product",
+                                 src_port="proceso_out", dst_port="entrada",
+                                 price=85.0, T=60,
+                                 main_component="clinker", phase="liquid",
+                                 composition={"clinker": 1.0})
+
+        self._set_example_labor(180_000)
+        self._add_example_extra("Combustible horno (coque + biomasa)",
+                                flowrate=120, price=160.0,
+                                stream="Utilities")
+
+        from flowsheet_solver import auto_set_duties_from_thermo
+        auto_set_duties_from_thermo(self.fs)
+
+
+    def _example_glass(self):
+        """TIER 1 — Vidrio sodocálcico (horno de fusión).
+
+        Sin reacción en DB — fusión a vidrio es proceso físico-químico
+        complejo dominado por energía (calor de fusión ≈ 2200 MJ/t).
+        Modo B con composición de salida declarada respetando balance
+        de masa: la fusión libera CO₂ proveniente de soda ash y caliza
+        (descarbonatación in-situ).
+
+        Topología:
+            TK-arena + TK-soda + TK-caliza → M-101 (mezcla batch) →
+            R-101 (horno fusión Modo B, ~1500 °C) → E-101 (cooler) →
+            TK-vidrio (producto) + TK-CO2 (emisión)
+
+        Basis 1000 tm/año batch típico {silica 0.72, soda_ash 0.14,
+        limestone 0.14}.  Cálculo de CO₂ liberado:
+            Na2CO3 → Na2O + CO2:  0.14·(44/106) = 0.058 → 58 t/y CO₂
+            CaCO3  → CaO  + CO2:  0.14·(44/100) = 0.062 → 62 t/y CO₂
+        Vidrio formado = 1000 − 120 = 880 t/y.
+        """
+        tk_si   = self._add_example_block("TK-101", "Storage tank — cone roof", 200.0,  60, 200)
+        tk_sd   = self._add_example_block("TK-102", "Storage tank — cone roof", 150.0,  60, 360)
+        tk_lm   = self._add_example_block("TK-103", "Storage tank — cone roof", 150.0,  60, 520)
+        m101    = self._add_example_block("M-101",  "Mixer — static",            10.0, 280, 360)
+        r101    = self._add_example_block("R-101",  "Reactor — jacketed non-agit.", 30.0, 500, 360)
+        e101    = self._add_example_block("E-101",  "Heat exch. — air cooler",   100.0, 720, 460)
+        tk_gl   = self._add_example_block("TK-104", "Storage tank — cone roof", 250.0, 920, 460)
+        tk_co2  = self._add_example_block("TK-105", "Storage tank — cone roof", 100.0, 500, 100)
+
+        # R-101 — Modo B fusión vidrio (sin reacción en DB)
+        self.fs.blocks[r101].reactions = ["R_FUSION_GLASS"]
+        self.fs.blocks[r101].T_op_K    = 1773.0      # 1500 °C
+        self.fs.blocks[r101].P_op_bar  = 1.0
+        # Calor de fusión ≈ 2200 MJ/t × 1000 t/y = 2.2e6 GJ/y = 70 kW continuo.
+        # Endotérmico: +2200 kJ/kg input.  Duty bloqueado.
+        self._set_block_duty(r101, +250)
+        self.fs.blocks[r101].duty_locked = True
+        self.fs.blocks[r101].heat_of_reaction = +2200.0
+
+        # Composición del batch al mixer
+        batch_mix = {"silica": 0.72, "soda_ash": 0.14, "limestone": 0.14}
+
+        # Feeds
+        self._add_example_stream(tk_si, m101, "S-silica", 720, role="feed",
+                                 src_port="salida", dst_port="alimentacion_1",
+                                 price=30.0, T=25,
+                                 main_component="silica", phase="liquid",
+                                 composition={"silica": 1.0})
+        self._add_example_stream(tk_sd, m101, "S-soda", 140, role="feed",
+                                 src_port="salida", dst_port="alimentacion_2",
+                                 price=350.0, T=25,
+                                 main_component="soda_ash", phase="liquid",
+                                 composition={"soda_ash": 1.0})
+        self._add_example_stream(tk_lm, m101, "S-lime", 140, role="feed",
+                                 src_port="salida", dst_port="alimentacion_2",
+                                 price=15.0, T=25,
+                                 main_component="limestone", phase="liquid",
+                                 composition={"limestone": 1.0})
+        # Mezcla batch al horno
+        self._add_example_stream(m101, r101, "S-batch", 1000,
+                                 src_port="producto", dst_port="alimentacion",
+                                 T=25,
+                                 composition=batch_mix,
+                                 main_component="silica", phase="liquid")
+        # Vidrio fundido al cooler
+        self._add_example_stream(r101, e101, "S-melt", 880,
+                                 src_port="producto", dst_port="proceso_in",
+                                 T=1500,
+                                 main_component="glass", phase="liquid",
+                                 composition={"glass": 1.0})
+        # CO2 emisión (soda + caliza descarbonatadas)
+        self._add_example_stream(r101, tk_co2, "S-CO2", 120, role="waste",
+                                 src_port="util_out", dst_port="entrada",
+                                 price=0.0, T=1500,
+                                 main_component="co2", phase="gas",
+                                 composition={"co2": 1.0})
+        # Vidrio sólido (~25 °C tras conformado abstraído)
+        self._add_example_stream(e101, tk_gl, "S-glass", 880, role="product",
+                                 src_port="proceso_out", dst_port="entrada",
+                                 price=400.0, T=200,
+                                 main_component="glass", phase="liquid",
+                                 composition={"glass": 1.0})
+
+        self._set_example_labor(150_000)
+        self._add_example_extra("Gas natural (horno)",
+                                flowrate=180, price=180.0,
+                                stream="Utilities")
+
+        from flowsheet_solver import auto_set_duties_from_thermo
+        auto_set_duties_from_thermo(self.fs)
+
+
     def open_json(self):
         path = filedialog.askopenfilename(
             title="Abrir diagrama",

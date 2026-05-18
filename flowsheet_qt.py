@@ -4143,6 +4143,19 @@ class FlowsheetMainWindow(QMainWindow):
                               "Polietileno LDPE (autoclave HP)",
                               "100 — Polímeros",
                               "PFD-LDPE-001"),
+            # ── Catálogo educativo Lote 4a (inorgánica + materiales) ──
+            "chloralkali_hcl": (TkEditor._example_chloralkali_hcl,
+                              "Cloro-álcali compacto + HCl",
+                              "100 — Inorgánica pesada",
+                              "PFD-CAHCL-001"),
+            "cement":       (TkEditor._example_cement,
+                              "Cemento Portland (horno rotatorio)",
+                              "100 — Materiales",
+                              "PFD-CEM-001"),
+            "glass":        (TkEditor._example_glass,
+                              "Vidrio sodocálcico (horno de fusión)",
+                              "100 — Materiales",
+                              "PFD-GLASS-001"),
         }
         entry = builder_map.get(key)
         if entry is None:

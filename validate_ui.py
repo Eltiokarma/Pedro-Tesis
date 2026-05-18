@@ -70,6 +70,10 @@ def run_all_examples():
         # ── Catálogo educativo Lote 3 (química fina + polímeros) ──
         '_example_acetic_acid',
         '_example_polyethylene',
+        # ── Catálogo educativo Lote 4a (inorgánica + materiales) ──
+        '_example_chloralkali_hcl',
+        '_example_cement',
+        '_example_glass',
     ]
     print(f"\n{'='*92}")
     print("VALIDACIÓN HEADLESS — todos los ejemplos del flowsheet")
