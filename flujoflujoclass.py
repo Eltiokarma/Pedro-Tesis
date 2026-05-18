@@ -1149,6 +1149,10 @@ class ReportGenerator:
                 Convención FC=[0]: planta instantánea
                 (0 años de construcción, opera desde el
                 año 1).
+                Convención Opción B (modo batch): clave
+                opcional schedule["batch_recipe"] de tipo
+                batch_schedule.BatchRecipe activa el
+                puente Capa 3.
             vida_operacion: años de operación de planta
                 (la construcción NO cuenta).
 
@@ -1160,6 +1164,13 @@ class ReportGenerator:
                 (sin cambios hasta el final).
             cutoff: corte para reporte (steady_start + 3).
             años_display: etiquetas de año para reporte.
+            batch: (OPCIONAL — solo si batch_recipe pasó por
+                el puente) metadata del ciclo batch:
+                cycle_time_s, batches_per_year,
+                annual_production_kg, utility_peaks, etc.
+                Los consumidores existentes (CashFlowModel,
+                results_ui, reporte Excel) NO leen esta
+                clave — lectura defensiva con .get().
         """
 
         # =========================
@@ -1167,6 +1178,12 @@ class ReportGenerator:
         # =========================
         fc_input = schedule["FC"]
         vcop_input = schedule["VCOP"]
+        # Opción B — modo batch (clave opcional, retrocompatible).
+        # Si schedule trae 'batch_recipe' (BatchRecipe de Capa 1),
+        # activamos el puente.  Caso contrario, comportamiento
+        # legacy intacto byte-idéntico.
+        _batch_recipe = schedule.get("batch_recipe")
+        _batch_availability = schedule.get("batch_availability", 0.90)
 
         # =========================
         # DETECTAR TIPO
@@ -1315,9 +1332,37 @@ class ReportGenerator:
         cutoff = steady_start + 3 #2
 
         # =========================
+        # PUENTE BATCH (Opción B — Capa 3)
+        # Estrictamente aditivo: si schedule trae 'batch_recipe',
+        # calculamos producción anual equivalente vía Capa 1 y la
+        # exponemos como clave 'batch' del dict de retorno.  El
+        # cash flow sigue usando VCOP / FCOP / WL con su semántica
+        # actual (la capacidad nominal de la planta es la base, y
+        # el batch alimenta esa capacidad implícitamente via la
+        # producción anual equivalente que ya está en el modelo
+        # económico — el factor de utilización VCOP no cambia
+        # porque la vida del proyecto es la misma).  Esta clave
+        # extra la lee el dashboard de forma defensiva.
+        # =========================
+        batch_block = None
+        if _batch_recipe is not None:
+            try:
+                import batch_schedule as _bs
+                batch_block = _bs.to_schedule_block(
+                    _batch_recipe, availability=_batch_availability
+                )
+            except (ImportError, ValueError) as _e:
+                # Falla en Capa 1 (módulo ausente o receta inválida):
+                # NO romper el cash flow estacionario — solo logueamos
+                # el fallo de forma silenciosa.  Sin batch_block, los
+                # consumers ven schedule sin la clave 'batch' y operan
+                # como pre-batch.
+                batch_block = {"error": f"{type(_e).__name__}: {_e}"}
+
+        # =========================
         # OUTPUT
         # =========================
-        return {
+        result = {
             "FC": fc,
             "VCOP": vcop_pct,
             "FCOP": fcop,
@@ -1327,3 +1372,6 @@ class ReportGenerator:
             "t_start": t_start,
             "años_display": años_display
         }
+        if batch_block is not None:
+            result["batch"] = batch_block
+        return result
