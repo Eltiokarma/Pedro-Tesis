@@ -64,6 +64,9 @@ def run_all_examples():
         '_example_pasteurizer',
         '_example_pineapple_juice',
         '_example_potato_chips',
+        # ── Catálogo educativo Lote 2 (bioproceso + química gratis) ──
+        '_example_beer_brewing',
+        '_example_sulfuric_acid',
     ]
     print(f"\n{'='*92}")
     print("VALIDACIÓN HEADLESS — todos los ejemplos del flowsheet")

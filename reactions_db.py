@@ -52,8 +52,8 @@ FORMULA_TO_THERMO = {
     'H2':        'hydrogen',
     'N2':        'nitrogen',
     'NH3':       'ammonia',
-    'SO2':       'so2',
-    'SO3':       None,            # no está en thermo_db
+    'SO2':       'so2',           # ya existe en thermo_db.md
+    'SO3':       None,             # no está en thermo_db.md aún
     'H2S':       'h2s',
     'MDEA':      'mdea',
     # Orgánicos

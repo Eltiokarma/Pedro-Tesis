@@ -4125,6 +4125,15 @@ class FlowsheetMainWindow(QMainWindow):
                               "Papas fritas (freído industrial)",
                               "100 — Alimentaria",
                               "PFD-CHIP-001"),
+            # ── Catálogo educativo Lote 2 (bioproceso + química gratis) ──
+            "beer":         (TkEditor._example_beer_brewing,
+                              "Cervecería — fermentación batch→continuo",
+                              "100 — Bioproceso",
+                              "PFD-BEER-001"),
+            "sulfuric":     (TkEditor._example_sulfuric_acid,
+                              "Ácido sulfúrico (contacto, V₂O₅)",
+                              "100 — Inorgánica pesada",
+                              "PFD-H2SO4-001"),
         }
         entry = builder_map.get(key)
         if entry is None:

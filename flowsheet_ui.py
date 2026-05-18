@@ -4460,6 +4460,225 @@ class FlowsheetEditor:
         auto_set_duties_from_thermo(self.fs)
 
 
+    # ==================================================================
+    # Lote 2 — Bioproceso + química gratis (Tier 1, R006/R007 ya en DB)
+    # ==================================================================
+
+    def _example_beer_brewing(self):
+        """TIER 1 — Cervecería (fermentación + venteo CO₂).
+
+        ⏱ PROCESO BATCH MODELADO COMO CONTINUO EQUIVALENTE: en la
+        industria la fermentación corre por lotes (cargas discretas
+        de ~5–10 días).  Aquí se modela como flujo continuo usando
+        el caudal promedio anual (producción/8760 h), técnica
+        estándar de simulación en estado estacionario (Aspen/HYSYS
+        steady-state).  El balance de masa y energía es correcto;
+        NO se modela la dinámica temporal del lote.
+
+        Química asociada (R007 en reactions_db.md, irreversible):
+            1 Glucose(aq) → 2 C2H5OH(aq) + 2 CO2(g)
+            ΔH ≈ −101.5 kJ/mol  (exotérmica suave)
+
+        Modo B (composición declarada).  Justificación: el solver
+        de equilibrio Gibbs no soporta reacciones irreversibles
+        (Keq → ∞); por eso R007 se referencia como placeholder en
+        block.reactions y la composición de salida se impone a mano
+        respetando estequiometría con conversión 95 %.
+
+        Topología:
+            TK-mosto → R-101 (fermentador) → V-101 (venteo CO₂)
+                                                 → E-101 (pasteur.) → TK-cerveza
+
+        Basis 1000 tm/año mosto = {water 0.85, glucose 0.15}.
+        Balance (95 % conv glucosa):
+            150 g glucose × 0.95 = 142.5 reacted → 72.84 EtOH + 69.66 CO2
+            CO2 venteado: 69.66 tm/año
+            Cerveza fermentada: 850 H2O + 7.5 glucose + 72.84 EtOH ≈ 930.3 tm/año
+            Total: 930.3 + 69.66 = 1000.0 ✓
+        """
+        tk_in   = self._add_example_block("TK-101", "Storage tank — cone roof", 250.0,  80, 240)
+        r101    = self._add_example_block("R-101", "Reactor — jacketed agitated", 60.0, 260, 240)
+        v101    = self._add_example_block("V-101", "Vessel — vertical",            12.0, 460, 240)
+        tk_co2  = self._add_example_block("TK-102", "Storage tank — cone roof",    40.0, 460,  80)
+        e101    = self._add_example_block("E-101", "Heat exch. — floating head",   50.0, 640, 240)
+        tk_out  = self._add_example_block("TK-103", "Storage tank — cone roof",   200.0, 820, 240)
+
+        # Modo B: placeholder R007 para marcar el bloque como reactor
+        # de fermentación (educativo), pero los outlets se declaran a mano.
+        self.fs.blocks[r101].reactions = ["R007_PLACEHOLDER"]
+        self.fs.blocks[r101].T_op_K    = 295.0
+        self.fs.blocks[r101].P_op_bar  = 1.0
+        # Calor de reacción para que el solver calcule el duty del chaqueta:
+        # ΔH = -101.52 kJ/mol_glucose × (142.5 g/y / 180.16 g/mol) = -80.32 GJ/y
+        # = -2.55 kW (continuo).  Como heat_of_reaction es kJ/kg_input_total:
+        # -80.32e6 / 1000e3 = -80.3 kJ/kg input.
+        self.fs.blocks[r101].heat_of_reaction = -80.3
+
+        mosto      = {"water": 0.85, "glucose": 0.15}
+        fermented  = {"water": 0.850, "glucose": 0.0075,
+                      "ethanol": 0.0728, "co2": 0.0697}
+        beer_liq   = {"water": 0.9137, "glucose": 0.0081, "ethanol": 0.0783}
+
+        # Feed: mosto azucarado (~15 °Brix)
+        self._add_example_stream(tk_in, r101, "S-mosto", 1000, role="feed",
+                                 src_port="salida",   dst_port="alimentacion",
+                                 price=90.0, T=20,
+                                 composition=mosto,
+                                 main_component="water", phase="liquid")
+        # Post-fermentador: composición declarada (Modo B)
+        self._add_example_stream(r101, v101, "S-fermented", 1000,
+                                 src_port="producto", dst_port="alimentacion",
+                                 T=22,
+                                 composition=fermented,
+                                 main_component="water", phase="liquid")
+        # Venteo CO₂ (subproducto vendible — refrescos, secado, etc.)
+        self._add_example_stream(v101, tk_co2, "S-CO2", 69.66, role="product",
+                                 src_port="vapor",    dst_port="entrada",
+                                 price=120.0, T=22,
+                                 main_component="co2", phase="gas",
+                                 composition={"co2": 1.0})
+        # Líquido fermentado al pasteurizador (sin CO2 ya)
+        self._add_example_stream(v101, e101, "S-vino", 930.3,
+                                 src_port="liquido",  dst_port="tube_in",
+                                 T=22,
+                                 composition=beer_liq,
+                                 main_component="water", phase="liquid")
+        # Cerveza pasteurizada a 4 °C (producto envasado)
+        self._add_example_stream(e101, tk_out, "S-cerveza", 930.3, role="product",
+                                 src_port="tube_out", dst_port="entrada",
+                                 price=1500.0, T=4,
+                                 composition=beer_liq,
+                                 main_component="water", phase="liquid")
+
+        # Levadura (consumible)
+        self._add_example_extra("Levadura (S. cerevisiae)",
+                                flowrate=10.0, price=2_500.0,
+                                stream="Consumables")
+
+        from flowsheet_solver import auto_set_duties_from_thermo
+        auto_set_duties_from_thermo(self.fs)
+
+
+    def _example_sulfuric_acid(self):
+        """TIER 1 — Ácido sulfúrico por proceso de contacto.
+
+        Etapa 1 — Convertidor catalítico (R006 referenciada):
+            2 SO2(g) + O2(g) → 2 SO3(g)   ΔH ≈ −198 kJ/mol O2
+            T ≈ 770 K, P ≈ 1.2 bar, catalizador V₂O₅, conv ~98 %.
+            R006 está derivada en Capa 3 pero SO3 no existe en
+            thermo_db.md aún, por lo que se modela en Modo B con
+            outputs declarados respetando estequiometría.
+
+        Etapa 2 — Torre de absorción:
+            SO3(g) + H2O(l) → H2SO4(l)
+            Vessel Modo B (hidratación NO en DB), outlets declarados
+            y duty bloqueado (reacción muy exotérmica).
+
+        Topología:
+            TK-SO2 + Aire → R-101 (Modo B) → E-101 → ABS-101 (Modo B) → TK-H2SO4
+                                                          ↑
+                                                       H2O (feed)
+
+        Basis 1000 tm/año SO2 → ~1500 tm/año H2SO4 (con conv ~98 %).
+        Balance R-101 (98 % conv de SO2):
+            In:  1000 SO2 + 248 O2 + 817 N2 = 2065 tm/año
+            React: 980 SO2 + 245 O2 → 1225 SO3
+            Out: 20 SO2 + 3 O2 + 817 N2 + 1225 SO3 = 2065 ✓
+        Balance ABS-101:  1225 SO3 + 276 H2O → 1501 H2SO4
+            Venteos: 20 SO2 + 3 O2 + 817 N2 = 840 tm/año (waste)
+            Total OUT: 1501 + 840 = 2341 vs IN 2065 + 276 = 2341 ✓
+        """
+        tk_so2  = self._add_example_block("TK-101", "Storage tank — cone roof",  80.0,  80, 200)
+        tk_air  = self._add_example_block("TK-102", "Storage tank — cone roof",  80.0,  80, 380)
+        m101    = self._add_example_block("M-101",  "Mixer — static",            10.0, 240, 290)
+        r101    = self._add_example_block("R-101",  "Reactor — jacketed non-agit.", 35.0, 420, 290)
+        e101    = self._add_example_block("E-101",  "Heat exch. — floating head", 80.0, 600, 290)
+        tk_h2o  = self._add_example_block("TK-103", "Storage tank — cone roof",  80.0, 600, 480)
+        abs101  = self._add_example_block("ABS-101","Vessel — vertical",          20.0, 780, 380)
+        tk_acid = self._add_example_block("TK-104", "Storage tank — cone roof", 200.0, 980, 380)
+        tk_vent = self._add_example_block("TK-105", "Storage tank — cone roof", 100.0, 980, 200)
+
+        # Convertidor R-101 — Modo B con R006 como referencia educativa.
+        self.fs.blocks[r101].reactions = ["R006_PLACEHOLDER"]
+        self.fs.blocks[r101].T_op_K    = 770.0
+        self.fs.blocks[r101].P_op_bar  = 1.2
+        # Calor R006 ≈ -198 kJ/mol O2 reacted = -245/32 mol O2 = 7.66 kmol/y
+        # × -198 kJ/mol = -1517 GJ/y = -48.1 kW continuo.  Por kg input
+        # (2065 t/y): -1517e6/2065e3 = -734 kJ/kg.
+        self.fs.blocks[r101].heat_of_reaction = -734.0
+
+        # Composiciones (en thermo_db keys: so2, oxygen, nitrogen, water)
+        air_comp = {"oxygen": 0.233, "nitrogen": 0.767}
+        # Out R-101 (98 % conv SO2):  20 SO2 + 3 O2 + 817 N2 + 1225 SO3 = 2065
+        conv_out = {"so2": 0.0097, "oxygen": 0.0015,
+                    "nitrogen": 0.3956, "sulfur_trioxide": 0.5933}
+        # Venteo absorción: 20 SO2 + 3 O2 + 817 N2 = 840  (sin SO3 residual)
+        vent     = {"so2": 0.0238, "oxygen": 0.0036, "nitrogen": 0.9726}
+
+        # Feed SO₂ puro (gas industrial, 1000 tm/año)
+        self._add_example_stream(tk_so2, m101, "S-SO2", 1000, role="feed",
+                                 src_port="salida",   dst_port="alimentacion_1",
+                                 price=180.0, T=120,
+                                 main_component="so2", phase="gas",
+                                 composition={"so2": 1.0})
+        # Aire para el convertidor (248 O2 + 817 N2 = 1065 tm/año)
+        self._add_example_stream(tk_air, m101, "S-aire", 1065, role="feed",
+                                 src_port="salida",   dst_port="alimentacion_2",
+                                 price=0.0, T=25,
+                                 composition=air_comp,
+                                 main_component="nitrogen", phase="gas")
+        # Mezcla al convertidor
+        self._add_example_stream(m101, r101, "S-1", 2065,
+                                 src_port="producto", dst_port="alimentacion",
+                                 T=420,
+                                 composition={"so2": 0.484, **{k: v*(1-0.484) for k,v in air_comp.items()}},
+                                 main_component="nitrogen", phase="gas")
+        # Salida del convertidor — composición declarada (Modo B)
+        self._add_example_stream(r101, e101, "S-conv", 2065,
+                                 src_port="producto", dst_port="tube_in",
+                                 T=500,
+                                 composition=conv_out,
+                                 main_component="sulfur_trioxide", phase="gas")
+        # Enfriado para absorción
+        self._add_example_stream(e101, abs101, "S-cool", 2065,
+                                 src_port="tube_out", dst_port="alimentacion",
+                                 T=80,
+                                 composition=conv_out,
+                                 main_component="sulfur_trioxide", phase="gas")
+        # Agua de absorción (estequiométrica al SO3 producido)
+        self._add_example_stream(tk_h2o, abs101, "S-H2O", 276, role="feed",
+                                 src_port="salida",   dst_port="alimentacion",
+                                 price=0.5, T=25,
+                                 main_component="water", phase="liquid",
+                                 composition={"water": 1.0})
+        # H2SO4 producto 98 % (Modo B)
+        self._add_example_stream(abs101, tk_acid, "S-H2SO4", 1501, role="product",
+                                 src_port="liquido", dst_port="entrada",
+                                 price=140.0, T=70,
+                                 composition={"sulfuric_acid": 0.98, "water": 0.02},
+                                 main_component="sulfuric_acid", phase="liquid")
+        # Venteo gases inertes (N2 + trazas SO2/O2)
+        self._add_example_stream(abs101, tk_vent, "S-vent", 840, role="waste",
+                                 src_port="vapor",   dst_port="entrada",
+                                 price=0.0, T=70,
+                                 composition=vent,
+                                 main_component="nitrogen", phase="gas")
+
+        # ABS-101: hidratación SO3+H2O→H2SO4 muy exotérmica ≈ -132 kJ/mol.
+        # 1501 tm/año H2SO4 ≈ 15.30 kmol/h × -132 kJ/mol = -2020 GJ/y =
+        # -64 kW continuo.
+        self._set_block_duty(abs101, -64)
+        self.fs.blocks[abs101].duty_locked = True
+
+        # Catalizador V2O5 (consumible periódico)
+        self._add_example_extra("Catalizador V₂O₅",
+                                flowrate=0.4, price=15_000.0,
+                                stream="Consumables")
+
+        from flowsheet_solver import auto_set_duties_from_thermo
+        auto_set_duties_from_thermo(self.fs)
+
+
     def open_json(self):
         path = filedialog.askopenfilename(
             title="Abrir diagrama",
