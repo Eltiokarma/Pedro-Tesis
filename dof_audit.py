@@ -120,15 +120,18 @@ def _determinable_masses(fs: Flowsheet) -> Set[int]:
                                 det.add(s.id); changed = True
                         continue
 
-            # ── Caso flash_active / column_active: solver propaga
-            # también, conservando masa.  Si los inputs son
-            # determinables y al menos 1 output declarado, el resto
-            # se computa.
-            if getattr(b, "flash_active", False) \
-               or getattr(b, "column_active", False):
+            # ── Caso flash_active / column_active / separadores
+            # mecánicos: solver dedicado propaga conservando masa.
+            # Si los inputs son determinables, los outputs los pone
+            # el solver salvo que estén lockeados.
+            if (getattr(b, "flash_active", False)
+                    or getattr(b, "column_active", False)
+                    or getattr(b, "separator_active", False)
+                    or getattr(b, "dryer_active", False)
+                    or getattr(b, "crystallizer_active", False)
+                    or getattr(b, "evaporator_active", False)
+                    or getattr(b, "cyclone_active", False)):
                 if all(s.id in det for s in ins):
-                    # El flash/column distribuye via VLE/FUG; si los
-                    # outputs no están lockeados, el solver los pone.
                     for s in outs:
                         if s.id not in det:
                             det.add(s.id); changed = True
@@ -172,7 +175,12 @@ def _determinable_compositions(fs: Flowsheet) -> Set[int]:
             chem_aware = (bool(getattr(b, "reactions", None))
                           or getattr(b, "splitter_active", False)
                           or getattr(b, "flash_active", False)
-                          or getattr(b, "column_active", False))
+                          or getattr(b, "column_active", False)
+                          or getattr(b, "separator_active", False)
+                          or getattr(b, "dryer_active", False)
+                          or getattr(b, "crystallizer_active", False)
+                          or getattr(b, "evaporator_active", False)
+                          or getattr(b, "cyclone_active", False))
             ins_have = any(s.id in det for s in ins)
             if chem_aware or ins_have:
                 for s in outs:
