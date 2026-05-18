@@ -154,6 +154,43 @@ HEAT_INTEGRATION = {
 
 
 # ─────────────────────────────────────────────────────────────
+# COLUMN SIZING DEFAULTS (fuente única para size_tower)
+# ─────────────────────────────────────────────────────────────
+# Parámetros físicos para dimensionar columnas de destilación.
+# size_tower(block, fs) los usa salvo que el Block tenga overrides
+# explícitos (Block.tray_spacing_m, K_souders_brown, etc.).
+#
+#   K_souders_brown:        coeficiente de inundación.
+#                           0.04 = foaming severo / 18" spacing
+#                           0.06 = default conservador (24")
+#                           0.09 = packing estructurado bajo foaming
+#   tray_spacing_m:         distancia entre platos.
+#                           0.46 = 18" (columnas chicas)
+#                           0.60 = 24" (default industrial)
+#                           0.76 = 30" (con foaming)
+#   column_head_height_m:   altura extra para sumidero+cabezal.
+#                           1.5 m mínimo, 3-5 m típico industrial
+#   tray_efficiency:        N_real = N_teorico / eficiencia.
+#                           0.50 = aminas, glycols
+#                           0.65 = etanol/agua (binario polar)
+#                           0.80 = hidrocarburos livianos (refino)
+#                           1.00 = asume etapas reales = teóricas
+#   HETP_m:                 altura equivalente de plato teórico
+#                           (solo empaques).
+#                           0.30 = estructurado Mellapak alta efic.
+#                           0.50 = random Pall rings (default)
+#                           0.80 = random Raschig
+# ─────────────────────────────────────────────────────────────
+COLUMN_DEFAULTS = {
+    "K_souders_brown":       0.06,
+    "tray_spacing_m":        0.6,
+    "column_head_height_m":  3.0,
+    "tray_efficiency":       1.0,
+    "HETP_m":                0.5,
+}
+
+
+# ─────────────────────────────────────────────────────────────
 # COM FORMULA COEFFICIENTS (Turton Eq 8.2)
 # ─────────────────────────────────────────────────────────────
 # COM_d = α·FCI + β·COL + γ·(CUT + CRM + CWT)
@@ -300,6 +337,14 @@ def get_heat_integration_factor() -> float:
     """Factor (0-1) que se aplica al CUT total para reflejar heat
     integration realista.  Ver HEAT_INTEGRATION dict."""
     return HEAT_INTEGRATION["factor"]
+
+
+def get_column_defaults() -> dict:
+    """Defaults canónicos para dimensionamiento de columnas de
+    destilación.  size_tower() los usa salvo que el Block tenga
+    overrides explícitos (Block.tray_spacing_m, K_souders_brown,
+    column_head_height_m, tray_efficiency, HETP_m)."""
+    return dict(COLUMN_DEFAULTS)
 
 
 def set_heat_integration_factor(f: float):
