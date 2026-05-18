@@ -591,6 +591,124 @@ class BlockEditDialog(QDialog):
         flash_layout.addRow("", hint_flash)
         layout.addRow(self.gb_flash)
 
+        # ─────────────────────────────────────────────────────────
+        # SEPARADORES MECÁNICOS — modelos internos (filtro,
+        # centrífuga, secador, cristalizador, evaporador, ciclón).
+        # Cada uno con su QGroupBox visible solo si eq_type coincide.
+        # ─────────────────────────────────────────────────────────
+        eq_lower = (block.eq_type or "").lower()
+        is_separator    = "filter" in eq_lower or "centrifuge" in eq_lower
+        is_dryer        = "dryer" in eq_lower
+        is_crystallizer = "crystallizer" in eq_lower
+        is_evaporator   = "evaporator" in eq_lower
+        is_cyclone      = "cyclone" in eq_lower
+
+        # ---- Filter / Centrifuge ----
+        self.gb_sep = QGroupBox("Separación sólido-líquido (filtro / centrífuga)")
+        self.gb_sep.setVisible(is_separator)
+        sep_layout = QFormLayout(self.gb_sep)
+
+        self.sep_active_cb = QCheckBox("Activar separador automático")
+        self.sep_active_cb.setToolTip(
+            "Si activo: el solver computa torta (cake) y madre\n"
+            "desde solids_recovery + cake_moisture.  Modo dual con\n"
+            "los outputs lockeados (si están lockeados, los respeta)."
+        )
+        self.sep_active_cb.setChecked(getattr(block, "separator_active", False))
+        sep_layout.addRow(self.sep_active_cb)
+
+        self.sep_recov = QDoubleSpinBox()
+        self.sep_recov.setRange(0.0, 1.0); self.sep_recov.setDecimals(3)
+        self.sep_recov.setSingleStep(0.01)
+        self.sep_recov.setValue(getattr(block, "solids_recovery", 0.95))
+        sep_layout.addRow("Solids recovery:", self.sep_recov)
+
+        self.sep_moist = QDoubleSpinBox()
+        self.sep_moist.setRange(0.0, 0.95); self.sep_moist.setDecimals(3)
+        self.sep_moist.setSingleStep(0.01)
+        self.sep_moist.setValue(getattr(block, "cake_moisture", 0.30))
+        sep_layout.addRow("Cake moisture:", self.sep_moist)
+
+        self.sep_solids = QLineEdit()
+        self.sep_solids.setPlaceholderText("sucrose, biomass, ...  (vacío = usar main_component)")
+        self.sep_solids.setText(",".join(getattr(block, "solid_components", []) or []))
+        sep_layout.addRow("Solid components:", self.sep_solids)
+        layout.addRow(self.gb_sep)
+
+        # ---- Dryer ----
+        self.gb_dry = QGroupBox("Secador (Dryer — drum)")
+        self.gb_dry.setVisible(is_dryer)
+        dry_layout = QFormLayout(self.gb_dry)
+        self.dry_active_cb = QCheckBox("Activar secador automático")
+        self.dry_active_cb.setToolTip(
+            "Si activo: el solver computa producto seco a humedad\n"
+            "final declarada + venteo de vapor."
+        )
+        self.dry_active_cb.setChecked(getattr(block, "dryer_active", False))
+        dry_layout.addRow(self.dry_active_cb)
+        self.dry_moist = QDoubleSpinBox()
+        self.dry_moist.setRange(0.0, 0.5); self.dry_moist.setDecimals(3)
+        self.dry_moist.setSingleStep(0.005)
+        self.dry_moist.setValue(getattr(block, "final_moisture", 0.02))
+        dry_layout.addRow("Final moisture:", self.dry_moist)
+        self.dry_comp = QLineEdit()
+        self.dry_comp.setText(getattr(block, "moisture_component", "water"))
+        dry_layout.addRow("Moisture comp:", self.dry_comp)
+        layout.addRow(self.gb_dry)
+
+        # ---- Crystallizer ----
+        self.gb_cry = QGroupBox("Cristalizador")
+        self.gb_cry.setVisible(is_crystallizer)
+        cry_layout = QFormLayout(self.gb_cry)
+        self.cry_active_cb = QCheckBox("Activar cristalizador automático")
+        self.cry_active_cb.setChecked(getattr(block, "crystallizer_active", False))
+        cry_layout.addRow(self.cry_active_cb)
+        self.cry_solute = QLineEdit()
+        self.cry_solute.setText(getattr(block, "solute_component", ""))
+        self.cry_solute.setPlaceholderText("sucrose, urea, ...")
+        cry_layout.addRow("Solute comp:", self.cry_solute)
+        self.cry_yield = QDoubleSpinBox()
+        self.cry_yield.setRange(0.0, 1.0); self.cry_yield.setDecimals(3)
+        self.cry_yield.setSingleStep(0.01)
+        self.cry_yield.setValue(getattr(block, "crystal_yield", 0.80))
+        cry_layout.addRow("Crystal yield:", self.cry_yield)
+        layout.addRow(self.gb_cry)
+
+        # ---- Evaporator ----
+        self.gb_evp = QGroupBox("Evaporador")
+        self.gb_evp.setVisible(is_evaporator)
+        evp_layout = QFormLayout(self.gb_evp)
+        self.evp_active_cb = QCheckBox("Activar evaporador automático")
+        self.evp_active_cb.setChecked(getattr(block, "evaporator_active", False))
+        evp_layout.addRow(self.evp_active_cb)
+        self.evp_cf = QDoubleSpinBox()
+        self.evp_cf.setRange(1.0, 20.0); self.evp_cf.setDecimals(2)
+        self.evp_cf.setSingleStep(0.1)
+        self.evp_cf.setValue(getattr(block, "concentration_factor", 2.0))
+        evp_layout.addRow("Concentration factor:", self.evp_cf)
+        self.evp_comp = QLineEdit()
+        self.evp_comp.setText(getattr(block, "volatile_component", "water"))
+        evp_layout.addRow("Volatile comp:", self.evp_comp)
+        layout.addRow(self.gb_evp)
+
+        # ---- Cyclone ----
+        self.gb_cyc = QGroupBox("Ciclón gas/sólido")
+        self.gb_cyc.setVisible(is_cyclone)
+        cyc_layout = QFormLayout(self.gb_cyc)
+        self.cyc_active_cb = QCheckBox("Activar ciclón automático")
+        self.cyc_active_cb.setChecked(getattr(block, "cyclone_active", False))
+        cyc_layout.addRow(self.cyc_active_cb)
+        self.cyc_eff = QDoubleSpinBox()
+        self.cyc_eff.setRange(0.0, 1.0); self.cyc_eff.setDecimals(3)
+        self.cyc_eff.setSingleStep(0.01)
+        self.cyc_eff.setValue(getattr(block, "collection_efficiency", 0.90))
+        cyc_layout.addRow("Collection efficiency:", self.cyc_eff)
+        self.cyc_solids = QLineEdit()
+        self.cyc_solids.setPlaceholderText("silica, clinker, ...  (vacío = usar main_component)")
+        self.cyc_solids.setText(",".join(getattr(block, "solid_components", []) or []))
+        cyc_layout.addRow("Solid components:", self.cyc_solids)
+        layout.addRow(self.gb_cyc)
+
         # ---- Equipo rotativo (bomba / compresor) ----
         is_pump_or_compr = ("pump" in block.eq_type.lower()
                              or "bomba" in block.eq_type.lower()
@@ -702,6 +820,33 @@ class BlockEditDialog(QDialog):
             self.block.flash_active = bool(self.flash_active_cb.isChecked())
             self.block.flash_T_K = float(self.flash_T.value())
             self.block.flash_P_bar = float(self.flash_P.value())
+
+        # Separadores mecánicos
+        if hasattr(self, "gb_sep") and self.gb_sep.isVisible():
+            self.block.separator_active = bool(self.sep_active_cb.isChecked())
+            self.block.solids_recovery  = float(self.sep_recov.value())
+            self.block.cake_moisture    = float(self.sep_moist.value())
+            txt = self.sep_solids.text().strip()
+            self.block.solid_components = [t.strip() for t in txt.split(",")
+                                             if t.strip()] if txt else []
+        if hasattr(self, "gb_dry") and self.gb_dry.isVisible():
+            self.block.dryer_active       = bool(self.dry_active_cb.isChecked())
+            self.block.final_moisture     = float(self.dry_moist.value())
+            self.block.moisture_component = self.dry_comp.text().strip() or "water"
+        if hasattr(self, "gb_cry") and self.gb_cry.isVisible():
+            self.block.crystallizer_active = bool(self.cry_active_cb.isChecked())
+            self.block.solute_component    = self.cry_solute.text().strip()
+            self.block.crystal_yield       = float(self.cry_yield.value())
+        if hasattr(self, "gb_evp") and self.gb_evp.isVisible():
+            self.block.evaporator_active    = bool(self.evp_active_cb.isChecked())
+            self.block.concentration_factor = float(self.evp_cf.value())
+            self.block.volatile_component   = self.evp_comp.text().strip() or "water"
+        if hasattr(self, "gb_cyc") and self.gb_cyc.isVisible():
+            self.block.cyclone_active         = bool(self.cyc_active_cb.isChecked())
+            self.block.collection_efficiency  = float(self.cyc_eff.value())
+            txt = self.cyc_solids.text().strip()
+            self.block.solid_components = [t.strip() for t in txt.split(",")
+                                             if t.strip()] if txt else []
 
         # Equipo rotativo (pump / compressor)
         if hasattr(self, "gb_rot") and self.gb_rot.isVisible():
