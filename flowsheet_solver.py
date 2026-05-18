@@ -2176,6 +2176,366 @@ def solve_splitters(fs):
     return msgs
 
 
+# ─────────────────────────────────────────────────────────────
+# SEPARADORES MECÁNICOS — modelos internos basados en split/recovery
+# (filtro, centrífuga, secador, cristalizador, evaporador, ciclón)
+# Patrón: respetan locks (mass/composition), conservan masa global +
+# por componente, devuelven List[str] con prefijos ✓/⚠/✗ igual que
+# los solvers existentes.
+# ─────────────────────────────────────────────────────────────
+
+def _pick_feed(fs, b):
+    """Helper: stream de entrada al bloque con mass>0 y composition."""
+    ins = [s for s in fs.streams.values() if s.dst == b.id]
+    return next((s for s in ins
+                   if s.mass_flow > 0 and (s.composition or {})), None)
+
+
+def _pick_outs_by_port(fs, b, primary_port_kws, secondary_port_kws):
+    """Helper: identifica dos outputs de b por nombre de puerto.
+    Devuelve (primary_out, secondary_out).  Si los puertos no
+    coinciden, fallback al orden de aparición."""
+    outs = [s for s in fs.streams.values() if s.src == b.id]
+    if len(outs) < 2:
+        return outs[0] if outs else None, None
+    def _match(s, kws):
+        port = (s.src_port or "").lower()
+        return any(k in port for k in kws)
+    primary = next((s for s in outs if _match(s, primary_port_kws)), None)
+    secondary = next((s for s in outs
+                        if _match(s, secondary_port_kws) and s is not primary),
+                       None)
+    if primary is None and secondary is None:
+        primary, secondary = outs[0], outs[1]
+    elif primary is None:
+        primary = next((s for s in outs if s is not secondary), None)
+    elif secondary is None:
+        secondary = next((s for s in outs if s is not primary), None)
+    return primary, secondary
+
+
+def _comp_masses(stream):
+    """Dict {comp: mass_kg/y} desde stream.composition × mass_flow."""
+    if not stream.composition or stream.mass_flow <= 0:
+        return {}
+    return {c: f * stream.mass_flow for c, f in stream.composition.items()}
+
+
+def _write_output(s_out, total_mass, comp_masses, phase=None):
+    """Setea composition + main_component + mass_flow del stream
+    respetando _is_mass_locked y _is_comp_locked.  comp_masses son
+    masas absolutas; se normalizan a fracciones internamente."""
+    if total_mass <= 0:
+        return
+    if not _is_comp_locked(s_out):
+        comp_frac = {c: m / total_mass for c, m in comp_masses.items()
+                       if m > 1e-12}
+        s_out.composition = comp_frac
+        if comp_frac:
+            s_out.main_component = max(comp_frac, key=comp_frac.get)
+        if phase:
+            s_out.phase = phase
+    if not _is_mass_locked(s_out):
+        s_out.mass_flow = total_mass
+
+
+def solve_separators(fs):
+    """Filtros y centrífugas con separator_active=True.
+
+    Modelo:  feed con sólidos y líquidos → torta (cake) + madre.
+    Parámetros del bloque:
+        solids_recovery:  frac de los sólidos que se recupera en torta
+        cake_moisture:    frac másica de líquido en la torta
+        solid_components: lista de keys consideradas sólido (el resto
+                          se trata como líquido madre)
+    Si solid_components está vacío, usa el main_component del feed
+    como sólido (heurística reasonable para procesos con un sólido
+    dominante: azúcar, sal, almidón, biomasa).
+
+    Puertos:
+        Filter — belt:  producto=torta, venteo=madre
+        Centrifuge — *: solido=torta, liquido=madre
+    """
+    msgs = []
+    for b in fs.blocks.values():
+        if not getattr(b, "separator_active", False):
+            continue
+        feed = _pick_feed(fs, b)
+        if feed is None:
+            continue
+        # Identificar puertos según eq_type
+        if "centrifuge" in (b.eq_type or "").lower():
+            cake_out, mother_out = _pick_outs_by_port(
+                fs, b, ("solido",), ("liquido",))
+        else:
+            cake_out, mother_out = _pick_outs_by_port(
+                fs, b, ("producto",), ("venteo", "liquido"))
+        if cake_out is None or mother_out is None:
+            msgs.append(f"⚠ Separator {b.name}: faltan 2 salidas conectadas")
+            continue
+
+        # Componentes sólido vs líquido
+        solids = set(b.solid_components or [])
+        if not solids and feed.main_component:
+            solids = {feed.main_component}
+        comp_in = _comp_masses(feed)
+        m_solid_total  = sum(m for c, m in comp_in.items() if c in solids)
+        m_liquid_total = sum(m for c, m in comp_in.items() if c not in solids)
+
+        if m_solid_total <= 0:
+            msgs.append(f"⚠ Separator {b.name}: feed no tiene sólidos "
+                         f"(solid_components={list(solids)})")
+            continue
+
+        rec = max(min(b.solids_recovery, 1.0), 0.0)
+        moist = max(min(b.cake_moisture, 0.95), 0.0)
+        # Reparto del sólido
+        m_solid_cake = m_solid_total * rec
+        m_solid_mother = m_solid_total - m_solid_cake
+        # Reparto del líquido (la torta arrastra moist·M_cake_total)
+        if (1 - moist) > 1e-6:
+            m_cake_total = m_solid_cake / (1 - moist)
+        else:
+            m_cake_total = m_solid_cake
+        m_liquid_cake = max(0.0, m_cake_total - m_solid_cake)
+        if m_liquid_cake > m_liquid_total:
+            m_liquid_cake = m_liquid_total      # no inventes líquido
+        m_liquid_mother = m_liquid_total - m_liquid_cake
+
+        # Composición por componente en cada salida
+        cake_masses = {}
+        mother_masses = {}
+        for c, m in comp_in.items():
+            if c in solids:
+                if m_solid_total > 0:
+                    cake_masses[c]   = m * rec
+                    mother_masses[c] = m * (1 - rec)
+            else:
+                if m_liquid_total > 0:
+                    frac = m / m_liquid_total
+                    cake_masses[c]   = m_liquid_cake   * frac
+                    mother_masses[c] = m_liquid_mother * frac
+        m_cake_final   = sum(cake_masses.values())
+        m_mother_final = sum(mother_masses.values())
+        _write_output(cake_out,   m_cake_final,   cake_masses,   phase="liquid")
+        _write_output(mother_out, m_mother_final, mother_masses, phase="liquid")
+        msgs.append(
+            f"✓ Separator {b.name}: cake={m_cake_final:.0f}, "
+            f"mother={m_mother_final:.0f}, recov={rec:.2f}, "
+            f"moist_cake={moist:.2f}"
+        )
+    return msgs
+
+
+def solve_dryers(fs):
+    """Secadores con dryer_active=True (Dryer — drum).
+
+    Modelo:  feed húmedo → producto seco a final_moisture + venteo
+    de vapor del moisture_component.
+
+    Puertos: alimentacion → producto (seco) + venteo (vapor agua).
+    """
+    msgs = []
+    for b in fs.blocks.values():
+        if not getattr(b, "dryer_active", False):
+            continue
+        feed = _pick_feed(fs, b)
+        if feed is None:
+            continue
+        dry_out, vent_out = _pick_outs_by_port(
+            fs, b, ("producto",), ("venteo", "vapor"))
+        if dry_out is None or vent_out is None:
+            msgs.append(f"⚠ Dryer {b.name}: faltan 2 salidas conectadas")
+            continue
+
+        moist_c = b.moisture_component or "water"
+        target_frac = max(min(b.final_moisture, 0.5), 0.0)
+        comp_in = _comp_masses(feed)
+        m_moist_in = comp_in.get(moist_c, 0.0)
+        m_dry_solids = sum(m for c, m in comp_in.items() if c != moist_c)
+
+        if m_moist_in <= 0:
+            msgs.append(f"⚠ Dryer {b.name}: feed sin '{moist_c}' "
+                         f"(nada que evaporar)")
+            continue
+        # M_dry_out_total: producto incluye solids + final_moisture·total
+        if (1 - target_frac) > 1e-6:
+            m_dry_out = m_dry_solids / (1 - target_frac)
+        else:
+            m_dry_out = m_dry_solids
+        m_moist_in_dry = m_dry_out * target_frac
+        if m_moist_in_dry > m_moist_in:
+            m_moist_in_dry = m_moist_in    # final_moisture inalcanzable
+        m_vapor = m_moist_in - m_moist_in_dry
+
+        # Composición del producto seco
+        dry_masses = {c: m for c, m in comp_in.items() if c != moist_c}
+        if m_moist_in_dry > 0:
+            dry_masses[moist_c] = m_moist_in_dry
+        _write_output(dry_out, m_dry_out, dry_masses, phase="liquid")
+        _write_output(vent_out, m_vapor, {moist_c: m_vapor}, phase="vapor")
+        msgs.append(
+            f"✓ Dryer {b.name}: dry={m_dry_out:.0f} ({target_frac*100:.1f}% "
+            f"{moist_c}), vapor={m_vapor:.0f}"
+        )
+    return msgs
+
+
+def solve_crystallizers(fs):
+    """Cristalizadores con crystallizer_active=True.
+
+    Modelo:  solute_component cristaliza con crystal_yield; el resto
+    + solvente + impurezas van al licor madre.
+
+    Puertos: alimentacion → producto (cristales) + venteo (madre).
+    """
+    msgs = []
+    for b in fs.blocks.values():
+        if not getattr(b, "crystallizer_active", False):
+            continue
+        feed = _pick_feed(fs, b)
+        if feed is None:
+            continue
+        xtal_out, mother_out = _pick_outs_by_port(
+            fs, b, ("producto",), ("venteo", "liquido"))
+        if xtal_out is None or mother_out is None:
+            msgs.append(f"⚠ Crystallizer {b.name}: faltan 2 salidas conectadas")
+            continue
+
+        solute = b.solute_component or feed.main_component
+        if not solute:
+            msgs.append(f"⚠ Crystallizer {b.name}: solute_component vacío")
+            continue
+        yield_ = max(min(b.crystal_yield, 1.0), 0.0)
+        comp_in = _comp_masses(feed)
+        m_solute_in = comp_in.get(solute, 0.0)
+        if m_solute_in <= 0:
+            msgs.append(f"⚠ Crystallizer {b.name}: feed sin '{solute}'")
+            continue
+        m_xtal = m_solute_in * yield_
+        m_solute_mother = m_solute_in - m_xtal
+        # Cristales = puro solute (modelo simple); madre = resto del feed
+        xtal_masses = {solute: m_xtal}
+        mother_masses = {c: m for c, m in comp_in.items() if c != solute}
+        if m_solute_mother > 0:
+            mother_masses[solute] = m_solute_mother
+        m_mother = sum(mother_masses.values())
+        _write_output(xtal_out, m_xtal, xtal_masses, phase="liquid")
+        _write_output(mother_out, m_mother, mother_masses, phase="liquid")
+        msgs.append(
+            f"✓ Crystallizer {b.name}: xtals={m_xtal:.0f} "
+            f"({solute}, yield={yield_:.2f}), mother={m_mother:.0f}"
+        )
+    return msgs
+
+
+def solve_evaporators(fs):
+    """Evaporadores con evaporator_active=True.
+
+    Modelo:  feed → concentrado con concentration_factor (ratio de
+    composición de sólidos) + vapor de volatile_component.
+
+    Topología: la masa total se reduce M_out_total = M_in / CF;
+    la diferencia se evapora como volatile_component puro.
+
+    Puertos: alimentacion → producto (concentrado) + venteo (vapor).
+    """
+    msgs = []
+    for b in fs.blocks.values():
+        if not getattr(b, "evaporator_active", False):
+            continue
+        feed = _pick_feed(fs, b)
+        if feed is None:
+            continue
+        conc_out, vap_out = _pick_outs_by_port(
+            fs, b, ("producto",), ("venteo", "vapor"))
+        if conc_out is None or vap_out is None:
+            msgs.append(f"⚠ Evaporator {b.name}: faltan 2 salidas conectadas")
+            continue
+
+        cf = max(b.concentration_factor, 1.0)
+        vol_c = b.volatile_component or "water"
+        comp_in = _comp_masses(feed)
+        m_vol_in   = comp_in.get(vol_c, 0.0)
+        m_nonvol   = sum(m for c, m in comp_in.items() if c != vol_c)
+        # M_concentrate = M_feed / CF
+        m_concentrate = feed.mass_flow / cf
+        m_vapor = feed.mass_flow - m_concentrate
+        if m_vapor > m_vol_in:
+            msgs.append(
+                f"⚠ Evaporator {b.name}: CF={cf:.2f} requiere "
+                f"{m_vapor:.0f} t de {vol_c}, feed solo tiene "
+                f"{m_vol_in:.0f}.  Clampeando.")
+            m_vapor = m_vol_in
+            m_concentrate = feed.mass_flow - m_vapor
+        m_vol_remaining = m_vol_in - m_vapor
+
+        conc_masses = {c: m for c, m in comp_in.items() if c != vol_c}
+        if m_vol_remaining > 0:
+            conc_masses[vol_c] = m_vol_remaining
+        _write_output(conc_out, m_concentrate, conc_masses, phase="liquid")
+        _write_output(vap_out, m_vapor, {vol_c: m_vapor}, phase="vapor")
+        msgs.append(
+            f"✓ Evaporator {b.name}: conc={m_concentrate:.0f} (CF={cf:.2f}), "
+            f"vapor={m_vapor:.0f} {vol_c}"
+        )
+    return msgs
+
+
+def solve_cyclones(fs):
+    """Ciclones gas/sólido con cyclone_active=True.
+
+    Modelo: feed (gas + polvo) → producto (sólidos colectados) +
+    venteo (gas limpio con escape de finos).
+
+    El sólido se identifica por solid_components o por feed.main_component
+    si la lista está vacía.  Todo lo demás se trata como gas portador.
+
+    Puertos: alimentacion → producto (sólidos) + venteo (gas).
+    """
+    msgs = []
+    for b in fs.blocks.values():
+        if not getattr(b, "cyclone_active", False):
+            continue
+        feed = _pick_feed(fs, b)
+        if feed is None:
+            continue
+        sol_out, gas_out = _pick_outs_by_port(
+            fs, b, ("producto",), ("venteo", "vapor", "gas"))
+        if sol_out is None or gas_out is None:
+            msgs.append(f"⚠ Cyclone {b.name}: faltan 2 salidas conectadas")
+            continue
+
+        solids = set(b.solid_components or [])
+        if not solids and feed.main_component:
+            solids = {feed.main_component}
+        eff = max(min(b.collection_efficiency, 1.0), 0.0)
+        comp_in = _comp_masses(feed)
+        m_solid_total = sum(m for c, m in comp_in.items() if c in solids)
+        if m_solid_total <= 0:
+            msgs.append(f"⚠ Cyclone {b.name}: feed sin sólido declarado "
+                         f"({list(solids)})")
+            continue
+
+        sol_masses = {}
+        gas_masses = {}
+        for c, m in comp_in.items():
+            if c in solids:
+                sol_masses[c] = m * eff
+                gas_masses[c] = m * (1 - eff)
+            else:
+                gas_masses[c] = m       # gas portador todo a venteo
+        m_sol = sum(sol_masses.values())
+        m_gas = sum(gas_masses.values())
+        _write_output(sol_out, m_sol, sol_masses, phase="liquid")
+        _write_output(gas_out, m_gas, gas_masses, phase="gas")
+        msgs.append(
+            f"✓ Cyclone {b.name}: solids={m_sol:.0f} (η={eff:.2f}), "
+            f"gas={m_gas:.0f}"
+        )
+    return msgs
+
+
 def auto_propagate_compositions(fs):
     """Para cada bloque NO reactivo, calcula la composición de las
     salidas como promedio ponderado por mass_flow de las entradas.
