@@ -5227,6 +5227,209 @@ class FlowsheetEditor:
         auto_set_duties_from_thermo(self.fs)
 
 
+    # ==================================================================
+    # Lote 4b — Saponificación + urea (Tier 1, R030/R031 Modo B)
+    # ==================================================================
+
+    def _example_soap(self):
+        """TIER 1 — Jabón por saponificación de triglicérido.
+
+        Química (R030 placeholder Modo B):
+            1 vegetable_oil + 3 NaOH → 3 soap + 1 glycerin
+            ΔH ≈ −60 kJ/mol_oil (exotérmica suave).
+            T ≈ 80 °C, conversión >99 %.  Subproducto glicerina
+            valiosa.
+
+        Topología:
+            TK-oil + TK-NaOH → M-101 → R-101 saponif → V-101
+                decanter → TK-soap (sólido) + TK-glycerin (subprod)
+
+        Basis 1000 tm/año vegetable_oil + 136 tm/año NaOH →
+        1032 tm/año soap + 104 tm/año glycerin (estequiométrico).
+        Modo B con composición declarada (R030 NO DERIVADA, sin
+        van't Hoff en .md).
+        """
+        tk_oil  = self._add_example_block("TK-101", "Storage tank — cone roof", 200.0,  60, 200)
+        tk_naoh = self._add_example_block("TK-102", "Storage tank — cone roof",  80.0,  60, 400)
+        m101    = self._add_example_block("M-101",  "Mixer — static",            10.0, 260, 300)
+        r101    = self._add_example_block("R-101",  "Reactor — jacketed agitated", 30.0, 480, 300)
+        v101    = self._add_example_block("V-101",  "Vessel — vertical",          15.0, 680, 300)
+        tk_soap = self._add_example_block("TK-103", "Storage tank — cone roof", 250.0, 880, 180)
+        tk_gly  = self._add_example_block("TK-104", "Storage tank — cone roof", 100.0, 880, 420)
+
+        # R-101 — Modo B con R030 placeholder
+        self.fs.blocks[r101].reactions = ["R030_PLACEHOLDER"]
+        self.fs.blocks[r101].T_op_K    = 353.0
+        self.fs.blocks[r101].P_op_bar  = 1.0
+        # ΔH = -60 kJ/mol_oil × (1000e3 / 885) mol/y = -67.8 GJ/y
+        # = -2.15 kW continuo.  Por kg input (1135.6 t/y): -59.7 kJ/kg.
+        self.fs.blocks[r101].heat_of_reaction = -59.7
+
+        # Composición mezcla pre-R101: 1000 oil + 135.6 NaOH = 1135.6
+        feed_mix = {"vegetable_oil": 0.881, "sodium_hydroxide": 0.119}
+        # Salida R-101 (Modo B): 1032 soap + 104 glycerin = 1136
+        rxn_out  = {"soap": 0.908, "glycerin": 0.092}
+
+        # Aceite (feed)
+        self._add_example_stream(tk_oil, m101, "S-oil", 1000, role="feed",
+                                 src_port="salida", dst_port="alimentacion_1",
+                                 price=900.0, T=25,
+                                 main_component="vegetable_oil", phase="liquid",
+                                 composition={"vegetable_oil": 1.0})
+        # NaOH (feed)
+        self._add_example_stream(tk_naoh, m101, "S-NaOH", 135.6, role="feed",
+                                 src_port="salida", dst_port="alimentacion_2",
+                                 price=400.0, T=25,
+                                 main_component="sodium_hydroxide", phase="liquid",
+                                 composition={"sodium_hydroxide": 1.0})
+        # Mezcla al reactor
+        self._add_example_stream(m101, r101, "S-mix", 1135.6,
+                                 src_port="producto", dst_port="alimentacion",
+                                 T=70,
+                                 composition=feed_mix,
+                                 main_component="vegetable_oil", phase="liquid")
+        # Salida reactor a decanter
+        self._add_example_stream(r101, v101, "S-rxn", 1135.6,
+                                 src_port="producto", dst_port="alimentacion",
+                                 T=80,
+                                 composition=rxn_out,
+                                 main_component="soap", phase="liquid")
+        # Jabón (fase superior, en realidad sólido pero declarado liquid
+        # para flow conservation; el motor no maneja fase sólida explícita)
+        self._add_example_stream(v101, tk_soap, "S-soap", 1031.6, role="product",
+                                 src_port="vapor", dst_port="entrada",
+                                 price=1800.0, T=80,
+                                 main_component="soap", phase="liquid",
+                                 composition={"soap": 1.0})
+        # Glicerina (fondo) — subproducto vendible
+        self._add_example_stream(v101, tk_gly, "S-glycerin", 104.0, role="product",
+                                 src_port="liquido", dst_port="entrada",
+                                 price=800.0, T=80,
+                                 main_component="glycerin", phase="liquid",
+                                 composition={"glycerin": 1.0})
+
+        self._set_example_labor(120_000)
+        self._add_example_extra("Sal de salado / lavado",
+                                flowrate=15.0, price=80.0,
+                                stream="Consumables")
+
+        from flowsheet_solver import auto_set_duties_from_thermo
+        auto_set_duties_from_thermo(self.fs)
+
+
+    def _example_urea(self):
+        """TIER 1 — Urea por proceso Bosch-Meiser.
+
+        Química (R031 placeholder Modo B):
+            2 NH3(g) + 1 CO2(g) → 1 urea(l) + 1 H2O(l)
+            ΔH ≈ −101 kJ/mol_urea (vía carbamato; exotérmica neta).
+            T ≈ 180–200 °C, P ≈ 150 bar.  Conv por paso ~50–60 %
+            (limitada por equilibrio del carbamato); aquí se asume
+            conversión global ~95 % con purga simple (en planta
+            real hay reciclo de carbamato a alta presión).
+
+        Topología:
+            TK-NH3 + TK-CO2 → M-101 → K-101 (compresor 150 bar) →
+            R-101 → V-101 (flash purga NH3+CO2) → T-101 (evaporador
+            separa urea del H2O) → TK-urea + TK-H2O waste
+
+        Basis 1000 tm/año NH3 + 1292 CO2 → 1675 urea + 502 H2O.
+        Purga (5 % no reacciona): 50 NH3 + 64.6 CO2 = 114.6 t/y waste.
+        """
+        tk_nh3  = self._add_example_block("TK-101", "Storage tank — cone roof", 200.0,  60, 200)
+        tk_co2  = self._add_example_block("TK-102", "Storage tank — cone roof", 250.0,  60, 400)
+        m101    = self._add_example_block("M-101",  "Mixer — static",            10.0, 260, 300)
+        k101    = self._add_example_block("K-101",  "Compressor — centrifugal", 600.0, 460, 300)
+        r101    = self._add_example_block("R-101",  "Reactor — autoclave",       12.0, 660, 300)
+        v101    = self._add_example_block("V-101",  "Vessel — vertical",         18.0, 860, 300)
+        tk_purg = self._add_example_block("TK-103", "Storage tank — cone roof", 100.0, 860, 100)
+        t101    = self._add_example_block("EV-101", "Evaporator — vertical",     30.0,1060, 380)
+        tk_h2o  = self._add_example_block("TK-104", "Storage tank — cone roof", 100.0,1060, 200)
+        tk_urea = self._add_example_block("TK-105", "Storage tank — cone roof", 300.0,1260, 380)
+
+        # R-101 — Modo B con R031 placeholder
+        self.fs.blocks[r101].reactions = ["R031_PLACEHOLDER"]
+        self.fs.blocks[r101].T_op_K    = 458.0
+        self.fs.blocks[r101].P_op_bar  = 150.0
+        # ΔH = -101 kJ/mol_urea × 1675e3/60.06 mol/y = -2817 GJ/y
+        # = -89.4 kW.  Por kg input (2292 t/y): -1229 kJ/kg.
+        self.fs.blocks[r101].heat_of_reaction = -1229.0
+
+        # Composiciones (thermo_db keys: ammonia, co2, urea, water)
+        feed_mix  = {"ammonia": 0.436, "co2": 0.564}      # 1000 + 1292 = 2292
+        # Salida R-101: 50 NH3 + 64.6 CO2 + 1675 urea + 502 H2O = 2291.6
+        rxn_out   = {"ammonia": 0.0218, "co2": 0.0282,
+                     "urea": 0.7311, "water": 0.2191}
+        # Líquido del V-101: 1675 urea + 502 H2O = 2177
+        liq_mix   = {"urea": 0.7694, "water": 0.2306}
+
+        # NH3 feed (gas → líquido a alta P)
+        self._add_example_stream(tk_nh3, m101, "S-NH3", 1000, role="feed",
+                                 src_port="salida", dst_port="alimentacion_1",
+                                 price=350.0, T=25,
+                                 main_component="ammonia", phase="liquid",
+                                 composition={"ammonia": 1.0})
+        # CO2 feed
+        self._add_example_stream(tk_co2, m101, "S-CO2", 1292, role="feed",
+                                 src_port="salida", dst_port="alimentacion_2",
+                                 price=50.0, T=25,
+                                 main_component="co2", phase="gas",
+                                 composition={"co2": 1.0})
+        # Mezcla → compresor
+        self._add_example_stream(m101, k101, "S-mix", 2292,
+                                 src_port="producto", dst_port="succion",
+                                 T=40,
+                                 composition=feed_mix,
+                                 main_component="co2", phase="gas")
+        # Comprimida → reactor
+        self._add_example_stream(k101, r101, "S-HP", 2292,
+                                 src_port="descarga", dst_port="alimentacion",
+                                 T=180,
+                                 composition=feed_mix,
+                                 main_component="co2", phase="liquid")
+        # Salida reactor a flash (Modo B)
+        self._add_example_stream(r101, v101, "S-rxn", 2292,
+                                 src_port="producto", dst_port="alimentacion",
+                                 T=190,
+                                 composition=rxn_out,
+                                 main_component="urea", phase="liquid")
+        # Purga vapor (NH3 + CO2 no reaccionados, ~114.6 t/y)
+        self._add_example_stream(v101, tk_purg, "S-purga", 114.6, role="waste",
+                                 src_port="vapor", dst_port="entrada",
+                                 price=0.0, T=190,
+                                 composition={"ammonia": 0.436, "co2": 0.564},
+                                 main_component="co2", phase="gas")
+        # Líquido al evaporador (urea + H2O)
+        self._add_example_stream(v101, t101, "S-liq", 2177,
+                                 src_port="liquido", dst_port="alimentacion",
+                                 T=150,
+                                 composition=liq_mix,
+                                 main_component="urea", phase="liquid")
+        # Agua evaporada (subproducto / waste)
+        self._add_example_stream(t101, tk_h2o, "S-H2O", 502, role="waste",
+                                 src_port="venteo", dst_port="entrada",
+                                 price=0.0, T=110,
+                                 main_component="water", phase="vapor",
+                                 composition={"water": 1.0})
+        # Urea concentrada / prill (producto final)
+        self._add_example_stream(t101, tk_urea, "S-urea", 1675, role="product",
+                                 src_port="producto", dst_port="entrada",
+                                 price=550.0, T=130,
+                                 main_component="urea", phase="liquid",
+                                 composition={"urea": 1.0})
+
+        self._set_example_labor(200_000)
+        self._add_example_extra("Energía eléctrica (compresores)",
+                                flowrate=480000, price=0.08,
+                                stream="Utilities")
+        self._add_example_extra("Inhibidor de corrosión",
+                                flowrate=8.0, price=5_000.0,
+                                stream="Consumables")
+
+        from flowsheet_solver import auto_set_duties_from_thermo
+        auto_set_duties_from_thermo(self.fs)
+
+
     def open_json(self):
         path = filedialog.askopenfilename(
             title="Abrir diagrama",

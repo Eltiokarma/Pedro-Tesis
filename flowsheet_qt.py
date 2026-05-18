@@ -4156,6 +4156,15 @@ class FlowsheetMainWindow(QMainWindow):
                               "Vidrio sodocálcico (horno de fusión)",
                               "100 — Materiales",
                               "PFD-GLASS-001"),
+            # ── Catálogo educativo Lote 4b (saponificación + urea) ──
+            "soap":         (TkEditor._example_soap,
+                              "Jabón por saponificación",
+                              "100 — Consumo / química",
+                              "PFD-SOAP-001"),
+            "urea":         (TkEditor._example_urea,
+                              "Urea (Bosch-Meiser, fertilizante)",
+                              "100 — Fertilizantes",
+                              "PFD-UREA-001"),
         }
         entry = builder_map.get(key)
         if entry is None:
