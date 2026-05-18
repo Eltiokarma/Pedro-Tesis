@@ -410,6 +410,19 @@ class Stream:
     #   Entrada brusca a tanque: 1
     pipe_K_local:     float = 0.0     # K total de accesorios
 
+    # ---- Modo de la corriente (Hallazgo 4-C) ----
+    # False (default) = corriente CONCEPTUAL: solo estado termo
+    #                   (mass_flow, T, P, composition).  El solver NO
+    #                   calcula ΔP de tubería para esta corriente.
+    #                   Mantiene la UX exploratoria limpia (sin ΔP
+    #                   fantasma en flowsheets escolares/conceptuales).
+    # True  = TUBERÍA física: el solver calcula ΔP Darcy-Weisbach
+    #         con pipe_length_m / pipe_diameter_m / pipe_roughness_m
+    #         / pipe_K_local.  Para flowsheets de diseño detallado.
+    # Compat JSON viejo: default False; loader puede inferir True si
+    # hay geometría no-default + pressure_locked (heurística).
+    is_pipe: bool = False
+
     # ---- OPERACIÓN POR LOTES (declarativo, hook transitorio) ----
     # Ventana de actividad batch:
     #   None (default) → corriente CONTINUA, comportamiento idéntico

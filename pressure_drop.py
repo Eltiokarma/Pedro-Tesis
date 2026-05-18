@@ -237,6 +237,11 @@ def stream_pressure_drop(stream, pipe_length_m: float = None,
     """
     if stream.mass_flow <= 0:
         return None
+    # Hallazgo 4-C: si la corriente NO está marcada como tubería física,
+    # no calculamos hidráulica.  Mantiene la UX conceptual limpia
+    # (los flowsheets escolares no tienen ΔP fantasma de tubería).
+    if not getattr(stream, "is_pipe", False):
+        return None
     # Geometría: defaults razonables si Stream no los tiene
     L = pipe_length_m or getattr(stream, "pipe_length_m", 0) or 10.0
     D = pipe_diameter_m or getattr(stream, "pipe_diameter_m", 0) or 0.050

@@ -1182,8 +1182,20 @@ class StreamEditDialog(QDialog):
         layout.addRow(gb_ports)
 
         # ---- Tubería: pérdida de carga (Darcy-Weisbach) ----
+        # Hallazgo 4-C: checkbox 'is_pipe'.  Si está desmarcado (default
+        # para flowsheets conceptuales), gb_pipe queda greyed y el
+        # solver no calcula ΔP.  Marcado → calcula.
         gb_pipe = QGroupBox("Tubería (pérdida de carga)")
         pipe_layout = QFormLayout(gb_pipe)
+
+        self.pipe_is_pipe = QCheckBox(
+            "Tratar como tubería física (calcular ΔP Darcy-Weisbach)")
+        self.pipe_is_pipe.setToolTip(
+            "Desmarcado: corriente conceptual, sin hidráulica.\n"
+            "Marcado: el solver calcula ΔP usando los campos de geometría."
+        )
+        self.pipe_is_pipe.setChecked(bool(getattr(stream, "is_pipe", False)))
+        pipe_layout.addRow(self.pipe_is_pipe)
 
         self.pipe_L = QDoubleSpinBox()
         self.pipe_L.setRange(0.0, 10000.0); self.pipe_L.setDecimals(2)
@@ -1245,6 +1257,13 @@ class StreamEditDialog(QDialog):
         pipe_layout.addRow("", hint_pipe)
         layout.addRow(gb_pipe)
 
+        # Habilitar/deshabilitar inputs de geometría según is_pipe.
+        def _toggle_pipe_inputs(checked):
+            for w in (self.pipe_L, self.pipe_D, self.pipe_eps, self.pipe_K):
+                w.setEnabled(bool(checked))
+        self.pipe_is_pipe.toggled.connect(_toggle_pipe_inputs)
+        _toggle_pipe_inputs(self.pipe_is_pipe.isChecked())
+
         # ─── Botones OK/Cancel FUERA del scroll, siempre visibles ───
         # antes estaban dentro del QFormLayout y se cortaban en
         # pantallas chicas.  Ahora viven en el outer QVBoxLayout, así
@@ -1282,7 +1301,8 @@ class StreamEditDialog(QDialog):
         self.stream.temperature = float(self.t_edit.value())
         self.stream.temperature_locked = bool(self.t_lock.isChecked())
         self.stream.composition_locked = bool(self.comp_lock.isChecked())
-        # Pipe geometry para pressure drop
+        # Pipe geometry para pressure drop (Hallazgo 4-C: gating)
+        self.stream.is_pipe = bool(self.pipe_is_pipe.isChecked())
         self.stream.pipe_length_m = float(self.pipe_L.value())
         self.stream.pipe_diameter_m = float(self.pipe_D.value()) / 1000.0
         self.stream.pipe_roughness_m = float(self.pipe_eps.value()) / 1000.0
