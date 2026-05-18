@@ -115,6 +115,81 @@ class TestSeparatorUnlocked(unittest.TestCase):
         self.assertAlmostEqual(cake.mass_flow, 102.22, delta=0.1)
 
 
+class TestSeparatorPassthrough(unittest.TestCase):
+    """Bug fixes D/F/G/J: cuando el equipo no puede operar (falta
+    el material esperado), debe pasar el feed al output principal
+    SIN inventar masa y SIN dejar todo en cero."""
+
+    def test_separator_feed_sin_solidos_passthrough(self):
+        fs = fm.Flowsheet()
+        b = _make_block("Filter — belt",
+                         separator_active=True,
+                         solids_recovery=0.95,
+                         cake_moisture=0.30,
+                         solid_components=["MISSING"])
+        fs.blocks[1] = b
+        _add_feed(fs, 1, 1000.0,
+                    {"a": 0.5, "b": 0.5}, "a")
+        cake = _add_out(fs, 3, "cake", 1, "producto")
+        moth = _add_out(fs, 4, "filt", 1, "venteo")
+        fsv.solve_separators(fs)
+        # Balance: in=1000 = cake + moth (NO ceros, NO inventar)
+        self.assertAlmostEqual(cake.mass_flow + moth.mass_flow, 1000.0,
+                                  delta=MASS_TOL)
+
+    def test_dryer_humedad_imposible_passthrough(self):
+        # final_moisture 50 % pero feed solo tiene 30 %.  Si el solver
+        # intentara alcanzar 50 % añadiría agua → masa inventada.
+        # Fix: pass-through al producto sin cambio.
+        fs = fm.Flowsheet()
+        b = _make_block("Dryer — drum",
+                         dryer_active=True,
+                         final_moisture=0.50,
+                         moisture_component="water")
+        fs.blocks[1] = b
+        _add_feed(fs, 1, 1000.0,
+                    {"sucrose": 0.7, "water": 0.3}, "sucrose")
+        dry = _add_out(fs, 3, "dry", 1, "producto")
+        vap = _add_out(fs, 4, "vap", 1, "venteo")
+        fsv.solve_dryers(fs)
+        # NO debe inventar masa: in=1000 ≤ out (era 1400 antes del fix)
+        total = dry.mass_flow + vap.mass_flow
+        self.assertAlmostEqual(total, 1000.0, delta=MASS_TOL,
+            msg=f"Dryer inventó masa: total={total} vs feed=1000")
+
+    def test_crystallizer_sin_solute_passthrough(self):
+        fs = fm.Flowsheet()
+        b = _make_block("Crystallizer",
+                         crystallizer_active=True,
+                         solute_component="salt",     # no en feed
+                         crystal_yield=0.80)
+        fs.blocks[1] = b
+        _add_feed(fs, 1, 1000.0,
+                    {"sucrose": 0.4, "water": 0.6}, "sucrose")
+        xt = _add_out(fs, 3, "x", 1, "producto")
+        mo = _add_out(fs, 4, "m", 1, "venteo")
+        fsv.solve_crystallizers(fs)
+        self.assertAlmostEqual(xt.mass_flow + mo.mass_flow, 1000.0,
+                                  delta=MASS_TOL)
+
+    def test_cyclone_sin_solidos_passthrough_a_gas(self):
+        fs = fm.Flowsheet()
+        b = _make_block("Cyclone — gas/solid",
+                         cyclone_active=True,
+                         collection_efficiency=1.0,
+                         solid_components=["silica"])
+        fs.blocks[1] = b
+        _add_feed(fs, 1, 1000.0,
+                    {"nitrogen": 1.0}, "nitrogen")
+        sol = _add_out(fs, 3, "sol", 1, "producto")
+        gas = _add_out(fs, 4, "gas", 1, "venteo")
+        fsv.solve_cyclones(fs)
+        # Sin sólido en feed: todo el gas va al venteo, sol=0
+        self.assertAlmostEqual(sol.mass_flow + gas.mass_flow, 1000.0,
+                                  delta=MASS_TOL)
+        self.assertAlmostEqual(gas.mass_flow, 1000.0, delta=MASS_TOL)
+
+
 class TestSeparatorLocked(unittest.TestCase):
     """Outputs LOCKEADOS → el solver NO los toca (modo datos)."""
 

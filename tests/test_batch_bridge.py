@@ -132,6 +132,21 @@ class TestBatchBridge(unittest.TestCase):
         self.assertEqual(peaks["steam"], 12.0)   # MAX(12, 3) = 12
         self.assertEqual(peaks["CW"], 18.0)
 
+    def test_objeto_no_batchrecipe_no_rompe(self):
+        """Bug fix C: si batch_recipe es un objeto raro (no BatchRecipe),
+        Capa 3 debe capturar AttributeError/TypeError y NO romper el
+        cash flow estacionario."""
+        rg = _make_rg()
+        class FakeRecipe:
+            pass     # no tiene .tasks ni nada
+        sched_in = {"FC": [0], "VCOP": [1.0],
+                    "batch_recipe": FakeRecipe()}
+        out = rg.construir_schedule(sched_in, vida_operacion=5)
+        for k in LEGACY_KEYS:
+            self.assertIn(k, out)
+        self.assertIn("batch", out)
+        self.assertIn("error", out["batch"])
+
     def test_receta_invalida_no_rompe_economico(self):
         """Si la receta tiene una tarea sin duración (ode_hook no
         resuelto), Capa 3 debe NO romper el cash flow estacionario:

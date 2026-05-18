@@ -138,8 +138,9 @@ def cycle_time_s(recipe: BatchRecipe) -> float:
     """Tiempo de ciclo total en segundos = Σ duration_s.
 
     Lanza ValueError EXPLÍCITO si alguna tarea no tiene duration_s
-    resuelta.  El caller debe haber corrido resolve_dynamic_durations
-    antes si la receta usaba ode_hook.
+    resuelta, o si la duración no es estrictamente positiva.  El
+    caller debe haber corrido resolve_dynamic_durations antes si la
+    receta usaba ode_hook.
     """
     if not recipe.tasks:
         raise ValueError(f"BatchRecipe '{recipe.name}' no tiene tareas.")
@@ -151,6 +152,14 @@ def cycle_time_s(recipe: BatchRecipe) -> float:
                 f"'{recipe.name}' no tiene duration_s.  Definir un "
                 f"valor fijo o resolver via ode_hook antes de medir "
                 f"cycle_time."
+            )
+        if t.duration_s <= 0:
+            raise ValueError(
+                f"Tarea '{t.name}' ({t.kind.value}) en receta "
+                f"'{recipe.name}' tiene duration_s={t.duration_s} "
+                f"≤ 0.  Las tareas deben tener duración estrictamente "
+                f"positiva (revisar ode_hook si la duración la calcula "
+                f"un solver dinámico)."
             )
         total += t.duration_s
     return total
@@ -267,7 +276,13 @@ def resolve_dynamic_durations(recipe: BatchRecipe,
             continue           # ya tiene duración fija
         if t.ode_hook is None:
             continue           # ni hook ni fija → quedará sin resolver
-        if solver is not None:
-            t.duration_s = float(solver(t))
-        else:
-            t.duration_s = float(t.ode_hook(t))
+        result = solver(t) if solver is not None else t.ode_hook(t)
+        if result is None:
+            raise ValueError(
+                f"Tarea '{t.name}' ({t.kind.value}): el ode_hook "
+                f"devolvió None.  Capa 2 (batch_equipment) suele "
+                f"devolver None cuando la cinética no alcanza la "
+                f"conversión objetivo en t_max_s — subir t_max_s, "
+                f"T_K, o usar una receta con duración fija."
+            )
+        t.duration_s = float(result)

@@ -2239,6 +2239,22 @@ def _write_output(s_out, total_mass, comp_masses, phase=None):
         s_out.mass_flow = total_mass
 
 
+def _passthrough_to(feed, primary_out, secondary_out, phase=None):
+    """Cuando un separador no puede operar (falta material esperado),
+    pasa el feed completo al primary_out y deja secondary_out en 0.
+    Preserva el balance global de masa (cero invención).  El warning
+    explicativo lo emite el caller en `msgs`."""
+    if feed is None or feed.mass_flow <= 0:
+        return
+    feed_comp_mass = {c: f * feed.mass_flow
+                       for c, f in (feed.composition or {}).items()}
+    _write_output(primary_out, feed.mass_flow, feed_comp_mass, phase=phase)
+    if secondary_out is not None and not _is_mass_locked(secondary_out):
+        secondary_out.mass_flow = 0.0
+    if secondary_out is not None and not _is_comp_locked(secondary_out):
+        secondary_out.composition = {}
+
+
 def solve_separators(fs):
     """Filtros y centrífugas con separator_active=True.
 
@@ -2283,8 +2299,11 @@ def solve_separators(fs):
         m_liquid_total = sum(m for c, m in comp_in.items() if c not in solids)
 
         if m_solid_total <= 0:
+            # Sin sólidos en el feed → pass-through al primer output
+            # (preserva balance global; emite warning explicativo).
+            _passthrough_to(feed, cake_out, mother_out, phase="liquid")
             msgs.append(f"⚠ Separator {b.name}: feed no tiene sólidos "
-                         f"(solid_components={list(solids)})")
+                         f"(solid_components={list(solids)}) → pass-through")
             continue
 
         rec = max(min(b.solids_recovery, 1.0), 0.0)
@@ -2355,8 +2374,22 @@ def solve_dryers(fs):
         m_dry_solids = sum(m for c, m in comp_in.items() if c != moist_c)
 
         if m_moist_in <= 0:
+            # Feed seco — nada que evaporar.  Pass-through al producto.
+            _passthrough_to(feed, dry_out, vent_out, phase="liquid")
             msgs.append(f"⚠ Dryer {b.name}: feed sin '{moist_c}' "
-                         f"(nada que evaporar)")
+                         f"(nada que evaporar) → pass-through")
+            continue
+        # Si la humedad actual del feed ya es ≤ target, NO hay que
+        # evaporar nada (el dryer no PUEDE añadir moisture).  Pass-
+        # through.  Sin este check, el solver inventaría agua para
+        # alcanzar target_frac mayor → masa rota (bug fix).
+        moist_actual = m_moist_in / feed.mass_flow
+        if moist_actual <= target_frac:
+            _passthrough_to(feed, dry_out, vent_out, phase="liquid")
+            msgs.append(
+                f"⚠ Dryer {b.name}: humedad actual {moist_actual*100:.1f}% "
+                f"≤ target {target_frac*100:.1f}% — no se evapora, "
+                f"pass-through")
             continue
         # M_dry_out_total: producto incluye solids + final_moisture·total
         if (1 - target_frac) > 1e-6:
@@ -2404,13 +2437,20 @@ def solve_crystallizers(fs):
 
         solute = b.solute_component or feed.main_component
         if not solute:
-            msgs.append(f"⚠ Crystallizer {b.name}: solute_component vacío")
+            # Sin solute_component declarado → pass-through (no se
+            # puede cristalizar lo desconocido).  Preserva balance.
+            _passthrough_to(feed, mother_out, xtal_out, phase="liquid")
+            msgs.append(f"⚠ Crystallizer {b.name}: solute_component vacío "
+                         f"→ pass-through al licor madre")
             continue
         yield_ = max(min(b.crystal_yield, 1.0), 0.0)
         comp_in = _comp_masses(feed)
         m_solute_in = comp_in.get(solute, 0.0)
         if m_solute_in <= 0:
-            msgs.append(f"⚠ Crystallizer {b.name}: feed sin '{solute}'")
+            # Solute no presente en feed → mismo manejo.
+            _passthrough_to(feed, mother_out, xtal_out, phase="liquid")
+            msgs.append(f"⚠ Crystallizer {b.name}: feed sin '{solute}' "
+                         f"→ pass-through al licor madre")
             continue
         m_xtal = m_solute_in * yield_
         m_solute_mother = m_solute_in - m_xtal
@@ -2513,8 +2553,11 @@ def solve_cyclones(fs):
         comp_in = _comp_masses(feed)
         m_solid_total = sum(m for c, m in comp_in.items() if c in solids)
         if m_solid_total <= 0:
+            # Sin sólidos en feed → todo el gas sale por venteo
+            # (preserva balance global, no inventa polvo).
+            _passthrough_to(feed, gas_out, sol_out, phase="gas")
             msgs.append(f"⚠ Cyclone {b.name}: feed sin sólido declarado "
-                         f"({list(solids)})")
+                         f"({list(solids)}) → pass-through al gas")
             continue
 
         sol_masses = {}

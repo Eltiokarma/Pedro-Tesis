@@ -201,6 +201,32 @@ class TestResolveDynamicDurations(unittest.TestCase):
         bs.resolve_dynamic_durations(r)
         self.assertEqual(r.tasks[0].duration_s, 1800.0)
 
+    def test_hook_devuelve_None_lanza_error(self):
+        # Bug fix A: hook→None debe lanzar ValueError explícito,
+        # no TypeError opaco de float(None).
+        def null_hook(task):
+            return None
+        r = BatchRecipe(
+            name="nullhook",
+            tasks=[Task("react", TaskKind.REACCION, ode_hook=null_hook)],
+            product_mass_kg_per_batch=100.0,
+        )
+        with self.assertRaises(ValueError) as cm:
+            bs.resolve_dynamic_durations(r)
+        self.assertIn("ode_hook devolvió None", str(cm.exception))
+
+    def test_duracion_negativa_rechazada(self):
+        # Bug fix B: cycle_time_s lanza ValueError si alguna tarea
+        # tiene duration_s ≤ 0 (hook mal escrito, valor inválido).
+        r = BatchRecipe(
+            name="neg",
+            tasks=[Task("react", TaskKind.REACCION, duration_s=-100)],
+            product_mass_kg_per_batch=100.0,
+        )
+        with self.assertRaises(ValueError) as cm:
+            bs.cycle_time_s(r)
+        self.assertIn("≤ 0", str(cm.exception))
+
 
 # ─────────────────────────────────────────────────────────────
 # Aislamiento — confirmar que Capa 1 NO importa otros módulos

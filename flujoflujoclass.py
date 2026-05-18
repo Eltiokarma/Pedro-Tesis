@@ -1351,12 +1351,13 @@ class ReportGenerator:
                 batch_block = _bs.to_schedule_block(
                     _batch_recipe, availability=_batch_availability
                 )
-            except (ImportError, ValueError) as _e:
-                # Falla en Capa 1 (módulo ausente o receta inválida):
-                # NO romper el cash flow estacionario — solo logueamos
-                # el fallo de forma silenciosa.  Sin batch_block, los
-                # consumers ven schedule sin la clave 'batch' y operan
-                # como pre-batch.
+            except (ImportError, ValueError, AttributeError, TypeError) as _e:
+                # Falla en Capa 1 (módulo ausente, receta inválida, o
+                # objeto que no es BatchRecipe): NO romper el cash flow
+                # estacionario — logueamos el fallo en schedule['batch']
+                # sin alterar las claves legacy.  Los consumers viejos
+                # ven schedule sin clave 'batch' (lectura defensiva) y
+                # operan como pre-batch.
                 batch_block = {"error": f"{type(_e).__name__}: {_e}"}
 
         # =========================
