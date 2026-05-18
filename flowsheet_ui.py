@@ -4336,10 +4336,10 @@ class FlowsheetEditor:
         e101   = self._add_example_block("E-101",  "Heat exch. — floating head", 30.0, 260, 240)
         ev101  = self._add_example_block("EV-101", "Evaporator — vertical",      40.0, 440, 220)
         ev102  = self._add_example_block("EV-102", "Evaporator — vertical",      30.0, 640, 220)
-        tk_out = self._add_example_block("TK-102", "Storage tank — cone roof",   80.0, 840, 220)
+        tk_out = self._add_example_block("TK-102", "Storage tank — cone roof",   90.0, 840, 220)
         # tanques de vapor (utility) para visualizar el efluente
         tk_v1  = self._add_example_block("TK-V1",  "Storage tank — cone roof",  100.0, 440,  60)
-        tk_v2  = self._add_example_block("TK-V2",  "Storage tank — cone roof",   80.0, 640,  60)
+        tk_v2  = self._add_example_block("TK-V2",  "Storage tank — cone roof",   90.0, 640,  60)
 
         # Composiciones por etapa
         diluted   = {"water": 0.880, "pineapple_solids": 0.120}    # 12 %
@@ -4497,9 +4497,9 @@ class FlowsheetEditor:
             Total: 930.3 + 69.66 = 1000.0 ✓
         """
         tk_in   = self._add_example_block("TK-101", "Storage tank — cone roof", 250.0,  80, 240)
-        r101    = self._add_example_block("R-101", "Reactor — jacketed agitated", 60.0, 260, 240)
+        r101    = self._add_example_block("R-101", "Reactor — jacketed agitated", 35.0, 260, 240)
         v101    = self._add_example_block("V-101", "Vessel — vertical",            12.0, 460, 240)
-        tk_co2  = self._add_example_block("TK-102", "Storage tank — cone roof",    40.0, 460,  80)
+        tk_co2  = self._add_example_block("TK-102", "Storage tank — cone roof",    90.0, 460,  80)
         e101    = self._add_example_block("E-101", "Heat exch. — floating head",   50.0, 640, 240)
         tk_out  = self._add_example_block("TK-103", "Storage tank — cone roof",   200.0, 820, 240)
 
@@ -4588,12 +4588,12 @@ class FlowsheetEditor:
             Venteos: 20 SO2 + 3 O2 + 817 N2 = 840 tm/año (waste)
             Total OUT: 1501 + 840 = 2341 vs IN 2065 + 276 = 2341 ✓
         """
-        tk_so2  = self._add_example_block("TK-101", "Storage tank — cone roof",  80.0,  80, 200)
-        tk_air  = self._add_example_block("TK-102", "Storage tank — cone roof",  80.0,  80, 380)
-        m101    = self._add_example_block("M-101",  "Mixer — static",            10.0, 240, 290)
+        tk_so2  = self._add_example_block("TK-101", "Storage tank — cone roof",  90.0,  80, 200)
+        tk_air  = self._add_example_block("TK-102", "Storage tank — cone roof",  90.0,  80, 380)
+        m101    = self._add_example_block("M-101",  "Mixer — static",            2.0, 240, 290)
         r101    = self._add_example_block("R-101",  "Reactor — jacketed non-agit.", 35.0, 420, 290)
         e101    = self._add_example_block("E-101",  "Heat exch. — floating head", 80.0, 600, 290)
-        tk_h2o  = self._add_example_block("TK-103", "Storage tank — cone roof",  80.0, 600, 480)
+        tk_h2o  = self._add_example_block("TK-103", "Storage tank — cone roof",  90.0, 600, 480)
         abs101  = self._add_example_block("ABS-101","Vessel — vertical",          20.0, 780, 380)
         tk_acid = self._add_example_block("TK-104", "Storage tank — cone roof", 200.0, 980, 380)
         tk_vent = self._add_example_block("TK-105", "Storage tank — cone roof", 100.0, 980, 200)
@@ -4710,16 +4710,16 @@ class FlowsheetEditor:
         # Layout 1.8× (planta industrial mediana)
         tk_meoh = self._add_example_block("TK-101", "Storage tank — cone roof", 200.0,  60, 200)
         tk_co   = self._add_example_block("TK-102", "Storage tank — cone roof", 150.0,  60, 400)
-        k101    = self._add_example_block("K-101",  "Compressor — centrifugal", 200.0, 260, 400)
-        m101    = self._add_example_block("M-101",  "Mixer — static",            10.0, 460, 300)
+        k101    = self._add_example_block("K-101",  "Compressor — centrifugal", 450.0, 260, 400)
+        m101    = self._add_example_block("M-101",  "Mixer — static",            2.0, 460, 300)
         e101    = self._add_example_block("E-101",  "Heat exch. — floating head", 80.0, 660, 300)
-        r101    = self._add_example_block("R-101",  "Reactor — jacketed agitated", 50.0, 860, 300)
+        r101    = self._add_example_block("R-101",  "Reactor — jacketed agitated", 35.0, 860, 300)
         v101    = self._add_example_block("V-101",  "Vessel — vertical",          25.0,1060, 300)
-        tk_purg = self._add_example_block("TK-103", "Storage tank — cone roof",  60.0,1060,  80)
+        tk_purg = self._add_example_block("TK-103", "Storage tank — cone roof",  90.0,1060,  80)
         t101    = self._add_example_block("T-101",  "Tower (column shell)",       45.0,1260, 380)
         e102    = self._add_example_block("E-102",  "Heat exch. — floating head", 60.0,1460, 200)
         e103    = self._add_example_block("E-103",  "Heat exch. — kettle reboiler", 80.0,1460, 560)
-        tk_liv  = self._add_example_block("TK-104", "Storage tank — cone roof",   80.0,1640, 200)
+        tk_liv  = self._add_example_block("TK-104", "Storage tank — cone roof",   90.0,1640, 200)
         tk_ac   = self._add_example_block("TK-105", "Storage tank — cone roof",  300.0,1640, 560)
 
         # R-101 — Modo B con R026 referenciada
@@ -4849,7 +4849,7 @@ class FlowsheetEditor:
         = -993 GJ/año = -31.5 kW continuo.
         """
         tk_eth  = self._add_example_block("TK-101", "Storage tank — cone roof", 200.0,  80, 280)
-        k101    = self._add_example_block("K-101",  "Compressor — reciprocating", 400.0, 280, 280)
+        k101    = self._add_example_block("K-101",  "Compressor — reciprocating", 450.0, 280, 280)
         r101    = self._add_example_block("R-101",  "Reactor — autoclave",         5.0, 480, 280)
         v101    = self._add_example_block("V-101",  "Vessel — vertical",          15.0, 680, 280)
         tk_pe   = self._add_example_block("TK-102", "Storage tank — cone roof", 200.0, 880, 380)
@@ -5158,7 +5158,7 @@ class FlowsheetEditor:
         tk_si   = self._add_example_block("TK-101", "Storage tank — cone roof", 200.0,  60, 200)
         tk_sd   = self._add_example_block("TK-102", "Storage tank — cone roof", 150.0,  60, 360)
         tk_lm   = self._add_example_block("TK-103", "Storage tank — cone roof", 150.0,  60, 520)
-        m101    = self._add_example_block("M-101",  "Mixer — static",            10.0, 280, 360)
+        m101    = self._add_example_block("M-101",  "Mixer — static",            2.0, 280, 360)
         r101    = self._add_example_block("R-101",  "Reactor — jacketed non-agit.", 30.0, 500, 360)
         e101    = self._add_example_block("E-101",  "Heat exch. — air cooler",   100.0, 720, 460)
         tk_gl   = self._add_example_block("TK-104", "Storage tank — cone roof", 250.0, 920, 460)
@@ -5250,8 +5250,8 @@ class FlowsheetEditor:
         van't Hoff en .md).
         """
         tk_oil  = self._add_example_block("TK-101", "Storage tank — cone roof", 200.0,  60, 200)
-        tk_naoh = self._add_example_block("TK-102", "Storage tank — cone roof",  80.0,  60, 400)
-        m101    = self._add_example_block("M-101",  "Mixer — static",            10.0, 260, 300)
+        tk_naoh = self._add_example_block("TK-102", "Storage tank — cone roof",  90.0,  60, 400)
+        m101    = self._add_example_block("M-101",  "Mixer — static",            2.0, 260, 300)
         r101    = self._add_example_block("R-101",  "Reactor — jacketed agitated", 30.0, 480, 300)
         v101    = self._add_example_block("V-101",  "Vessel — vertical",          15.0, 680, 300)
         tk_soap = self._add_example_block("TK-103", "Storage tank — cone roof", 250.0, 880, 180)
@@ -5338,7 +5338,7 @@ class FlowsheetEditor:
         """
         tk_nh3  = self._add_example_block("TK-101", "Storage tank — cone roof", 200.0,  60, 200)
         tk_co2  = self._add_example_block("TK-102", "Storage tank — cone roof", 250.0,  60, 400)
-        m101    = self._add_example_block("M-101",  "Mixer — static",            10.0, 260, 300)
+        m101    = self._add_example_block("M-101",  "Mixer — static",            2.0, 260, 300)
         k101    = self._add_example_block("K-101",  "Compressor — centrifugal", 600.0, 460, 300)
         r101    = self._add_example_block("R-101",  "Reactor — autoclave",       12.0, 660, 300)
         v101    = self._add_example_block("V-101",  "Vessel — vertical",         18.0, 860, 300)
@@ -5476,11 +5476,11 @@ class FlowsheetEditor:
         tk_in   = self._add_example_block("TK-001", "Storage tank — cone roof", 800.0,  60, 200)
         clar    = self._add_example_block("CLAR-101","Vessel — vertical",        20.0, 240, 200)
         e101    = self._add_example_block("E-101", "Heat exch. — floating head", 80.0, 420, 200)
-        sep     = self._add_example_block("SEP-101","Centrifuge — disc stack",  100.0, 600, 200)
-        tk_clw  = self._add_example_block("TK-002","Storage tank — cone roof",   30.0, 240, 380)  # waste clar
+        sep     = self._add_example_block("SEP-101","Centrifuge — disc stack",  2.5, 600, 200)
+        tk_clw  = self._add_example_block("TK-002","Storage tank — cone roof",   90.0, 240, 380)  # waste clar
 
         # Fila 2 (y=420): RAMA FLUIDA  (descremada → estandariza → past → homog)
-        m_std   = self._add_example_block("M-101", "Mixer — static",             10.0, 800, 420)
+        m_std   = self._add_example_block("M-101", "Mixer — static",             2.0, 800, 420)
         e102    = self._add_example_block("E-102", "Heat exch. — floating head", 60.0, 980, 420)
         p_hom   = self._add_example_block("P-101", "Pump — positive displacement", 25.0,1180, 420)
         e103    = self._add_example_block("E-103", "Heat exch. — floating head", 60.0,1380, 420)
@@ -5526,14 +5526,17 @@ class FlowsheetEditor:
         buttermilk  = {"water": 0.986, "milk_fat": 0.009,
                        "milk_protein": 0.001, "lactose": 0.004,
                        "milk_ash": 0.0}
-        # Concentrada intermedia (entre EV1 y EV2, ST ~15 %)
-        mid_evap    = {"water": 0.850, "milk_fat": 0.0008,
-                       "milk_protein": 0.060, "lactose": 0.085,
-                       "milk_ash": 0.0042}
-        # Leche evaporada final (ST 26 %)
-        leche_evap  = {"water": 0.740, "milk_fat": 0.0017,
-                       "milk_protein": 0.110, "lactose": 0.140,
-                       "milk_ash": 0.0083}
+        # Concentrada intermedia (entre EV1 y EV2, ST ~15.4 %) —
+        # SOLO se evapora agua: protein/lactose/ash/fat conservan masa
+        # exacto desde la descremada (8048 t/y).  Frac recalculadas
+        # exactas para evitar drift de componentes individuales.
+        mid_evap    = {"water": 0.8463, "milk_fat": 0.0008,
+                       "milk_protein": 0.0578, "lactose": 0.0828,
+                       "milk_ash": 0.0124}
+        # Leche evaporada final (ST 26 %) — masa conservada exacto
+        leche_evap  = {"water": 0.7400, "milk_fat": 0.0014,
+                       "milk_protein": 0.0977, "lactose": 0.1400,
+                       "milk_ash": 0.0210}
 
         # ============ STREAMS ============
         # 1) Cruda → Clarificadora
@@ -5719,7 +5722,7 @@ class FlowsheetEditor:
         tk_in   = self._add_example_block("TK-101", "Storage tank — cone roof", 200.0,  60, 260)
         e101    = self._add_example_block("E-101", "Heat exch. — floating head", 100.0, 240, 260)
         f101    = self._add_example_block("F-101", "Fired heater — non-reformer", 4000.0, 420, 260)
-        r101    = self._add_example_block("R-101", "Reactor — jacketed non-agit.", 80.0, 600, 260)
+        r101    = self._add_example_block("R-101", "Reactor — jacketed non-agit.", 35.0, 600, 260)
         e102    = self._add_example_block("E-102", "Heat exch. — air cooler",   200.0, 780, 260)
         k101    = self._add_example_block("K-101", "Compressor — centrifugal", 600.0, 960, 260)
         t101    = self._add_example_block("T-101", "Tower (column shell)",      35.0,1140, 380)
@@ -5815,7 +5818,7 @@ class FlowsheetEditor:
         t101    = self._add_example_block("T-101", "Tower (column shell)",       50.0, 960, 400)
         tk_n2   = self._add_example_block("TK-102","Storage tank — cone roof", 250.0,1160, 220)
         tk_o2   = self._add_example_block("TK-103","Storage tank — cone roof", 100.0,1160, 580)
-        tk_wst  = self._add_example_block("TK-W",  "Storage tank — cone roof",  30.0, 600, 480)
+        tk_wst  = self._add_example_block("TK-W",  "Storage tank — cone roof",  90.0, 600, 480)
 
         # Feed aire (1000 t/y, composición másica real)
         air_comp = {"nitrogen": 0.767, "oxygen": 0.233}
@@ -5895,13 +5898,13 @@ class FlowsheetEditor:
         de agua).  Potable: 998 t/y agua pura.
         """
         tk_in   = self._add_example_block("TK-101", "Storage tank — cone roof", 300.0,  60, 240)
-        m101    = self._add_example_block("M-101", "Mixer — static",            10.0, 240, 240)
+        m101    = self._add_example_block("M-101", "Mixer — static",            2.0, 240, 240)
         r101    = self._add_example_block("R-101", "Reactor — jacketed agitated", 30.0, 420, 240)
         v101    = self._add_example_block("V-101", "Vessel — vertical",          50.0, 600, 240)
         f101    = self._add_example_block("F-101", "Filter — belt",              40.0, 780, 240)
-        m102    = self._add_example_block("M-102", "Mixer — static",            10.0, 960, 240)
+        m102    = self._add_example_block("M-102", "Mixer — static",            2.0, 960, 240)
         tk_pot  = self._add_example_block("TK-102","Storage tank — cone roof", 300.0,1140, 240)
-        tk_lod  = self._add_example_block("TK-103","Storage tank — cone roof",  50.0, 600, 440)
+        tk_lod  = self._add_example_block("TK-103","Storage tank — cone roof",  90.0, 600, 440)
 
         # Marcar como sin reacciones (operaciones físicas)
         self.fs.blocks[r101].reactions = ["R_FLOCULACION"]
@@ -5994,7 +5997,7 @@ class FlowsheetEditor:
         880 t/y at {starch 0.51, water 0.43, glucose 0.057}.
         """
         tk_in   = self._add_example_block("TK-101", "Storage tank — cone roof", 200.0,  60, 280)
-        m101    = self._add_example_block("M-101", "Mixer — static",            10.0, 240, 280)
+        m101    = self._add_example_block("M-101", "Mixer — static",            2.0, 240, 280)
         r101    = self._add_example_block("R-101", "Reactor — jacketed agitated", 30.0, 420, 280)
         h101    = self._add_example_block("H-101", "Heat exch. — floating head", 80.0, 600, 280)
         tk_vap  = self._add_example_block("TK-V",  "Storage tank — cone roof", 100.0, 600,  80)
@@ -6090,12 +6093,12 @@ class FlowsheetEditor:
         """
         tk_med  = self._add_example_block("TK-101", "Storage tank — cone roof", 250.0,  60, 300)
         e_est   = self._add_example_block("E-EST",  "Heat exch. — floating head", 60.0, 240, 300)
-        r101    = self._add_example_block("R-101",  "Reactor — jacketed agitated", 80.0, 420, 300)
-        tk_co2  = self._add_example_block("TK-CO2", "Storage tank — cone roof",  50.0, 420,  80)
+        r101    = self._add_example_block("R-101",  "Reactor — jacketed agitated", 35.0, 420, 300)
+        tk_co2  = self._add_example_block("TK-CO2", "Storage tank — cone roof",  90.0, 420,  80)
         v101    = self._add_example_block("V-101",  "Vessel — vertical",          40.0, 620, 300)
         tk_bio  = self._add_example_block("TK-102", "Storage tank — cone roof", 100.0, 620, 520)
         f101    = self._add_example_block("F-101",  "Filter — belt",              25.0, 820, 300)
-        tk_pen  = self._add_example_block("TK-103", "Storage tank — cone roof",  50.0,1000, 240)
+        tk_pen  = self._add_example_block("TK-103", "Storage tank — cone roof",  90.0,1000, 240)
         tk_res  = self._add_example_block("TK-104", "Storage tank — cone roof", 150.0,1000, 380)
 
         # R-101: fermentador placeholder
@@ -6200,12 +6203,12 @@ class FlowsheetEditor:
         El "combustible abstraído" se mete como _add_example_extra
         utility con price para reflejar el OPEX energético.
         """
-        tk_in   = self._add_example_block("TK-001", "Storage tank — cone roof",  50.0,  60, 260)
+        tk_in   = self._add_example_block("TK-001", "Storage tank — cone roof",  90.0,  60, 260)
         p101    = self._add_example_block("P-101", "Pump — centrifugal",         10.0, 240, 260)
-        b101    = self._add_example_block("B-101", "Boiler — water tube",     20000.0, 420, 260)
+        b101    = self._add_example_block("B-101", "Boiler — water tube",     10.0, 420, 260)
         tur101  = self._add_example_block("TUR-101","Heat exch. — floating head", 150.0, 600, 260)
         con101  = self._add_example_block("CON-101","Heat exch. — air cooler",   180.0, 780, 260)
-        tk_out  = self._add_example_block("TK-002", "Storage tank — cone roof",  50.0, 960, 260)
+        tk_out  = self._add_example_block("TK-002", "Storage tank — cone roof",  90.0, 960, 260)
 
         # Makeup water 100 t/y (feed)
         self._add_example_stream(tk_in, p101, "S-makeup", 100, role="feed",
@@ -6269,12 +6272,12 @@ class FlowsheetEditor:
 
         Basis 100 tm/año makeup water (plant scale piloto).
         """
-        tk_in   = self._add_example_block("TK-001", "Storage tank — cone roof",  50.0,  60, 260)
+        tk_in   = self._add_example_block("TK-001", "Storage tank — cone roof",  90.0,  60, 260)
         p101    = self._add_example_block("P-101", "Pump — centrifugal",         10.0, 240, 260)
-        gv101   = self._add_example_block("GV-101","Heat exch. — kettle reboiler", 200.0, 420, 260)
+        gv101   = self._add_example_block("GV-101","Heat exch. — kettle reboiler", 100.0, 420, 260)
         tur101  = self._add_example_block("TUR-101","Heat exch. — floating head", 150.0, 620, 260)
         con101  = self._add_example_block("CON-101","Heat exch. — air cooler",   180.0, 820, 260)
-        tk_out  = self._add_example_block("TK-002", "Storage tank — cone roof",  50.0,1000, 260)
+        tk_out  = self._add_example_block("TK-002", "Storage tank — cone roof",  90.0,1000, 260)
 
         # Makeup water
         self._add_example_stream(tk_in, p101, "S-makeup", 100, role="feed",
