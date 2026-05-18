@@ -60,6 +60,10 @@ def run_all_examples():
         '_example_quimpac_chloralkali',
         '_example_hno3_ostwald',
         '_example_talara_refinery',
+        # ── Catálogo educativo Lote 1 (alimentaria simple) ──
+        '_example_pasteurizer',
+        '_example_pineapple_juice',
+        '_example_potato_chips',
     ]
     print(f"\n{'='*92}")
     print("VALIDACIÓN HEADLESS — todos los ejemplos del flowsheet")

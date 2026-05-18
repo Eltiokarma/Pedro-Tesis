@@ -4250,6 +4250,216 @@ class FlowsheetEditor:
                                  flowrate=4400000, price=15.0,
                                  stream="Utilities")
 
+    # ==================================================================
+    # CATÁLOGO EDUCATIVO E01–E24 (Lote 1: alimentaria simple Tier 1)
+    # ==================================================================
+
+    def _example_pasteurizer(self):
+        """TIER 1 — Pasteurizador HTST de jugo.
+
+        Operación térmica simple sin reacción química: jugo de fruta
+        diluido en agua se calienta de 5 °C a 72 °C, se mantiene 15 s
+        en el tubo de retención, y se enfría rápidamente a 4 °C antes
+        del envasado.  Topología:
+
+            TK-101  →  E-101  →  V-101  →  E-102  →  TK-102
+            crudo     calent.   retened.  enfri.   pasteur.
+            5°C       72°C      72°C/15s  4°C      product
+
+        Basis 1000 tm/año, jugo = {water 0.88, sucrose 0.12}.  El
+        retenedor es un Vessel vertical isotérmico (T constante,
+        sin reacción).  Modo: sin reacciones químicas; el solver
+        calcula los duties de calentador y enfriador desde Cp del
+        mosto azucarado.  Los duties deben ser de signo opuesto y
+        magnitud similar (no hay regeneración explícita en este
+        modelo simple).
+        """
+        # Layout horizontal sencillo (5 bloques en línea)
+        tk_in  = self._add_example_block("TK-101", "Storage tank — cone roof", 200.0,  80, 220)
+        e101   = self._add_example_block("E-101",  "Heat exch. — floating head", 60.0, 260, 220)
+        v101   = self._add_example_block("V-101",  "Vessel — vertical",          5.0,  440, 220)
+        e102   = self._add_example_block("E-102",  "Heat exch. — floating head", 60.0, 620, 220)
+        tk_out = self._add_example_block("TK-102", "Storage tank — cone roof", 200.0, 800, 220)
+
+        juice = {"water": 0.88, "sucrose": 0.12}
+
+        # Crudo a 5 °C
+        self._add_example_stream(tk_in, e101, "S-jugo-crudo", 1000, role="feed",
+                                 src_port="salida",   dst_port="tube_in",
+                                 price=120.0, T=5,
+                                 composition=juice,
+                                 main_component="water", phase="liquid")
+        # Calentado a 72 °C
+        self._add_example_stream(e101, v101, "S-1", 1000,
+                                 src_port="tube_out", dst_port="alimentacion",
+                                 T=72,
+                                 composition=juice,
+                                 main_component="water", phase="liquid")
+        # Tras retenedor (T constante)
+        self._add_example_stream(v101, e102, "S-2", 1000,
+                                 src_port="liquido",  dst_port="tube_in",
+                                 T=72,
+                                 composition=juice,
+                                 main_component="water", phase="liquid")
+        # Enfriado a 4 °C
+        self._add_example_stream(e102, tk_out, "S-pasteurizado", 1000, role="product",
+                                 src_port="tube_out", dst_port="entrada",
+                                 price=600.0, T=4,
+                                 composition=juice,
+                                 main_component="water", phase="liquid")
+
+        # Duties auto desde Cp del mosto
+        from flowsheet_solver import auto_set_duties_from_thermo
+        auto_set_duties_from_thermo(self.fs)
+
+
+    def _example_pineapple_juice(self):
+        """TIER 1 — Jugo de piña concentrado por evaporación.
+
+        Evapora agua de un jugo diluido 12 % sólidos hasta concentrado
+        35 % sólidos.  Tren de doble efecto: el vapor de M-101 calienta
+        al efecto 2.  Sin reacción química (operación física de
+        concentración).
+
+        Topología:
+            TK-101 → E-101 → EV-101 → EV-102 → TK-102 (concentrado)
+                                  ↓        ↓
+                              vapor    vapor   (role=utility)
+
+        Basis 1000 tm/año jugo diluido.  Balance:
+            ST in:   120 tm/año (12 %)
+            ST out:  120 tm/año (35 %)  → producto = 120/0.35 ≈ 342.9 tm/año
+            Agua evaporada total ≈ 1000 − 342.9 = 657.1 tm/año
+            (reparto 50/50 entre los dos efectos a fines didácticos).
+        """
+        tk_in  = self._add_example_block("TK-101", "Storage tank — cone roof", 200.0,  80, 240)
+        e101   = self._add_example_block("E-101",  "Heat exch. — floating head", 30.0, 260, 240)
+        ev101  = self._add_example_block("EV-101", "Evaporator — vertical",      40.0, 440, 220)
+        ev102  = self._add_example_block("EV-102", "Evaporator — vertical",      30.0, 640, 220)
+        tk_out = self._add_example_block("TK-102", "Storage tank — cone roof",   80.0, 840, 220)
+        # tanques de vapor (utility) para visualizar el efluente
+        tk_v1  = self._add_example_block("TK-V1",  "Storage tank — cone roof",  100.0, 440,  60)
+        tk_v2  = self._add_example_block("TK-V2",  "Storage tank — cone roof",   80.0, 640,  60)
+
+        # Composiciones por etapa
+        diluted   = {"water": 0.880, "pineapple_solids": 0.120}    # 12 %
+        mid       = {"water": 0.817, "pineapple_solids": 0.183}    # ~18 % tras efecto 1
+        concen    = {"water": 0.650, "pineapple_solids": 0.350}    # 35 %
+
+        # Feed: jugo diluido
+        self._add_example_stream(tk_in, e101, "S-jugo-diluido", 1000, role="feed",
+                                 src_port="salida",   dst_port="tube_in",
+                                 price=200.0, T=20,
+                                 composition=diluted,
+                                 main_component="water", phase="liquid")
+        # Pre-calentado al efecto 1
+        self._add_example_stream(e101, ev101, "S-1", 1000,
+                                 src_port="tube_out", dst_port="alimentacion",
+                                 T=80,
+                                 composition=diluted,
+                                 main_component="water", phase="liquid")
+        # Producto efecto 1 → efecto 2  (656 tm: 120 sólidos / 18.3 %)
+        self._add_example_stream(ev101, ev102, "S-2", 656,
+                                 src_port="producto", dst_port="alimentacion",
+                                 T=70,
+                                 composition=mid,
+                                 main_component="water", phase="liquid")
+        # Vapor efecto 1 (~344 tm de agua)
+        self._add_example_stream(ev101, tk_v1, "S-vap1", 344, role="utility",
+                                 src_port="venteo",   dst_port="entrada",
+                                 price=0.0, T=85,
+                                 main_component="water", phase="vapor")
+        # Producto efecto 2 = concentrado final  (342.9 tm: 120 sólidos / 35 %)
+        self._add_example_stream(ev102, tk_out, "S-concentrado", 343, role="product",
+                                 src_port="producto", dst_port="entrada",
+                                 price=900.0, T=55,
+                                 composition=concen,
+                                 main_component="water", phase="liquid")
+        # Vapor efecto 2 (~313 tm)
+        self._add_example_stream(ev102, tk_v2, "S-vap2", 313, role="utility",
+                                 src_port="venteo",   dst_port="entrada",
+                                 price=0.0, T=60,
+                                 main_component="water", phase="vapor")
+
+        # Duties auto desde ΔH_vap del agua + Cp de la mezcla
+        from flowsheet_solver import auto_set_duties_from_thermo
+        auto_set_duties_from_thermo(self.fs)
+
+
+    def _example_potato_chips(self):
+        """TIER 1 — Papas fritas (freído industrial).
+
+        Modo pseudo-reacción: la freidora evapora ~98 % del agua de
+        la papa y la papa absorbe aceite hasta ~60 % p/p.  No es
+        reacción química — es transferencia de masa simultánea.
+        Se modela como Vessel con duty bloqueado (calor de freído
+        = calor sensible + calor de evaporación del agua perdida).
+
+        Topología:
+            TK-101 (papas)  ┐
+                            ├─→ FR-101 (freidora) ─→ TK-103 (chips)
+            TK-102 (aceite) ┘            │
+                                         └─→ TK-VAP (vapor agua, utility)
+
+        Basis 1000 tm/año papa cruda {potato_solids 0.20, water 0.80}.
+        Chip out: {potato_solids 0.38, water 0.02, vegetable_oil 0.60}.
+        Sólidos conservan (200 tm/año) → chip = 200/0.38 ≈ 526.3 tm/año
+        Agua en chip = 0.02·526.3 ≈ 10.5 tm/año
+        Aceite absorbido = 0.60·526.3 ≈ 315.8 tm/año (feed adicional)
+        Vapor de agua = 800 − 10.5 ≈ 789.5 tm/año (utility)
+        Balance:  1000 + 315.8 = 526.3 + 789.5 = 1315.8 ✓
+        """
+        tk_papa  = self._add_example_block("TK-101", "Storage tank — cone roof", 200.0,  80, 200)
+        tk_oil   = self._add_example_block("TK-102", "Storage tank — cone roof", 150.0,  80, 400)
+        fr101    = self._add_example_block("FR-101", "Vessel — vertical",         20.0, 320, 300)  # freidora
+        tk_chip  = self._add_example_block("TK-103", "Storage tank — cone roof", 200.0, 560, 300)  # chips
+        tk_vap   = self._add_example_block("TK-VAP", "Storage tank — cone roof", 100.0, 320,  80)  # vapor agua
+
+        papa_cruda = {"potato_solids": 0.20, "water": 0.80}
+        chip_out   = {"potato_solids": 0.380, "water": 0.020, "vegetable_oil": 0.600}
+
+        # Papa cruda (feed)
+        self._add_example_stream(tk_papa, fr101, "S-papa-cruda", 1000, role="feed",
+                                 src_port="salida",   dst_port="alimentacion",
+                                 price=150.0, T=20,
+                                 composition=papa_cruda,
+                                 main_component="water", phase="liquid")
+        # Aceite vegetal (feed, lo que se consume — el repuesto)
+        self._add_example_stream(tk_oil, fr101, "S-aceite", 316, role="feed",
+                                 src_port="salida",   dst_port="alimentacion",
+                                 price=1200.0, T=180,
+                                 main_component="vegetable_oil", phase="liquid")
+        # Chips: salida sólida (Modo B: composición declarada)
+        self._add_example_stream(fr101, tk_chip, "S-chips", 526, role="product",
+                                 src_port="liquido",  dst_port="entrada",
+                                 price=2500.0, T=170,
+                                 composition=chip_out,
+                                 main_component="vegetable_oil", phase="liquid")
+        # Vapor de agua del freído (utility — recuperable como steam)
+        self._add_example_stream(fr101, tk_vap, "S-vapor-agua", 790, role="utility",
+                                 src_port="vapor",    dst_port="entrada",
+                                 price=0.0, T=180,
+                                 main_component="water", phase="vapor")
+
+        # Duty de la freidora: calor sensible (papa 20→180 °C) +
+        # ΔHvap·agua_evaporada.  Estimación rápida:
+        #   sensible papa cruda  = 1000 tm × ~3.8 kJ/kg·K × 160 K = 608 GJ/año
+        #   ΔHvap agua (789.5 tm × 2257 kJ/kg)              = 1782 GJ/año
+        # Total ≈ 2390 GJ/año = 75.8 kW (continuo, 8760 h).
+        # Se setea como duty bloqueado para que el solver no recalcule
+        # y rompa el balance Modo B (los outlets ya están declarados).
+        self._set_block_duty(fr101, +76)
+        self.fs.blocks[fr101].duty_locked = True
+
+        # Calor de "reacción" pseudo (evap del agua dominante)
+        # ΔHvap·m_agua / m_in_total = 2257·(789.5/1316) ≈ +1354 kJ/kg input.
+        # Signo + porque el sistema absorbe calor (endotérmico para el fluido).
+        self.fs.blocks[fr101].heat_of_reaction = +1354.0
+
+        from flowsheet_solver import auto_set_duties_from_thermo
+        auto_set_duties_from_thermo(self.fs)
+
+
     def open_json(self):
         path = filedialog.askopenfilename(
             title="Abrir diagrama",

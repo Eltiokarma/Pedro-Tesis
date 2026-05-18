@@ -4112,6 +4112,19 @@ class FlowsheetMainWindow(QMainWindow):
                               "REFINERÍA TALARA — PMRT Petroperú",
                               "100-900 — Conversión Profunda",
                               "PFD-TALARA-001"),
+            # ── Catálogo educativo Lote 1 (alimentaria simple) ──
+            "pasteurizer":  (TkEditor._example_pasteurizer,
+                              "Pasteurizador HTST de jugo",
+                              "100 — Alimentaria",
+                              "PFD-PAST-001"),
+            "pineapple":    (TkEditor._example_pineapple_juice,
+                              "Jugo de piña concentrado (evaporación)",
+                              "100 — Alimentaria",
+                              "PFD-PINE-001"),
+            "potato_chips": (TkEditor._example_potato_chips,
+                              "Papas fritas (freído industrial)",
+                              "100 — Alimentaria",
+                              "PFD-CHIP-001"),
         }
         entry = builder_map.get(key)
         if entry is None:
