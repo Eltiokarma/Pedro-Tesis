@@ -1092,7 +1092,24 @@ class FlowsheetEditor:
                             role="internal", src_port="", dst_port="",
                             price=0.0, T=25.0, cp=0.0,
                             main_component="", phase="",
-                            composition=None):
+                            composition=None,
+                            lock_mass=None, lock_T=None, lock_comp=None):
+        """Crea un stream del ejemplo.
+
+        Hallazgo 2 — params lock_* explícitos (opcionales):
+          lock_mass:  None → heurística vieja (mass_flow > 0)
+                      bool → respetar explícito
+          lock_T:     None → heurística vieja (T != 25 °C)
+                      bool → respetar explícito
+          lock_comp:  None → heurística vieja (composition o main_component)
+                      bool → respetar explícito
+
+        Regla física (para builders nuevos):
+          · Feeds frescos:   lock_mass=True, lock_comp=True, lock_T=True
+          · Specs de diseño: lock en outputs de productos (no más)
+          · Intermedios:     mass_flow=0.0 (sin lock) → solver calcula
+          · Outputs reactor: composition=None (solver Modo A calcula)
+        """
         sid = self.fs.new_id()
         s = Stream(
             id=sid, name=name, src=src, dst=dst,
@@ -1104,11 +1121,13 @@ class FlowsheetEditor:
             phase=phase,
             composition=dict(composition) if composition else {},
         )
-        # Sudoku locks: los example builders DECLARAN valores explícitamente,
-        # así que cualquier no-default = locked (user/example spec).
-        s.mass_flow_locked   = (mass_flow > 0)
-        s.temperature_locked = abs(T - 25.0) > 0.01
-        s.composition_locked = bool(composition) or bool(main_component)
+        # Sudoku locks: heurística legacy si lock_* es None.
+        s.mass_flow_locked   = ((mass_flow > 0) if lock_mass is None
+                                  else bool(lock_mass))
+        s.temperature_locked = ((abs(T - 25.0) > 0.01) if lock_T is None
+                                  else bool(lock_T))
+        s.composition_locked = ((bool(composition) or bool(main_component))
+                                  if lock_comp is None else bool(lock_comp))
         self.fs.streams[sid] = s
         return sid
 

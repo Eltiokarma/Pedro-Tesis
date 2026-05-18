@@ -6039,7 +6039,10 @@ class _ExampleBuilderShim:
                             role="internal", src_port="", dst_port="",
                             price=0.0, T=25.0, cp=0.0,
                             main_component="", phase="",
-                            composition=None):
+                            composition=None,
+                            lock_mass=None, lock_T=None, lock_comp=None):
+        """Shim Qt — Hallazgo 2: mismo contrato que FlowsheetEditor de Tk
+        con lock_* opcionales (None = heurística vieja)."""
         sid = self.fs.new_id()
         s = Stream(
             id=sid, name=name, src=src, dst=dst,
@@ -6051,11 +6054,12 @@ class _ExampleBuilderShim:
             phase=phase,
             composition=dict(composition) if composition else {},
         )
-        # Sudoku locks (mismo criterio que FlowsheetEditor de Tk):
-        # cualquier valor declarado explícitamente = locked.
-        s.mass_flow_locked   = (mass_flow > 0)
-        s.temperature_locked = abs(T - 25.0) > 0.01
-        s.composition_locked = bool(composition) or bool(main_component)
+        s.mass_flow_locked   = ((mass_flow > 0) if lock_mass is None
+                                  else bool(lock_mass))
+        s.temperature_locked = ((abs(T - 25.0) > 0.01) if lock_T is None
+                                  else bool(lock_T))
+        s.composition_locked = ((bool(composition) or bool(main_component))
+                                  if lock_comp is None else bool(lock_comp))
         self.fs.streams[sid] = s
         return sid
 
