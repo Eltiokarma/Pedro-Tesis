@@ -235,6 +235,30 @@ class Block:
     cyclone_active:        bool      = False
     collection_efficiency: float     = 0.90
 
+    # ---- OPERACIÓN POR LOTES (batch) — declarativo, Capa 1+3 ----
+    # Clasificación del bloque respecto al modo batch:
+    #   "continuous" (default) — opera en steady state aunque exista
+    #                            una sección batch en el flowsheet.
+    #                            Comportamiento idéntico al pre-batch.
+    #   "native"               — equipo batch-nativo (reactor batch,
+    #                            cristalizador, secador drum, vessel
+    #                            usado como tanque de carga).  Se
+    #                            dimensiona por volumen de lote.
+    #   "auxiliary"            — continuo por naturaleza pero opera
+    #                            en ventanas intermitentes del ciclo
+    #                            (bomba de carga/descarga, HX del
+    #                            chaqueta, mixer).  Se dimensiona por
+    #                            su PICO durante la ventana, no por
+    #                            el promedio anual.
+    # task_ref: nombre de la Task de BatchRecipe a la que el bloque
+    #           está vinculado (para native/auxiliary).  El cruce
+    #           Block↔Task se usa en Capa 2 (sizing) y Capa 3
+    #           (utility peaks por bloque), NO en Capa 1.
+    # Regla aditiva: un proyecto sin batch tiene batch_role
+    # "continuous" en todos los bloques → comportamiento legacy.
+    batch_role: str = "continuous"
+    task_ref:   str = ""
+
     # caches del canvas Tk (no se serializan, no se usan en Qt)
     canvas_rect: Optional[int] = field(default=None, repr=False)
     canvas_text: Optional[int] = field(default=None, repr=False)
@@ -348,6 +372,23 @@ class Stream:
     #   Expansión brusca: 1
     #   Entrada brusca a tanque: 1
     pipe_K_local:     float = 0.0     # K total de accesorios
+
+    # ---- OPERACIÓN POR LOTES (declarativo, hook transitorio) ----
+    # Ventana de actividad batch:
+    #   None (default) → corriente CONTINUA, comportamiento idéntico
+    #                    al pre-batch (solver y validación la tratan
+    #                    como permanente).
+    #   {"task_ref": <nombre_tarea>, "active": bool}
+    #                  → la corriente existe físicamente solo durante
+    #                    esa tarea del ciclo.  PURAMENTE DECLARATIVO
+    #                    en esta fase: ni solver ni flowsheet_validation
+    #                    lo leen.  Es el equivalente a ode_hook pero
+    #                    para corrientes — deja la metadata para que
+    #                    la dinámica transitoria futura (Capa 4+) la
+    #                    use sin tener que rediseñar la estructura.
+    # Regla aditiva: un Stream sin batch_window se comporta byte-
+    # idéntico a hoy.  Lectura defensiva con .get() en consumers.
+    batch_window: Optional[dict] = field(default=None)
 
     # caches del canvas Tk
     canvas_line:    Optional[int] = field(default=None, repr=False)
