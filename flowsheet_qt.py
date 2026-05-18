@@ -404,6 +404,63 @@ class BlockEditDialog(QDialog):
                     self.dtlm_over_label, self.dtlm_over_edit, hint_uov):
             _w.setVisible(_hx_cat)
 
+        # ---- Columna de destilación: parámetros de sizing físico ----
+        # Solo visible si eq_type == 'Tower (column shell)'.
+        # 0 = "usar default canónico de econ_defaults.COLUMN_DEFAULTS".
+        is_tower = "Tower" in (block.eq_type or "")
+        self.gb_col_phys = QGroupBox("Columna — sizing físico")
+        self.gb_col_phys.setVisible(is_tower)
+        col_layout = QFormLayout(self.gb_col_phys)
+
+        self.col_pack_type = QComboBox()
+        self.col_pack_type.addItem("Platos (default)", "")
+        self.col_pack_type.addItem("Empaque random", "random")
+        self.col_pack_type.addItem("Empaque estructurado", "structured")
+        _ptype = getattr(block, "packing_type", "") or ""
+        for _i in range(self.col_pack_type.count()):
+            if self.col_pack_type.itemData(_i) == _ptype:
+                self.col_pack_type.setCurrentIndex(_i); break
+        col_layout.addRow("Tipo interno:", self.col_pack_type)
+
+        self.col_tray_space = QDoubleSpinBox()
+        self.col_tray_space.setRange(0.0, 2.0); self.col_tray_space.setDecimals(3)
+        self.col_tray_space.setSingleStep(0.05); self.col_tray_space.setSuffix(" m")
+        self.col_tray_space.setValue(float(getattr(block, "tray_spacing_m", None) or 0.0))
+        col_layout.addRow("Tray spacing:", self.col_tray_space)
+
+        self.col_K_sb = QDoubleSpinBox()
+        self.col_K_sb.setRange(0.0, 0.5); self.col_K_sb.setDecimals(4)
+        self.col_K_sb.setSingleStep(0.01); self.col_K_sb.setSuffix(" m/s")
+        self.col_K_sb.setValue(float(getattr(block, "K_souders_brown", None) or 0.0))
+        col_layout.addRow("K Souders-Brown:", self.col_K_sb)
+
+        self.col_head = QDoubleSpinBox()
+        self.col_head.setRange(0.0, 20.0); self.col_head.setDecimals(2)
+        self.col_head.setSingleStep(0.5); self.col_head.setSuffix(" m")
+        self.col_head.setValue(float(getattr(block, "column_head_height_m", None) or 0.0))
+        col_layout.addRow("Head height:", self.col_head)
+
+        self.col_tray_eff = QDoubleSpinBox()
+        self.col_tray_eff.setRange(0.0, 1.0); self.col_tray_eff.setDecimals(3)
+        self.col_tray_eff.setSingleStep(0.05)
+        self.col_tray_eff.setValue(float(getattr(block, "tray_efficiency", None) or 0.0))
+        col_layout.addRow("Tray efficiency:", self.col_tray_eff)
+
+        self.col_HETP = QDoubleSpinBox()
+        self.col_HETP.setRange(0.0, 2.0); self.col_HETP.setDecimals(3)
+        self.col_HETP.setSingleStep(0.05); self.col_HETP.setSuffix(" m")
+        self.col_HETP.setValue(float(getattr(block, "HETP_m", None) or 0.0))
+        col_layout.addRow("HETP (empaque):", self.col_HETP)
+
+        hint_col = QLabel(
+            "0 = usar default canónico de econ_defaults.COLUMN_DEFAULTS\n"
+            "Defaults: tray_spacing 0.6m (24\"), K=0.06, head 3m,\n"
+            "tray_eff 1.0, HETP 0.5m.  Para empaque estructurado HETP~0.3m."
+        )
+        hint_col.setStyleSheet("color: #888; font-size: 8pt;")
+        col_layout.addRow("", hint_col)
+        layout.addRow(self.gb_col_phys)
+
         layout.addRow(gb_duty)
 
         # ---- Reactor (Capas 4 y 5) ----
@@ -836,6 +893,16 @@ class BlockEditDialog(QDialog):
         if self.dtlm_over_edit.isVisible():
             v = float(self.dtlm_over_edit.value())
             self.block.dtlm_override = v if v > 0 else None
+        # Columna — sizing físico (Tower)
+        if hasattr(self, "gb_col_phys") and self.gb_col_phys.isVisible():
+            self.block.packing_type = self.col_pack_type.currentData() or ""
+            for attr, widget in (("tray_spacing_m",        self.col_tray_space),
+                                  ("K_souders_brown",       self.col_K_sb),
+                                  ("column_head_height_m",  self.col_head),
+                                  ("tray_efficiency",       self.col_tray_eff),
+                                  ("HETP_m",                self.col_HETP)):
+                v = float(widget.value())
+                setattr(self.block, attr, v if v > 0 else None)
         # Reactor de equilibrio (Capa 4): persistir reactions, T_op, P_op
         if hasattr(self, "gb_eq") and self.gb_eq.isVisible():
             picked: List[str] = []

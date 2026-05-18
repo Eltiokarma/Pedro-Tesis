@@ -272,6 +272,30 @@ class Block:
     U_override:     Optional[float] = None     # W/m²·K
     dtlm_override:  Optional[float] = None     # K
 
+    # ---- OVERRIDES de columnas de destilación (size_tower) ----
+    # Solo aplican a bloques eq_type='Tower (column shell)'.  None
+    # (default) → el solver usa los defaults canónicos de
+    # econ_defaults.COLUMN_DEFAULTS (K_SB=0.06, tray_spacing=0.6 m,
+    # head=3.0 m, tray_eff=1.0, HETP=0.5 m).
+    #
+    # Casos de uso:
+    #   · tray_spacing 0.46 m (18") para columnas chicas
+    #   · tray_spacing 0.76 m (30") para columnas con high foaming
+    #   · K_souders_brown 0.04 con foaming severo
+    #   · tray_efficiency 0.65 para etanol/agua, 0.50 para amine
+    #   · HETP 0.30 m para empaque estructurado de alta eficiencia
+    #   · column_head_height_m=5 m si hay condensador externo grande
+    # packing_type:
+    #   ""        → columna de platos (default, usa N · tray_spacing)
+    #   "random"  → empacada con anillos (usa N · HETP)
+    #   "structured" → empacada Mellapak (usa N · HETP)
+    tray_spacing_m:        Optional[float] = None
+    K_souders_brown:       Optional[float] = None
+    column_head_height_m:  Optional[float] = None
+    tray_efficiency:       Optional[float] = None
+    HETP_m:                Optional[float] = None
+    packing_type:          str             = ""
+
     # caches del canvas Tk (no se serializan, no se usan en Qt)
     canvas_rect: Optional[int] = field(default=None, repr=False)
     canvas_text: Optional[int] = field(default=None, repr=False)

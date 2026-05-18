@@ -210,20 +210,59 @@ def size_compressor(block, fs) -> Optional[float]:
 
 
 def size_tower(block, fs) -> Optional[float]:
-    """V = π·D²/4 · H.  D del Souders-Brown real (§4.2), H = N · 0.6 + 3.
+    """V = π·D²/4 · H para columnas de destilación.
 
     Souders-Brown (Perry 8ª §14, Walas §13.1):
 
         v_max = K · sqrt( (ρ_L − ρ_V) / ρ_V )    [m/s]
 
-    Con K en m/s.  Valor típico para platos trayed con 24" tray
-    spacing:  K = 0.05–0.09 m/s (≈ 0.165–0.30 ft/s).  Usamos
-    K = 0.06 (conservador, 24" spacing, sin foaming severo).
+    Con K en m/s.  Defaults canónicos en econ_defaults.COLUMN_DEFAULTS:
+        K_SB           0.06 m/s  (24" tray spacing, sin foaming severo)
+        tray_spacing   0.6 m     (24")
+        head_height    3.0 m     (sumidero + cabezal)
+        tray_eff       1.0       (asume N_real = N_teorico)
+        HETP           0.5 m     (random packing; estructurado ~0.3)
+
+    Precedencia por parámetro:
+        1. block.{tray_spacing_m, K_souders_brown, ...} si > 0
+        2. econ_defaults.COLUMN_DEFAULTS[*]
+        3. fallback hardcoded conservador
+
+    Si block.packing_type ∈ {'random','structured'}, la altura por
+    etapa se calcula con HETP_m en lugar de tray_spacing_m, y
+    N_real = N_teorico (no se aplica tray_efficiency).
     """
-    K_SB = 0.06             # m/s — Souders-Brown coefficient
-    N = (getattr(block, "_column_N", 0)
-         or getattr(block, "column_N_stages", 0) or 10)
-    H = N * 0.6 + 3.0
+    # Defaults canónicos centralizados
+    try:
+        import econ_defaults as _ed
+        defaults = _ed.get_column_defaults()
+    except Exception:
+        defaults = {"K_souders_brown": 0.06, "tray_spacing_m": 0.6,
+                     "column_head_height_m": 3.0, "tray_efficiency": 1.0,
+                     "HETP_m": 0.5}
+    def _pick(attr, key):
+        v = getattr(block, attr, None)
+        return v if (v is not None and v > 0) else defaults[key]
+    K_SB        = _pick("K_souders_brown",      "K_souders_brown")
+    tray_space  = _pick("tray_spacing_m",       "tray_spacing_m")
+    head        = _pick("column_head_height_m", "column_head_height_m")
+    tray_eff    = _pick("tray_efficiency",      "tray_efficiency")
+    HETP        = _pick("HETP_m",               "HETP_m")
+
+    # N teóricas: del solver FUG (column_N) o declarado por el user.
+    N_th = (getattr(block, "_column_N", 0)
+            or getattr(block, "column_N_stages", 0) or 10)
+    # Convertir a N reales según tipo de columna.
+    packing_type = (getattr(block, "packing_type", "") or "").lower()
+    if packing_type in ("random", "structured"):
+        # Empacada: H = N_teorico · HETP + head (tray_eff ignorada,
+        # HETP ya incorpora la eficiencia del relleno).
+        H = N_th * HETP + head
+    else:
+        # Platos: N_real = N_teorico / tray_eff (eff < 1 → más platos
+        # reales que teóricos para alcanzar la separación).
+        N_real = N_th / max(tray_eff, 1e-3)
+        H = N_real * tray_space + head
     # Vapor flow (preferir corriente declarada vapor/gas)
     vap = next((s for s in fs.streams.values()
                 if s.dst == block.id
