@@ -5197,6 +5197,30 @@ class FlowsheetMainWindow(QMainWindow):
         sev, msg = fval.validate_connection(self.fs, src_id, dst_id,
                                               src_port, dst_port)
         if sev == "error":
+            # Reactor con TODOS sus puertos de alimentación ocupados →
+            # ofrecer crear un mixer automáticamente upstream (UX
+            # accionable: en lugar de un error muerto, propongo la
+            # arquitectura física correcta).
+            _is_reactor_full = (
+                "Reactor" in (b_dst.eq_type or "")
+                and dst_port in ("util_in", "util_out")
+                and any("alimentacion" in (t.dst_port or "")
+                        for t in self.fs.streams.values() if t.dst == dst_id)
+            )
+            if _is_reactor_full:
+                ans = QMessageBox.question(
+                    self, "Reactor con alimentación llena",
+                    f"El reactor {b_dst.name} ya tiene sus puertos de "
+                    f"alimentación ocupados.  Un reactor admite hasta dos "
+                    f"corrientes directas; para combinar más insumos, hay "
+                    f"que insertar un Mezclador (Mixer — static) antes.\n\n"
+                    f"¿Crear el mezclador automáticamente y reconectar?",
+                    QMessageBox.Yes | QMessageBox.No, QMessageBox.No,
+                )
+                if ans == QMessageBox.Yes:
+                    self._insert_mixer_upstream(src_id, dst_id)
+                    return
+                return
             QMessageBox.critical(self, "Conexión inválida", msg)
             return
         elif sev == "warn":
@@ -5222,6 +5246,71 @@ class FlowsheetMainWindow(QMainWindow):
         self._refresh_port_colors()
         self._update_status()
         self.end_action(f"Conectar {b_src.name}→{b_dst.name}", before)
+
+    def _insert_mixer_upstream(self, new_src_id, reactor_id):
+        """Inserta un Mixer — static delante del reactor, reconecta la
+        corriente existente al mixer, agrega la nueva corriente al
+        mixer, y conecta el mixer al reactor.  Hallazgo 3 — UX.
+        """
+        from flowsheet_model import Block
+        # Localizar la corriente existente al reactor (la primera con
+        # dst_port que empiece con 'alimentacion').
+        existing_stream = next(
+            (t for t in self.fs.streams.values()
+             if t.dst == reactor_id and (t.dst_port or "").startswith("alimentacion")),
+            None)
+        if existing_stream is None:
+            return
+        existing_src_id = existing_stream.src
+        # Crear el mixer cerca del reactor (entre los dos sources).
+        b_reactor = self.fs.blocks[reactor_id]
+        b_src_new = self.fs.blocks.get(new_src_id)
+        b_src_old = self.fs.blocks.get(existing_src_id)
+        mx_id = self.fs.new_id()
+        x_mid = (b_reactor.x + (b_src_new.x if b_src_new else b_reactor.x - 200)) / 2
+        y_mid = b_reactor.y
+        mx_name = f"M-{mx_id:03d}"
+        self.fs.blocks[mx_id] = Block(
+            id=mx_id, name=mx_name, eq_type="Mixer — static", S=2.0,
+            n=1, x=int(x_mid), y=int(y_mid),
+        )
+        # Eliminar la corriente existente reactor-old y crear:
+        # old_src → mixer (alimentacion_1), new_src → mixer (alimentacion_2),
+        # mixer → reactor (alimentacion).
+        before = self.begin_action()
+        self.fs.streams.pop(existing_stream.id, None)
+        # Re-render canvas: limpiar las líneas viejas
+        for sid in list(self.fs.streams.keys()):
+            pass
+        # Re-crear como mixer downstream
+        for src, port_in, name_suffix in (
+            (existing_src_id, "alimentacion_1", "old"),
+            (new_src_id,      "alimentacion_2", "new"),
+        ):
+            new_sid = self.fs.new_id()
+            self.fs.streams[new_sid] = Stream(
+                id=new_sid, name=f"S-{new_sid}",
+                src=src, dst=mx_id, mass_flow=0.0,
+                src_port=ep.autoselect_outlet(self.fs.blocks[src].eq_type,
+                    [t.src_port for t in self.fs.streams.values()
+                     if t.src == src and t.src_port]),
+                dst_port=port_in,
+            )
+        # Mixer → reactor
+        final_sid = self.fs.new_id()
+        self.fs.streams[final_sid] = Stream(
+            id=final_sid, name=f"S-{final_sid}",
+            src=mx_id, dst=reactor_id, mass_flow=0.0,
+            src_port="producto", dst_port="alimentacion",
+        )
+        # Re-render todo (canvas pierde tracking de los streams viejos)
+        self._render_block(self.fs.blocks[mx_id])
+        for s in self.fs.streams.values():
+            if s.canvas_line is None:
+                self._render_stream(s)
+        self._refresh_port_colors()
+        self._update_status()
+        self.end_action(f"Insertar mixer antes de {b_reactor.name}", before)
 
     def delete_block(self, bid: int):
         ans = QMessageBox.question(

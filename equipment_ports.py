@@ -83,10 +83,11 @@ COMPRESSOR_PORTS = {
 
 # Reactor con servicios de utilidad (chaqueta o serpentín)
 REACTOR_PORTS = {
-    "alimentacion": ("left",  0.5),
-    "producto":     ("right", 0.5),
-    "util_in":      ("top",   0.30),
-    "util_out":     ("top",   0.70),
+    "alimentacion":   ("left",  0.35),
+    "alimentacion_2": ("left",  0.65),    # co-feed opcional
+    "producto":       ("right", 0.5),
+    "util_in":        ("top",   0.30),
+    "util_out":       ("top",   0.70),
 }
 
 # Vessel vertical (flash drum, separador)
