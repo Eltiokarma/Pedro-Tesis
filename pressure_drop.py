@@ -138,6 +138,108 @@ def pipe_pressure_drop(mass_flow_kg_s: float,
 
 
 # ============================================================
+# Gas compresible isotérmico (Hallazgo 4-A)
+# ============================================================
+
+def pipe_pressure_drop_compressible(mass_flow_kg_s: float,
+                                      P_in_Pa: float,
+                                      T_K: float,
+                                      MW_kg_mol: float,
+                                      mu_Pa_s: float,
+                                      diameter_m: float,
+                                      length_m: float,
+                                      roughness_m: float = 4.5e-5,
+                                      K_local: float = 0.0,
+                                      Z: float = 1.0) -> Optional[Dict]:
+    """ΔP en tubería de GAS por flujo isotérmico compresible.
+
+    Ecuación isotérmica (Crane TP-410 / forma integrada de Darcy con
+    densidad variable):
+        P1² − P2² = (f·L/D + K) · (G²·R·T·Z / (A²·MW))
+    donde:
+      G  = mass_flow_kg_s
+      A  = π·D²/4 [m²]
+      R  = 8.314 J/(mol·K),  MW en kg/mol
+    Resuelve P2 explícito porque la ecuación es cuadrática en P2².
+
+    Selección automática del modelo (devuelve flag 'model'):
+      · ΔP/P_in < 0.10 → 'incompressible_ok' (degrada a Darcy-Weisbach
+        incompresible, error < 5 %, más simple).
+      · 0.10 ≤ ΔP/P_in ≤ 0.40 → 'compressible_isothermal'.
+      · ΔP/P_in > 0.40 → 'near_sonic' (flag warning, el usuario debe
+        rediseñar la tubería o segmentarla).
+
+    Returns dict con: delta_P_Pa, delta_P_bar, P_out_Pa, velocity_in,
+    velocity_out, Re_avg, f_Darcy, model, warning (opcional).
+    """
+    import math
+    if mass_flow_kg_s <= 0 or P_in_Pa <= 0 or T_K <= 0 or MW_kg_mol <= 0:
+        return None
+    if diameter_m <= 0 or length_m <= 0:
+        return None
+    R = 8.314
+    A_pipe = math.pi * diameter_m ** 2 / 4.0
+    # Densidad y velocidad de entrada (gas ideal)
+    rho_in = P_in_Pa * MW_kg_mol / (R * T_K * Z)
+    v_in = mass_flow_kg_s / (rho_in * A_pipe)
+    # Re y f en condiciones de entrada (aprox; en compresible varía con x)
+    Re_in = rho_in * v_in * diameter_m / mu_Pa_s
+    f_d = colebrook_white(Re_in, roughness_m / diameter_m)
+    # Primer estimado con DW incompresible para decidir el modelo
+    dP_incomp = (f_d * length_m / diameter_m + K_local) * \
+                (rho_in * v_in ** 2 / 2.0)
+    if dP_incomp < 0.10 * P_in_Pa:
+        # ΔP chico → incompresible es suficiente
+        return {
+            "delta_P_Pa":   dP_incomp,
+            "delta_P_bar":  dP_incomp / 1e5,
+            "P_out_Pa":     P_in_Pa - dP_incomp,
+            "velocity_in":  v_in,
+            "velocity_out": v_in,    # rho no cambia significativamente
+            "Re_avg":       Re_in,
+            "f_Darcy":      f_d,
+            "model":        "incompressible_ok",
+        }
+    # Compresible isotérmico: resolver P2² = P1² − Δ
+    # G² · R · T · Z / (A² · MW) tiene unidades de Pa² · m (consistente
+    # cuando multiplicado por L/D o K adimensional).
+    factor = (f_d * length_m / diameter_m + K_local) * \
+             (mass_flow_kg_s ** 2 * R * T_K * Z) / \
+             (A_pipe ** 2 * MW_kg_mol)
+    P2_sq = P_in_Pa ** 2 - factor
+    if P2_sq <= 0:
+        # Flujo bloqueado / sónico
+        return {
+            "delta_P_Pa":   P_in_Pa * 0.5,   # estimación conservadora
+            "delta_P_bar":  P_in_Pa * 0.5 / 1e5,
+            "P_out_Pa":     P_in_Pa * 0.5,
+            "velocity_in":  v_in,
+            "velocity_out": None,
+            "Re_avg":       Re_in,
+            "f_Darcy":      f_d,
+            "model":        "compressible_isothermal",
+            "warning":      "near_sonic_or_choked",
+        }
+    P_out = math.sqrt(P2_sq)
+    dP = P_in_Pa - P_out
+    rho_out = P_out * MW_kg_mol / (R * T_K * Z)
+    v_out = mass_flow_kg_s / (rho_out * A_pipe)
+    out = {
+        "delta_P_Pa":   dP,
+        "delta_P_bar":  dP / 1e5,
+        "P_out_Pa":     P_out,
+        "velocity_in":  v_in,
+        "velocity_out": v_out,
+        "Re_avg":       Re_in,
+        "f_Darcy":      f_d,
+        "model":        "compressible_isothermal",
+    }
+    if dP > 0.40 * P_in_Pa:
+        out["warning"] = "near_sonic"     # ΔP > 40 % → rediseñar
+    return out
+
+
+# ============================================================
 # Wrapper para Stream del flowsheet
 # ============================================================
 
@@ -265,6 +367,28 @@ def stream_pressure_drop(stream, pipe_length_m: float = None,
         return None
     mu = _viscosity_Pa_s(comp, T_K, phase)
     K_local = getattr(stream, "pipe_K_local", 0.0) or 0.0
+    # Hallazgo 4-A: para gas, usar modelo compresible isotérmico
+    # cuando ΔP estimado > 10 % de P_in.  Para líquido o gas con ΔP
+    # chico, Darcy-Weisbach incompresible (validado contra Perry 6e).
+    if phase in ("gas", "vapor"):
+        try:
+            import thermo_db as _td
+            mw_avg = 0.0; total_w = 0.0
+            for c, w in comp.items():
+                co = _td.get(c)
+                if co is None or co.mw <= 0:
+                    continue
+                mw_avg += w * co.mw; total_w += w
+            mw_avg = (mw_avg / total_w) * 1e-3 if total_w > 0 else 0.029
+        except ImportError:
+            mw_avg = 0.029       # fallback aire (kg/mol)
+        return pipe_pressure_drop_compressible(
+            mass_flow_kg_s=m_kg_s,
+            P_in_Pa=P_stream_Pa,
+            T_K=T_K, MW_kg_mol=mw_avg,
+            mu_Pa_s=mu, diameter_m=D, length_m=L,
+            roughness_m=eps, K_local=K_local,
+        )
     return pipe_pressure_drop(m_kg_s, rho, mu, D, L, eps, K_local)
 
 
