@@ -368,6 +368,42 @@ class BlockEditDialog(QDialog):
         self.hor_edit.setVisible(is_reactor)
         hint_hor.setVisible(is_reactor)
 
+        # ---- Overrides de U y ΔTlm para sizing de HX ----
+        # Solo visible si eq_type es de la categoría Heat exchangers.
+        # 0 = "usar valor típico de tabla" (se persiste como None).
+        try:
+            import equipment_costs as _ec_hx
+            _hx_cat = (_ec_hx.EQUIPMENT_DATA.get(block.eq_type, {})
+                                .get("categoria") == "Heat exchangers")
+        except Exception:
+            _hx_cat = False
+        self.u_over_edit = QDoubleSpinBox()
+        self.u_over_edit.setRange(0.0, 5000.0)
+        self.u_over_edit.setDecimals(1)
+        self.u_over_edit.setSingleStep(50.0)
+        self.u_over_edit.setSuffix(" W/m²·K")
+        self.u_over_edit.setValue(float(getattr(block, "U_override", None) or 0.0))
+        self.u_over_label = QLabel("U override:")
+        gb_layout.addRow(self.u_over_label, self.u_over_edit)
+        self.dtlm_over_edit = QDoubleSpinBox()
+        self.dtlm_over_edit.setRange(0.0, 500.0)
+        self.dtlm_over_edit.setDecimals(2)
+        self.dtlm_over_edit.setSingleStep(1.0)
+        self.dtlm_over_edit.setSuffix(" K")
+        self.dtlm_over_edit.setValue(float(getattr(block, "dtlm_override", None) or 0.0))
+        self.dtlm_over_label = QLabel("ΔT_lm override:")
+        gb_layout.addRow(self.dtlm_over_label, self.dtlm_over_edit)
+        hint_uov = QLabel(
+            "Solo aplica a Heat exchangers.  0 = usar valor típico\n"
+            "de tabla (U_TYPICAL / DTLM_TYPICAL).  Útil para condensación\n"
+            "de vapor puro (U~1500), aceite térmico (U~200), close-approach."
+        )
+        hint_uov.setStyleSheet("color: #888; font-size: 8pt;")
+        gb_layout.addRow("", hint_uov)
+        for _w in (self.u_over_label, self.u_over_edit,
+                    self.dtlm_over_label, self.dtlm_over_edit, hint_uov):
+            _w.setVisible(_hx_cat)
+
         layout.addRow(gb_duty)
 
         # ---- Reactor (Capas 4 y 5) ----
@@ -792,6 +828,14 @@ class BlockEditDialog(QDialog):
         # heat_of_reaction (sólo si visible, i.e. reactor)
         if self.hor_edit.isVisible():
             self.block.heat_of_reaction = float(self.hor_edit.value())
+        # Overrides de HX (sólo si visibles, i.e. categoría HX).
+        # Valor 0 → guardar None (sin override; usa tablas U/ΔTlm).
+        if self.u_over_edit.isVisible():
+            v = float(self.u_over_edit.value())
+            self.block.U_override = v if v > 0 else None
+        if self.dtlm_over_edit.isVisible():
+            v = float(self.dtlm_over_edit.value())
+            self.block.dtlm_override = v if v > 0 else None
         # Reactor de equilibrio (Capa 4): persistir reactions, T_op, P_op
         if hasattr(self, "gb_eq") and self.gb_eq.isVisible():
             picked: List[str] = []

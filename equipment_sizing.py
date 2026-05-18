@@ -136,12 +136,22 @@ def _flow_kg_s(mass_flow_tm_yr):
 # ─────────────────────────────────────────────────────────────
 
 def size_heat_exchanger(block, fs) -> Optional[float]:
-    """A = |Q| / (U · ΔT_lm).  Q de block.duty [kW], devuelve m²."""
+    """A = |Q| / (U · ΔT_lm).  Q de block.duty [kW], devuelve m².
+
+    Precedencia para U y ΔT_lm:
+      1. block.U_override / block.dtlm_override (si > 0)
+      2. U_TYPICAL[eq_type] / DTLM_TYPICAL[eq_type]
+      3. U_DEFAULT (400) / DTLM_DEFAULT (40)
+    """
     Q = abs(float(block.duty or 0.0))
     if Q <= 0:
         return None
-    U  = U_TYPICAL.get(block.eq_type, U_DEFAULT)
-    dT = DTLM_TYPICAL.get(block.eq_type, DTLM_DEFAULT)
+    U_user  = getattr(block, "U_override",    None)
+    dT_user = getattr(block, "dtlm_override", None)
+    U  = (U_user  if (U_user  is not None and U_user  > 0)
+          else U_TYPICAL.get(block.eq_type, U_DEFAULT))
+    dT = (dT_user if (dT_user is not None and dT_user > 0)
+          else DTLM_TYPICAL.get(block.eq_type, DTLM_DEFAULT))
     A = Q * 1000.0 / (U * dT)            # Q en kW → W
     return max(A, 0.5)
 

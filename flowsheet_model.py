@@ -259,6 +259,19 @@ class Block:
     batch_role: str = "continuous"
     task_ref:   str = ""
 
+    # ---- OVERRIDES de transferencia de calor (HX sizing) ----
+    # Solo aplican a bloques con categoria='Heat exchangers'.  Cuando
+    # están seteados (>0), size_heat_exchanger los usa en lugar de las
+    # tablas U_TYPICAL / DTLM_TYPICAL.  Default None = "no override"
+    # (el solver usa el valor típico de tabla por eq_type).
+    #
+    # Casos donde el user quiere override:
+    #   · Condensación de vapor de agua puro: U ≈ 1500 W/m²·K
+    #   · Aceite térmico denso a baja vel.:   U ≈ 200 W/m²·K
+    #   · Close-approach con plate-frame:     ΔT_lm ≈ 5 K
+    U_override:     Optional[float] = None     # W/m²·K
+    dtlm_override:  Optional[float] = None     # K
+
     # caches del canvas Tk (no se serializan, no se usan en Qt)
     canvas_rect: Optional[int] = field(default=None, repr=False)
     canvas_text: Optional[int] = field(default=None, repr=False)
