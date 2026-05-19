@@ -3684,8 +3684,15 @@ class _LibraryTree(QTreeWidget):
         from PySide6.QtCore import QMimeData, QByteArray
         from PySide6.QtGui import QDrag
         mime = QMimeData()
-        mime.setData("application/x-pfd-eqtype",
-                       QByteArray(str(eq_type).encode("utf-8")))
+        # Distinguir entre equipo y stream según prefijo
+        if eq_type.startswith("__STREAM__"):
+            # Corriente: el payload es 'mass' o 'energy'
+            kind = eq_type.replace("__STREAM__", "")
+            mime.setData("application/x-pfd-stream",
+                           QByteArray(kind.encode("utf-8")))
+        else:
+            mime.setData("application/x-pfd-eqtype",
+                           QByteArray(str(eq_type).encode("utf-8")))
         drag = QDrag(self)
         drag.setMimeData(mime)
         drag.exec(Qt.CopyAction)
@@ -3716,31 +3723,39 @@ class FlowsheetView(QGraphicsView):
 
     # ---- drag-and-drop desde la biblioteca de equipos ----
     def dragEnterEvent(self, event):
-        if event.mimeData().hasFormat("application/x-pfd-eqtype"):
+        md = event.mimeData()
+        if md.hasFormat("application/x-pfd-eqtype") \
+                or md.hasFormat("application/x-pfd-stream"):
             event.acceptProposedAction()
         else:
             super().dragEnterEvent(event)
 
     def dragMoveEvent(self, event):
-        if event.mimeData().hasFormat("application/x-pfd-eqtype"):
+        md = event.mimeData()
+        if md.hasFormat("application/x-pfd-eqtype") \
+                or md.hasFormat("application/x-pfd-stream"):
             event.acceptProposedAction()
         else:
             super().dragMoveEvent(event)
 
     def dropEvent(self, event):
         md = event.mimeData()
+        scene_pos = self.mapToScene(event.position().toPoint()
+                                      if hasattr(event, "position")
+                                      else event.pos())
+        x = round(scene_pos.x() / GRID_STEP) * GRID_STEP
+        y = round(scene_pos.y() / GRID_STEP) * GRID_STEP
+        w = self.window()
         if md.hasFormat("application/x-pfd-eqtype"):
             eq_type = bytes(md.data("application/x-pfd-eqtype")).decode("utf-8")
-            scene_pos = self.mapToScene(event.position().toPoint()
-                                          if hasattr(event, "position")
-                                          else event.pos())
-            # snap a grilla
-            x = round(scene_pos.x() / GRID_STEP) * GRID_STEP
-            y = round(scene_pos.y() / GRID_STEP) * GRID_STEP
-            # buscar el FlowsheetMainWindow padre
-            w = self.window()
             if hasattr(w, "_add_block_of_type"):
                 w._add_block_of_type(eq_type, x=x, y=y)
+            event.acceptProposedAction()
+            return
+        if md.hasFormat("application/x-pfd-stream"):
+            kind = bytes(md.data("application/x-pfd-stream")).decode("utf-8")
+            if hasattr(w, "_add_floating_stream"):
+                w._add_floating_stream(kind=kind, x=x, y=y)
             event.acceptProposedAction()
             return
         super().dropEvent(event)
@@ -4326,6 +4341,24 @@ class FlowsheetMainWindow(QMainWindow):
 
         self.lib_tree = _LibraryTree(self)
         self.lib_tree.setHeaderHidden(True)
+        # Categoría especial "Corrientes" — primero del árbol, con
+        # dos ítems para drag&drop de streams flotantes.
+        streams_cat = QTreeWidgetItem(["Corrientes"])
+        s_mass = QTreeWidgetItem(["→  Corriente de masa"])
+        s_mass.setData(0, Qt.UserRole, "__STREAM__mass")
+        s_mass.setToolTip(0, "Arrastrá al lienzo: aparece una flecha "
+                               "suelta.\nArrastrá los endpoints a un puerto "
+                               "para conectar.")
+        s_energy = QTreeWidgetItem(["⚡  Corriente de energía (kW)"])
+        s_energy.setData(0, Qt.UserRole, "__STREAM__energy")
+        s_energy.setToolTip(0, "Arrastrá al lienzo: aparece una flecha "
+                                 "de calor suelta.\nAl conectar dos bloques, "
+                                 "el solver acopla sus duties por energy_kW.")
+        streams_cat.addChild(s_mass)
+        streams_cat.addChild(s_energy)
+        streams_cat.setExpanded(True)
+        self.lib_tree.addTopLevelItem(streams_cat)
+        # Categorías de equipos (catálogo)
         cats = eq.por_categoria()
         for cat, names in cats.items():
             parent = QTreeWidgetItem([cat])
@@ -5961,14 +5994,24 @@ class FlowsheetMainWindow(QMainWindow):
     # ---------------------------------------------------
 
     def _on_lib_double_click(self, item, _col):
-        if item.data(0, Qt.UserRole):
-            self._add_block_of_type(item.data(0, Qt.UserRole))
+        data = item.data(0, Qt.UserRole)
+        if not data:
+            return
+        if data.startswith("__STREAM__"):
+            kind = data.replace("__STREAM__", "")
+            self._add_floating_stream(kind=kind)
+        else:
+            self._add_block_of_type(data)
 
     def _add_selected_from_lib(self):
         sel = self.lib_tree.currentItem()
         if sel is None or not sel.data(0, Qt.UserRole):
             return
-        self._add_block_of_type(sel.data(0, Qt.UserRole))
+        data = sel.data(0, Qt.UserRole)
+        if data.startswith("__STREAM__"):
+            self._add_floating_stream(kind=data.replace("__STREAM__", ""))
+        else:
+            self._add_block_of_type(data)
 
     def _add_block_of_type(self, eq_type, x=None, y=None):
         """Agrega un bloque del tipo dado al flowsheet.  Si x/y no se
@@ -6011,6 +6054,50 @@ class FlowsheetMainWindow(QMainWindow):
         except Exception:
             pass
         self.end_action(f"Agregar {nombre}", before)
+
+    def _add_floating_stream(self, kind="mass", x=None, y=None,
+                               length=120.0):
+        """Agrega un Stream FLOTANTE al canvas en la posición (x, y).
+
+        kind: 'mass' o 'energy'.
+        length: largo inicial de la flecha en píxeles (default 120).
+
+        Convención: src=-1, dst=-1, start_xy=[x, y], end_xy=[x+length, y].
+        El solver IGNORA streams con src<=0 o dst<=0 (no afecta balance).
+        El usuario puede arrastrar los endpoints y conectarlos a puertos
+        de bloques.
+        """
+        if x is None or y is None:
+            try:
+                vp_center = self.view.mapToScene(
+                    self.view.viewport().rect().center()
+                )
+                x = round(vp_center.x() / GRID_STEP) * GRID_STEP
+                y = round(vp_center.y() / GRID_STEP) * GRID_STEP
+            except Exception:
+                x, y = 300.0, 200.0
+        kind = kind if kind in ("mass", "energy") else "mass"
+        before = self.begin_action()
+        sid = self.fs.new_id()
+        # Nombre auto: S-Nx para masa, Q-Nx para energía
+        prefix = "Q" if kind == "energy" else "S"
+        n = 1 + sum(1 for s in self.fs.streams.values()
+                     if s.name.startswith(f"{prefix}-flo"))
+        name = f"{prefix}-flo-{n}"
+        s = Stream(
+            id=sid, name=name, src=-1, dst=-1, mass_flow=0.0,
+            role="internal",
+            start_xy=[float(x), float(y)],
+            end_xy=[float(x + length), float(y)],
+            stream_kind=kind,
+            energy_kW=0.0,
+        )
+        self.fs.streams[sid] = s
+        self._render_stream(s)
+        self._refresh_port_colors()
+        self._update_status()
+        self.end_action(f"Agregar {name} (flotante {kind})", before)
+        return sid
 
 
 # ======================================================
