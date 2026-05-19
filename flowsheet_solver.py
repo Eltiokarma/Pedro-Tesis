@@ -401,6 +401,11 @@ def _check_stream_roles(fs):
                        "shell_in", "shell_out"}
 
     for s in fs.streams.values():
+        # Streams flotantes (src o dst sin conectar): no participan
+        # del balance ni del check de roles.  Convención sentinel
+        # src<=0 o dst<=0 (incluye -1 explícito y 0 legacy).
+        if s.src <= 0 or s.dst <= 0:
+            continue
         comp  = s.composition or {}
         is_water = (len(comp) <= 2
                      and comp.get("water", 0) >= 0.95)
