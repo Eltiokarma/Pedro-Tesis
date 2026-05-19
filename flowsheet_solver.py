@@ -2983,6 +2983,49 @@ def _solve_recycle_wegstein(fs, scc_block_ids,
 # ENTRYPOINT
 # ======================================================
 
+def apply_energy_streams(fs) -> List[str]:
+    """E3 — Aplica las corrientes de energía (stream_kind='energy')
+    al duty de los bloques conectados.
+
+    Convención: para un Stream con stream_kind='energy', src=A, dst=B,
+    energy_kW=Q (Q > 0):
+        block_A.duty -= Q     (A cede Q kW → más enfriador)
+        block_B.duty += Q     (B recibe Q kW → más calentador)
+
+    Σ delta_duty = 0 por construcción → conservación de energía
+    automática.
+
+    Streams flotantes (src<=0 o dst<=0) o con energy_kW=0 se ignoran.
+    Bloques con duty_locked=True NO se tocan (respeta override del user).
+
+    Devuelve lista de mensajes ✓/⚠ con los acoplamientos aplicados.
+    """
+    msgs: List[str] = []
+    for s in fs.streams.values():
+        if getattr(s, "stream_kind", "mass") != "energy":
+            continue
+        if s.src <= 0 or s.dst <= 0:
+            continue          # flotante o sentinel
+        Q = float(getattr(s, "energy_kW", 0.0) or 0.0)
+        if abs(Q) < 1e-9:
+            continue
+        b_src = fs.blocks.get(s.src)
+        b_dst = fs.blocks.get(s.dst)
+        if b_src is None or b_dst is None:
+            msgs.append(f"⚠ Energy stream {s.name}: bloque src/dst "
+                         f"inexistente, saltado.")
+            continue
+        # src cede Q kW (más negativo)
+        if not _is_duty_locked(b_src):
+            b_src.duty -= Q
+        # dst recibe Q kW (más positivo)
+        if not _is_duty_locked(b_dst):
+            b_dst.duty += Q
+        msgs.append(f"✓ Energy stream {s.name}: {b_src.name} → "
+                     f"{b_dst.name}, Q={Q:.1f} kW (duties acoplados)")
+    return msgs
+
+
 def solve(fs, max_iter=MAX_ITER):
     """Resuelve mass + energy balance sobre el flowsheet in-place.
 
@@ -3167,6 +3210,12 @@ def solve(fs, max_iter=MAX_ITER):
     #     balance de los coolers/heaters downstream del reactor que
     #     antes no podían calcularse porque les faltaba T del input.
     auto_set_duties_from_thermo(fs, only_zero=True, respect_locks=True)
+
+    # 4d-bis.  Corrientes de energía (E3): aplican acoplamiento de
+    # duties entre bloques conectados.  Conservación automática
+    # (Σ delta_duty = 0).  Solo procesa streams kind='energy' con
+    # src/dst válidos; los flotantes (src<=0 o dst<=0) se ignoran.
+    apply_energy_streams(fs)
 
     # 4e. Solver hidráulico acoplado: bombas/compresores se auto-
     #     dimensionan iterativamente para cubrir ΔP de tuberías +
