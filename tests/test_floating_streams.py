@@ -197,6 +197,73 @@ class TestEnergyStreams(unittest.TestCase):
             "duty_locked debe respetarse: A.duty intacto")
         self.assertAlmostEqual(b.duty, 500.0)
 
+    def test_idempotente_3_solves(self):
+        """REGRESIÓN bug crítico: solve() llamado N veces debe dar
+        las mismas duties.  Antes del fix, cada solve acumulaba el
+        efecto del energy stream → duties × N."""
+        fs, a, b = self._make_two_hx()
+        s_q = fm.Stream(id=10, name="Q", src=1, dst=2,
+                         stream_kind="energy", energy_kW=500.0)
+        fs.streams = {10: s_q}
+        fsv.solve(fs)
+        d1 = (a.duty, b.duty)
+        fsv.solve(fs)
+        d2 = (a.duty, b.duty)
+        fsv.solve(fs)
+        d3 = (a.duty, b.duty)
+        self.assertEqual(d1, d2, "duties cambian entre solve #1 y #2")
+        self.assertEqual(d2, d3, "duties cambian entre solve #2 y #3")
+        self.assertAlmostEqual(a.duty, -500.0)
+        self.assertAlmostEqual(b.duty, +500.0)
+
+    def test_apply_energy_streams_idempotente_directa(self):
+        """apply_energy_streams llamada N veces directamente."""
+        fs, a, b = self._make_two_hx()
+        fs.streams = {10: fm.Stream(id=10, name="Q", src=1, dst=2,
+                                       stream_kind="energy",
+                                       energy_kW=300.0)}
+        fsv.apply_energy_streams(fs)
+        fsv.apply_energy_streams(fs)
+        fsv.apply_energy_streams(fs)
+        self.assertAlmostEqual(a.duty, -300.0)
+        self.assertAlmostEqual(b.duty, +300.0)
+
+    def test_cambiar_energy_kW_actualiza(self):
+        """Si el user edita energy_kW entre solves, las duties deben
+        reflejar el valor nuevo (no acumular con el viejo)."""
+        fs, a, b = self._make_two_hx()
+        s_q = fm.Stream(id=10, name="Q", src=1, dst=2,
+                         stream_kind="energy", energy_kW=500.0)
+        fs.streams = {10: s_q}
+        fsv.apply_energy_streams(fs)
+        self.assertAlmostEqual(a.duty, -500.0)
+        # User cambia el valor
+        s_q.energy_kW = 100.0
+        fsv.apply_energy_streams(fs)
+        self.assertAlmostEqual(a.duty, -100.0,
+            "Duty no se actualizó al nuevo energy_kW")
+        self.assertAlmostEqual(b.duty, +100.0)
+        # Y si pasa a 0, las duties vuelven a 0
+        s_q.energy_kW = 0.0
+        fsv.apply_energy_streams(fs)
+        self.assertAlmostEqual(a.duty, 0.0)
+        self.assertAlmostEqual(b.duty, 0.0)
+
+    def test_blocks_inexistentes_warning_propagado(self):
+        """REGRESIÓN: si energy stream tiene src/dst que no existen
+        en fs.blocks, el warning debe propagarse a
+        result.energy_warnings (no perderse silenciosamente)."""
+        fs = fm.Flowsheet()
+        fs.streams = {10: fm.Stream(id=10, name="Q-bad",
+                                       src=999, dst=998,
+                                       stream_kind="energy",
+                                       energy_kW=500.0)}
+        res = fsv.solve(fs)
+        self.assertTrue(
+            any("bloque src/dst inexistente" in w
+                for w in res.energy_warnings),
+            f"Warning no propagado: {res.energy_warnings}")
+
 
 # ─────────────────────────────────────────────────────────────
 # Sin regresión en ejemplos existentes

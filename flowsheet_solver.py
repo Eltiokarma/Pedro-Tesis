@@ -2995,12 +2995,25 @@ def apply_energy_streams(fs) -> List[str]:
     Σ delta_duty = 0 por construcción → conservación de energía
     automática.
 
+    IDEMPOTENCIA: la función guarda la última contribución aplicada
+    en `block._energy_streams_delta` (attr runtime, NO serializado
+    al JSON).  Al re-invocarse (re-solve), RESTA primero la
+    contribución previa antes de sumar la nueva.  Sin esto, dos
+    solves seguidos duplicarían el efecto (bug crítico).
+
     Streams flotantes (src<=0 o dst<=0) o con energy_kW=0 se ignoran.
     Bloques con duty_locked=True NO se tocan (respeta override del user).
 
     Devuelve lista de mensajes ✓/⚠ con los acoplamientos aplicados.
     """
     msgs: List[str] = []
+    # 1. Restar contribuciones previas para garantizar idempotencia.
+    for b in fs.blocks.values():
+        prev = getattr(b, "_energy_streams_delta", 0.0)
+        if abs(prev) > 1e-12 and not _is_duty_locked(b):
+            b.duty -= prev
+        b._energy_streams_delta = 0.0
+    # 2. Aplicar las nuevas contribuciones, tracking en attr runtime.
     for s in fs.streams.values():
         if getattr(s, "stream_kind", "mass") != "energy":
             continue
@@ -3018,9 +3031,13 @@ def apply_energy_streams(fs) -> List[str]:
         # src cede Q kW (más negativo)
         if not _is_duty_locked(b_src):
             b_src.duty -= Q
+            b_src._energy_streams_delta = (
+                getattr(b_src, "_energy_streams_delta", 0.0) - Q)
         # dst recibe Q kW (más positivo)
         if not _is_duty_locked(b_dst):
             b_dst.duty += Q
+            b_dst._energy_streams_delta = (
+                getattr(b_dst, "_energy_streams_delta", 0.0) + Q)
         msgs.append(f"✓ Energy stream {s.name}: {b_src.name} → "
                      f"{b_dst.name}, Q={Q:.1f} kW (duties acoplados)")
     return msgs
@@ -3215,7 +3232,12 @@ def solve(fs, max_iter=MAX_ITER):
     # duties entre bloques conectados.  Conservación automática
     # (Σ delta_duty = 0).  Solo procesa streams kind='energy' con
     # src/dst válidos; los flotantes (src<=0 o dst<=0) se ignoran.
-    apply_energy_streams(fs)
+    e_msgs = apply_energy_streams(fs)
+    for m in e_msgs:
+        if m.startswith("✗"):
+            result.energy_balance_errors.append(m)
+        elif m.startswith("⚠"):
+            result.energy_warnings.append(m)
 
     # 4e. Solver hidráulico acoplado: bombas/compresores se auto-
     #     dimensionan iterativamente para cubrir ΔP de tuberías +
