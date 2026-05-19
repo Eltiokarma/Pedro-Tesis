@@ -3171,14 +3171,24 @@ class StreamItem(QGraphicsPathItem):
                 scene.removeItem(sm)
         self._handles.clear()
 
-        if not self.isSelected() or scene is None:
+        if scene is None:
+            return
+        # Stream flotante (src<=0 o dst<=0): mostrar endpoint handles
+        # SIEMPRE, aunque no esté seleccionado, para que el user pueda
+        # arrastrarlos a un puerto sin tener que seleccionar primero.
+        is_floating = (self.model.src <= 0 or self.model.dst <= 0)
+        if not self.isSelected() and not is_floating:
             return
 
-        # Endpoints SIEMPRE (start y end) — son la novedad principal
+        # Endpoints (start y end) — siempre si seleccionado o flotante
         for role in ("start", "end"):
             h = _EndpointHandle(self, role)
             scene.addItem(h)
             self._handles.append(h)
+
+        # Waypoints + ghosts solo si seleccionado (no en flotante puro)
+        if not self.isSelected():
+            return
 
         if self.model.waypoints:
             for i in range(len(self.model.waypoints)):
