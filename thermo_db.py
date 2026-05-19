@@ -214,9 +214,9 @@ def _normalize_name(label: str) -> str:
     """'Methanol (CH4O)' → 'methanol'.  'o-Xylene' → 'xylene'."""
     base = label.split("(")[0].strip()
     base = base.lower().replace("-", " ")
-    base = base.replace("o ", "")     # 'o xylene' → 'xylene'
-    base = base.replace("n ", "")     # 'n hexane' → 'hexane'
-    base = base.replace("iso", "iso") # mantener
+    # Anclar al inicio: si no, 'carbon dioxide' pierde 'n ' interno ('carbodioxide').
+    # Afecta CO2/CO/H2S/HCl/HBr/HCN/HF/CS2/CCl4/CF4/NF3/DMF.
+    base = re.sub(r"^[on]\s+", "", base)   # 'o xylene' / 'n hexane' → 'xylene' / 'hexane'
     base = re.sub(r"\s+", "_", base.strip())
     return base
 
@@ -333,9 +333,40 @@ def _parse_db() -> Dict[str, ComponentThermo]:
         m = re.search(r"z_ra\s*=\s*([\d.]+)", body)
         if m: comp.z_ra_override = float(m.group(1))
 
-        out[name] = comp
+        # Merge en lugar de overwrite. Si el nombre ya existe (compuesto
+        # repetido con datos por capa: e.g. Perry da Cp_liq + ΔHf, otra
+        # entrada da Antoine), conserva los campos previos no vacíos.
+        # Sin esto, Perry sobrescribiría Antoine de methanol/water con
+        # None y rompería Wang-Henke.
+        if name in out:
+            prev = out[name]
+            for f, default in _DEFAULTS.items():
+                old_v = getattr(prev, f)
+                new_v = getattr(comp, f)
+                if old_v == default and new_v != default:
+                    setattr(prev, f, new_v)
+            # label/quality: prefer the more specific (non-empty)
+            if not prev.label and comp.label:
+                prev.label = comp.label
+        else:
+            out[name] = comp
 
     return out
+
+
+# Defaults por campo, para el merge. Cualquier campo que aún esté en
+# default es "vacío" y puede ser rellenado por una entrada posterior.
+_DEFAULTS: Dict[str, object] = {
+    "cas": "", "formula": "", "mw": 0.0, "tb_c": 0.0,
+    "tc_c": None, "pc_bar": None, "omega": None,
+    "antoine_A": None, "antoine_B": None, "antoine_C": None,
+    "antoine_range_C": (0, 0),
+    "cp_gas_coefs": None, "cp_gas_range_K": (0, 0),
+    "cp_liq_coefs": None, "cp_liq_range_K": (0, 0),
+    "dh_f_gas_kJ_mol": None, "dh_f_liq_kJ_mol": None,
+    "quality": "",
+    "rho_ref_kg_m3": None, "rho_ref_T_C": None, "z_ra_override": None,
+}
 
 
 def _ensure_loaded() -> Dict[str, ComponentThermo]:

@@ -53,7 +53,7 @@ FORMULA_TO_THERMO = {
     'N2':        'nitrogen',
     'NH3':       'ammonia',
     'SO2':       'so2',           # ya existe en thermo_db.md
-    'SO3':       None,             # no está en thermo_db.md aún
+    'SO3':       'sulfur_trioxide', # Perry 8th ed (Cmpd 327)
     'H2S':       'h2s',
     'MDEA':      'mdea',
     # Orgánicos
@@ -70,6 +70,8 @@ FORMULA_TO_THERMO = {
     'CH3COOC2H5':      'ethyl_acetate',
     'C6H6':            'benzene',
     'C8H10':           'ethylbenzene',
+    'C2H5_C6H5':       'ethylbenzene',  # alias usado en R016 styrene
+    'Glycerol':        'glycerin',      # nombre alternativo (R021 biodiesel)
     # Bioquímica
     'Glucose':         'glucose',
     'Sucrose':         'sucrose',
