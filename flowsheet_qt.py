@@ -1197,10 +1197,16 @@ class StreamEditDialog(QDialog):
         self.resize(540, min(720, max_h))
         self.setMinimumHeight(360)
 
-        b_src = fs.blocks[stream.src]
-        b_dst = fs.blocks[stream.dst]
-        ports_src = list(ep.get_ports(b_src.eq_type).keys())
-        ports_dst = list(ep.get_ports(b_dst.eq_type).keys())
+        # Tolerar streams flotantes (src<=0 o dst<=0): el dialog
+        # permite configurar mass_flow / composition / kind aunque
+        # el stream no esté conectado todavía.  Cuando se conecte
+        # (via endpoint handles), los valores configurados se aplican.
+        b_src = fs.blocks.get(stream.src)
+        b_dst = fs.blocks.get(stream.dst)
+        ports_src = (list(ep.get_ports(b_src.eq_type).keys())
+                     if b_src is not None else [])
+        ports_dst = (list(ep.get_ports(b_dst.eq_type).keys())
+                     if b_dst is not None else [])
 
         # Outer layout: vertical con scroll arriba + botones abajo
         outer = QVBoxLayout(self)
@@ -1378,7 +1384,9 @@ class StreamEditDialog(QDialog):
             idx = self.src_port_combo.findText(cur_sp)
             if idx >= 0:
                 self.src_port_combo.setCurrentIndex(idx)
-        gb_layout.addRow(f"Puerto en {b_src.name}:", self.src_port_combo)
+        _src_label = (f"Puerto en {b_src.name}:" if b_src is not None
+                      else "Puerto origen (sin conectar):")
+        gb_layout.addRow(_src_label, self.src_port_combo)
 
         self.dst_port_combo = QComboBox()
         self.dst_port_combo.addItems(ports_dst)
@@ -1387,8 +1395,43 @@ class StreamEditDialog(QDialog):
             idx = self.dst_port_combo.findText(cur_dp)
             if idx >= 0:
                 self.dst_port_combo.setCurrentIndex(idx)
-        gb_layout.addRow(f"Puerto en {b_dst.name}:", self.dst_port_combo)
+        _dst_label = (f"Puerto en {b_dst.name}:" if b_dst is not None
+                      else "Puerto destino (sin conectar):")
+        gb_layout.addRow(_dst_label, self.dst_port_combo)
         layout.addRow(gb_ports)
+
+        # ---- Tipo de corriente (mass / energy) ----
+        gb_kind = QGroupBox("Tipo de corriente")
+        kind_layout = QFormLayout(gb_kind)
+        self.kind_combo = QComboBox()
+        self.kind_combo.addItem("Masa (material clásico)", "mass")
+        self.kind_combo.addItem("Energía pura (Q en kW)", "energy")
+        cur_kind = getattr(stream, "stream_kind", "mass") or "mass"
+        for _i in range(self.kind_combo.count()):
+            if self.kind_combo.itemData(_i) == cur_kind:
+                self.kind_combo.setCurrentIndex(_i); break
+        kind_layout.addRow("Tipo:", self.kind_combo)
+        self.energy_kW_edit = QDoubleSpinBox()
+        self.energy_kW_edit.setRange(-1e6, 1e6); self.energy_kW_edit.setDecimals(2)
+        self.energy_kW_edit.setSingleStep(50.0); self.energy_kW_edit.setSuffix(" kW")
+        self.energy_kW_edit.setValue(float(getattr(stream, "energy_kW", 0.0) or 0.0))
+        kind_layout.addRow("Q (energy_kW):", self.energy_kW_edit)
+        kind_hint = QLabel(
+            "Masa: corriente material clásica (mass_flow, T, comp).\n"
+            "Energía: corriente PURA DE CALOR.  energy_kW > 0 → calor\n"
+            "sale del bloque origen y entra al destino (Σ duties conserva).\n"
+            "Si está flotante (sin src/dst): no afecta balance — útil para\n"
+            "preparar la corriente y conectarla después."
+        )
+        kind_hint.setStyleSheet("color: #888; font-size: 8pt;")
+        kind_layout.addRow("", kind_hint)
+        # Habilitar energy_kW solo si kind=='energy'
+        def _toggle_energy(idx):
+            is_energy = (self.kind_combo.itemData(idx) == "energy")
+            self.energy_kW_edit.setEnabled(is_energy)
+        self.kind_combo.currentIndexChanged.connect(_toggle_energy)
+        _toggle_energy(self.kind_combo.currentIndex())
+        layout.addRow(gb_kind)
 
         # ---- Tubería: pérdida de carga (Darcy-Weisbach) ----
         # Hallazgo 4-C: checkbox 'is_pipe'.  Si está desmarcado (default
@@ -1518,6 +1561,9 @@ class StreamEditDialog(QDialog):
         self.stream.pipe_K_local = float(self.pipe_K.value())
         self.stream.pressure_bar = float(self.p_edit.value())
         self.stream.pressure_locked = bool(self.p_lock.isChecked())
+        # Tipo de corriente (mass/energy) + energy_kW
+        self.stream.stream_kind = self.kind_combo.currentData() or "mass"
+        self.stream.energy_kW = float(self.energy_kW_edit.value())
         # Setpoint: si la casilla está marcada, guarda T objetivo;
         # si no, -999 (centinela "sin setpoint").
         if self.sp_check.isChecked():
