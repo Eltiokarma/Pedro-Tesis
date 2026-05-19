@@ -450,6 +450,22 @@ class Stream:
     # idéntico a hoy.  Lectura defensiva con .get() en consumers.
     batch_window: Optional[dict] = field(default=None)
 
+    # ---- TIPO DE CORRIENTE (mass / energy) ----
+    # "mass"  (default) → corriente material clásica.  El solver
+    #                     calcula balance de masa y energía vía
+    #                     entalpía sensible del fluido.
+    # "energy" → corriente PURA DE CALOR (Q en kW).  No transporta
+    #            materia.  energy_kW > 0 indica calor que sale del
+    #            block src y entra al block dst.  El solver:
+    #              · block.src.duty += energy_kW  (extrae calor)
+    #              · block.dst.duty -= energy_kW  (recibe calor)
+    #            Útil para representar cross-exchange explícito o
+    #            integración térmica (Pinch).  Conservación
+    #            automática por construcción.  Si la corriente está
+    #            flotante (src<=0 o dst<=0), se IGNORA.
+    stream_kind: str   = "mass"
+    energy_kW:   float = 0.0
+
     # caches del canvas Tk
     canvas_line:    Optional[int] = field(default=None, repr=False)
     canvas_label:   Optional[int] = field(default=None, repr=False)
