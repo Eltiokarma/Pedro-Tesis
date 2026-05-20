@@ -1773,6 +1773,15 @@ class StreamEditDialog(QDialog):
         """
         if not hasattr(self, "dof_label"):
             return
+        # Defensa contra invocaciones durante __init__: el populate inicial
+        # de la tabla de composición dispara _update_comp_sum → este método
+        # ANTES de que la sección de tubería cree p_lock/phase_combo/comp_combo
+        # /cp_edit. Si falta cualquiera, abortamos silenciosamente — el último
+        # _update_dof_summary del __init__ corre con todo creado.
+        needed = ("mass_lock", "t_lock", "p_lock", "comp_lock",
+                  "phase_combo", "comp_combo", "cp_edit")
+        if not all(hasattr(self, w) for w in needed):
+            return
         locks = []
         free  = []
         for lbl, chk in (("flujo", self.mass_lock), ("T", self.t_lock),
@@ -3091,11 +3100,73 @@ class BlockItem(QGraphicsItemGroup):
 
     def mouseReleaseEvent(self, event):
         super().mouseReleaseEvent(event)
+        # IMÁN BIDIRECCIONAL: al soltar el bloque tras un drag, si algún
+        # endpoint flotante quedó cerca de un puerto de ESTE bloque, snap.
+        # No durante el drag (sería intrusivo), solo al release.
+        if event.button() == Qt.LeftButton and self.editor is not None:
+            self._snap_nearby_floating_endpoints()
         # push undo si hubo un drag
         if (event.button() == Qt.LeftButton and self.editor is not None
             and self.editor._drag_before_snapshot is not None):
             self.editor.end_action("Mover", self.editor._drag_before_snapshot)
             self.editor._drag_before_snapshot = None
+
+    def _snap_nearby_floating_endpoints(self):
+        """Imán block→stream: para cada endpoint flotante de cualquier
+        stream, si quedó dentro de SNAP_RADIUS de un puerto de este
+        bloque, conecta el endpoint a ese puerto.
+
+        Complementa el imán stream→block existente (_EndpointHandle):
+        ahora también moviendo el BLOQUE cerca de una flecha flotante
+        se imanta.  Solo se evalúa al SOLTAR (mouseReleaseEvent), no
+        durante el drag, para evitar conexiones accidentales al pasar
+        por encima."""
+        from PySide6.QtCore import QPointF
+        if self.editor is None or self.scene() is None:
+            return
+        SNAP_R = _EndpointHandle.SNAP_RADIUS
+        SNAP_R2 = SNAP_R * SNAP_R
+        bid = self.model.id
+        snapped_any = False
+        for s in list(self.editor.fs.streams.values()):
+            # Probar endpoint START si está flotante
+            for role, src_or_dst, xy_field, port_field, other_field in (
+                ("start", "src", "start_xy", "src_port", "dst"),
+                ("end",   "dst", "end_xy",   "dst_port", "src"),
+            ):
+                if getattr(s, src_or_dst) != -1:
+                    continue   # ese extremo ya está conectado
+                # Evitar que un stream conecte src y dst al mismo bloque
+                if getattr(s, other_field) == bid:
+                    continue
+                xy = getattr(s, xy_field, []) or []
+                if len(xy) < 2:
+                    continue
+                ex, ey = float(xy[0]), float(xy[1])
+                best = None
+                best_d2 = SNAP_R2
+                for port_name, port_ell in self.port_items.items():
+                    p = port_ell.mapToScene(port_ell.boundingRect().center())
+                    dx, dy = p.x() - ex, p.y() - ey
+                    d2 = dx*dx + dy*dy
+                    if d2 < best_d2:
+                        best_d2 = d2
+                        best = (port_name, p)
+                if best is None:
+                    continue
+                port_name, p_scene = best
+                setattr(s, src_or_dst, bid)
+                setattr(s, port_field, port_name)
+                if xy_field == "start_xy":
+                    s.start_xy = []
+                else:
+                    s.end_xy = []
+                item = self.scene().stream_items.get(s.id)
+                if item is not None:
+                    item.update_path()
+                snapped_any = True
+        if snapped_any and hasattr(self.editor, "_mark_dirty"):
+            self.editor._mark_dirty()
 
     def contextMenuEvent(self, event):
         """Click derecho → menú contextual con íconos HYSYS."""
@@ -3718,8 +3789,23 @@ class StreamItem(QGraphicsPathItem):
 
     def mousePressEvent(self, event):
         """Inicia drag-translate de toda la flecha al hacer click sobre
-        ella (no sobre un handle)."""
+        ella (no sobre un handle).
+
+        EXCEPCIÓN: si el stream está fully-connected (src y dst en bloques)
+        Y no tiene waypoints, NO hay nada que mover (los endpoints siguen
+        a los bloques, no hay bend points editables). En ese caso NO
+        interceptamos el click: dejamos que Qt haga la selección normal,
+        para que rubber-band + drag de un bloque vecino mueva el conjunto
+        sin que esta flecha 'absorba' el click y bloquee el group-drag."""
         if event.button() == Qt.LeftButton:
+            s = self.model
+            has_floating = (s.src == -1 or s.dst == -1)
+            has_waypoints = bool(s.waypoints)
+            if not has_floating and not has_waypoints:
+                # Fully-connected, sin waypoints — nada que arrastrar.
+                # Selección por defecto via super(), no consumimos el evento.
+                super().mousePressEvent(event)
+                return
             self.setSelected(True)
             self._drag_origin = event.scenePos()
             self._drag_snap = self._translation_snapshot()
