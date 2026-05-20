@@ -1197,6 +1197,12 @@ class StreamEditDialog(QDialog):
         self.resize(540, min(720, max_h))
         self.setMinimumHeight(360)
 
+        # Auto-lock: cuando es True, cualquier value-changed en los
+        # editores marca el lock correspondiente. Arranca False durante
+        # el init (para que setear los valores iniciales NO lockee
+        # automáticamente todo), se activa al final del __init__.
+        self._allow_auto_lock = False
+
         # Tolerar streams flotantes (src<=0 o dst<=0): el dialog
         # permite configurar mass_flow / composition / kind aunque
         # el stream no esté conectado todavía.  Cuando se conecte
@@ -1587,6 +1593,32 @@ class StreamEditDialog(QDialog):
         # (lo hace _update_comp_sum via signals al agregar fila)
         self._update_dof_summary()
 
+        # ─── AUTO-LOCK on edit ─────────────────────────────────────
+        # Filosofía estilo Aspen/HYSYS: el simple acto de cambiar un
+        # valor declara la variable como spec del user. El user puede
+        # destildar el 🔒 después si quiere liberar la variable para
+        # el solver. valueChanged solo dispara con cambios reales (no
+        # con focus-out sin editar); el guard _allow_auto_lock=False
+        # durante __init__ evita que los setValue iniciales auto-lockeen.
+        self.mass_edit.valueChanged.connect(
+            lambda _v: self._auto_lock(self.mass_lock))
+        self.t_edit.valueChanged.connect(
+            lambda _v: self._auto_lock(self.t_lock))
+        self.p_edit.valueChanged.connect(
+            lambda _v: self._auto_lock(self.p_lock))
+        # composition: agregar/quitar/editar filas marca comp_lock
+        self.btn_comp_add.clicked.connect(
+            lambda: self._auto_lock(self.comp_lock))
+        self.btn_comp_norm.clicked.connect(
+            lambda: self._auto_lock(self.comp_lock))
+        # dropdown legacy 'Componente principal' también lockea comp
+        # (.activated solo dispara con interacción del user, no con
+        #  setCurrentIndex programático)
+        self.comp_combo.activated.connect(
+            lambda _idx: self._auto_lock(self.comp_lock))
+        # Habilitar auto-lock AHORA que el init terminó
+        self._allow_auto_lock = True
+
         # ─── Botones OK/Cancel FUERA del scroll, siempre visibles ───
         # antes estaban dentro del QFormLayout y se cortaban en
         # pantallas chicas.  Ahora viven en el outer QVBoxLayout, así
@@ -1609,10 +1641,17 @@ class StreamEditDialog(QDialog):
         self.price_label.setVisible(visible)
         self.price_edit.setVisible(visible)
 
+    def _auto_lock(self, checkbox: QCheckBox):
+        """Marca el checkbox 🔒 cuando el user editó el valor asociado.
+        No hace nada durante el init (cuando _allow_auto_lock=False)."""
+        if getattr(self, "_allow_auto_lock", False):
+            checkbox.setChecked(True)
+
     # ---- helpers del editor multi-componente ----
     def _add_comp_row(self, key: str = "", frac: float = 0.0):
         """Agrega una fila a la tabla de composición con un combo de
-        componente y un spin de fracción másica."""
+        componente y un spin de fracción másica. Editar cualquier fila
+        auto-lockea comp_lock (filosofía 'tipear es declarar spec')."""
         r = self.comp_table.rowCount()
         self.comp_table.insertRow(r)
         combo = QComboBox()
@@ -1624,6 +1663,8 @@ class StreamEditDialog(QDialog):
             if idx >= 0:
                 combo.setCurrentIndex(idx)
         combo.currentIndexChanged.connect(self._update_comp_sum)
+        combo.activated.connect(
+            lambda _idx: self._auto_lock(self.comp_lock))
         self.comp_table.setCellWidget(r, 0, combo)
         spin = QDoubleSpinBox()
         spin.setRange(0.0, 1.0)
@@ -1631,6 +1672,8 @@ class StreamEditDialog(QDialog):
         spin.setSingleStep(0.05)
         spin.setValue(float(frac))
         spin.valueChanged.connect(self._update_comp_sum)
+        spin.valueChanged.connect(
+            lambda _v: self._auto_lock(self.comp_lock))
         self.comp_table.setCellWidget(r, 1, spin)
         self._update_comp_sum()
 
