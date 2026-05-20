@@ -2635,23 +2635,32 @@ class _EndpointHandle(QGraphicsEllipseItem):
 
     def _sync_pos_from_model(self):
         """Lee la pos actual del endpoint (puerto si conectado, xy si
-        flotante) y posiciona el handle ahí."""
+        flotante) y posiciona el handle ahí.
+
+        IMPORTANTE: apagamos ItemSendsGeometryChanges durante el setPos
+        para que itemChange NO se dispare. Si se disparara, su rama
+        ItemPositionHasChanged haria s.src = -1 (pensando que es un
+        drag del usuario) y wipearia la conexion al puerto."""
         si = self._stream_item
         s  = si.model
-        if self._role == "start":
-            b = si.fs.blocks.get(s.src)
-            if b is not None:
-                _, x, y = si._resolve_port(b, s.src_port, "right")
-                self.setPos(x, y)
-            elif s.start_xy and len(s.start_xy) >= 2:
-                self.setPos(float(s.start_xy[0]), float(s.start_xy[1]))
-        else:
-            b = si.fs.blocks.get(s.dst)
-            if b is not None:
-                _, x, y = si._resolve_port(b, s.dst_port, "left")
-                self.setPos(x, y)
-            elif s.end_xy and len(s.end_xy) >= 2:
-                self.setPos(float(s.end_xy[0]), float(s.end_xy[1]))
+        self.setFlag(QGraphicsItem.ItemSendsGeometryChanges, False)
+        try:
+            if self._role == "start":
+                b = si.fs.blocks.get(s.src)
+                if b is not None:
+                    _, x, y = si._resolve_port(b, s.src_port, "right")
+                    self.setPos(x, y)
+                elif s.start_xy and len(s.start_xy) >= 2:
+                    self.setPos(float(s.start_xy[0]), float(s.start_xy[1]))
+            else:
+                b = si.fs.blocks.get(s.dst)
+                if b is not None:
+                    _, x, y = si._resolve_port(b, s.dst_port, "left")
+                    self.setPos(x, y)
+                elif s.end_xy and len(s.end_xy) >= 2:
+                    self.setPos(float(s.end_xy[0]), float(s.end_xy[1]))
+        finally:
+            self.setFlag(QGraphicsItem.ItemSendsGeometryChanges, True)
 
     def _find_snap_target(self, scene_pos: QPointF):
         """Busca un puerto de un bloque cercano (dentro de SNAP_RADIUS).
@@ -3602,6 +3611,18 @@ class StreamItem(QGraphicsPathItem):
 
         if rebuild_handles:
             self._rebuild_handles()
+        else:
+            # Sin reconstruir handles, RE-SINCRONIZAR los _EndpointHandle
+            # existentes con el modelo. Cuando un bloque conectado se
+            # mueve (refresh_streams_of), el endpoint del path se redibuja
+            # en la nueva pos del puerto pero la bolita naranja del handle
+            # quedaba en la pos anterior. _sync_pos_from_model la pone
+            # donde el modelo dice — y el flag SendsGeometryChanges está
+            # protegido (ver _sync_pos_from_model) para no wipear la
+            # conexión.
+            for h in self._handles:
+                if isinstance(h, _EndpointHandle):
+                    h._sync_pos_from_model()
 
         self._update_tooltip()
 
