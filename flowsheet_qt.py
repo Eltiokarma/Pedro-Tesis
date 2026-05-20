@@ -323,7 +323,6 @@ class BlockEditDialog(QDialog):
         # ---- duty ----
         gb_duty = QGroupBox("Balance de energía")
         gb_layout = QFormLayout(gb_duty)
-        from PySide6.QtWidgets import QHBoxLayout, QWidget
         self.duty_edit = QDoubleSpinBox()
         self.duty_edit.setRange(-1e7, 1e7)
         self.duty_edit.setDecimals(1)
@@ -1288,7 +1287,6 @@ class StreamEditDialog(QDialog):
         layout.addRow("Nombre:", self.name_edit)
 
         # mass flow + lock (sudoku)
-        from PySide6.QtWidgets import QHBoxLayout, QWidget
         self.mass_edit = QDoubleSpinBox()
         self.mass_edit.setRange(0.0, 1e9)
         self.mass_edit.setDecimals(2)
@@ -1347,7 +1345,6 @@ class StreamEditDialog(QDialog):
         # termofísicas
         gb_thermo = QGroupBox("Termofísicas (balance de energía)")
         gb_layout = QFormLayout(gb_thermo)
-        from PySide6.QtWidgets import QHBoxLayout, QWidget
         self.t_edit = QDoubleSpinBox()
         self.t_edit.setRange(-273.0, 2000.0)
         self.t_edit.setDecimals(1)
@@ -1367,7 +1364,6 @@ class StreamEditDialog(QDialog):
         # Setpoint de T (target_temperature, opcional).  Cuando está
         # activado, "Setpoints…" del toolbar puede iterar el duty del
         # bloque upstream para hacer que T real iguale el objetivo.
-        from PySide6.QtWidgets import QHBoxLayout, QWidget
         sp_row = QWidget()
         sp_lay = QHBoxLayout(sp_row); sp_lay.setContentsMargins(0,0,0,0)
         self.sp_check = QCheckBox("Setpoint T")
@@ -1591,7 +1587,6 @@ class StreamEditDialog(QDialog):
         self.p_lock.setToolTip("Marcar para FIJAR P (spec).  Sin marcar:\n"
                                 "el solver la calcula propagando ΔP por el flowsheet.")
         self.p_lock.setChecked(getattr(stream, "pressure_locked", False))
-        from PySide6.QtWidgets import QHBoxLayout, QWidget
         p_row = QWidget(); p_lay = QHBoxLayout(p_row)
         p_lay.setContentsMargins(0,0,0,0)
         p_lay.addWidget(self.p_lock); p_lay.addWidget(self.p_edit, 1)
@@ -2587,7 +2582,10 @@ class _EndpointHandle(QGraphicsEllipseItem):
     HIT_RADIUS   = 18       # HIT AREA invisible — el endpoint cae sobre el
                             # puerto del bloque, así que sin un área grande
                             # los clicks al lado activan el bloque (movable)
-    SNAP_RADIUS  = 22.0     # px scene: rango de snap a un puerto
+    SNAP_RADIUS  = 35.0     # px scene: rango de snap a un puerto.  Generoso
+                            # (~1.75 grid steps) para que el user no tenga
+                            # que ser perfectamente preciso al arrastrar el
+                            # endpoint cerca del puerto del bloque.
 
     def shape(self):
         """Hit area ~36px diámetro para fácil agarre del handle."""
@@ -3195,6 +3193,14 @@ class StreamItem(QGraphicsPathItem):
         scene.addItem(self.label_bg)
         scene.addItem(self.label_name)
         scene.addItem(self.label_flow)
+        # Forzar refresh de handles AHORA que el stream está en escena.
+        # Sin esto, los endpoint handles (naranja) de streams flotantes
+        # no aparecen hasta que el user clickea el stream — y como los
+        # handles son lo que se arrastra a un puerto, la conexión es
+        # imposible sin haberlo seleccionado primero. _rebuild_handles
+        # con scene=None es no-op (ver guard adentro), así que ahora
+        # que scene existe sí crea los _EndpointHandle naranjas.
+        self._rebuild_handles()
 
     def remove_from_scene(self, scene: QGraphicsScene):
         # remover handles de waypoints si estaban activos
