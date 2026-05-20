@@ -1602,6 +1602,45 @@ class StreamEditDialog(QDialog):
         pipe_layout.addRow("", hint_pipe)
         layout.addRow(gb_pipe)
 
+        # ─── Geometría del path en el canvas ───────────────────────
+        # Permite enderezar la flecha sin tener que salir del dialog.
+        # Aplica el mismo helper _straighten_to_orthogonal del menu
+        # derecho de la flecha, pero con eje explícito.
+        gb_geo = QGroupBox("Forma de la flecha en el canvas")
+        geo_lay = QHBoxLayout(gb_geo)
+        self.btn_geo_auto = QPushButton("Auto-route")
+        self.btn_geo_horz = QPushButton("Horizontal")
+        self.btn_geo_vert = QPushButton("Vertical")
+        for b in (self.btn_geo_auto, self.btn_geo_horz, self.btn_geo_vert):
+            geo_lay.addWidget(b)
+        geo_hint = QLabel("Alinea el endpoint flotante con el puerto del bloque.")
+        geo_hint.setStyleSheet("color: #888; font-size: 8pt;")
+        # Wiring: necesitamos el StreamItem para llamar
+        # _straighten_to_orthogonal. Lo conseguimos via el parent del
+        # dialog (FlowsheetMainWindow) y stream.id.
+        def _apply_geo(axis):
+            ed = self.parent()
+            if ed is None or not hasattr(ed, "scene"):
+                return
+            si = ed.scene.stream_items.get(self.stream.id)
+            if si is None:
+                return
+            if axis == "auto":
+                self.stream.waypoints = []
+                si.update_path()
+            else:
+                si._straighten_to_orthogonal(axis=axis)
+            # Refrescar tambien todos los streams para los cruces
+            for _sid, _other in ed.scene.stream_items.items():
+                _other.update_path(rebuild_handles=False)
+            if hasattr(ed, "_mark_dirty"):
+                ed._mark_dirty()
+        self.btn_geo_auto.clicked.connect(lambda: _apply_geo("auto"))
+        self.btn_geo_horz.clicked.connect(lambda: _apply_geo("horizontal"))
+        self.btn_geo_vert.clicked.connect(lambda: _apply_geo("vertical"))
+        layout.addRow(gb_geo)
+        layout.addRow("", geo_hint)
+
         # Habilitar/deshabilitar inputs de geometría según is_pipe.
         def _toggle_pipe_inputs(checked):
             for w in (self.pipe_L, self.pipe_D, self.pipe_eps, self.pipe_K):
@@ -3795,34 +3834,42 @@ class StreamItem(QGraphicsPathItem):
                 _si.update_path(rebuild_handles=False)
         event.accept()
 
-    def _straighten_to_orthogonal(self):
+    def _straighten_to_orthogonal(self, axis: str = "auto"):
         """Endereza la flecha a horizontal o vertical pura.
 
         El clásico problema 'la flecha quedó inclinada y no se puede
         volver a poner derecha' después de un snap de bloque. Esto
-        decide eje dominante (|Δx| vs |Δy|), alinea el endpoint
-        flotante para que coincida en la coordenada perpendicular con
-        el endpoint anclado, y limpia los waypoints (la línea va
-        directa, sin bends raros que la inclinaron).
+        alinea el endpoint flotante para que coincida EXACTAMENTE con
+        la coordenada perpendicular del endpoint anclado, y limpia los
+        waypoints (la línea va directa, sin bends raros que la
+        inclinaron).
+
+        axis:
+          'auto'       — decide por |Δx| vs |Δy|, dominante = el eje
+                          de la flecha (horizontal si dx>=dy).
+          'horizontal' — fuerza alineación en Y (flecha horizontal).
+          'vertical'   — fuerza alineación en X (flecha vertical).
+
+        POR QUÉ antes 'cambiaba un poco pero seguía chueca': los
+        puertos están en pos del bloque + h*frac (típico 297, 345)
+        que NO está en la grilla de 20 px. Snapear el endpoint
+        flotante a la grilla perdía 1-5 px de alineación. Fix: el
+        eje constreñido se setea EXACTO al anchored, sin grid snap.
+        Solo el eje libre se snapea a grilla (no afecta la rectitud).
 
         Casos:
-          • Ambos endpoints anclados (a bloques): solo limpia waypoints.
-            El auto-route es ortogonal por defecto, así queda bonito.
+          • Ambos endpoints anclados: solo limpia waypoints.
           • Un endpoint flotante: alinea el flotante con el anclado.
-          • Ambos flotantes: alinea end_xy con start_xy según eje
-            dominante.
-
-        Snapeado a GRID_STEP para que quede prolijo en la grilla."""
+          • Ambos flotantes: alinea END con START."""
         s = self.model
         fs = getattr(self, "fs", None)
-        # Coords de cada endpoint: del puerto del bloque o de start/end_xy
         def _endpoint_pos(role):
             if role == "start":
                 if s.src != -1 and fs is not None:
                     b = fs.blocks.get(s.src)
                     if b is not None:
                         _, x, y = self._resolve_port(b, s.src_port, "right")
-                        return (x, y, True)   # True = anclado
+                        return (x, y, True)
                 if s.start_xy and len(s.start_xy) >= 2:
                     return (float(s.start_xy[0]), float(s.start_xy[1]), False)
                 return None
@@ -3839,49 +3886,50 @@ class StreamItem(QGraphicsPathItem):
         p_start = _endpoint_pos("start")
         p_end   = _endpoint_pos("end")
         if p_start is None or p_end is None:
-            return    # no se puede operar sin posiciones válidas
+            return
 
         x1, y1, anchored_start = p_start
         x2, y2, anchored_end   = p_end
-        dx = abs(x2 - x1)
-        dy = abs(y2 - y1)
-        horizontal = (dx >= dy)   # dominante: el eje más largo
+        if axis == "auto":
+            horizontal = (abs(x2 - x1) >= abs(y2 - y1))
+        elif axis == "horizontal":
+            horizontal = True
+        elif axis == "vertical":
+            horizontal = False
+        else:
+            horizontal = True
 
-        # Limpiar waypoints — son los que típicamente desalinean el path
         s.waypoints = []
 
         if anchored_start and anchored_end:
-            # Ambos en bloques: nada que mover, el auto-route ya es
-            # ortogonal. Solo limpiamos los waypoints y reroute.
+            # Ambos en bloques: nada que mover, auto-route es ortogonal.
             self.update_path()
             return
 
+        # X libre: snap a grilla. Y constreñido: EXACTO al anchored.
+        # (y viceversa para vertical)
+        def snap(v): return round(v / GRID_STEP) * GRID_STEP
+
         if anchored_start and not anchored_end:
-            # Mover el endpoint END flotante para que se alinee
             if horizontal:
-                new_y = round(y1 / GRID_STEP) * GRID_STEP
-                s.end_xy = [round(x2 / GRID_STEP) * GRID_STEP, new_y]
+                s.end_xy = [snap(x2), y1]    # Y exacto, X a grilla
             else:
-                new_x = round(x1 / GRID_STEP) * GRID_STEP
-                s.end_xy = [new_x, round(y2 / GRID_STEP) * GRID_STEP]
+                s.end_xy = [x1, snap(y2)]    # X exacto, Y a grilla
         elif anchored_end and not anchored_start:
-            # Mover el endpoint START flotante
             if horizontal:
-                new_y = round(y2 / GRID_STEP) * GRID_STEP
-                s.start_xy = [round(x1 / GRID_STEP) * GRID_STEP, new_y]
+                s.start_xy = [snap(x1), y2]
             else:
-                new_x = round(x2 / GRID_STEP) * GRID_STEP
-                s.start_xy = [new_x, round(y1 / GRID_STEP) * GRID_STEP]
+                s.start_xy = [x2, snap(y1)]
         else:
-            # Ambos flotantes: alinear END con START en el eje perp.
+            # Ambos flotantes: alinear END con START en el eje perpendicular.
             if horizontal:
-                new_y = round(y1 / GRID_STEP) * GRID_STEP
-                s.start_xy = [round(x1 / GRID_STEP) * GRID_STEP, new_y]
-                s.end_xy   = [round(x2 / GRID_STEP) * GRID_STEP, new_y]
+                yy = snap(y1)
+                s.start_xy = [snap(x1), yy]
+                s.end_xy   = [snap(x2), yy]
             else:
-                new_x = round(x1 / GRID_STEP) * GRID_STEP
-                s.start_xy = [new_x, round(y1 / GRID_STEP) * GRID_STEP]
-                s.end_xy   = [new_x, round(y2 / GRID_STEP) * GRID_STEP]
+                xx = snap(x1)
+                s.start_xy = [xx, snap(y1)]
+                s.end_xy   = [xx, snap(y2)]
         self.update_path()
 
     def _draw_arrow(self, path, x_end, y_end, x_prev, y_prev):
