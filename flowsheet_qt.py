@@ -498,7 +498,8 @@ class BlockEditDialog(QDialog):
             "• equilibrium: minimización Gibbs multi-reacción\n"
             "  (ignora volumen, recomendado si V grande o cinética rápida)\n"
             "• pfr: flujo pistón con RK4 (requiere V > 0)\n"
-            "• cstr: tanque agitado, robusto para cinéticas stiff (requiere V > 0)"
+            "• cstr: tanque agitado, robusto para cinéticas stiff (requiere V > 0)\n"
+            "• batch: RK4 dN/dt, V cte, P emergente (requiere V > 0 + tiempo de tanda)"
         )
         hint_mode.setStyleSheet("color: #888; font-size: 8pt;")
         eq_layout.addRow("", hint_mode)
@@ -6858,8 +6859,15 @@ class _ExampleBuilderShim:
     def _add_example_block(self, name, eq_type, S, x, y, n=1):
         bid = self.fs.new_id()
         b = Block(id=bid, name=name, eq_type=eq_type, S=S, n=n, x=x, y=y)
-        import equipment_ports as _ep
-        _ep.apply_type_defaults(b)
+        # NO llamar a apply_type_defaults aca: los ejemplos son
+        # "carga" en espiritu (configuracion pre-curada), no creacion
+        # interactiva de usuario. Multiples ejemplos usan
+        # 'Reactor — autoclave' con .reactions=[...] esperando modo
+        # equilibrium (default historico); apply_type_defaults los
+        # pasaria silenciosamente a batch (Patch 3) y romperia el solve
+        # por falta de reactor_volume_L. Los ejemplos que quieren
+        # PFR/CSTR/batch setean reactor_mode explicitamente despues
+        # del _add_example_block (ej. _example_ethane_cracker_pfr).
         self.fs.blocks[bid] = b
         return bid
 
