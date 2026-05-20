@@ -1230,6 +1230,21 @@ class StreamEditDialog(QDialog):
         info.setStyleSheet("color: #555;")
         layout.addRow(info)
 
+        # ---- Panel de Spec / Grados de libertad (se rellena al final) ----
+        # Una corriente multicomponente es un sistema termodinamico con
+        # variables intensivas acopladas: T, P, composicion (n-1 fracs
+        # independientes), + extensiva = flujo. Si phase=two_phase, T y P
+        # se atan por VLE — lockear ambos puede ser inconsistente.
+        # Este label muestra en vivo que va a calcular el solver vs que
+        # esta lockeado por el user.
+        self.dof_label = QLabel("")
+        self.dof_label.setWordWrap(True)
+        self.dof_label.setStyleSheet(
+            "background: #f4f6f8; border: 1px solid #dde2e7; "
+            "border-radius: 4px; padding: 6px 8px; font-size: 8.5pt;"
+        )
+        layout.addRow(self.dof_label)
+
         # nombre
         self.name_edit = QLineEdit(stream.name)
         layout.addRow("Nombre:", self.name_edit)
@@ -1561,6 +1576,15 @@ class StreamEditDialog(QDialog):
         self.pipe_is_pipe.toggled.connect(_toggle_pipe_inputs)
         _toggle_pipe_inputs(self.pipe_is_pipe.isChecked())
 
+        # ─── Wiring del panel DOF: cualquier lock/phase/comp dispara
+        # refresh del resumen en vivo ───
+        for chk in (self.mass_lock, self.t_lock, self.p_lock, self.comp_lock):
+            chk.toggled.connect(self._update_dof_summary)
+        self.phase_combo.currentTextChanged.connect(self._update_dof_summary)
+        # cualquier edit de fila de composición re-evalúa Σ y DOF
+        # (ya lo hacen _update_comp_sum via signals al agregar fila)
+        self._update_dof_summary()
+
         # ─── Botones OK/Cancel FUERA del scroll, siempre visibles ───
         # antes estaban dentro del QFormLayout y se cortaban en
         # pantallas chicas.  Ahora viven en el outer QVBoxLayout, así
@@ -1653,6 +1677,73 @@ class StreamEditDialog(QDialog):
             icon, color = "⚠ debe sumar 1.00", "#b54708"
         self.comp_sum_lbl.setText(f"Σ = {total:.4f}  {icon}")
         self.comp_sum_lbl.setStyleSheet(f"color: {color}; font-weight: 600;")
+        # Σ cambia → DOF analysis tambien (se cuenta como comp valida o no)
+        if hasattr(self, "dof_label"):
+            self._update_dof_summary()
+
+    def _update_dof_summary(self):
+        """Resumen en vivo de grados de libertad de la corriente.
+
+        Variables intensivas + extensiva considaradas:
+          • mass_flow (extensiva)
+          • T, P (intensivas)
+          • composition (n-1 fracciones independientes)
+
+        Regla de Gibbs para sistema de C componentes y P fases:
+          F = C - P + 2  (intensivas)
+        Para una corriente material monofasica con C componentes:
+          F_intensive = C + 1  (composiciones n-1 + T + P)
+        + 1 extensiva (flujo total).
+
+        Lo que importa al user es: que esta lockeando vs que va a
+        calcular el solver, y avisar cuando hay over-spec (e.g. T y P
+        ambos lockeados con phase=two_phase rompe el VLE).
+        """
+        if not hasattr(self, "dof_label"):
+            return
+        locks = []
+        free  = []
+        for lbl, chk in (("flujo", self.mass_lock), ("T", self.t_lock),
+                          ("P", self.p_lock), ("composición", self.comp_lock)):
+            (locks if chk.isChecked() else free).append(lbl)
+        phase = self.phase_combo.currentText() or "(sin fase)"
+        # Contar componentes con fraccion > 0
+        n_comp = sum(1 for k, v in self._read_comp_rows() if k and v > 0)
+
+        rows = []
+        rows.append(f"<b>Sistema:</b> {n_comp or '?'} componente(s), fase {phase}")
+        rows.append("<b>Spec del user:</b> " +
+                    (" · ".join(f"🔒 {l}" for l in locks)
+                     if locks else "<i>nada lockeado</i>"))
+        rows.append("<b>Solver calculará:</b> " +
+                    (", ".join(free) if free else
+                     "<i>nada — todo over-spec</i>"))
+
+        # Advertencias DOF
+        warns = []
+        if phase == "two_phase" and self.t_lock.isChecked() and self.p_lock.isChecked():
+            warns.append(
+                "⚠ <b>T y P lockeados con fase two_phase:</b> el VLE los "
+                "acopla. Lockeá solo T <i>o</i> solo P; la otra sale del "
+                "punto de burbuja/rocío con la composición."
+            )
+        if not locks:
+            warns.append(
+                "ℹ Sin nada lockeado, el solver propaga el estado desde "
+                "upstream. Útil en corrientes internas; un feed externo "
+                "típicamente necesita flujo + T + composición fijados."
+            )
+        if n_comp == 0:
+            warns.append(
+                "⚠ La tabla de composición está vacía. Agregá al menos un "
+                "compuesto, o el solver no sabrá las propiedades de la mezcla."
+            )
+
+        color = "#7a3814" if any("⚠" in w for w in warns) else "#1b4d3e"
+        html = (f"<div style='color:{color}'>"
+                + "<br>".join(rows + warns)
+                + "</div>")
+        self.dof_label.setText(html)
 
     def apply_to_model(self):
         name = self.name_edit.text().strip()
