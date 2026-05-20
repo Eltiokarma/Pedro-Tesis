@@ -1466,6 +1466,169 @@ def _net_generation_per_species(rxn_ids: List[str], F: Dict[str, float],
     return dG
 
 
+def _concentrations_batch(N: Dict[str, float], V_R_m3: float,
+                          T_K: float, uses_pp: bool) -> Dict[str, float]:
+    """Concentraciones/presiones parciales en un reactor BATCH a
+    VOLUMEN CONSTANTE.
+
+    A diferencia de _concentrations (flujo: C = F/Q con Q = F·RT/P),
+    el batch tiene N moles encerrados en V_R fijo:
+        Cᵢ = Nᵢ / V_R                         [mol/m³]
+        pᵢ = Cᵢ·R·T = (Nᵢ/V_R)·R·T  →  bar   (gas ideal, P emergente)
+
+    La presión total NO es constante: P(t) = N_tot(t)·R·T / V_R.
+    Esto es lo que distingue físicamente un batch de un PFR/CSTR
+    y por qué necesita su propio cálculo (no reinterpretar el PFR).
+    """
+    if V_R_m3 <= 0:
+        return {k: 0.0 for k in N}
+    C = {k: max(v, 0.0) / V_R_m3 for k, v in N.items()}     # mol/m³
+    if not uses_pp:
+        return C
+    # cinética en presión parcial [bar]: pᵢ = Cᵢ·R·T  (Pa→bar)
+    return {k: c * R_GAS * T_K / 1e5 for k, c in C.items()}
+
+
+def _net_generation_batch(rxn_ids: List[str], N: Dict[str, float],
+                          V_R_m3: float, T_K: float, uses_pp: bool,
+                          rho_b: Optional[float]) -> Optional[Dict[str, float]]:
+    """dNᵢ/dt [mol/s] = V_R · Σⱼ νᵢⱼ·rⱼ(C_batch).
+
+    Igual estructura que _net_generation_per_species pero:
+      · concentración batch (Nᵢ/V_R, no Fᵢ/Q)
+      · multiplica por V_R para pasar de r [mol/(m³·s)] a dN/dt
+        [mol/s] (el batch balancea moles totales, no densidad de flujo)
+    """
+    conc = _concentrations_batch(N, V_R_m3, T_K, uses_pp)
+    dN = {k: 0.0 for k in N}
+    for rid in rxn_ids:
+        rxn = get(rid)
+        if rxn is None:
+            continue
+        r = rxn.rate_net(T_K, conc)
+        if r is None:
+            return None
+        if rxn.rate_basis == 'cat_mass':
+            if rho_b is None:
+                return None
+            r = r * rho_b                 # mol/(m³·s)
+        for sp in rxn.stoich:
+            if sp.formula not in dN:
+                dN[sp.formula] = 0.0
+            dN[sp.formula] += sp.nu * r * V_R_m3    # · V_R → mol/s
+    return dN
+
+
+def solve_batch(rxn_ids:   List[str],
+                N_in:       Dict[str, float],
+                T_K:        float,
+                P0_bar:     float,
+                V_R_m3:     float,
+                t_batch_s:  float,
+                n_steps:    int = 500,
+                rho_b:      Optional[float] = None,
+                ) -> Optional[Dict]:
+    """Reactor BATCH isotérmico, volumen constante, gas ideal.
+
+    Integra dNᵢ/dt = V_R·Σⱼ νᵢⱼ·rⱼ con RK4 paso fijo desde t=0
+    hasta t_batch_s.  La presión NO es constante: se reporta P(t)
+    emergente de N_tot(t)·R·T/V_R.
+
+    Args:
+        rxn_ids:    reacciones (deben tener cinética disponible)
+        N_in:       {formula: moles} carga inicial (NO flujo — moles)
+        T_K:        temperatura isoterma
+        P0_bar:     presión inicial (informativa; V_R fija la física.
+                    Se usa solo para validar/registrar el estado t=0)
+        V_R_m3:     volumen del reactor [m³] (constante)
+        t_batch_s:  tiempo total de reacción [s]
+        n_steps:    pasos RK4
+
+    Returns dict:
+        'N_out':       {formula: moles} al final
+        'conversion':  {formula: frac} por reactante (solo positivo)
+        't_batch_s':   tiempo total
+        'P_final_bar': presión al final (emergente)
+        'profile_t':   [t0, t1, ..., t_N] s
+        'profile_N':   list de {formula: moles} en cada t
+        'profile_P':   [P0, ..., P_final] bar  (presión emergente)
+        None si cinética inválida / T fuera de rango / V<=0 / t<=0.
+    """
+    err = _check_kinetics_compatibility(rxn_ids)
+    if err is not None:
+        return None
+    if V_R_m3 <= 0 or t_batch_s <= 0:
+        return None
+    if rho_b is None:
+        for rid in rxn_ids:
+            r = get(rid)
+            if r and r.rho_b_cat:
+                rho_b = r.rho_b_cat
+                break
+    species = set(N_in.keys())
+    for rid in rxn_ids:
+        r = get(rid)
+        if r is None:
+            return None
+        for sp in r.stoich:
+            species.add(sp.formula)
+    N = {s: float(N_in.get(s, 0.0)) for s in species}
+    rxns = [get(rid) for rid in rxn_ids]
+    uses_pp = rxns[0].uses_partial_pressure
+
+    def _P_bar(state):
+        n_tot = sum(max(v, 0.0) for v in state.values())
+        return n_tot * R_GAS * T_K / V_R_m3 / 1e5
+
+    dt = t_batch_s / n_steps
+    profile_t = [0.0]
+    profile_N = [dict(N)]
+    profile_P = [_P_bar(N)]
+
+    def _deriv(state):
+        return _net_generation_batch(rxn_ids, state, V_R_m3,
+                                     T_K, uses_pp, rho_b)
+
+    for step in range(n_steps):
+        k1 = _deriv(N)
+        if k1 is None:
+            return None
+        N2 = {k: max(N[k] + 0.5*dt*k1[k], 0.0) for k in species}
+        k2 = _deriv(N2)
+        if k2 is None:
+            return None
+        N3 = {k: max(N[k] + 0.5*dt*k2[k], 0.0) for k in species}
+        k3 = _deriv(N3)
+        if k3 is None:
+            return None
+        N4 = {k: max(N[k] + dt*k3[k], 0.0) for k in species}
+        k4 = _deriv(N4)
+        if k4 is None:
+            return None
+        N = {k: max(N[k] + dt/6.0*(k1[k] + 2*k2[k] + 2*k3[k] + k4[k]), 0.0)
+             for k in species}
+        profile_t.append((step + 1) * dt)
+        profile_N.append(dict(N))
+        profile_P.append(_P_bar(N))
+
+    conv = {}
+    for sp in species:
+        Nin = N_in.get(sp, 0.0)
+        if Nin > 1e-12:
+            x = (Nin - N[sp]) / Nin
+            if x > 1e-9:
+                conv[sp] = x
+    return dict(
+        N_out=N,
+        conversion=conv,
+        t_batch_s=t_batch_s,
+        P_final_bar=profile_P[-1],
+        profile_t=profile_t,
+        profile_N=profile_N,
+        profile_P=profile_P,
+    )
+
+
 def solve_pfr(rxn_ids:    List[str],
               F_in:       Dict[str, float],
               T_K:        float,
@@ -1911,4 +2074,128 @@ def solve_kinetic_reactor_from_composition(
         tau_s=res.get('tau_s'),
         conversion=res.get('conversion', {}),
         pfr_profile=pfr_profile,
+    )
+
+
+def solve_batch_from_composition(
+        rxn_ids:           List[str],
+        inlet_composition: Dict[str, float],
+        inlet_mass_kg_s:   float,
+        T_K:               float,
+        P_bar:             float,
+        V_reactor_L:       float,
+        t_batch_s:         float,
+        rho_b:             Optional[float] = None) -> Optional[Dict]:
+    """Wrapper batch para el flowsheet.  Convención: carga =
+    ṁ_in · t_batch, resuelve el batch, devuelve caudal medio
+    equivalente para cerrar el balance anual del PFD.
+
+    Devuelve la misma forma que solve_kinetic_reactor_from_composition
+    + 'batch_profile' (perfil temporal en nombres thermo)."""
+    if V_reactor_L <= 0 or t_batch_s <= 0:
+        return None
+    try:
+        import thermo_db as _td
+    except ImportError:
+        return None
+    err = _check_kinetics_compatibility(rxn_ids)
+    if err is not None:
+        return None
+    for rid in rxn_ids:
+        r = get(rid)
+        if r and not r.is_kinetic_T_valid(T_K):
+            return None
+    total_frac = sum(inlet_composition.values())
+    if total_frac <= 0:
+        return None
+    norm = {k: v/total_frac for k, v in inlet_composition.items() if v > 0}
+
+    # carga total de la tanda [kg] = ṁ · t_batch
+    mass_charge_kg = inlet_mass_kg_s * t_batch_s
+
+    N_in: Dict[str, float] = {}
+    inert_moles: Dict[str, float] = {}
+    unmapped: List[str] = []
+    for thermo_n, frac in norm.items():
+        m_kg = frac * mass_charge_kg
+        formula = formula_for(thermo_n)
+        comp_obj = _td.get(thermo_n)
+        if comp_obj is None or comp_obj.mw <= 0 or formula is None:
+            inert_moles[thermo_n] = inert_moles.get(thermo_n, 0.0)
+            if formula is None:
+                unmapped.append(thermo_n)
+            continue
+        N_in[formula] = N_in.get(formula, 0.0) + m_kg*1000.0/comp_obj.mw
+
+    if not N_in:
+        return None
+
+    V_m3 = V_reactor_L / 1000.0
+    res = solve_batch(rxn_ids, N_in, T_K, P_bar, V_m3, t_batch_s,
+                      n_steps=500, rho_b=rho_b)
+    if res is None:
+        return None
+
+    # N_out [mol tanda] → caudal medio equivalente kg/s
+    outlet_mass_per_s: Dict[str, float] = {}
+    for formula, moles in res['N_out'].items():
+        if moles < 1e-15:
+            continue
+        tn = thermo_name(formula)
+        if tn is None:
+            continue
+        co = _td.get(tn)
+        if co is None or co.mw <= 0:
+            continue
+        kg_total = moles * co.mw / 1000.0
+        outlet_mass_per_s[tn] = kg_total / t_batch_s     # caudal medio
+    total_out = sum(outlet_mass_per_s.values())
+    outlet_composition = ({k: v/total_out for k, v in outlet_mass_per_s.items()}
+                          if total_out > 0 else {})
+
+    # Calor de reacción: Σ ξ·ΔH, ξ inferido de ΔN del primer reactante
+    dh_total_kW = 0.0
+    for rid in rxn_ids:
+        rxn = get(rid)
+        xi_mol = 0.0
+        for sp in rxn.stoich:
+            dN = res['N_out'].get(sp.formula, 0.0) - N_in.get(sp.formula, 0.0)
+            if abs(sp.nu) > 0:
+                xi_mol = dN / sp.nu
+                break
+        dh = rxn.dh_rxn_kJ_mol(T_K) or rxn.dh_rxn_298_kJ_mol or 0.0
+        dh_total_kW += (xi_mol * dh) / t_batch_s     # kJ tanda / s = kW medio
+    heat_kJ_per_kg = (dh_total_kW / inlet_mass_kg_s
+                      if inlet_mass_kg_s > 0 else 0.0)
+
+    # perfil temporal en nombres thermo + conversión por especie
+    profile = None
+    if res.get("profile_t") and res.get("profile_N"):
+        N0 = res["profile_N"][0]
+        sp_thermo = {f: (thermo_name(f) or f) for f in N0.keys()}
+        pts = []
+        for tk, Nk, Pk in zip(res["profile_t"], res["profile_N"],
+                              res["profile_P"]):
+            e = {"t_s": tk, "P_bar": Pk, "N": {}, "X": {}}
+            for f, val in Nk.items():
+                tn = sp_thermo.get(f, f)
+                e["N"][tn] = val
+                n0 = N0.get(f, 0.0)
+                if n0 > 1e-12:
+                    x = (n0 - val) / n0
+                    if x > 1e-9:
+                        e["X"][tn] = x
+            pts.append(e)
+        profile = {"t_total_s": res["t_batch_s"], "points": pts}
+
+    return dict(
+        outlet_composition=outlet_composition,
+        outlet_mass_kg_s=total_out,
+        heat_of_reaction_kJ_per_kg=heat_kJ_per_kg,
+        duty_kW=dh_total_kW,
+        xi={},
+        unmapped=unmapped,
+        tau_s=t_batch_s,                 # para batch, "τ" = tiempo tanda
+        conversion=res.get('conversion', {}),
+        batch_profile=profile,
     )

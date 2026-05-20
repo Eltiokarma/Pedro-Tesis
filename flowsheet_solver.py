@@ -338,6 +338,7 @@ def _reset_propagated_values(fs):
         # solve para que un reactor que ya no es PFR (o un solve viejo)
         # no muestre datos obsoletos en el panel de propiedades.
         b._pfr_profile = None
+        b._batch_profile = None
 
 
 def _solve_mass_iteration(fs):
@@ -1503,6 +1504,24 @@ def solve_equilibrium_reactors(fs):
                 inlet_mass_kg_s=m_in_kg_s,
                 T_K=T_K, P_bar=b.P_op_bar,
                 V_reactor_L=V_L)
+        elif mode == "batch":
+            V_L = getattr(b, "reactor_volume_L", 0.0) or 0.0
+            t_b = getattr(b, "batch_time_s", 3600.0) or 0.0
+            if V_L <= 0:
+                msgs.append(f"✗ Reactor {b.name} (batch): falta declarar "
+                             f"reactor_volume_L > 0.")
+                continue
+            if t_b <= 0:
+                msgs.append(f"✗ Reactor {b.name} (batch): falta declarar "
+                             f"batch_time_s > 0.")
+                continue
+            res = _rdb.solve_batch_from_composition(
+                rxn_ids=all_rxn_ids,
+                inlet_composition=agg,
+                inlet_mass_kg_s=m_in_kg_s,
+                T_K=T_K, P_bar=b.P_op_bar,
+                V_reactor_L=V_L,
+                t_batch_s=t_b)
         else:
             msgs.append(f"✗ Reactor {b.name}: modo desconocido '{mode}'.")
             continue
@@ -1536,10 +1555,12 @@ def solve_equilibrium_reactors(fs):
         # ya lo dejó en 0 al inicio del solve.
         b.heat_of_reaction = res['heat_of_reaction_kJ_per_kg']
 
-        # Guardar el perfil espacial del PFR en el bloque para que el
-        # panel de propiedades lo pueda graficar.  CSTR → None.
-        # Runtime con guion bajo: NO se serializa.
+        # Guardar el perfil espacial del PFR / temporal del batch en el
+        # bloque para que el panel de propiedades los pueda graficar.
+        # CSTR → ambos None (no tiene perfil). Runtime con guion bajo:
+        # NO se serializan.
         b._pfr_profile = res.get("pfr_profile")
+        b._batch_profile = res.get("batch_profile")
 
         # ---- AUTO-DUTY: calor que el horno/jacket externo provee ----
         # Para mantener el reactor isothermal a T_op_K, el horno debe

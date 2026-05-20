@@ -488,6 +488,7 @@ class BlockEditDialog(QDialog):
         self.mode_combo.addItem("equilibrium  —  Newton Gibbs (Capa 4)", "equilibrium")
         self.mode_combo.addItem("pfr          —  RK4 cinética (Capa 5)", "pfr")
         self.mode_combo.addItem("cstr         —  Newton cinética (Capa 5)", "cstr")
+        self.mode_combo.addItem("batch        —  RK4 dN/dt, V cte (Capa 5)", "batch")
         current_mode = getattr(block, "reactor_mode", "equilibrium") or "equilibrium"
         idx = self.mode_combo.findData(current_mode)
         if idx >= 0:
@@ -540,13 +541,29 @@ class BlockEditDialog(QDialog):
         eq_layout.addRow("", hint_vol)
         self._vol_hint_widget = hint_vol
 
-        # Toggle de visibilidad del volumen según modo
+        # Tiempo de tanda (solo visible en modo batch)
+        self.batch_time = QDoubleSpinBox()
+        self.batch_time.setRange(1.0, 1e7)
+        self.batch_time.setDecimals(0)
+        self.batch_time.setSuffix(" s")
+        self.batch_time.setValue(getattr(block, "batch_time_s", 3600.0))
+        self.batch_time.setToolTip(
+            "Tiempo de tanda (solo modo batch).\n"
+            "El solver integra dN/dt de 0 a este tiempo, V constante."
+        )
+        self.batch_time_label = QLabel("Tiempo de tanda:")
+        eq_layout.addRow(self.batch_time_label, self.batch_time)
+
+        # Toggle de visibilidad del volumen / batch_time según modo
         def _on_mode_change():
             m = self.mode_combo.currentData()
-            show = (m in ("pfr", "cstr"))
-            self.vol_label_widget.setVisible(show)
-            self.vol_edit.setVisible(show)
-            self._vol_hint_widget.setVisible(show)
+            show_vol = (m in ("pfr", "cstr", "batch"))
+            show_batch = (m == "batch")
+            self.vol_label_widget.setVisible(show_vol)
+            self.vol_edit.setVisible(show_vol)
+            self._vol_hint_widget.setVisible(show_vol)
+            self.batch_time_label.setVisible(show_batch)
+            self.batch_time.setVisible(show_batch)
         self.mode_combo.currentIndexChanged.connect(lambda _: _on_mode_change())
         _on_mode_change()
 
@@ -958,6 +975,7 @@ class BlockEditDialog(QDialog):
             self.block.P_op_bar = float(self.p_op_edit.value())
             self.block.reactor_mode = self.mode_combo.currentData() or "equilibrium"
             self.block.reactor_volume_L = float(self.vol_edit.value())
+            self.block.batch_time_s = float(self.batch_time.value())
         # Column FUG
         if hasattr(self, "gb_col") and self.gb_col.isVisible():
             self.block.column_active = bool(self.col_active.isChecked())
@@ -6399,21 +6417,34 @@ class FlowsheetMainWindow(QMainWindow):
             self.prop_label.setText(txt)
 
             # ---- Perfil PFR / batch / barras CSTR ----
-            prof = getattr(b, "_pfr_profile", None)
             mode = getattr(b, "reactor_mode", "") or ""
-            if mode == "pfr" and prof and prof.get("points"):
+            show = False
+            if mode == "pfr":
+                show = bool(getattr(b, "_pfr_profile", None)
+                            and b._pfr_profile.get("points"))
+            elif mode == "batch":
+                show = bool(getattr(b, "_batch_profile", None)
+                            and b._batch_profile.get("points"))
+            elif mode == "cstr":
+                # CSTR: mostrar barras si hay streams con composición
+                show = any((s.composition for s in self.fs.streams.values()
+                            if s.src == b.id or s.dst == b.id))
+            if show:
                 self._pfr_current_block = b
                 self.pfr_panel.setVisible(True)
+                # toggles X (vol/len) no aplican a batch/cstr → deshabilitar
+                en_x = (mode == "pfr")
+                self.pfr_x_vol.setEnabled(en_x)
+                self.pfr_x_len.setEnabled(en_x)
                 self._redraw_pfr_profile()
             else:
                 self._pfr_current_block = None
                 self.pfr_panel.setVisible(False)
-                # pista útil: PFR sin perfil = falta correr Solve o V=0
-                if mode == "pfr":
+                if mode in ("pfr", "batch", "cstr"):
                     self.prop_label.setText(
                         self.prop_label.text()
-                        + "\n\n(Perfil PFR: corré Solve con "
-                          "reactor_volume_L > 0 para verlo)"
+                        + f"\n\n(Reactor {mode}: corré Solve con "
+                          "reactor_volume_L > 0 para ver el gráfico)"
                     )
         elif isinstance(it, StreamItem):
             for other in self.scene.block_items.values():
@@ -6547,15 +6578,32 @@ class FlowsheetMainWindow(QMainWindow):
             self.prop_label.setText(txt)
 
     def _redraw_pfr_profile(self):
-        """Dibuja el perfil del bloque actual según los toggles.
-        No-op si no hay bloque PFR seleccionado o falta matplotlib.
-
-        Patch 3 generaliza este dispatcher para batch (curva temporal)
-        y CSTR (barras). Por ahora solo dibuja PFR (perfil espacial)."""
+        """Dibuja el visual del reactor actual según su modo:
+          · pfr   → perfil espacial (curva vs V/L)
+          · batch → curva de especies vs tiempo
+          · cstr  → barras entrada→salida (sin curva: mezcla perfecta)
+        No-op si falta matplotlib o no hay reactor seleccionado."""
         if not _MPL_OK or self._pfr_canvas is None:
             return
         b = self._pfr_current_block
-        prof = getattr(b, "_pfr_profile", None) if b is not None else None
+        if b is None:
+            self._pfr_fig.clear()
+            self._pfr_canvas.draw()
+            return
+        mode = getattr(b, "reactor_mode", "") or ""
+        if mode == "pfr":
+            self._draw_pfr_curve(b)
+        elif mode == "batch":
+            self._draw_batch_curve(b)
+        elif mode == "cstr":
+            self._draw_cstr_bars(b)
+        else:
+            self._pfr_fig.clear()
+            self._pfr_canvas.draw()
+
+    def _draw_pfr_curve(self, b):
+        """Perfil espacial PFR (curva vs V o L_frac)."""
+        prof = getattr(b, "_pfr_profile", None)
         self._pfr_fig.clear()
         if not prof or not prof.get("points"):
             self._pfr_canvas.draw()
@@ -6565,16 +6613,13 @@ class FlowsheetMainWindow(QMainWindow):
         use_conv = self.pfr_y_conv.isChecked()
         xs = [p["L_frac"] if use_len else p["V_m3"] for p in pts]
         ax = self._pfr_fig.add_subplot(111)
-        # especies presentes en el perfil
         all_species = set()
         for p in pts:
             all_species.update((p["X"] if use_conv else p["F"]).keys())
-        # orden estable
         species = sorted(all_species)
         for sp in species:
             if use_conv:
                 ys = [p["X"].get(sp, 0.0) * 100.0 for p in pts]
-                # ocultar especies que nunca se convierten (productos):
                 if max(ys) < 1e-6:
                     continue
             else:
@@ -6587,10 +6632,98 @@ class FlowsheetMainWindow(QMainWindow):
         ax.tick_params(labelsize=7)
         ax.grid(True, alpha=0.3, linestyle="--")
         ax.legend(fontsize=6, loc="best", ncol=2)
-        title = f"Perfil PFR — {b.name}" if b is not None else "Perfil PFR"
-        ax.set_title(title, fontsize=9, fontweight="bold")
+        ax.set_title(f"Perfil PFR — {b.name}", fontsize=9, fontweight="bold")
         for spine in ("top", "right"):
             ax.spines[spine].set_visible(False)
+        self._pfr_fig.tight_layout()
+        self._pfr_canvas.draw()
+
+    def _draw_batch_curve(self, b):
+        """Curva de especies vs tiempo para reactor batch."""
+        prof = getattr(b, "_batch_profile", None)
+        self._pfr_fig.clear()
+        if not prof or not prof.get("points"):
+            self._pfr_canvas.draw()
+            return
+        pts = prof["points"]
+        use_conv = self.pfr_y_conv.isChecked()
+        # eje X del batch SIEMPRE es tiempo (no hay "longitud").
+        xs = [p["t_s"] for p in pts]
+        ax = self._pfr_fig.add_subplot(111)
+        species = sorted({s for p in pts
+                          for s in (p["X"] if use_conv else p["N"])})
+        for sp in species:
+            if use_conv:
+                ys = [p["X"].get(sp, 0.0)*100.0 for p in pts]
+                if max(ys) < 1e-6:
+                    continue
+            else:
+                ys = [p["N"].get(sp, 0.0) for p in pts]
+            ax.plot(xs, ys, linewidth=1.4, label=sp)
+        ax.set_xlabel("Tiempo de tanda (s)", fontsize=8)
+        ax.set_ylabel("Conversión (%)" if use_conv else "Moles (mol)",
+                      fontsize=8)
+        ax.tick_params(labelsize=7)
+        ax.grid(True, alpha=0.3, linestyle="--")
+        ax.legend(fontsize=6, loc="best", ncol=2)
+        ax.set_title(f"Batch — {b.name}  (t={prof['t_total_s']:.0f}s)",
+                     fontsize=9, fontweight="bold")
+        for s in ("top", "right"):
+            ax.spines[s].set_visible(False)
+        self._pfr_fig.tight_layout()
+        self._pfr_canvas.draw()
+
+    def _draw_cstr_bars(self, b):
+        """Barras entrada→salida por especie. CSTR es mezcla perfecta,
+        físicamente NO tiene perfil espacial ni temporal en steady-state."""
+        self._pfr_fig.clear()
+        ins = [s for s in self.fs.streams.values() if s.dst == b.id]
+        outs = [s for s in self.fs.streams.values() if s.src == b.id]
+
+        def _agg(streams):
+            tot = {}
+            mtot = 0.0
+            for s in streams:
+                comp = s.composition or {}
+                m = s.mass_flow or 0.0
+                mtot += m
+                for k, v in comp.items():
+                    tot[k] = tot.get(k, 0.0) + v*m
+            if mtot > 0:
+                return {k: v/mtot for k, v in tot.items()}
+            return {}
+
+        cin = _agg(ins)
+        cout = _agg(outs)
+        if not cin and not cout:
+            ax = self._pfr_fig.add_subplot(111)
+            ax.text(0.5, 0.5, "Sin datos — corré Solve",
+                    ha="center", va="center", fontsize=9)
+            ax.axis("off")
+            self._pfr_canvas.draw()
+            return
+        species = sorted(set(cin) | set(cout))
+        import numpy as _np
+        x = _np.arange(len(species))
+        w = 0.38
+        ax = self._pfr_fig.add_subplot(111)
+        ax.bar(x - w/2, [cin.get(s, 0.0)*100 for s in species],  w,
+               label="Entrada", color="#5c6bc0")
+        ax.bar(x + w/2, [cout.get(s, 0.0)*100 for s in species], w,
+               label="Salida",  color="#ef6c00")
+        ax.set_xticks(x)
+        ax.set_xticklabels(species, fontsize=6, rotation=40, ha="right")
+        ax.set_ylabel("% másico", fontsize=8)
+        ax.tick_params(labelsize=7)
+        ax.grid(True, axis="y", alpha=0.3, linestyle="--")
+        ax.legend(fontsize=7, loc="best")
+        tau = getattr(b, "tau_s", None) or getattr(b, "_tau_s", None)
+        ttl = f"CSTR — {b.name}"
+        if tau:
+            ttl += f"  (τ={tau:.1f}s)"
+        ax.set_title(ttl, fontsize=9, fontweight="bold")
+        for s in ("top", "right"):
+            ax.spines[s].set_visible(False)
         self._pfr_fig.tight_layout()
         self._pfr_canvas.draw()
 

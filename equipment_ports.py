@@ -434,6 +434,7 @@ def autoselect_inlet(eq_type, used_ports=()):
 REACTOR_MODE_BY_TYPE = {
     "Reactor — PFR (tubular)":  "pfr",
     "Reactor — CSTR (agitado)": "cstr",
+    "Reactor — autoclave":      "batch",   # autoclave = batch agitado
 }
 
 
