@@ -2881,7 +2881,23 @@ class _EndpointHandle(QGraphicsEllipseItem):
                 s.dst = bid
                 s.dst_port = port_name
                 s.end_xy = []
-            self.setPos(p_scene)
+            # CRITICAL: clear _drag_committed BEFORE setPos. El setPos
+            # dispara itemChange→ItemPositionHasChanged. Si
+            # _drag_committed sigue True, mi codigo de itemChange
+            # entra al bloque de disconnect y sobreescribe s.src=-1,
+            # start_xy=new_xy — DESHACIENDO el snap que acabamos de
+            # commitear. Tambien clearamos _press_pos para que el
+            # check 'pp is None' haga return early si itemChange
+            # llega a fire de todos modos.
+            self._drag_committed = False
+            self._press_pos = None
+            # Y para mayor seguridad, deshabilitar geometry signals
+            # durante el setPos (igual que en _sync_pos_from_model).
+            self.setFlag(QGraphicsItem.ItemSendsGeometryChanges, False)
+            try:
+                self.setPos(p_scene)
+            finally:
+                self.setFlag(QGraphicsItem.ItemSendsGeometryChanges, True)
         else:
             # Mantener flotante: xy ya quedó guardado en itemChange
             pass
@@ -2893,7 +2909,7 @@ class _EndpointHandle(QGraphicsEllipseItem):
         if editor is not None and hasattr(editor, "_mark_dirty"):
             editor._mark_dirty()
         super().mouseReleaseEvent(event)
-        # Reset flags al final
+        # Reset flags al final (en caso de NO snap, donde no lo hicimos arriba)
         self._press_pos = None
         self._drag_committed = False
 
