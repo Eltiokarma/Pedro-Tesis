@@ -1222,8 +1222,11 @@ class StreamEditDialog(QDialog):
         layout = QFormLayout(form_widget)
         layout.setContentsMargins(12, 12, 12, 12)
 
-        # info read-only
-        info = QLabel(f"<b>{stream.name}</b>:  {b_src.name}  →  {b_dst.name}")
+        # info read-only — tolera streams flotantes (b_src/b_dst pueden
+        # ser None si el stream aún no está conectado a ningún bloque).
+        src_name = b_src.name if b_src is not None else "(sin conectar)"
+        dst_name = b_dst.name if b_dst is not None else "(sin conectar)"
+        info = QLabel(f"<b>{stream.name}</b>:  {src_name}  →  {dst_name}")
         info.setStyleSheet("color: #555;")
         layout.addRow(info)
 
@@ -3159,32 +3162,41 @@ class StreamItem(QGraphicsPathItem):
         self._draw_direction_arrows(pts)
 
         # ---- label (pill compacta: SÓLO número de corriente) ----
-        name_text, flow_text = self._label_parts(s)
-        self.label_name.setText(name_text)
-        self.label_name.setBrush(QBrush(color))
-        self.label_flow.setText(flow_text)
+        # Por default OFF (limpia visual de canvas, sin etiquetas sobre la
+        # flecha). El user puede reactivar con editor._show_stream_labels=True
+        # (ver View → 'Mostrar etiquetas de corrientes' si está disponible).
+        show_label = bool(getattr(self.editor, "_show_stream_labels", False)) \
+                     if self.editor is not None else False
+        self.label_bg.setVisible(show_label)
+        self.label_name.setVisible(show_label)
+        self.label_flow.setVisible(show_label)
+        if show_label:
+            name_text, flow_text = self._label_parts(s)
+            self.label_name.setText(name_text)
+            self.label_name.setBrush(QBrush(color))
+            self.label_flow.setText(flow_text)
 
-        bb_name = self.label_name.boundingRect()
-        bb_flow = self.label_flow.boundingRect()
+            bb_name = self.label_name.boundingRect()
+            bb_flow = self.label_flow.boundingRect()
 
-        gap   = 8 if flow_text else 0
-        inner = bb_name.width() + gap + bb_flow.width()
-        pad_x = 9
-        pad_y = 3
-        pill_w = inner + 2 * pad_x
-        pill_h = max(bb_name.height(), bb_flow.height()) + 2 * pad_y
+            gap   = 8 if flow_text else 0
+            inner = bb_name.width() + gap + bb_flow.width()
+            pad_x = 9
+            pad_y = 3
+            pill_w = inner + 2 * pad_x
+            pill_h = max(bb_name.height(), bb_flow.height()) + 2 * pad_y
 
-        lx, ly = self._label_xy(pts)
-        x0 = lx - pill_w / 2
-        y0 = ly - pill_h / 2
+            lx, ly = self._label_xy(pts)
+            x0 = lx - pill_w / 2
+            y0 = ly - pill_h / 2
 
-        self.label_bg.setRect(x0, y0, pill_w, pill_h)
-        self.label_bg.setPen(QPen(color, 1.0))
+            self.label_bg.setRect(x0, y0, pill_w, pill_h)
+            self.label_bg.setPen(QPen(color, 1.0))
 
-        # name a la izquierda, flow a la derecha
-        ty = y0 + (pill_h - bb_name.height()) / 2
-        self.label_name.setPos(x0 + pad_x, ty)
-        self.label_flow.setPos(x0 + pad_x + bb_name.width() + gap, ty)
+            # name a la izquierda, flow a la derecha
+            ty = y0 + (pill_h - bb_name.height()) / 2
+            self.label_name.setPos(x0 + pad_x, ty)
+            self.label_flow.setPos(x0 + pad_x + bb_name.width() + gap, ty)
 
         if rebuild_handles:
             self._rebuild_handles()
@@ -3275,6 +3287,16 @@ class StreamItem(QGraphicsPathItem):
         a_reset = menu.addAction(ic_reset or QIcon(), "Resetear auto-routing")
         a_reset.setEnabled(bool(self.model.waypoints))
         menu.addSeparator()
+        # Toggle global: mostrar/ocultar pills sobre las flechas.
+        # Default OFF (canvas limpio); el user lo activa cuando quiere
+        # ver los caudales/composiciones rotulados sobre cada stream.
+        labels_on = bool(getattr(ed, "_show_stream_labels", False)) if ed else False
+        a_labels = menu.addAction(
+            ic_wp or QIcon(),
+            "Ocultar etiquetas de corrientes" if labels_on
+            else "Mostrar etiquetas de corrientes",
+        )
+        menu.addSeparator()
         a_del = menu.addAction(ic_delete or QIcon(), "Borrar")
         chosen = menu.exec_(event.screenPos())
         if chosen is a_edit and ed is not None:
@@ -3294,6 +3316,11 @@ class StreamItem(QGraphicsPathItem):
         elif chosen is a_reset:
             self.model.waypoints.clear()
             self.update_path()
+        elif chosen is a_labels and ed is not None:
+            ed._show_stream_labels = not labels_on
+            # Refrescar TODOS los streams para que el toggle aplique al canvas entero
+            for _sid, _si in ed.stream_items_iter():
+                _si.update_path(rebuild_handles=False)
         event.accept()
 
     def _draw_arrow(self, path, x_end, y_end, x_prev, y_prev):
