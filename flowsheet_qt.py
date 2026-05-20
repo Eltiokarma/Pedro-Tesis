@@ -1353,6 +1353,48 @@ class StreamEditDialog(QDialog):
             self.comp_combo.setCurrentIndex(cur_idx)
         gb_layout.addRow("Componente principal:", self.comp_combo)
 
+        # ---- Composición multi-componente (tabla editable) ----
+        # El "Componente principal" arriba es legacy single-comp.  Esta
+        # tabla es la fuente real de la composición de la mezcla y se
+        # guarda en stream.composition (Dict[str, float] = mass frac).
+        self._comp_labels = comp_mod.list_labels()   # [(key, label)]
+        self.comp_table = QTableWidget(0, 2)
+        self.comp_table.setHorizontalHeaderLabels(["Componente", "Fracción másica"])
+        self.comp_table.verticalHeader().setVisible(False)
+        self.comp_table.setSelectionBehavior(QTableWidget.SelectRows)
+        self.comp_table.setColumnWidth(0, 260)
+        self.comp_table.setColumnWidth(1, 120)
+        self.comp_table.setMinimumHeight(130)
+        self.comp_table.setMaximumHeight(220)
+        # botones add/quitar/normalizar
+        comp_btn_row = QWidget()
+        comp_btn_lay = QHBoxLayout(comp_btn_row)
+        comp_btn_lay.setContentsMargins(0, 0, 0, 0)
+        self.btn_comp_add  = QPushButton("+ Agregar")
+        self.btn_comp_del  = QPushButton("− Quitar")
+        self.btn_comp_norm = QPushButton("Normalizar a 1.00")
+        comp_btn_lay.addWidget(self.btn_comp_add)
+        comp_btn_lay.addWidget(self.btn_comp_del)
+        comp_btn_lay.addWidget(self.btn_comp_norm)
+        comp_btn_lay.addStretch()
+        # label sumatoria (validación visual)
+        self.comp_sum_lbl = QLabel("Σ = 0.0000")
+        self.comp_sum_lbl.setStyleSheet("color: #666; font-weight: 600;")
+        comp_btn_lay.addWidget(self.comp_sum_lbl)
+        gb_layout.addRow(comp_btn_row)
+        gb_layout.addRow(self.comp_table)
+        # poblar desde stream.composition (o {main:1.0} si solo había main_component)
+        initial = dict(stream.composition or {})
+        if not initial and stream.main_component:
+            initial = {stream.main_component: 1.0}
+        for k, v in initial.items():
+            self._add_comp_row(k, float(v))
+        # wiring
+        self.btn_comp_add.clicked.connect(lambda: self._add_comp_row("", 0.0))
+        self.btn_comp_del.clicked.connect(self._del_comp_rows)
+        self.btn_comp_norm.clicked.connect(self._normalize_comp_rows)
+        self._update_comp_sum()
+
         # Fase
         self.phase_combo = QComboBox()
         self.phase_combo.addItems(["", "liquid", "vapor", "gas", "two_phase"])
@@ -1541,6 +1583,77 @@ class StreamEditDialog(QDialog):
         self.price_label.setVisible(visible)
         self.price_edit.setVisible(visible)
 
+    # ---- helpers del editor multi-componente ----
+    def _add_comp_row(self, key: str = "", frac: float = 0.0):
+        """Agrega una fila a la tabla de composición con un combo de
+        componente y un spin de fracción másica."""
+        r = self.comp_table.rowCount()
+        self.comp_table.insertRow(r)
+        combo = QComboBox()
+        combo.addItem("(elegir…)", "")
+        for k, lbl in self._comp_labels:
+            combo.addItem(lbl, k)
+        if key:
+            idx = combo.findData(key)
+            if idx >= 0:
+                combo.setCurrentIndex(idx)
+        combo.currentIndexChanged.connect(self._update_comp_sum)
+        self.comp_table.setCellWidget(r, 0, combo)
+        spin = QDoubleSpinBox()
+        spin.setRange(0.0, 1.0)
+        spin.setDecimals(4)
+        spin.setSingleStep(0.05)
+        spin.setValue(float(frac))
+        spin.valueChanged.connect(self._update_comp_sum)
+        self.comp_table.setCellWidget(r, 1, spin)
+        self._update_comp_sum()
+
+    def _del_comp_rows(self):
+        """Borra las filas seleccionadas de la tabla."""
+        rows = sorted({i.row() for i in self.comp_table.selectedIndexes()},
+                      reverse=True)
+        for r in rows:
+            self.comp_table.removeRow(r)
+        self._update_comp_sum()
+
+    def _read_comp_rows(self):
+        """Devuelve [(key, frac), ...] desde los widgets de la tabla."""
+        out = []
+        for r in range(self.comp_table.rowCount()):
+            combo = self.comp_table.cellWidget(r, 0)
+            spin  = self.comp_table.cellWidget(r, 1)
+            if combo is None or spin is None:
+                continue
+            key = combo.currentData() or ""
+            out.append((key, float(spin.value())))
+        return out
+
+    def _normalize_comp_rows(self):
+        """Escala las fracciones para que sumen 1.0."""
+        rows = self._read_comp_rows()
+        total = sum(v for _, v in rows)
+        if total <= 0:
+            return
+        for r in range(self.comp_table.rowCount()):
+            spin = self.comp_table.cellWidget(r, 1)
+            if spin is not None:
+                spin.setValue(spin.value() / total)
+        self._update_comp_sum()
+
+    def _update_comp_sum(self, *args, **kwargs):
+        """Actualiza el label 'Σ = X.XXXX' con ✓ si la suma cuadra a 1.0."""
+        rows = self._read_comp_rows()
+        total = sum(v for k, v in rows if k)
+        valid = total > 0 and abs(total - 1.0) < 0.01
+        if total == 0:
+            icon, color = "—", "#888"
+        elif valid:
+            icon, color = "✓", "#1b7e3b"
+        else:
+            icon, color = "⚠ debe sumar 1.00", "#b54708"
+        self.comp_sum_lbl.setText(f"Σ = {total:.4f}  {icon}")
+        self.comp_sum_lbl.setStyleSheet(f"color: {color}; font-weight: 600;")
+
     def apply_to_model(self):
         name = self.name_edit.text().strip()
         if name:
@@ -1574,7 +1687,27 @@ class StreamEditDialog(QDialog):
         else:
             self.stream.target_temperature = -999.0
         self.stream.cp = float(self.cp_edit.value())
-        self.stream.main_component = self.comp_combo.currentData() or ""
+        # Composición multi-componente desde la tabla. Si hay filas con
+        # componente seleccionado y fracción > 0, se sobreescribe el
+        # composition dict del stream y main_component se deriva del
+        # dominante (mantiene compatibilidad con código legacy que solo
+        # usa main_component).
+        rows = self._read_comp_rows()
+        comp_dict = {}
+        for key, frac in rows:
+            if key and frac > 0:
+                comp_dict[key] = comp_dict.get(key, 0.0) + frac
+        if comp_dict:
+            self.stream.composition = comp_dict
+            self.stream.main_component = max(
+                comp_dict.items(), key=lambda kv: kv[1])[0]
+        else:
+            # Tabla vacía: respetar dropdown legacy single-componente.
+            self.stream.main_component = self.comp_combo.currentData() or ""
+            if self.stream.main_component:
+                self.stream.composition = {self.stream.main_component: 1.0}
+            else:
+                self.stream.composition = {}
         self.stream.phase = self.phase_combo.currentText() or ""
         self.stream.src_port = self.src_port_combo.currentText() or ""
         self.stream.dst_port = self.dst_port_combo.currentText() or ""
