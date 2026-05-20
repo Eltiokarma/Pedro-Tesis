@@ -1720,7 +1720,24 @@ class StreamEditDialog(QDialog):
         auto-lockea comp_lock (filosofía 'tipear es declarar spec')."""
         r = self.comp_table.rowCount()
         self.comp_table.insertRow(r)
+        # Style explicito para combo + spin: cuando viven dentro de un
+        # QTableWidget y la fila se selecciona, el highlight de la
+        # selection-row puede tintar el widget de azul/negro y volverlo
+        # ilegible (texto blanco sobre fondo oscuro o todo negro). Estos
+        # stylesheets fuerzan fondo blanco/texto negro siempre.
+        CELL_STYLE = (
+            "QComboBox, QDoubleSpinBox { "
+            "  background: white; color: #222; border: 1px solid #ccc; "
+            "  padding: 2px; "
+            "} "
+            "QComboBox QAbstractItemView { "
+            "  background: white; color: #222; "
+            "  selection-background-color: #5c6bc0; "
+            "  selection-color: white; "
+            "} "
+        )
         combo = QComboBox()
+        combo.setStyleSheet(CELL_STYLE)
         combo.addItem("(elegir…)", "")
         for k, lbl in self._comp_labels:
             combo.addItem(lbl, k)
@@ -1733,6 +1750,7 @@ class StreamEditDialog(QDialog):
             lambda _idx: self._auto_lock(self.comp_lock))
         self.comp_table.setCellWidget(r, 0, combo)
         spin = QDoubleSpinBox()
+        spin.setStyleSheet(CELL_STYLE)
         spin.setRange(0.0, 1.0)
         spin.setDecimals(4)
         spin.setSingleStep(0.05)
@@ -2668,6 +2686,13 @@ class _EndpointHandle(QGraphicsEllipseItem):
         # snap target visual (círculo verde que aparece sobre el puerto
         # al que vamos a snappear)
         self._snap_marker = None
+        # Estado del drag — solo el threshold protege la desconexion
+        # accidental. Init explicito para no depender de mousePressEvent
+        # haber corrido antes del primer itemChange (caso edge: snap
+        # programatico desde BlockItem._snap_nearby_floating_endpoints
+        # o algun setPos en init).
+        self._press_pos = None
+        self._drag_committed = False
 
         # Setear posición desde el modelo o desde el puerto
         self._sync_pos_from_model()
@@ -2753,11 +2778,13 @@ class _EndpointHandle(QGraphicsEllipseItem):
             self._snap_marker.setVisible(False)
 
     # Distancia mínima de drag (px) para "commitear" la desconexión del
-    # puerto. Si el user mueve el handle menos que esto y suelta, se
-    # considera click accidental y el handle vuelve al puerto. Resuelve
-    # el bug 'el bloque se va a Jupiter' (en realidad era el handle el
-    # que se grababa por accidente y disconnectaba el stream).
-    DRAG_THRESHOLD = 16.0
+    # puerto. Debe ser > GRID_STEP (20 px), si no el primer step de
+    # grilla (20px en el itemChange snap) ya supera el threshold y
+    # desconecta inmediatamente — perdiendo toda la proteccion.
+    # 28 px = 1.4 grid steps: necesitas mover 2 celdas de grilla para
+    # que la desconexion se compromete. Mover 1 celda y soltar = no-op
+    # (snap-back al puerto).
+    DRAG_THRESHOLD = 28.0
 
     def mousePressEvent(self, event):
         """Al iniciar drag: reset del flag de 'commit'."""
@@ -2781,14 +2808,18 @@ class _EndpointHandle(QGraphicsEllipseItem):
             # 'desconexión accidental' que parecía 'el bloque se va a
             # Jupiter' (el endpoint seguía al cursor, no el bloque).
             if not self._drag_committed:
-                pp = getattr(self, "_press_pos", None)
-                if pp is not None:
-                    dx = self.pos().x() - pp.x()
-                    dy = self.pos().y() - pp.y()
-                    if dx*dx + dy*dy < self.DRAG_THRESHOLD ** 2:
-                        # Movimiento todavía dentro del umbral — visual
-                        # se mueve (Qt lo hizo), pero modelo intacto.
-                        return super().itemChange(change, value)
+                pp = self._press_pos
+                if pp is None:
+                    # Sin mousePressEvent previo (e.g. setPos programatico
+                    # con flag accidental, o init weirdo). No commitear:
+                    # el handle se mueve visualmente, modelo intacto.
+                    return super().itemChange(change, value)
+                dx = self.pos().x() - pp.x()
+                dy = self.pos().y() - pp.y()
+                if dx*dx + dy*dy < self.DRAG_THRESHOLD ** 2:
+                    # Movimiento todavía dentro del umbral — visual
+                    # se mueve (Qt lo hizo), pero modelo intacto.
+                    return super().itemChange(change, value)
                 self._drag_committed = True
 
             # Threshold superado — committear disconnect
