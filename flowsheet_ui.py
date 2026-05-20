@@ -6534,6 +6534,7 @@ class FlowsheetEditor:
             y = 100 + ((len(self.fs.blocks) // 6) % 6) * 100
 
         b = Block(id=bid, name=nombre, eq_type=eq_type, S=S_default, n=1, x=x, y=y)
+        ep.apply_type_defaults(b)
         self.fs.blocks[bid] = b
         self._render_block(b)
         self._select_block(bid)

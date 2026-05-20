@@ -418,6 +418,8 @@ SVG_ICONS = {
     "Reactor — autoclave":          SVG_REACTOR_AUTOCLAVE,
     "Reactor — jacketed agitated":  SVG_REACTOR_JACKETED,
     "Reactor — jacketed non-agit.": SVG_REACTOR_JACKETED_NA,
+    "Reactor — PFR (tubular)":      SVG_REACTOR_JACKETED_NA,
+    "Reactor — CSTR (agitado)":     SVG_REACTOR_JACKETED,
 
     # Vessels
     "Vessel — vertical":            SVG_VESSEL_VERTICAL,

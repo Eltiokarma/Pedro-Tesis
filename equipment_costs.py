@@ -203,6 +203,19 @@ EQUIPMENT_DATA = {
              S_param="Volume", S_unit="m³",
              S_min=0.1, S_max=35,   categoria="Reactors"),
 
+    # PFR y CSTR: mismos coeficientes Turton que sus análogos físicos
+    # (el costo no depende del modelo de flujo, solo del volumen y la
+    # construcción mecánica).  El modelo de solver se fija aparte vía
+    # reactor_mode (ver equipment_ports.REACTOR_MODE_BY_TYPE).
+    "Reactor — PFR (tubular)":
+        dict(K1=3.3496, K2=0.7235, K3=-0.0025,
+             S_param="Volume", S_unit="m³",
+             S_min=0.1, S_max=35,   categoria="Reactors"),
+    "Reactor — CSTR (agitado)":
+        dict(K1=4.1052, K2=0.5320, K3=-0.0005,
+             S_param="Volume", S_unit="m³",
+             S_min=0.1, S_max=35,   categoria="Reactors"),
+
     # -------- FIRED HEATERS --------
     "Fired heater — reformer":
         dict(K1=7.3488, K2=-1.1666, K3=0.2028,

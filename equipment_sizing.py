@@ -79,6 +79,8 @@ TAU_REACTOR = {
     "Reactor — autoclave":          1800,    # batch agitado 30 min
     "Reactor — jacketed agitated":  600,     # CSTR 10 min
     "Reactor — jacketed non-agit.": 60,      # tubular ~ 1 min
+    "Reactor — CSTR (agitado)":     600,     # CSTR 10 min (igual que jacketed agit.)
+    "Reactor — PFR (tubular)":      60,      # tubular ~ 1 min (igual que non-agit.)
 }
 TAU_REACTOR_DEFAULT = 600
 

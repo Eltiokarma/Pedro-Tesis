@@ -6514,6 +6514,7 @@ class FlowsheetMainWindow(QMainWindow):
             y = round((cy_v + offset) / GRID_STEP) * GRID_STEP
         b = Block(id=bid, name=nombre, eq_type=eq_type, S=S_default,
                   n=1, x=float(x), y=float(y))
+        ep.apply_type_defaults(b)
         self.fs.blocks[bid] = b
         self._render_block(b)
         self._refresh_port_colors()
@@ -6592,6 +6593,8 @@ class _ExampleBuilderShim:
     def _add_example_block(self, name, eq_type, S, x, y, n=1):
         bid = self.fs.new_id()
         b = Block(id=bid, name=name, eq_type=eq_type, S=S, n=n, x=x, y=y)
+        import equipment_ports as _ep
+        _ep.apply_type_defaults(b)
         self.fs.blocks[bid] = b
         return bid
 

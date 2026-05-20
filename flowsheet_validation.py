@@ -132,6 +132,18 @@ PORT_FLUID_TYPES = {
         "util_in":      "any",
         "util_out":     "any",
     },
+    "Reactor — PFR (tubular)": {
+        "alimentacion": "any",
+        "producto":     "any",
+        "util_in":      "any",
+        "util_out":     "any",
+    },
+    "Reactor — CSTR (agitado)": {
+        "alimentacion": "any",
+        "producto":     "any",
+        "util_in":      "any",
+        "util_out":     "any",
+    },
 
     # ---- Vessels: separadores ----
     # Vertical = flash drum: feed agnóstico, vapor por arriba,

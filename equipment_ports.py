@@ -244,6 +244,8 @@ EQUIPMENT_PORTS = {
     "Reactor — autoclave":          REACTOR_PORTS,
     "Reactor — jacketed agitated":  REACTOR_PORTS,
     "Reactor — jacketed non-agit.": REACTOR_PORTS,
+    "Reactor — PFR (tubular)":      REACTOR_PORTS,
+    "Reactor — CSTR (agitado)":     REACTOR_PORTS,
 
     "Vessel — vertical":            VESSEL_VERT_PORTS,
     "Vessel — horizontal":          VESSEL_HORZ_PORTS,
@@ -314,6 +316,8 @@ ISA_PREFIX = {
     "Reactor — autoclave":          "R",
     "Reactor — jacketed agitated":  "R",
     "Reactor — jacketed non-agit.": "R",
+    "Reactor — PFR (tubular)":      "R",
+    "Reactor — CSTR (agitado)":     "R",
 
     "Vessel — vertical":            "V",
     "Vessel — horizontal":          "V",
@@ -413,6 +417,45 @@ def autoselect_inlet(eq_type, used_ports=()):
             if side == preferred_side and pname not in used:
                 return pname
     return next(iter(ports))
+
+
+# ======================================================
+# AUTO-CONFIG DE reactor_mode AL CREAR EL BLOQUE
+# ======================================================
+# Algunos eq_types del catálogo implican un modelo de solver
+# específico (Capa 5).  Cuando el usuario arrastra uno de estos
+# desde la biblioteca, el bloque debe nacer con reactor_mode ya
+# seteado para que el solver lo trate como PFR/CSTR sin que el
+# user tenga que abrir el diálogo de edición.
+#
+# Los reactores físicos (autoclave, jacketed agitated/non-agit.)
+# NO están acá: quedan en "equilibrium" (default backward-compat),
+# y el user elige el modo manualmente si quiere cinética.
+REACTOR_MODE_BY_TYPE = {
+    "Reactor — PFR (tubular)":  "pfr",
+    "Reactor — CSTR (agitado)": "cstr",
+}
+
+
+def default_reactor_mode(eq_type):
+    """Devuelve el reactor_mode implícito por el tipo de equipo, o
+    None si el tipo no fuerza un modo (caso normal: el bloque usa
+    el default de la dataclass Block, 'equilibrium')."""
+    return REACTOR_MODE_BY_TYPE.get(eq_type)
+
+
+def apply_type_defaults(block):
+    """Aplica defaults dependientes del eq_type a un Block recién
+    creado.  Hoy solo configura reactor_mode para PFR/CSTR; es el
+    punto único de extensión para futuros defaults por tipo.
+
+    Idempotente: solo escribe reactor_mode si el tipo lo fuerza.
+    No toca reactor_volume_L (lo declara el user) — pero el solver
+    ya avisa con un mensaje claro si V<=0 en modo pfr/cstr."""
+    mode = default_reactor_mode(block.eq_type)
+    if mode is not None:
+        block.reactor_mode = mode
+    return block
 
 
 # ======================================================
