@@ -1864,6 +1864,43 @@ def solve_kinetic_reactor_from_composition(
     heat_of_reaction_kJ_per_kg = (dh_total_kW / inlet_mass_kg_s
                                    if inlet_mass_kg_s > 0 else 0.0)
 
+    # ---- Perfil espacial del PFR (Capa 5) ----
+    # solve_pfr devuelve profile_V [m³] y profile_F [{formula: mol/s}].
+    # El CSTR no tiene perfil (mezcla perfecta) → profile=None.
+    # Convertimos formula→thermo_name y agregamos la conversión por
+    # especie en cada punto, para que la UI no necesite reactions_db.
+    pfr_profile = None
+    if mode == "pfr" and res.get("profile_V") and res.get("profile_F"):
+        prof_V = res["profile_V"]                 # [m³] acumulado
+        V_tot = prof_V[-1] if prof_V else 0.0
+        F0 = res["profile_F"][0] if res["profile_F"] else {}
+        species_thermo = {}                       # formula -> thermo_name
+        for formula in (F0.keys() if F0 else []):
+            tn = thermo_name(formula)
+            species_thermo[formula] = tn if tn else formula
+        points = []
+        for Vk, Fk in zip(prof_V, res["profile_F"]):
+            entry = {
+                "V_m3":   Vk,
+                "L_frac": (Vk / V_tot) if V_tot > 0 else 0.0,
+                "F":      {},      # {thermo_name: mol/s}
+                "X":      {},      # {thermo_name: conversión fracción}
+            }
+            for formula, Fval in Fk.items():
+                tn = species_thermo.get(formula, formula)
+                entry["F"][tn] = Fval
+                F_in_sp = F0.get(formula, 0.0)
+                if F_in_sp > 1e-12:
+                    x = (F_in_sp - Fval) / F_in_sp
+                    # solo conversión positiva (reactantes consumidos)
+                    if x > 1e-9:
+                        entry["X"][tn] = x
+            points.append(entry)
+        pfr_profile = {
+            "V_total_m3": V_tot,
+            "points":     points,
+        }
+
     return dict(
         outlet_composition=outlet_composition,
         outlet_mass_kg_s=total_out,
@@ -1873,4 +1910,5 @@ def solve_kinetic_reactor_from_composition(
         unmapped=unmapped,
         tau_s=res.get('tau_s'),
         conversion=res.get('conversion', {}),
+        pfr_profile=pfr_profile,
     )

@@ -74,6 +74,19 @@ import equipment_ports as ep
 import equipment_icons as eicon
 import pfd_symbols as pfd
 import pfd_fonts
+
+# ---- matplotlib opcional (perfil de reactor PFR/batch + barras CSTR) ----
+# Mismo patrón que results_ui.py pero con backend QtAgg en vez de TkAgg.
+# Si el entorno no tiene matplotlib o le falta el binding Qt, el panel
+# de perfil degrada con un aviso en vez de crashear.
+try:
+    import matplotlib
+    matplotlib.use("QtAgg")
+    from matplotlib.figure import Figure
+    from matplotlib.backends.backend_qtagg import FigureCanvas as _MplCanvas
+    _MPL_OK = True
+except Exception:
+    _MPL_OK = False
 import flowsheet_solver as fsolv
 import flowsheet_export as fexp
 import flowsheet_validation as fval
@@ -4863,6 +4876,52 @@ class FlowsheetMainWindow(QMainWindow):
         self.prop_label.setWordWrap(True)
         self.prop_label.setAlignment(Qt.AlignTop | Qt.AlignLeft)
         layout.addWidget(self.prop_label)
+
+        # ---- Perfil de reactor PFR / batch / barras CSTR (oculto hasta
+        #      seleccionar un reactor con solve corrido) ----
+        self.pfr_panel = QWidget()
+        pfr_lay = QVBoxLayout(self.pfr_panel)
+        pfr_lay.setContentsMargins(0, 4, 0, 0)
+        # toggles
+        from PySide6.QtWidgets import QButtonGroup, QRadioButton
+        toggles = QHBoxLayout()
+        self.pfr_y_conv = QRadioButton("Conversión %")
+        self.pfr_y_flow = QRadioButton("Flujo mol/s")
+        self.pfr_y_conv.setChecked(True)
+        gy = QButtonGroup(self.pfr_panel)
+        gy.addButton(self.pfr_y_conv); gy.addButton(self.pfr_y_flow)
+        self.pfr_x_vol = QRadioButton("vs Volumen")
+        self.pfr_x_len = QRadioButton("vs Longitud")
+        self.pfr_x_len.setChecked(True)
+        gx = QButtonGroup(self.pfr_panel)
+        gx.addButton(self.pfr_x_vol); gx.addButton(self.pfr_x_len)
+        for w in (self.pfr_y_conv, self.pfr_y_flow):
+            w.setStyleSheet("font-size: 8pt;")
+            toggles.addWidget(w)
+        toggles.addSpacing(8)
+        for w in (self.pfr_x_len, self.pfr_x_vol):
+            w.setStyleSheet("font-size: 8pt;")
+            toggles.addWidget(w)
+        toggles.addStretch(1)
+        pfr_lay.addLayout(toggles)
+        if _MPL_OK:
+            self._pfr_fig = Figure(figsize=(3.4, 2.6), dpi=90)
+            self._pfr_canvas = _MplCanvas(self._pfr_fig)
+            self._pfr_canvas.setMinimumHeight(220)
+            pfr_lay.addWidget(self._pfr_canvas)
+            for w in (self.pfr_y_conv, self.pfr_y_flow,
+                      self.pfr_x_vol, self.pfr_x_len):
+                w.toggled.connect(self._redraw_pfr_profile)
+        else:
+            pfr_lay.addWidget(QLabel(
+                "matplotlib no disponible — perfil no se puede graficar.\n"
+                "pip install matplotlib"
+            ))
+            self._pfr_canvas = None
+        self.pfr_panel.setVisible(False)
+        layout.addWidget(self.pfr_panel)
+        self._pfr_current_block = None
+
         layout.addStretch(1)
 
         self.results_box = QTextEdit()
@@ -6201,6 +6260,9 @@ class FlowsheetMainWindow(QMainWindow):
         sel = self.scene.selectedItems()
         if not sel:
             self.prop_label.setText("(nada seleccionado)")
+            self._pfr_current_block = None
+            if hasattr(self, "pfr_panel"):
+                self.pfr_panel.setVisible(False)
             return
 
         # mostrar info del primer item seleccionado
@@ -6335,9 +6397,31 @@ class FlowsheetMainWindow(QMainWindow):
                     pass
 
             self.prop_label.setText(txt)
+
+            # ---- Perfil PFR / batch / barras CSTR ----
+            prof = getattr(b, "_pfr_profile", None)
+            mode = getattr(b, "reactor_mode", "") or ""
+            if mode == "pfr" and prof and prof.get("points"):
+                self._pfr_current_block = b
+                self.pfr_panel.setVisible(True)
+                self._redraw_pfr_profile()
+            else:
+                self._pfr_current_block = None
+                self.pfr_panel.setVisible(False)
+                # pista útil: PFR sin perfil = falta correr Solve o V=0
+                if mode == "pfr":
+                    self.prop_label.setText(
+                        self.prop_label.text()
+                        + "\n\n(Perfil PFR: corré Solve con "
+                          "reactor_volume_L > 0 para verlo)"
+                    )
         elif isinstance(it, StreamItem):
             for other in self.scene.block_items.values():
                 other.set_selected_visual(False)
+            # Ocultar panel de perfil al seleccionar streams
+            self._pfr_current_block = None
+            if hasattr(self, "pfr_panel"):
+                self.pfr_panel.setVisible(False)
             s = it.model
             # defensa: si los bloques referenciados ya no existen
             # (stream huérfano por inconsistencia de modelo), mostrar
@@ -6461,6 +6545,54 @@ class FlowsheetMainWindow(QMainWindow):
                     pass
 
             self.prop_label.setText(txt)
+
+    def _redraw_pfr_profile(self):
+        """Dibuja el perfil del bloque actual según los toggles.
+        No-op si no hay bloque PFR seleccionado o falta matplotlib.
+
+        Patch 3 generaliza este dispatcher para batch (curva temporal)
+        y CSTR (barras). Por ahora solo dibuja PFR (perfil espacial)."""
+        if not _MPL_OK or self._pfr_canvas is None:
+            return
+        b = self._pfr_current_block
+        prof = getattr(b, "_pfr_profile", None) if b is not None else None
+        self._pfr_fig.clear()
+        if not prof or not prof.get("points"):
+            self._pfr_canvas.draw()
+            return
+        pts = prof["points"]
+        use_len = self.pfr_x_len.isChecked()
+        use_conv = self.pfr_y_conv.isChecked()
+        xs = [p["L_frac"] if use_len else p["V_m3"] for p in pts]
+        ax = self._pfr_fig.add_subplot(111)
+        # especies presentes en el perfil
+        all_species = set()
+        for p in pts:
+            all_species.update((p["X"] if use_conv else p["F"]).keys())
+        # orden estable
+        species = sorted(all_species)
+        for sp in species:
+            if use_conv:
+                ys = [p["X"].get(sp, 0.0) * 100.0 for p in pts]
+                # ocultar especies que nunca se convierten (productos):
+                if max(ys) < 1e-6:
+                    continue
+            else:
+                ys = [p["F"].get(sp, 0.0) for p in pts]
+            ax.plot(xs, ys, linewidth=1.4, label=sp)
+        ax.set_xlabel("L / L_total" if use_len else "Volumen acumulado (m³)",
+                       fontsize=8)
+        ax.set_ylabel("Conversión (%)" if use_conv else "Flujo molar (mol/s)",
+                       fontsize=8)
+        ax.tick_params(labelsize=7)
+        ax.grid(True, alpha=0.3, linestyle="--")
+        ax.legend(fontsize=6, loc="best", ncol=2)
+        title = f"Perfil PFR — {b.name}" if b is not None else "Perfil PFR"
+        ax.set_title(title, fontsize=9, fontweight="bold")
+        for spine in ("top", "right"):
+            ax.spines[spine].set_visible(False)
+        self._pfr_fig.tight_layout()
+        self._pfr_canvas.draw()
 
     # ---------------------------------------------------
     # LIBRARY → CANVAS

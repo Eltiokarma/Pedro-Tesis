@@ -334,6 +334,10 @@ def _reset_propagated_values(fs):
         # nuevo cálculo no se mezcle con el viejo.
         if getattr(b, "reactions", None):
             b.heat_of_reaction = 0.0
+        # Perfiles runtime de PFR/batch — siempre limpiar antes del
+        # solve para que un reactor que ya no es PFR (o un solve viejo)
+        # no muestre datos obsoletos en el panel de propiedades.
+        b._pfr_profile = None
 
 
 def _solve_mass_iteration(fs):
@@ -1531,6 +1535,11 @@ def solve_equilibrium_reactors(fs):
         # y declarar heat_of_reaction manual).  _reset_propagated_values
         # ya lo dejó en 0 al inicio del solve.
         b.heat_of_reaction = res['heat_of_reaction_kJ_per_kg']
+
+        # Guardar el perfil espacial del PFR en el bloque para que el
+        # panel de propiedades lo pueda graficar.  CSTR → None.
+        # Runtime con guion bajo: NO se serializa.
+        b._pfr_profile = res.get("pfr_profile")
 
         # ---- AUTO-DUTY: calor que el horno/jacket externo provee ----
         # Para mantener el reactor isothermal a T_op_K, el horno debe
