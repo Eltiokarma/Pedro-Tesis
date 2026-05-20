@@ -3317,6 +3317,76 @@ class StreamItem(QGraphicsPathItem):
         self.arrow_head.setPolygon(QPolygonF([tip, b1, b2]))
         self.arrow_head.setBrush(QBrush(self._color()))
 
+    def shape(self):
+        """Hit area más ancha que el stroke visible (2.4 px) → click sobre
+        o cerca de la flecha la selecciona aunque no caigas justo encima.
+        Stroker en 12 px ≈ 5× ancho real."""
+        from PySide6.QtGui import QPainterPathStroker
+        stroker = QPainterPathStroker()
+        stroker.setWidth(12.0)
+        stroker.setCapStyle(Qt.RoundCap)
+        stroker.setJoinStyle(Qt.RoundJoin)
+        return stroker.createStroke(self.path())
+
+    def _translation_snapshot(self):
+        """Captura el estado del modelo para drag-translate."""
+        s = self.model
+        return {
+            "start_xy":  list(s.start_xy) if s.start_xy else None,
+            "end_xy":    list(s.end_xy)   if s.end_xy   else None,
+            "waypoints": [list(wp) for wp in (s.waypoints or [])],
+        }
+
+    def _apply_translation(self, dx, dy, snap):
+        """Aplica un offset (dx, dy) al modelo:
+          • endpoints flotantes (src/dst == -1) → start_xy/end_xy se mueven
+          • endpoints anclados a un bloque → quedan en el puerto
+          • waypoints → siempre se trasladan
+        `snap` es el snapshot inicial (no muta entre updates del drag)."""
+        s = self.model
+        if s.src == -1 and snap["start_xy"] is not None:
+            s.start_xy = [snap["start_xy"][0] + dx, snap["start_xy"][1] + dy]
+        if s.dst == -1 and snap["end_xy"] is not None:
+            s.end_xy = [snap["end_xy"][0] + dx, snap["end_xy"][1] + dy]
+        if snap["waypoints"]:
+            s.waypoints = [[wp[0] + dx, wp[1] + dy] for wp in snap["waypoints"]]
+        self.update_path()
+
+    def translate_by(self, dx, dy):
+        """API pública: trasladar el stream relativo al estado actual.
+        Usado por keyPressEvent de la view (flechas del teclado)."""
+        snap = self._translation_snapshot()
+        self._apply_translation(dx, dy, snap)
+
+    def mousePressEvent(self, event):
+        """Inicia drag-translate de toda la flecha al hacer click sobre
+        ella (no sobre un handle)."""
+        if event.button() == Qt.LeftButton:
+            self.setSelected(True)
+            self._drag_origin = event.scenePos()
+            self._drag_snap = self._translation_snapshot()
+            event.accept()
+            return
+        super().mousePressEvent(event)
+
+    def mouseMoveEvent(self, event):
+        if getattr(self, "_drag_origin", None) is not None:
+            delta = event.scenePos() - self._drag_origin
+            dx = round(delta.x() / GRID_STEP) * GRID_STEP
+            dy = round(delta.y() / GRID_STEP) * GRID_STEP
+            self._apply_translation(dx, dy, self._drag_snap)
+            event.accept()
+            return
+        super().mouseMoveEvent(event)
+
+    def mouseReleaseEvent(self, event):
+        if getattr(self, "_drag_origin", None) is not None:
+            self._drag_origin = None
+            self._drag_snap = None
+            event.accept()
+            return
+        super().mouseReleaseEvent(event)
+
     def mouseDoubleClickEvent(self, event):
         """Doble-click sobre el stream → abrir editor."""
         if self.editor is not None:
@@ -3860,6 +3930,33 @@ class FlowsheetView(QGraphicsView):
             event.accept()
             return
         super().mouseReleaseEvent(event)
+
+    def keyPressEvent(self, event):
+        """Flechas del teclado → mueven los items seleccionados.
+        Paso fino con Shift (1 px), paso de grilla por default."""
+        key = event.key()
+        if key in (Qt.Key_Left, Qt.Key_Right, Qt.Key_Up, Qt.Key_Down):
+            step = 1 if (event.modifiers() & Qt.ShiftModifier) else GRID_STEP
+            dx = dy = 0
+            if key == Qt.Key_Left:   dx = -step
+            if key == Qt.Key_Right:  dx = +step
+            if key == Qt.Key_Up:     dy = -step
+            if key == Qt.Key_Down:   dy = +step
+            scene = self.scene()
+            moved = False
+            if scene is not None:
+                for item in scene.selectedItems():
+                    if isinstance(item, StreamItem):
+                        item.translate_by(dx, dy)
+                        moved = True
+                    elif hasattr(item, "moveBy"):
+                        # BlockItem y similares: usar moveBy nativo de Qt
+                        item.moveBy(dx, dy)
+                        moved = True
+            if moved:
+                event.accept()
+                return
+        super().keyPressEvent(event)
 
     def zoom_in(self):
         self.wheelEvent_like(+1)
