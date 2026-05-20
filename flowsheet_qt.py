@@ -1411,6 +1411,17 @@ class StreamEditDialog(QDialog):
         self.comp_table.setHorizontalHeaderLabels(["Componente", "Fracción másica"])
         self.comp_table.verticalHeader().setVisible(False)
         self.comp_table.setSelectionBehavior(QTableWidget.SelectRows)
+        # NoEditTriggers: el table NO compite con los cell widgets por los
+        # clicks. Sin esto, click en spinbox arrow podia ser interceptado
+        # por la maquinaria de edit-in-place del table → el spinbox no
+        # registraba el click.
+        self.comp_table.setEditTriggers(QTableWidget.NoEditTriggers)
+        # Suprimir el highlight oscuro sobre la fila seleccionada: los
+        # cell widgets quedaban ennegrecidos por heredar ese color.
+        self.comp_table.setStyleSheet(
+            "QTableWidget::item { background: white; color: #222; }"
+            "QTableWidget::item:selected { background: white; color: #222; }"
+        )
         self.comp_table.setColumnWidth(0, 260)
         self.comp_table.setColumnWidth(1, 120)
         self.comp_table.setMinimumHeight(130)
@@ -1720,24 +1731,23 @@ class StreamEditDialog(QDialog):
         auto-lockea comp_lock (filosofía 'tipear es declarar spec')."""
         r = self.comp_table.rowCount()
         self.comp_table.insertRow(r)
-        # Style explicito para combo + spin: cuando viven dentro de un
-        # QTableWidget y la fila se selecciona, el highlight de la
-        # selection-row puede tintar el widget de azul/negro y volverlo
-        # ilegible (texto blanco sobre fondo oscuro o todo negro). Estos
-        # stylesheets fuerzan fondo blanco/texto negro siempre.
-        CELL_STYLE = (
-            "QComboBox, QDoubleSpinBox { "
-            "  background: white; color: #222; border: 1px solid #ccc; "
-            "  padding: 2px; "
-            "} "
+        # Style del COMBO solo: dropdown view tiene que ser blanco (sino
+        # el QAbstractItemView hereda colores oscuros del theme). El SPIN
+        # se deja sin stylesheet — Qt en Windows MATA las flechas
+        # up/down si estilas QDoubleSpinBox sin estilar tambien
+        # ::up-button y ::down-button (quirk conocido). El fondo blanco
+        # del spin se logra via el setStyleSheet del TABLE (arriba) que
+        # ya suprime el highlight oscuro de selection-row.
+        COMBO_STYLE = (
+            "QComboBox { background: white; color: #222; "
+            "  border: 1px solid #ccc; padding: 1px 4px; } "
             "QComboBox QAbstractItemView { "
             "  background: white; color: #222; "
             "  selection-background-color: #5c6bc0; "
-            "  selection-color: white; "
-            "} "
+            "  selection-color: white; } "
         )
         combo = QComboBox()
-        combo.setStyleSheet(CELL_STYLE)
+        combo.setStyleSheet(COMBO_STYLE)
         combo.addItem("(elegir…)", "")
         for k, lbl in self._comp_labels:
             combo.addItem(lbl, k)
@@ -1750,7 +1760,7 @@ class StreamEditDialog(QDialog):
             lambda _idx: self._auto_lock(self.comp_lock))
         self.comp_table.setCellWidget(r, 0, combo)
         spin = QDoubleSpinBox()
-        spin.setStyleSheet(CELL_STYLE)
+        # NO stylesheet en el spin — rompe las flechas en Windows.
         spin.setRange(0.0, 1.0)
         spin.setDecimals(4)
         spin.setSingleStep(0.05)
@@ -3728,15 +3738,18 @@ class StreamItem(QGraphicsPathItem):
             self._rebuild_handles()
         else:
             # Sin reconstruir handles, RE-SINCRONIZAR los _EndpointHandle
-            # existentes con el modelo. Cuando un bloque conectado se
-            # mueve (refresh_streams_of), el endpoint del path se redibuja
-            # en la nueva pos del puerto pero la bolita naranja del handle
-            # quedaba en la pos anterior. _sync_pos_from_model la pone
-            # donde el modelo dice — y el flag SendsGeometryChanges está
-            # protegido (ver _sync_pos_from_model) para no wipear la
-            # conexión.
+            # existentes con el modelo (usado cuando un bloque conectado
+            # se mueve y los handles deben seguir al puerto).
+            # SKIP el handle que está siendo arrastrado por el user:
+            # _press_pos != None significa drag activo. Si llamo setPos
+            # ahí, Qt pierde el reference point del drag offset y el
+            # próximo mouseMove computa delta desde el lugar incorrecto
+            # → handle salta a la esquina superior izquierda (0,0) o
+            # peor. Qt maneja su pos durante el drag; mejor no tocar.
             for h in self._handles:
                 if isinstance(h, _EndpointHandle):
+                    if getattr(h, "_press_pos", None) is not None:
+                        continue   # drag activo — Qt lo maneja
                     h._sync_pos_from_model()
 
         self._update_tooltip()
@@ -6259,11 +6272,18 @@ class FlowsheetMainWindow(QMainWindow):
         # aplicar al modelo
         dlg.apply_to_model()
         self._mark_dirty()
-        # validar la conexión actualizada (puertos pueden haber cambiado)
-        sev, msg = fval.validate_connection(
-            self.fs, stream.src, stream.dst,
-            stream.src_port, stream.dst_port,
-        )
+        # validar la conexión actualizada (puertos pueden haber cambiado).
+        # SKIP si el stream es flotante (src o dst == -1): validate_connection
+        # rechaza eso con 'Bloque no existe', pero un stream flotante es un
+        # estado transitorio valido (el user esta editando antes de conectar).
+        is_floating = (stream.src == -1 or stream.dst == -1)
+        if not is_floating:
+            sev, msg = fval.validate_connection(
+                self.fs, stream.src, stream.dst,
+                stream.src_port, stream.dst_port,
+            )
+        else:
+            sev, msg = "ok", None
         if sev == "error":
             QMessageBox.critical(self, "Conexión inválida",
                                   msg + "\n\nLa edición se revierte.")
