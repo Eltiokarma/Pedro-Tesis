@@ -3688,6 +3688,8 @@ class StreamItem(QGraphicsPathItem):
         a_add = menu.addAction(ic_wp or QIcon(), "Insertar waypoint acá")
         a_reset = menu.addAction(ic_reset or QIcon(), "Resetear auto-routing")
         a_reset.setEnabled(bool(self.model.waypoints))
+        a_straighten = menu.addAction(
+            ic_wp or QIcon(), "Enderezar flecha (horizontal / vertical)")
         menu.addSeparator()
         # Toggle global: mostrar/ocultar pills sobre las flechas.
         # Default OFF (canvas limpio); el user lo activa cuando quiere
@@ -3718,12 +3720,103 @@ class StreamItem(QGraphicsPathItem):
         elif chosen is a_reset:
             self.model.waypoints.clear()
             self.update_path()
+        elif chosen is a_straighten:
+            self._straighten_to_orthogonal()
         elif chosen is a_labels and ed is not None:
             ed._show_stream_labels = not labels_on
             # Refrescar TODOS los streams para que el toggle aplique al canvas entero
             for _sid, _si in ed.stream_items_iter():
                 _si.update_path(rebuild_handles=False)
         event.accept()
+
+    def _straighten_to_orthogonal(self):
+        """Endereza la flecha a horizontal o vertical pura.
+
+        El clásico problema 'la flecha quedó inclinada y no se puede
+        volver a poner derecha' después de un snap de bloque. Esto
+        decide eje dominante (|Δx| vs |Δy|), alinea el endpoint
+        flotante para que coincida en la coordenada perpendicular con
+        el endpoint anclado, y limpia los waypoints (la línea va
+        directa, sin bends raros que la inclinaron).
+
+        Casos:
+          • Ambos endpoints anclados (a bloques): solo limpia waypoints.
+            El auto-route es ortogonal por defecto, así queda bonito.
+          • Un endpoint flotante: alinea el flotante con el anclado.
+          • Ambos flotantes: alinea end_xy con start_xy según eje
+            dominante.
+
+        Snapeado a GRID_STEP para que quede prolijo en la grilla."""
+        s = self.model
+        fs = getattr(self, "fs", None)
+        # Coords de cada endpoint: del puerto del bloque o de start/end_xy
+        def _endpoint_pos(role):
+            if role == "start":
+                if s.src != -1 and fs is not None:
+                    b = fs.blocks.get(s.src)
+                    if b is not None:
+                        _, x, y = self._resolve_port(b, s.src_port, "right")
+                        return (x, y, True)   # True = anclado
+                if s.start_xy and len(s.start_xy) >= 2:
+                    return (float(s.start_xy[0]), float(s.start_xy[1]), False)
+                return None
+            else:
+                if s.dst != -1 and fs is not None:
+                    b = fs.blocks.get(s.dst)
+                    if b is not None:
+                        _, x, y = self._resolve_port(b, s.dst_port, "left")
+                        return (x, y, True)
+                if s.end_xy and len(s.end_xy) >= 2:
+                    return (float(s.end_xy[0]), float(s.end_xy[1]), False)
+                return None
+
+        p_start = _endpoint_pos("start")
+        p_end   = _endpoint_pos("end")
+        if p_start is None or p_end is None:
+            return    # no se puede operar sin posiciones válidas
+
+        x1, y1, anchored_start = p_start
+        x2, y2, anchored_end   = p_end
+        dx = abs(x2 - x1)
+        dy = abs(y2 - y1)
+        horizontal = (dx >= dy)   # dominante: el eje más largo
+
+        # Limpiar waypoints — son los que típicamente desalinean el path
+        s.waypoints = []
+
+        if anchored_start and anchored_end:
+            # Ambos en bloques: nada que mover, el auto-route ya es
+            # ortogonal. Solo limpiamos los waypoints y reroute.
+            self.update_path()
+            return
+
+        if anchored_start and not anchored_end:
+            # Mover el endpoint END flotante para que se alinee
+            if horizontal:
+                new_y = round(y1 / GRID_STEP) * GRID_STEP
+                s.end_xy = [round(x2 / GRID_STEP) * GRID_STEP, new_y]
+            else:
+                new_x = round(x1 / GRID_STEP) * GRID_STEP
+                s.end_xy = [new_x, round(y2 / GRID_STEP) * GRID_STEP]
+        elif anchored_end and not anchored_start:
+            # Mover el endpoint START flotante
+            if horizontal:
+                new_y = round(y2 / GRID_STEP) * GRID_STEP
+                s.start_xy = [round(x1 / GRID_STEP) * GRID_STEP, new_y]
+            else:
+                new_x = round(x2 / GRID_STEP) * GRID_STEP
+                s.start_xy = [new_x, round(y1 / GRID_STEP) * GRID_STEP]
+        else:
+            # Ambos flotantes: alinear END con START en el eje perp.
+            if horizontal:
+                new_y = round(y1 / GRID_STEP) * GRID_STEP
+                s.start_xy = [round(x1 / GRID_STEP) * GRID_STEP, new_y]
+                s.end_xy   = [round(x2 / GRID_STEP) * GRID_STEP, new_y]
+            else:
+                new_x = round(x1 / GRID_STEP) * GRID_STEP
+                s.start_xy = [new_x, round(y1 / GRID_STEP) * GRID_STEP]
+                s.end_xy   = [new_x, round(y2 / GRID_STEP) * GRID_STEP]
+        self.update_path()
 
     def _draw_arrow(self, path, x_end, y_end, x_prev, y_prev):
         """Punta de flecha rellena al final del stream — QGraphicsPolygonItem
