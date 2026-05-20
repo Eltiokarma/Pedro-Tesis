@@ -1576,13 +1576,15 @@ class StreamEditDialog(QDialog):
         self.pipe_is_pipe.toggled.connect(_toggle_pipe_inputs)
         _toggle_pipe_inputs(self.pipe_is_pipe.isChecked())
 
-        # ─── Wiring del panel DOF: cualquier lock/phase/comp dispara
-        # refresh del resumen en vivo ───
+        # ─── Wiring del panel DOF: cualquier lock/phase/comp/cp/main_comp
+        # dispara refresh del resumen en vivo ───
         for chk in (self.mass_lock, self.t_lock, self.p_lock, self.comp_lock):
             chk.toggled.connect(self._update_dof_summary)
         self.phase_combo.currentTextChanged.connect(self._update_dof_summary)
+        self.comp_combo.currentIndexChanged.connect(self._update_dof_summary)
+        self.cp_edit.valueChanged.connect(self._update_dof_summary)
         # cualquier edit de fila de composición re-evalúa Σ y DOF
-        # (ya lo hacen _update_comp_sum via signals al agregar fila)
+        # (lo hace _update_comp_sum via signals al agregar fila)
         self._update_dof_summary()
 
         # ─── Botones OK/Cancel FUERA del scroll, siempre visibles ───
@@ -1710,6 +1712,25 @@ class StreamEditDialog(QDialog):
         # Contar componentes con fraccion > 0
         n_comp = sum(1 for k, v in self._read_comp_rows() if k and v > 0)
 
+        # ─── Determinar qué fuente de propiedades va a usar el solver ───
+        # Cadena de fallback en flowsheet_solver._resolve_cp:
+        #   1. thermo_db (DIPPR) con composition dict   (más preciso)
+        #   2. thermo_db con main_component             (componente puro)
+        #   3. components.py legacy con composition
+        #   4. components.py legacy con main_component
+        #   5. s.cp > 0 (override manual constante)
+        #   6. None  (solver sin propiedades — falla en balance de energía)
+        main_comp = self.comp_combo.currentData() or ""
+        cp_manual = float(self.cp_edit.value())
+        if n_comp >= 2:
+            cp_source = "mezcla multi-componente (DIPPR ponderado)"
+        elif n_comp == 1 or main_comp:
+            cp_source = "componente puro del catálogo"
+        elif cp_manual > 0:
+            cp_source = f"Cp manual constante = {cp_manual:.3f} kJ/kg·K"
+        else:
+            cp_source = None
+
         rows = []
         rows.append(f"<b>Sistema:</b> {n_comp or '?'} componente(s), fase {phase}")
         rows.append("<b>Spec del user:</b> " +
@@ -1718,6 +1739,10 @@ class StreamEditDialog(QDialog):
         rows.append("<b>Solver calculará:</b> " +
                     (", ".join(free) if free else
                      "<i>nada — todo over-spec</i>"))
+        if cp_source:
+            rows.append(f"<b>Propiedades:</b> {cp_source}")
+        else:
+            rows.append("<b>Propiedades:</b> <i>ninguna fuente disponible</i>")
 
         # Advertencias DOF
         warns = []
@@ -1733,10 +1758,11 @@ class StreamEditDialog(QDialog):
                 "upstream. Útil en corrientes internas; un feed externo "
                 "típicamente necesita flujo + T + composición fijados."
             )
-        if n_comp == 0:
+        if cp_source is None:
             warns.append(
-                "⚠ La tabla de composición está vacía. Agregá al menos un "
-                "compuesto, o el solver no sabrá las propiedades de la mezcla."
+                "⚠ <b>Sin fuente de Cp:</b> agregá componentes a la tabla, "
+                "o elegí 'Componente principal', o poné un Cp manual > 0. "
+                "El solver no podrá computar el balance de energía sin esto."
             )
 
         color = "#7a3814" if any("⚠" in w for w in warns) else "#1b4d3e"
