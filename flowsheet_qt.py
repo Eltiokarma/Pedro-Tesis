@@ -2713,6 +2713,20 @@ class _EndpointHandle(QGraphicsEllipseItem):
         if self._snap_marker is not None:
             self._snap_marker.setVisible(False)
 
+    # Distancia mínima de drag (px) para "commitear" la desconexión del
+    # puerto. Si el user mueve el handle menos que esto y suelta, se
+    # considera click accidental y el handle vuelve al puerto. Resuelve
+    # el bug 'el bloque se va a Jupiter' (en realidad era el handle el
+    # que se grababa por accidente y disconnectaba el stream).
+    DRAG_THRESHOLD = 16.0
+
+    def mousePressEvent(self, event):
+        """Al iniciar drag: reset del flag de 'commit'."""
+        if event.button() == Qt.LeftButton:
+            self._press_pos = QPointF(self.pos())   # pos del handle al apretar
+            self._drag_committed = False
+        super().mousePressEvent(event)
+
     def itemChange(self, change, value):
         if change == QGraphicsItem.ItemPositionChange and self.scene():
             # Snap a grilla durante el drag (suave)
@@ -2720,10 +2734,25 @@ class _EndpointHandle(QGraphicsEllipseItem):
             ny = round(value.y() / GRID_STEP) * GRID_STEP
             value = QPointF(nx, ny)
         elif change == QGraphicsItem.ItemPositionHasChanged and self.scene():
-            # Durante el drag: actualizar xy y refrescar el path.
-            # Si hay puerto cerca, mostrar feedback verde.
             si = self._stream_item
             s = si.model
+            # GATE: solo modificar el modelo si el drag superó el
+            # threshold. Antes, el más mínimo movimiento (incluso por
+            # click sin querer cerca del puerto) hacía s.src = -1 →
+            # 'desconexión accidental' que parecía 'el bloque se va a
+            # Jupiter' (el endpoint seguía al cursor, no el bloque).
+            if not self._drag_committed:
+                pp = getattr(self, "_press_pos", None)
+                if pp is not None:
+                    dx = self.pos().x() - pp.x()
+                    dy = self.pos().y() - pp.y()
+                    if dx*dx + dy*dy < self.DRAG_THRESHOLD ** 2:
+                        # Movimiento todavía dentro del umbral — visual
+                        # se mueve (Qt lo hizo), pero modelo intacto.
+                        return super().itemChange(change, value)
+                self._drag_committed = True
+
+            # Threshold superado — committear disconnect
             new_xy = [self.pos().x(), self.pos().y()]
             if self._role == "start":
                 s.src = -1
@@ -2744,7 +2773,20 @@ class _EndpointHandle(QGraphicsEllipseItem):
 
     def mouseReleaseEvent(self, event):
         """Al soltar el handle: si hay un puerto cerca, snap+conectar.
-        Si no, dejar flotante con las coords actuales."""
+        Si no, dejar flotante con las coords actuales.
+
+        Caso especial: si el drag no superó el threshold (movimiento
+        accidental al clickear), restaurar la pos del handle al modelo
+        original (el modelo nunca fue modificado, solo la pos visual).
+        """
+        if not getattr(self, "_drag_committed", False):
+            # Drag accidental sin commit — restaurar handle al modelo
+            self._sync_pos_from_model()
+            self._hide_snap_marker()
+            super().mouseReleaseEvent(event)
+            self._press_pos = None
+            return
+
         si = self._stream_item
         s  = si.model
         scene_pos = self.pos()    # ya está en scene coords (handle es scene-level)
@@ -2771,6 +2813,9 @@ class _EndpointHandle(QGraphicsEllipseItem):
         if editor is not None and hasattr(editor, "_mark_dirty"):
             editor._mark_dirty()
         super().mouseReleaseEvent(event)
+        # Reset flags al final
+        self._press_pos = None
+        self._drag_committed = False
 
 
 class BlockItem(QGraphicsItemGroup):
