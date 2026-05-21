@@ -2811,6 +2811,22 @@ class _EndpointHandle(QGraphicsEllipseItem):
             self._drag_committed = False
         super().mousePressEvent(event)
 
+    def mouseDoubleClickEvent(self, event):
+        """Doble-click sobre la bolita naranja → abrir editor del stream.
+        Sin este override, Qt por default llama mousePressEvent en el
+        segundo click, lo que prepara otro drag potencial pero NO abre
+        nada. Usuario espera que doble-click haga 'algo útil' (editar
+        propiedades) — delegamos al stream item subyacente."""
+        si = self._stream_item
+        editor = getattr(si, "editor", None) if si is not None else None
+        if editor is not None and hasattr(editor, "edit_stream"):
+            # Reset flags primero para que cualquier itemChange residual
+            # no commitee disconnect mientras el dialog está abierto.
+            self._drag_committed = False
+            self._press_pos = None
+            editor.edit_stream(si.model)
+        event.accept()
+
     def itemChange(self, change, value):
         if change == QGraphicsItem.ItemPositionChange and self.scene():
             # Snap a grilla durante el drag (suave)
@@ -2842,6 +2858,19 @@ class _EndpointHandle(QGraphicsEllipseItem):
 
             # Threshold superado — committear disconnect
             new_xy = [self.pos().x(), self.pos().y()]
+            # SANITY: si new_xy ~= (0, 0) Y press_pos NO estaba en (0, 0)
+            # → anomalía. Algo dejó el handle en (0,0) entre press y este
+            # update (e.g., un sync programatico mid-drag, un Qt internal
+            # weirdness). NO commitear — sería escribir start_xy=[0,0]
+            # → flecha 'a Jupiter'. Restaurar pos desde el modelo y
+            # abortar el drag.
+            pp_check = self._press_pos
+            if (abs(new_xy[0]) < 1.0 and abs(new_xy[1]) < 1.0
+                    and pp_check is not None
+                    and (abs(pp_check.x()) > 1.0 or abs(pp_check.y()) > 1.0)):
+                self._drag_committed = False
+                self._sync_pos_from_model()
+                return super().itemChange(change, value)
             if self._role == "start":
                 s.src = -1
                 s.src_port = ""
@@ -2910,16 +2939,20 @@ class _EndpointHandle(QGraphicsEllipseItem):
             # Mantener flotante: xy ya quedó guardado en itemChange
             pass
         self._hide_snap_marker()
-        # Refresh
+        # IMPORTANTE: super().mouseReleaseEvent + reset de flags ANTES de
+        # update_path. update_path con rebuild_handles=True default
+        # destruye este handle (self) — llamar super() o setear self.*
+        # despues sería operar sobre un item ya quitado de la escena,
+        # lo cual puede dejar internal Qt state inconsistente.
+        super().mouseReleaseEvent(event)
+        self._press_pos = None
+        self._drag_committed = False
+        # Refresh (puede destruir 'self' via _rebuild_handles)
         si.update_path()
         # Notificar al editor que algo cambió (mark_dirty)
         editor = getattr(si, "editor", None)
         if editor is not None and hasattr(editor, "_mark_dirty"):
             editor._mark_dirty()
-        super().mouseReleaseEvent(event)
-        # Reset flags al final (en caso de NO snap, donde no lo hicimos arriba)
-        self._press_pos = None
-        self._drag_committed = False
 
 
 class BlockItem(QGraphicsItemGroup):
