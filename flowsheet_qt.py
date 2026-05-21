@@ -3318,6 +3318,70 @@ class BlockItem(QGraphicsItemGroup):
             else:
                 ell.setBrush(QBrush(COLOR_PORT_FREE))
 
+    def update_warning_badge(self) -> None:
+        """Muestra/oculta el badge de alerta en la esquina superior
+        derecha del bloque segun model.reaction_warnings.
+
+        Llamar despues de chemfx.analyze_flowsheet(fs) para refrescar
+        todos los bloques. Es no-op si el bloque no tiene warnings.
+
+        Color por severity (max del bloque):
+          critical → rojo (#c41e3a)
+          high     → naranja (#e57c00)
+          medium   → amarillo (#f4b400)
+          (sin warnings → badge oculto)
+        """
+        warns = getattr(self.model, "reaction_warnings", None) or []
+        # Maximo de severidad en este bloque
+        severity_order = {"critical": 3, "high": 2, "medium": 1, "low": 0}
+        max_sev = "low"
+        max_score = -1
+        for w in warns:
+            if not isinstance(w, dict):
+                continue
+            sev = w.get("severity", "medium")
+            score = severity_order.get(sev, 0)
+            if score > max_score:
+                max_score = score
+                max_sev = sev
+        # Crear el badge la primera vez
+        if not hasattr(self, "_warning_badge") or self._warning_badge is None:
+            from PySide6.QtWidgets import QGraphicsEllipseItem
+            self._warning_badge = QGraphicsEllipseItem(-7, -7, 14, 14)
+            self._warning_badge.setPen(QPen(QColor("#ffffff"), 1.5))
+            self._warning_badge.setZValue(20)   # encima del bloque
+            self._warning_badge.setAcceptedMouseButtons(Qt.NoButton)
+            self.addToGroup(self._warning_badge)
+        # Color + visibilidad segun warnings
+        if not warns:
+            self._warning_badge.setVisible(False)
+            return
+        color_map = {
+            "critical": "#c41e3a",
+            "high":     "#e57c00",
+            "medium":   "#f4b400",
+        }
+        color = color_map.get(max_sev, "#9ca3af")
+        self._warning_badge.setBrush(QBrush(QColor(color)))
+        self._warning_badge.setVisible(True)
+        # Posicion: esquina superior derecha del bloque
+        try:
+            w, h = pfd.block_dims(self.model.eq_type)
+        except Exception:
+            w, h = 80, 60
+        # Local coords (BlockItem es un group con setPos absoluto al bloque)
+        self._warning_badge.setPos(w - 4, 4)
+        # Tooltip con el primer warning
+        first_msg = ""
+        for w_ in warns:
+            if isinstance(w_, dict):
+                first_msg = w_.get("message", "")
+                if first_msg:
+                    break
+        if len(warns) > 1:
+            first_msg += f"\n\n+ {len(warns) - 1} warning(s) más"
+        self._warning_badge.setToolTip(first_msg)
+
     def _update_tooltip(self):
         """Tooltip al hover con info del bloque (HTML)."""
         b = self.model
@@ -6073,6 +6137,12 @@ class FlowsheetMainWindow(QMainWindow):
         try:
             import chemfx
             chemfx.analyze_flowsheet(self.fs)
+            # Refrescar badge visual de warning en cada bloque del canvas
+            for _bid, _bitem in self.block_items_iter():
+                try:
+                    _bitem.update_warning_badge()
+                except Exception:
+                    pass
             if getattr(self, "reactivity_dock", None) is not None:
                 self.reactivity_dock.refresh_from_flowsheet(self.fs)
                 # Si hay warnings criticos, traer el dock al frente
