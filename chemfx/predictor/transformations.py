@@ -182,6 +182,47 @@ def list_transformations() -> List[TransformationTemplate]:
     return load_transformations()
 
 
+def validate_smarts(force_log: bool = False) -> Dict[str, bool]:
+    """Valida cada SMARTS de los templates contra RDKit ReactionFromSmarts.
+
+    Devuelve {template_id: True/False} indicando cuales parsean.
+    Si force_log=True, imprime cuales fallan (util para debug).
+
+    Templates con SMARTS invalido (e.g. T16 aldol con literal '...') quedan
+    en False y deben skipearse en apply_to_compounds. Sin esto, RDKit
+    spammea stderr con cada intento."""
+    if not RDKIT_AVAILABLE:
+        return {}
+    from rdkit import Chem
+    from rdkit.Chem import AllChem
+    result: Dict[str, bool] = {}
+    for tpl in load_transformations():
+        if not tpl.reaction_smarts:
+            result[tpl.id] = False
+            continue
+        try:
+            rxn = AllChem.ReactionFromSmarts(tpl.reaction_smarts)
+            ok = rxn is not None and rxn.GetNumReactantTemplates() > 0
+        except Exception:
+            ok = False
+        result[tpl.id] = ok
+        if force_log and not ok:
+            print(f"  T-SMARTS invalido: {tpl.id}")
+    return result
+
+
+# Cache lazy: {template_id: bool}, populado al primer uso.
+_SMARTS_VALID_CACHE: Optional[Dict[str, bool]] = None
+
+
+def is_smarts_valid(template_id: str) -> bool:
+    """Cache de validacion: True si el SMARTS del template parsea OK."""
+    global _SMARTS_VALID_CACHE
+    if _SMARTS_VALID_CACHE is None:
+        _SMARTS_VALID_CACHE = validate_smarts()
+    return _SMARTS_VALID_CACHE.get(template_id, False)
+
+
 # ======================================================
 # APLICACION (RDKit)
 # ======================================================
@@ -208,17 +249,32 @@ def apply_to_compounds(template: TransformationTemplate,
         return []
     if not smiles_list:
         return []
+    # Skip templates con SMARTS invalido (e.g. T16 aldol con literal
+    # '...') ANTES de pasar a RDKit — evita spam de stderr.
+    if not is_smarts_valid(template.id):
+        return []
     try:
         from rdkit import Chem
         from rdkit.Chem import AllChem
-        rxn = AllChem.ReactionFromSmarts(template.reaction_smarts)
+        # Suprimir el log de RDKit por warnings de atom mapping
+        # (no son errors fatales — solo informativos del solver de RDKit).
+        from rdkit import RDLogger
+        RDLogger.DisableLog("rdApp.warning")
+        try:
+            rxn = AllChem.ReactionFromSmarts(template.reaction_smarts)
+        finally:
+            RDLogger.EnableLog("rdApp.warning")
         if rxn is None:
             return []
         mols = [Chem.MolFromSmiles(s) for s in smiles_list]
         if any(m is None for m in mols):
             return []
         # RunReactants requiere tuple
-        product_sets = rxn.RunReactants(tuple(mols))
+        RDLogger.DisableLog("rdApp.warning")
+        try:
+            product_sets = rxn.RunReactants(tuple(mols))
+        finally:
+            RDLogger.EnableLog("rdApp.warning")
         out: List[List[str]] = []
         for ps in product_sets:
             try:

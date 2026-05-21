@@ -160,6 +160,30 @@ def test_predict_reactions_predicted():
         print(f"  {WARN}  RDKit no instalado — saltando")
         return False
     from chemfx.predictor import reaction_predictor as rp
+    from chemfx.predictor import transformations as tf
+
+    # Diagnostico previo: validar cuales SMARTS parsean
+    smarts_valid = tf.validate_smarts()
+    n_valid = sum(1 for v in smarts_valid.values() if v)
+    n_total = len(smarts_valid)
+    print(f"  ℹ  SMARTS validos: {n_valid}/{n_total} templates")
+    invalid = [tid for tid, ok in smarts_valid.items() if not ok]
+    if invalid:
+        print(f"  ℹ  Invalidos (skipean): {invalid[:5]}")
+
+    # Diagnostico directo: aplicar T01 a (acetic_acid, ethanol) manualmente
+    from chemfx.predictor import smiles_loader
+    t01 = tf.get_transformation("T01")
+    if t01:
+        print(f"  ℹ  T01 SMARTS: {t01.reaction_smarts[:60]}...")
+        ac = smiles_loader.get_smiles("acetic_acid")
+        et = smiles_loader.get_smiles("ethanol")
+        print(f"  ℹ  Probando T01 con ({ac}, {et}):")
+        products = tf.apply_to_compounds(t01, [ac, et])
+        print(f"  ℹ    RDKit RunReactants devolvio {len(products)} sets de productos")
+        for p in products[:3]:
+            print(f"      {p}")
+
     fa = rp.predict_reactions(
         feed_compounds=["ethanol", "acetic_acid"], T_K=350,
     )

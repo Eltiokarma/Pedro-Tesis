@@ -48,6 +48,35 @@ def _confidence_from_error(err_kJ_mol: float) -> Confidence:
     return Confidence.BAJA
 
 
+def _safe_get(obj, name, *call_args):
+    """Acceso defensivo a un atributo de thermo.Joback.
+
+    En versiones distintas de la libreria, Hf/Tb/Tc/... pueden ser:
+      - metodos (J.Hf()) — version clasica
+      - propiedades (J.Hf) — version mas reciente
+      - metodos con argumento (J.Cpig(298.15))
+    Esta funcion intenta los tres patrones en orden y devuelve el
+    primer valor numerico que obtenga. None si todo falla.
+    """
+    try:
+        attr = getattr(obj, name, None)
+    except Exception:
+        return None
+    if attr is None:
+        return None
+    if callable(attr):
+        try:
+            return attr(*call_args) if call_args else attr()
+        except Exception as e:
+            logger.debug(f"safe_get({name}) callable fallo: {e}")
+            return None
+    # No callable: es propiedad/valor
+    try:
+        return float(attr)
+    except (TypeError, ValueError):
+        return None
+
+
 def estimate_via_joback(smiles: str) -> Optional[Dict[str, ThermoEstimate]]:
     """Backend thermo.Joback (Caleb Bell).
 
@@ -56,7 +85,7 @@ def estimate_via_joback(smiles: str) -> Optional[Dict[str, ThermoEstimate]]:
         'tc_K', 'pc_bar', 'cp_298_J_mol_K', 'dh_vap_kJ_mol'. None si:
           - thermo no instalado
           - SMILES no parsea o tiene grupos no reconocidos
-          - status != 'OK' del objeto Joback
+          - ningun valor numerico se puede extraer del objeto Joback
     """
     if not THERMO_AVAILABLE or not smiles:
         return None
@@ -66,48 +95,78 @@ def estimate_via_joback(smiles: str) -> Optional[Dict[str, ThermoEstimate]]:
     except Exception as e:
         logger.debug(f"thermo.Joback fallo para {smiles!r}: {e}")
         return None
-    # thermo no siempre setea 'status' explicito; defendemos.
+    # status puede ser str ('OK'), lista ['OK'], o no existir. Defendemos.
     status = getattr(J, "status", "OK")
     if isinstance(status, str) and status.upper() not in ("OK", ""):
         return None
+    if isinstance(status, (list, tuple)) and status and "OK" not in status:
+        # Algunos versions devuelven lista de warnings; OK como elemento ok.
+        # Si no hay 'OK' en la lista, asumimos fallo.
+        non_ok = [s for s in status if not (isinstance(s, str) and s.upper() == "OK")]
+        if non_ok and not any(isinstance(s, str) and s.upper() == "OK" for s in status):
+            logger.debug(f"thermo.Joback status no OK: {status}")
+            # No bail — intentamos extraer valores igual
 
     # Numero de grupos identificados (para banda de error).
-    counts = getattr(J, "counts", {})
+    counts = getattr(J, "counts", {}) or {}
     n_groups = len(counts) if counts else 1
     err_dHf = _estimate_joback_error(n_groups)
 
     out: Dict[str, ThermoEstimate] = {}
-    # Cada llamada al objeto Joback puede tirar excepcion si falta data;
-    # silenciamos individualmente para no perder los que SI funcionaron.
-    def _try(label, fn, unit_div=1.0, unc=None, conf=None):
+
+    def _add(label, value, unc, conf=None, method="joback (thermo lib)"):
+        if value is None:
+            return
         try:
-            v = fn()
-            if v is None:
-                return
-            value = v / unit_div
-            unc_val = unc if unc is not None else value * 0.05
-            conf_val = conf if conf is not None else _confidence_from_error(unc_val)
-            out[label] = ThermoEstimate(
-                value=value, uncertainty=abs(unc_val),
-                method="joback (thermo lib)", confidence=conf_val,
-            )
-        except Exception as e:
-            logger.debug(f"thermo.Joback.{label} fallo: {e}")
+            value = float(value)
+        except (TypeError, ValueError):
+            return
+        if conf is None:
+            conf = _confidence_from_error(abs(unc) if unc else 5.0)
+        out[label] = ThermoEstimate(
+            value=value, uncertainty=abs(unc) if unc else 0.0,
+            method=method, confidence=conf,
+        )
 
     # ΔHf°: thermo devuelve J/mol → dividir por 1000 para kJ/mol.
-    _try("dh_f_298_kJ_mol", J.Hf, unit_div=1000.0,
-         unc=err_dHf, conf=_confidence_from_error(err_dHf))
-    _try("dg_f_298_kJ_mol", J.Gf, unit_div=1000.0,
-         unc=err_dHf * 1.2)   # Gf tipicamente algo mas inexacto que Hf
-    _try("tb_K", J.Tb, unc=12.9, conf=Confidence.MEDIA)
-    _try("tc_K", J.Tc, unc=None, conf=Confidence.MEDIA)  # 4.8% relativo
-    _try("pc_bar", lambda: J.Pc() / 1e5)   # thermo da Pa → bar
-    _try("cp_298_J_mol_K", lambda: J.Cpig(298.15),
-         conf=Confidence.ALTA)              # 1.4% relativo
-    # ΔH_vap a Tb (thermo lo expone como Hvap).
-    _try("dh_vap_kJ_mol", J.Hvap, unit_div=1000.0,
-         unc=3.9, conf=Confidence.MEDIA)
+    # Algunos versions tienen Hf como metodo con arg T (Hf(T=298.15));
+    # otros como propiedad. _safe_get cubre ambos.
+    hf = _safe_get(J, "Hf")
+    if hf is None:
+        # Algunos thermo Joback requieren T como argumento explicito.
+        hf = _safe_get(J, "Hf", 298.15)
+    if hf is None:
+        logger.debug(
+            f"thermo.Joback({smiles!r}): no se obtuvo Hf. "
+            f"status={getattr(J, 'status', '?')}, "
+            f"counts={getattr(J, 'counts', '?')}"
+        )
+    if hf is not None:
+        _add("dh_f_298_kJ_mol", hf / 1000.0, err_dHf,
+             conf=_confidence_from_error(err_dHf))
+    gf = _safe_get(J, "Gf")
+    if gf is None:
+        gf = _safe_get(J, "Gf", 298.15)
+    if gf is not None:
+        _add("dg_f_298_kJ_mol", gf / 1000.0, err_dHf * 1.2)
+    tb = _safe_get(J, "Tb")
+    if tb is not None:
+        _add("tb_K", tb, 12.9, conf=Confidence.MEDIA)
+    tc = _safe_get(J, "Tc")
+    if tc is not None:
+        _add("tc_K", tc, tc * 0.048, conf=Confidence.MEDIA)
+    pc = _safe_get(J, "Pc")
+    if pc is not None:
+        _add("pc_bar", pc / 1e5, pc / 1e5 * 0.052, conf=Confidence.MEDIA)
+    cp298 = _safe_get(J, "Cpig", 298.15)
+    if cp298 is not None:
+        _add("cp_298_J_mol_K", cp298, cp298 * 0.014, conf=Confidence.ALTA)
+    hvap = _safe_get(J, "Hvap")
+    if hvap is not None:
+        _add("dh_vap_kJ_mol", hvap / 1000.0, 3.9, conf=Confidence.MEDIA)
+
     return out if out else None
+
 
 
 def joback_groups_in_molecule(smiles: str) -> Dict[str, int]:
