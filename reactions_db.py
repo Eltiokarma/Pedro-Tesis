@@ -167,6 +167,26 @@ class Reaction:
     # Notas y refs
     comments: str = ""
 
+    # ---- Capa 4b (predictor) — procedencia + confianza ----
+    # Tipo de reaccion:
+    #   'curated'   — escrita a mano en reactions_db.md (literatura)
+    #   'auto'      — generada por chemfx.auto_reactions (combustion, cracking)
+    #   'predicted' — generada por templates T01-T20 + Joback/Benson
+    origin: str = "curated"
+    # Confianza del mecanismo (que la reaccion realmente puede ocurrir
+    # con el set de reactantes dado).
+    confidence_mechanism: str = "alta"   # 'alta' | 'media' | 'baja'
+    # Confianza de la termodinamica (ΔH, ΔS, ΔG estimados).
+    confidence_thermo: str = "alta"
+    # Si origin in ('auto', 'predicted'): metodo usado para estimar ΔH.
+    estimation_method: str = ""   # 'joback', 'benson', 'hess_from_exp', 'auto_combustion'
+    estimation_uncertainty_kJ_mol: float = 0.0
+    # Si origin == 'predicted': template T01..T20 que la genero.
+    transformation_id: Optional[str] = None
+    # Catalizador requerido (informativo, no afecta el solver).
+    requires_catalyst: bool = False
+    catalyst_hint: str = ""
+
     # ============================================================
     # CAPA 5 — CINÉTICA (Arrhenius)
     # ============================================================

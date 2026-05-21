@@ -74,6 +74,26 @@ class ComponentThermo:
     rho_ref_T_C:   Optional[float] = None   # T del punto experimental
     z_ra_override: Optional[float] = None   # Z_RA pre-calibrado
 
+    # ---- Capa 4b (predictor) — campos cheminformaticos ----
+    # SMILES canonico para el predictor. Si vacio, predictor cae a
+    # lookup manual de grupos (functional_groups_db.md).
+    smiles: str = ""
+    # Grupos funcionales detectados (lista de strings, populada por
+    # functional_groups.detect_groups() lazy on demand).
+    functional_groups: List[str] = field(default_factory=list)
+    # Procedencia del compuesto.
+    #   'experimental' — del thermo_db curado (NIST/DIPPR/FIT)
+    #   'estimated'    — estimado via Joback/Benson
+    #   'predicted'    — producto generado por un template del predictor
+    origin: str = "experimental"
+    # Si origin in ('estimated', 'predicted'): cual metodo lo estimo.
+    estimation_method: str = ""        # 'joback', 'benson', 'auto_combustion'
+    # Bandas de incertidumbre por campo, en su escala natural.
+    # Ej: {'dh_f': 12.0, 'cp_gas_298': 5.0} (en kJ/mol y J/(mol·K)).
+    estimation_uncertainty: Dict[str, float] = field(default_factory=dict)
+    # Si origin == 'predicted': el template T01..T20 que lo genero.
+    parent_transformation: Optional[str] = None
+
     # ---- Métodos ----
     def cp_J_mol_K(self, T_K: float, phase: str = "liquid") -> Optional[float]:
         """Cp en J/(mol·K) a T en K para la fase indicada.

@@ -312,6 +312,25 @@ class Block:
     HETP_m:                Optional[float] = None
     packing_type:          str             = ""
 
+    # ---- Capa 4b (predictor) — toggle reactividad por equipo ----
+    # Determina si este bloque permite reacciones. Default depende del
+    # eq_type (ver chemfx.defaults.ALLOW_REACTIONS_DEFAULTS):
+    #   - Reactores y absorbedores: True
+    #   - Mezcladores, HX, tanques, bombas, compresores: False
+    # El asistente proactivo puede SUGERIR activar este toggle si
+    # detecta reactantes complementarios + condiciones favorables.
+    allow_reactions: bool = False
+    # IDs de reacciones explicitamente activadas por el user para este
+    # bloque. Subset de reactions (curated) + auto + predicted.
+    # Ej: ['R002', 'P_T01_001', 'AUTO_C2H6O_combustion'].
+    # Si vacio y allow_reactions=True: el solver ejecuta solo las
+    # curated listadas en 'reactions' (backward-compat).
+    active_reactions: List[str] = field(default_factory=list)
+    # Warnings de reacciones peligrosas detectadas pero NO activadas
+    # (informativo para la UI). Cada entrada es un DangerWarning
+    # serializado como dict.
+    reaction_warnings: List[dict] = field(default_factory=list)
+
     # caches del canvas Tk (no se serializan, no se usan en Qt)
     canvas_rect: Optional[int] = field(default=None, repr=False)
     canvas_text: Optional[int] = field(default=None, repr=False)
@@ -471,6 +490,18 @@ class Stream:
     #            flotante (src<=0 o dst<=0), se IGNORA.
     stream_kind: str   = "mass"
     energy_kW:   float = 0.0
+
+    # ---- Capa 4b (predictor) — reactividad en tuberias ----
+    # Permite reaccion en el stream (tipicamente OFF; el asistente
+    # sugiere ON si T+P altas + τ suficiente).
+    allow_reactions: bool = False
+    # Tiempo de residencia [s]. Si None, se calcula en runtime desde
+    # pipe_length_m, pipe_diameter_m, mass_flow + densidad de la mezcla.
+    residence_time_s: Optional[float] = None
+    # IDs de reacciones activas (igual semantica que Block.active_reactions).
+    active_reactions: List[str] = field(default_factory=list)
+    # Warnings serializados.
+    reaction_warnings: List[dict] = field(default_factory=list)
 
     # caches del canvas Tk
     canvas_line:    Optional[int] = field(default=None, repr=False)
