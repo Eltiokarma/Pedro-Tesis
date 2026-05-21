@@ -1972,8 +1972,16 @@ class StreamEditDialog(QDialog):
             else:
                 self.stream.composition = {}
         self.stream.phase = self.phase_combo.currentText() or ""
-        self.stream.src_port = self.src_port_combo.currentText() or ""
-        self.stream.dst_port = self.dst_port_combo.currentText() or ""
+        # NO wipear src_port/dst_port si el combo está vacío. Eso pasa
+        # cuando el stream esta flotante (b_src/b_dst None al abrir →
+        # ports_src/dst = []). Sin esta guarda, hacer OK en el dialog
+        # sobreescribia el src_port/dst_port valido a "". El usuario
+        # despues veia 'la flecha se va a Jupiter' porque sin src_port,
+        # _resolve_port no podia ubicar el handle bien.
+        if self.src_port_combo.count() > 0:
+            self.stream.src_port = self.src_port_combo.currentText() or ""
+        if self.dst_port_combo.count() > 0:
+            self.stream.dst_port = self.dst_port_combo.currentText() or ""
 
 
 class OpexExtraRowDialog(QDialog):
@@ -3805,8 +3813,24 @@ class StreamItem(QGraphicsPathItem):
         if not self.isSelected() and not is_floating:
             return
 
-        # Endpoints (start y end) — siempre si seleccionado o flotante
+        # Endpoints (start y end) — siempre si seleccionado o flotante.
+        # PERO: solo si el modelo tiene info valida para esa punta.
+        # Sin esto, un endpoint sin info (src=-1 AND start_xy=[]) crea
+        # un handle que se queda en (0,0) — el clasico 'va a Jupiter'.
+        s = self.model
         for role in ("start", "end"):
+            if role == "start":
+                has_info = (
+                    (s.src != -1 and self.fs.blocks.get(s.src) is not None)
+                    or (s.start_xy and len(s.start_xy) >= 2)
+                )
+            else:
+                has_info = (
+                    (s.dst != -1 and self.fs.blocks.get(s.dst) is not None)
+                    or (s.end_xy and len(s.end_xy) >= 2)
+                )
+            if not has_info:
+                continue   # no creas handle sin pos valida
             h = _EndpointHandle(self, role)
             scene.addItem(h)
             self._handles.append(h)
