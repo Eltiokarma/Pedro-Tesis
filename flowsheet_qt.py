@@ -1789,6 +1789,9 @@ class CustomReactionDialog(QDialog):
 
     def _recompute_balance(self):
         """Actualiza self.balance_label con el balance atomico actual."""
+        # Guard: __init__ llama _add_species_row antes de crear balance_label.
+        if not hasattr(self, "balance_label"):
+            return
         species = self._read_table_species()
         if not species:
             self.balance_label.setText("Balance: (sin especies)")
