@@ -920,6 +920,75 @@ class BlockEditDialog(QDialog):
         rot_layout.addRow("", hint_rot)
         layout.addRow(self.gb_rot)
 
+        # ─── Reactividad (Fase 8 — predictor de reacciones) ─────────
+        # Aparece SIEMPRE (es opt-in via toggle). Lee de
+        # block.feed_analysis_cache si el predictor corrio.
+        self.gb_reactivity = QGroupBox("Reactividad (predictor Capa 4b)")
+        rxlay = QVBoxLayout(self.gb_reactivity)
+
+        # Toggle allow_reactions
+        from chemfx.defaults import default_allow_reactions
+        default_allow = default_allow_reactions(
+            getattr(block, "eq_type", "") or "")
+        self.allow_rxn_cb = QCheckBox(
+            "Permitir reacciones en este bloque  "
+            f"(default por tipo: {'ON' if default_allow else 'OFF'})"
+        )
+        self.allow_rxn_cb.setChecked(bool(
+            getattr(block, "allow_reactions", default_allow)))
+        self.allow_rxn_cb.setToolTip(
+            "Si está marcado, las reacciones activas (debajo) se incluyen "
+            "en el balance al correr Solve. Si está desmarcado, todas se "
+            "ignoran. El asistente puede sugerir activar esto."
+        )
+        rxlay.addWidget(self.allow_rxn_cb)
+
+        # Status: corrió el predictor o no
+        fa_cache = getattr(block, "feed_analysis_cache", None) or {}
+        n_predicted = fa_cache.get("n_predicted", 0)
+        n_curated = fa_cache.get("n_curated", 0)
+        n_warns = fa_cache.get("n_warnings", 0)
+        if not fa_cache:
+            status_text = (
+                "<i>El predictor todavía no corrió sobre este bloque.</i><br>"
+                "Apretá <b>Solve balances</b> para activar el análisis.")
+        else:
+            status_text = (
+                f"Análisis: <b>{n_curated}</b> curadas · "
+                f"<b>{n_predicted}</b> predichas · "
+                f"<b>{n_warns}</b> warnings"
+            )
+        status_lbl = QLabel(status_text)
+        status_lbl.setStyleSheet(
+            "color: #444; font-size: 8.5pt; padding: 4px 0;")
+        rxlay.addWidget(status_lbl)
+
+        # Tabla de reacciones detectadas + checkboxes en active_reactions
+        self.rxn_table = QTableWidget(0, 4)
+        self.rxn_table.setHorizontalHeaderLabels(
+            ["✓", "ID", "Reacción", "Conf"])
+        self.rxn_table.verticalHeader().setVisible(False)
+        self.rxn_table.setSelectionBehavior(QTableWidget.SelectRows)
+        self.rxn_table.setEditTriggers(QTableWidget.NoEditTriggers)
+        self.rxn_table.setColumnWidth(0, 30)
+        self.rxn_table.setColumnWidth(1, 140)
+        self.rxn_table.horizontalHeader().setSectionResizeMode(
+            2, QHeaderView.Stretch)
+        self.rxn_table.setColumnWidth(3, 50)
+        self.rxn_table.setMinimumHeight(120)
+        self.rxn_table.setMaximumHeight(200)
+        rxlay.addWidget(self.rxn_table)
+        self._populate_reactivity_table(block, fa_cache)
+
+        rxhint = QLabel(
+            "Marcá las reacciones que querés incluir en el balance.\n"
+            "🟢 ALTA · 🟡 MEDIA · 🟠 BAJA · ⚫ no aplicable (fuera de rango T)"
+        )
+        rxhint.setStyleSheet("color: #888; font-size: 8pt;")
+        rxlay.addWidget(rxhint)
+
+        layout.addRow(self.gb_reactivity)
+
         # botones
         buttons = QDialogButtonBox(
             QDialogButtonBox.Ok | QDialogButtonBox.Cancel
@@ -927,6 +996,60 @@ class BlockEditDialog(QDialog):
         buttons.accepted.connect(self.accept)
         buttons.rejected.connect(self.reject)
         layout.addRow(buttons)
+
+    # ─── helpers Reactividad (Fase 8) ───
+    def _populate_reactivity_table(self, block, fa_cache: dict) -> None:
+        """Rellena la tabla de reacciones detectadas con checkboxes
+        para activar/desactivar cada una en block.active_reactions."""
+        active = set(getattr(block, "active_reactions", []) or [])
+        rows: list = []
+        # 1. Curadas: id + name (de fa_cache.curated_ids + curated_names)
+        curated_ids = fa_cache.get("curated_ids", []) or []
+        curated_names = fa_cache.get("curated_names", []) or []
+        for rid, name in zip(curated_ids, curated_names):
+            rows.append({
+                "id": rid, "label": name or rid,
+                "kind": "CURATED", "conf": "ALTA",
+            })
+        # 2. Predichas: del summary
+        for r in fa_cache.get("predicted_summary", []) or []:
+            label = r.get("display_label", "") or r.get("id", "")
+            conf = (r.get("confidence_mechanism", "alta") or "alta").upper()
+            rows.append({
+                "id": r.get("id", ""), "label": label,
+                "kind": "PRED", "conf": conf,
+                "fav": r.get("favorable_at_T", False),
+            })
+        # 3. Auto-reactions (catálogo) en caché de fa_cache no se almacenan
+        #    individualmente — solo n_auto. Lo dejamos para v2.
+
+        self.rxn_table.setRowCount(len(rows))
+        for ri, row in enumerate(rows):
+            # Col 0: checkbox
+            cb = QCheckBox()
+            cb.setChecked(row["id"] in active)
+            cb_w = QWidget()
+            cb_l = QHBoxLayout(cb_w)
+            cb_l.setContentsMargins(4, 0, 0, 0)
+            cb_l.addWidget(cb)
+            cb_l.addStretch()
+            self.rxn_table.setCellWidget(ri, 0, cb_w)
+            # Guardar reference para leer al apply
+            cb.setProperty("rxn_id", row["id"])
+            # Col 1: ID
+            id_it = QTableWidgetItem(row["id"][:30])
+            id_it.setToolTip(f"[{row['kind']}] {row['id']}")
+            self.rxn_table.setItem(ri, 1, id_it)
+            # Col 2: descripcion
+            lbl_it = QTableWidgetItem(row["label"][:80])
+            lbl_it.setToolTip(row["label"])
+            self.rxn_table.setItem(ri, 2, lbl_it)
+            # Col 3: confidence icono
+            conf = row["conf"]
+            icon_map = {"ALTA": "🟢", "MEDIA": "🟡", "BAJA": "🟠"}
+            cf_it = QTableWidgetItem(icon_map.get(conf, "⚫"))
+            cf_it.setToolTip(f"Confidence: {conf}")
+            self.rxn_table.setItem(ri, 3, cf_it)
 
     def apply_to_model(self):
         """Persistir los valores al Block."""
@@ -1026,6 +1149,24 @@ class BlockEditDialog(QDialog):
             else:
                 self.block.delta_p_bar = float(self.rot_dp.value())
             self.block.efficiency = float(self.rot_eta.value())
+
+        # Reactividad — toggle allow_reactions + active_reactions (Fase 8)
+        if hasattr(self, "allow_rxn_cb"):
+            self.block.allow_reactions = bool(self.allow_rxn_cb.isChecked())
+        if hasattr(self, "rxn_table"):
+            active_ids: list = []
+            for ri in range(self.rxn_table.rowCount()):
+                cb_w = self.rxn_table.cellWidget(ri, 0)
+                if cb_w is None:
+                    continue
+                cb = cb_w.findChild(QCheckBox)
+                if cb is None:
+                    continue
+                if cb.isChecked():
+                    rid = cb.property("rxn_id")
+                    if rid:
+                        active_ids.append(rid)
+            self.block.active_reactions = active_ids
 
     # ─── Custom reactions helpers (Hallazgo 1) ──────────────────────
 
