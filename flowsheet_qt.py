@@ -66,7 +66,7 @@ from PySide6.QtWidgets import (
     QDialog, QDialogButtonBox, QLineEdit, QSpinBox, QDoubleSpinBox,
     QComboBox, QTableWidget, QTableWidgetItem, QHeaderView, QCheckBox,
     QGroupBox, QGraphicsSceneContextMenuEvent, QToolButton,
-    QScrollArea,
+    QScrollArea, QCompleter,
 )
 from PySide6.QtGui import QUndoStack, QUndoCommand
 
@@ -1343,7 +1343,59 @@ class CustomReactionDialog(QDialog):
         self.eq_edit.editingFinished.connect(self._parse_equation)
         layout.addRow("Ecuación:", self.eq_edit)
 
-        # ─── Barra de helpers (auto-balance + predecir) ───
+        # ─── Plantillas comunes ───
+        self.tpl_combo = QComboBox()
+        self.tpl_combo.addItem("— Plantilla —", None)
+        # Cada plantilla: (display, dict con campos)
+        self._templates = [
+            ("Combustión completa de un alcano (CnH2n+2)", {
+                "stoich": [("CnH2n+2", "g", -1), ("O2", "g", -1),
+                           ("CO2", "g", +1), ("H2O", "g", +1)],
+                "name": "Combustión", "T_range": (298, 2500),
+                "dh_default": 0.0,
+            }),
+            ("Esterificación de Fischer (RCOOH + R'OH)", {
+                "stoich": [("RCOOH", "l", -1), ("R'OH", "l", -1),
+                           ("RCOOR'", "l", +1), ("H2O", "l", +1)],
+                "name": "Esterificación", "T_range": (333, 423),
+                "dh_default": 0.0,
+            }),
+            ("Water-gas shift (CO + H2O → CO2 + H2)", {
+                "stoich": [("CO", "g", -1), ("H2O", "g", -1),
+                           ("CO2", "g", +1), ("H2", "g", +1)],
+                "name": "WGS", "T_range": (473, 773),
+                "dh_default": -41.2,
+            }),
+            ("Steam reforming de metano (CH4 + H2O → CO + 3H2)", {
+                "stoich": [("CH4", "g", -1), ("H2O", "g", -1),
+                           ("CO", "g", +1), ("H2", "g", +3)],
+                "name": "Steam reforming", "T_range": (973, 1273),
+                "dh_default": 206.1,
+            }),
+            ("Methanation (CO + 3H2 → CH4 + H2O)", {
+                "stoich": [("CO", "g", -1), ("H2", "g", -3),
+                           ("CH4", "g", +1), ("H2O", "g", +1)],
+                "name": "Methanation", "T_range": (523, 723),
+                "dh_default": -206.1,
+            }),
+            ("Hidrólisis de éster (RCOOR' + H2O)", {
+                "stoich": [("RCOOR'", "l", -1), ("H2O", "l", -1),
+                           ("RCOOH", "l", +1), ("R'OH", "l", +1)],
+                "name": "Hidrólisis", "T_range": (333, 423),
+                "dh_default": 0.0,
+            }),
+            ("Síntesis de amoníaco (N2 + 3H2 → 2NH3)", {
+                "stoich": [("N2", "g", -1), ("H2", "g", -3), ("NH3", "g", +2)],
+                "name": "Haber-Bosch", "T_range": (673, 823),
+                "dh_default": -91.8,
+            }),
+        ]
+        for disp, data in self._templates:
+            self.tpl_combo.addItem(disp, data)
+        self.tpl_combo.currentIndexChanged.connect(self._apply_template)
+        layout.addRow("Plantilla:", self.tpl_combo)
+
+        # ─── Barra de helpers (auto-balance + predecir + ΔH) ───
         helpers_row = QWidget()
         h_lay = QHBoxLayout(helpers_row)
         h_lay.setContentsMargins(0, 0, 0, 0)
@@ -1356,15 +1408,24 @@ class CustomReactionDialog(QDialog):
             "Resuelve el null space de la matriz de atomos."
         )
         btn_balance.clicked.connect(self._auto_balance)
-        btn_predict = QPushButton("🔮 Predecir reacción")
+        btn_predict = QPushButton("🔮 Predecir")
         btn_predict.setToolTip(
             "Dados los REACTIVOS de la tabla (filas con ν<0), llama al\n"
             "predictor chemfx para sugerir productos + coeficientes +\n"
             "ΔH. Requiere RDKit + thermo instalados."
         )
         btn_predict.clicked.connect(self._predict_from_reactants)
+        btn_sum_dh = QPushButton("Σ ΔH desde stoich")
+        btn_sum_dh.setToolTip(
+            "Suma ΔHf° (Hess) de cada especie de la tabla, ponderado por ν\n"
+            "y por fase (gas/liq). Popula el campo ΔH₂₉₈.\n\n"
+            "Requiere que las especies esten en el thermo_db con dh_f.\n"
+            "Si falta alguna, te avisa."
+        )
+        btn_sum_dh.clicked.connect(self._sum_delta_h_from_stoich)
         h_lay.addWidget(btn_balance)
         h_lay.addWidget(btn_predict)
+        h_lay.addWidget(btn_sum_dh)
         h_lay.addStretch()
         layout.addRow("", helpers_row)
 
@@ -1374,22 +1435,29 @@ class CustomReactionDialog(QDialog):
         self.name_edit = QLineEdit("Reacción custom")
         layout.addRow("Nombre:", self.name_edit)
 
-        # Tabla de especies (compuesto, fase, nu) — 6 filas
-        # Col 0 = QComboBox editable poblado con thermo_db (nombre — formula).
+        # ─── Tabla de especies dinamica ───
+        # Col 0 = QComboBox editable poblado con thermo_db (nombre - formula).
         # Col 1 = QComboBox con fases (g, l, s, aq).
-        # Col 2 = QTableWidgetItem editable (ν).
-        self.tbl = QTableWidget(6, 3)
+        # Col 2 = QTableWidgetItem editable (nu).
+        # Empieza con 4 filas; se agregan/quitan dinamicamente.
+        self.tbl = QTableWidget(0, 3)
         self.tbl.setHorizontalHeaderLabels(["Compuesto", "Fase", "ν"])
         self.tbl.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
-        self.tbl.setMaximumHeight(220)
+        self.tbl.setMinimumHeight(140)
+        self.tbl.setMaximumHeight(260)
         self.tbl.verticalHeader().setDefaultSectionSize(28)
+        # Click derecho en una fila → menu contextual (eliminar)
+        self.tbl.setContextMenuPolicy(Qt.CustomContextMenu)
+        self.tbl.customContextMenuRequested.connect(self._show_row_menu)
         # Cargar lista del thermo_db
         try:
             import thermo_db as _tdb
             _names = sorted(_tdb.list_names())
+            self._thermo_db = _tdb
         except Exception:
             _tdb = None
             _names = []
+            self._thermo_db = None
         # Construir "nombre (formula)" para mostrar y un map paralelo
         # para resolver de nuevo a formula al leer la celda.
         self._compound_items: list = []   # [(display, formula, name)]
@@ -1401,30 +1469,33 @@ class CustomReactionDialog(QDialog):
             f = getattr(ct, "formula", "") if ct else ""
             disp = f"{n}" + (f"  ({f})" if f else "")
             self._compound_items.append((disp, f, n))
-        # Para QCompleter / lookup rapido
-        _disp_list = [d for d, _, _ in self._compound_items]
-
-        from PySide6.QtWidgets import QCompleter
-        for i in range(6):
-            # Combo de compuesto
-            cb_cmp = QComboBox()
-            cb_cmp.setEditable(True)
-            cb_cmp.addItem("")    # opcion vacia inicial
-            cb_cmp.addItems(_disp_list)
-            if _disp_list:
-                comp = QCompleter(_disp_list, cb_cmp)
-                comp.setCaseSensitivity(Qt.CaseInsensitive)
-                comp.setFilterMode(Qt.MatchContains)
-                cb_cmp.setCompleter(comp)
-            cb_cmp.setCurrentIndex(0)
-            self.tbl.setCellWidget(i, 0, cb_cmp)
-            # Combo de fase
-            cb_ph = QComboBox()
-            cb_ph.addItems(["g", "l", "s", "aq"])
-            self.tbl.setCellWidget(i, 1, cb_ph)
-            # ν editable
-            self.tbl.setItem(i, 2, QTableWidgetItem(""))
+        self._disp_list = [d for d, _, _ in self._compound_items]
+        # Crear 4 filas iniciales
+        for _ in range(4):
+            self._add_species_row()
         layout.addRow("Especies:", self.tbl)
+
+        # Botones +/- fila
+        rowbtns = QWidget()
+        rb_lay = QHBoxLayout(rowbtns)
+        rb_lay.setContentsMargins(0, 0, 0, 0)
+        btn_add_row = QPushButton("+ Agregar especie")
+        btn_add_row.setToolTip("Agregar una fila vacia al final de la tabla.")
+        btn_add_row.clicked.connect(lambda: self._add_species_row())
+        rb_lay.addWidget(btn_add_row)
+        hint_ctx = QLabel("(click derecho en una fila para eliminarla)")
+        hint_ctx.setStyleSheet("color: #888; font-size: 8pt;")
+        rb_lay.addWidget(hint_ctx)
+        rb_lay.addStretch()
+        layout.addRow("", rowbtns)
+
+        # ─── Balance atomico en vivo ───
+        self.balance_label = QLabel("Balance: (vacio)")
+        self.balance_label.setStyleSheet(
+            "padding: 4px; border: 1px solid #ccc; border-radius: 3px; "
+            "background: #f9f9f9; font-family: monospace;"
+        )
+        layout.addRow("", self.balance_label)
 
         # ΔH₂₉₈
         self.dh_edit = QDoubleSpinBox()
@@ -1488,6 +1559,12 @@ class CustomReactionDialog(QDialog):
                 out.append((formula, int(coef * sign)))
             return out
         species = _parse_side(lhs, -1) + _parse_side(rhs, +1)
+        # Ajustar el numero de filas a lo necesario (minimo 2)
+        n_needed = max(2, len(species))
+        while self.tbl.rowCount() < n_needed:
+            self._add_species_row()
+        while self.tbl.rowCount() > n_needed:
+            self.tbl.removeRow(self.tbl.rowCount() - 1)
         for i in range(self.tbl.rowCount()):
             if i < len(species):
                 f, nu = species[i]
@@ -1497,6 +1574,7 @@ class CustomReactionDialog(QDialog):
             else:
                 self._set_compound_in_row(i, "")
                 self.tbl.item(i, 2).setText("")
+        self._recompute_balance()
 
     # ─── Helpers Fase 8b: auto-balance + predict ───
     def _formula_from_combo(self, row: int) -> str:
@@ -1553,6 +1631,259 @@ class CustomReactionDialog(QDialog):
             return
         idx = cb.findText((phase or "g").strip() or "g")
         cb.setCurrentIndex(idx if idx >= 0 else 0)
+
+    def _add_species_row(self):
+        """Agrega una fila vacia al final de la tabla con sus widgets."""
+        r = self.tbl.rowCount()
+        self.tbl.insertRow(r)
+        # Combo de compuesto
+        cb_cmp = QComboBox()
+        cb_cmp.setEditable(True)
+        cb_cmp.addItem("")
+        cb_cmp.addItems(self._disp_list)
+        if self._disp_list:
+            comp = QCompleter(self._disp_list, cb_cmp)
+            comp.setCaseSensitivity(Qt.CaseInsensitive)
+            comp.setFilterMode(Qt.MatchContains)
+            cb_cmp.setCompleter(comp)
+        cb_cmp.setCurrentIndex(0)
+        cb_cmp.currentIndexChanged.connect(
+            lambda _i, row=r: self._on_compound_changed(row))
+        cb_cmp.editTextChanged.connect(
+            lambda _t, row=r: self._on_compound_changed(row))
+        self.tbl.setCellWidget(r, 0, cb_cmp)
+        # Combo de fase
+        cb_ph = QComboBox()
+        cb_ph.addItems(["g", "l", "s", "aq"])
+        cb_ph.currentIndexChanged.connect(
+            lambda _i, row=r: self._on_compound_changed(row))
+        self.tbl.setCellWidget(r, 1, cb_ph)
+        # nu editable
+        nu_it = QTableWidgetItem("")
+        self.tbl.setItem(r, 2, nu_it)
+        # Reconectar cellChanged una sola vez (es global a la tabla,
+        # no por fila — usamos un flag para no duplicar la connection).
+        if not getattr(self, "_cell_signal_connected", False):
+            self.tbl.cellChanged.connect(
+                lambda _r, _c: self._recompute_balance())
+            self._cell_signal_connected = True
+        self._recompute_balance()
+
+    def _show_row_menu(self, pos):
+        """Menu contextual para eliminar la fila bajo el cursor."""
+        row = self.tbl.rowAt(pos.y())
+        if row < 0:
+            return
+        from PySide6.QtWidgets import QMenu
+        menu = QMenu(self.tbl)
+        act_del = menu.addAction("Eliminar esta especie")
+        act_clr = menu.addAction("Limpiar esta fila")
+        action = menu.exec(self.tbl.mapToGlobal(pos))
+        if action == act_del:
+            if self.tbl.rowCount() > 2:
+                self.tbl.removeRow(row)
+                self._recompute_balance()
+            else:
+                QMessageBox.information(self, "Eliminar",
+                    "Se necesitan al menos 2 especies (reactivo + producto).")
+        elif action == act_clr:
+            self._set_compound_in_row(row, "")
+            self._set_phase_in_row(row, "g")
+            if self.tbl.item(row, 2) is not None:
+                self.tbl.item(row, 2).setText("")
+            self._recompute_balance()
+
+    def _apply_template(self, idx: int):
+        """Carga la plantilla seleccionada en la tabla. idx==0 = ignorar."""
+        if idx <= 0:
+            return
+        data = self.tpl_combo.itemData(idx)
+        if not isinstance(data, dict):
+            return
+        # Resetear tabla al tamano del template (minimo 2)
+        n_needed = max(2, len(data.get("stoich", [])))
+        while self.tbl.rowCount() < n_needed:
+            self._add_species_row()
+        while self.tbl.rowCount() > n_needed:
+            self.tbl.removeRow(self.tbl.rowCount() - 1)
+        # Limpiar todas las filas primero
+        for i in range(self.tbl.rowCount()):
+            self._set_compound_in_row(i, "")
+            self._set_phase_in_row(i, "g")
+            if self.tbl.item(i, 2) is not None:
+                self.tbl.item(i, 2).setText("")
+        # Poblar
+        for i, (formula, phase, nu) in enumerate(data.get("stoich", [])):
+            self._set_compound_in_row(i, formula)
+            self._set_phase_in_row(i, phase)
+            self.tbl.item(i, 2).setText(str(nu))
+        # Metadata
+        if data.get("name"):
+            self.name_edit.setText(data["name"])
+        tr = data.get("T_range")
+        if tr and len(tr) == 2:
+            self.t_min_edit.setValue(float(tr[0]))
+            self.t_max_edit.setValue(float(tr[1]))
+        if data.get("dh_default") is not None:
+            self.dh_edit.setValue(float(data["dh_default"]))
+        # Volver el combo a "— Plantilla —" para que se pueda reusar
+        self.tpl_combo.blockSignals(True)
+        self.tpl_combo.setCurrentIndex(0)
+        self.tpl_combo.blockSignals(False)
+        self._recompute_balance()
+
+    def _on_compound_changed(self, row: int):
+        """Refresca tooltip del combo con info del thermo_db y recomputa
+        el balance atomico."""
+        cb = self.tbl.cellWidget(row, 0)
+        if cb is None:
+            return
+        f = self._formula_from_combo(row)
+        # Buscar el ComponentThermo
+        info = ""
+        if self._thermo_db is not None and f:
+            try:
+                # Buscar por display match para tener el nombre canonico
+                disp = (cb.currentText() or "").strip()
+                name = None
+                for d, ff, nn in self._compound_items:
+                    if d == disp:
+                        name = nn
+                        break
+                if name is None:
+                    # Buscar por formula
+                    for d, ff, nn in self._compound_items:
+                        if ff == f:
+                            name = nn
+                            break
+                ct = self._thermo_db.get(name) if name else None
+                if ct is not None:
+                    mw = getattr(ct, "mw", None)
+                    dh_g = getattr(ct, "dh_f_gas_kJ_mol", None)
+                    dh_l = getattr(ct, "dh_f_liq_kJ_mol", None)
+                    parts = [f"<b>{name}</b>  ({getattr(ct, 'formula', '')})"]
+                    if mw:
+                        parts.append(f"MW: {mw:.2f} g/mol")
+                    if dh_g is not None:
+                        parts.append(f"ΔHf° gas: {dh_g:+.1f} kJ/mol")
+                    if dh_l is not None:
+                        parts.append(f"ΔHf° liq: {dh_l:+.1f} kJ/mol")
+                    info = "<br>".join(parts)
+            except Exception:
+                info = ""
+        cb.setToolTip(info or f or "")
+        self._recompute_balance()
+
+    def _atom_counts(self, formula: str) -> dict:
+        """Devuelve dict {elemento: nº atomos}. Vacio si no parsea."""
+        import re
+        d: dict = {}
+        if not formula:
+            return d
+        for m in re.finditer(r"([A-Z][a-z]?)(\d*)", formula):
+            el, num = m.group(1), m.group(2)
+            if not el:
+                continue
+            d[el] = d.get(el, 0) + (int(num) if num else 1)
+        return d
+
+    def _recompute_balance(self):
+        """Actualiza self.balance_label con el balance atomico actual."""
+        species = self._read_table_species()
+        if not species:
+            self.balance_label.setText("Balance: (sin especies)")
+            self.balance_label.setStyleSheet(
+                "padding: 4px; border: 1px solid #ccc; border-radius: 3px; "
+                "background: #f9f9f9; font-family: monospace; color: #888;"
+            )
+            return
+        # Sumar nu * atom_counts para cada elemento
+        total: dict = {}
+        n_with_nu = 0
+        for _, f, _, nu in species:
+            if nu == 0:
+                continue
+            n_with_nu += 1
+            for el, n_at in self._atom_counts(f).items():
+                total[el] = total.get(el, 0) + nu * n_at
+        if n_with_nu == 0:
+            self.balance_label.setText("Balance: (sin ν asignados)")
+            self.balance_label.setStyleSheet(
+                "padding: 4px; border: 1px solid #ccc; border-radius: 3px; "
+                "background: #f9f9f9; font-family: monospace; color: #888;"
+            )
+            return
+        ok = all(abs(v) < 1e-6 for v in total.values())
+        parts = [f"{el}: {v:+d}" for el, v in sorted(total.items())]
+        text = "  ".join(parts) if parts else "(sin atomos)"
+        if ok:
+            self.balance_label.setText(f"Balance: BALANCEADO ✓  ({text})")
+            self.balance_label.setStyleSheet(
+                "padding: 4px; border: 1px solid #2d7a2d; border-radius: 3px; "
+                "background: #e8f5e8; font-family: monospace; color: #2d7a2d;"
+            )
+        else:
+            self.balance_label.setText(f"Balance: NO CIERRA ✗  ({text})")
+            self.balance_label.setStyleSheet(
+                "padding: 4px; border: 1px solid #c41e3a; border-radius: 3px; "
+                "background: #fdecec; font-family: monospace; color: #c41e3a;"
+            )
+
+    def _sum_delta_h_from_stoich(self):
+        """Calcula ΔH₂₉₈ por Hess: Σ ν_i · ΔHf°_i.
+
+        Usa dh_f_gas o dh_f_liq segun la fase de la fila. Avisa si falta
+        algun dato."""
+        if self._thermo_db is None:
+            QMessageBox.warning(self, "ΔH desde stoich",
+                "thermo_db no disponible.")
+            return
+        species = self._read_table_species()
+        if not species:
+            QMessageBox.warning(self, "ΔH desde stoich",
+                "Pone al menos los reactivos y productos primero.")
+            return
+        total_dh = 0.0
+        missing: list = []
+        for _, f, phase, nu in species:
+            if nu == 0:
+                continue
+            # Buscar el ComponentThermo por formula
+            ct = None
+            for _disp, ff, nn in self._compound_items:
+                if ff == f:
+                    try:
+                        ct = self._thermo_db.get(nn)
+                    except Exception:
+                        ct = None
+                    if ct is not None:
+                        break
+            if ct is None:
+                missing.append(f"{f} ({phase})  → no esta en thermo_db")
+                continue
+            if phase in ("l", "aq"):
+                dh = getattr(ct, "dh_f_liq_kJ_mol", None)
+                if dh is None:
+                    dh = getattr(ct, "dh_f_gas_kJ_mol", None)
+            else:
+                dh = getattr(ct, "dh_f_gas_kJ_mol", None)
+                if dh is None:
+                    dh = getattr(ct, "dh_f_liq_kJ_mol", None)
+            if dh is None:
+                missing.append(f"{f} ({phase})  → ΔHf° no esta en thermo_db")
+                continue
+            total_dh += nu * dh
+        if missing:
+            QMessageBox.warning(self, "ΔH desde stoich — datos faltantes",
+                "No pude calcular ΔH porque faltan datos:\n\n"
+                + "\n".join(missing[:10])
+                + ("\n…" if len(missing) > 10 else ""))
+            return
+        self.dh_edit.setValue(total_dh)
+        QMessageBox.information(self, "ΔH calculado",
+            f"ΔH₂₉₈ = {total_dh:+.2f} kJ/mol\n\n"
+            "Calculado por Hess: Σ ν · ΔHf° de cada especie.\n"
+            "Ya quedo cargado en el campo ΔH₂₉₈.")
 
     def _read_table_species(self):
         """Lee la tabla y devuelve [(row_idx, formula, phase, nu_actual)]
@@ -1694,6 +2025,7 @@ class CustomReactionDialog(QDialog):
         # Escribir de vuelta en la tabla
         for k, (row_idx, _, _, _) in enumerate(species):
             self.tbl.item(row_idx, 2).setText(str(final_nu[k]))
+        self._recompute_balance()
 
     def _predict_from_reactants(self):
         """Llama al predictor chemfx con los reactivos (ν<0) de la tabla
@@ -1790,6 +2122,12 @@ class CustomReactionDialog(QDialog):
             QMessageBox.warning(self, "Predecir reacción",
                 "La reaccion seleccionada no tiene stoich (¿bug?).")
             return
+        # Ajustar el numero de filas a lo necesario
+        n_needed = max(2, len(stoich))
+        while self.tbl.rowCount() < n_needed:
+            self._add_species_row()
+        while self.tbl.rowCount() > n_needed:
+            self.tbl.removeRow(self.tbl.rowCount() - 1)
         # Limpiar tabla
         for i in range(self.tbl.rowCount()):
             self._set_compound_in_row(i, "")
@@ -1818,6 +2156,7 @@ class CustomReactionDialog(QDialog):
                 self.t_max_edit.setValue(float(tr[1]))
             except Exception:
                 pass
+        self._recompute_balance()
 
     def _on_accept(self):
         import reactions_db as _rdb
