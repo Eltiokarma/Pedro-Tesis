@@ -1374,14 +1374,55 @@ class CustomReactionDialog(QDialog):
         self.name_edit = QLineEdit("Reacción custom")
         layout.addRow("Nombre:", self.name_edit)
 
-        # Tabla de especies (formula, fase, nu) — 6 filas máximo
+        # Tabla de especies (compuesto, fase, nu) — 6 filas
+        # Col 0 = QComboBox editable poblado con thermo_db (nombre — formula).
+        # Col 1 = QComboBox con fases (g, l, s, aq).
+        # Col 2 = QTableWidgetItem editable (ν).
         self.tbl = QTableWidget(6, 3)
-        self.tbl.setHorizontalHeaderLabels(["Fórmula", "Fase", "ν"])
+        self.tbl.setHorizontalHeaderLabels(["Compuesto", "Fase", "ν"])
         self.tbl.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
-        self.tbl.setMaximumHeight(180)
+        self.tbl.setMaximumHeight(220)
+        self.tbl.verticalHeader().setDefaultSectionSize(28)
+        # Cargar lista del thermo_db
+        try:
+            import thermo_db as _tdb
+            _names = sorted(_tdb.list_names())
+        except Exception:
+            _tdb = None
+            _names = []
+        # Construir "nombre (formula)" para mostrar y un map paralelo
+        # para resolver de nuevo a formula al leer la celda.
+        self._compound_items: list = []   # [(display, formula, name)]
+        for n in _names:
+            try:
+                ct = _tdb.get(n)
+            except Exception:
+                ct = None
+            f = getattr(ct, "formula", "") if ct else ""
+            disp = f"{n}" + (f"  ({f})" if f else "")
+            self._compound_items.append((disp, f, n))
+        # Para QCompleter / lookup rapido
+        _disp_list = [d for d, _, _ in self._compound_items]
+
+        from PySide6.QtWidgets import QCompleter
         for i in range(6):
-            self.tbl.setItem(i, 0, QTableWidgetItem(""))
-            self.tbl.setItem(i, 1, QTableWidgetItem("g"))
+            # Combo de compuesto
+            cb_cmp = QComboBox()
+            cb_cmp.setEditable(True)
+            cb_cmp.addItem("")    # opcion vacia inicial
+            cb_cmp.addItems(_disp_list)
+            if _disp_list:
+                comp = QCompleter(_disp_list, cb_cmp)
+                comp.setCaseSensitivity(Qt.CaseInsensitive)
+                comp.setFilterMode(Qt.MatchContains)
+                cb_cmp.setCompleter(comp)
+            cb_cmp.setCurrentIndex(0)
+            self.tbl.setCellWidget(i, 0, cb_cmp)
+            # Combo de fase
+            cb_ph = QComboBox()
+            cb_ph.addItems(["g", "l", "s", "aq"])
+            self.tbl.setCellWidget(i, 1, cb_ph)
+            # ν editable
             self.tbl.setItem(i, 2, QTableWidgetItem(""))
         layout.addRow("Especies:", self.tbl)
 
@@ -1450,25 +1491,78 @@ class CustomReactionDialog(QDialog):
         for i in range(self.tbl.rowCount()):
             if i < len(species):
                 f, nu = species[i]
-                self.tbl.item(i, 0).setText(f)
-                self.tbl.item(i, 1).setText("g")
+                self._set_compound_in_row(i, f)
+                self._set_phase_in_row(i, "g")
                 self.tbl.item(i, 2).setText(str(nu))
             else:
-                self.tbl.item(i, 0).setText("")
+                self._set_compound_in_row(i, "")
                 self.tbl.item(i, 2).setText("")
 
     # ─── Helpers Fase 8b: auto-balance + predict ───
+    def _formula_from_combo(self, row: int) -> str:
+        """Devuelve la formula del compuesto seleccionado en la fila.
+
+        El combo muestra 'nombre (formula)'. Resuelve via _compound_items;
+        si el user tipeo manualmente algo que no esta en la lista, intenta
+        usar lo escrito tal cual (asumiendo que es ya una formula)."""
+        cb = self.tbl.cellWidget(row, 0)
+        if cb is None:
+            return ""
+        txt = (cb.currentText() or "").strip()
+        if not txt:
+            return ""
+        # Match exacto en la lista cargada
+        for disp, formula, _name in getattr(self, "_compound_items", []):
+            if disp == txt:
+                return formula or txt
+        # Match case-insensitive por nombre o por formula
+        low = txt.lower()
+        for disp, formula, name in getattr(self, "_compound_items", []):
+            if name.lower() == low or (formula and formula.lower() == low):
+                return formula or txt
+        # No matchea: usar lo escrito tal cual como formula
+        return txt
+
+    def _phase_from_combo(self, row: int) -> str:
+        cb = self.tbl.cellWidget(row, 1)
+        if cb is None:
+            return "g"
+        return (cb.currentText() or "g").strip() or "g"
+
+    def _set_compound_in_row(self, row: int, formula: str) -> None:
+        """Selecciona en el combo de la fila la entrada cuya formula
+        coincide; si no la encuentra, deja el texto libre."""
+        cb = self.tbl.cellWidget(row, 0)
+        if cb is None:
+            return
+        target = formula.strip()
+        if not target:
+            cb.setCurrentIndex(0)
+            return
+        for disp, f, _ in getattr(self, "_compound_items", []):
+            if f == target:
+                idx = cb.findText(disp)
+                if idx >= 0:
+                    cb.setCurrentIndex(idx)
+                    return
+        cb.setEditText(target)
+
+    def _set_phase_in_row(self, row: int, phase: str) -> None:
+        cb = self.tbl.cellWidget(row, 1)
+        if cb is None:
+            return
+        idx = cb.findText((phase or "g").strip() or "g")
+        cb.setCurrentIndex(idx if idx >= 0 else 0)
+
     def _read_table_species(self):
         """Lee la tabla y devuelve [(row_idx, formula, phase, nu_actual)]
-        para filas con formula no vacia. nu_actual es int (0 si vacio)."""
+        para filas con compuesto no vacio. nu_actual es int (0 si vacio)."""
         out = []
         for i in range(self.tbl.rowCount()):
-            it_f = self.tbl.item(i, 0)
-            f = (it_f.text() if it_f else "").strip()
+            f = self._formula_from_combo(i)
             if not f:
                 continue
-            it_p = self.tbl.item(i, 1)
-            phase = (it_p.text() if it_p else "g").strip() or "g"
+            phase = self._phase_from_combo(i)
             it_n = self.tbl.item(i, 2)
             txt = (it_n.text() if it_n else "").strip()
             try:
@@ -1698,12 +1792,12 @@ class CustomReactionDialog(QDialog):
             return
         # Limpiar tabla
         for i in range(self.tbl.rowCount()):
-            self.tbl.item(i, 0).setText("")
-            self.tbl.item(i, 1).setText("g")
+            self._set_compound_in_row(i, "")
+            self._set_phase_in_row(i, "g")
             self.tbl.item(i, 2).setText("")
         for i, sp in enumerate(stoich[:self.tbl.rowCount()]):
-            self.tbl.item(i, 0).setText(str(getattr(sp, "formula", "") or ""))
-            self.tbl.item(i, 1).setText(str(getattr(sp, "phase", "g") or "g"))
+            self._set_compound_in_row(i, str(getattr(sp, "formula", "") or ""))
+            self._set_phase_in_row(i, str(getattr(sp, "phase", "g") or "g"))
             self.tbl.item(i, 2).setText(str(int(getattr(sp, "nu", 0) or 0)))
 
         # ΔH y nombre
@@ -1730,10 +1824,10 @@ class CustomReactionDialog(QDialog):
         # Construir dict desde inputs
         stoich = []
         for i in range(self.tbl.rowCount()):
-            f = (self.tbl.item(i, 0).text() if self.tbl.item(i, 0) else "").strip()
+            f = self._formula_from_combo(i)
             if not f:
                 continue
-            ph = (self.tbl.item(i, 1).text() if self.tbl.item(i, 1) else "g").strip()
+            ph = self._phase_from_combo(i)
             try:
                 nu = int(self.tbl.item(i, 2).text())
             except (ValueError, AttributeError):
