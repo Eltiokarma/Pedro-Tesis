@@ -34,6 +34,19 @@ Filosofia:
 try:
     import rdkit  # noqa: F401
     RDKIT_AVAILABLE = True
+    # Silenciar RDKit globalmente: el predictor recibe SMILES pseudo
+    # (placeholders tipo "air", "biomass") y SMARTS de templates con
+    # variantes invalidas (T16 aldol con "..."). RDKit spammea la
+    # consola con cada parseo fallido. Para un usuario final eso es
+    # ruido inutil. Mantenemos critical/fatal por si hay algo grave.
+    try:
+        from rdkit import RDLogger as _RDLogger
+        _RDLogger.DisableLog("rdApp.error")
+        _RDLogger.DisableLog("rdApp.warning")
+        _RDLogger.DisableLog("rdApp.info")
+        _RDLogger.DisableLog("rdApp.debug")
+    except Exception:
+        pass
 except ImportError:
     RDKIT_AVAILABLE = False
 

@@ -66,6 +66,7 @@ from PySide6.QtWidgets import (
     QDialog, QDialogButtonBox, QLineEdit, QSpinBox, QDoubleSpinBox,
     QComboBox, QTableWidget, QTableWidgetItem, QHeaderView, QCheckBox,
     QGroupBox, QGraphicsSceneContextMenuEvent, QToolButton,
+    QScrollArea,
 )
 from PySide6.QtGui import QUndoStack, QUndoCommand
 
@@ -282,11 +283,35 @@ class BlockEditDialog(QDialog):
         super().__init__(parent)
         self.block = block
         self.setWindowTitle(f"Editar equipo — {block.name}")
-        self.resize(480, 460)
+        # Acotamos el tamano inicial al de la pantalla para que el
+        # dialog siempre entre. El contenido es scrolleable.
+        try:
+            screen = self.screen() if hasattr(self, "screen") else None
+            avail = screen.availableGeometry() if screen else None
+            max_h = int(avail.height() * 0.85) if avail else 720
+            max_w = int(avail.width()  * 0.60) if avail else 540
+        except Exception:
+            max_h, max_w = 720, 540
+        self.resize(min(540, max_w), min(700, max_h))
+        self.setMaximumHeight(max_h)
 
         spec = eq.EQUIPMENT_DATA.get(block.eq_type, {})
 
-        layout = QFormLayout(self)
+        # ─── Scroll container ───
+        # Todos los widgets del editor viven dentro de un QWidget que
+        # va dentro de un QScrollArea; asi siempre entra en pantalla.
+        outer = QVBoxLayout(self)
+        outer.setContentsMargins(0, 0, 0, 0)
+        outer.setSpacing(0)
+        scroll = QScrollArea(self)
+        scroll.setWidgetResizable(True)
+        scroll.setFrameShape(QScrollArea.NoFrame)
+        scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarAsNeeded)
+        scroll.setVerticalScrollBarPolicy(Qt.ScrollBarAsNeeded)
+        content = QWidget()
+        scroll.setWidget(content)
+        outer.addWidget(scroll, 1)
+        layout = QFormLayout(content)
 
         # info read-only
         lbl_type = QLabel(block.eq_type)
@@ -989,13 +1014,25 @@ class BlockEditDialog(QDialog):
 
         layout.addRow(self.gb_reactivity)
 
-        # botones
+        # ─── Especies entrantes (read-only) ───
+        # Muestra que streams entran al bloque y la composicion agregada
+        # (suma de mass fractions ponderadas por mass_flow). Util para
+        # ver "que esta entrando al reactor" sin tener que abrir cada
+        # stream upstream uno por uno.
+        try:
+            parent_fs = getattr(parent, "fs", None)
+        except Exception:
+            parent_fs = None
+        if parent_fs is not None:
+            self._build_incoming_species_section(parent_fs, block, layout)
+
+        # botones (fuera del scroll: siempre visibles al fondo)
         buttons = QDialogButtonBox(
             QDialogButtonBox.Ok | QDialogButtonBox.Cancel
         )
         buttons.accepted.connect(self.accept)
         buttons.rejected.connect(self.reject)
-        layout.addRow(buttons)
+        outer.addWidget(buttons)
 
     # ─── helpers Reactividad (Fase 8) ───
     def _populate_reactivity_table(self, block, fa_cache: dict) -> None:
@@ -1050,6 +1087,92 @@ class BlockEditDialog(QDialog):
             cf_it = QTableWidgetItem(icon_map.get(conf, "⚫"))
             cf_it.setToolTip(f"Confidence: {conf}")
             self.rxn_table.setItem(ri, 3, cf_it)
+
+    def _build_incoming_species_section(self, fs, block, layout) -> None:
+        """Agrega una QGroupBox 'Especies entrantes' al form layout.
+
+        Lista cada stream cuyo dst == block.id y, debajo, una tabla con
+        la composicion agregada (suma ponderada por mass_flow). Si el
+        bloque no tiene streams entrantes, muestra un label informativo.
+        """
+        gb = QGroupBox("Especies entrantes")
+        gbl = QVBoxLayout(gb)
+
+        incoming = [s for s in fs.streams.values() if s.dst == block.id]
+        if not incoming:
+            lbl = QLabel("(sin streams conectados a la entrada de este bloque)")
+            lbl.setStyleSheet("color: #888; font-style: italic;")
+            gbl.addWidget(lbl)
+            layout.addRow(gb)
+            return
+
+        # Tabla por stream: nombre + mass_flow + T + composicion resumida
+        tbl_streams = QTableWidget(len(incoming), 4)
+        tbl_streams.setHorizontalHeaderLabels([
+            "Stream", "Flujo (tm/año)", "T (°C)", "Composición",
+        ])
+        tbl_streams.setEditTriggers(QTableWidget.NoEditTriggers)
+        tbl_streams.setSelectionMode(QTableWidget.NoSelection)
+        tbl_streams.verticalHeader().setVisible(False)
+        tbl_streams.horizontalHeader().setStretchLastSection(True)
+        tbl_streams.setMinimumHeight(80)
+        for ri, s in enumerate(incoming):
+            tbl_streams.setItem(ri, 0, QTableWidgetItem(s.name))
+            tbl_streams.setItem(ri, 1, QTableWidgetItem(f"{s.mass_flow:,.1f}"))
+            tbl_streams.setItem(ri, 2, QTableWidgetItem(f"{s.temperature:.1f}"))
+            if s.composition:
+                comp_str = ", ".join(
+                    f"{k} {v*100:.1f}%"
+                    for k, v in sorted(
+                        s.composition.items(), key=lambda kv: -kv[1])[:4]
+                )
+                if len(s.composition) > 4:
+                    comp_str += f", +{len(s.composition)-4} más"
+            elif s.main_component:
+                comp_str = f"{s.main_component} (100%)"
+            else:
+                comp_str = "(no declarada)"
+            it = QTableWidgetItem(comp_str)
+            it.setToolTip(comp_str)
+            tbl_streams.setItem(ri, 3, it)
+        tbl_streams.resizeColumnsToContents()
+        gbl.addWidget(tbl_streams)
+
+        # ─── Composicion agregada (mass-flow weighted) ───
+        total_flow = sum(s.mass_flow for s in incoming)
+        if total_flow > 0:
+            agg: dict = {}
+            for s in incoming:
+                comp = s.composition or (
+                    {s.main_component: 1.0} if s.main_component else {}
+                )
+                for comp_name, frac in comp.items():
+                    agg[comp_name] = agg.get(comp_name, 0.0) + frac * s.mass_flow
+            # Normalizar a fraccion masica
+            agg_frac = {k: v / total_flow for k, v in agg.items()}
+            if agg_frac:
+                hdr = QLabel("<b>Composición agregada (ponderada por flujo)</b>")
+                gbl.addWidget(hdr)
+                tbl_agg = QTableWidget(len(agg_frac), 3)
+                tbl_agg.setHorizontalHeaderLabels([
+                    "Componente", "Fracción másica", "Flujo (tm/año)",
+                ])
+                tbl_agg.setEditTriggers(QTableWidget.NoEditTriggers)
+                tbl_agg.setSelectionMode(QTableWidget.NoSelection)
+                tbl_agg.verticalHeader().setVisible(False)
+                tbl_agg.horizontalHeader().setStretchLastSection(True)
+                tbl_agg.setMinimumHeight(80)
+                for ri, (comp_name, frac) in enumerate(
+                    sorted(agg_frac.items(), key=lambda kv: -kv[1])
+                ):
+                    tbl_agg.setItem(ri, 0, QTableWidgetItem(comp_name))
+                    tbl_agg.setItem(ri, 1, QTableWidgetItem(f"{frac*100:.2f}%"))
+                    tbl_agg.setItem(ri, 2, QTableWidgetItem(
+                        f"{frac * total_flow:,.1f}"))
+                tbl_agg.resizeColumnsToContents()
+                gbl.addWidget(tbl_agg)
+
+        layout.addRow(gb)
 
     def apply_to_model(self):
         """Persistir los valores al Block."""

@@ -195,19 +195,28 @@ def validate_smarts(force_log: bool = False) -> Dict[str, bool]:
         return {}
     from rdkit import Chem
     from rdkit.Chem import AllChem
-    result: Dict[str, bool] = {}
-    for tpl in load_transformations():
-        if not tpl.reaction_smarts:
-            result[tpl.id] = False
-            continue
-        try:
-            rxn = AllChem.ReactionFromSmarts(tpl.reaction_smarts)
-            ok = rxn is not None and rxn.GetNumReactantTemplates() > 0
-        except Exception:
-            ok = False
-        result[tpl.id] = ok
-        if force_log and not ok:
-            print(f"  T-SMARTS invalido: {tpl.id}")
+    from rdkit import RDLogger
+    # Silenciar RDKit durante la validacion — los SMARTS invalidos
+    # (e.g. T16 con literal "...") spammean stderr y no es util.
+    RDLogger.DisableLog("rdApp.error")
+    RDLogger.DisableLog("rdApp.warning")
+    try:
+        result: Dict[str, bool] = {}
+        for tpl in load_transformations():
+            if not tpl.reaction_smarts:
+                result[tpl.id] = False
+                continue
+            try:
+                rxn = AllChem.ReactionFromSmarts(tpl.reaction_smarts)
+                ok = rxn is not None and rxn.GetNumReactantTemplates() > 0
+            except Exception:
+                ok = False
+            result[tpl.id] = ok
+            if force_log and not ok:
+                print(f"  T-SMARTS invalido: {tpl.id}")
+    finally:
+        RDLogger.EnableLog("rdApp.error")
+        RDLogger.EnableLog("rdApp.warning")
     return result
 
 
@@ -256,24 +265,22 @@ def apply_to_compounds(template: TransformationTemplate,
     try:
         from rdkit import Chem
         from rdkit.Chem import AllChem
-        # Suprimir el log de RDKit por warnings de atom mapping
-        # (no son errors fatales — solo informativos del solver de RDKit).
+        # Suprimir error+warning de RDKit durante todo el ciclo: tanto el
+        # ReactionFromSmarts como MolFromSmiles pueden spammear cuando el
+        # usuario tiene compuestos con SMILES pseudo o templates rotos.
         from rdkit import RDLogger
+        RDLogger.DisableLog("rdApp.error")
         RDLogger.DisableLog("rdApp.warning")
         try:
             rxn = AllChem.ReactionFromSmarts(template.reaction_smarts)
-        finally:
-            RDLogger.EnableLog("rdApp.warning")
-        if rxn is None:
-            return []
-        mols = [Chem.MolFromSmiles(s) for s in smiles_list]
-        if any(m is None for m in mols):
-            return []
-        # RunReactants requiere tuple
-        RDLogger.DisableLog("rdApp.warning")
-        try:
+            if rxn is None:
+                return []
+            mols = [Chem.MolFromSmiles(s) for s in smiles_list]
+            if any(m is None for m in mols):
+                return []
             product_sets = rxn.RunReactants(tuple(mols))
         finally:
+            RDLogger.EnableLog("rdApp.error")
             RDLogger.EnableLog("rdApp.warning")
         out: List[List[str]] = []
         for ps in product_sets:

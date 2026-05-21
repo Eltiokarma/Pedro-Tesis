@@ -59,8 +59,19 @@ def _parse_md() -> Dict[str, dict]:
         # Saltar headers tipo "nombre_canónico | CAS | SMILES | comentario"
         if name.lower() in ("nombre_canónico", "nombre", "compuesto"):
             continue
-        if not name or not smiles or smiles.upper() == "N/A":
-            # Compuesto sin SMILES (mezclas, placeholders): tracking, sin smiles.
+        # Pseudo-componentes y placeholders: el SMILES no es real.
+        # Detectar: vacio, N/A, comienza con "(" (literal "(sin SMILES — ...)"),
+        # contiene " " (todo SMILES valido es contiguo), o "—" (em dash).
+        is_pseudo = (
+            not smiles
+            or smiles.upper() == "N/A"
+            or smiles.startswith("(")
+            or " " in smiles
+            or "—" in smiles
+            or "no usar" in smiles.lower()
+            or "sin smiles" in smiles.lower()
+        )
+        if not name or is_pseudo:
             out[_normalize_name_local(name)] = {
                 "smiles": "",
                 "cas": cas if cas != "--" else "",
