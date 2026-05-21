@@ -148,13 +148,76 @@ def estimate_via_joback(smiles: str) -> Optional[Dict[str, ThermoEstimate]]:
             method=method, confidence=conf,
         )
 
-    # ΔHf°: thermo devuelve J/mol → dividir por 1000 para kJ/mol.
-    # Algunos versions tienen Hf como metodo con arg T (Hf(T=298.15));
-    # otros como propiedad. _safe_get cubre ambos.
+    # ════ PATH PRINCIPAL (thermo>=0.2): J.estimate() devuelve un dict ════
+    # con todas las propiedades. Confirmado en testing del user.
+    # Keys: Tb, Tm, Tc, Pc (Pa), Vc, Hf (J/mol), Gf (J/mol), Hfus, Hvap,
+    #       mul_coeffs, Cpig_coeffs, mul, Cpig.
+    estimate_dict = None
+    try:
+        est_attr = getattr(J, "estimate", None)
+        if callable(est_attr):
+            estimate_dict = est_attr()
+        elif isinstance(est_attr, dict):
+            estimate_dict = est_attr
+    except Exception as e:
+        logger.debug(f"J.estimate() fallo: {e}")
+
+    if isinstance(estimate_dict, dict) and estimate_dict:
+        hf_j = estimate_dict.get("Hf")
+        if hf_j is not None:
+            _add("dh_f_298_kJ_mol", hf_j / 1000.0, err_dHf,
+                 conf=_confidence_from_error(err_dHf))
+        gf_j = estimate_dict.get("Gf")
+        if gf_j is not None:
+            _add("dg_f_298_kJ_mol", gf_j / 1000.0, err_dHf * 1.2)
+        tb = estimate_dict.get("Tb")
+        if tb is not None:
+            _add("tb_K", tb, 12.9, conf=Confidence.MEDIA)
+        tc = estimate_dict.get("Tc")
+        if tc is not None:
+            _add("tc_K", tc, tc * 0.048, conf=Confidence.MEDIA)
+        pc_pa = estimate_dict.get("Pc")
+        if pc_pa is not None:
+            _add("pc_bar", pc_pa / 1e5, pc_pa / 1e5 * 0.052,
+                 conf=Confidence.MEDIA)
+        hvap_j = estimate_dict.get("Hvap")
+        if hvap_j is not None:
+            _add("dh_vap_kJ_mol", hvap_j / 1000.0, 3.9,
+                 conf=Confidence.MEDIA)
+        # Cp@298: J.estimate() devuelve 'Cpig' como bound method, lo
+        # llamamos con 298.15 si esta disponible.
+        cpig_callable = estimate_dict.get("Cpig")
+        if cpig_callable is not None:
+            try:
+                cp298 = cpig_callable(298.15) if callable(cpig_callable) else cpig_callable
+                _add("cp_298_J_mol_K", cp298, cp298 * 0.014,
+                     conf=Confidence.ALTA)
+            except Exception:
+                # Fallback: Cpig_coeffs polynomial
+                cp_coefs = estimate_dict.get("Cpig_coeffs")
+                if cp_coefs and len(cp_coefs) >= 4:
+                    T = 298.15
+                    cp298 = (cp_coefs[0] + cp_coefs[1]*T
+                             + cp_coefs[2]*T**2 + cp_coefs[3]*T**3)
+                    _add("cp_298_J_mol_K", cp298, cp298 * 0.014,
+                         conf=Confidence.ALTA)
+
+        if out:
+            return out    # Path principal exitoso
+
+    # ════ FALLBACK 1: API legacy (Hf, Gf como metodos de instancia) ════
+    # Algunas versiones viejas exponen J.Hf() directo sin argumentos.
     hf = _safe_get(J, "Hf")
     if hf is None:
-        # Algunos thermo Joback requieren T como argumento explicito.
         hf = _safe_get(J, "Hf", 298.15)
+    if hf is None:
+        # ════ FALLBACK 2: API moderna estatica (J.Hf(counts)) ════
+        # En thermo>=0.2 los metodos son estaticos: J.Hf(counts).
+        if counts:
+            try:
+                hf = J.Hf(counts) if callable(getattr(J, "Hf", None)) else None
+            except Exception as e:
+                logger.debug(f"J.Hf(counts) fallo: {e}")
     if hf is None:
         logger.debug(
             f"thermo.Joback({smiles!r}): no se obtuvo Hf. "
