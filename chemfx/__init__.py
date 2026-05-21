@@ -65,3 +65,11 @@ def verify_dependencies():
         "thermo": THERMO_AVAILABLE,
         "chemicals": CHEMICALS_AVAILABLE,
     }
+
+
+# Entry point publico para analisis pasivo (Fase 7b opcion a):
+# corre evaluate_block sobre todos los bloques del flowsheet despues
+# de que el solver termino. NO modifica el balance.
+from chemfx.analyze_flowsheet import (
+    analyze_flowsheet, summarize_warnings,
+)
