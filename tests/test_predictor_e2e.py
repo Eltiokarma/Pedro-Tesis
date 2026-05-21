@@ -107,6 +107,87 @@ def test_detect_groups():
     return all_ok
 
 
+def _diagnose_joback_api():
+    """Imprime info detallada del objeto thermo.Joback para diagnosticar
+    cual API expone esta version de la libreria."""
+    try:
+        from thermo.group_contribution.joback import Joback
+        from rdkit import Chem
+    except ImportError as e:
+        print(f"  {WARN}  import fallo: {e}")
+        return
+
+    smiles = "CCO"
+    mol = Chem.MolFromSmiles(smiles)
+    print(f"  ℹ  mol = Chem.MolFromSmiles({smiles!r}): {mol}")
+
+    # Intento 1: con Mol
+    try:
+        J = Joback(mol)
+        print(f"  ℹ  Joback(mol) OK: type={type(J).__name__}")
+    except Exception as e:
+        print(f"  ℹ  Joback(mol) FAIL: {e}")
+        # Intento 2: con string SMILES
+        try:
+            J = Joback(smiles)
+            print(f"  ℹ  Joback({smiles!r}) OK")
+        except Exception as e2:
+            print(f"  ℹ  Joback({smiles!r}) FAIL: {e2}")
+            return
+
+    # Atributos disponibles
+    attrs = [a for a in dir(J) if not a.startswith('_')]
+    print(f"  ℹ  attrs publicos: {attrs}")
+
+    # status, counts
+    print(f"  ℹ  status: {getattr(J, 'status', '(no attr)')!r}")
+    print(f"  ℹ  counts: {getattr(J, 'counts', '(no attr)')!r}")
+    if hasattr(J, 'MW'):
+        print(f"  ℹ  MW: {J.MW}")
+    if hasattr(J, 'atom_count'):
+        print(f"  ℹ  atom_count: {J.atom_count}")
+
+    # Probar Hf con multiples patrones
+    for name in ['Hf', 'Hfg', 'Hf_calc', 'Hform']:
+        attr = getattr(J, name, None)
+        if attr is None:
+            continue
+        print(f"  ℹ  J.{name} = {attr!r}")
+        if callable(attr):
+            for args in [(), (298.15,)]:
+                try:
+                    val = attr(*args)
+                    print(f"  ℹ    J.{name}{args} = {val}")
+                except Exception as e:
+                    print(f"  ℹ    J.{name}{args} raised: {e}")
+
+    # Probar Tb, Tc, Cpig por completitud
+    for name in ['Tb', 'Tc', 'Pc']:
+        attr = getattr(J, name, None)
+        if attr is None:
+            continue
+        if callable(attr):
+            try:
+                val = attr()
+                print(f"  ℹ  J.{name}() = {val}")
+            except Exception as e:
+                print(f"  ℹ  J.{name}() raised: {e}")
+        else:
+            print(f"  ℹ  J.{name} = {attr}")
+
+    # Tambien probar metodos estaticos o classmethods que pueden estimar
+    for name in ['Hf_static', 'estimate', 'predict']:
+        attr = getattr(J, name, None)
+        if attr is None:
+            continue
+        if callable(attr):
+            try:
+                val = attr()
+                print(f"  ℹ  J.{name}() = {val}")
+            except Exception as e:
+                print(f"  ℹ  J.{name}() raised: {e}")
+
+
 def test_joback():
     """Test 3: Joback estima ΔHf° de etanol ~ -235 ± 5 kJ/mol."""
     section("Test 3 — Joback wrapper (requiere thermo)")
@@ -118,10 +199,19 @@ def test_joback():
     est = joback_wrapper.estimate_via_joback("CCO")   # ethanol
     if est is None:
         print(f"  {FAIL}  estimate_via_joback('CCO') devolvio None")
+        # Correr diagnostico API
+        print()
+        print("  Diagnostico thermo.Joback API:")
+        _diagnose_joback_api()
         return False
     dh = est.get("dh_f_298_kJ_mol")
     if dh is None:
         print(f"  {FAIL}  no se obtuvo dh_f_298_kJ_mol")
+        print(f"  ℹ  est devolvio: {est}")
+        # Correr diagnostico API
+        print()
+        print("  Diagnostico thermo.Joback API:")
+        _diagnose_joback_api()
         return False
     expected_min, expected_max = -245, -225    # tolerancia ±5 vs literatura
     ok = expected_min <= dh.value <= expected_max
