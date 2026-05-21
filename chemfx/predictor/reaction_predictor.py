@@ -274,7 +274,23 @@ def _apply_template_to_feed(
                         "missing_compounds": [],
                     }
                 else:
-                    continue
+                    # Joback fallo. NO descartar la reaccion: reportarla
+                    # con thermo desconocida (dh=0, confidence BAJA). El
+                    # template SI matcheo (RDKit produjo productos), asi
+                    # que la reaccion ESTRUCTURALMENTE existe. Solo no
+                    # podemos predecir su termodinamica.
+                    from chemfx.predictor.types import ThermoEstimate
+                    rxn_thermo = {
+                        "delta_h_298_kJ_mol": ThermoEstimate(
+                            value=0.0, uncertainty=50.0,
+                            method="placeholder (thermo no disponible)",
+                            confidence=Confidence.BAJA),
+                        "delta_g_298_kJ_mol": None,
+                        "keq_298": 1.0,    # neutro
+                        "method_used": "placeholder",
+                        "overall_confidence": Confidence.BAJA,
+                        "missing_compounds": [],
+                    }
 
             # Construir PredictedReaction
             display = " + ".join(names) + " → " + " + ".join(product_smis)

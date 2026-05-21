@@ -89,11 +89,31 @@ def estimate_via_joback(smiles: str) -> Optional[Dict[str, ThermoEstimate]]:
     """
     if not THERMO_AVAILABLE or not smiles:
         return None
+    # IMPORTANTE: thermo>=0.2 requiere Mol object (no string SMILES).
+    # Si pasamos string directo, J.Hf() devuelve None silenciosamente
+    # porque no pudo parsear los grupos. Bug detectado en testing.
+    J = None
     try:
         from thermo.group_contribution.joback import Joback
-        J = Joback(smiles)
-    except Exception as e:
-        logger.debug(f"thermo.Joback fallo para {smiles!r}: {e}")
+        from rdkit import Chem
+        mol = Chem.MolFromSmiles(smiles)
+        if mol is None:
+            logger.debug(f"RDKit no parseo {smiles!r}")
+            return None
+        # Primer intento: Mol object (API moderna)
+        try:
+            J = Joback(mol)
+        except Exception:
+            # Fallback: string SMILES (API legacy)
+            try:
+                J = Joback(smiles)
+            except Exception as e:
+                logger.debug(f"thermo.Joback fallo para {smiles!r}: {e}")
+                return None
+    except ImportError as e:
+        logger.debug(f"import fallo: {e}")
+        return None
+    if J is None:
         return None
     # status puede ser str ('OK'), lista ['OK'], o no existir. Defendemos.
     status = getattr(J, "status", "OK")
