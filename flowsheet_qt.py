@@ -5371,6 +5371,22 @@ class FlowsheetMainWindow(QMainWindow):
         dock.setWidget(widget)
         self.addDockWidget(Qt.RightDockWidgetArea, dock)
 
+        # ─── Dock de Reactividad (Fase 8 — predictor de reacciones) ───
+        # Aparece al lado del dock de propiedades. Si chemfx no esta
+        # instalado o falta alguna dep, simplemente no se crea (no rompe
+        # la UI principal).
+        try:
+            from chemfx.ui.reactivity_dock_qt import ReactivityDock
+            self.reactivity_dock = ReactivityDock(self, editor=self)
+            self.addDockWidget(Qt.RightDockWidgetArea, self.reactivity_dock)
+            # Tab-ifica si ya hay otro dock derecho
+            self.tabifyDockWidget(dock, self.reactivity_dock)
+            # Por default mostramos el dock de propiedades primero
+            dock.raise_()
+        except Exception:
+            # chemfx no disponible o PySide6 incompatible — silenciar.
+            self.reactivity_dock = None
+
     def _build_streams_dock(self):
         """Tabla de corrientes con cambio de unidades."""
         self.streams_dock = StreamsTableDock(self, self)
@@ -5908,6 +5924,30 @@ class FlowsheetMainWindow(QMainWindow):
         dlg.setText("Resumen del solver:")
         dlg.setDetailedText(summary)
         dlg.exec()
+
+        # ─── Hook automático: predictor de reacciones (Fase 8) ───
+        # Despues de Solve, correr el analizador pasivo. NO afecta el
+        # balance (es solo anotacion). Si chemfx no esta disponible o
+        # falla, silencioso.
+        try:
+            import chemfx
+            chemfx.analyze_flowsheet(self.fs)
+            if getattr(self, "reactivity_dock", None) is not None:
+                self.reactivity_dock.refresh_from_flowsheet(self.fs)
+                # Si hay warnings criticos, traer el dock al frente
+                n_crit = sum(
+                    1
+                    for b in self.fs.blocks.values()
+                    for w in (getattr(b, "reaction_warnings", []) or [])
+                    if isinstance(w, dict) and w.get("severity") == "critical"
+                )
+                if n_crit > 0:
+                    self.reactivity_dock.raise_()
+        except Exception as e:
+            # No bloquear el solve por un error en el predictor.
+            import logging
+            logging.getLogger(__name__).debug(
+                f"predictor post-solve fallo: {e}")
 
     def action_compute(self):
         # delegamos al editor Tk en una llamada simple para no duplicar lógica.
