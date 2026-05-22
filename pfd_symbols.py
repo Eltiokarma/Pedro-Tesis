@@ -1261,3 +1261,742 @@ def port_side(eq_type: str, port_name: str) -> str:
     if info is None:
         return "right"
     return info[0]
+"""
+PFD SYMBOLS — PARCHE PFD-ICN-002
+=================================
+Añade símbolos faltantes y reemplaza proxies incorrectos en
+``pfd_symbols.py`` para que los siguientes ``eq_type`` tengan un
+símbolo dedicado en lugar de reciclar el de otro equipo:
+
+  · Condensadores (shell-tube y air-cooled) — antes reusaban
+    'hx-shell-tube' / 'hx-air-cooled' sin marcar el cambio de fase.
+
+  · Reactor PFR tubular y Reactor CSTR agitado — antes reusaban
+    'reactor-fixed-bed' / 'reactor-cstr' del autoclave, perdiendo la
+    distinción mecánica.
+
+  · Empaques (random y structured) — antes NO TENÍAN mapeo, caían
+    al fallback (rectángulo plano).
+
+  · Calderas (fire-tube y water-tube) — antes reusaban 'fired-heater',
+    el ícono del horno reformer; mecánicamente son equipos distintos.
+
+  · Torres de enfriamiento (induced / natural draft) — antes reusaban
+    'column-stripper', símbolo de una columna de stripping (BUG GRAVE).
+
+  · Compressor axial / screw — antes ambos compartían el símbolo del
+    centrífugo, perdiendo la topología (álabes axiales / dos rotores
+    helicoidales engranados).
+
+  · Reformer — antes idéntico al horno convencional; el reformer real
+    tiene tubos catalíticos verticales en cajón rectangular.
+
+  · Splitter flow divider — antes proxy de 'mixer-inline' (dirección
+    de flujo invertida).
+
+  · Fan axial — antes proxy de 'blower' centrífugo.
+
+  · Trays sieve / valve — separados del símbolo de columna completa
+    para que se puedan plotear como detalles individuales.
+
+Normas: ISO 10628-2:2012 · ISA-5.1 · DIN 28004-3.
+
+Estilo gráfico
+--------------
+Stroke #0d0d0d  ·  Fill #fff  ·  stroke-width 1.6 (principal) / 1.1 (detalle).
+Mismo lenguaje visual que el resto de ``pfd_symbols.py`` para que el
+diseño sea coherente al renderizar.
+
+Aplicación
+----------
+1. Pegar todo el bloque al final de ``pfd_symbols.py`` (después
+   del cierre del dict EQ_TYPE_TO_SYMBOL existente).
+2. El ``SYMBOLS.update({...})`` y ``EQ_TYPE_TO_SYMBOL.update({...})``
+   al final del archivo extienden los dicts sin sobrescribir nada.
+3. El cache ``_BBOX_CACHE`` se autoinvalida porque no tiene entradas
+   precomputadas para los nuevos IDs.
+"""
+
+# ──────────────────────────────────────────────────────────────────
+# CONDENSADORES — diferencian del HX genérico por la indicación
+# de cambio de fase (gotas + flecha ↓ de condensado).
+# ──────────────────────────────────────────────────────────────────
+
+SYMBOL_HX_CONDENSER_ST = {
+    'name': 'Condensador haz y carcasa',
+    'category': 'intercambiadores',
+    'standard': 'ISO 10628 · TEMA',
+    'w': 140.0, 'h': 70.0,
+    'ports': [
+        ('shell-in',  0.0,   30.0),
+        ('shell-out', 140.0, 30.0),
+        ('tube-in',   42.0,  0.0),
+        ('liq-out',   98.0,  70.0),
+    ],
+    'body': (
+        '<rect x="0" y="10" width="140" height="40" rx="20" ry="20" '
+        'fill="#fff" stroke="#0d0d0d" stroke-width="1.6"/>\n'
+        '<path d="M 14 20 L 120 20 A 10 10 0 0 1 120 40 L 14 40" '
+        'fill="none" stroke="#0d0d0d" stroke-width="1.1" stroke-linecap="round"/>\n'
+        '<line x1="42" y1="10" x2="42" y2="2" stroke="#0d0d0d" stroke-width="1.1"/>\n'
+        '<line x1="98" y1="50" x2="98" y2="58" stroke="#0d0d0d" stroke-width="1.1"/>\n'
+        # Gotas de condensado (símbolo ISO para cambio de fase)
+        '<path d="M 30 60 Q 32 64 30 66 Q 28 64 30 60 Z" fill="#0d0d0d"/>\n'
+        '<path d="M 60 60 Q 62 64 60 66 Q 58 64 60 60 Z" fill="#0d0d0d"/>\n'
+        '<path d="M 90 60 Q 92 64 90 66 Q 88 64 90 60 Z" fill="#0d0d0d"/>\n'
+        '<path d="M 110 56 L 110 66 L 107 63 M 110 66 L 113 63" '
+        'stroke="#0d0d0d" stroke-width="1" fill="none" stroke-linecap="round"/>'
+    ),
+}
+
+SYMBOL_HX_CONDENSER_AC = {
+    'name': 'Condensador aerorrefrigerado',
+    'category': 'intercambiadores',
+    'standard': 'ISO 10628 · API 661',
+    'w': 140.0, 'h': 100.0,
+    'ports': [
+        ('in',      0.0,   50.0),
+        ('liq-out', 140.0, 50.0),
+    ],
+    'body': (
+        # Banco de tubos
+        '<rect x="10" y="40" width="120" height="50" fill="#fff" stroke="#0d0d0d" stroke-width="1.6"/>\n'
+        '<line x1="20" y1="50" x2="120" y2="50" stroke="#0d0d0d" stroke-width="1.1"/>\n'
+        '<line x1="20" y1="60" x2="120" y2="60" stroke="#0d0d0d" stroke-width="1.1"/>\n'
+        '<line x1="20" y1="70" x2="120" y2="70" stroke="#0d0d0d" stroke-width="1.1"/>\n'
+        '<line x1="20" y1="80" x2="120" y2="80" stroke="#0d0d0d" stroke-width="1.1"/>\n'
+        # Fan superior (induced draft — convención ISO para condensador aéreo)
+        '<circle cx="70" cy="20" r="14" fill="#fff" stroke="#0d0d0d" stroke-width="1.6"/>\n'
+        '<path d="M 70 6 Q 78 13 70 20 Z" fill="#fff" stroke="#0d0d0d" stroke-width="1.1"/>\n'
+        '<path d="M 84 20 Q 77 28 70 20 Z" fill="#fff" stroke="#0d0d0d" stroke-width="1.1"/>\n'
+        '<path d="M 70 34 Q 62 27 70 20 Z" fill="#fff" stroke="#0d0d0d" stroke-width="1.1"/>\n'
+        '<path d="M 56 20 Q 63 13 70 20 Z" fill="#fff" stroke="#0d0d0d" stroke-width="1.1"/>\n'
+        '<circle cx="70" cy="20" r="2" fill="#0d0d0d"/>\n'
+        # Gotas saliendo abajo (cambio de fase)
+        '<path d="M 35 92 Q 37 96 35 98 Q 33 96 35 92 Z" fill="#0d0d0d"/>\n'
+        '<path d="M 70 92 Q 72 96 70 98 Q 68 96 70 92 Z" fill="#0d0d0d"/>\n'
+        '<path d="M 105 92 Q 107 96 105 98 Q 103 96 105 92 Z" fill="#0d0d0d"/>'
+    ),
+}
+
+
+# ──────────────────────────────────────────────────────────────────
+# REACTORES — PFR tubular y CSTR jacketed agitated (diferenciar del
+# autoclave / lecho fijo).
+# ──────────────────────────────────────────────────────────────────
+
+SYMBOL_REACTOR_PFR_COILED = {
+    'name': 'Reactor PFR (serpentín tubular)',
+    'category': 'reactores',
+    'standard': 'ISO 10628',
+    'w': 180.0, 'h': 70.0,
+    'ports': [
+        ('in',  0.0,   35.0),
+        ('out', 180.0, 35.0),
+    ],
+    'body': (
+        # Doble tubo: carcasa exterior + serpentín interno helicoidal
+        '<rect x="0" y="14" width="180" height="42" rx="6" ry="6" '
+        'fill="#fff" stroke="#0d0d0d" stroke-width="1.6"/>\n'
+        # Serpentín visible: arcos sucesivos
+        '<path d="M 8 35 Q 16 18 24 35 Q 32 52 40 35 Q 48 18 56 35 '
+        'Q 64 52 72 35 Q 80 18 88 35 Q 96 52 104 35 Q 112 18 120 35 '
+        'Q 128 52 136 35 Q 144 18 152 35 Q 160 52 168 35 Q 174 22 178 30" '
+        'fill="none" stroke="#0d0d0d" stroke-width="1.4"/>\n'
+        # Flechas de flujo entrada y salida
+        '<polygon points="2,32 8,35 2,38" fill="#0d0d0d"/>'
+    ),
+}
+
+SYMBOL_REACTOR_CSTR_JACKETED = {
+    'name': 'Reactor CSTR jacketed agitated',
+    'category': 'reactores',
+    'standard': 'ISO 10628',
+    'w': 80.0, 'h': 130.0,
+    'ports': [
+        ('in',         40.0, 5.0),
+        ('out',        40.0, 125.0),
+        ('jacket-in',  0.0,  65.0),
+        ('jacket-out', 80.0, 65.0),
+    ],
+    'body': (
+        # Chaqueta exterior
+        '<path d="M 0 30 A 40 18 0 0 1 80 30 L 80 100 A 40 18 0 0 1 0 100 Z" '
+        'fill="#fff" stroke="#0d0d0d" stroke-width="1.6"/>\n'
+        # Vessel interior
+        '<path d="M 8 36 A 32 14 0 0 1 72 36 L 72 94 A 32 14 0 0 1 8 94 Z" '
+        'fill="#fff" stroke="#0d0d0d" stroke-width="1.1"/>\n'
+        # Motor + eje agitador
+        '<rect x="30" y="0" width="20" height="14" fill="#fff" stroke="#0d0d0d" stroke-width="1.1"/>\n'
+        '<line x1="36" y1="6" x2="44" y2="6" stroke="#0d0d0d" stroke-width="0.6"/>\n'
+        '<line x1="40" y1="14" x2="40" y2="76" stroke="#0d0d0d" stroke-width="1.2"/>\n'
+        # Paletas (cruz Rushton)
+        '<line x1="24" y1="76" x2="56" y2="76" stroke="#0d0d0d" stroke-width="1.6"/>\n'
+        '<line x1="24" y1="70" x2="24" y2="82" stroke="#0d0d0d" stroke-width="1.6"/>\n'
+        '<line x1="56" y1="70" x2="56" y2="82" stroke="#0d0d0d" stroke-width="1.6"/>\n'
+        # Nivel del líquido
+        '<line x1="10" y1="56" x2="70" y2="56" stroke="#0d0d0d" '
+        'stroke-width="0.6" stroke-dasharray="3 2"/>'
+    ),
+}
+
+
+# ──────────────────────────────────────────────────────────────────
+# EMPAQUES — Random y Structured (sección de columna).
+# ──────────────────────────────────────────────────────────────────
+
+SYMBOL_PACKING_RANDOM = {
+    'name': 'Empaque al azar (random)',
+    'category': 'columnas',
+    'standard': 'ISO 10628 · DIN 28004',
+    'w': 70.0, 'h': 160.0,
+    'ports': [
+        ('top',  35.0, 0.0),
+        ('bot',  35.0, 160.0),
+        ('feed', 70.0, 72.0),
+    ],
+    'body': (
+        # Sección de columna
+        '<path d="M 5 16 A 30 16 0 0 1 65 16 L 65 144 A 30 16 0 0 1 5 144 Z" '
+        'fill="#fff" stroke="#0d0d0d" stroke-width="1.6"/>\n'
+        # Distribuidor de líquido superior
+        '<line x1="10" y1="32" x2="60" y2="32" stroke="#0d0d0d" stroke-width="1.4"/>\n'
+        '<line x1="18" y1="32" x2="18" y2="40" stroke="#0d0d0d" stroke-width="0.8"/>\n'
+        '<line x1="28" y1="32" x2="28" y2="40" stroke="#0d0d0d" stroke-width="0.8"/>\n'
+        '<line x1="38" y1="32" x2="38" y2="40" stroke="#0d0d0d" stroke-width="0.8"/>\n'
+        '<line x1="48" y1="32" x2="48" y2="40" stroke="#0d0d0d" stroke-width="0.8"/>\n'
+        # Anillos random (rotaciones variadas)
+        '<g fill="none" stroke="#0d0d0d" stroke-width="0.8">\n'
+        '  <circle cx="18" cy="52" r="3"/>\n'
+        '  <ellipse cx="32" cy="50" rx="3.5" ry="1.8" transform="rotate(20,32,50)"/>\n'
+        '  <circle cx="46" cy="56" r="3"/>\n'
+        '  <ellipse cx="56" cy="52" rx="3.5" ry="1.8" transform="rotate(-30,56,52)"/>\n'
+        '  <circle cx="22" cy="68" r="3"/>\n'
+        '  <ellipse cx="36" cy="66" rx="3.5" ry="1.8" transform="rotate(40,36,66)"/>\n'
+        '  <circle cx="50" cy="72" r="3"/>\n'
+        '  <ellipse cx="18" cy="84" rx="3.5" ry="1.8" transform="rotate(-15,18,84)"/>\n'
+        '  <circle cx="32" cy="82" r="3"/>\n'
+        '  <ellipse cx="46" cy="86" rx="3.5" ry="1.8" transform="rotate(60,46,86)"/>\n'
+        '  <circle cx="56" cy="80" r="3"/>\n'
+        '  <ellipse cx="22" cy="100" rx="3.5" ry="1.8" transform="rotate(10,22,100)"/>\n'
+        '  <circle cx="36" cy="102" r="3"/>\n'
+        '  <circle cx="50" cy="98" r="3"/>\n'
+        '  <ellipse cx="58" cy="104" rx="3.5" ry="1.8" transform="rotate(-25,58,104)"/>\n'
+        '  <circle cx="18" cy="116" r="3"/>\n'
+        '  <ellipse cx="32" cy="118" rx="3.5" ry="1.8" transform="rotate(35,32,118)"/>\n'
+        '  <circle cx="46" cy="114" r="3"/>\n'
+        '  <ellipse cx="56" cy="118" rx="3.5" ry="1.8" transform="rotate(-10,56,118)"/>\n'
+        '</g>\n'
+        # Soporte (grid) inferior
+        '<line x1="10" y1="130" x2="60" y2="130" stroke="#0d0d0d" stroke-width="1.4"/>'
+    ),
+}
+
+SYMBOL_PACKING_STRUCTURED = {
+    'name': 'Empaque estructurado',
+    'category': 'columnas',
+    'standard': 'ISO 10628 · DIN 28004',
+    'w': 70.0, 'h': 160.0,
+    'ports': [
+        ('top',  35.0, 0.0),
+        ('bot',  35.0, 160.0),
+        ('feed', 70.0, 72.0),
+    ],
+    'body': (
+        '<path d="M 5 16 A 30 16 0 0 1 65 16 L 65 144 A 30 16 0 0 1 5 144 Z" '
+        'fill="#fff" stroke="#0d0d0d" stroke-width="1.6"/>\n'
+        # Distribuidor superior
+        '<line x1="10" y1="32" x2="60" y2="32" stroke="#0d0d0d" stroke-width="1.4"/>\n'
+        '<line x1="22" y1="32" x2="22" y2="38" stroke="#0d0d0d" stroke-width="0.8"/>\n'
+        '<line x1="35" y1="32" x2="35" y2="38" stroke="#0d0d0d" stroke-width="0.8"/>\n'
+        '<line x1="48" y1="32" x2="48" y2="38" stroke="#0d0d0d" stroke-width="0.8"/>\n'
+        # Patrón chevrón (Mellapak/Flexipac)
+        '<g stroke="#0d0d0d" stroke-width="0.8" fill="none">\n'
+        '  <path d="M 10 46 L 18 56 L 26 46 L 34 56 L 42 46 L 50 56 L 58 46"/>\n'
+        '  <path d="M 10 56 L 18 66 L 26 56 L 34 66 L 42 56 L 50 66 L 58 56"/>\n'
+        '  <path d="M 10 66 L 18 76 L 26 66 L 34 76 L 42 66 L 50 76 L 58 66"/>\n'
+        '  <path d="M 10 76 L 18 86 L 26 76 L 34 86 L 42 76 L 50 86 L 58 76"/>\n'
+        '  <path d="M 10 86 L 18 96 L 26 86 L 34 96 L 42 86 L 50 96 L 58 86"/>\n'
+        '  <path d="M 10 96 L 18 106 L 26 96 L 34 106 L 42 96 L 50 106 L 58 96"/>\n'
+        '  <path d="M 10 106 L 18 116 L 26 106 L 34 116 L 42 106 L 50 116 L 58 106"/>\n'
+        '  <path d="M 10 116 L 18 126 L 26 116 L 34 126 L 42 116 L 50 126 L 58 116"/>\n'
+        '</g>\n'
+        '<line x1="10" y1="130" x2="60" y2="130" stroke="#0d0d0d" stroke-width="1.4"/>'
+    ),
+}
+
+
+# ──────────────────────────────────────────────────────────────────
+# CALDERAS — fire-tube y water-tube son geometrías muy distintas
+# (horizontal vs drums verticales).  Antes ambas usaban 'fired-heater'.
+# ──────────────────────────────────────────────────────────────────
+
+SYMBOL_BOILER_FIRE_TUBE = {
+    'name': 'Caldera fire-tube',
+    'category': 'reactores',
+    'standard': 'ISO 10628 · ASME I',
+    'w': 160.0, 'h': 100.0,
+    'ports': [
+        ('feed-water', 0.0,   60.0),
+        ('steam-out',  80.0,  0.0),
+        ('fuel-in',    0.0,   30.0),
+        ('blowdown',   80.0,  100.0),
+    ],
+    'body': (
+        # Cuerpo horizontal (cilindro acostado con cabezas)
+        '<path d="M 22 16 Q 8 16 8 38 Q 8 60 22 60 L 138 60 '
+        'Q 152 60 152 38 Q 152 16 138 16 Z" '
+        'fill="#fff" stroke="#0d0d0d" stroke-width="1.6"/>\n'
+        # Tubos de fuego (filas horizontales)
+        '<line x1="26" y1="24" x2="134" y2="24" stroke="#0d0d0d" stroke-width="1.1"/>\n'
+        '<line x1="26" y1="32" x2="134" y2="32" stroke="#0d0d0d" stroke-width="1.1"/>\n'
+        '<line x1="26" y1="40" x2="134" y2="40" stroke="#0d0d0d" stroke-width="1.1"/>\n'
+        '<line x1="26" y1="48" x2="134" y2="48" stroke="#0d0d0d" stroke-width="1.1"/>\n'
+        '<line x1="26" y1="56" x2="134" y2="56" stroke="#0d0d0d" stroke-width="1.1"/>\n'
+        # Chimenea
+        '<rect x="125" y="0" width="14" height="18" '
+        'fill="#fff" stroke="#0d0d0d" stroke-width="1.4"/>\n'
+        # Salida steam (tope)
+        '<line x1="80" y1="16" x2="80" y2="0" stroke="#0d0d0d" stroke-width="1.6"/>\n'
+        # Símbolo de llama en la boca del furnace
+        '<path d="M 18 28 L 14 32 L 16 38 L 12 42 L 18 48 Z" '
+        'fill="#0d0d0d" stroke="#0d0d0d" stroke-width="0.8"/>\n'
+        # Nivel de agua punteado
+        '<line x1="14" y1="22" x2="146" y2="22" stroke="#0d0d0d" '
+        'stroke-width="0.6" stroke-dasharray="3 2"/>'
+    ),
+}
+
+SYMBOL_BOILER_WATER_TUBE = {
+    'name': 'Caldera water-tube',
+    'category': 'reactores',
+    'standard': 'ISO 10628 · ASME I',
+    'w': 120.0, 'h': 140.0,
+    'ports': [
+        ('feed-water', 0.0,   30.0),
+        ('steam-out',  60.0,  0.0),
+        ('fuel-in',    120.0, 100.0),
+        ('blowdown',   60.0,  140.0),
+    ],
+    'body': (
+        # Steam drum (arriba)
+        '<rect x="20" y="14" width="80" height="22" rx="11" ry="11" '
+        'fill="#fff" stroke="#0d0d0d" stroke-width="1.6"/>\n'
+        # Mud drum (abajo)
+        '<rect x="20" y="108" width="80" height="20" rx="10" ry="10" '
+        'fill="#fff" stroke="#0d0d0d" stroke-width="1.6"/>\n'
+        # Banco de tubos verticales (waterwall)
+        '<line x1="28" y1="36" x2="28" y2="108" stroke="#0d0d0d" stroke-width="1.1"/>\n'
+        '<line x1="38" y1="36" x2="38" y2="108" stroke="#0d0d0d" stroke-width="1.1"/>\n'
+        '<line x1="48" y1="36" x2="48" y2="108" stroke="#0d0d0d" stroke-width="1.1"/>\n'
+        '<line x1="58" y1="36" x2="58" y2="108" stroke="#0d0d0d" stroke-width="1.1"/>\n'
+        '<line x1="68" y1="36" x2="68" y2="108" stroke="#0d0d0d" stroke-width="1.1"/>\n'
+        '<line x1="78" y1="36" x2="78" y2="108" stroke="#0d0d0d" stroke-width="1.1"/>\n'
+        '<line x1="88" y1="36" x2="88" y2="108" stroke="#0d0d0d" stroke-width="1.1"/>\n'
+        # Firebox lateral con llamas
+        '<path d="M 102 96 L 106 84 L 110 96 Z" fill="#0d0d0d" stroke="#0d0d0d" stroke-width="0.6"/>\n'
+        '<path d="M 110 96 L 114 80 L 118 96 Z" fill="#0d0d0d" stroke="#0d0d0d" stroke-width="0.6"/>\n'
+        # Chimenea lateral (gases hacia arriba)
+        '<rect x="6" y="46" width="12" height="20" fill="#fff" stroke="#0d0d0d" stroke-width="1.4"/>\n'
+        # Steam outlet (tope del steam drum)
+        '<line x1="60" y1="14" x2="60" y2="0" stroke="#0d0d0d" stroke-width="1.6"/>\n'
+        # Blowdown (fondo del mud drum)
+        '<line x1="60" y1="128" x2="60" y2="140" stroke="#0d0d0d" stroke-width="1.6"/>'
+    ),
+}
+
+
+# ──────────────────────────────────────────────────────────────────
+# TORRES DE ENFRIAMIENTO — BUG GRAVE: antes ambas reusaban
+# 'column-stripper' (¡es una columna de stripping, no una torre!)
+# ──────────────────────────────────────────────────────────────────
+
+SYMBOL_COOLING_TOWER_INDUCED = {
+    'name': 'Torre de enfriamiento (induced draft)',
+    'category': 'otros',
+    'standard': 'ISO 10628 · CTI',
+    'w': 100.0, 'h': 140.0,
+    'ports': [
+        ('water-in',  0.0,   30.0),
+        ('water-out', 0.0,   120.0),
+        ('air-in',    100.0, 100.0),
+        ('air-out',   50.0,  0.0),
+    ],
+    'body': (
+        # Cuerpo rectangular
+        '<rect x="10" y="30" width="80" height="100" '
+        'fill="#fff" stroke="#0d0d0d" stroke-width="1.6"/>\n'
+        # Fan grande en el tope (tiro inducido)
+        '<circle cx="50" cy="20" r="14" '
+        'fill="#fff" stroke="#0d0d0d" stroke-width="1.6"/>\n'
+        '<path d="M 50 6 Q 58 13 50 20 Z" fill="#fff" stroke="#0d0d0d" stroke-width="1.1"/>\n'
+        '<path d="M 64 20 Q 57 28 50 20 Z" fill="#fff" stroke="#0d0d0d" stroke-width="1.1"/>\n'
+        '<path d="M 50 34 Q 42 27 50 20 Z" fill="#fff" stroke="#0d0d0d" stroke-width="1.1"/>\n'
+        '<path d="M 36 20 Q 43 13 50 20 Z" fill="#fff" stroke="#0d0d0d" stroke-width="1.1"/>\n'
+        '<circle cx="50" cy="20" r="2" fill="#0d0d0d"/>\n'
+        # Distribuidor de agua arriba (líneas verticales que caen)
+        '<line x1="22" y1="40" x2="22" y2="80" stroke="#0d0d0d" stroke-width="0.7"/>\n'
+        '<line x1="32" y1="40" x2="32" y2="80" stroke="#0d0d0d" stroke-width="0.7"/>\n'
+        '<line x1="42" y1="40" x2="42" y2="80" stroke="#0d0d0d" stroke-width="0.7"/>\n'
+        '<line x1="52" y1="40" x2="52" y2="80" stroke="#0d0d0d" stroke-width="0.7"/>\n'
+        '<line x1="62" y1="40" x2="62" y2="80" stroke="#0d0d0d" stroke-width="0.7"/>\n'
+        '<line x1="72" y1="40" x2="72" y2="80" stroke="#0d0d0d" stroke-width="0.7"/>\n'
+        '<line x1="80" y1="40" x2="80" y2="80" stroke="#0d0d0d" stroke-width="0.7"/>\n'
+        # Fill central (líneas horizontales)
+        '<line x1="14" y1="62" x2="86" y2="62" stroke="#0d0d0d" stroke-width="0.9"/>\n'
+        '<line x1="14" y1="70" x2="86" y2="70" stroke="#0d0d0d" stroke-width="0.9"/>\n'
+        # Basin
+        '<line x1="10" y1="110" x2="90" y2="110" stroke="#0d0d0d" '
+        'stroke-width="0.7" stroke-dasharray="3 2"/>\n'
+        # Louvers de entrada de aire (lateral inferior)
+        '<line x1="14" y1="118" x2="20" y2="114" stroke="#0d0d0d" stroke-width="0.9"/>\n'
+        '<line x1="14" y1="124" x2="20" y2="120" stroke="#0d0d0d" stroke-width="0.9"/>\n'
+        '<line x1="80" y1="118" x2="86" y2="114" stroke="#0d0d0d" stroke-width="0.9"/>\n'
+        '<line x1="80" y1="124" x2="86" y2="120" stroke="#0d0d0d" stroke-width="0.9"/>'
+    ),
+}
+
+SYMBOL_COOLING_TOWER_NATURAL = {
+    'name': 'Torre de enfriamiento (natural draft)',
+    'category': 'otros',
+    'standard': 'ISO 10628 · CTI',
+    'w': 110.0, 'h': 160.0,
+    'ports': [
+        ('water-in',  0.0,   50.0),
+        ('water-out', 0.0,   140.0),
+        ('air-in',    100.0, 130.0),
+        ('air-out',   55.0,  0.0),
+    ],
+    'body': (
+        # Silueta hiperbólica clásica (chimenea)
+        '<path d="M 18 0 '
+        'C 26 40 40 60 40 80 '
+        'C 40 100 26 130 18 156 '
+        'L 92 156 '
+        'C 84 130 70 100 70 80 '
+        'C 70 60 84 40 92 0 '
+        'Z" '
+        'fill="#fff" stroke="#0d0d0d" stroke-width="1.6"/>\n'
+        # Vapor saliendo arriba (líneas wavy fuera del shell)
+        '<path d="M 24 -4 Q 32 -10 40 -4" fill="none" stroke="#0d0d0d" stroke-width="0.8"/>\n'
+        '<path d="M 50 -8 Q 55 -14 60 -8" fill="none" stroke="#0d0d0d" stroke-width="0.8"/>\n'
+        '<path d="M 70 -4 Q 78 -10 86 -4" fill="none" stroke="#0d0d0d" stroke-width="0.8"/>\n'
+        # Fill central
+        '<line x1="34" y1="84" x2="76" y2="84" stroke="#0d0d0d" stroke-width="0.9"/>\n'
+        '<line x1="32" y1="92" x2="78" y2="92" stroke="#0d0d0d" stroke-width="0.9"/>\n'
+        # Louvers de entrada de aire en la base
+        '<line x1="22" y1="130" x2="28" y2="124" stroke="#0d0d0d" stroke-width="0.9"/>\n'
+        '<line x1="24" y1="138" x2="30" y2="132" stroke="#0d0d0d" stroke-width="0.9"/>\n'
+        '<line x1="26" y1="146" x2="32" y2="140" stroke="#0d0d0d" stroke-width="0.9"/>\n'
+        '<line x1="82" y1="124" x2="88" y2="130" stroke="#0d0d0d" stroke-width="0.9"/>\n'
+        '<line x1="80" y1="132" x2="86" y2="138" stroke="#0d0d0d" stroke-width="0.9"/>\n'
+        '<line x1="78" y1="140" x2="84" y2="146" stroke="#0d0d0d" stroke-width="0.9"/>'
+    ),
+}
+
+
+# ──────────────────────────────────────────────────────────────────
+# COMPRESORES — separar axial (álabes) del centrífugo (voluta)
+# y del rotary screw (dos tornillos).
+# ──────────────────────────────────────────────────────────────────
+
+SYMBOL_COMPRESSOR_AXIAL = {
+    'name': 'Compresor axial',
+    'category': 'compresores',
+    'standard': 'ISO 10628 · ISA S5.1',
+    'w': 120.0, 'h': 70.0,
+    'ports': [
+        ('in',  0.0,   35.0),
+        ('out', 120.0, 35.0),
+    ],
+    'body': (
+        # Forma trapezoidal: entrada ancha → salida estrecha
+        # (típico del axial; el centrífugo es al revés)
+        '<polygon points="5,8 115,28 115,42 5,62" '
+        'fill="#fff" stroke="#0d0d0d" stroke-width="1.6"/>\n'
+        # Álabes axiales (líneas verticales paralelas)
+        '<line x1="18" y1="13" x2="18" y2="57" stroke="#0d0d0d" stroke-width="1"/>\n'
+        '<line x1="32" y1="16" x2="32" y2="54" stroke="#0d0d0d" stroke-width="1"/>\n'
+        '<line x1="46" y1="19" x2="46" y2="51" stroke="#0d0d0d" stroke-width="1"/>\n'
+        '<line x1="60" y1="22" x2="60" y2="48" stroke="#0d0d0d" stroke-width="1"/>\n'
+        '<line x1="74" y1="25" x2="74" y2="45" stroke="#0d0d0d" stroke-width="1"/>\n'
+        '<line x1="88" y1="27" x2="88" y2="43" stroke="#0d0d0d" stroke-width="1"/>\n'
+        '<line x1="102" y1="29" x2="102" y2="41" stroke="#0d0d0d" stroke-width="1"/>'
+    ),
+}
+
+SYMBOL_COMPRESSOR_SCREW = {
+    'name': 'Compresor rotary screw',
+    'category': 'compresores',
+    'standard': 'ISO 10628 · ISA S5.1',
+    'w': 110.0, 'h': 70.0,
+    'ports': [
+        ('in',  0.0,   35.0),
+        ('out', 110.0, 35.0),
+    ],
+    'body': (
+        # Cuerpo rectangular
+        '<rect x="6" y="14" width="98" height="42" rx="3" ry="3" '
+        'fill="#fff" stroke="#0d0d0d" stroke-width="1.6"/>\n'
+        # Dos rotores helicoidales engranados
+        '<ellipse cx="55" cy="26" rx="42" ry="9" fill="#fff" stroke="#0d0d0d" stroke-width="1.1"/>\n'
+        '<ellipse cx="55" cy="44" rx="42" ry="9" fill="#fff" stroke="#0d0d0d" stroke-width="1.1"/>\n'
+        # Helix patterns (líneas diagonales sobre ambos rotores)
+        '<line x1="20" y1="22" x2="30" y2="30" stroke="#0d0d0d" stroke-width="0.8"/>\n'
+        '<line x1="32" y1="22" x2="42" y2="30" stroke="#0d0d0d" stroke-width="0.8"/>\n'
+        '<line x1="44" y1="22" x2="54" y2="30" stroke="#0d0d0d" stroke-width="0.8"/>\n'
+        '<line x1="56" y1="22" x2="66" y2="30" stroke="#0d0d0d" stroke-width="0.8"/>\n'
+        '<line x1="68" y1="22" x2="78" y2="30" stroke="#0d0d0d" stroke-width="0.8"/>\n'
+        '<line x1="80" y1="22" x2="90" y2="30" stroke="#0d0d0d" stroke-width="0.8"/>\n'
+        '<line x1="20" y1="40" x2="30" y2="48" stroke="#0d0d0d" stroke-width="0.8"/>\n'
+        '<line x1="32" y1="40" x2="42" y2="48" stroke="#0d0d0d" stroke-width="0.8"/>\n'
+        '<line x1="44" y1="40" x2="54" y2="48" stroke="#0d0d0d" stroke-width="0.8"/>\n'
+        '<line x1="56" y1="40" x2="66" y2="48" stroke="#0d0d0d" stroke-width="0.8"/>\n'
+        '<line x1="68" y1="40" x2="78" y2="48" stroke="#0d0d0d" stroke-width="0.8"/>\n'
+        '<line x1="80" y1="40" x2="90" y2="48" stroke="#0d0d0d" stroke-width="0.8"/>'
+    ),
+}
+
+
+# ──────────────────────────────────────────────────────────────────
+# HORNO REFORMER — tubos catalíticos verticales en cajón rectangular
+# (mecánicamente distinto al horno con serpentín en S).
+# ──────────────────────────────────────────────────────────────────
+
+SYMBOL_FURNACE_REFORMER = {
+    'name': 'Horno reformer (tubos catalíticos)',
+    'category': 'reactores',
+    'standard': 'ISO 10628',
+    'w': 120.0, 'h': 130.0,
+    'ports': [
+        ('feed', 0.0,   30.0),
+        ('out',  120.0, 30.0),
+        ('flue', 60.0,  0.0),
+    ],
+    'body': (
+        # Cajón rectangular del firebox
+        '<rect x="5" y="18" width="110" height="100" '
+        'fill="#fff" stroke="#0d0d0d" stroke-width="1.6"/>\n'
+        # Tubos catalíticos verticales (4 columnas)
+        '<rect x="18" y="26" width="6" height="86" fill="#fff" stroke="#0d0d0d" stroke-width="1.1"/>\n'
+        '<rect x="38" y="26" width="6" height="86" fill="#fff" stroke="#0d0d0d" stroke-width="1.1"/>\n'
+        '<rect x="58" y="26" width="6" height="86" fill="#fff" stroke="#0d0d0d" stroke-width="1.1"/>\n'
+        '<rect x="78" y="26" width="6" height="86" fill="#fff" stroke="#0d0d0d" stroke-width="1.1"/>\n'
+        '<rect x="98" y="26" width="6" height="86" fill="#fff" stroke="#0d0d0d" stroke-width="1.1"/>\n'
+        # Manifold horizontal de cabeza
+        '<line x1="14" y1="26" x2="108" y2="26" stroke="#0d0d0d" stroke-width="1.4"/>\n'
+        '<line x1="14" y1="112" x2="108" y2="112" stroke="#0d0d0d" stroke-width="1.4"/>\n'
+        # Chimenea
+        '<rect x="50" y="0" width="20" height="20" fill="#fff" stroke="#0d0d0d" stroke-width="1.4"/>\n'
+        # Quemadores indicados como triángulos en la base
+        '<polygon points="22,124 26,118 30,124" fill="#0d0d0d"/>\n'
+        '<polygon points="42,124 46,118 50,124" fill="#0d0d0d"/>\n'
+        '<polygon points="62,124 66,118 70,124" fill="#0d0d0d"/>\n'
+        '<polygon points="82,124 86,118 90,124" fill="#0d0d0d"/>\n'
+        '<polygon points="102,124 106,118 110,124" fill="#0d0d0d"/>'
+    ),
+}
+
+
+# ──────────────────────────────────────────────────────────────────
+# SPLITTER — ahora con su propio símbolo (antes proxy 'mixer-inline'
+# con dirección invertida).
+# ──────────────────────────────────────────────────────────────────
+
+SYMBOL_SPLITTER = {
+    'name': 'Splitter / divisor de flujo',
+    'category': 'otros',
+    'standard': 'ISA S5.1',
+    'w': 100.0, 'h': 70.0,
+    'ports': [
+        ('in',   0.0,   35.0),
+        ('out1', 100.0, 12.0),
+        ('out2', 100.0, 58.0),
+    ],
+    'body': (
+        # Cuerpo en rombo
+        '<polygon points="30,18 50,35 30,52" '
+        'fill="#fff" stroke="#0d0d0d" stroke-width="1.6"/>\n'
+        # Entrada
+        '<line x1="0" y1="35" x2="30" y2="35" stroke="#0d0d0d" stroke-width="1.6"/>\n'
+        # Salidas con flechas
+        '<line x1="50" y1="35" x2="86" y2="12" stroke="#0d0d0d" stroke-width="1.6"/>\n'
+        '<polygon points="82,8 90,12 82,16" fill="#0d0d0d"/>\n'
+        '<line x1="50" y1="35" x2="86" y2="58" stroke="#0d0d0d" stroke-width="1.6"/>\n'
+        '<polygon points="82,54 90,58 82,62" fill="#0d0d0d"/>\n'
+        # Línea interna del divisor
+        '<line x1="34" y1="35" x2="46" y2="35" stroke="#0d0d0d" '
+        'stroke-width="0.7" stroke-dasharray="2 1.5"/>'
+    ),
+}
+
+
+# ──────────────────────────────────────────────────────────────────
+# FAN AXIAL — diferente del 'blower' (centrífugo).  Propeller fan
+# rectangular con álabes axiales.
+# ──────────────────────────────────────────────────────────────────
+
+SYMBOL_FAN_AXIAL = {
+    'name': 'Ventilador axial',
+    'category': 'compresores',
+    'standard': 'ISO 10628 · ISA S5.1',
+    'w': 80.0, 'h': 70.0,
+    'ports': [
+        ('in',  0.0,  35.0),
+        ('out', 80.0, 35.0),
+    ],
+    'body': (
+        # Carcasa rectangular
+        '<rect x="5" y="10" width="70" height="50" '
+        'fill="#fff" stroke="#0d0d0d" stroke-width="1.6"/>\n'
+        # Hub central
+        '<circle cx="40" cy="35" r="6" fill="#0d0d0d"/>\n'
+        # Álabes axiales (3 paths radiales)
+        '<path d="M 40 35 L 40 14 Q 47 20 40 35 Z" '
+        'fill="#fff" stroke="#0d0d0d" stroke-width="1.1"/>\n'
+        '<path d="M 40 35 L 58 45 Q 53 51 40 35 Z" '
+        'fill="#fff" stroke="#0d0d0d" stroke-width="1.1"/>\n'
+        '<path d="M 40 35 L 22 45 Q 27 51 40 35 Z" '
+        'fill="#fff" stroke="#0d0d0d" stroke-width="1.1"/>'
+    ),
+}
+
+
+# ──────────────────────────────────────────────────────────────────
+# TRAYS — sección de columna individual (no la columna completa).
+# Útil para diagramar detalles de plato y modular columnas.
+# ──────────────────────────────────────────────────────────────────
+
+SYMBOL_TRAY_SIEVE_SECTION = {
+    'name': 'Plato perforado (sección)',
+    'category': 'columnas',
+    'standard': 'ISA / DIN',
+    'w': 80.0, 'h': 50.0,
+    'ports': [
+        ('vap-in',  40.0, 50.0),
+        ('vap-out', 40.0, 0.0),
+        ('liq-in',  80.0, 8.0),
+        ('liq-out', 0.0,  42.0),
+    ],
+    'body': (
+        # Paredes de la sección
+        '<line x1="6" y1="0" x2="6" y2="50" stroke="#0d0d0d" stroke-width="1.6"/>\n'
+        '<line x1="74" y1="0" x2="74" y2="50" stroke="#0d0d0d" stroke-width="1.6"/>\n'
+        # Plato
+        '<line x1="6" y1="28" x2="74" y2="28" stroke="#0d0d0d" stroke-width="1.8"/>\n'
+        # Perforaciones
+        '<circle cx="14" cy="28" r="1.4" fill="#fff" stroke="#0d0d0d" stroke-width="0.7"/>\n'
+        '<circle cx="22" cy="28" r="1.4" fill="#fff" stroke="#0d0d0d" stroke-width="0.7"/>\n'
+        '<circle cx="30" cy="28" r="1.4" fill="#fff" stroke="#0d0d0d" stroke-width="0.7"/>\n'
+        '<circle cx="38" cy="28" r="1.4" fill="#fff" stroke="#0d0d0d" stroke-width="0.7"/>\n'
+        '<circle cx="46" cy="28" r="1.4" fill="#fff" stroke="#0d0d0d" stroke-width="0.7"/>\n'
+        '<circle cx="54" cy="28" r="1.4" fill="#fff" stroke="#0d0d0d" stroke-width="0.7"/>\n'
+        '<circle cx="62" cy="28" r="1.4" fill="#fff" stroke="#0d0d0d" stroke-width="0.7"/>\n'
+        '<circle cx="70" cy="28" r="1.4" fill="#fff" stroke="#0d0d0d" stroke-width="0.7"/>\n'
+        # Downcomer
+        '<line x1="6" y1="28" x2="14" y2="44" stroke="#0d0d0d" stroke-width="1.1"/>\n'
+        '<line x1="14" y1="44" x2="14" y2="28" stroke="#0d0d0d" stroke-width="1.1"/>\n'
+        # Nivel de líquido sobre el plato
+        '<line x1="14" y1="22" x2="70" y2="22" stroke="#0d0d0d" '
+        'stroke-width="0.6" stroke-dasharray="2 2"/>'
+    ),
+}
+
+SYMBOL_TRAY_VALVE_SECTION = {
+    'name': 'Plato con válvulas (sección)',
+    'category': 'columnas',
+    'standard': 'ISA / DIN',
+    'w': 80.0, 'h': 50.0,
+    'ports': [
+        ('vap-in',  40.0, 50.0),
+        ('vap-out', 40.0, 0.0),
+        ('liq-in',  80.0, 8.0),
+        ('liq-out', 0.0,  42.0),
+    ],
+    'body': (
+        '<line x1="6" y1="0" x2="6" y2="50" stroke="#0d0d0d" stroke-width="1.6"/>\n'
+        '<line x1="74" y1="0" x2="74" y2="50" stroke="#0d0d0d" stroke-width="1.6"/>\n'
+        '<line x1="6" y1="28" x2="74" y2="28" stroke="#0d0d0d" stroke-width="1.8"/>\n'
+        # Valve caps (semicírculos sobre el plato)
+        '<path d="M 14 28 a 3 3 0 0 1 6 0" fill="#fff" stroke="#0d0d0d" stroke-width="1"/>\n'
+        '<line x1="17" y1="25" x2="17" y2="20" stroke="#0d0d0d" stroke-width="0.8"/>\n'
+        '<path d="M 26 28 a 3 3 0 0 1 6 0" fill="#fff" stroke="#0d0d0d" stroke-width="1"/>\n'
+        '<line x1="29" y1="25" x2="29" y2="20" stroke="#0d0d0d" stroke-width="0.8"/>\n'
+        '<path d="M 38 28 a 3 3 0 0 1 6 0" fill="#fff" stroke="#0d0d0d" stroke-width="1"/>\n'
+        '<line x1="41" y1="25" x2="41" y2="20" stroke="#0d0d0d" stroke-width="0.8"/>\n'
+        '<path d="M 50 28 a 3 3 0 0 1 6 0" fill="#fff" stroke="#0d0d0d" stroke-width="1"/>\n'
+        '<line x1="53" y1="25" x2="53" y2="20" stroke="#0d0d0d" stroke-width="0.8"/>\n'
+        '<path d="M 62 28 a 3 3 0 0 1 6 0" fill="#fff" stroke="#0d0d0d" stroke-width="1"/>\n'
+        '<line x1="65" y1="25" x2="65" y2="20" stroke="#0d0d0d" stroke-width="0.8"/>\n'
+        # Downcomer
+        '<line x1="6" y1="28" x2="14" y2="44" stroke="#0d0d0d" stroke-width="1.1"/>\n'
+        '<line x1="14" y1="44" x2="14" y2="28" stroke="#0d0d0d" stroke-width="1.1"/>'
+    ),
+}
+
+
+# ======================================================
+# REGISTRO — extender SYMBOLS y EQ_TYPE_TO_SYMBOL
+# ======================================================
+
+SYMBOLS.update({
+    'hx-condenser-shell-tube':  SYMBOL_HX_CONDENSER_ST,
+    'hx-condenser-air-cooled':  SYMBOL_HX_CONDENSER_AC,
+    'reactor-pfr-coiled':       SYMBOL_REACTOR_PFR_COILED,
+    'reactor-cstr-jacketed':    SYMBOL_REACTOR_CSTR_JACKETED,
+    'packing-random':           SYMBOL_PACKING_RANDOM,
+    'packing-structured':       SYMBOL_PACKING_STRUCTURED,
+    'boiler-fire-tube':         SYMBOL_BOILER_FIRE_TUBE,
+    'boiler-water-tube':        SYMBOL_BOILER_WATER_TUBE,
+    'cooling-tower-induced':    SYMBOL_COOLING_TOWER_INDUCED,
+    'cooling-tower-natural':    SYMBOL_COOLING_TOWER_NATURAL,
+    'compressor-axial':         SYMBOL_COMPRESSOR_AXIAL,
+    'compressor-screw':         SYMBOL_COMPRESSOR_SCREW,
+    'furnace-reformer':         SYMBOL_FURNACE_REFORMER,
+    'splitter-flow-divider':    SYMBOL_SPLITTER,
+    'fan-axial':                SYMBOL_FAN_AXIAL,
+    'tray-sieve-section':       SYMBOL_TRAY_SIEVE_SECTION,
+    'tray-valve-section':       SYMBOL_TRAY_VALVE_SECTION,
+})
+
+
+EQ_TYPE_TO_SYMBOL.update({
+    # Condensadores — antes sin mapeo (caían al rect plano)
+    'Heat exch. — condenser shell-tube':  'hx-condenser-shell-tube',
+    'Heat exch. — condenser air-cooled':  'hx-condenser-air-cooled',
+
+    # Reactores — antes sin mapeo
+    'Reactor — PFR (tubular)':            'reactor-pfr-coiled',
+    'Reactor — CSTR (agitado)':           'reactor-cstr-jacketed',
+
+    # Empaques — antes sin mapeo
+    'Packing — random':                   'packing-random',
+    'Packing — structured':               'packing-structured',
+
+    # Calderas — antes proxy incorrecto 'fired-heater'
+    'Boiler — fire tube':                 'boiler-fire-tube',
+    'Boiler — water tube':                'boiler-water-tube',
+
+    # Torres de enfriamiento — antes proxy INCORRECTO 'column-stripper'
+    # (¡es una columna de stripping, geometría completamente distinta!)
+    'Cooling tower — induced draft':      'cooling-tower-induced',
+    'Cooling tower — natural draft':      'cooling-tower-natural',
+
+    # Compresores — separar tres topologías que antes compartían
+    # 'compressor-centrifugal'
+    'Compressor — axial':                 'compressor-axial',
+    'Compressor — rotary':                'compressor-screw',
+
+    # Reformer — antes idéntico al horno convencional
+    'Fired heater — reformer':            'furnace-reformer',
+
+    # Splitter — antes proxy invertido 'mixer-inline'
+    'Splitter — flow divider':            'splitter-flow-divider',
+
+    # Fan axial — antes proxy 'blower' (centrífugo)
+    'Fan — axial':                        'fan-axial',
+
+    # Trays — ahora secciones individuales (antes la columna completa)
+    'Tray — sieve':                       'tray-sieve-section',
+    'Tray — valve':                       'tray-valve-section',
+})
