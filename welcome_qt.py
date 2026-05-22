@@ -1,23 +1,20 @@
 """
 WELCOME QT — pantalla de bienvenida del editor Qt.
 
-Port de main.py (Tk) con look más moderno: QMainWindow con header,
-3 botones grandes + lista de proyectos recientes.
+QMainWindow con header, 2 botones grandes + lista de proyectos
+recientes.  Todos los proyectos son diagramas `.json` del editor Qt.
 
 Al elegir:
   · Nuevo proyecto      → abre FlowsheetMainWindow (Qt) vacío.
-  · Abrir proyecto…     → file dialog
-       .json            → FlowsheetMainWindow (Qt) con --open.
-       .xlsx / .xls     → ANA.py legacy (subprocess) con --import.
-  · Recientes           → mismo comportamiento que arriba según ext.
+  · Abrir proyecto…     → file dialog .json → FlowsheetMainWindow (Qt)
+                          con --open.
+  · Recientes           → mismo comportamiento.
 
-Los recientes se guardan en ~/.pedro_tesis_recent.json (compartido
-con la welcome Tk).
+Los recientes se guardan en ~/.pedro_tesis_recent.json.
 """
 
 import json
 import os
-import subprocess
 import sys
 
 from PySide6.QtCore import Qt
@@ -66,20 +63,11 @@ def launch_flowsheet_qt(json_path=None):
     return ("qt", json_path)
 
 
-def launch_legacy_xlsx(xlsx_path):
-    """ANA.py sigue siendo Tk — la lanzamos como subprocess."""
-    _save_recent(xlsx_path)
-    subprocess.Popen(
-        [sys.executable, "ANA.py", "--import", xlsx_path],
-        cwd=_here(),
-    )
-
-
 class WelcomeWindow(QMainWindow):
     """Welcome principal del editor Qt.
 
     Resuelve un Action al cerrar:
-      action: 'qt' | 'legacy' | None
+      action: 'qt' | None
       payload: path o None
     """
 
@@ -129,7 +117,7 @@ class WelcomeWindow(QMainWindow):
 
         btn_open = self._big_button(
             "  Abrir proyecto…",
-            "Cargar un .json (diagrama Qt o Tk) o un .xlsx legacy (análisis económico).",
+            "Cargar un diagrama .json del editor Qt.",
             self._on_open,
         )
         layout.addWidget(btn_open)
@@ -181,9 +169,7 @@ class WelcomeWindow(QMainWindow):
         row = QFrame()
         layout = QHBoxLayout(row)
         layout.setContentsMargins(0, 0, 0, 0)
-        ext = os.path.splitext(path)[1].lower()
-        tag = "Diagrama" if ext == ".json" else "Excel legacy"
-        btn = QPushButton(f"{tag}  ·  {os.path.basename(path)}")
+        btn = QPushButton(f"Diagrama  ·  {os.path.basename(path)}")
         btn.setMinimumHeight(34)
         btn.setStyleSheet(
             "QPushButton { text-align: left; padding-left: 12px; }"
@@ -206,7 +192,6 @@ class WelcomeWindow(QMainWindow):
         path, _ = QFileDialog.getOpenFileName(
             self, "Abrir proyecto", "",
             "Diagrama de proceso (JSON) (*.json);;"
-            "Proyecto legacy (Excel) (*.xlsx *.xls);;"
             "Todos los archivos (*.*)"
         )
         if not path:
@@ -221,27 +206,10 @@ class WelcomeWindow(QMainWindow):
             self.payload = path
             self.close()
             return
-        if ext in (".xlsx", ".xls"):
-            ans = QMessageBox.question(
-                self, "Proyecto sin proceso modelado",
-                "Este archivo es un proyecto legacy del análisis económico, "
-                "sin diagrama asociado.\n\n"
-                "Lo voy a abrir directamente en el análisis económico (ANA.py).\n"
-                "Si querés modelar el proceso primero, cancelá y elegí "
-                "'Nuevo proyecto'.",
-                QMessageBox.Ok | QMessageBox.Cancel,
-            )
-            if ans != QMessageBox.Ok:
-                return
-            launch_legacy_xlsx(path)
-            self.action = "legacy"
-            self.payload = path
-            self.close()
-            return
         QMessageBox.critical(
             self, "Tipo de archivo no soportado",
             f"No sé cómo abrir la extensión: {ext}\n"
-            "Usá .json (diagrama) o .xlsx (proyecto legacy)."
+            "Usá .json (diagrama del editor Qt)."
         )
 
     def _on_exit(self):
