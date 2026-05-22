@@ -234,3 +234,275 @@ def make_qicon(icon_id: str, color: str = "#1a1a1a",
     renderer.render(painter)
     painter.end()
     return QIcon(px)
+
+
+"""
+ICONS — PARCHE PFD-ICN-003
+===========================
+Añade 24 íconos HYSYS-style faltantes a ``icons.py`` y extiende
+``EQ_TYPE_TO_ICON`` para mapear los 32 tipos de equipo que antes
+caían al fallback ``eq-mixer``.
+
+Formato (heredado de icons.py)
+-------------------------------
+Cada entrada es ``(display_name, category, svg_paths)`` con
+viewBox 24×24, stroke vía currentColor, stroke-width 1.6,
+stroke-linecap/linejoin round.  Misma estética del set de 126
+íconos existentes — line-art monocromo parametrizable por color.
+
+Aplicación
+----------
+1. Pegar el bloque ``EXTRA_EQUIP_ICONS`` y la sentencia
+   ``ICONS.update(...)`` al final de ``icons.py`` (después del dict
+   ``ICONS = {…}`` y de las constantes ``CATEGORIES`` /
+   ``EQ_TYPE_TO_ICON`` existentes).
+
+2. La sentencia ``EQ_TYPE_TO_ICON.update(...)`` extiende el mapeo
+   eq_type → icon_id sin sobrescribir nada.
+
+Normas: ISA-5.1 · ISO 10628.
+"""
+
+# ──────────────────────────────────────────────────────────────────
+# 24 íconos nuevos para la categoría 'equip'
+# ──────────────────────────────────────────────────────────────────
+
+EXTRA_EQUIP_ICONS = {
+
+    # ── HEAT EXCHANGERS ────────────────────────────────────────────
+    'eq-condenser': ('Condenser', 'equip', (
+        '<rect x="3" y="8" width="18" height="8" rx="1"/>\n'
+        '<path d="M 3 12 H 21"/>\n'
+        '<path d="M 7 19 l 0 2 M 12 19 l 0 2 M 17 19 l 0 2"/>\n'
+        '<path d="M 11 21 l 1 1 1 -1"/>'
+    )),
+
+    'eq-hx-plate': ('HX Plate', 'equip', (
+        '<rect x="3" y="5" width="18" height="14" rx="1"/>\n'
+        '<path d="M 6 5 V 19 M 9 5 V 19 M 12 5 V 19 M 15 5 V 19 M 18 5 V 19"/>'
+    )),
+
+    'eq-hx-spiral': ('HX Spiral', 'equip', (
+        '<circle cx="12" cy="12" r="9"/>\n'
+        '<path d="M 12 12 m -1 0 a 1 1 0 1 1 2 0 a 2 2 0 1 1 -4 0 '
+        'a 3 3 0 1 1 6 0 a 4 4 0 1 1 -8 0"/>'
+    )),
+
+    'eq-hx-double-pipe': ('HX Double Pipe', 'equip', (
+        '<rect x="2" y="9" width="20" height="6" rx="3"/>\n'
+        '<rect x="5" y="11" width="14" height="2" rx="1"/>'
+    )),
+
+    # ── COMPRESSORS / TURBINES ─────────────────────────────────────
+    'eq-compressor-axial': ('Compressor (axial)', 'equip', (
+        '<polygon points="4,5 20,10 20,14 4,19"/>\n'
+        '<path d="M 7 6 V 18 M 11 7 V 17 M 15 8 V 16 M 19 10 V 14"/>'
+    )),
+
+    'eq-compressor-screw': ('Compressor (screw)', 'equip', (
+        '<rect x="3" y="7" width="18" height="10" rx="1.5"/>\n'
+        '<ellipse cx="12" cy="10" rx="8" ry="2"/>\n'
+        '<ellipse cx="12" cy="14" rx="8" ry="2"/>\n'
+        '<path d="M 5 9 l 2 2 M 8 9 l 2 2 M 11 9 l 2 2 M 14 9 l 2 2 M 17 9 l 2 2"/>'
+    )),
+
+    'eq-fan-axial': ('Fan (axial)', 'equip', (
+        '<rect x="3" y="5" width="18" height="14" rx="1"/>\n'
+        '<circle cx="12" cy="12" r="1.6" fill="currentColor"/>\n'
+        '<path d="M 12 12 L 12 6 Q 16 9 12 12"/>\n'
+        '<path d="M 12 12 L 17 16 Q 14 18 12 12"/>\n'
+        '<path d="M 12 12 L 7 16 Q 10 18 12 12"/>'
+    )),
+
+    'eq-fan-centrifugal': ('Fan (centrifugal)', 'equip', (
+        '<circle cx="12" cy="12" r="8"/>\n'
+        '<path d="M 12 12 L 12 4 Q 16 7 12 12"/>\n'
+        '<path d="M 12 12 L 18 16 Q 16 19 12 12"/>\n'
+        '<path d="M 12 12 L 6 16 Q 8 19 12 12"/>\n'
+        '<circle cx="12" cy="12" r="1.6" fill="currentColor"/>'
+    )),
+
+    # ── REACTORS ───────────────────────────────────────────────────
+    'eq-reactor-pfr': ('Reactor PFR (coil)', 'equip', (
+        '<rect x="2" y="9" width="20" height="6" rx="3"/>\n'
+        '<path d="M 4 12 Q 6 8 8 12 Q 10 16 12 12 Q 14 8 16 12 Q 18 16 20 12" '
+        'fill="none"/>'
+    )),
+
+    'eq-reactor-autoclave': ('Reactor (autoclave)', 'equip', (
+        '<path d="M 6 5 a 2 2 0 0 1 2 -2 h 8 a 2 2 0 0 1 2 2 v 14 '
+        'a 2 2 0 0 1 -2 2 h -8 a 2 2 0 0 1 -2 -2 z"/>\n'
+        '<path d="M 8 8 h 8 M 8 12 h 8 M 8 16 h 8"/>'
+    )),
+
+    'eq-furnace-reformer': ('Fired heater (reformer)', 'equip', (
+        '<rect x="3" y="6" width="18" height="14"/>\n'
+        '<path d="M 7 6 V 20 M 10 6 V 20 M 13 6 V 20 M 16 6 V 20"/>\n'
+        '<rect x="10" y="2" width="4" height="4"/>'
+    )),
+
+    # ── COLUMNS DETAIL (tray / packing sections) ───────────────────
+    'eq-tray-sieve': ('Tray (sieve)', 'equip', (
+        '<path d="M 6 3 V 21 M 18 3 V 21"/>\n'
+        '<line x1="6" y1="12" x2="18" y2="12"/>\n'
+        '<circle cx="9" cy="12" r="0.6" fill="currentColor"/>\n'
+        '<circle cx="11" cy="12" r="0.6" fill="currentColor"/>\n'
+        '<circle cx="13" cy="12" r="0.6" fill="currentColor"/>\n'
+        '<circle cx="15" cy="12" r="0.6" fill="currentColor"/>\n'
+        '<path d="M 6 12 L 8 17 L 8 12"/>'
+    )),
+
+    'eq-tray-valve': ('Tray (valve)', 'equip', (
+        '<path d="M 6 3 V 21 M 18 3 V 21"/>\n'
+        '<line x1="6" y1="12" x2="18" y2="12"/>\n'
+        '<path d="M 8 12 a 1 1 0 0 1 2 0 M 11 12 a 1 1 0 0 1 2 0 '
+        'M 14 12 a 1 1 0 0 1 2 0"/>\n'
+        '<path d="M 9 11 V 9 M 12 11 V 9 M 15 11 V 9"/>'
+    )),
+
+    'eq-packing-random': ('Packing (random)', 'equip', (
+        '<path d="M 6 3 V 21 M 18 3 V 21"/>\n'
+        '<circle cx="9" cy="8" r="1.2"/>\n'
+        '<circle cx="14" cy="9" r="1.2"/>\n'
+        '<circle cx="11" cy="12" r="1.2"/>\n'
+        '<circle cx="16" cy="13" r="1.2"/>\n'
+        '<circle cx="8" cy="14" r="1.2"/>\n'
+        '<circle cx="13" cy="17" r="1.2"/>\n'
+        '<circle cx="9" cy="18" r="1.2"/>'
+    )),
+
+    'eq-packing-structured': ('Packing (structured)', 'equip', (
+        '<path d="M 6 3 V 21 M 18 3 V 21"/>\n'
+        '<path d="M 7 6 L 11 10 L 7 14 L 11 18"/>\n'
+        '<path d="M 11 6 L 15 10 L 11 14 L 15 18"/>\n'
+        '<path d="M 15 6 L 17 8 M 15 14 L 17 16"/>'
+    )),
+
+    # ── MIXERS / SPLITTER ──────────────────────────────────────────
+    'eq-mixer-static': ('Mixer (static)', 'equip', (
+        '<rect x="3" y="9" width="18" height="6" rx="1"/>\n'
+        '<path d="M 5 9 L 8 15 M 8 9 L 11 15 M 11 9 L 14 15 '
+        'M 14 9 L 17 15 M 17 9 L 19 13"/>'
+    )),
+
+    'eq-splitter': ('Splitter', 'equip', (
+        '<path d="M 3 12 H 10"/>\n'
+        '<polygon points="10,9 15,12 10,15"/>\n'
+        '<path d="M 15 12 L 21 7"/>\n'
+        '<path d="M 18 7 L 21 7 L 21 10"/>\n'
+        '<path d="M 15 12 L 21 17"/>\n'
+        '<path d="M 18 17 L 21 17 L 21 14"/>'
+    )),
+
+    # ── SOLIDS / SEPARATION ────────────────────────────────────────
+    'eq-cyclone': ('Cyclone', 'equip', (
+        '<rect x="7" y="3" width="10" height="7"/>\n'
+        '<path d="M 7 10 L 17 10 L 13 21 L 11 21 Z"/>\n'
+        '<line x1="12" y1="2" x2="12" y2="8"/>\n'
+        '<path d="M 4 6 L 7 6"/>'
+    )),
+
+    'eq-centrifuge': ('Centrifuge', 'equip', (
+        '<ellipse cx="12" cy="6" rx="6" ry="1.6"/>\n'
+        '<path d="M 6 6 V 17 q 0 2.5 6 2.5 q 6 0 6 -2.5 V 6"/>\n'
+        '<path d="M 7 9 L 17 11 M 7 12 L 17 14 M 7 15 L 17 17"/>'
+    )),
+
+    'eq-decanter': ('Decanter', 'equip', (
+        '<rect x="3" y="9" width="18" height="6" rx="3"/>\n'
+        '<line x1="3" y1="12" x2="21" y2="12" stroke-dasharray="2 1.5"/>\n'
+        '<path d="M 17 12 V 15"/>'
+    )),
+
+    # ── VALVES ─────────────────────────────────────────────────────
+    'eq-valve-control': ('Valve (control)', 'equip', (
+        '<polygon points="4,9 12,12 4,15"/>\n'
+        '<polygon points="20,9 12,12 20,15"/>\n'
+        '<line x1="12" y1="9" x2="12" y2="5"/>\n'
+        '<path d="M 7 3 H 17 a 1 1 0 0 1 1 1 V 5 a 1 1 0 0 1 -1 1 H 7 '
+        'a 1 1 0 0 1 -1 -1 V 4 a 1 1 0 0 1 1 -1 Z"/>'
+    )),
+
+    'eq-valve-relief': ('Valve (relief)', 'equip', (
+        '<polygon points="9,17 9,9 14,13"/>\n'
+        '<polygon points="14,5 14,13 19,9"/>\n'
+        '<line x1="9" y1="20" x2="9" y2="17"/>\n'
+        '<path d="M 14 9 V 7 L 11 4 L 14 2 L 11 0"/>'
+    )),
+
+    # ── UTILITIES ──────────────────────────────────────────────────
+    'eq-boiler': ('Boiler', 'equip', (
+        '<rect x="3" y="6" width="18" height="12" rx="3"/>\n'
+        '<path d="M 6 9 H 18 M 6 12 H 18 M 6 15 H 18"/>\n'
+        '<path d="M 11 4 V 6 M 13 4 V 6"/>'
+    )),
+
+    'eq-cooling-tower': ('Cooling tower', 'equip', (
+        '<path d="M 7 3 C 9 8 11 10 11 12 C 11 14 9 18 7 21 '
+        'L 17 21 C 15 18 13 14 13 12 C 13 10 15 8 17 3 Z"/>\n'
+        '<line x1="9" y1="13" x2="15" y2="13"/>\n'
+        '<line x1="8" y1="17" x2="10" y2="15"/>\n'
+        '<line x1="16" y1="15" x2="14" y2="17"/>'
+    )),
+}
+
+
+# ──────────────────────────────────────────────────────────────────
+# Registro — extender ICONS sin sobrescribir nada
+# ──────────────────────────────────────────────────────────────────
+ICONS.update(EXTRA_EQUIP_ICONS)
+
+
+# ──────────────────────────────────────────────────────────────────
+# EQ_TYPE_TO_ICON — añadir los 32 tipos que antes caían al fallback
+# ──────────────────────────────────────────────────────────────────
+EQ_TYPE_TO_ICON.update({
+    # Heat exchangers
+    "Heat exch. — double pipe":          "eq-hx-double-pipe",
+    "Heat exch. — multiple pipe":        "eq-hx-double-pipe",
+    "Heat exch. — condenser shell-tube": "eq-condenser",
+    "Heat exch. — condenser air-cooled": "eq-condenser",
+    "Heat exch. — flat plate":           "eq-hx-plate",
+    "Heat exch. — spiral plate":         "eq-hx-spiral",
+
+    # Compressors / fans
+    "Compressor — axial":                "eq-compressor-axial",
+    "Compressor — rotary":               "eq-compressor-screw",
+    "Pump — reciprocating":              "eq-pump",
+    "Fan — centrifugal radial":          "eq-fan-centrifugal",
+    "Fan — axial":                       "eq-fan-axial",
+
+    # Reactors
+    "Reactor — autoclave":               "eq-reactor-autoclave",
+    "Reactor — PFR (tubular)":           "eq-reactor-pfr",
+    "Reactor — CSTR (agitado)":          "eq-cstr",
+    "Fired heater — reformer":           "eq-furnace-reformer",
+
+    # Columns detail
+    "Tray — sieve":                      "eq-tray-sieve",
+    "Tray — valve":                      "eq-tray-valve",
+    "Packing — random":                  "eq-packing-random",
+    "Packing — structured":              "eq-packing-structured",
+
+    # Mixers / splitters
+    "Mixer — inline":                    "eq-mixer",
+    "Mixer — static":                    "eq-mixer-static",
+    "Splitter — flow divider":           "eq-splitter",
+
+    # Solids / sep.
+    "Centrifuge — disc stack":           "eq-centrifuge",
+    "Centrifuge — decanter":             "eq-centrifuge",
+    "Cyclone — gas/solid":               "eq-cyclone",
+    "Decanter — gravity":                "eq-decanter",
+
+    # Valves
+    "Valve — control globe":             "eq-valve-control",
+    "Valve — relief":                    "eq-valve-relief",
+    "Valve — 3-way":                     "eq-valve-control",   # comparte cuerpo + actuador
+
+    # Utilities
+    "Boiler — fire tube":                "eq-boiler",
+    "Boiler — water tube":               "eq-boiler",
+    "Cooling tower — induced draft":     "eq-cooling-tower",
+    "Cooling tower — natural draft":     "eq-cooling-tower",
+})
