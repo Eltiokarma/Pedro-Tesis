@@ -2091,6 +2091,11 @@ class StreamEditDialog(QDialog):
         )
         layout.addRow(self.dof_label)
 
+        # ── Visualización — burbuja flotante (parche NUEVA_UI_P_SAD_3) ──
+        # Primer grupo del dialog para que el user que solo quiere "ver"
+        # los valores no tenga que scrollear hasta el final.
+        self._build_visualizacion_section(layout, stream)
+
         # nombre
         self.name_edit = QLineEdit(stream.name)
         layout.addRow("Nombre:", self.name_edit)
@@ -2726,10 +2731,120 @@ class StreamEditDialog(QDialog):
                 + "</div>")
         self.dof_label.setText(html)
 
+    def _build_visualizacion_section(self, layout, stream):
+        """Card 'Visualización' con toggle iOS + sub-toggles de la
+        burbuja flotante."""
+        from PySide6.QtWidgets import QCheckBox
+        try:
+            from block_inspector import TOK as _T
+        except Exception:
+            _T = None
+        is_on = bool(getattr(stream, "bubble_visible", False))
+
+        # Card contenedor
+        self.bub_card = QFrame()
+        self.bub_card.setObjectName("bubCard")
+        card_lay = QVBoxLayout(self.bub_card)
+        card_lay.setContentsMargins(14, 12, 14, 12)
+        card_lay.setSpacing(8)
+
+        # Row principal: icon + textos + switch
+        row = QHBoxLayout(); row.setSpacing(12)
+        icon = QLabel("💧")
+        icon.setFixedSize(32, 32)
+        icon.setAlignment(Qt.AlignCenter)
+        if _T:
+            icon.setStyleSheet(
+                f"background:{_T['accent_tint'] if is_on else _T['bg_mute']}; "
+                f"color:{_T['accent'] if is_on else _T['ink_mute']}; "
+                f"border-radius:8px; font-size:14px;"
+            )
+        row.addWidget(icon)
+
+        textcol = QVBoxLayout(); textcol.setSpacing(1)
+        title = QLabel("Mostrar burbuja en el lienzo")
+        title.setStyleSheet(
+            f"color:{_T['ink'] if _T else '#1a1714'}; "
+            f"font-weight:500; font-size:11pt;"
+        )
+        self.bub_sub = QLabel(self._bub_subtitle(is_on))
+        self.bub_sub.setStyleSheet(
+            f"color:{_T['ink_mute'] if _T else '#6b6256'}; font-size:9pt;"
+        )
+        textcol.addWidget(title); textcol.addWidget(self.bub_sub)
+        row.addLayout(textcol, 1)
+
+        # Toggle (usamos QCheckBox estilizado como switch iOS via QSS)
+        self.bub_toggle = QCheckBox()
+        self.bub_toggle.setChecked(is_on)
+        self.bub_toggle.setCursor(Qt.PointingHandCursor)
+        # Estilo "iOS switch" via QSS — knob no animado por simplicidad
+        if _T:
+            self.bub_toggle.setStyleSheet(
+                f"QCheckBox::indicator {{ width: 36px; height: 20px; "
+                f"border-radius: 10px; background: {_T['line_strong']}; }} "
+                f"QCheckBox::indicator:checked {{ background: {_T['accent']}; }}"
+            )
+        self.bub_toggle.toggled.connect(self._on_bub_toggle_changed)
+        row.addWidget(self.bub_toggle)
+        card_lay.addLayout(row)
+
+        # Sub-toggles (visibles solo cuando ON)
+        self._bub_subs_wrap = QFrame()
+        sub_lay = QVBoxLayout(self._bub_subs_wrap)
+        sub_lay.setContentsMargins(44, 2, 0, 0)
+        sub_lay.setSpacing(4)
+        self.bub_show_h = QCheckBox("Mostrar entalpía")
+        self.bub_show_h.setChecked(bool(getattr(stream, "bubble_show_enthalpy", False)))
+        sub_lay.addWidget(self.bub_show_h)
+        self.bub_show_comp = QCheckBox("Mostrar composición")
+        self.bub_show_comp.setChecked(bool(getattr(stream, "bubble_show_composition", False)))
+        sub_lay.addWidget(self.bub_show_comp)
+        self._bub_subs_wrap.setVisible(is_on)
+        card_lay.addWidget(self._bub_subs_wrap)
+
+        # Estilo del card según estado
+        self._refresh_bub_card_style(is_on)
+        layout.addRow(self.bub_card)
+
+    def _bub_subtitle(self, is_on: bool) -> str:
+        if is_on:
+            return "Visible — arrastrá la burbuja para reposicionarla"
+        return "Oculta — activá para ver T, P, ṁ flotando junto al stream"
+
+    def _on_bub_toggle_changed(self, on: bool):
+        self.bub_sub.setText(self._bub_subtitle(on))
+        self._bub_subs_wrap.setVisible(on)
+        self._refresh_bub_card_style(on)
+
+    def _refresh_bub_card_style(self, is_on: bool):
+        try:
+            from block_inspector import TOK as _T
+        except Exception:
+            return
+        if is_on:
+            self.bub_card.setStyleSheet(
+                f"#bubCard {{ background:{_T['accent_tint']}; "
+                f"border:1px solid {_T['accent_soft']}; border-radius:9px; }}"
+            )
+        else:
+            self.bub_card.setStyleSheet(
+                f"#bubCard {{ background:{_T['bg_elev']}; "
+                f"border:1px solid {_T['line']}; border-radius:9px; }}"
+            )
+
     def apply_to_model(self):
         name = self.name_edit.text().strip()
         if name:
             self.stream.name = name
+        # Burbuja (parche NUEVA_UI_P_SAD_3) — los sub-toggles solo aplican
+        # si la burbuja está activa.
+        if hasattr(self, "bub_toggle"):
+            self.stream.bubble_visible = bool(self.bub_toggle.isChecked())
+        if hasattr(self, "bub_show_h"):
+            self.stream.bubble_show_enthalpy = bool(self.bub_show_h.isChecked())
+        if hasattr(self, "bub_show_comp"):
+            self.stream.bubble_show_composition = bool(self.bub_show_comp.isChecked())
         self.stream.mass_flow = float(self.mass_edit.value())
         self.stream.mass_flow_locked = bool(self.mass_lock.isChecked())
         self.stream.role = self.role_combo.currentText()
@@ -5907,6 +6022,9 @@ class FlowsheetMainWindow(QMainWindow):
         self._zoom_widget    = EditorZoom(self.view.viewport())
         self._chrome_overlay = _Overlay(self.view, self._palette_widget, self._zoom_widget)
         self._palette_to_eq_type = PALETTE_TO_EQ_TYPE
+        # Bubble manager se inicializa al final del __init__ (necesita
+        # stream_items_iter pero ese método ya está disponible).
+        self._bubble_manager = None
 
         # state de conexión pendiente (right-click + left-click)
         self._connecting_from: int = None
@@ -5948,6 +6066,21 @@ class FlowsheetMainWindow(QMainWindow):
         self._anim_timer.timeout.connect(self._tick_stream_animation)
         self._anim_enabled = True
         self._anim_timer.start()
+
+        # ── Bubble manager (parche NUEVA_UI_P_SAD_3) ──
+        # Crea las burbujas flotantes sobre streams cuyo
+        # stream.bubble_visible es True.  Refresh inicial = sin
+        # burbujas (los nuevos flowsheets arrancan con bubble_visible
+        # False en todos los streams).
+        try:
+            from stream_bubbles import BubbleManager
+            self._bubble_manager = BubbleManager(
+                self.view, self.fs, self.stream_items_iter,
+            )
+            self._bubble_manager.refresh_all()
+        except Exception as _e:
+            print(f"[bubbles] no se pudo inicializar: {_e}")
+            self._bubble_manager = None
 
     def _tick_stream_animation(self):
         """Avanza el offset de chevrons en cada stream y los re-renderiza.
@@ -7204,6 +7337,9 @@ class FlowsheetMainWindow(QMainWindow):
         n_iter = getattr(result, "iter_count", 0) or 0
         dt = getattr(result, "elapsed_s", 0.0) or 0.0
         self.update_solver_chip(chip_state, n_iter, dt)
+        # Refrescar burbujas con los valores resueltos
+        if self._bubble_manager is not None:
+            self._bubble_manager.refresh_all()
         # auditar conexiones semánticas
         sem_issues = fval.validate_all_streams(self.fs)
         # mostrar resumen
@@ -7765,6 +7901,10 @@ class FlowsheetMainWindow(QMainWindow):
             item.update_path()
         self._refresh_port_colors()
         self._on_selection_changed()
+        # Refrescar burbuja del stream (puede haberse activado/desactivado
+        # desde el dialog, o cambiado T/P/composición)
+        if self._bubble_manager is not None:
+            self._bubble_manager.refresh_all()
         self.end_action(f"Editar {stream.name}", before)
 
     def is_connecting(self) -> bool:
@@ -8055,6 +8195,9 @@ class FlowsheetMainWindow(QMainWindow):
         queden coherentes."""
         for sid, item in self.scene.stream_items.items():
             item.update_path(rebuild_handles=False)
+        # Burbujas: actualizar leaders (anclas de streams cambiaron)
+        if getattr(self, "_bubble_manager", None) is not None:
+            self._bubble_manager._refresh_leaders()
 
     def _delete_block(self, bid):
         item = self.scene.block_items.pop(bid, None)
