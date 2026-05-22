@@ -805,35 +805,54 @@ class EditorPalette(QFrame):
                 out.append(eq_name)
         return sorted(out)
 
+    def _icon_for_eq_type(self, eq_type: str, size: int = 22):
+        """Genera un QIcon de 22px renderizando la silueta ISA del
+        eq_type via BlockGlyph (mismo dibujo que se ve en el lienzo)."""
+        from PySide6.QtGui import QPixmap, QIcon
+        try:
+            isa = isa_type_for_eq(eq_type)
+            nw, nh = BLOCK_DIMS.get(isa, (60, 60))
+            px = QPixmap(size + 4, size + 4)
+            px.fill(Qt.transparent)
+            p = QPainter(px)
+            p.setRenderHint(QPainter.Antialiasing, True)
+            # escalar al recuadro size×size manteniendo proporción
+            scale = min(size / nw, size / nh) * 0.9
+            sw = nw * scale; sh = nh * scale
+            p.translate((size + 4 - sw) / 2, (size + 4 - sh) / 2)
+            p.scale(scale, scale)
+            BlockGlyph.draw(p, isa, nw, nh, QColor(TOK["ink_mute"]),
+                            fill=QColor(TOK["bg_elev"]),
+                            stroke_width=2.0 / max(scale, 0.1))
+            p.end()
+            return QIcon(px)
+        except Exception:
+            return QIcon()
+
     def _show_variants_menu(self, palette_id: str, anchor_widget):
         """Muestra un popup con todas las variantes de una categoría.
         Si solo hay una, la emite directo sin abrir el menú."""
         eq_types = self._eq_types_for_palette(palette_id)
         if not eq_types:
-            # fallback al default canónico
             default = PALETTE_TO_EQ_TYPE.get(palette_id)
             if default:
                 self.blockTypeRequested.emit(default)
                 self.blockRequested.emit(palette_id)
             return
-        # Si hay un solo eq_type, no abrir menú: emitir directo
         if len(eq_types) == 1:
             self.blockTypeRequested.emit(eq_types[0])
             return
-        # Sino, abrir QMenu con las variantes
         from PySide6.QtWidgets import QMenu
         menu = QMenu(self)
         self._style_menu(menu)
-        # Marcar la variante por defecto como recomendada
         default = PALETTE_TO_EQ_TYPE.get(palette_id)
         for et in eq_types:
             label = et
             if et == default:
                 label = f"★  {et}"
-            act = menu.addAction(label)
+            act = menu.addAction(self._icon_for_eq_type(et), label)
             act.triggered.connect(lambda _=False, e=et:
                                   self.blockTypeRequested.emit(e))
-        # Posicionar a la derecha del botón
         global_pos = anchor_widget.mapToGlobal(
             anchor_widget.rect().topRight()
         )
@@ -849,7 +868,6 @@ class EditorPalette(QFrame):
         from PySide6.QtWidgets import QMenu
         menu = QMenu(self)
         self._style_menu(menu)
-        # Ordenar categorías alfabéticamente, pero poner las más usadas arriba
         priority = ["Reactors", "Heat exchangers", "Vessels",
                     "Mixers / splitters", "Pumps", "Compressors",
                     "Storage", "Fired heaters", "Fans", "Solids / sep."]
@@ -859,7 +877,7 @@ class EditorPalette(QFrame):
             sub = menu.addMenu(cat)
             self._style_menu(sub)
             for et in by_cat[cat]:
-                act = sub.addAction(et)
+                act = sub.addAction(self._icon_for_eq_type(et), et)
                 act.triggered.connect(lambda _=False, e=et:
                                       self.blockTypeRequested.emit(e))
         global_pos = anchor_widget.mapToGlobal(

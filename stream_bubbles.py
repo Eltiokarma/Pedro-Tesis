@@ -647,6 +647,9 @@ class BubbleManager:
         self._refresh_leaders()
 
     def _create_bubble(self, stream):
+        """Crea una nueva burbuja. La posición efectiva se calcula
+        dinámicamente en _position_bubble() para que la burbuja siga
+        al stream cuando el user hace pan o zoom."""
         vp = self.view.viewport()
         bub = StreamBubble(stream.id, parent=vp)
         bub.positionDragging.connect(self._on_dragging)
@@ -657,37 +660,43 @@ class BubbleManager:
         bub.set_collapsed(bool(getattr(stream, "bubble_collapsed", False)))
         bub.set_show_composition(bool(getattr(stream, "bubble_show_composition", False)))
         bub.set_show_enthalpy(bool(getattr(stream, "bubble_show_enthalpy", False)))
-        # Posición: si stream.bubble_position vacío, usar offset del
-        # midpoint del stream.  Si el midpoint tampoco es computable,
-        # poner la burbuja cerca del centro del viewport (NO en 40,40
-        # porque ahí está la paleta y queda tapada).
-        bp = getattr(stream, "bubble_position", []) or []
-        if len(bp) == 2:
-            x, y = int(bp[0]), int(bp[1])
-        else:
-            mp = self._stream_midpoint_viewport(stream.id)
-            if mp is not None:
-                n_visible = len(self._bubbles)
-                x = int(mp.x() + 80)
-                y = int(mp.y() + 60 + n_visible * 20)
-            else:
-                # Fallback visible: centro-izquierda del viewport, lejos
-                # de la paleta (que está en 14,14, ancho 50).
-                n = len(self._bubbles)
-                x = 150 + n * 24
-                y = 120 + n * 24
-        # Clamp al rect del viewport por si la posición persistida
-        # quedó fuera tras un resize.
-        vw, vh = vp.width(), vp.height()
-        # adjustSize antes de mover para obtener width/height real
         bub.adjustSize()
-        bw, bh = bub.sizeHint().width(), bub.sizeHint().height()
-        x = max(0, min(x, max(0, vw - 30)))
-        y = max(0, min(y, max(0, vh - 30)))
-        bub.move(x, y)
+        # Si stream.bubble_position vacío, inicializar con un offset
+        # default desde el midpoint (+80 abajo, +60 a la derecha,
+        # +20*n para escalonar múltiples burbujas activas).
+        bp = getattr(stream, "bubble_position", []) or []
+        if len(bp) != 2:
+            n_visible = len(self._bubbles)
+            stream.bubble_position = [80.0, 60.0 + n_visible * 20]
+        self._bubbles[stream.id] = bub
+        self._position_bubble(stream, bub)
         bub.show()
         bub.raise_()   # encima del leader_overlay y del chrome
-        self._bubbles[stream.id] = bub
+
+    def _position_bubble(self, stream, bub: "StreamBubble"):
+        """Calcula y aplica la posición efectiva de la burbuja: midpoint
+        del stream en viewport + offset persistido en bubble_position.
+        Si el midpoint no es computable, usa un fallback visible."""
+        vp = self.view.viewport()
+        bp = getattr(stream, "bubble_position", []) or [80.0, 60.0]
+        offset_x = float(bp[0]); offset_y = float(bp[1])
+        mp = self._stream_midpoint_viewport(stream.id)
+        if mp is not None:
+            x = int(mp.x() + offset_x)
+            y = int(mp.y() + offset_y)
+        else:
+            # Fallback: centro-izquierda del viewport, lejos de la
+            # paleta vertical (que está en 14,14 ancho 50).
+            n = list(self._bubbles.keys()).index(stream.id) \
+                if stream.id in self._bubbles else 0
+            x = 150 + n * 24
+            y = 120 + n * 24
+        # Clamp al rect del viewport
+        vw, vh = vp.width(), vp.height()
+        x = max(0, min(x, max(0, vw - 30)))
+        y = max(0, min(y, max(0, vh - 30)))
+        if not bub.is_dragging():   # no pisar el drag activo del user
+            bub.move(x, y)
 
     def _destroy_bubble(self, sid: int):
         bub = self._bubbles.pop(sid, None)
@@ -727,10 +736,20 @@ class BubbleManager:
         )
 
     def _refresh_leaders(self):
-        """Reconstruye la lista de leaders y la entrega al overlay."""
+        """Reposiciona las burbujas para que sigan al midpoint del
+        stream (siempre que NO se esté arrastrando esa burbuja),
+        reconstruye la lista de leaders y la entrega al overlay."""
         if not self._bubbles:
             self.leader_overlay.set_links([])
             return
+        # Re-posicionar primero para que el midpoint cambie y la burbuja
+        # lo siga (pan/zoom)
+        for sid, bub in self._bubbles.items():
+            s = self._get_stream(sid)
+            if s is not None:
+                self._position_bubble(s, bub)
+        # Después calcular leaders desde el midpoint hacia el lado de
+        # la burbuja más cercano al ancla
         links: List[Tuple[QPoint, QPoint, str]] = []
         for sid, bub in self._bubbles.items():
             mp = self._stream_midpoint_viewport(sid)
@@ -740,50 +759,42 @@ class BubbleManager:
             attach = bub.attachment_point(mp)
             links.append((mp, attach, state))
         self.leader_overlay.set_links(links)
-        # Asegurar z-order: leader_overlay debajo de las burbujas
+        # z-order: leader debajo de bubbles, bubbles arriba
         self.leader_overlay.raise_()
         for bub in self._bubbles.values():
             bub.raise_()
 
     def _stream_midpoint_viewport(self, sid: int) -> Optional[QPoint]:
-        """Devuelve el midpoint del path del stream en coordenadas del
-        viewport (donde viven las burbujas).  None si el stream item
-        no existe en la scene actual."""
+        """Devuelve el CENTRO GEOMÉTRICO del path del stream en
+        coordenadas del viewport.  Usa QPainterPath.pointAtPercent(0.5)
+        que recorre el path por longitud — funciona para polilíneas
+        ortogonales con cualquier número de codos.  None si el stream
+        item no existe en la scene actual."""
         try:
             for s_id, item in self.get_stream_items_iter():
                 if s_id != sid:
                     continue
-                # StreamItem tiene path() (QPainterPath) o pts/polyline
-                pts = None
-                if hasattr(item, "polyline_points"):
-                    pts = item.polyline_points()
-                elif hasattr(item, "path"):
+                scene_p = None
+                # Intento 1: pointAtPercent (canon — verdadero centro del path)
+                if hasattr(item, "path"):
                     try:
                         path = item.path()
-                        n = path.elementCount()
-                        if n >= 2:
-                            pts = [(path.elementAt(i).x, path.elementAt(i).y)
-                                    for i in range(n)]
+                        if path is not None and path.length() > 0:
+                            scene_p = path.pointAtPercent(0.5)
+                            # path() puede estar en coords locales del item;
+                            # sumamos la pos del item para ir a scene coords
+                            scene_p = scene_p + item.scenePos()
                     except Exception:
-                        pts = None
-                if not pts:
-                    # Fallback: usar boundingRect center
-                    br = item.sceneBoundingRect()
-                    scene_p = QPointF(br.center())
-                else:
-                    # midpoint del segmento más largo
-                    import math
-                    max_len = -1; best = (pts[0], pts[-1])
-                    for i in range(1, len(pts)):
-                        a = pts[i-1]; b = pts[i]
-                        l = math.hypot(b[0]-a[0], b[1]-a[1])
-                        if l > max_len:
-                            max_len = l; best = (a, b)
-                    a, b = best
-                    scene_p = QPointF((a[0]+b[0])/2, (a[1]+b[1])/2)
-                # scene → view → viewport (mismo sistema de coords)
+                        scene_p = None
+                # Intento 2: boundingRect center si pointAtPercent falla
+                if scene_p is None:
+                    try:
+                        br = item.sceneBoundingRect()
+                        scene_p = QPointF(br.center())
+                    except Exception:
+                        return None
                 view_p = self.view.mapFromScene(scene_p)
-                return QPoint(view_p.x(), view_p.y())
+                return QPoint(int(view_p.x()), int(view_p.y()))
         except Exception:
             return None
         return None
@@ -793,9 +804,17 @@ class BubbleManager:
         self._refresh_leaders()
 
     def _on_drag_finished(self, sid: int, x: float, y: float):
-        # Persistir en el modelo
+        """x, y son coords absolutas en el viewport.  Convertir a
+        OFFSET desde el midpoint del stream (también en viewport px)
+        para que la burbuja siga al stream al hacer pan/zoom."""
         s = self._get_stream(sid)
-        if s is not None:
+        if s is None:
+            return
+        mp = self._stream_midpoint_viewport(sid)
+        if mp is not None:
+            s.bubble_position = [float(x - mp.x()), float(y - mp.y())]
+        else:
+            # Sin midpoint → guardamos como offset desde origen viewport
             s.bubble_position = [float(x), float(y)]
         self._refresh_leaders()
 
