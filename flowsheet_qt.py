@@ -66,7 +66,7 @@ from PySide6.QtWidgets import (
     QDialog, QDialogButtonBox, QLineEdit, QSpinBox, QDoubleSpinBox,
     QComboBox, QTableWidget, QTableWidgetItem, QHeaderView, QCheckBox,
     QGroupBox, QGraphicsSceneContextMenuEvent, QToolButton,
-    QScrollArea, QCompleter,
+    QScrollArea, QCompleter, QFrame, QRadioButton, QButtonGroup,
 )
 from PySide6.QtGui import QUndoStack, QUndoCommand
 
@@ -1313,471 +1313,362 @@ class BlockEditDialog(QDialog):
 
 
 class CustomReactionDialog(QDialog):
-    """Sub-diálogo para definir una reacción custom (Hallazgo 1).
+    """Editor de reaccion 'estilo iPhone': pickers de chips, balance/ΔH auto.
 
-    Campos:
-      · Ecuación libre 'A + 2 B -> C + D' (parsea coeficientes).
-      · Tabla de especies (formula, fase g/l/aq/s, ν) auto-poblada.
-      · ΔH₂₉₈ kJ/mol obligatorio.
-      · Radio: reversible / irreversible.
-      · Si reversible: ΔS₂₉₈ J/(mol·K) O Keq₂₉₈ (mutuamente excluyentes).
-      · Rango T válido [K] default 298–2000.
+    Diseño single-page sin tabla y sin coeficientes visibles. El usuario:
+      1. Tap + verde para agregar reactivos (popup picker del thermo_db).
+      2. Tap + verde para agregar productos.
+      3. El balance atómico y el ΔH se calculan solos en cada cambio.
+      4. Opcionalmente abre "Avanzado" para ID, nombre, modo, ΔS, plantillas.
 
-    Al aceptar: valida vía reactions_db.reaction_from_dict (captura
-    ValueError, muestra QMessageBox.warning, NO cierra hasta OK).
-    El dict resultante queda en self.result_dict.
+    Internamente sigue persistiendo el mismo dict {stoich, dh, T_min, ...}
+    compatible con reactions_db.reaction_from_dict.
     """
 
     def __init__(self, parent=None):
         super().__init__(parent)
-        self.setWindowTitle("Reacción custom")
+        self.setWindowTitle("Nueva reacción")
+        self.setMinimumWidth(580)
+        self.resize(640, 700)
         self.result_dict = None
-        layout = QFormLayout(self)
 
-        from PySide6.QtWidgets import (QLineEdit, QTableWidget,
-                                          QTableWidgetItem, QRadioButton,
-                                          QButtonGroup, QHeaderView)
-        # Ecuación libre
-        self.eq_edit = QLineEdit()
-        self.eq_edit.setPlaceholderText("Ej: CO + H2O -> CO2 + H2")
-        self.eq_edit.editingFinished.connect(self._parse_equation)
-        layout.addRow("Ecuación:", self.eq_edit)
+        # Estado interno (chips). Cada chip:
+        #   {formula, phase, nu, widget, name}
+        # nu < 0 para reactivos, > 0 para productos.
+        self.reactant_chips: list = []
+        self.product_chips:  list = []
+        self._setting_dh = False
+        self._user_overrode_dh = False
 
-        # ─── Plantillas comunes ───
-        self.tpl_combo = QComboBox()
-        self.tpl_combo.addItem("— Plantilla —", None)
-        # Cada plantilla: (display, dict con campos)
-        self._templates = [
-            ("Combustión completa de un alcano (CnH2n+2)", {
-                "stoich": [("CnH2n+2", "g", -1), ("O2", "g", -1),
-                           ("CO2", "g", +1), ("H2O", "g", +1)],
-                "name": "Combustión", "T_range": (298, 2500),
-                "dh_default": 0.0,
-            }),
-            ("Esterificación de Fischer (RCOOH + R'OH)", {
-                "stoich": [("RCOOH", "l", -1), ("R'OH", "l", -1),
-                           ("RCOOR'", "l", +1), ("H2O", "l", +1)],
-                "name": "Esterificación", "T_range": (333, 423),
-                "dh_default": 0.0,
-            }),
-            ("Water-gas shift (CO + H2O → CO2 + H2)", {
-                "stoich": [("CO", "g", -1), ("H2O", "g", -1),
-                           ("CO2", "g", +1), ("H2", "g", +1)],
-                "name": "WGS", "T_range": (473, 773),
-                "dh_default": -41.2,
-            }),
-            ("Steam reforming de metano (CH4 + H2O → CO + 3H2)", {
-                "stoich": [("CH4", "g", -1), ("H2O", "g", -1),
-                           ("CO", "g", +1), ("H2", "g", +3)],
-                "name": "Steam reforming", "T_range": (973, 1273),
-                "dh_default": 206.1,
-            }),
-            ("Methanation (CO + 3H2 → CH4 + H2O)", {
-                "stoich": [("CO", "g", -1), ("H2", "g", -3),
-                           ("CH4", "g", +1), ("H2O", "g", +1)],
-                "name": "Methanation", "T_range": (523, 723),
-                "dh_default": -206.1,
-            }),
-            ("Hidrólisis de éster (RCOOR' + H2O)", {
-                "stoich": [("RCOOR'", "l", -1), ("H2O", "l", -1),
-                           ("RCOOH", "l", +1), ("R'OH", "l", +1)],
-                "name": "Hidrólisis", "T_range": (333, 423),
-                "dh_default": 0.0,
-            }),
-            ("Síntesis de amoníaco (N2 + 3H2 → 2NH3)", {
-                "stoich": [("N2", "g", -1), ("H2", "g", -3), ("NH3", "g", +2)],
-                "name": "Haber-Bosch", "T_range": (673, 823),
-                "dh_default": -91.8,
-            }),
-        ]
-        for disp, data in self._templates:
-            self.tpl_combo.addItem(disp, data)
-        self.tpl_combo.currentIndexChanged.connect(self._apply_template)
-        layout.addRow("Plantilla:", self.tpl_combo)
-
-        # ─── Barra de helpers (auto-balance + predecir + ΔH) ───
-        helpers_row = QWidget()
-        h_lay = QHBoxLayout(helpers_row)
-        h_lay.setContentsMargins(0, 0, 0, 0)
-        btn_balance = QPushButton("⚖ Auto-balancear")
-        btn_balance.setToolTip(
-            "Calcula los coeficientes estequiometricos a partir de las\n"
-            "formulas. Usa el signo actual de ν (negativo=reactivo,\n"
-            "positivo=producto). Si todos estan en 0, asume las primeras\n"
-            "filas como reactivos.\n\n"
-            "Resuelve el null space de la matriz de atomos."
-        )
-        btn_balance.clicked.connect(self._auto_balance)
-        btn_predict = QPushButton("🔮 Predecir")
-        btn_predict.setToolTip(
-            "Dados los REACTIVOS de la tabla (filas con ν<0), llama al\n"
-            "predictor chemfx para sugerir productos + coeficientes +\n"
-            "ΔH. Requiere RDKit + thermo instalados."
-        )
-        btn_predict.clicked.connect(self._predict_from_reactants)
-        btn_sum_dh = QPushButton("Σ ΔH desde stoich")
-        btn_sum_dh.setToolTip(
-            "Suma ΔHf° (Hess) de cada especie de la tabla, ponderado por ν\n"
-            "y por fase (gas/liq). Popula el campo ΔH₂₉₈.\n\n"
-            "Requiere que las especies esten en el thermo_db con dh_f.\n"
-            "Si falta alguna, te avisa."
-        )
-        btn_sum_dh.clicked.connect(self._sum_delta_h_from_stoich)
-        h_lay.addWidget(btn_balance)
-        h_lay.addWidget(btn_predict)
-        h_lay.addWidget(btn_sum_dh)
-        h_lay.addStretch()
-        layout.addRow("", helpers_row)
-
-        # ID + nombre
-        self.id_edit = QLineEdit("CUSTOM-1")
-        layout.addRow("ID:", self.id_edit)
-        self.name_edit = QLineEdit("Reacción custom")
-        layout.addRow("Nombre:", self.name_edit)
-
-        # ─── Tabla de especies dinamica ───
-        # Col 0 = QComboBox editable poblado con thermo_db (nombre - formula).
-        # Col 1 = QComboBox con fases (g, l, s, aq).
-        # Col 2 = QTableWidgetItem editable (nu).
-        # Empieza con 4 filas; se agregan/quitan dinamicamente.
-        self.tbl = QTableWidget(0, 3)
-        self.tbl.setHorizontalHeaderLabels(["Compuesto", "Fase", "ν"])
-        self.tbl.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
-        self.tbl.setMinimumHeight(140)
-        self.tbl.setMaximumHeight(260)
-        self.tbl.verticalHeader().setDefaultSectionSize(28)
-        # Click derecho en una fila → menu contextual (eliminar)
-        self.tbl.setContextMenuPolicy(Qt.CustomContextMenu)
-        self.tbl.customContextMenuRequested.connect(self._show_row_menu)
-        # Cargar lista del thermo_db
+        # Cargar thermo_db
         try:
             import thermo_db as _tdb
-            _names = sorted(_tdb.list_names())
             self._thermo_db = _tdb
+            _names = sorted(_tdb.list_names())
         except Exception:
-            _tdb = None
-            _names = []
             self._thermo_db = None
-        # Construir "nombre (formula)" para mostrar y un map paralelo
-        # para resolver de nuevo a formula al leer la celda.
-        self._compound_items: list = []   # [(display, formula, name)]
+            _names = []
+        self._compound_items = []
         for n in _names:
             try:
-                ct = _tdb.get(n)
+                ct = self._thermo_db.get(n) if self._thermo_db else None
             except Exception:
                 ct = None
             f = getattr(ct, "formula", "") if ct else ""
-            disp = f"{n}" + (f"  ({f})" if f else "")
+            disp = f"{n}  ({f})" if f else n
             self._compound_items.append((disp, f, n))
         self._disp_list = [d for d, _, _ in self._compound_items]
-        # Crear 4 filas iniciales
-        for _ in range(4):
-            self._add_species_row()
-        layout.addRow("Especies:", self.tbl)
 
-        # Botones +/- fila
-        rowbtns = QWidget()
-        rb_lay = QHBoxLayout(rowbtns)
-        rb_lay.setContentsMargins(0, 0, 0, 0)
-        btn_add_row = QPushButton("+ Agregar especie")
-        btn_add_row.setToolTip("Agregar una fila vacia al final de la tabla.")
-        btn_add_row.clicked.connect(lambda: self._add_species_row())
-        rb_lay.addWidget(btn_add_row)
-        hint_ctx = QLabel("(click derecho en una fila para eliminarla)")
-        hint_ctx.setStyleSheet("color: #888; font-size: 8pt;")
-        rb_lay.addWidget(hint_ctx)
-        rb_lay.addStretch()
-        layout.addRow("", rowbtns)
+        # ─── Layout principal ───
+        outer = QVBoxLayout(self)
+        outer.setContentsMargins(20, 16, 20, 16)
+        outer.setSpacing(10)
 
-        # ─── Balance atomico en vivo ───
-        self.balance_label = QLabel("Balance: (vacio)")
-        self.balance_label.setStyleSheet(
-            "padding: 4px; border: 1px solid #ccc; border-radius: 3px; "
-            "background: #f9f9f9; font-family: monospace;"
-        )
-        layout.addRow("", self.balance_label)
+        # Título
+        title = QLabel("✨ Nueva reacción")
+        title.setStyleSheet(
+            "font-size: 17pt; font-weight: 600; color: #111;")
+        outer.addWidget(title)
+        hint = QLabel(
+            "Elegí reactivos y productos. Los coeficientes, el balance "
+            "atómico y el ΔH se calculan automáticamente.")
+        hint.setStyleSheet("color: #666; font-size: 9pt;")
+        hint.setWordWrap(True)
+        outer.addWidget(hint)
 
-        # ΔH₂₉₈
+        # Reactivos
+        outer.addWidget(self._section_label("Reactivos"))
+        rb, self.reactant_layout = self._make_chip_container()
+        outer.addWidget(rb)
+
+        # Productos
+        outer.addWidget(self._section_label("Productos"))
+        pb, self.product_layout = self._make_chip_container()
+        outer.addWidget(pb)
+
+        # Botón Sugerir productos
+        sg_row = QHBoxLayout()
+        btn_suggest = QPushButton("🔮 Sugerir productos")
+        btn_suggest.setMinimumHeight(34)
+        btn_suggest.setToolTip(
+            "Llama al predictor chemfx con los reactivos elegidos "
+            "para sugerir productos y completar la reacción.")
+        btn_suggest.clicked.connect(self._predict_from_reactants)
+        sg_row.addWidget(btn_suggest)
+        sg_row.addStretch()
+        outer.addLayout(sg_row)
+
+        # Badges
+        bd_row = QHBoxLayout()
+        bd_row.setSpacing(6)
+        self.badge_balance = QLabel("Balance: —")
+        self.badge_balance.setStyleSheet(self._badge_style("neutral"))
+        self.badge_dh = QLabel("ΔH: —")
+        self.badge_dh.setStyleSheet(self._badge_style("neutral"))
+        bd_row.addWidget(self.badge_balance)
+        bd_row.addWidget(self.badge_dh)
+        bd_row.addStretch()
+        outer.addLayout(bd_row)
+
+        # Condiciones
+        outer.addWidget(self._section_label("Condiciones típicas"))
+        cond_row = QHBoxLayout()
+        cond_row.addWidget(QLabel("T desde"))
+        self.t_min_edit = QDoubleSpinBox()
+        self.t_min_edit.setRange(100, 5000)
+        self.t_min_edit.setValue(298)
+        self.t_min_edit.setSuffix(" K")
+        cond_row.addWidget(self.t_min_edit)
+        cond_row.addWidget(QLabel("a"))
+        self.t_max_edit = QDoubleSpinBox()
+        self.t_max_edit.setRange(100, 5000)
+        self.t_max_edit.setValue(2000)
+        self.t_max_edit.setSuffix(" K")
+        cond_row.addWidget(self.t_max_edit)
+        cond_row.addStretch()
+        outer.addLayout(cond_row)
+
+        # ─── Avanzado (colapsable) ───
+        self.gb_advanced = QGroupBox(
+            "Avanzado  (ID, nombre, ΔS/Keq, plantillas)")
+        self.gb_advanced.setCheckable(True)
+        self.gb_advanced.setChecked(False)
+        adv = QFormLayout(self.gb_advanced)
+        self.id_edit = QLineEdit("CUSTOM-1")
+        adv.addRow("ID:", self.id_edit)
+        self.name_edit = QLineEdit("Reacción custom")
+        adv.addRow("Nombre:", self.name_edit)
         self.dh_edit = QDoubleSpinBox()
-        self.dh_edit.setRange(-1e4, 1e4); self.dh_edit.setDecimals(2)
-        self.dh_edit.setSingleStep(1.0); self.dh_edit.setSuffix(" kJ/mol")
-        layout.addRow("ΔH₂₉₈:", self.dh_edit)
-
-        # Modo: reversible / irreversible
-        self.rb_rev = QRadioButton("Reversible (dar ΔS o Keq)")
+        self.dh_edit.setRange(-1e4, 1e4)
+        self.dh_edit.setDecimals(2)
+        self.dh_edit.setSuffix(" kJ/mol")
+        self.dh_edit.valueChanged.connect(self._on_dh_changed)
+        adv.addRow("ΔH₂₉₈ override:", self.dh_edit)
+        self.rb_rev = QRadioButton("Reversible (ΔS o Keq)")
         self.rb_irr = QRadioButton("Irreversible (conversión declarada)")
         self.rb_rev.setChecked(True)
         rb_grp = QButtonGroup(self)
-        rb_grp.addButton(self.rb_rev); rb_grp.addButton(self.rb_irr)
-        layout.addRow(self.rb_rev)
-        layout.addRow(self.rb_irr)
-
-        # ΔS₂₉₈ o Keq₂₉₈ (mutuamente excluyentes)
+        rb_grp.addButton(self.rb_rev)
+        rb_grp.addButton(self.rb_irr)
+        adv.addRow("Tipo:", self.rb_rev)
+        adv.addRow("", self.rb_irr)
         self.ds_edit = QDoubleSpinBox()
-        self.ds_edit.setRange(-1e4, 1e4); self.ds_edit.setDecimals(2)
+        self.ds_edit.setRange(-1e4, 1e4)
+        self.ds_edit.setDecimals(2)
         self.ds_edit.setSuffix(" J/(mol·K)")
-        layout.addRow("ΔS₂₉₈ (o vacío):", self.ds_edit)
+        adv.addRow("ΔS₂₉₈:", self.ds_edit)
         self.keq_edit = QDoubleSpinBox()
-        self.keq_edit.setRange(0.0, 1e30); self.keq_edit.setDecimals(6)
-        self.keq_edit.setValue(0.0)
-        layout.addRow("Keq₂₉₈ (o 0=usar ΔS):", self.keq_edit)
-
-        # Rango T
-        self.t_min_edit = QDoubleSpinBox()
-        self.t_min_edit.setRange(100, 5000); self.t_min_edit.setValue(298.15)
-        self.t_min_edit.setSuffix(" K")
-        layout.addRow("T_min:", self.t_min_edit)
-        self.t_max_edit = QDoubleSpinBox()
-        self.t_max_edit.setRange(100, 5000); self.t_max_edit.setValue(2000)
-        self.t_max_edit.setSuffix(" K")
-        layout.addRow("T_max:", self.t_max_edit)
-
-        # Buttons
+        self.keq_edit.setRange(0.0, 1e30)
+        self.keq_edit.setDecimals(6)
+        adv.addRow("Keq₂₉₈:", self.keq_edit)
+        # Plantillas
+        self.tpl_combo = QComboBox()
+        self.tpl_combo.addItem("— Elegir plantilla —", None)
+        self._templates = [
+            ("Combustión CH4", {
+                "r": [("CH4", "g"), ("O2", "g")],
+                "p": [("CO2", "g"), ("H2O", "g")],
+                "T": (298, 2500), "name": "Combustión metano"}),
+            ("Water-gas shift", {
+                "r": [("CO", "g"), ("H2O", "g")],
+                "p": [("CO2", "g"), ("H2", "g")],
+                "T": (473, 773), "name": "Water-gas shift"}),
+            ("Esterificación HAc+EtOH", {
+                "r": [("C2H4O2", "l"), ("C2H6O", "l")],
+                "p": [("C4H8O2", "l"), ("H2O", "l")],
+                "T": (333, 423), "name": "Esterificación HAc+EtOH"}),
+            ("Steam reforming CH4", {
+                "r": [("CH4", "g"), ("H2O", "g")],
+                "p": [("CO", "g"), ("H2", "g")],
+                "T": (973, 1273), "name": "Steam reforming CH4"}),
+            ("Methanation", {
+                "r": [("CO", "g"), ("H2", "g")],
+                "p": [("CH4", "g"), ("H2O", "g")],
+                "T": (523, 723), "name": "Methanation"}),
+            ("Haber-Bosch (NH3)", {
+                "r": [("N2", "g"), ("H2", "g")],
+                "p": [("NH3", "g")],
+                "T": (673, 823), "name": "Haber-Bosch"}),
+        ]
+        for disp, data in self._templates:
+            self.tpl_combo.addItem(disp, data)
+        self.tpl_combo.currentIndexChanged.connect(self._apply_template_v2)
+        adv.addRow("Plantilla:", self.tpl_combo)
+        btn_rebal = QPushButton("⚖ Re-balancear manualmente")
+        btn_rebal.clicked.connect(lambda: self._auto_balance_chips(silent=False))
+        adv.addRow("", btn_rebal)
+        outer.addWidget(self.gb_advanced)
+        self.gb_advanced.toggled.connect(self._toggle_advanced)
+        # Botones OK/Cancel
         buttons = QDialogButtonBox(
             QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
+        buttons.button(QDialogButtonBox.Ok).setText("Guardar")
         buttons.accepted.connect(self._on_accept)
         buttons.rejected.connect(self.reject)
-        layout.addRow(buttons)
+        outer.addWidget(buttons)
 
-    def _parse_equation(self):
-        """'A + 2 B -> C + D' → autopopula la tabla de especies."""
+        # Init: render chips + colapsar avanzado
+        self._refresh_chips()
+        self._toggle_advanced(False)
+        self._recompute_all()
+
+    # ─── helpers de UI ───
+    def _section_label(self, text):
+        l = QLabel(text)
+        l.setStyleSheet(
+            "font-size: 10pt; font-weight: 600; color: #555; "
+            "padding-top: 6px;")
+        return l
+
+    def _make_chip_container(self):
+        fr = QFrame()
+        fr.setStyleSheet(
+            "QFrame { background: #f5f5f7; border-radius: 10px; "
+            "padding: 6px; }")
+        fr.setMinimumHeight(54)
+        lay = QHBoxLayout(fr)
+        lay.setContentsMargins(8, 6, 8, 6)
+        lay.setSpacing(6)
+        return fr, lay
+
+    def _badge_style(self, kind):
+        if kind == "ok":
+            return ("padding: 5px 14px; border-radius: 12px; font-size: 9pt; "
+                    "font-weight: 500; color: #16632c; background: #d4ecd4;")
+        if kind == "bad":
+            return ("padding: 5px 14px; border-radius: 12px; font-size: 9pt; "
+                    "font-weight: 500; color: #8b0000; background: #fbd0d0;")
+        return ("padding: 5px 14px; border-radius: 12px; font-size: 9pt; "
+                "color: #666; background: #e8e8e8;")
+
+    def _refresh_chips(self):
+        """Limpia y reconstruye los layouts de chips desde reactant_chips
+        + product_chips."""
+        if not hasattr(self, "reactant_layout"):
+            return
+        for lay, chips, side in (
+            (self.reactant_layout, self.reactant_chips, "reactant"),
+            (self.product_layout,  self.product_chips,  "product"),
+        ):
+            while lay.count() > 0:
+                it = lay.takeAt(0)
+                w = it.widget()
+                if w is not None:
+                    w.setParent(None)
+            for ch in chips:
+                w = self._make_chip_widget(side, ch)
+                ch["widget"] = w
+                lay.addWidget(w)
+            # Botón +
+            btn_add = QPushButton("+")
+            btn_add.setFixedSize(34, 34)
+            btn_add.setStyleSheet(
+                "QPushButton { border-radius: 17px; background: #34c759; "
+                "color: white; font-weight: bold; font-size: 14pt; border: none; }"
+                "QPushButton:hover { background: #2ab04b; }"
+            )
+            btn_add.setToolTip(
+                "Agregar reactivo" if side == "reactant" else "Agregar producto")
+            btn_add.clicked.connect(
+                lambda _c=False, s=side: self._open_picker(s))
+            lay.addWidget(btn_add)
+            lay.addStretch()
+
+    def _make_chip_widget(self, side, ch):
+        fr = QFrame()
+        fr.setStyleSheet(
+            "QFrame { background: white; border: 1px solid #d0d0d0; "
+            "border-radius: 14px; }"
+        )
+        fr.setMinimumHeight(32)
+        h = QHBoxLayout(fr)
+        h.setContentsMargins(10, 4, 4, 4)
+        h.setSpacing(2)
+        nu_abs = abs(ch.get("nu", 0))
+        prefix = (f"{nu_abs} " if nu_abs > 1 else "")
+        nm = ch.get("name") or ch.get("formula") or "?"
+        phase = ch.get("phase", "g")
+        lbl = QLabel(
+            f"<b>{prefix}{nm}</b>"
+            f"&nbsp;&nbsp;<span style='color:#888; font-size:8pt;'>({phase})</span>"
+        )
+        h.addWidget(lbl)
+        btn_x = QPushButton("×")
+        btn_x.setFixedSize(22, 22)
+        btn_x.setStyleSheet(
+            "QPushButton { border: none; color: #999; font-size: 13pt; "
+            "background: transparent; }"
+            "QPushButton:hover { color: #c41e3a; }"
+        )
+        btn_x.clicked.connect(
+            lambda _c=False, s=side, c=ch: self._remove_chip(s, c))
+        h.addWidget(btn_x)
+        return fr
+
+    def _toggle_advanced(self, checked):
+        for w in self.gb_advanced.findChildren(QWidget):
+            if w is self.gb_advanced:
+                continue
+            w.setVisible(bool(checked))
+
+    # ─── operaciones sobre chips ───
+    def _open_picker(self, side):
+        from PySide6.QtWidgets import QInputDialog
+        if not self._disp_list:
+            QMessageBox.warning(self, "Agregar",
+                "El thermo_db no cargó. No puedo listar compuestos.")
+            return
+        disp, ok = QInputDialog.getItem(
+            self, "Agregar " + ("reactivo" if side == "reactant" else "producto"),
+            "Buscá el compuesto (podés tipear para filtrar):",
+            self._disp_list, 0, True)
+        if not ok or not disp:
+            return
+        formula = ""
+        name = disp.strip()
+        for d, f, n in self._compound_items:
+            if d == disp:
+                formula = f
+                name = n
+                break
+        if not formula:
+            formula = disp.split()[0]
+            name = formula
+        phase, ok = QInputDialog.getItem(
+            self, f"Fase de {name}",
+            "Estado de la materia:",
+            ["g (gas)", "l (líquido)", "s (sólido)", "aq (acuoso)"],
+            0, False)
+        if not ok:
+            return
+        phase = phase.split()[0]
+        chips = (self.reactant_chips
+                 if side == "reactant" else self.product_chips)
+        sign = -1 if side == "reactant" else +1
+        chips.append({
+            "formula": formula, "phase": phase, "nu": sign,
+            "name": name, "widget": None,
+        })
+        self._refresh_chips()
+        self._auto_balance_chips(silent=True)
+        self._recompute_all()
+
+    def _remove_chip(self, side, ch):
+        chips = (self.reactant_chips
+                 if side == "reactant" else self.product_chips)
+        if ch in chips:
+            chips.remove(ch)
+        self._refresh_chips()
+        self._auto_balance_chips(silent=True)
+        self._recompute_all()
+
+    def _all_chips(self):
+        return self.reactant_chips + self.product_chips
+
+    # ─── balance + ΔH + predictor ───
+    def _atom_counts(self, formula):
         import re
-        eq = self.eq_edit.text().strip()
-        if "->" not in eq and "→" not in eq:
-            return
-        eq = eq.replace("→", "->")
-        lhs, rhs = eq.split("->", 1)
-        def _parse_side(side, sign):
-            terms = [t.strip() for t in side.split("+") if t.strip()]
-            out = []
-            for t in terms:
-                m = re.match(r"^(\d+\.?\d*)?\s*([A-Za-z][\w\d]*)$", t)
-                if not m:
-                    continue
-                coef = float(m.group(1)) if m.group(1) else 1.0
-                formula = m.group(2)
-                out.append((formula, int(coef * sign)))
-            return out
-        species = _parse_side(lhs, -1) + _parse_side(rhs, +1)
-        # Ajustar el numero de filas a lo necesario (minimo 2)
-        n_needed = max(2, len(species))
-        while self.tbl.rowCount() < n_needed:
-            self._add_species_row()
-        while self.tbl.rowCount() > n_needed:
-            self.tbl.removeRow(self.tbl.rowCount() - 1)
-        for i in range(self.tbl.rowCount()):
-            if i < len(species):
-                f, nu = species[i]
-                self._set_compound_in_row(i, f)
-                self._set_phase_in_row(i, "g")
-                self.tbl.item(i, 2).setText(str(nu))
-            else:
-                self._set_compound_in_row(i, "")
-                self.tbl.item(i, 2).setText("")
-        self._recompute_balance()
-
-    # ─── Helpers Fase 8b: auto-balance + predict ───
-    def _formula_from_combo(self, row: int) -> str:
-        """Devuelve la formula del compuesto seleccionado en la fila.
-
-        El combo muestra 'nombre (formula)'. Resuelve via _compound_items;
-        si el user tipeo manualmente algo que no esta en la lista, intenta
-        usar lo escrito tal cual (asumiendo que es ya una formula)."""
-        cb = self.tbl.cellWidget(row, 0)
-        if cb is None:
-            return ""
-        txt = (cb.currentText() or "").strip()
-        if not txt:
-            return ""
-        # Match exacto en la lista cargada
-        for disp, formula, _name in getattr(self, "_compound_items", []):
-            if disp == txt:
-                return formula or txt
-        # Match case-insensitive por nombre o por formula
-        low = txt.lower()
-        for disp, formula, name in getattr(self, "_compound_items", []):
-            if name.lower() == low or (formula and formula.lower() == low):
-                return formula or txt
-        # No matchea: usar lo escrito tal cual como formula
-        return txt
-
-    def _phase_from_combo(self, row: int) -> str:
-        cb = self.tbl.cellWidget(row, 1)
-        if cb is None:
-            return "g"
-        return (cb.currentText() or "g").strip() or "g"
-
-    def _set_compound_in_row(self, row: int, formula: str) -> None:
-        """Selecciona en el combo de la fila la entrada cuya formula
-        coincide; si no la encuentra, deja el texto libre."""
-        cb = self.tbl.cellWidget(row, 0)
-        if cb is None:
-            return
-        target = formula.strip()
-        if not target:
-            cb.setCurrentIndex(0)
-            return
-        for disp, f, _ in getattr(self, "_compound_items", []):
-            if f == target:
-                idx = cb.findText(disp)
-                if idx >= 0:
-                    cb.setCurrentIndex(idx)
-                    return
-        cb.setEditText(target)
-
-    def _set_phase_in_row(self, row: int, phase: str) -> None:
-        cb = self.tbl.cellWidget(row, 1)
-        if cb is None:
-            return
-        idx = cb.findText((phase or "g").strip() or "g")
-        cb.setCurrentIndex(idx if idx >= 0 else 0)
-
-    def _add_species_row(self):
-        """Agrega una fila vacia al final de la tabla con sus widgets."""
-        r = self.tbl.rowCount()
-        self.tbl.insertRow(r)
-        # Combo de compuesto
-        cb_cmp = QComboBox()
-        cb_cmp.setEditable(True)
-        cb_cmp.addItem("")
-        cb_cmp.addItems(self._disp_list)
-        if self._disp_list:
-            comp = QCompleter(self._disp_list, cb_cmp)
-            comp.setCaseSensitivity(Qt.CaseInsensitive)
-            comp.setFilterMode(Qt.MatchContains)
-            cb_cmp.setCompleter(comp)
-        cb_cmp.setCurrentIndex(0)
-        cb_cmp.currentIndexChanged.connect(
-            lambda _i, row=r: self._on_compound_changed(row))
-        cb_cmp.editTextChanged.connect(
-            lambda _t, row=r: self._on_compound_changed(row))
-        self.tbl.setCellWidget(r, 0, cb_cmp)
-        # Combo de fase
-        cb_ph = QComboBox()
-        cb_ph.addItems(["g", "l", "s", "aq"])
-        cb_ph.currentIndexChanged.connect(
-            lambda _i, row=r: self._on_compound_changed(row))
-        self.tbl.setCellWidget(r, 1, cb_ph)
-        # nu editable
-        nu_it = QTableWidgetItem("")
-        self.tbl.setItem(r, 2, nu_it)
-        # Reconectar cellChanged una sola vez (es global a la tabla,
-        # no por fila — usamos un flag para no duplicar la connection).
-        if not getattr(self, "_cell_signal_connected", False):
-            self.tbl.cellChanged.connect(
-                lambda _r, _c: self._recompute_balance())
-            self._cell_signal_connected = True
-        self._recompute_balance()
-
-    def _show_row_menu(self, pos):
-        """Menu contextual para eliminar la fila bajo el cursor."""
-        row = self.tbl.rowAt(pos.y())
-        if row < 0:
-            return
-        from PySide6.QtWidgets import QMenu
-        menu = QMenu(self.tbl)
-        act_del = menu.addAction("Eliminar esta especie")
-        act_clr = menu.addAction("Limpiar esta fila")
-        action = menu.exec(self.tbl.mapToGlobal(pos))
-        if action == act_del:
-            if self.tbl.rowCount() > 2:
-                self.tbl.removeRow(row)
-                self._recompute_balance()
-            else:
-                QMessageBox.information(self, "Eliminar",
-                    "Se necesitan al menos 2 especies (reactivo + producto).")
-        elif action == act_clr:
-            self._set_compound_in_row(row, "")
-            self._set_phase_in_row(row, "g")
-            if self.tbl.item(row, 2) is not None:
-                self.tbl.item(row, 2).setText("")
-            self._recompute_balance()
-
-    def _apply_template(self, idx: int):
-        """Carga la plantilla seleccionada en la tabla. idx==0 = ignorar."""
-        if idx <= 0:
-            return
-        data = self.tpl_combo.itemData(idx)
-        if not isinstance(data, dict):
-            return
-        # Resetear tabla al tamano del template (minimo 2)
-        n_needed = max(2, len(data.get("stoich", [])))
-        while self.tbl.rowCount() < n_needed:
-            self._add_species_row()
-        while self.tbl.rowCount() > n_needed:
-            self.tbl.removeRow(self.tbl.rowCount() - 1)
-        # Limpiar todas las filas primero
-        for i in range(self.tbl.rowCount()):
-            self._set_compound_in_row(i, "")
-            self._set_phase_in_row(i, "g")
-            if self.tbl.item(i, 2) is not None:
-                self.tbl.item(i, 2).setText("")
-        # Poblar
-        for i, (formula, phase, nu) in enumerate(data.get("stoich", [])):
-            self._set_compound_in_row(i, formula)
-            self._set_phase_in_row(i, phase)
-            self.tbl.item(i, 2).setText(str(nu))
-        # Metadata
-        if data.get("name"):
-            self.name_edit.setText(data["name"])
-        tr = data.get("T_range")
-        if tr and len(tr) == 2:
-            self.t_min_edit.setValue(float(tr[0]))
-            self.t_max_edit.setValue(float(tr[1]))
-        if data.get("dh_default") is not None:
-            self.dh_edit.setValue(float(data["dh_default"]))
-        # Volver el combo a "— Plantilla —" para que se pueda reusar
-        self.tpl_combo.blockSignals(True)
-        self.tpl_combo.setCurrentIndex(0)
-        self.tpl_combo.blockSignals(False)
-        self._recompute_balance()
-
-    def _on_compound_changed(self, row: int):
-        """Refresca tooltip del combo con info del thermo_db y recomputa
-        el balance atomico."""
-        cb = self.tbl.cellWidget(row, 0)
-        if cb is None:
-            return
-        f = self._formula_from_combo(row)
-        # Buscar el ComponentThermo
-        info = ""
-        if self._thermo_db is not None and f:
-            try:
-                # Buscar por display match para tener el nombre canonico
-                disp = (cb.currentText() or "").strip()
-                name = None
-                for d, ff, nn in self._compound_items:
-                    if d == disp:
-                        name = nn
-                        break
-                if name is None:
-                    # Buscar por formula
-                    for d, ff, nn in self._compound_items:
-                        if ff == f:
-                            name = nn
-                            break
-                ct = self._thermo_db.get(name) if name else None
-                if ct is not None:
-                    mw = getattr(ct, "mw", None)
-                    dh_g = getattr(ct, "dh_f_gas_kJ_mol", None)
-                    dh_l = getattr(ct, "dh_f_liq_kJ_mol", None)
-                    parts = [f"<b>{name}</b>  ({getattr(ct, 'formula', '')})"]
-                    if mw:
-                        parts.append(f"MW: {mw:.2f} g/mol")
-                    if dh_g is not None:
-                        parts.append(f"ΔHf° gas: {dh_g:+.1f} kJ/mol")
-                    if dh_l is not None:
-                        parts.append(f"ΔHf° liq: {dh_l:+.1f} kJ/mol")
-                    info = "<br>".join(parts)
-            except Exception:
-                info = ""
-        cb.setToolTip(info or f or "")
-        self._recompute_balance()
-
-    def _atom_counts(self, formula: str) -> dict:
-        """Devuelve dict {elemento: nº atomos}. Vacio si no parsea."""
-        import re
-        d: dict = {}
+        d = {}
         if not formula:
             return d
         for m in re.finditer(r"([A-Z][a-z]?)(\d*)", formula):
@@ -1787,371 +1678,262 @@ class CustomReactionDialog(QDialog):
             d[el] = d.get(el, 0) + (int(num) if num else 1)
         return d
 
-    def _recompute_balance(self):
-        """Actualiza self.balance_label con el balance atomico actual."""
-        # Guard: __init__ llama _add_species_row antes de crear balance_label.
-        if not hasattr(self, "balance_label"):
+    def _name_for_formula(self, formula):
+        for _d, f, n in self._compound_items:
+            if f == formula:
+                return n
+        return None
+
+    def _recompute_all(self):
+        """Actualiza badges balance + ΔH; auto-calcula ΔH por Hess si
+        el user no lo overridó manualmente."""
+        if not hasattr(self, "badge_balance"):
             return
-        species = self._read_table_species()
-        if not species:
-            self.balance_label.setText("Balance: (sin especies)")
-            self.balance_label.setStyleSheet(
-                "padding: 4px; border: 1px solid #ccc; border-radius: 3px; "
-                "background: #f9f9f9; font-family: monospace; color: #888;"
-            )
+        chips = self._all_chips()
+        if not chips:
+            self.badge_balance.setText("Balance: vacío")
+            self.badge_balance.setStyleSheet(self._badge_style("neutral"))
+            self.badge_dh.setText("ΔH: —")
+            self.badge_dh.setStyleSheet(self._badge_style("neutral"))
             return
-        # Sumar nu * atom_counts para cada elemento
-        total: dict = {}
-        n_with_nu = 0
-        for _, f, _, nu in species:
+        # Balance
+        total = {}
+        for ch in chips:
+            nu = ch.get("nu", 0)
             if nu == 0:
                 continue
-            n_with_nu += 1
-            for el, n_at in self._atom_counts(f).items():
-                total[el] = total.get(el, 0) + nu * n_at
-        if n_with_nu == 0:
-            self.balance_label.setText("Balance: (sin ν asignados)")
-            self.balance_label.setStyleSheet(
-                "padding: 4px; border: 1px solid #ccc; border-radius: 3px; "
-                "background: #f9f9f9; font-family: monospace; color: #888;"
-            )
-            return
-        ok = all(abs(v) < 1e-6 for v in total.values())
-        parts = [f"{el}: {v:+d}" for el, v in sorted(total.items())]
-        text = "  ".join(parts) if parts else "(sin atomos)"
+            for el, n in self._atom_counts(ch.get("formula", "")).items():
+                total[el] = total.get(el, 0) + nu * n
+        ok = bool(total) and all(abs(v) < 1e-6 for v in total.values())
         if ok:
-            self.balance_label.setText(f"Balance: BALANCEADO ✓  ({text})")
-            self.balance_label.setStyleSheet(
-                "padding: 4px; border: 1px solid #2d7a2d; border-radius: 3px; "
-                "background: #e8f5e8; font-family: monospace; color: #2d7a2d;"
-            )
+            self.badge_balance.setText("✓ Balanceado")
+            self.badge_balance.setStyleSheet(self._badge_style("ok"))
         else:
-            self.balance_label.setText(f"Balance: NO CIERRA ✗  ({text})")
-            self.balance_label.setStyleSheet(
-                "padding: 4px; border: 1px solid #c41e3a; border-radius: 3px; "
-                "background: #fdecec; font-family: monospace; color: #c41e3a;"
-            )
+            non_zero = {k: int(round(v)) for k, v in total.items()
+                        if abs(v) > 1e-6}
+            msg = ("  ".join(f"{k}: {v:+d}" for k, v in non_zero.items())
+                   or "incompleto")
+            self.badge_balance.setText(f"✗ {msg}")
+            self.badge_balance.setStyleSheet(self._badge_style("bad"))
+        # ΔH
+        if not self._user_overrode_dh:
+            dh = self._hess_dh()
+            if dh is not None:
+                self._setting_dh = True
+                try:
+                    self.dh_edit.setValue(dh)
+                finally:
+                    self._setting_dh = False
+                kind = "ok" if dh < 0 else "neutral"
+                self.badge_dh.setText(f"ΔH: {dh:+.1f} kJ/mol")
+                self.badge_dh.setStyleSheet(self._badge_style(kind))
+            else:
+                self.badge_dh.setText("ΔH: — (faltan datos)")
+                self.badge_dh.setStyleSheet(self._badge_style("neutral"))
+        else:
+            v = float(self.dh_edit.value())
+            self.badge_dh.setText(f"ΔH: {v:+.1f} kJ/mol (manual)")
+            self.badge_dh.setStyleSheet(self._badge_style("neutral"))
 
-    def _sum_delta_h_from_stoich(self):
-        """Calcula ΔH₂₉₈ por Hess: Σ ν_i · ΔHf°_i.
-
-        Usa dh_f_gas o dh_f_liq segun la fase de la fila. Avisa si falta
-        algun dato."""
+    def _hess_dh(self):
         if self._thermo_db is None:
-            QMessageBox.warning(self, "ΔH desde stoich",
-                "thermo_db no disponible.")
-            return
-        species = self._read_table_species()
-        if not species:
-            QMessageBox.warning(self, "ΔH desde stoich",
-                "Pone al menos los reactivos y productos primero.")
-            return
-        total_dh = 0.0
-        missing: list = []
-        for _, f, phase, nu in species:
+            return None
+        total = 0.0
+        for ch in self._all_chips():
+            nu = ch.get("nu", 0)
             if nu == 0:
                 continue
-            # Buscar el ComponentThermo por formula
             ct = None
-            for _disp, ff, nn in self._compound_items:
-                if ff == f:
-                    try:
-                        ct = self._thermo_db.get(nn)
-                    except Exception:
-                        ct = None
-                    if ct is not None:
+            name = ch.get("name") or ""
+            try:
+                ct = self._thermo_db.get(name)
+            except Exception:
+                ct = None
+            if ct is None:
+                f = ch.get("formula", "")
+                for _d, ff, nn in self._compound_items:
+                    if ff == f:
+                        try:
+                            ct = self._thermo_db.get(nn)
+                        except Exception:
+                            ct = None
                         break
             if ct is None:
-                missing.append(f"{f} ({phase})  → no esta en thermo_db")
-                continue
+                return None
+            phase = ch.get("phase", "g")
             if phase in ("l", "aq"):
-                dh = getattr(ct, "dh_f_liq_kJ_mol", None)
-                if dh is None:
-                    dh = getattr(ct, "dh_f_gas_kJ_mol", None)
+                dh = (getattr(ct, "dh_f_liq_kJ_mol", None)
+                      or getattr(ct, "dh_f_gas_kJ_mol", None))
             else:
-                dh = getattr(ct, "dh_f_gas_kJ_mol", None)
-                if dh is None:
-                    dh = getattr(ct, "dh_f_liq_kJ_mol", None)
+                dh = (getattr(ct, "dh_f_gas_kJ_mol", None)
+                      or getattr(ct, "dh_f_liq_kJ_mol", None))
             if dh is None:
-                missing.append(f"{f} ({phase})  → ΔHf° no esta en thermo_db")
-                continue
-            total_dh += nu * dh
-        if missing:
-            QMessageBox.warning(self, "ΔH desde stoich — datos faltantes",
-                "No pude calcular ΔH porque faltan datos:\n\n"
-                + "\n".join(missing[:10])
-                + ("\n…" if len(missing) > 10 else ""))
+                return None
+            total += nu * dh
+        return total
+
+    def _on_dh_changed(self, _v):
+        if self._setting_dh:
             return
-        self.dh_edit.setValue(total_dh)
-        QMessageBox.information(self, "ΔH calculado",
-            f"ΔH₂₉₈ = {total_dh:+.2f} kJ/mol\n\n"
-            "Calculado por Hess: Σ ν · ΔHf° de cada especie.\n"
-            "Ya quedo cargado en el campo ΔH₂₉₈.")
+        self._user_overrode_dh = True
+        self._recompute_all()
 
-    def _read_table_species(self):
-        """Lee la tabla y devuelve [(row_idx, formula, phase, nu_actual)]
-        para filas con compuesto no vacio. nu_actual es int (0 si vacio)."""
-        out = []
-        for i in range(self.tbl.rowCount()):
-            f = self._formula_from_combo(i)
-            if not f:
-                continue
-            phase = self._phase_from_combo(i)
-            it_n = self.tbl.item(i, 2)
-            txt = (it_n.text() if it_n else "").strip()
-            try:
-                nu = int(float(txt)) if txt else 0
-            except ValueError:
-                nu = 0
-            out.append((i, f, phase, nu))
-        return out
-
-    def _auto_balance(self):
-        """Calcula los coeficientes estequiometricos por null space.
-
-        Usa el signo actual de ν: si el user puso -1, esa especie es
-        reactivo (ν final sera negativo); si puso +1, producto. Si todos
-        son 0, asume mitad/mitad por orden de fila.
-        """
+    def _auto_balance_chips(self, silent=False):
+        """Calcula coeficientes por null space y los settea en los chips."""
         try:
             import numpy as np
         except ImportError:
-            QMessageBox.warning(self, "Auto-balance",
-                "Requiere numpy. Instalalo con: pip install numpy")
+            if not silent:
+                QMessageBox.warning(self, "Auto-balance",
+                    "Requiere numpy. pip install numpy")
             return
-        import re
         from math import gcd
         from functools import reduce
-
-        species = self._read_table_species()
-        if len(species) < 2:
-            QMessageBox.warning(self, "Auto-balance",
-                "Necesito al menos 2 especies (mejor 3+).")
+        chips = self._all_chips()
+        if len(chips) < 2:
             return
-
-        # Si todos ν=0, asume primer mitad reactivos, segunda mitad productos
-        signs = [1 if nu > 0 else (-1 if nu < 0 else 0)
-                 for _, _, _, nu in species]
-        if all(s == 0 for s in signs):
-            n = len(species)
-            split = max(1, n // 2)
-            signs = [-1] * split + [1] * (n - split)
-
-        # Si alguna fila quedo en 0 sign, asignarle el opuesto del lado mayoritario
-        n_react = sum(1 for s in signs if s < 0)
-        n_prod  = sum(1 for s in signs if s > 0)
-        for i in range(len(signs)):
-            if signs[i] == 0:
-                signs[i] = 1 if n_react >= n_prod else -1
-
-        # Construir matriz de atomos
-        def atoms(formula: str) -> dict:
-            d: dict = {}
-            for m in re.finditer(r"([A-Z][a-z]?)(\d*)", formula):
-                el, num = m.group(1), m.group(2)
-                if not el:
-                    continue
-                d[el] = d.get(el, 0) + (int(num) if num else 1)
-            return d
-
-        atoms_per_species = [atoms(f) for _, f, _, _ in species]
-        all_elements = sorted({e for d in atoms_per_species for e in d})
-        if not all_elements:
-            QMessageBox.warning(self, "Auto-balance",
-                "No pude parsear formulas. Usa formato tipo 'C6H12O6'.")
+        signs = [-1 if ch in self.reactant_chips else +1 for ch in chips]
+        formulas = [ch.get("formula", "") for ch in chips]
+        apsp = [self._atom_counts(f) for f in formulas]
+        all_el = sorted({e for d in apsp for e in d})
+        if not all_el:
             return
-
-        # Convencion del null space: A·ν = 0, con ν = [nu_1, ..., nu_n]
-        # donde nu_i tiene el signo que indica el user (negativo reactivo,
-        # positivo producto). Construimos A directo sobre las formulas
-        # (signos van al final).
-        A = np.zeros((len(all_elements), len(species)), dtype=float)
-        for j, ad in enumerate(atoms_per_species):
-            for i, el in enumerate(all_elements):
+        A = np.zeros((len(all_el), len(chips)))
+        for j, ad in enumerate(apsp):
+            for i, el in enumerate(all_el):
                 A[i, j] = ad.get(el, 0) * signs[j]
-        # Null space: SVD → vectores con singular value ~ 0
-        u, s, vh = np.linalg.svd(A)
-        # vh tiene shape (n_species, n_species). Las filas con singular
-        # value pequeno son del null space. Como hemos paddeado A con
-        # ceros a la derecha si n_elem < n_species, tomar el ultimo vh row.
-        # Buscamos singular values menores a tol:
+        try:
+            _, s, vh = np.linalg.svd(A)
+        except Exception:
+            return
         tol = max(A.shape) * np.spacing(np.linalg.norm(A) or 1.0)
-        # Cantidad de SVs >= tol = rango
         rank = int(np.sum(s > tol))
-        n = len(species)
-        null_dim = n - rank
-        if null_dim == 0:
-            QMessageBox.warning(self, "Auto-balance",
-                "El sistema esta sobredeterminado: no hay vector\n"
-                "estequiometrico que cierre con estas especies.\n"
-                "Revisa las formulas.")
+        null_dim = len(chips) - rank
+        if null_dim != 1:
+            if not silent:
+                if null_dim == 0:
+                    QMessageBox.warning(self, "Auto-balance",
+                        "El sistema está sobredeterminado.\n"
+                        "Revisá las fórmulas o agregá especies que falten.")
+                else:
+                    QMessageBox.warning(self, "Auto-balance",
+                        f"El sistema es ambiguo (null space = {null_dim}).\n"
+                        "Definí mejor las especies.")
             return
-        if null_dim > 1:
-            QMessageBox.warning(self, "Auto-balance",
-                f"El sistema es ambiguo (dimension del null space = {null_dim}).\n"
-                "Hay multiples reacciones independientes posibles.\n"
-                "Pone mas especies o se mas especifico con los signos.")
+        nu = vh[-1, :]
+        nz = next((v for v in nu if abs(v) > 1e-9), 1.0)
+        nu = nu / nz
+        sc = np.round(nu * 10000).astype(int)
+        nzv = [abs(v) for v in sc if v != 0]
+        if not nzv:
             return
-        nu_raw = vh[-1, :]
-        # Normalizar: hacer el primer componente reactante (signo<0 actual) positivo
-        # Multiplicamos por el signo del primer entry no-cero para que sea > 0.
-        nz = next((v for v in nu_raw if abs(v) > 1e-9), 1.0)
-        nu_raw = nu_raw / nz
-        # Escalear a enteros con gcd
-        # Tomar 10000x para enteros, luego dividir por gcd
-        scaled = np.round(nu_raw * 10000).astype(int)
-        # Si todo es 0, fallar
-        non_zero = [abs(v) for v in scaled if v != 0]
-        if not non_zero:
-            QMessageBox.warning(self, "Auto-balance",
-                "El null space dio coeficientes inutilizables (todos cero).")
+        g = reduce(gcd, nzv) or 1
+        coeffs = [int(v // g) for v in sc]
+        if all(c <= 0 for c in coeffs) and any(c < 0 for c in coeffs):
+            coeffs = [-c for c in coeffs]
+        for k, ch in enumerate(chips):
+            ch["nu"] = coeffs[k] * signs[k]
+        self._refresh_chips()
+
+    def _apply_template_v2(self, idx):
+        if idx <= 0:
             return
-        g = reduce(gcd, non_zero)
-        if g == 0:
-            g = 1
-        coeffs = [int(v // g) for v in scaled]
-        # Aplicar signo: el coeficiente final = coef * signo_user
-        final_nu = [c * signs[k] for k, c in enumerate(coeffs)]
-        # Si todos quedaron negativos, voltear
-        if all(v <= 0 for v in final_nu) and any(v < 0 for v in final_nu):
-            final_nu = [-v for v in final_nu]
-        # Verificar balance
-        check: dict = {}
-        for k, (_, f, _, _) in enumerate(species):
-            for el, n_at in atoms_per_species[k].items():
-                check[el] = check.get(el, 0) + final_nu[k] * n_at
-        max_err = max(abs(v) for v in check.values()) if check else 0
-        if max_err > 1e-3:
-            QMessageBox.warning(self, "Auto-balance",
-                f"Balance imperfecto: max error = {max_err:.3g} atomos.\n"
-                "El resultado puede no ser exacto.")
-        # Escribir de vuelta en la tabla
-        for k, (row_idx, _, _, _) in enumerate(species):
-            self.tbl.item(row_idx, 2).setText(str(final_nu[k]))
-        self._recompute_balance()
+        data = self.tpl_combo.itemData(idx)
+        if not isinstance(data, dict):
+            return
+        self.reactant_chips.clear()
+        self.product_chips.clear()
+        for f, ph in data.get("r", []):
+            nm = self._name_for_formula(f) or f
+            self.reactant_chips.append({
+                "formula": f, "phase": ph, "nu": -1,
+                "name": nm, "widget": None})
+        for f, ph in data.get("p", []):
+            nm = self._name_for_formula(f) or f
+            self.product_chips.append({
+                "formula": f, "phase": ph, "nu": +1,
+                "name": nm, "widget": None})
+        self.tpl_combo.blockSignals(True)
+        self.tpl_combo.setCurrentIndex(0)
+        self.tpl_combo.blockSignals(False)
+        if data.get("T"):
+            self.t_min_edit.setValue(float(data["T"][0]))
+            self.t_max_edit.setValue(float(data["T"][1]))
+        if data.get("name"):
+            self.name_edit.setText(data["name"])
+        self._user_overrode_dh = False
+        self._refresh_chips()
+        self._auto_balance_chips(silent=True)
+        self._recompute_all()
 
     def _predict_from_reactants(self):
-        """Llama al predictor chemfx con los reactivos (ν<0) de la tabla
-        y popula productos + coeficientes + ΔH con la mejor prediccion."""
-        # Reactivos = filas con ν<0; si ninguna, tomar todas las filas con
-        # formula como candidato reactivo.
-        species = self._read_table_species()
-        if not species:
-            QMessageBox.warning(self, "Predecir reacción",
-                "Pone al menos los reactivos en la tabla (con ν<0).")
-            return
-        reactants = [f for _, f, _, nu in species if nu < 0]
+        """Predice productos via chemfx a partir de los reactivos elegidos."""
+        reactants = [ch.get("formula", "") for ch in self.reactant_chips]
+        reactants = [r for r in reactants if r]
         if not reactants:
-            reactants = [f for _, f, _, _ in species]
-        # Mapear formulas a nombres del thermo_db
-        try:
-            import thermo_db as _tdb
-        except ImportError:
-            _tdb = None
-        compound_names: list = []
-        if _tdb is not None:
-            try:
-                all_names = _tdb.list_names()
-            except Exception:
-                all_names = []
-            # buscar por formula
-            for f in reactants:
-                match = None
-                for name in all_names:
-                    try:
-                        ct = _tdb.get(name)
-                    except Exception:
-                        continue
-                    if getattr(ct, "formula", "") == f:
-                        match = name
-                        break
-                if match:
-                    compound_names.append(match)
-                else:
-                    compound_names.append(f.lower())  # fallback
-        else:
-            compound_names = [f.lower() for f in reactants]
-
-        # Llamar al predictor
+            QMessageBox.warning(self, "Sugerir productos",
+                "Primero agregá al menos un reactivo (botón verde +).")
+            return
         try:
             from chemfx.predictor.reaction_predictor import predict_reactions
         except ImportError:
-            QMessageBox.warning(self, "Predecir reacción",
-                "chemfx no disponible. Instala RDKit y thermo:\n"
-                "pip install rdkit thermo chemicals")
+            QMessageBox.warning(self, "Sugerir productos",
+                "chemfx no disponible. pip install rdkit thermo")
             return
+        cnames = []
+        for r in reactants:
+            n = self._name_for_formula(r) or r.lower()
+            cnames.append(n)
         T_mid = 0.5 * (self.t_min_edit.value() + self.t_max_edit.value())
         try:
-            fa = predict_reactions(
-                compound_names, T_K=T_mid,
-                include_curated=True, include_predicted=True)
+            fa = predict_reactions(cnames, T_K=T_mid)
         except Exception as e:
-            QMessageBox.warning(self, "Predecir reacción",
-                f"El predictor fallo: {e}")
+            QMessageBox.warning(self, "Sugerir productos",
+                f"El predictor falló: {e}")
             return
-
-        # Combinar curadas + predichas, ordenar por confianza
-        candidates = list(getattr(fa, "curated", []) or []) + \
-                     list(getattr(fa, "predicted", []) or [])
-        if not candidates:
-            QMessageBox.information(self, "Predecir reacción",
-                f"No encontre reacciones plausibles a T={T_mid:.0f} K\n"
-                f"para los reactivos: {', '.join(reactants)}.\n\n"
-                "Probá con mas especies o usá Auto-balancear si ya\n"
-                "sabes los productos.")
+        cands = (list(getattr(fa, "curated", []) or [])
+                 + list(getattr(fa, "predicted", []) or []))
+        if not cands:
+            QMessageBox.information(self, "Sugerir productos",
+                f"No encontré reacciones plausibles a {T_mid:.0f} K\n"
+                f"para: {', '.join(reactants)}.\n\n"
+                "Probá con más reactivos o agregá los productos a mano.")
             return
-        # Si hay >1 candidato, dejar al user elegir
-        if len(candidates) > 1:
+        if len(cands) > 1:
             items = []
-            for r in candidates[:20]:
-                label = getattr(r, "display_label", "") or getattr(r, "id", "?")
+            for r in cands[:15]:
+                lbl = getattr(r, "display_label", "") or getattr(r, "id", "?")
                 conf = getattr(r, "confidence_mechanism", None)
-                conf_s = conf.name if conf else "?"
-                items.append(f"[{conf_s}] {label}")
-            sel, ok = QInputDialog.getItem(
-                self, "Predecir reacción",
-                f"Encontre {len(candidates)} candidata(s). Cual usar?",
+                items.append(f"[{conf.name if conf else '?'}] {lbl}")
+            from PySide6.QtWidgets import QInputDialog
+            sel, ok = QInputDialog.getItem(self, "Sugerir productos",
+                f"Encontré {len(cands)} opción(es). ¿Cuál usar?",
                 items, 0, False)
             if not ok:
                 return
-            idx = items.index(sel)
-            rxn = candidates[idx]
+            rxn = cands[items.index(sel)]
         else:
-            rxn = candidates[0]
-
-        # Popular tabla desde rxn.stoichiometry
+            rxn = cands[0]
         stoich = list(getattr(rxn, "stoichiometry", []) or [])
         if not stoich:
-            QMessageBox.warning(self, "Predecir reacción",
-                "La reaccion seleccionada no tiene stoich (¿bug?).")
+            QMessageBox.warning(self, "Sugerir productos",
+                "La reacción seleccionada no trae estequiometría.")
             return
-        # Ajustar el numero de filas a lo necesario
-        n_needed = max(2, len(stoich))
-        while self.tbl.rowCount() < n_needed:
-            self._add_species_row()
-        while self.tbl.rowCount() > n_needed:
-            self.tbl.removeRow(self.tbl.rowCount() - 1)
-        # Limpiar tabla
-        for i in range(self.tbl.rowCount()):
-            self._set_compound_in_row(i, "")
-            self._set_phase_in_row(i, "g")
-            self.tbl.item(i, 2).setText("")
-        for i, sp in enumerate(stoich[:self.tbl.rowCount()]):
-            self._set_compound_in_row(i, str(getattr(sp, "formula", "") or ""))
-            self._set_phase_in_row(i, str(getattr(sp, "phase", "g") or "g"))
-            self.tbl.item(i, 2).setText(str(int(getattr(sp, "nu", 0) or 0)))
-
-        # ΔH y nombre
-        dh = getattr(rxn, "delta_h_298", None)
-        if dh is not None:
-            try:
-                self.dh_edit.setValue(float(getattr(dh, "value", 0.0)))
-            except Exception:
-                pass
+        self.reactant_chips.clear()
+        self.product_chips.clear()
+        for sp in stoich:
+            f = str(getattr(sp, "formula", "") or "")
+            ph = str(getattr(sp, "phase", "g") or "g")
+            nu = int(getattr(sp, "nu", 0) or 0)
+            if nu == 0:
+                continue
+            nm = self._name_for_formula(f) or f
+            ch = {"formula": f, "phase": ph, "nu": nu,
+                  "name": nm, "widget": None}
+            (self.reactant_chips if nu < 0 else self.product_chips).append(ch)
         label = getattr(rxn, "display_label", "") or getattr(rxn, "id", "")
         if label:
             self.name_edit.setText(label[:60])
-        # Reflejar T range si viene
         tr = getattr(rxn, "T_range_K", None)
         if tr and len(tr) == 2:
             try:
@@ -2159,22 +1941,25 @@ class CustomReactionDialog(QDialog):
                 self.t_max_edit.setValue(float(tr[1]))
             except Exception:
                 pass
-        self._recompute_balance()
+        self._user_overrode_dh = False
+        self._refresh_chips()
+        self._recompute_all()
 
     def _on_accept(self):
         import reactions_db as _rdb
-        # Construir dict desde inputs
         stoich = []
-        for i in range(self.tbl.rowCount()):
-            f = self._formula_from_combo(i)
-            if not f:
+        for ch in self._all_chips():
+            f = ch.get("formula", "")
+            nu = int(ch.get("nu", 0))
+            if not f or nu == 0:
                 continue
-            ph = self._phase_from_combo(i)
-            try:
-                nu = int(self.tbl.item(i, 2).text())
-            except (ValueError, AttributeError):
-                continue
-            stoich.append({"formula": f, "phase": ph or "g", "nu": nu})
+            ph = ch.get("phase", "g")
+            stoich.append({"formula": f, "phase": ph, "nu": nu})
+        if len(stoich) < 2:
+            QMessageBox.warning(self, "Guardar",
+                "Necesito al menos un reactivo y un producto.\n"
+                "Tip: tocá los botones verdes + para agregar.")
+            return
         d = {
             "id":   self.id_edit.text().strip() or "CUSTOM-?",
             "name": self.name_edit.text().strip() or "Custom",
@@ -2191,12 +1976,11 @@ class CustomReactionDialog(QDialog):
                 d["keq_298"] = keq
             else:
                 d["ds_rxn_298_J_mol_K"] = ds
-        # Validar
         try:
-            _rdb.reaction_from_dict(d)   # solo validación; descartar resultado
+            _rdb.reaction_from_dict(d)
         except ValueError as e:
             QMessageBox.warning(self, "Reacción inválida", str(e))
-            return  # NO cerrar
+            return
         self.result_dict = d
         self.accept()
 
