@@ -34,7 +34,7 @@ from PySide6.QtGui import (
 from PySide6.QtWidgets import (
     QWidget, QDockWidget, QHBoxLayout, QVBoxLayout, QFormLayout, QGridLayout,
     QLabel, QLineEdit, QPushButton, QToolButton, QFrame, QScrollArea,
-    QSizePolicy, QSpacerItem, QComboBox, QTextEdit, QMessageBox,
+    QSizePolicy, QSpacerItem, QComboBox, QTextEdit, QMessageBox, QCheckBox,
     QButtonGroup, QApplication, QStyle,
 )
 
@@ -96,6 +96,186 @@ PANEL_W   = 520
 
 
 # ════════════════════════════════════════════════════════
+#  PREFERENCIAS — temas, densidades, acentos
+# ════════════════════════════════════════════════════════
+# Estos diccionarios definen alternativas que el usuario puede elegir
+# desde Vista > Preferencias…  Al cambiar, mutamos TOK / ROW_PAD /
+# SECT_GAP in-place y emitimos un signal global para que widgets
+# vivos se re-construyan.
+
+THEME_LIGHT = {
+    "bg": "#f6f3ec", "bg_elev": "#ffffff", "bg_mute": "#f1ede4",
+    "bg_sunk": "#ece6d8",
+    "line": "#e6e0d0", "line_strong": "#d4ccb8", "line_soft": "#efeadd",
+    "ink": "#1a1714", "ink_mute": "#6b6256",
+    "ink_soft": "#948a7c", "ink_ghost": "#bab2a3",
+    "spec_bg": "#eef1ff", "spec": "#3548b4",
+    "spec_ink": "#2a3a9a", "spec_ribbon": "#4a5dcc",
+    "auto_bg": "#f3efe5", "auto_ink": "#918878", "auto_ribbon": "#c9c0ad",
+    "green": "#4d8742", "green_bg": "#e6f0df",
+    "amber": "#b8841a", "amber_bg": "#f4ecd1",
+    "orange": "#c26329", "orange_bg": "#f5e1d0",
+    "danger": "#b8453a", "danger_bg": "#f3dcd8",
+    "tag_bg": "#ede7d6", "tag_ink": "#6b6253",
+}
+
+THEME_DARK = {
+    "bg": "#16130f", "bg_elev": "#1f1b16", "bg_mute": "#26211b",
+    "bg_sunk": "#110e0a",
+    "line": "#2f2920", "line_strong": "#3f3830", "line_soft": "#251f18",
+    "ink": "#efe7d6", "ink_mute": "#a59a89",
+    "ink_soft": "#6f6759", "ink_ghost": "#4a4438",
+    "spec_bg": "#20254a", "spec": "#92a0ef",
+    "spec_ink": "#b4befa", "spec_ribbon": "#8294f5",
+    "auto_bg": "#221d16", "auto_ink": "#8a8170", "auto_ribbon": "#463f33",
+    "green": "#85b274", "green_bg": "#1f2a1d",
+    "amber": "#d8aa3a", "amber_bg": "#2e2618",
+    "orange": "#d18a55", "orange_bg": "#2e2118",
+    "danger": "#d97262", "danger_bg": "#2e1a17",
+    "tag_bg": "#2a241d", "tag_ink": "#a59a89",
+}
+
+# Acentos: 4 presets que sobrescriben los 4 tokens de accent.
+ACCENTS = {
+    "teal": {     # default — teal profundo
+        "accent": "#0d6e78", "accent_deep": "#064951",
+        "accent_soft": "#d4ebed", "accent_tint": "#eaf4f5",
+    },
+    "terracota": {
+        "accent": "#a44a2b", "accent_deep": "#7a341c",
+        "accent_soft": "#f0d3c5", "accent_tint": "#f7e7df",
+    },
+    "cobalto": {
+        "accent": "#3548b4", "accent_deep": "#1f2e8c",
+        "accent_soft": "#cfd5f0", "accent_tint": "#e5e8f7",
+    },
+    "oliva": {
+        "accent": "#5f7a30", "accent_deep": "#3f5520",
+        "accent_soft": "#d9e3c2", "accent_tint": "#ecf0dc",
+    },
+}
+
+# Dark-mode tiene su propio juego de accents (matiza más suave)
+ACCENTS_DARK = {
+    "teal":      {"accent": "#5dc1cc", "accent_deep": "#92dde4",
+                  "accent_soft": "#1f3a3d", "accent_tint": "#1a2b2d"},
+    "terracota": {"accent": "#d18a6a", "accent_deep": "#ecae8c",
+                  "accent_soft": "#3a221a", "accent_tint": "#2a1812"},
+    "cobalto":   {"accent": "#8a98ed", "accent_deep": "#aab5f4",
+                  "accent_soft": "#23295a", "accent_tint": "#1a1f40"},
+    "oliva":     {"accent": "#9cb56a", "accent_deep": "#bccf8d",
+                  "accent_soft": "#2c3520", "accent_tint": "#1f2618"},
+}
+
+# Densidades: (row_pad, sect_gap)
+DENSITIES = {
+    "compact": (8,  14),
+    "cozy":    (12, 22),
+    "comfy":   (16, 30),
+}
+
+# Estado global de preferencias
+_PREFS = {
+    "theme":   "light",
+    "density": "cozy",
+    "accent":  "teal",
+}
+
+
+def current_prefs() -> dict:
+    return dict(_PREFS)
+
+
+def apply_preferences(theme: str = None, density: str = None,
+                      accent: str = None) -> bool:
+    """Muta TOK / ROW_PAD / SECT_GAP in-place según el tema / densidad /
+    acento elegidos.  Devuelve True si algo cambió.
+
+    Llamar al inicio de la app (cargando prefs.json) y desde el diálogo
+    de preferencias.  Widgets ya construidos NO se actualizan
+    automáticamente — el caller debe reconstruirlos (signal
+    PreferencesChanged emitido).
+    """
+    global ROW_PAD, SECT_GAP
+    changed = False
+    if theme and theme in ("light", "dark") and theme != _PREFS["theme"]:
+        _PREFS["theme"] = theme
+        changed = True
+    if density and density in DENSITIES and density != _PREFS["density"]:
+        _PREFS["density"] = density
+        changed = True
+    if accent and accent in ACCENTS and accent != _PREFS["accent"]:
+        _PREFS["accent"] = accent
+        changed = True
+
+    # Reconstruir TOK
+    base = THEME_DARK if _PREFS["theme"] == "dark" else THEME_LIGHT
+    acc_set = ACCENTS_DARK if _PREFS["theme"] == "dark" else ACCENTS
+    acc = acc_set.get(_PREFS["accent"], acc_set["teal"])
+
+    TOK.clear()
+    TOK.update(base)
+    TOK.update(acc)
+
+    # Densidad
+    ROW_PAD, SECT_GAP = DENSITIES.get(_PREFS["density"], (12, 22))
+    return changed
+
+
+# Inicializa TOK con los defaults para que importar el módulo no rompa
+apply_preferences()
+
+
+# Signal global de cambios — los widgets vivos se suscriben y rebuilen.
+# Lo expone via un QObject helper porque las Signal de Qt necesitan
+# un instancia.
+
+class _PrefsBus:
+    """Bus de eventos para cambios de preferencias.  Lazy-init para
+    no requerir un QApplication al importar el módulo."""
+    _instance = None
+    _obj = None
+
+    @classmethod
+    def signal(cls):
+        if cls._obj is None:
+            from PySide6.QtCore import QObject, Signal as _Sig
+            class _Bus(QObject):
+                themeChanged = _Sig()
+            cls._obj = _Bus()
+        return cls._obj.themeChanged
+
+    @classmethod
+    def emit(cls):
+        sig = cls.signal()
+        sig.emit()
+
+
+# Persistencia: ~/.flowsheet_prefs.json
+import os, json
+_PREFS_PATH = os.path.expanduser("~/.flowsheet_prefs.json")
+
+
+def load_prefs_from_disk():
+    try:
+        with open(_PREFS_PATH) as f:
+            d = json.load(f)
+        apply_preferences(d.get("theme"), d.get("density"), d.get("accent"))
+    except FileNotFoundError:
+        pass
+    except Exception as e:
+        print(f"[prefs] no se pudo cargar {_PREFS_PATH}: {e}")
+
+
+def save_prefs_to_disk():
+    try:
+        with open(_PREFS_PATH, "w") as f:
+            json.dump(_PREFS, f, indent=2)
+    except Exception as e:
+        print(f"[prefs] no se pudo guardar {_PREFS_PATH}: {e}")
+
+
+# ════════════════════════════════════════════════════════
 #  HELPERS
 # ════════════════════════════════════════════════════════
 
@@ -128,6 +308,35 @@ def _is_mixer(eq_type: str) -> bool:
     t = (eq_type or "").lower()
     return "mixer" in t or "mezclador" in t
 
+def _is_flash_vessel(eq_type: str) -> bool:
+    """Flash VLE aplica a Vessels (verticales/horizontales) y Flash drums."""
+    t = (eq_type or "").lower()
+    return ("vessel" in t or "tanque" in t or "flash" in t) and "tower" not in t
+
+def _is_mech_separator(eq_type: str) -> bool:
+    """Filtro o centrífuga — separación sólido/líquido mecánica."""
+    t = (eq_type or "").lower()
+    return "filter" in t or "centrifuge" in t
+
+def _is_dryer(eq_type: str) -> bool:
+    return "dryer" in (eq_type or "").lower()
+
+def _is_crystallizer(eq_type: str) -> bool:
+    return "crystallizer" in (eq_type or "").lower()
+
+def _is_evaporator(eq_type: str) -> bool:
+    return "evaporator" in (eq_type or "").lower()
+
+def _is_cyclone(eq_type: str) -> bool:
+    return "cyclone" in (eq_type or "").lower()
+
+def _has_special_mode(eq_type: str) -> bool:
+    """True si el eq_type tiene un modelo automático nicho (filtro,
+    secador, cristalizador, evaporador, ciclón)."""
+    return (_is_mech_separator(eq_type) or _is_dryer(eq_type)
+            or _is_crystallizer(eq_type) or _is_evaporator(eq_type)
+            or _is_cyclone(eq_type))
+
 def _type_short(eq_type: str) -> str:
     """Etiqueta corta tipo 'REACTOR', 'HX', 'PUMP' para el chip del header."""
     if _is_reactor(eq_type):      return "REACTOR"
@@ -146,6 +355,10 @@ def _sections_for(eq_type: str) -> List[str]:
         secs.append("reactividad")
     if _is_tower(eq_type):
         secs.append("columna")
+    if _is_flash_vessel(eq_type):
+        secs.append("flash")
+    if _has_special_mode(eq_type):
+        secs.append("especial")
     secs.append("sizing")
     secs.append("utility")
     secs.append("economia")
@@ -739,6 +952,8 @@ class _InspectorSidebar(QFrame):
         "termo":       "Termodinámica",
         "reactividad": "Reactividad",
         "columna":     "Etapas y reflujo",
+        "flash":       "Flash VLE",
+        "especial":    "Modo especial",
         "sizing":      "Sizing",
         "utility":     "Utility",
         "economia":    "Economía",
@@ -748,6 +963,8 @@ class _InspectorSidebar(QFrame):
         "termo":       "θ",
         "reactividad": "R",
         "columna":     "≡",
+        "flash":       "V",
+        "especial":    "★",
         "sizing":      "□",
         "utility":     "♨",
         "economia":    "$",
@@ -907,6 +1124,12 @@ class BlockInspectorPanel(QWidget):
         self._extras: Dict[str, object] = {}   # widgets no-SpecField
         self._reaction_rows: List[Tuple[str, ReactionRow]] = []
         self._open_advanced_cb: Optional[Callable] = None
+        # Suscribirse al bus de prefs para re-construir el panel al
+        # cambiar tema/densidad/acento (Vista > Preferencias…).
+        try:
+            _PrefsBus.signal().connect(self._on_prefs_changed)
+        except Exception:
+            pass
 
         outer = QVBoxLayout(self)
         outer.setContentsMargins(0, 0, 0, 0); outer.setSpacing(0)
@@ -1008,6 +1231,22 @@ class BlockInspectorPanel(QWidget):
             f"border-top: 1px solid {TOK['line']}; }}"
         )
         return ft
+
+    def _on_prefs_changed(self):
+        """Callback de Vista > Preferencias…  Reconstruye el panel
+        entero para que el nuevo tema / densidad / acento se aplique
+        a todos los widgets hijos.  Sin block cargado → no-op."""
+        if self.block is None or self.fs is None:
+            return
+        active = self._sidebar.active() or "identidad"
+        self.load_block(self.block, self.fs,
+                        on_save=self._on_save,
+                        open_advanced=self._open_advanced_cb)
+        # restaurar sección activa
+        try:
+            self._switch_section(active)
+        except Exception:
+            pass
 
     # ─── API pública ─────────────────────────────────────
     def load_block(self, block, flowsheet, on_save: Optional[Callable] = None,
@@ -1162,6 +1401,10 @@ class BlockInspectorPanel(QWidget):
         self._fields.clear()
         self._extras.clear()
         self._reaction_rows.clear()
+        # custom reactions: drop el snapshot local — se re-crea desde el
+        # block.custom_reactions cuando se vuelve a entrar a Reactividad
+        if hasattr(self, "_custom_rxns_data"):
+            del self._custom_rxns_data
         b = self.block
         if b is None:
             return
@@ -1172,6 +1415,8 @@ class BlockInspectorPanel(QWidget):
             "termo":       self._section_termo,
             "reactividad": self._section_reactividad,
             "columna":     self._section_columna,
+            "flash":       self._section_flash,
+            "especial":    self._section_especial,
             "sizing":      self._section_sizing,
             "utility":     self._section_utility,
             "economia":    self._section_economia,
@@ -1181,12 +1426,10 @@ class BlockInspectorPanel(QWidget):
             sect = fn(b, eq_type)
             self._content_lay.insertWidget(self._content_lay.count() - 1, sect)
 
-        # Avanzado (siempre disponible — abre el dialog legacy para
-        # opciones de nicho aún no migradas: custom rxns, FUG columna,
-        # separadores mecánicos, batch).
-        if self._open_advanced_cb:
-            adv = self._build_advanced_link()
-            self._content_lay.insertWidget(self._content_lay.count() - 1, adv)
+        # Nota: el link 'Opciones avanzadas…' fue retirado en V2 — todas
+        # las opciones de nicho (custom rxns, FUG columna, flash VLE,
+        # separadores mecánicos, dryer, crystallizer, evaporator, cyclone)
+        # están migradas a secciones nativas del inspector.
 
         # asegurar que el scroll empieza arriba al cambiar de sección
         # (defer un tick para que el layout calcule range primero)
@@ -1421,7 +1664,113 @@ class BlockInspectorPanel(QWidget):
             warn.setStyleSheet(f"color:{TOK['ink_ghost']}; font-style:italic;")
             l.addWidget(warn)
 
+        # ── Reacciones custom ────────────────────────────────
+        # Reacciones in-memory que no están en el catálogo .md.  Cada
+        # una es un dict {id, name, eq?, dh_rxn_298_kJ_mol?, …}.
+        custom_hd = QLabel("Reacciones custom")
+        custom_hd.setFont(QFont(pfd_fonts.SANS, 8, QFont.Bold))
+        custom_hd.setStyleSheet(
+            f"color:{TOK['ink_soft']}; padding-top:12px; letter-spacing:1px;"
+        )
+        l.addWidget(custom_hd)
+
+        self._custom_rxn_list_widget = QVBoxLayout()
+        self._custom_rxn_list_widget.setContentsMargins(0, 0, 0, 0)
+        self._custom_rxn_list_widget.setSpacing(4)
+        # Snapshot mutable de las custom rxns del bloque
+        self._custom_rxns_data = list(getattr(b, "custom_reactions", []) or [])
+        self._refresh_custom_rxn_rows()
+        cl_wrap = QFrame(); cl_wrap.setLayout(self._custom_rxn_list_widget)
+        l.addWidget(cl_wrap)
+
+        # Botón "+ Añadir reacción custom"
+        add_btn = QPushButton("+  Añadir reacción custom")
+        add_btn.setCursor(Qt.PointingHandCursor)
+        add_btn.setFont(QFont(pfd_fonts.SANS, 9))
+        add_btn.setStyleSheet(
+            f"QPushButton {{ background: transparent; color: {TOK['accent']}; "
+            f"border: 1px dashed {TOK['accent_soft']}; border-radius: 7px; "
+            f"padding: 8px; text-align: center; }} "
+            f"QPushButton:hover {{ background: {TOK['accent_tint']}; "
+            f"color: {TOK['accent_deep']}; border-color: {TOK['accent']}; }}"
+        )
+        add_btn.clicked.connect(self._on_add_custom_rxn)
+        l.addWidget(add_btn)
+
         return sect
+
+    def _refresh_custom_rxn_rows(self):
+        """Repuebla la lista visual de custom reactions."""
+        lay = self._custom_rxn_list_widget
+        # limpiar
+        while lay.count():
+            it = lay.takeAt(0)
+            w = it.widget()
+            if w: w.setParent(None); w.deleteLater()
+        if not self._custom_rxns_data:
+            empty = QLabel("(ninguna)  ")
+            empty.setStyleSheet(f"color:{TOK['ink_ghost']}; font-style:italic; padding:4px;")
+            lay.addWidget(empty)
+            return
+        for idx, d in enumerate(self._custom_rxns_data):
+            row = QFrame(); row.setObjectName(f"customRxn_{idx}")
+            row.setStyleSheet(
+                f"#customRxn_{idx} {{ background: {TOK['bg_mute']}; "
+                f"border: 1px solid {TOK['line']}; border-left: 3px solid "
+                f"{TOK['spec_ribbon']}; border-radius: 6px; }}"
+            )
+            rlay = QHBoxLayout(row); rlay.setContentsMargins(10, 6, 6, 6)
+            rlay.setSpacing(8)
+            # diamante indicador
+            dot = QLabel("◆")
+            dot.setStyleSheet(f"color:{TOK['spec']}; font-size:11px;")
+            rlay.addWidget(dot)
+            # nombre + id
+            name = d.get("name") or d.get("id", "?")
+            rid  = d.get("id", "?")
+            nm = QLabel(name)
+            nm.setFont(QFont(pfd_fonts.MONO, 9))
+            nm.setStyleSheet(f"color:{TOK['ink']};")
+            rlay.addWidget(nm, 1)
+            rid_lbl = QLabel(rid)
+            rid_lbl.setFont(QFont(pfd_fonts.MONO, 8))
+            rid_lbl.setStyleSheet(f"color:{TOK['ink_soft']};")
+            rlay.addWidget(rid_lbl)
+            # botón eliminar
+            rm = QToolButton(); rm.setText("✕")
+            rm.setCursor(Qt.PointingHandCursor)
+            rm.setFixedSize(22, 22)
+            rm.setStyleSheet(
+                f"QToolButton {{ background: transparent; color: {TOK['ink_mute']}; "
+                f"border: 0; border-radius: 4px; }} "
+                f"QToolButton:hover {{ background: {TOK['danger_bg']}; "
+                f"color: {TOK['danger']}; }}"
+            )
+            rm.clicked.connect(lambda _=False, i=idx: self._on_remove_custom_rxn(i))
+            rlay.addWidget(rm)
+            lay.addWidget(row)
+
+    def _on_add_custom_rxn(self):
+        """Abre CustomReactionDialog (del flowsheet_qt legacy) y, si el user
+        acepta, lo añade a la lista in-memory."""
+        try:
+            from flowsheet_qt import CustomReactionDialog
+        except Exception:
+            QMessageBox.warning(self, "No disponible",
+                "CustomReactionDialog no está disponible en este entorno.")
+            return
+        dlg = CustomReactionDialog(self)
+        from PySide6.QtWidgets import QDialog as _QDialog
+        if dlg.exec() == _QDialog.Accepted and dlg.result_dict is not None:
+            self._custom_rxns_data.append(dlg.result_dict)
+            self._refresh_custom_rxn_rows()
+            self._update_dof_badges()
+
+    def _on_remove_custom_rxn(self, idx: int):
+        if 0 <= idx < len(self._custom_rxns_data):
+            del self._custom_rxns_data[idx]
+            self._refresh_custom_rxn_rows()
+            self._update_dof_badges()
 
     @staticmethod
     def _confidence_for(r) -> str:
@@ -1454,44 +1803,269 @@ class BlockInspectorPanel(QWidget):
         l = QVBoxLayout(sect); l.setContentsMargins(0, 0, 0, 0); l.setSpacing(8)
         l.addLayout(self._section_header(
             "Etapas y reflujo",
-            help_text="Método FUG (Fenske-Underwood-Gilliland) o Wang-Henke MESH."
+            help_text="FUG (Fenske-Underwood-Gilliland) o Wang-Henke MESH. "
+                      "Activar el diseño automático hace que el solver calcule "
+                      "composiciones de destilado/fondo + Q_reb desde el feed."
         ))
 
+        # Toggle FUG/MESH automático
+        act = QCheckBox("Activar diseño automático")
+        act.setChecked(bool(getattr(b, "column_active", False)))
+        act.setFont(QFont(pfd_fonts.SANS, 9))
+        act.setStyleSheet(self._checkbox_style())
+        self._extras["column_active"] = act
+        l.addWidget(act)
+
+        # LK / HK por nombre de componente
+        lk = QLineEdit(getattr(b, "column_LK", "") or "")
+        lk.setPlaceholderText("ethanol, methanol, propane, ...")
+        lk.setStyleSheet(self._line_input_style())
+        self._extras["column_LK"] = lk
+        l.addWidget(self._row("Light key (LK)", lk,
+                              info="Componente más volátil. Por nombre canónico."))
+        hk = QLineEdit(getattr(b, "column_HK", "") or "")
+        hk.setPlaceholderText("water, butane, ...")
+        hk.setStyleSheet(self._line_input_style())
+        self._extras["column_HK"] = hk
+        l.addWidget(self._row("Heavy key (HK)", hk,
+                              info="Componente menos volátil."))
+
+        # N etapas
         N = int(getattr(b, "column_N_stages", 0) or 0)
         sf_N = self._spec_field("column_N_stages",
                                 value=str(N) if N > 0 else "",
                                 unit="·",
                                 state="spec" if N > 0 else "empty")
-        l.addWidget(self._row("N etapas", sf_N))
+        l.addWidget(self._row("N etapas", sf_N,
+                              info="0/empty → solver lo calcula con Gilliland (FUG)"))
 
+        # Pureza destilado / frac fondo
         xD = float(getattr(b, "column_x_D_LK", 0.95) or 0.95)
-        sf_xD = self._spec_field("column_x_D_LK", value=f"{xD:.3f}", unit="·", state="spec")
+        sf_xD = self._spec_field("column_x_D_LK", value=f"{xD:.4f}",
+                                 unit="·", state="spec")
         l.addWidget(self._row("Pureza LK en destilado", sf_xD))
 
         xB = float(getattr(b, "column_x_B_LK", 0.05) or 0.05)
-        sf_xB = self._spec_field("column_x_B_LK", value=f"{xB:.3f}", unit="·", state="spec")
+        sf_xB = self._spec_field("column_x_B_LK", value=f"{xB:.4f}",
+                                 unit="·", state="spec")
         l.addWidget(self._row("Frac LK en fondo", sf_xB))
 
+        # R / Rmin
         Rf = float(getattr(b, "column_R_factor", 1.3) or 1.3)
-        sf_Rf = self._spec_field("column_R_factor", value=f"{Rf:.2f}", unit="·", state="spec")
-        l.addWidget(self._row("Relación R / Rmin", sf_Rf))
+        sf_Rf = self._spec_field("column_R_factor", value=f"{Rf:.2f}",
+                                 unit="·", state="spec")
+        l.addWidget(self._row("Relación R / Rmin", sf_Rf,
+                              info="Típico 1.2-1.5. R=Rmin requeriría ∞ etapas."))
 
-        # método (combo)
-        m_lay = QHBoxLayout()
-        m_lbl = QLabel("Método")
-        m_lbl.setFont(QFont(pfd_fonts.SANS, 9)); m_lbl.setStyleSheet(f"color:{TOK['ink_mute']};")
-        m_lbl.setMinimumWidth(140)
+        # Método combo
         m_cb = QComboBox()
-        m_cb.addItem("FUG — shortcut", "fug")
-        m_cb.addItem("Wang-Henke MESH", "wanghenke")
+        m_cb.addItem("FUG — shortcut (rápido)", "fug")
+        m_cb.addItem("Wang-Henke MESH (riguroso)", "wanghenke")
         idx = m_cb.findData(getattr(b, "column_method", "fug") or "fug")
         if idx >= 0: m_cb.setCurrentIndex(idx)
         m_cb.setStyleSheet(self._combo_style())
         self._extras["column_method"] = m_cb
-        m_lay.addWidget(m_lbl); m_lay.addWidget(m_cb, 1)
-        wrap = QFrame(); wrap.setLayout(m_lay); l.addWidget(wrap)
+        l.addWidget(self._combo_row("Método", m_cb))
 
         return sect
+
+    def _section_flash(self, b, eq_type) -> QFrame:
+        """Flash isotérmico VLE — Vessels y flash drums."""
+        sect = QFrame()
+        l = QVBoxLayout(sect); l.setContentsMargins(0, 0, 0, 0); l.setSpacing(8)
+        l.addLayout(self._section_header(
+            "Flash VLE",
+            help_text="Si activo, el solver separa vapor/líquido con flash "
+                      "isotérmico NRTL (γ·P_sat) a T_flash, P_flash. Asigna "
+                      "vapor al puerto 'vapor' y líquido al 'liquido'."
+        ))
+
+        act = QCheckBox("Activar flash automático")
+        act.setChecked(bool(getattr(b, "flash_active", False)))
+        act.setFont(QFont(pfd_fonts.SANS, 9))
+        act.setStyleSheet(self._checkbox_style())
+        self._extras["flash_active"] = act
+        l.addWidget(act)
+
+        T_K = float(getattr(b, "flash_T_K", 298.15) or 298.15)
+        sf_T = self._spec_field("flash_T_K", value=f"{T_K:.2f}",
+                                unit="K", state="spec")
+        l.addWidget(self._row("T_flash", sf_T))
+
+        P_bar = float(getattr(b, "flash_P_bar", 1.013) or 1.013)
+        sf_P = self._spec_field("flash_P_bar", value=f"{P_bar:.3f}",
+                                unit="bar", state="spec")
+        l.addWidget(self._row("P_flash", sf_P))
+
+        return sect
+
+    def _section_especial(self, b, eq_type) -> QFrame:
+        """Modos especiales según eq_type: filtro/centrífuga, secador,
+        cristalizador, evaporador, ciclón. Sólo aparece la sub-pieza
+        relevante."""
+        sect = QFrame()
+        l = QVBoxLayout(sect); l.setContentsMargins(0, 0, 0, 0); l.setSpacing(8)
+
+        if _is_mech_separator(eq_type):
+            l.addLayout(self._section_header(
+                "Separación sólido/líquido",
+                sub="Filter / Centrifuge",
+                help_text="Solver computa cake (torta) y madre desde "
+                          "solids_recovery + cake_moisture."
+            ))
+            self._add_active_toggle(l, "separator_active",
+                                    "Activar separador automático",
+                                    getattr(b, "separator_active", False))
+            sr = float(getattr(b, "solids_recovery", 0.95) or 0.95)
+            l.addWidget(self._row("Solids recovery",
+                                  self._spec_field("solids_recovery",
+                                                   value=f"{sr:.3f}",
+                                                   unit="·", state="spec"),
+                                  info="Fracción de sólido que pasa a la torta"))
+            cm = float(getattr(b, "cake_moisture", 0.30) or 0.30)
+            l.addWidget(self._row("Cake moisture",
+                                  self._spec_field("cake_moisture",
+                                                   value=f"{cm:.3f}",
+                                                   unit="·", state="spec"),
+                                  info="Frac. másica de líquido en la torta"))
+            sc = QLineEdit(",".join(getattr(b, "solid_components", []) or []))
+            sc.setPlaceholderText("sucrose, biomass, …  (vacío = main_component)")
+            sc.setStyleSheet(self._line_input_style())
+            self._extras["solid_components"] = sc
+            l.addWidget(self._row("Solid components", sc))
+
+        elif _is_dryer(eq_type):
+            l.addLayout(self._section_header(
+                "Secador (Dryer — drum)",
+                help_text="Solver computa producto seco a humedad final + "
+                          "venteo del vapor del moisture_component."
+            ))
+            self._add_active_toggle(l, "dryer_active",
+                                    "Activar secador automático",
+                                    getattr(b, "dryer_active", False))
+            fm = float(getattr(b, "final_moisture", 0.02) or 0.02)
+            l.addWidget(self._row("Humedad final",
+                                  self._spec_field("final_moisture",
+                                                   value=f"{fm:.3f}",
+                                                   unit="·", state="spec")))
+            mc = QLineEdit(getattr(b, "moisture_component", "water") or "water")
+            mc.setStyleSheet(self._line_input_style())
+            self._extras["moisture_component"] = mc
+            l.addWidget(self._row("Moisture comp.", mc,
+                                  info="Componente que se evapora (default: water)"))
+
+        elif _is_crystallizer(eq_type):
+            l.addLayout(self._section_header(
+                "Cristalizador",
+                help_text="Solver extrae solute_component a cristales según "
+                          "crystal_yield; el resto va a la madre."
+            ))
+            self._add_active_toggle(l, "crystallizer_active",
+                                    "Activar cristalizador automático",
+                                    getattr(b, "crystallizer_active", False))
+            sl = QLineEdit(getattr(b, "solute_component", "") or "")
+            sl.setPlaceholderText("sucrose, urea, …")
+            sl.setStyleSheet(self._line_input_style())
+            self._extras["solute_component"] = sl
+            l.addWidget(self._row("Solute comp.", sl))
+            cy = float(getattr(b, "crystal_yield", 0.80) or 0.80)
+            l.addWidget(self._row("Crystal yield",
+                                  self._spec_field("crystal_yield",
+                                                   value=f"{cy:.3f}",
+                                                   unit="·", state="spec")))
+
+        elif _is_evaporator(eq_type):
+            l.addLayout(self._section_header(
+                "Evaporador",
+                help_text="Solver concentra los sólidos según concentration "
+                          "factor; el volátil sale como vapor."
+            ))
+            self._add_active_toggle(l, "evaporator_active",
+                                    "Activar evaporador automático",
+                                    getattr(b, "evaporator_active", False))
+            cf = float(getattr(b, "concentration_factor", 2.0) or 2.0)
+            l.addWidget(self._row("Concentration factor",
+                                  self._spec_field("concentration_factor",
+                                                   value=f"{cf:.2f}",
+                                                   unit="·", state="spec"),
+                                  info="Ratio sólidos out/in (e.g. 2.0 → masa cae a la mitad)"))
+            vc = QLineEdit(getattr(b, "volatile_component", "water") or "water")
+            vc.setStyleSheet(self._line_input_style())
+            self._extras["volatile_component"] = vc
+            l.addWidget(self._row("Volatile comp.", vc))
+
+        elif _is_cyclone(eq_type):
+            l.addLayout(self._section_header(
+                "Ciclón gas/sólido",
+                help_text="Solver separa sólidos del gas portador según "
+                          "collection efficiency."
+            ))
+            self._add_active_toggle(l, "cyclone_active",
+                                    "Activar ciclón automático",
+                                    getattr(b, "cyclone_active", False))
+            ce = float(getattr(b, "collection_efficiency", 0.90) or 0.90)
+            l.addWidget(self._row("Collection efficiency",
+                                  self._spec_field("collection_efficiency",
+                                                   value=f"{ce:.3f}",
+                                                   unit="·", state="spec")))
+            sc = QLineEdit(",".join(getattr(b, "solid_components", []) or []))
+            sc.setPlaceholderText("silica, clinker, …  (vacío = main_component)")
+            sc.setStyleSheet(self._line_input_style())
+            self._extras["solid_components"] = sc
+            l.addWidget(self._row("Solid components", sc))
+
+        else:
+            empty = QLabel("(No hay modos especiales para este tipo de bloque)")
+            empty.setStyleSheet(f"color:{TOK['ink_soft']}; font-style:italic;")
+            l.addWidget(empty)
+
+        return sect
+
+    # ---- helpers compartidos ----
+    def _add_active_toggle(self, layout, key: str, label: str, checked: bool):
+        cb = QCheckBox(label)
+        cb.setChecked(bool(checked))
+        cb.setFont(QFont(pfd_fonts.SANS, 9))
+        cb.setStyleSheet(self._checkbox_style())
+        self._extras[key] = cb
+        layout.addWidget(cb)
+
+    def _combo_row(self, label: str, combo) -> QFrame:
+        """Row con label + combo (usado en lugar de _row + SpecField)."""
+        r = QFrame()
+        lay = QHBoxLayout(r); lay.setContentsMargins(0, ROW_PAD//2, 0, ROW_PAD//2)
+        lay.setSpacing(12)
+        l = QLabel(label)
+        l.setFont(QFont(pfd_fonts.SANS, 9))
+        l.setStyleSheet(f"color:{TOK['ink_mute']};")
+        l.setMinimumWidth(140)
+        lay.addWidget(l); lay.addWidget(combo, 1)
+        r.setStyleSheet(
+            f"#combo_row {{ border-bottom: 1px solid {TOK['line_soft']}; }}"
+        )
+        return r
+
+    @staticmethod
+    def _checkbox_style() -> str:
+        return (
+            f"QCheckBox {{ color: {TOK['ink']}; spacing: 8px; padding: 4px 0; }} "
+            f"QCheckBox::indicator {{ width: 16px; height: 16px; "
+            f"border: 1.5px solid {TOK['line_strong']}; "
+            f"border-radius: 4px; background: {TOK['bg_elev']}; }} "
+            f"QCheckBox::indicator:checked {{ background: {TOK['accent']}; "
+            f"border-color: {TOK['accent']}; image: none; }} "
+            f"QCheckBox::indicator:hover {{ border-color: {TOK['accent_soft']}; }}"
+        )
+
+    @staticmethod
+    def _line_input_style() -> str:
+        return (
+            f"QLineEdit {{ background: {TOK['bg_elev']}; color: {TOK['ink']}; "
+            f"border: 1px solid {TOK['line_strong']}; border-radius: 7px; "
+            f"padding: 6px 8px; font-family: '{pfd_fonts.SANS}'; font-size: 9pt; }} "
+            f"QLineEdit:focus {{ border: 1.5px solid {TOK['accent']}; }} "
+            f"QLineEdit::placeholder {{ color: {TOK['ink_ghost']}; }}"
+        )
 
     def _section_sizing(self, b, eq_type) -> QFrame:
         sect = QFrame()
@@ -1784,6 +2358,9 @@ class BlockInspectorPanel(QWidget):
             b.reactor_mode = cb.currentData() or "equilibrium"
         if self._reaction_rows:
             b.reactions = [rid for rid, row in self._reaction_rows if row.isOn()]
+        # custom reactions (lista in-memory de dicts)
+        if hasattr(self, "_custom_rxns_data"):
+            b.custom_reactions = list(self._custom_rxns_data)
         # ─── Columna ───
         for key, attr in (
             ("column_N_stages", "column_N_stages"),
@@ -1804,6 +2381,43 @@ class BlockInspectorPanel(QWidget):
         if "column_method" in self._extras:
             cb = self._extras["column_method"]
             b.column_method = cb.currentData() or "fug"
+        if "column_active" in self._extras:
+            b.column_active = bool(self._extras["column_active"].isChecked())
+        if "column_LK" in self._extras:
+            b.column_LK = self._extras["column_LK"].text().strip()
+        if "column_HK" in self._extras:
+            b.column_HK = self._extras["column_HK"].text().strip()
+        # ─── Flash VLE ───
+        if "flash_active" in self._extras:
+            b.flash_active = bool(self._extras["flash_active"].isChecked())
+        for key in ("flash_T_K", "flash_P_bar"):
+            if key in f:
+                v = self._parse_num(f[key].value())
+                try:
+                    setattr(b, key, float(v) if v else 0.0)
+                except Exception:
+                    pass
+        # ─── Modos especiales ───
+        for key in ("separator_active", "dryer_active", "crystallizer_active",
+                    "evaporator_active", "cyclone_active"):
+            if key in self._extras:
+                setattr(b, key, bool(self._extras[key].isChecked()))
+        for key in ("solids_recovery", "cake_moisture", "final_moisture",
+                    "crystal_yield", "concentration_factor",
+                    "collection_efficiency"):
+            if key in f:
+                v = self._parse_num(f[key].value())
+                try:
+                    setattr(b, key, float(v) if v else 0.0)
+                except Exception:
+                    pass
+        for key in ("solute_component", "moisture_component", "volatile_component"):
+            if key in self._extras:
+                setattr(b, key, self._extras[key].text().strip())
+        if "solid_components" in self._extras:
+            txt = self._extras["solid_components"].text().strip()
+            b.solid_components = [t.strip() for t in txt.split(",")
+                                  if t.strip()] if txt else []
         # ─── Sizing ───
         if "U_override" in f:
             v = self._parse_num(f["U_override"].value())
@@ -1879,3 +2493,122 @@ class BlockInspectorDock(QDockWidget):
                               open_advanced=open_advanced)
         self.show()
         self.raise_()
+
+
+# ════════════════════════════════════════════════════════
+#  PREFERENCIAS — diálogo
+# ════════════════════════════════════════════════════════
+
+from PySide6.QtWidgets import QDialog, QDialogButtonBox, QRadioButton
+
+
+class PreferencesDialog(QDialog):
+    """Pequeño diálogo accesible desde Vista > Preferencias…
+
+    Tres grupos exclusivos: Tema (light/dark), Densidad
+    (compact/cozy/comfy), Acento (teal/terracota/cobalto/oliva).
+
+    Al pulsar Aplicar: muta TOK + persiste a disco + emite
+    PrefsBus.signal() para que widgets vivos se reconstruyan.
+    """
+
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.setWindowTitle("Preferencias")
+        self.setMinimumWidth(420)
+        cur = current_prefs()
+
+        lay = QVBoxLayout(self)
+        lay.setContentsMargins(20, 20, 20, 20); lay.setSpacing(18)
+
+        # ── Tema ──
+        lay.addWidget(self._group_title("Tema"))
+        self._theme_group = QButtonGroup(self)
+        themes_row = QHBoxLayout(); themes_row.setSpacing(10)
+        for key, label in [("light", "Claro"), ("dark", "Oscuro")]:
+            rb = QRadioButton(label)
+            rb.setChecked(cur["theme"] == key)
+            rb.setProperty("value", key)
+            self._theme_group.addButton(rb)
+            themes_row.addWidget(rb)
+        themes_row.addStretch(1)
+        wrap = QFrame(); wrap.setLayout(themes_row); lay.addWidget(wrap)
+
+        # ── Densidad ──
+        lay.addWidget(self._group_title("Densidad"))
+        self._density_group = QButtonGroup(self)
+        dens_row = QHBoxLayout(); dens_row.setSpacing(10)
+        for key, label in [("compact", "Compacta"), ("cozy", "Cómoda"),
+                           ("comfy", "Amplia")]:
+            rb = QRadioButton(label)
+            rb.setChecked(cur["density"] == key)
+            rb.setProperty("value", key)
+            self._density_group.addButton(rb)
+            dens_row.addWidget(rb)
+        dens_row.addStretch(1)
+        wrap = QFrame(); wrap.setLayout(dens_row); lay.addWidget(wrap)
+
+        # ── Acento ──
+        lay.addWidget(self._group_title("Color de acento"))
+        self._accent_group = QButtonGroup(self)
+        acc_row = QHBoxLayout(); acc_row.setSpacing(10)
+        for key, label in [("teal", "Teal"), ("terracota", "Terracota"),
+                           ("cobalto", "Cobalto"), ("oliva", "Oliva")]:
+            rb = QRadioButton(label)
+            rb.setChecked(cur["accent"] == key)
+            rb.setProperty("value", key)
+            self._accent_group.addButton(rb)
+            # swatch
+            swatch_color = ACCENTS[key]["accent"]
+            rb.setStyleSheet(
+                f"QRadioButton::indicator {{ width: 14px; height: 14px; }} "
+                f"QRadioButton {{ padding: 4px 8px; "
+                f"border-left: 4px solid {swatch_color}; "
+                f"padding-left: 10px; }}"
+            )
+            acc_row.addWidget(rb)
+        acc_row.addStretch(1)
+        wrap = QFrame(); wrap.setLayout(acc_row); lay.addWidget(wrap)
+
+        # nota
+        note = QLabel(
+            "Tema y acento se aplican al Inspector inmediatamente. "
+            "El editor (topbar, paleta, zoom) toma el nuevo estilo al "
+            "reiniciar la app."
+        )
+        note.setWordWrap(True)
+        note.setStyleSheet(
+            f"color:{TOK['ink_soft']}; font-size:9pt; "
+            f"background:{TOK['bg_mute']}; padding:8px; border-radius:6px;"
+        )
+        lay.addWidget(note)
+
+        # botones
+        bb = QDialogButtonBox(
+            QDialogButtonBox.Apply | QDialogButtonBox.Close, parent=self
+        )
+        bb.button(QDialogButtonBox.Apply).setText("Aplicar")
+        bb.button(QDialogButtonBox.Close).setText("Cerrar")
+        bb.button(QDialogButtonBox.Apply).clicked.connect(self._do_apply)
+        bb.button(QDialogButtonBox.Close).clicked.connect(self.accept)
+        lay.addWidget(bb)
+
+    def _group_title(self, text: str) -> QLabel:
+        l = QLabel(text)
+        l.setFont(QFont(pfd_fonts.SANS, 10, QFont.Bold))
+        l.setStyleSheet(f"color:{TOK['ink']}; letter-spacing:0.5px;")
+        return l
+
+    def _picked(self, group: QButtonGroup) -> Optional[str]:
+        btn = group.checkedButton()
+        if btn is None: return None
+        return btn.property("value")
+
+    def _do_apply(self):
+        theme   = self._picked(self._theme_group)
+        density = self._picked(self._density_group)
+        accent  = self._picked(self._accent_group)
+        changed = apply_preferences(theme=theme, density=density, accent=accent)
+        if changed:
+            save_prefs_to_disk()
+            _PrefsBus.emit()

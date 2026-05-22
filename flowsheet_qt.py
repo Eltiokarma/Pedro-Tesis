@@ -5872,6 +5872,14 @@ class FlowsheetMainWindow(QMainWindow):
         # Idempotente — si Qt no encuentra las TTFs, cae al sistema.
         pfd_fonts.load_all()
 
+        # Cargar preferencias del usuario (tema, densidad, acento) desde
+        # ~/.flowsheet_prefs.json — silencioso si no existe.
+        try:
+            import block_inspector as _bi
+            _bi.load_prefs_from_disk()
+        except Exception:
+            pass
+
         self.fs = Flowsheet()
         self.scene = FlowsheetScene(self)
         self.view  = FlowsheetView(self.scene)
@@ -6145,6 +6153,9 @@ class FlowsheetMainWindow(QMainWindow):
         if hasattr(self, "_inspector_dock") and self._inspector_dock is not None:
             m_view.addAction(self._inspector_dock.toggleViewAction())
         m_view.addSeparator()
+        # Preferencias (tema, densidad, acento)
+        m_view.addAction(_ac("&Preferencias…", self._open_preferences, "Ctrl+,"))
+        m_view.addSeparator()
         # Toggle de toolbars legacy
         self._legacy_tb_action = QAction("Toolbars legacy", self)
         self._legacy_tb_action.setCheckable(True)
@@ -6180,6 +6191,19 @@ class FlowsheetMainWindow(QMainWindow):
         y desde el menú Vista > Toolbars legacy para re-mostrarlas."""
         for tb in self.findChildren(QToolBar):
             tb.setVisible(bool(visible))
+
+    def _open_preferences(self):
+        """Vista > Preferencias…  Abre el diálogo de tema/densidad/acento.
+        Los cambios se aplican en vivo al Inspector (vía PrefsBus signal)
+        y se persisten en ~/.flowsheet_prefs.json."""
+        try:
+            from block_inspector import PreferencesDialog
+        except Exception as e:
+            QMessageBox.warning(self, "No disponible",
+                                f"Preferencias no disponibles: {e}")
+            return
+        dlg = PreferencesDialog(self)
+        dlg.exec()
 
     # ---------------------------------------------------
     # EDITOR CHROME WIRING (Parte B — NUEVA_UI)
