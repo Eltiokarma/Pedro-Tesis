@@ -1202,15 +1202,23 @@ class IsaGlyphItem(QGraphicsItem):
             r = max(self._w, self._h) / 2 + 8
             p.drawEllipse(QPointF(self._w/2, self._h/2), r, r)
 
-        # Glyph ISA — escalar desde dims nativas a (w, h) reales
+        # Glyph ISA — escalar UNIFORMEMENTE (preservando proporciones)
+        # desde sus dims nativas (BLOCK_DIMS) a las dims reales del
+        # bloque.  Si las proporciones no calzan exactas, el glyph
+        # queda centrado dentro del recuadro y los puertos quedan en
+        # el border del recuadro como antes.  Esto evita el efecto
+        # "achatado" que ocurría con scale(sx, sy) no-uniforme.
         native_w, native_h = BLOCK_DIMS.get(self._isa, (60, 60))
-        sx = self._w / native_w
-        sy = self._h / native_h
+        scale = min(self._w / native_w, self._h / native_h)
+        # offset para centrar el glyph dentro de la caja real
+        ox = (self._w - native_w * scale) / 2.0
+        oy = (self._h - native_h * scale) / 2.0
         p.save()
-        p.scale(sx, sy)
+        p.translate(ox, oy)
+        p.scale(scale, scale)
         BlockGlyph.draw(p, self._isa, native_w, native_h, stroke,
                         fill=QColor(TOK["bg_elev"]),
-                        stroke_width=stroke_w / max(sx, sy))
+                        stroke_width=stroke_w / max(scale, 0.1))
         p.restore()
 
         # Selection dashed ring (offset 6px)

@@ -6977,9 +6977,10 @@ class FlowsheetMainWindow(QMainWindow):
                                   f"{type(e).__name__}: {e}")
             return
         self._rebuild_scene()
-        # Zoom 100% por default al cargar (no fit) — el user prefiere
-        # ver el tamaño nativo antes que un fit que puede ampliar/encoger.
+        # Zoom 100% nativo + centrar la vista en el bbox de los bloques
+        # (el user prefiere ver el tamaño real, centrado, sin scroll).
         self.view.zoom_reset()
+        self._center_view_on_blocks()
         self._update_status()
 
     def action_save(self):
@@ -7179,6 +7180,13 @@ class FlowsheetMainWindow(QMainWindow):
             return
         builder, title, area, dwg_no = entry
         builder(shim)
+        # Los example builders del editor Tk legacy posicionan bloques
+        # para una silueta de 130x60.  Las siluetas ISA nuevas son
+        # más grandes (reactor 86x127, tower 76x216, hx 151x60) y
+        # quedan apachurradas con las posiciones originales.
+        # Expandimos las posiciones por un factor para dar respiro
+        # tanto a los bloques como a las corrientes.
+        self._expand_block_spacing(factor=1.7)
         # Estado inicial: stale (azul). El user ve los bloques en azul
         # hasta que apriete F5 para correr el solver y verificar el
         # balance del ejemplo.
@@ -7194,15 +7202,57 @@ class FlowsheetMainWindow(QMainWindow):
         if hasattr(self, "_paper_action"):
             self._paper_action.setChecked(True)
 
-        # Zoom 100% por default al cargar (no fit) — el user prefiere
-        # ver el tamaño nativo antes que un fit que puede ampliar/encoger.
+        # Zoom 100% nativo y centrar la vista en el centroide del
+        # diagrama.  Así el user ve el proceso entero centrado al
+        # cargar el ejemplo, sin scroll necesario para encontrarlo.
         self.view.zoom_reset()
+        self._center_view_on_blocks()
         self._update_status()
         self.end_action(f"Cargar ejemplo: {key}", before)
 
     # ---------------------------------------------------
     # ACCIONES — Otros
     # ---------------------------------------------------
+
+    def _expand_block_spacing(self, factor: float = 1.7):
+        """Multiplica las coordenadas (x, y) de TODOS los bloques por
+        un factor + snap a la grilla.  Usado al cargar ejemplos legacy
+        para que las nuevas siluetas ISA (más grandes que el rect
+        130x60 viejo) no queden apachurradas y los streams tengan
+        longitud cómoda."""
+        if not self.fs.blocks:
+            return
+        # Anclar el escalado al bloque más arriba-izquierda para no
+        # desparramar el diagrama lejos del origen.
+        min_x = min(b.x for b in self.fs.blocks.values())
+        min_y = min(b.y for b in self.fs.blocks.values())
+        for b in self.fs.blocks.values():
+            b.x = min_x + (b.x - min_x) * factor
+            b.y = min_y + (b.y - min_y) * factor
+            # snap a la grilla del modelo
+            b.x = round(b.x / GRID_STEP) * GRID_STEP
+            b.y = round(b.y / GRID_STEP) * GRID_STEP
+
+    def _center_view_on_blocks(self):
+        """Centra la vista en el centroide del bbox de los bloques.
+        No cambia el zoom — solo el centro."""
+        if not self.fs.blocks:
+            return
+        try:
+            xs = [b.x for b in self.fs.blocks.values()]
+            ys = [b.y for b in self.fs.blocks.values()]
+            # Centro del bbox (no del centroide — más estable cuando
+            # hay un bloque outlier muy lejos)
+            cx = (min(xs) + max(xs)) / 2.0
+            cy = (min(ys) + max(ys)) / 2.0
+            # Sumar la mitad de W/H típico para centrar el ÁREA visible,
+            # no la esquina top-left de los bloques
+            cx += BLOCK_W / 2.0
+            cy += BLOCK_H / 2.0
+            from PySide6.QtCore import QPointF
+            self.view.centerOn(QPointF(cx, cy))
+        except Exception:
+            pass
 
     def action_delete(self):
         selected = list(self.scene.selectedItems())
