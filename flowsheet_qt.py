@@ -6011,9 +6011,10 @@ class FlowsheetMainWindow(QMainWindow):
         ):
             sc = QShortcut(QKeySequence(seq), self)
             sc.activated.connect(slot)
-        # escapar conexión pendiente / borrar
+        # escapar conexión pendiente — Delete se cablea via QAction en el
+        # menubar (Editar > Borrar selección) para evitar el "Ambiguous
+        # shortcut overload" que ocurre al registrar Del dos veces.
         QShortcut(QKeySequence(Qt.Key_Escape), self, activated=self.cancel_connection)
-        QShortcut(QKeySequence(Qt.Key_Delete), self, activated=self.action_delete)
 
     # ---------------------------------------------------
     # MENU BAR (Parte B — NUEVA_UI, reemplazo de toolbars)
@@ -6216,10 +6217,16 @@ class FlowsheetMainWindow(QMainWindow):
         # Undo/redo — reutilizar el undo_stack
         tb.undoRequested.connect(self.undo_stack.undo)
         tb.redoRequested.connect(self.undo_stack.redo)
-        # Estado inicial de undo/redo y observador del stack
+        # Estado inicial de undo/redo y observador del stack.
+        # Guard contra RuntimeError al cerrar la app: cuando QUndoStack
+        # se destruye el signal puede dispararse una vez más con el
+        # objeto C++ ya muerto.
         def _refresh_undo_buttons():
-            tb.set_undo_enabled(self.undo_stack.canUndo(),
-                                self.undo_stack.canRedo())
+            try:
+                tb.set_undo_enabled(self.undo_stack.canUndo(),
+                                    self.undo_stack.canRedo())
+            except RuntimeError:
+                pass   # objeto C++ ya destruido (shutdown)
         self.undo_stack.canUndoChanged.connect(lambda _: _refresh_undo_buttons())
         self.undo_stack.canRedoChanged.connect(lambda _: _refresh_undo_buttons())
         _refresh_undo_buttons()
@@ -6239,6 +6246,8 @@ class FlowsheetMainWindow(QMainWindow):
         # ── Palette: tool/block ─────────────────────────────────
         pal = self._palette_widget
         pal.blockRequested.connect(self._on_palette_block_requested)
+        # blockTypeRequested viene del popup de variantes — eq_type directo
+        pal.blockTypeRequested.connect(self._on_palette_eq_type_requested)
         # Tools: el primer slice solo activa el modo de selección/pan/connect.
         pal.toolSelected.connect(self._on_palette_tool_selected)
         pal.moreRequested.connect(self._on_palette_more_requested)
@@ -6281,9 +6290,17 @@ class FlowsheetMainWindow(QMainWindow):
             self._paper_action.trigger()
 
     def _on_palette_block_requested(self, palette_id: str):
-        """Crear un bloque del tipo seleccionado en la paleta."""
+        """Crear un bloque del tipo seleccionado en la paleta (default
+        canónico). Usado por drag-from-palette."""
         eq_type = self._palette_to_eq_type.get(palette_id)
         if eq_type is None:
+            return
+        self._add_block_of_type(eq_type)
+
+    def _on_palette_eq_type_requested(self, eq_type: str):
+        """Crear un bloque del eq_type EXACTO elegido en el popup de
+        variantes o en el catálogo completo (+ botón)."""
+        if not eq_type:
             return
         self._add_block_of_type(eq_type)
 
