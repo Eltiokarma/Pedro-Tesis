@@ -68,32 +68,6 @@ CEPCI = {
 AÑO_BASE_DEFAULT = 2024
 
 
-def años_disponibles():
-    """Lista de años con CEPCI oficial disponible, ascendente."""
-    return sorted(CEPCI.keys())
-
-
-def factor_cepci(año_origen, año_destino):
-    """Factor multiplicativo para llevar un costo del año
-    origen al año destino.
-
-    Para años fuera de la tabla oficial:
-      · Entre años conocidos: interpolación lineal.
-      · Antes del primer año o después del último: nearest-neighbor
-        con warning explícito.
-    """
-    if año_origen == año_destino:
-        return 1.0
-    val_origen  = _valor_cepci(año_origen)
-    val_destino = _valor_cepci(año_destino)
-    return val_destino / val_origen
-
-
-def ajustar_costo(costo, año_origen, año_destino):
-    """Lleva `costo` del año_origen al año_destino vía CEPCI."""
-    return costo * factor_cepci(año_origen, año_destino)
-
-
 def _valor_cepci(año):
     """Devuelve CEPCI[año] usando lookup directo si existe,
     interpolación lineal entre años vecinos si está dentro del
@@ -108,7 +82,7 @@ def _valor_cepci(año):
     if año in CEPCI:
         return CEPCI[año]
 
-    años = años_disponibles()
+    años = sorted(CEPCI.keys())
     if año < años[0]:
         warnings.warn(
             f"CEPCI: año {año} < primer año disponible ({años[0]}).  "
