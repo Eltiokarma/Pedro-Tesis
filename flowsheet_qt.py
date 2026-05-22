@@ -3913,18 +3913,38 @@ class BlockItem(QGraphicsItemGroup):
         return item
 
     def _draw_category_decoration(self, category, eq_type):
-        """Renderiza el símbolo PFD del eq_type (catálogo pfd_symbols).
+        """Renderiza la silueta ISA del eq_type (Parte B — NUEVA_UI).
 
-        El símbolo se renderiza a su tamaño natural (W × H del viewBox).
-        Si no hay símbolo en el catálogo, queda solo el rect (invisible)
-        + los textos.
+        Reemplaza el SVG raster del antiguo pfd_symbols por un
+        IsaGlyphItem vectorial nativo (QPainter paths). El glyph se
+        escala a las dimensiones W×H del bloque preservando las
+        proporciones del diseño hi-fi. Mantiene puertos, badges,
+        tag y halo de status idénticos.
+
+        Si el módulo editor_chrome no está disponible (entorno sin
+        PySide6 dev install), cae al SVG legacy para no perder UI.
         """
         self._svg_mode = False
+        self._isa_item = None
+        try:
+            from editor_chrome import IsaGlyphItem
+            isa = IsaGlyphItem(eq_type, self.W, self.H, parent=self)
+            isa.setPos(0, 0)
+            isa.setZValue(0)
+            # estado inicial sync con _status del solver
+            isa.set_state(self._isa_state_for_status(self._status))
+            self.decoration_items.append(isa)
+            self._isa_item = isa
+            self._svg_mode = True
+            return
+        except Exception:
+            pass
 
+        # ─── Fallback: SVG raster legacy ─────────────────────
         svg_str = pfd.wrap_svg(pfd.EQ_TYPE_TO_SYMBOL.get(eq_type, ""),
                                 w=self.W, h=self.H)
         if not svg_str:
-            return  # sin símbolo: rect invisible + textos solamente
+            return
 
         try:
             pixmap = _get_svg_pixmap(eq_type, int(self.W), int(self.H),
@@ -3937,11 +3957,6 @@ class BlockItem(QGraphicsItemGroup):
         try:
             from PySide6.QtWidgets import QGraphicsPixmapItem
             pix_item = QGraphicsPixmapItem(pixmap, parent=self)
-            # NO usar setScale(0.5): el pixmap ya tiene
-            # setDevicePixelRatio(2) que hace que Qt reporte un
-            # boundingRect en unidades lógicas (la mitad del pixel
-            # size).  Aplicar setScale(0.5) además habría sido una
-            # doble reducción → SVG aparecía a 1/4 del área del bloque.
             pix_item.setPos(0, 0)
             pix_item.setZValue(0)
             pix_item.setTransformationMode(Qt.SmoothTransformation)
@@ -3949,6 +3964,18 @@ class BlockItem(QGraphicsItemGroup):
             self._svg_mode = True
         except Exception:
             pass
+
+    @staticmethod
+    def _isa_state_for_status(status: str) -> str:
+        """Mapea el `_status` del solver al estado visual del ISA glyph."""
+        return {
+            "ok":      "idle",      # el halo verde ya está en status_halo
+            "warning": "warning",
+            "error":   "error",
+            "unrun":   "idle",
+            "stale":   "idle",
+            "empty":   "idle",
+        }.get(status, "idle")
 
     def _render_ports(self):
         r = self.PORT_RADIUS
@@ -4121,6 +4148,14 @@ class BlockItem(QGraphicsItemGroup):
         else:    # stale / unrun
             pen = QPen(color, 1.2, Qt.DashLine)
         self.status_halo.setPen(pen)
+        # Sync IsaGlyphItem (silueta ISA) — el halo da el verde/amarillo/rojo
+        # pero la propia silueta también colorea el stroke en warning/error.
+        if getattr(self, "_isa_item", None) is not None:
+            # Si el bloque está seleccionado, conservar 'selected' visual.
+            if self.isSelected():
+                self._isa_item.set_state("selected")
+            else:
+                self._isa_item.set_state(self._isa_state_for_status(self._status))
 
     def itemChange(self, change, value):
         """Sync posición al modelo + refresh streams conectados.
@@ -4140,6 +4175,14 @@ class BlockItem(QGraphicsItemGroup):
             self.model.y = self.pos().y()
             if self.editor is not None:
                 self.editor.refresh_streams_of(self.model.id)
+        elif change == QGraphicsItem.ItemSelectedHasChanged:
+            # sync visual del IsaGlyphItem con selección Qt
+            if getattr(self, "_isa_item", None) is not None:
+                if bool(value):
+                    self._isa_item.set_state("selected")
+                else:
+                    self._isa_item.set_state(
+                        self._isa_state_for_status(self._status))
         return super().itemChange(change, value)
 
     def mouseDoubleClickEvent(self, event):
@@ -4161,6 +4204,19 @@ class BlockItem(QGraphicsItemGroup):
             and self.editor._drag_before_snapshot is None):
             self.editor._drag_before_snapshot = self.editor.begin_action()
         super().mousePressEvent(event)
+
+    def hoverEnterEvent(self, event):
+        """Estado visual hover sobre el ISA glyph (no pisa selected)."""
+        isa = getattr(self, "_isa_item", None)
+        if isa is not None and not self.isSelected():
+            isa.set_state("hover")
+        super().hoverEnterEvent(event)
+
+    def hoverLeaveEvent(self, event):
+        isa = getattr(self, "_isa_item", None)
+        if isa is not None and not self.isSelected():
+            isa.set_state(self._isa_state_for_status(self._status))
+        super().hoverLeaveEvent(event)
 
     def mouseReleaseEvent(self, event):
         super().mouseReleaseEvent(event)
@@ -5862,7 +5918,12 @@ class FlowsheetMainWindow(QMainWindow):
         self._build_streams_dock()
         self._build_toolbar()
         self._build_statusbar()
+        self._build_menubar()
         self._wire_editor_chrome()
+        # Por default ocultar los toolbars legacy: el EditorTopbar + el
+        # menubar nuevo cubren todas las acciones.  Vista > Toolbars
+        # legacy permite re-mostrarlos.
+        self._set_legacy_toolbars_visible(False)
 
         # selección
         self.scene.selectionChanged.connect(self._on_selection_changed)
@@ -5945,6 +6006,180 @@ class FlowsheetMainWindow(QMainWindow):
         # escapar conexión pendiente / borrar
         QShortcut(QKeySequence(Qt.Key_Escape), self, activated=self.cancel_connection)
         QShortcut(QKeySequence(Qt.Key_Delete), self, activated=self.action_delete)
+
+    # ---------------------------------------------------
+    # MENU BAR (Parte B — NUEVA_UI, reemplazo de toolbars)
+    # ---------------------------------------------------
+
+    def _build_menubar(self):
+        """Menu bar que reusa todas las acciones del toolbar legacy.
+        Una vez construido, las QToolBars se ocultan por default."""
+        mb = self.menuBar()
+        # estilo plano consistente con el resto del editor
+        try:
+            from block_inspector import TOK as _T
+            mb.setStyleSheet(
+                f"QMenuBar {{ background:{_T['bg_elev']}; color:{_T['ink']}; "
+                f"border-bottom:1px solid {_T['line']}; }} "
+                f"QMenuBar::item {{ padding:5px 10px; background:transparent; }} "
+                f"QMenuBar::item:selected {{ background:{_T['bg_mute']}; "
+                f"color:{_T['accent_deep']}; border-radius:4px; }} "
+                f"QMenu {{ background:{_T['bg_elev']}; color:{_T['ink']}; "
+                f"border:1px solid {_T['line']}; padding:4px 0; }} "
+                f"QMenu::item {{ padding:5px 22px 5px 14px; }} "
+                f"QMenu::item:selected {{ background:{_T['accent_tint']}; "
+                f"color:{_T['accent_deep']}; }}"
+            )
+        except Exception:
+            pass
+
+        _mk = getattr(self, "_mk_icon", None) or (lambda *a, **k: None)
+        ic_color = getattr(self, "_icon_color", "#3a3a3a")
+
+        def _ac(label, slot, shortcut=None, icon_id=None):
+            act = QAction(label, self)
+            act.triggered.connect(slot)
+            if shortcut: act.setShortcut(shortcut)
+            if icon_id and _mk:
+                ic = _mk(icon_id, color=ic_color, size=16)
+                if ic is not None:
+                    act.setIcon(ic)
+            return act
+
+        # ── Archivo ──
+        m_file = mb.addMenu("&Archivo")
+        m_file.addAction(_ac("&Nuevo",      self.action_new,
+                               QKeySequence.New,  "file-new"))
+        m_file.addAction(_ac("&Abrir…",     self.action_open,
+                               QKeySequence.Open, "file-open"))
+        m_file.addAction(_ac("&Guardar…",   self.action_save,
+                               QKeySequence.Save, "file-save"))
+        m_file.addSeparator()
+        # Ejemplos — submenu
+        m_examples = m_file.addMenu("&Ejemplos")
+        for label, key in [
+            ("HDA — Hidrodealquilación de tolueno", "hda"),
+            ("Síntesis de metanol", "methanol"),
+            ("Destilación binaria benceno/tolueno", "distillation"),
+            ("Síntesis de amoníaco (Haber-Bosch)", "ammonia"),
+            ("Producción de etanol", "ethanol"),
+            ("Producción de biodiesel", "biodiesel"),
+            ("Refinería atmosférica simplificada", "cdu"),
+        ]:
+            m_examples.addAction(label, lambda k=key: self.action_load_example(k))
+        m_examples.addSeparator()
+        for label, key in [
+            ("HDA completo (Douglas, escala industrial)", "hda_full"),
+            ("Endulzamiento de gas natural (MDEA)", "gas_sweet"),
+            ("Planta de azúcar (caña)", "sugar"),
+        ]:
+            m_examples.addAction(label, lambda k=key: self.action_load_example(k))
+        m_examples.addSeparator()
+        for label, key in [
+            ("Reformado SMR + WGS (reactor de equilibrio Capa 4)", "smr_eq"),
+            ("Cracking de etano (reactor PFR Capa 5)", "ethane_pfr"),
+            ("Haber-Bosch con recycle (NH3, loop reactivo)", "haber_rec"),
+            ("Destilación azeotrópica etanol-agua (NRTL Capa 6)", "dist_eth_az"),
+            ("Reactor + flash + columna AUTOMÁTICOS (FUG + NRTL)", "rxn_flash_col"),
+            ("Planta hidráulica con auto-sizing de bomba", "hydraulic"),
+        ]:
+            m_examples.addAction(label, lambda k=key: self.action_load_example(k))
+        m_examples.addSeparator()
+        for label, key in [
+            ("⭐ PLANTA INDUSTRIAL COMPLETA (MeOH + servicios + BOP)", "industrial"),
+            ("🇵🇪 QUIMPAC — cloro-álcali (membrana)", "quimpac"),
+            ("⚗️ HNO3 Ostwald (dual-presión)", "hno3"),
+            ("🏭 REFINERÍA TALARA — PMRT", "talara"),
+        ]:
+            m_examples.addAction(label, lambda k=key: self.action_load_example(k))
+
+        m_file.addSeparator()
+        # Exportar — submenu
+        m_export = m_file.addMenu("E&xportar")
+        m_export.addAction(_ac("PDF…",          self.action_export_pdf,
+                                  "Ctrl+E", "file-print"))
+        m_export.addAction(_ac("SVG (vectorial)…", self.action_export_svg,
+                                  "Ctrl+Shift+E", "file-export"))
+        m_export.addAction(_ac("PNG (alta resolución)…", self.action_export_png,
+                                  None, "file-export"))
+        m_file.addSeparator()
+        m_file.addAction(_ac("Salir", self.close, QKeySequence.Quit))
+
+        # ── Editar ──
+        m_edit = mb.addMenu("&Editar")
+        if hasattr(self, "undo_action"):
+            m_edit.addAction(self.undo_action)
+        if hasattr(self, "redo_action"):
+            m_edit.addAction(self.redo_action)
+        m_edit.addSeparator()
+        m_edit.addAction(_ac("&Borrar selección", self.action_delete,
+                              QKeySequence.Delete, "edit-delete"))
+
+        # ── Vista ──
+        m_view = mb.addMenu("&Vista")
+        m_view.addAction(_ac("Zoom −", self.view.zoom_out,    "Ctrl+-",  "zoom-out"))
+        m_view.addAction(_ac("100 %",  self.view.zoom_reset,  "Ctrl+0",  "zoom-100"))
+        m_view.addAction(_ac("Zoom +", self.view.zoom_in,     "Ctrl++",  "zoom-in"))
+        m_view.addAction(_ac("Ajustar a vista", self.view.zoom_fit,
+                              "F",  "zoom-fit"))
+        m_view.addSeparator()
+        # Marco PFD toggle — reusa el _paper_action si existe
+        if hasattr(self, "_paper_action"):
+            m_view.addAction(self._paper_action)
+        else:
+            m_view.addAction(_ac("Marco PFD", self.action_toggle_paper, "Ctrl+M"))
+        # Animación
+        anim_act = QAction("Animación de flujo", self)
+        anim_act.setCheckable(True); anim_act.setChecked(True)
+        anim_act.triggered.connect(self.toggle_animation)
+        m_view.addAction(anim_act)
+        m_view.addSeparator()
+        # Toggle docks
+        if hasattr(self, "lib_dock"):
+            m_view.addAction(self.lib_dock.toggleViewAction())
+        if hasattr(self, "streams_dock"):
+            t = self.streams_dock.toggleViewAction()
+            t.setText("Tabla de corrientes")
+            t.setShortcut("Ctrl+T")
+            m_view.addAction(t)
+        if hasattr(self, "_inspector_dock") and self._inspector_dock is not None:
+            m_view.addAction(self._inspector_dock.toggleViewAction())
+        m_view.addSeparator()
+        # Toggle de toolbars legacy
+        self._legacy_tb_action = QAction("Toolbars legacy", self)
+        self._legacy_tb_action.setCheckable(True)
+        self._legacy_tb_action.setChecked(False)
+        self._legacy_tb_action.triggered.connect(
+            lambda v: self._set_legacy_toolbars_visible(v))
+        m_view.addAction(self._legacy_tb_action)
+
+        # ── Simulación ──
+        m_sim = mb.addMenu("&Simulación")
+        m_sim.addAction(_ac("Validar &DOF", self.action_dof,
+                              None, "act-dof"))
+        m_sim.addAction(_ac("&Resolver balances", self.action_solve,
+                              "F5", "sim-run"))
+        m_sim.addAction(_ac("&Calcular costos",  self.action_compute,
+                              "F9", "sim-refresh"))
+        m_sim.addSeparator()
+        m_sim.addAction(_ac("Setpoints…",  self.action_setpoints,
+                              None, "act-setpoint"))
+        m_sim.addAction(_ac("Auto-size S", self.action_autosize,
+                              None, "act-sizing"))
+        m_sim.addAction(_ac("OPEX extras…", self.action_opex_extras,
+                              None, "act-money"))
+        m_sim.addSeparator()
+        m_sim.addAction(_ac("Perfil económico…", self.action_econ_profile,
+                              None, "act-money"))
+        m_sim.addAction(_ac("Análisis económico →", self.action_launch_analysis,
+                              None, "an-case-study"))
+
+    def _set_legacy_toolbars_visible(self, visible: bool):
+        """Muestra/oculta las QToolBars legacy.  Usado en __init__ para
+        esconderlas por default (el EditorTopbar + menubar cubren todo)
+        y desde el menú Vista > Toolbars legacy para re-mostrarlas."""
+        for tb in self.findChildren(QToolBar):
+            tb.setVisible(bool(visible))
 
     # ---------------------------------------------------
     # EDITOR CHROME WIRING (Parte B — NUEVA_UI)

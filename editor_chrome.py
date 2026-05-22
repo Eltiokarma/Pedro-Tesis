@@ -29,15 +29,16 @@ from __future__ import annotations
 from typing import Callable, Dict, List, Optional, Tuple
 
 from PySide6.QtCore import (
-    Qt, Signal, QSize, QRect, QRectF, QPointF, QTimer,
+    Qt, Signal, QSize, QRect, QRectF, QPointF, QTimer, QMimeData, QByteArray,
 )
 from PySide6.QtGui import (
     QColor, QFont, QPainter, QPen, QBrush, QPainterPath, QPolygonF,
-    QFontMetrics, QMouseEvent,
+    QFontMetrics, QMouseEvent, QDrag, QPixmap,
 )
 from PySide6.QtWidgets import (
     QWidget, QHBoxLayout, QVBoxLayout, QLabel, QPushButton, QToolButton,
-    QFrame, QSizePolicy, QButtonGroup, QGraphicsView,
+    QFrame, QSizePolicy, QButtonGroup, QGraphicsView, QApplication,
+    QGraphicsItem, QGraphicsObject, QStyleOptionGraphicsItem,
 )
 
 import pfd_fonts
@@ -482,7 +483,13 @@ class EditorTopbar(QFrame):
 # ════════════════════════════════════════════════════════
 
 class _ToolButton(QToolButton):
-    """Botón de paleta (tool o block).  Pinta su contenido custom."""
+    """Botón de paleta (tool o block).  Pinta su contenido custom.
+
+    Si `kind == 'block'`, soporta drag-out: al iniciar drag se emite
+    un QMimeData con `application/x-pfd-eqtype` apuntando al eq_type
+    canónico (via PALETTE_TO_EQ_TYPE). El FlowsheetView ya escucha
+    ese mime y crea el bloque en la posición del drop.
+    """
 
     def __init__(self, kind: str, ident: str, tooltip: str,
                  active: bool = False, parent=None):
@@ -490,6 +497,7 @@ class _ToolButton(QToolButton):
         self._kind = kind   # "tool" | "block"
         self._id = ident
         self._active = active
+        self._drag_start = None
         self.setToolTip(tooltip)
         self.setFixedSize(40, 40)
         self.setCursor(Qt.PointingHandCursor)
@@ -517,6 +525,52 @@ class _ToolButton(QToolButton):
             f"QToolButton:hover {{ background: "
             f"{TOK['bg_mute'] if not self._active else TOK['accent_deep']}; }}"
         )
+
+    # ── Drag-out (solo block-buttons) ──────────────────
+    def mousePressEvent(self, ev):
+        if ev.button() == Qt.LeftButton and self._kind == "block":
+            self._drag_start = ev.position().toPoint()
+        super().mousePressEvent(ev)
+
+    def mouseMoveEvent(self, ev):
+        if (self._kind != "block" or
+            not (ev.buttons() & Qt.LeftButton) or
+            self._drag_start is None):
+            return super().mouseMoveEvent(ev)
+        # threshold para distinguir click de drag
+        if ((ev.position().toPoint() - self._drag_start).manhattanLength()
+                < QApplication.startDragDistance()):
+            return
+        self._start_block_drag()
+
+    def _start_block_drag(self):
+        eq_type = PALETTE_TO_EQ_TYPE.get(self._id)
+        if not eq_type:
+            return
+        drag = QDrag(self)
+        md = QMimeData()
+        # mime que ya escucha FlowsheetView.dropEvent
+        md.setData("application/x-pfd-eqtype",
+                   QByteArray(eq_type.encode("utf-8")))
+        drag.setMimeData(md)
+        # Pixmap preview = silueta ISA escalada
+        w_native, h_native = BLOCK_DIMS.get(self._id, (60, 60))
+        # render a 1.6x para que se vea generoso bajo el cursor
+        target_w = int(w_native * 1.6); target_h = int(h_native * 1.6)
+        px = QPixmap(target_w + 2, target_h + 2)
+        px.fill(Qt.transparent)
+        pp = QPainter(px)
+        pp.setRenderHint(QPainter.Antialiasing, True)
+        pp.translate(1, 1)
+        pp.scale(1.6, 1.6)
+        BlockGlyph.draw(pp, self._id, w_native, h_native,
+                        QColor(TOK["accent"]),
+                        fill=QColor(TOK["bg_elev"]),
+                        stroke_width=1.5)
+        pp.end()
+        drag.setPixmap(px)
+        drag.setHotSpot(QPointF(target_w/2, target_h/2).toPoint())
+        drag.exec(Qt.CopyAction)
 
     def paintEvent(self, ev):
         # Pintar el fondo (vía stylesheet) primero
@@ -791,3 +845,188 @@ class _Overlay(QWidget):
         self._zoom.move(max(14, vp.width()  - z.width()  - 14),
                         max(14, vp.height() - z.height() - 14))
         self._zoom.raise_()
+
+
+# ════════════════════════════════════════════════════════
+#  EQ_TYPE → ISA PALETTE TYPE MAPPING
+# ════════════════════════════════════════════════════════
+
+def isa_type_for_eq(eq_type: str) -> str:
+    """Mapea un eq_type canónico del catálogo (e.g. 'Reactor — CSTR
+    (agitado)', 'Heat exch. — flat plate') al tipo de paleta ISA
+    (uno de reactor/mezclador/separador/columna/hx/bomba/tanque).
+
+    Usa la categoría de equipment_costs si está disponible, con
+    fallback por substring matching del nombre.
+    """
+    if not eq_type:
+        return "tanque"
+    try:
+        import equipment_costs as _ec
+        cat = _ec.EQUIPMENT_DATA.get(eq_type, {}).get("categoria", "")
+    except Exception:
+        cat = ""
+    cat_l = (cat or "").lower()
+    t = eq_type.lower()
+    # por categoría primero (más confiable)
+    if "reactor" in cat_l:           return "reactor"
+    if "heat exchang" in cat_l:      return "hx"
+    if "compress" in cat_l:          return "bomba"
+    if "pump" in cat_l:              return "bomba"
+    if "mixer" in cat_l or "splitter" in cat_l: return "mezclador"
+    if "storage" in cat_l:           return "tanque"
+    if "fired heater" in cat_l:      return "hx"   # representamos como HX horizontal
+    if "vessel" in cat_l:
+        if "tower" in t or "column" in t:
+            return "columna"
+        return "separador"
+    if "solids" in cat_l or "dryer" in t or "evapor" in t or "cycl" in t \
+       or "crystal" in t:
+        return "separador"
+    # fallback por substring del eq_type
+    if "reactor" in t:               return "reactor"
+    if "tower" in t or "column" in t or "destil" in t: return "columna"
+    if "exchang" in t or "cooler" in t or "heater" in t \
+       or "condenser" in t or "reboiler" in t:        return "hx"
+    if "pump" in t or "bomba" in t or "compress" in t or "compresor" in t:
+        return "bomba"
+    if "mixer" in t or "mezclador" in t or "splitter" in t: return "mezclador"
+    if "tank" in t or "tanque" in t or "storage" in t:      return "tanque"
+    if "vessel" in t or "flash" in t or "separator" in t:   return "separador"
+    return "tanque"  # default conservador
+
+
+# ════════════════════════════════════════════════════════
+#  IsaGlyphItem — QGraphicsItem on-canvas
+# ════════════════════════════════════════════════════════
+
+# Estados visuales para BlockItem on-canvas:
+#   idle      → stroke ink_mute, sin extras
+#   hover     → stroke accent, halo accent_tint
+#   selected  → stroke accent gruesa + dashed ring offset
+#   solving   → stroke ink_soft, halo circular dashed accent
+#   warning   → stroke amber, chip "!" arriba-derecha
+#   error     → stroke danger, chip "!" arriba-derecha
+ISA_STATE_PEN = {
+    "idle":     (TOK["ink_mute"], 1.5),
+    "hover":    (TOK["accent"],   1.5),
+    "selected": (TOK["accent"],   2.0),
+    "solving":  (TOK["ink_soft"], 1.5),
+    "warning":  (TOK["amber"],    1.5),
+    "error":    (TOK["danger"],   1.5),
+}
+
+
+class IsaGlyphItem(QGraphicsItem):
+    """QGraphicsItem que pinta la silueta ISA de un bloque dentro
+    del rectángulo (0,0,W,H).
+
+    El glyph se dibuja en sus dimensiones NATIVAS (BLOCK_DIMS del
+    diseño) y luego se escala via QPainter.scale() para llenar el
+    rect del bloque. Eso preserva las proporciones del símbolo y
+    permite que BlockItem use cualquier W×H (las del catálogo
+    pfd_symbols, las que ya tiene cableadas con port_coords).
+
+    El estado visual se cambia via `set_state(name)`. Acepta los 6
+    estados del README: idle, hover, selected, solving, warning,
+    error. La selección dibuja un anillo dashed offset 6px.
+    """
+
+    def __init__(self, eq_type: str, w: float, h: float, parent=None):
+        super().__init__(parent)
+        self._eq_type = eq_type
+        self._isa = isa_type_for_eq(eq_type)
+        self._w = float(w)
+        self._h = float(h)
+        self._state = "idle"
+        self._warning = False
+        self.setAcceptedMouseButtons(Qt.NoButton)  # no captura clicks
+        self.setZValue(0.0)
+
+    # ── API ───────────────────────────────────────────
+    def set_state(self, state: str):
+        """state ∈ {idle, hover, selected, solving, warning, error}."""
+        if state not in ISA_STATE_PEN:
+            state = "idle"
+        if state == self._state:
+            return
+        self._state = state
+        self.update()
+
+    def set_warning(self, on: bool):
+        if bool(on) != self._warning:
+            self._warning = bool(on)
+            self.update()
+
+    def set_size(self, w: float, h: float):
+        if abs(w - self._w) < 1e-3 and abs(h - self._h) < 1e-3:
+            return
+        self.prepareGeometryChange()
+        self._w = float(w)
+        self._h = float(h)
+        self.update()
+
+    def isa_type(self) -> str:
+        return self._isa
+
+    # ── QGraphicsItem ─────────────────────────────────
+    def boundingRect(self) -> QRectF:
+        # Incluir margen para el anillo de selección dashed (+6px)
+        # y el chip de warning (-8, 0 esquina sup-derecha).
+        return QRectF(-8, -10, self._w + 16, self._h + 18)
+
+    def paint(self, p: QPainter, option, widget=None):
+        stroke_color_str, stroke_w = ISA_STATE_PEN.get(
+            self._state, ISA_STATE_PEN["idle"])
+        # warning/error override del estado de status si aplica
+        if self._warning and self._state not in ("error", "warning", "selected"):
+            stroke_color_str, stroke_w = ISA_STATE_PEN["warning"]
+        stroke = QColor(stroke_color_str)
+
+        p.setRenderHint(QPainter.Antialiasing, True)
+
+        # Halo hover: bg accent_tint detrás del glyph
+        if self._state == "hover":
+            halo = QColor(TOK["accent_tint"]); halo.setAlphaF(0.7)
+            p.setPen(Qt.NoPen); p.setBrush(QBrush(halo))
+            p.drawRoundedRect(QRectF(-3, -3, self._w + 6, self._h + 6), 8, 8)
+
+        # Halo solving: ring circular dashed pulsante
+        if self._state == "solving":
+            ring = QColor(TOK["accent"]); ring.setAlphaF(0.35)
+            pen = QPen(ring, 1.5)
+            pen.setStyle(Qt.DashLine); pen.setCapStyle(Qt.RoundCap)
+            pen.setDashPattern([4, 6])
+            p.setPen(pen); p.setBrush(Qt.NoBrush)
+            r = max(self._w, self._h) / 2 + 8
+            p.drawEllipse(QPointF(self._w/2, self._h/2), r, r)
+
+        # Glyph ISA — escalar desde dims nativas a (w, h) reales
+        native_w, native_h = BLOCK_DIMS.get(self._isa, (60, 60))
+        sx = self._w / native_w
+        sy = self._h / native_h
+        p.save()
+        p.scale(sx, sy)
+        BlockGlyph.draw(p, self._isa, native_w, native_h, stroke,
+                        fill=QColor(TOK["bg_elev"]),
+                        stroke_width=stroke_w / max(sx, sy))
+        p.restore()
+
+        # Selection dashed ring (offset 6px)
+        if self._state == "selected":
+            pen = QPen(QColor(TOK["accent"]), 1.0)
+            pen.setStyle(Qt.DashLine); pen.setDashPattern([3, 3])
+            p.setPen(pen); p.setBrush(Qt.NoBrush)
+            p.setOpacity(0.7)
+            p.drawRoundedRect(QRectF(-6, -6, self._w + 12, self._h + 12), 10, 10)
+            p.setOpacity(1.0)
+
+        # Warning/error chip "!" esquina sup-derecha
+        if self._warning or self._state in ("warning", "error"):
+            chip_color = TOK["danger"] if self._state == "error" else TOK["amber"]
+            cx = self._w - 2; cy = -2
+            p.setBrush(QBrush(QColor(chip_color))); p.setPen(Qt.NoPen)
+            p.drawEllipse(QPointF(cx, cy), 7.5, 7.5)
+            p.setPen(QPen(QColor("white"), 1.2))
+            p.setFont(QFont(pfd_fonts.SANS, 8, QFont.Bold))
+            p.drawText(QRectF(cx-7, cy-7, 14, 14), Qt.AlignCenter, "!")
