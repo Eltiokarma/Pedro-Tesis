@@ -28,7 +28,7 @@ from __future__ import annotations
 from typing import Callable, Dict, List, Optional, Tuple
 
 from PySide6.QtCore import (
-    Qt, Signal, QPoint, QPointF, QRectF, QRect, QEvent, QObject,
+    Qt, Signal, QPoint, QPointF, QRectF, QRect, QEvent, QObject, QSize,
 )
 from PySide6.QtGui import (
     QColor, QFont, QPainter, QPen, QBrush, QPainterPath, QMouseEvent,
@@ -554,38 +554,77 @@ class BubbleManager:
     FlowsheetMainWindow.
     """
 
-    def __init__(self, view: QGraphicsView, fs, get_stream_items_iter: Callable):
+    def __init__(self, view: QGraphicsView, get_fs: Callable,
+                 get_stream_items_iter: Callable):
         """
         view: el QGraphicsView del editor.
-        fs:   instancia de Flowsheet.
+        get_fs: callable que devuelve la Flowsheet ACTUAL.  Se llama
+                cada vez que el manager necesita iterar streams — así
+                resiste a swaps de fs por action_new/open/undo.
         get_stream_items_iter: callable que devuelve un iterador de
             (stream_id, StreamItem) — usado para encontrar el midpoint
             del path del stream en coordenadas de scene.
         """
         self.view = view
-        self.fs = fs
+        self._get_fs = get_fs
         self.get_stream_items_iter = get_stream_items_iter
         self._bubbles: Dict[int, StreamBubble] = {}
 
         vp = view.viewport()
-        # LeaderOverlay primero (z-order más bajo)
+        # LeaderOverlay primero (z-order más bajo).  NO mostrar ya:
+        # al construirse durante __init__ la ventana todavía no tiene
+        # surface válida y el primer paintEvent fallaría con
+        # "QPainter::begin: Paint device returned engine == 0".
+        # En su lugar, diferir el resize+show con QTimer.
         self.leader_overlay = LeaderOverlay(vp)
-        self.leader_overlay.resize(vp.size())
-        self.leader_overlay.show()
+        sz = vp.size()
+        if not sz.isValid() or sz.width() < 1 or sz.height() < 1:
+            sz = QSize(800, 600)
+        self.leader_overlay.resize(sz)
+        from PySide6.QtCore import QTimer
+        QTimer.singleShot(0, self._deferred_init)
 
-        # Hook resize/paint del viewport.  Conservar la ref para que
-        # el GC no recoja el filter.
+    def _deferred_init(self):
+        """Llamado después del primer event loop tick: el viewport ya
+        tiene tamaño real."""
+        vp = self.view.viewport()
+        try:
+            self.leader_overlay.resize(vp.size())
+            self.leader_overlay.show()
+        except Exception:
+            pass
+
+        # Hook resize del viewport.  Conservar la ref para que el GC no
+        # recoja el filter.
         self._resizer = _OverlayResizer(self)
         vp.installEventFilter(self._resizer)
 
+        # Hook scroll / zoom del view para que los leaders sigan al
+        # mapeo scene→viewport.  Los scrollbars se mueven en pan o
+        # cuando un wheelEvent dispara zoom anclado al cursor.
+        try:
+            view.horizontalScrollBar().valueChanged.connect(self._refresh_leaders)
+            view.verticalScrollBar().valueChanged.connect(self._refresh_leaders)
+        except Exception:
+            pass
+
     # ── API pública ─────────────────────────────────────
+    @property
+    def fs(self):
+        """Lee la Flowsheet actual via callback — resiste swaps."""
+        try:
+            return self._get_fs()
+        except Exception:
+            return None
+
     def refresh_all(self):
         """Sincroniza burbujas visibles con stream.bubble_visible para
         cada stream del fs.  Crea/destruye según haga falta y refresca
         valores."""
-        if self.fs is None:
+        fs = self.fs
+        if fs is None:
             return
-        streams = self.fs.streams
+        streams = fs.streams
         if isinstance(streams, dict):
             ids = set(streams.keys())
             streams_by_id = streams
@@ -608,7 +647,8 @@ class BubbleManager:
         self._refresh_leaders()
 
     def _create_bubble(self, stream):
-        bub = StreamBubble(stream.id, parent=self.view.viewport())
+        vp = self.view.viewport()
+        bub = StreamBubble(stream.id, parent=vp)
         bub.positionDragging.connect(self._on_dragging)
         bub.positionChanged.connect(self._on_drag_finished)
         bub.closeRequested.connect(self._on_close)
@@ -618,20 +658,35 @@ class BubbleManager:
         bub.set_show_composition(bool(getattr(stream, "bubble_show_composition", False)))
         bub.set_show_enthalpy(bool(getattr(stream, "bubble_show_enthalpy", False)))
         # Posición: si stream.bubble_position vacío, usar offset del
-        # midpoint del stream.
+        # midpoint del stream.  Si el midpoint tampoco es computable,
+        # poner la burbuja cerca del centro del viewport (NO en 40,40
+        # porque ahí está la paleta y queda tapada).
         bp = getattr(stream, "bubble_position", []) or []
         if len(bp) == 2:
-            bub.move(int(bp[0]), int(bp[1]))
+            x, y = int(bp[0]), int(bp[1])
         else:
             mp = self._stream_midpoint_viewport(stream.id)
             if mp is not None:
-                # offset escalado por # de burbujas ya visibles
                 n_visible = len(self._bubbles)
-                bub.move(int(mp.x() + 80),
-                         int(mp.y() + 60 + n_visible * 20))
+                x = int(mp.x() + 80)
+                y = int(mp.y() + 60 + n_visible * 20)
             else:
-                bub.move(40, 40)
-        bub.show(); bub.raise_()
+                # Fallback visible: centro-izquierda del viewport, lejos
+                # de la paleta (que está en 14,14, ancho 50).
+                n = len(self._bubbles)
+                x = 150 + n * 24
+                y = 120 + n * 24
+        # Clamp al rect del viewport por si la posición persistida
+        # quedó fuera tras un resize.
+        vw, vh = vp.width(), vp.height()
+        # adjustSize antes de mover para obtener width/height real
+        bub.adjustSize()
+        bw, bh = bub.sizeHint().width(), bub.sizeHint().height()
+        x = max(0, min(x, max(0, vw - 30)))
+        y = max(0, min(y, max(0, vh - 30)))
+        bub.move(x, y)
+        bub.show()
+        bub.raise_()   # encima del leader_overlay y del chrome
         self._bubbles[stream.id] = bub
 
     def _destroy_bubble(self, sid: int):
@@ -673,6 +728,9 @@ class BubbleManager:
 
     def _refresh_leaders(self):
         """Reconstruye la lista de leaders y la entrega al overlay."""
+        if not self._bubbles:
+            self.leader_overlay.set_links([])
+            return
         links: List[Tuple[QPoint, QPoint, str]] = []
         for sid, bub in self._bubbles.items():
             mp = self._stream_midpoint_viewport(sid)
@@ -682,6 +740,10 @@ class BubbleManager:
             attach = bub.attachment_point(mp)
             links.append((mp, attach, state))
         self.leader_overlay.set_links(links)
+        # Asegurar z-order: leader_overlay debajo de las burbujas
+        self.leader_overlay.raise_()
+        for bub in self._bubbles.values():
+            bub.raise_()
 
     def _stream_midpoint_viewport(self, sid: int) -> Optional[QPoint]:
         """Devuelve el midpoint del path del stream en coordenadas del
@@ -751,7 +813,10 @@ class BubbleManager:
         self._refresh_leaders()
 
     def _get_stream(self, sid: int):
-        streams = self.fs.streams
+        fs = self.fs
+        if fs is None:
+            return None
+        streams = fs.streams
         if isinstance(streams, dict):
             return streams.get(sid)
         for s in streams:
@@ -774,7 +839,10 @@ class BubbleManager:
 
 class _OverlayResizer(QObject):
     """Event filter (QObject) que llama BubbleManager.viewport_resized
-    cuando el viewport cambia de tamaño o se repaint (zoom/pan/scroll)."""
+    cuando el viewport cambia de tamaño.  NO escucha Paint events —
+    eso provocaba un loop de QPainter::begin failures porque
+    set_links(...) llama self.update() y Qt no permite repaint de un
+    child durante el paint del parent."""
 
     def __init__(self, mgr: "BubbleManager"):
         super().__init__()
@@ -783,6 +851,4 @@ class _OverlayResizer(QObject):
     def eventFilter(self, obj, ev):
         if ev.type() == QEvent.Resize:
             self._mgr.viewport_resized()
-        elif ev.type() == QEvent.Paint:
-            self._mgr._refresh_leaders()
         return False

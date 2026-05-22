@@ -6074,8 +6074,13 @@ class FlowsheetMainWindow(QMainWindow):
         # False en todos los streams).
         try:
             from stream_bubbles import BubbleManager
+            # Pasamos lambdas para que el manager siempre lea la fs y los
+            # stream items actuales (resistente a swaps de fs por
+            # action_new/open/undo).
             self._bubble_manager = BubbleManager(
-                self.view, self.fs, self.stream_items_iter,
+                self.view,
+                lambda: self.fs,
+                self.stream_items_iter,
             )
             self._bubble_manager.refresh_all()
         except Exception as _e:
@@ -6917,6 +6922,9 @@ class FlowsheetMainWindow(QMainWindow):
         self._update_status()
         self.prop_label.setText("(nada seleccionado)")
         self.results_box.setPlainText("(apretá Calcular para estimar el ISBL)")
+        # Burbujas: limpiar todas (no hay streams)
+        if getattr(self, "_bubble_manager", None) is not None:
+            self._bubble_manager.refresh_all()
 
     def action_open(self):
         path, _ = QFileDialog.getOpenFileName(
@@ -8108,6 +8116,9 @@ class FlowsheetMainWindow(QMainWindow):
         for s in self.fs.streams.values():
             self._render_stream(s)
         self._refresh_port_colors()
+        # Burbujas: reconcilar tras cargar / undo / redo
+        if getattr(self, "_bubble_manager", None) is not None:
+            self._bubble_manager.refresh_all()
 
     # ---------------------------------------------------
     # UNDO / REDO infrastructure
