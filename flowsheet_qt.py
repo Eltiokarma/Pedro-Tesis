@@ -1014,17 +1014,20 @@ class BlockEditDialog(QDialog):
 
         layout.addRow(self.gb_reactivity)
 
-        # ─── Especies entrantes (read-only) ───
-        # Muestra que streams entran al bloque y la composicion agregada
-        # (suma de mass fractions ponderadas por mass_flow). Util para
-        # ver "que esta entrando al reactor" sin tener que abrir cada
-        # stream upstream uno por uno.
+        # ─── Especies del equipo (read-only) ───
+        # Espejo de los streams conectados a los puertos del bloque. NO se
+        # editan especies acá: viven en las corrientes. Para modificar,
+        # doble-click sobre el nombre del stream → abre StreamEditDialog.
         try:
             parent_fs = getattr(parent, "fs", None)
         except Exception:
             parent_fs = None
+        self._species_tbl_in = None
+        self._species_tbl_out = None
+        self._species_incoming: list = []
+        self._species_outgoing: list = []
         if parent_fs is not None:
-            self._build_incoming_species_section(parent_fs, block, layout)
+            self._build_species_section(parent_fs, block, layout)
 
         # botones (fuera del scroll: siempre visibles al fondo)
         buttons = QDialogButtonBox(
@@ -1088,91 +1091,120 @@ class BlockEditDialog(QDialog):
             cf_it.setToolTip(f"Confidence: {conf}")
             self.rxn_table.setItem(ri, 3, cf_it)
 
-    def _build_incoming_species_section(self, fs, block, layout) -> None:
-        """Agrega una QGroupBox 'Especies entrantes' al form layout.
-
-        Lista cada stream cuyo dst == block.id y, debajo, una tabla con
-        la composicion agregada (suma ponderada por mass_flow). Si el
-        bloque no tiene streams entrantes, muestra un label informativo.
-        """
-        gb = QGroupBox("Especies entrantes")
+    # ─── helpers Especies del equipo (read-only) ───
+    def _build_species_section(self, fs, block, layout) -> None:
+        """Sección read-only con los streams entrantes y salientes del
+        bloque y sus especies. Cero edición acá; doble-click sobre un
+        stream abre el StreamEditDialog del editor."""
+        gb = QGroupBox("Especies del equipo (read-only)")
         gbl = QVBoxLayout(gb)
 
-        incoming = [s for s in fs.streams.values() if s.dst == block.id]
-        if not incoming:
-            lbl = QLabel("(sin streams conectados a la entrada de este bloque)")
+        self._species_incoming = [
+            s for s in fs.streams.values() if s.dst == block.id]
+        self._species_outgoing = [
+            s for s in fs.streams.values() if s.src == block.id]
+
+        gbl.addWidget(QLabel("<b>◀ Entradas</b>"))
+        if self._species_incoming:
+            self._species_tbl_in = self._make_stream_species_table(
+                self._species_incoming)
+            gbl.addWidget(self._species_tbl_in)
+        else:
+            lbl = QLabel("(sin streams conectados a la entrada)")
             lbl.setStyleSheet("color: #888; font-style: italic;")
             gbl.addWidget(lbl)
-            layout.addRow(gb)
-            return
 
-        # Tabla por stream: nombre + mass_flow + T + composicion resumida
-        tbl_streams = QTableWidget(len(incoming), 4)
-        tbl_streams.setHorizontalHeaderLabels([
-            "Stream", "Flujo (tm/año)", "T (°C)", "Composición",
+        gbl.addWidget(QLabel("<b>▶ Salidas</b>"))
+        if self._species_outgoing:
+            self._species_tbl_out = self._make_stream_species_table(
+                self._species_outgoing)
+            gbl.addWidget(self._species_tbl_out)
+        else:
+            lbl = QLabel("(sin streams conectados a la salida)")
+            lbl.setStyleSheet("color: #888; font-style: italic;")
+            gbl.addWidget(lbl)
+
+        hint = QLabel(
+            "ℹ Doble-click sobre un stream para editar sus valores. "
+            "Las especies viven en las corrientes, no en el equipo."
+        )
+        hint.setStyleSheet("color: #888; font-size: 8pt;")
+        hint.setWordWrap(True)
+        gbl.addWidget(hint)
+
+        layout.addRow(gb)
+
+    def _make_stream_species_table(self, streams: list) -> QTableWidget:
+        tbl = QTableWidget(0, 4)
+        tbl.setHorizontalHeaderLabels([
+            "Stream", "Flujo (tm/año)", "T (°C)", "Especies",
         ])
-        tbl_streams.setEditTriggers(QTableWidget.NoEditTriggers)
-        tbl_streams.setSelectionMode(QTableWidget.NoSelection)
-        tbl_streams.verticalHeader().setVisible(False)
-        tbl_streams.horizontalHeader().setStretchLastSection(True)
-        tbl_streams.setMinimumHeight(80)
-        for ri, s in enumerate(incoming):
-            tbl_streams.setItem(ri, 0, QTableWidgetItem(s.name))
-            tbl_streams.setItem(ri, 1, QTableWidgetItem(f"{s.mass_flow:,.1f}"))
-            tbl_streams.setItem(ri, 2, QTableWidgetItem(f"{s.temperature:.1f}"))
+        tbl.setEditTriggers(QTableWidget.NoEditTriggers)
+        tbl.setSelectionBehavior(QTableWidget.SelectRows)
+        tbl.verticalHeader().setVisible(False)
+        tbl.horizontalHeader().setStretchLastSection(True)
+        tbl.setMinimumHeight(60)
+        tbl.setMaximumHeight(180)
+        tbl.setProperty("streams_by_row", streams)
+        self._populate_species_table(tbl, streams)
+        tbl.cellDoubleClicked.connect(
+            lambda row, _col, t=tbl: self._on_species_table_dblclick(t, row)
+        )
+        return tbl
+
+    def _populate_species_table(
+            self, tbl: QTableWidget, streams: list) -> None:
+        tbl.setRowCount(len(streams))
+        for ri, s in enumerate(streams):
+            nm = QTableWidgetItem(s.name)
+            nm.setForeground(QColor("#1565c0"))
+            f = nm.font(); f.setUnderline(True); nm.setFont(f)
+            nm.setToolTip("Doble-click para editar este stream")
+            tbl.setItem(ri, 0, nm)
+            tbl.setItem(ri, 1, QTableWidgetItem(f"{s.mass_flow:,.1f}"))
+            T = getattr(s, "temperature", 0.0)
+            tbl.setItem(ri, 2, QTableWidgetItem(f"{T:.1f}"))
             if s.composition:
-                comp_str = ", ".join(
+                parts = [
                     f"{k} {v*100:.1f}%"
                     for k, v in sorted(
                         s.composition.items(), key=lambda kv: -kv[1])[:4]
-                )
+                ]
+                comp_str = ", ".join(parts)
                 if len(s.composition) > 4:
                     comp_str += f", +{len(s.composition)-4} más"
+                comp_color = None
             elif s.main_component:
                 comp_str = f"{s.main_component} (100%)"
+                comp_color = None
             else:
-                comp_str = "(no declarada)"
+                comp_str = "⚠ Aún no resuelto. Ejecutá Solve."
+                comp_color = QColor("#b8860b")
             it = QTableWidgetItem(comp_str)
             it.setToolTip(comp_str)
-            tbl_streams.setItem(ri, 3, it)
-        tbl_streams.resizeColumnsToContents()
-        gbl.addWidget(tbl_streams)
+            if comp_color is not None:
+                it.setForeground(comp_color)
+            tbl.setItem(ri, 3, it)
+        tbl.resizeColumnsToContents()
 
-        # ─── Composicion agregada (mass-flow weighted) ───
-        total_flow = sum(s.mass_flow for s in incoming)
-        if total_flow > 0:
-            agg: dict = {}
-            for s in incoming:
-                comp = s.composition or (
-                    {s.main_component: 1.0} if s.main_component else {}
-                )
-                for comp_name, frac in comp.items():
-                    agg[comp_name] = agg.get(comp_name, 0.0) + frac * s.mass_flow
-            # Normalizar a fraccion masica
-            agg_frac = {k: v / total_flow for k, v in agg.items()}
-            if agg_frac:
-                hdr = QLabel("<b>Composición agregada (ponderada por flujo)</b>")
-                gbl.addWidget(hdr)
-                tbl_agg = QTableWidget(len(agg_frac), 3)
-                tbl_agg.setHorizontalHeaderLabels([
-                    "Componente", "Fracción másica", "Flujo (tm/año)",
-                ])
-                tbl_agg.setEditTriggers(QTableWidget.NoEditTriggers)
-                tbl_agg.setSelectionMode(QTableWidget.NoSelection)
-                tbl_agg.verticalHeader().setVisible(False)
-                tbl_agg.horizontalHeader().setStretchLastSection(True)
-                tbl_agg.setMinimumHeight(80)
-                for ri, (comp_name, frac) in enumerate(
-                    sorted(agg_frac.items(), key=lambda kv: -kv[1])
-                ):
-                    tbl_agg.setItem(ri, 0, QTableWidgetItem(comp_name))
-                    tbl_agg.setItem(ri, 1, QTableWidgetItem(f"{frac*100:.2f}%"))
-                    tbl_agg.setItem(ri, 2, QTableWidgetItem(
-                        f"{frac * total_flow:,.1f}"))
-                tbl_agg.resizeColumnsToContents()
-                gbl.addWidget(tbl_agg)
-
-        layout.addRow(gb)
+    def _on_species_table_dblclick(
+            self, tbl: QTableWidget, row: int) -> None:
+        streams = tbl.property("streams_by_row")
+        if not streams or row < 0 or row >= len(streams):
+            return
+        stream = streams[row]
+        editor = self.parent()
+        edit_fn = getattr(editor, "edit_stream", None)
+        if edit_fn is None:
+            return
+        edit_fn(stream)
+        # Repoblar tablas: los Stream se mutan in-place en apply_to_model
+        if self._species_tbl_in is not None:
+            self._populate_species_table(
+                self._species_tbl_in, self._species_incoming)
+        if self._species_tbl_out is not None:
+            self._populate_species_table(
+                self._species_tbl_out, self._species_outgoing)
 
     def apply_to_model(self):
         """Persistir los valores al Block."""
