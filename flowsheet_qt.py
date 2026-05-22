@@ -5819,7 +5819,30 @@ class FlowsheetMainWindow(QMainWindow):
         self.fs = Flowsheet()
         self.scene = FlowsheetScene(self)
         self.view  = FlowsheetView(self.scene)
-        self.setCentralWidget(self.view)
+
+        # ── EditorTopbar (Parte B del rediseño NUEVA_UI) ────────────
+        # Barra superior fina (52px) con identidad del proyecto, undo/
+        # redo, status del solver y los dos botones primarios (Validar
+        # DOF + Resolver).  Convive con las QToolBars legacy debajo,
+        # que mantienen las acciones de file / examples / export /
+        # análisis económico.
+        from editor_chrome import (
+            EditorTopbar, EditorPalette, EditorZoom, _Overlay,
+            PALETTE_TO_EQ_TYPE,
+        )
+        central_wrap = QWidget(self)
+        wrap_lay = QVBoxLayout(central_wrap)
+        wrap_lay.setContentsMargins(0, 0, 0, 0)
+        wrap_lay.setSpacing(0)
+        self.editor_topbar = EditorTopbar(self)
+        wrap_lay.addWidget(self.editor_topbar)
+        wrap_lay.addWidget(self.view, 1)
+        self.setCentralWidget(central_wrap)
+        # guardar refs (overlays se construyen después de las acciones)
+        self._palette_widget = EditorPalette(self.view.viewport())
+        self._zoom_widget    = EditorZoom(self.view.viewport())
+        self._chrome_overlay = _Overlay(self.view, self._palette_widget, self._zoom_widget)
+        self._palette_to_eq_type = PALETTE_TO_EQ_TYPE
 
         # state de conexión pendiente (right-click + left-click)
         self._connecting_from: int = None
@@ -5839,6 +5862,7 @@ class FlowsheetMainWindow(QMainWindow):
         self._build_streams_dock()
         self._build_toolbar()
         self._build_statusbar()
+        self._wire_editor_chrome()
 
         # selección
         self.scene.selectionChanged.connect(self._on_selection_changed)
@@ -5921,6 +5945,120 @@ class FlowsheetMainWindow(QMainWindow):
         # escapar conexión pendiente / borrar
         QShortcut(QKeySequence(Qt.Key_Escape), self, activated=self.cancel_connection)
         QShortcut(QKeySequence(Qt.Key_Delete), self, activated=self.action_delete)
+
+    # ---------------------------------------------------
+    # EDITOR CHROME WIRING (Parte B — NUEVA_UI)
+    # ---------------------------------------------------
+
+    def _wire_editor_chrome(self):
+        """Conecta las señales del EditorTopbar / EditorPalette /
+        EditorZoom a las acciones existentes de la ventana."""
+        tb = self.editor_topbar
+        # Undo/redo — reutilizar el undo_stack
+        tb.undoRequested.connect(self.undo_stack.undo)
+        tb.redoRequested.connect(self.undo_stack.redo)
+        # Estado inicial de undo/redo y observador del stack
+        def _refresh_undo_buttons():
+            tb.set_undo_enabled(self.undo_stack.canUndo(),
+                                self.undo_stack.canRedo())
+        self.undo_stack.canUndoChanged.connect(lambda _: _refresh_undo_buttons())
+        self.undo_stack.canRedoChanged.connect(lambda _: _refresh_undo_buttons())
+        _refresh_undo_buttons()
+        # Grid toggle — refresh paper grid
+        tb.gridToggled.connect(self._on_topbar_grid_toggle)
+        # Auto-arrange (action existente si la hay; si no, no-op visual)
+        if hasattr(self, "action_auto_arrange"):
+            tb.autoArrangeRequested.connect(self.action_auto_arrange)
+        elif hasattr(self, "action_autoarrange"):
+            tb.autoArrangeRequested.connect(self.action_autoarrange)
+        # Validar DOF + Resolver
+        tb.validateRequested.connect(self.action_dof)
+        tb.solveRequested.connect(self.action_solve)
+        # Nombre del proyecto inicial
+        tb.set_project(self._current_project_name(), "sin guardar")
+
+        # ── Palette: tool/block ─────────────────────────────────
+        pal = self._palette_widget
+        pal.blockRequested.connect(self._on_palette_block_requested)
+        # Tools: el primer slice solo activa el modo de selección/pan/connect.
+        pal.toolSelected.connect(self._on_palette_tool_selected)
+        pal.moreRequested.connect(self._on_palette_more_requested)
+
+        # ── Zoom overlay ────────────────────────────────────────
+        zm = self._zoom_widget
+        zm.zoomInRequested.connect(self.view.zoom_in)
+        zm.zoomOutRequested.connect(self.view.zoom_out)
+        zm.zoomResetRequested.connect(self.view.zoom_reset)
+        zm.zoomFitRequested.connect(self.view.zoom_fit)
+        # observador de zoom para actualizar el %
+        if hasattr(self.view, "zoomChanged"):
+            self.view.zoomChanged.connect(zm.set_zoom)
+        else:
+            # Fallback: refrescar via timer cada 200ms (sutil)
+            from PySide6.QtCore import QTimer
+            self._zoom_refresh_timer = QTimer(self)
+            self._zoom_refresh_timer.setInterval(250)
+            self._zoom_refresh_timer.timeout.connect(self._refresh_zoom_chip)
+            self._zoom_refresh_timer.start()
+
+    def _refresh_zoom_chip(self):
+        try:
+            f = self.view.transform().m11()
+            self._zoom_widget.set_zoom(f)
+        except Exception:
+            pass
+
+    def _current_project_name(self) -> str:
+        # Sin path persistido aún: usar el window title como fallback
+        try:
+            t = self.windowTitle()
+        except Exception:
+            t = ""
+        return t.split("—")[0].strip() or "(sin nombre)"
+
+    def _on_topbar_grid_toggle(self):
+        """Toggle de visibilidad del marco PFD (cuando existe)."""
+        if hasattr(self, "_paper_action"):
+            self._paper_action.trigger()
+
+    def _on_palette_block_requested(self, palette_id: str):
+        """Crear un bloque del tipo seleccionado en la paleta."""
+        eq_type = self._palette_to_eq_type.get(palette_id)
+        if eq_type is None:
+            return
+        self._add_block_of_type(eq_type)
+
+    def _on_palette_tool_selected(self, tool_id: str):
+        """Activar herramienta de manipulación del canvas."""
+        v = self.view
+        if tool_id == "pan":
+            v.setDragMode(QGraphicsView.ScrollHandDrag)
+        elif tool_id == "select":
+            v.setDragMode(QGraphicsView.RubberBandDrag)
+        elif tool_id == "connect":
+            # Si existe modo de conexión nativo, activarlo.  Si no, dar
+            # un hint visual (cambio de cursor) y dejar la UX manual:
+            # right-click + left-click.
+            v.setDragMode(QGraphicsView.NoDrag)
+            v.viewport().setCursor(Qt.CrossCursor)
+            return
+        elif tool_id == "text":
+            v.setDragMode(QGraphicsView.NoDrag)
+            v.viewport().setCursor(Qt.IBeamCursor)
+            return
+        v.viewport().setCursor(Qt.ArrowCursor)
+
+    def _on_palette_more_requested(self):
+        """Mostrar el dock de biblioteca para acceder a tipos secundarios."""
+        if hasattr(self, "lib_dock"):
+            self.lib_dock.show()
+            self.lib_dock.raise_()
+
+    def update_solver_chip(self, state: str, iter_: int = 0, dt: float = 0.0):
+        """API pública — el solver llama acá tras finalizar para
+        actualizar el chip del topbar."""
+        if hasattr(self, "editor_topbar"):
+            self.editor_topbar.set_solver_state(state, iter_, dt)
 
     # ---------------------------------------------------
     # WIDGETS
@@ -6349,6 +6487,9 @@ class FlowsheetMainWindow(QMainWindow):
                 item.set_status("stale")
             if hasattr(self, "_update_status"):
                 self._update_status()
+            # chip del EditorTopbar
+            if hasattr(self, "editor_topbar"):
+                self.editor_topbar.set_solver_state("stale")
 
     # ---------------------------------------------------
     # ACCIONES — File
@@ -6778,6 +6919,15 @@ class FlowsheetMainWindow(QMainWindow):
         self._dirty_after_solve = False
         self._last_overall_status = result.overall_status
         self._update_status()
+        # Actualizar el chip del EditorTopbar (Parte B)
+        chip_state = {
+            "ok":      "converged",
+            "warning": "warning",
+            "error":   "failed",
+        }.get(result.overall_status, "idle")
+        n_iter = getattr(result, "iter_count", 0) or 0
+        dt = getattr(result, "elapsed_s", 0.0) or 0.0
+        self.update_solver_chip(chip_state, n_iter, dt)
         # auditar conexiones semánticas
         sem_issues = fval.validate_all_streams(self.fs)
         # mostrar resumen
