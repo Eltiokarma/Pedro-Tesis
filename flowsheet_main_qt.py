@@ -5,10 +5,8 @@ Uso:
     python flowsheet_main_qt.py                # nuevo diagrama vacío
     python flowsheet_main_qt.py --open d.json  # abre un diagrama
 
-Mientras dura la migración Tk → Qt, este script corre EN PARALELO
-con `flowsheet_main.py` (Tk legacy).  Ambos comparten el modelo
-(`flowsheet_model.py`) y los motores (`equipment_*`, `flowsheet_solver`,
-`pipeline`).  Los JSONs guardados son intercambiables.
+Editor principal Qt. Comparte modelo (`flowsheet_model.py`) y motores
+(`equipment_*`, `flowsheet_solver`) con el resto del proyecto.
 
 Requiere:
     pip install PySide6
@@ -50,8 +48,6 @@ def main():
         action, payload = wq.show_and_get_action()
         if action is None:
             return 0           # user cerró sin elegir
-        if action == "legacy":
-            return 0           # subprocess.Popen ya se ejecutó en welcome
         # action == "qt"
         initial_path = payload
 
