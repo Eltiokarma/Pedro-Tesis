@@ -458,6 +458,26 @@ class Stream:
     # hay geometría no-default + pressure_locked (heurística).
     is_pipe: bool = False
 
+    # ---- STREAM BUBBLES (parche NUEVA_UI_P_SAD_3) ----
+    # Burbuja flotante en el lienzo con propiedades del stream (T, P, ṁ,
+    # opcionalmente h y composición), conectada al stream por un leader
+    # punteado curvado.  Default OFF — un flowsheet con 50+ streams se
+    # llenaría de burbujas; el usuario las activa una por una desde el
+    # StreamEditDialog (sección "Visualización") o doble-click en stream.
+    bubble_visible:           bool = False
+    # Posición de la burbuja en coordenadas de la escena Qt.  [] = aún
+    # sin posicionar (offset default 80x abajo, 60y a la derecha del
+    # midpoint del stream).  Cuando el user arrastra la burbuja, esta
+    # lista se actualiza a [x, y].
+    bubble_position:          List[float] = field(default_factory=list)
+    # Densidad de la burbuja: False = estándar (T/P/ṁ visible),
+    # True = colapsada (solo T + ṁ inline, header muy chico).
+    bubble_collapsed:         bool = False
+    # Sub-toggles visuales accesibles desde el menú "⋯" del header de
+    # la burbuja o desde la sección "Visualización" del dialog.
+    bubble_show_composition:  bool = False
+    bubble_show_enthalpy:     bool = False
+
     # ---- OPERACIÓN POR LOTES (declarativo, hook transitorio) ----
     # Ventana de actividad batch:
     #   None (default) → corriente CONTINUA, comportamiento idéntico
