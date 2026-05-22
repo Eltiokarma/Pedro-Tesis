@@ -615,14 +615,25 @@ class _ToolButton(QToolButton):
 class EditorPalette(QFrame):
     """Paleta vertical flotante (50px).  Tools arriba, 7 bloques abajo.
 
-    Las señales `toolSelected(id)` y `blockRequested(id)` notifican al
-    parent.  Para el block library, el flowsheet decide si crear el
-    bloque al click (V1) o al drag (futuro).
+    Comportamiento:
+      · Click en una tool → toolSelected(id)
+      · Click en un bloque → popup con TODAS las variantes de la
+        categoría correspondiente.  El usuario elige una y se emite
+        blockTypeRequested(eq_type) con el eq_type canónico del
+        catálogo.
+      · Drag desde un bloque → crea el bloque default (canónico) en
+        la posición del drop.
+      · Botón "+" → popup con TODOS los eq_types agrupados por
+        categoría (Heat exchangers / Compressors / Reactors / etc.).
+
+    La paleta es arrastrable: un handle "⋮⋮" arriba permite moverla
+    a cualquier posición dentro del viewport.
     """
 
-    toolSelected    = Signal(str)
-    blockRequested  = Signal(str)
-    moreRequested   = Signal()
+    toolSelected         = Signal(str)
+    blockRequested       = Signal(str)        # palette-id (legacy)
+    blockTypeRequested   = Signal(str)        # eq_type canónico
+    moreRequested        = Signal()
 
     TOOLS = [
         ("select",  "Seleccionar (V)"),
@@ -633,6 +644,21 @@ class EditorPalette(QFrame):
     BLOCKS = ["reactor", "mezclador", "separador", "columna",
               "hx", "bomba", "tanque"]
 
+    # Mapeo categoría del catálogo → palette-id (para agrupar variantes
+    # bajo el botón correspondiente).
+    CATEGORY_TO_PALETTE = {
+        "Reactors":           "reactor",
+        "Heat exchangers":    "hx",
+        "Pumps":              "bomba",
+        "Compressors":        "bomba",   # comparten silueta circular
+        "Fans":               "bomba",
+        "Vessels":            "separador",
+        "Storage":            "tanque",
+        "Mixers / splitters": "mezclador",
+        "Fired heaters":      "hx",
+        "Solids / sep.":      "separador",
+    }
+
     def __init__(self, parent=None):
         super().__init__(parent)
         self.setObjectName("edPalette")
@@ -641,22 +667,35 @@ class EditorPalette(QFrame):
             f"#edPalette {{ background: {TOK['bg_elev']}; "
             f"border: 1px solid {TOK['line']}; border-radius: 12px; }}"
         )
-        # Shadow effect — usar QGraphicsDropShadow
+        # Shadow effect
         try:
             from PySide6.QtWidgets import QGraphicsDropShadowEffect
-            from PySide6.QtCore import Qt as _Qt
             sh = QGraphicsDropShadowEffect(self)
-            sh.setBlurRadius(28)
-            sh.setOffset(0, 6)
-            c = QColor(40, 30, 20); c.setAlphaF(0.12)
-            sh.setColor(c)
+            sh.setBlurRadius(28); sh.setOffset(0, 6)
+            c = QColor(40, 30, 20); c.setAlphaF(0.12); sh.setColor(c)
             self.setGraphicsEffect(sh)
         except Exception:
             pass
 
-        lay = QVBoxLayout(self)
-        lay.setContentsMargins(5, 8, 5, 8); lay.setSpacing(2)
+        # Estado de drag para mover la paleta
+        self._drag_offset = None
 
+        lay = QVBoxLayout(self)
+        lay.setContentsMargins(5, 4, 5, 8); lay.setSpacing(2)
+
+        # ── Drag handle arriba ──
+        self._drag_handle = QLabel("⋮⋮", self)
+        self._drag_handle.setFixedSize(40, 14)
+        self._drag_handle.setAlignment(Qt.AlignCenter)
+        self._drag_handle.setCursor(Qt.SizeAllCursor)
+        self._drag_handle.setFont(QFont(pfd_fonts.SANS, 9, QFont.Bold))
+        self._drag_handle.setStyleSheet(
+            f"color: {TOK['ink_ghost']}; letter-spacing: -2px;"
+        )
+        self._drag_handle.setToolTip("Arrastrá para mover la paleta")
+        lay.addWidget(self._drag_handle, alignment=Qt.AlignHCenter)
+
+        # ── Tools ──
         self._tool_btns: Dict[str, _ToolButton] = {}
         self._active_tool = "select"
         for tid, tip in self.TOOLS:
@@ -667,37 +706,77 @@ class EditorPalette(QFrame):
 
         lay.addWidget(self._mk_divider())
 
+        # ── Bloques (7 tipos, cada uno con popup de variantes) ──
         self._block_btns: Dict[str, _ToolButton] = {}
         for bid in self.BLOCKS:
             b = _ToolButton("block", bid, PALETTE_LABELS.get(bid, bid), parent=self)
-            b.clicked.connect(lambda _=False, k=bid: self.blockRequested.emit(k))
+            # Click sobre el bloque: abrir popup de variantes
+            b.clicked.connect(
+                lambda _=False, k=bid, btn=b: self._show_variants_menu(k, btn))
             self._block_btns[bid] = b
             lay.addWidget(b, alignment=Qt.AlignHCenter)
 
         lay.addWidget(self._mk_divider())
 
+        # ── Botón "+" (popup categorizado de todos los equipos) ──
         plus = QToolButton(self)
         plus.setText("+"); plus.setFixedSize(40, 32)
         plus.setCursor(Qt.PointingHandCursor)
         plus.setFont(QFont(pfd_fonts.SANS, 16, QFont.Bold))
-        plus.setToolTip("Más equipos (válvula, splitter, …)")
+        plus.setToolTip("Catálogo completo de equipos")
         plus.setStyleSheet(
             f"QToolButton {{ background: transparent; color: {TOK['ink_mute']}; "
             f"border: 0; border-radius: 6px; }} "
             f"QToolButton:hover {{ background: {TOK['bg_mute']}; color: {TOK['ink']}; }}"
         )
-        plus.clicked.connect(self.moreRequested.emit)
+        plus.clicked.connect(lambda: self._show_full_catalog_menu(plus))
         lay.addWidget(plus, alignment=Qt.AlignHCenter)
 
         lay.addStretch(1)
 
+    # ── Movimiento de la paleta ──
+    def mousePressEvent(self, ev):
+        # Solo el handle inicia el drag — los botones consumen sus clicks
+        if ev.button() == Qt.LeftButton:
+            child = self.childAt(ev.position().toPoint())
+            if child is self._drag_handle:
+                self._drag_offset = ev.globalPosition().toPoint() - self.pos()
+                ev.accept()
+                return
+        super().mousePressEvent(ev)
+
+    def mouseMoveEvent(self, ev):
+        if self._drag_offset is not None and (ev.buttons() & Qt.LeftButton):
+            new_pos = ev.globalPosition().toPoint() - self._drag_offset
+            # restringir al rectángulo del parent (viewport)
+            parent = self.parentWidget()
+            if parent is not None:
+                pr = parent.rect()
+                pw = self.width(); ph = self.height()
+                x = max(0, min(new_pos.x(), pr.width()  - pw))
+                y = max(0, min(new_pos.y(), pr.height() - ph))
+                new_pos = self.mapToParent(self.mapFromGlobal(
+                    ev.globalPosition().toPoint())) if parent is None else \
+                    type(new_pos)(x, y)
+            self.move(new_pos)
+            ev.accept()
+            return
+        super().mouseMoveEvent(ev)
+
+    def mouseReleaseEvent(self, ev):
+        if self._drag_offset is not None:
+            self._drag_offset = None
+            ev.accept()
+            return
+        super().mouseReleaseEvent(ev)
+
+    # ── Helpers ──
     def _mk_divider(self) -> QFrame:
         d = QFrame(self); d.setFixedHeight(1)
         d.setStyleSheet(f"background:{TOK['line']};")
         return d
 
     def _on_tool_click(self, tool_id: str):
-        # Actualizar visualmente cuál está activo
         if self._active_tool == tool_id:
             return
         self._tool_btns[self._active_tool].set_active(False)
@@ -708,6 +787,98 @@ class EditorPalette(QFrame):
     def set_active_tool(self, tool_id: str):
         if tool_id in self._tool_btns:
             self._on_tool_click(tool_id)
+
+    # ── Popups de variantes / catálogo completo ──
+    def _eq_types_for_palette(self, palette_id: str) -> List[str]:
+        """Devuelve todos los eq_types del catálogo cuya categoría
+        mapea a este palette_id, con overrides por nombre para casos
+        donde la categoría no determina la silueta (e.g. Tower está
+        en 'Vessels' pero pertenece a la columna)."""
+        try:
+            import equipment_costs as _ec
+        except Exception:
+            return []
+        out = []
+        for eq_name, spec in _ec.EQUIPMENT_DATA.items():
+            mapped = isa_type_for_eq(eq_name)
+            if mapped == palette_id:
+                out.append(eq_name)
+        return sorted(out)
+
+    def _show_variants_menu(self, palette_id: str, anchor_widget):
+        """Muestra un popup con todas las variantes de una categoría.
+        Si solo hay una, la emite directo sin abrir el menú."""
+        eq_types = self._eq_types_for_palette(palette_id)
+        if not eq_types:
+            # fallback al default canónico
+            default = PALETTE_TO_EQ_TYPE.get(palette_id)
+            if default:
+                self.blockTypeRequested.emit(default)
+                self.blockRequested.emit(palette_id)
+            return
+        # Si hay un solo eq_type, no abrir menú: emitir directo
+        if len(eq_types) == 1:
+            self.blockTypeRequested.emit(eq_types[0])
+            return
+        # Sino, abrir QMenu con las variantes
+        from PySide6.QtWidgets import QMenu
+        menu = QMenu(self)
+        self._style_menu(menu)
+        # Marcar la variante por defecto como recomendada
+        default = PALETTE_TO_EQ_TYPE.get(palette_id)
+        for et in eq_types:
+            label = et
+            if et == default:
+                label = f"★  {et}"
+            act = menu.addAction(label)
+            act.triggered.connect(lambda _=False, e=et:
+                                  self.blockTypeRequested.emit(e))
+        # Posicionar a la derecha del botón
+        global_pos = anchor_widget.mapToGlobal(
+            anchor_widget.rect().topRight()
+        )
+        menu.exec(global_pos)
+
+    def _show_full_catalog_menu(self, anchor_widget):
+        """Popup con TODO el catálogo agrupado por categoría."""
+        try:
+            import equipment_costs as _ec
+            by_cat = _ec.por_categoria()
+        except Exception:
+            return
+        from PySide6.QtWidgets import QMenu
+        menu = QMenu(self)
+        self._style_menu(menu)
+        # Ordenar categorías alfabéticamente, pero poner las más usadas arriba
+        priority = ["Reactors", "Heat exchangers", "Vessels",
+                    "Mixers / splitters", "Pumps", "Compressors",
+                    "Storage", "Fired heaters", "Fans", "Solids / sep."]
+        ordered_cats = [c for c in priority if c in by_cat] + \
+                       sorted([c for c in by_cat if c not in priority])
+        for cat in ordered_cats:
+            sub = menu.addMenu(cat)
+            self._style_menu(sub)
+            for et in by_cat[cat]:
+                act = sub.addAction(et)
+                act.triggered.connect(lambda _=False, e=et:
+                                      self.blockTypeRequested.emit(e))
+        global_pos = anchor_widget.mapToGlobal(
+            anchor_widget.rect().topRight()
+        )
+        menu.exec(global_pos)
+
+    def _style_menu(self, menu):
+        """Aplica el estilo del editor al QMenu."""
+        menu.setStyleSheet(
+            f"QMenu {{ background: {TOK['bg_elev']}; color: {TOK['ink']}; "
+            f"border: 1px solid {TOK['line']}; padding: 4px 0; "
+            f"font-family: '{pfd_fonts.SANS}'; font-size: 9pt; }} "
+            f"QMenu::item {{ padding: 6px 22px 6px 14px; }} "
+            f"QMenu::item:selected {{ background: {TOK['accent_tint']}; "
+            f"color: {TOK['accent_deep']}; }} "
+            f"QMenu::separator {{ height: 1px; background: {TOK['line']}; "
+            f"margin: 4px 8px; }}"
+        )
 
 
 # ════════════════════════════════════════════════════════
@@ -813,17 +984,15 @@ class _Overlay(QWidget):
         self._host = host
         self._palette = palette
         self._zoom = zoom
+        self._palette_positioned = False   # primer show vs subsequent resize
         # parent each to host.viewport() so they render on top
         palette.setParent(host.viewport())
         zoom.setParent(host.viewport())
         palette.show(); zoom.show()
         palette.raise_(); zoom.raise_()
-        # observar tanto el view como su viewport: en QGraphicsView el
-        # Resize externo le llega al view, no siempre al viewport.
+        # observar tanto el view como su viewport
         host.installEventFilter(self)
         host.viewport().installEventFilter(self)
-        # Diferir el primer reposition (algunos platforms ofreceen el
-        # tamaño real solo después del primer paint)
         QTimer.singleShot(0, self._reposition)
         self._reposition()
 
@@ -835,11 +1004,25 @@ class _Overlay(QWidget):
 
     def _reposition(self):
         vp = self._host.viewport()
-        # paleta arriba izquierda, con margen
+        # Paleta: solo posicionar la primera vez (arriba izquierda).
+        # Después el usuario puede arrastrarla y queremos respetar su
+        # posición.  En resize, solo clampeamos si quedó fuera del
+        # viewport.
         self._palette.adjustSize()
-        self._palette.move(14, 14)
+        pw = self._palette.width(); ph = self._palette.height()
+        if not self._palette_positioned:
+            self._palette.move(14, 14)
+            if pw > 0 and ph > 0:
+                self._palette_positioned = True
+        else:
+            # Clamp dentro del viewport por si el resize lo dejó fuera
+            cur = self._palette.pos()
+            x = max(0, min(cur.x(), vp.width()  - pw))
+            y = max(0, min(cur.y(), vp.height() - ph))
+            if (x, y) != (cur.x(), cur.y()):
+                self._palette.move(x, y)
         self._palette.raise_()
-        # zoom abajo derecha
+        # Zoom abajo derecha (siempre auto-posicionado contra el border)
         self._zoom.adjustSize()
         z = self._zoom.size()
         self._zoom.move(max(14, vp.width()  - z.width()  - 14),
