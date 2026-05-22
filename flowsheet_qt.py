@@ -3908,9 +3908,23 @@ class BlockItem(QGraphicsItemGroup):
         # bloque queda inerte porque ninguno de ellos es movable.
         self.setHandlesChildEvents(True)
 
-        # Dimensiones del símbolo PFD (varían por equipo).  Fallback al
-        # tamaño legacy 130×60 si el eq_type no tiene símbolo nuevo.
-        self.W, self.H = pfd.block_dims(block.eq_type)
+        # Dimensiones del bloque.  PRIORIDAD a las dims nativas del
+        # glyph ISA escaladas (1.5x) — así el recuadro del bloque tiene
+        # el mismo aspect ratio que la silueta y no quedan espacios
+        # vacíos a los lados.  Fallback a pfd_symbols.block_dims solo
+        # para eq_types que no mapeen a un tipo ISA conocido.
+        try:
+            from editor_chrome import isa_type_for_eq, BLOCK_DIMS
+            isa = isa_type_for_eq(block.eq_type)
+            if isa in BLOCK_DIMS:
+                nw, nh = BLOCK_DIMS[isa]
+                # Factor 1.6 = visual size cómodo (reactor → 96x102,
+                # tower → 70x141, hx → 134x80) sin sacrificar densidad.
+                self.W, self.H = nw * 1.6, nh * 1.6
+            else:
+                self.W, self.H = pfd.block_dims(block.eq_type)
+        except Exception:
+            self.W, self.H = pfd.block_dims(block.eq_type)
 
         # --- halo de status (semáforo solver) ---
         # Rectángulo redondeado AFUERA del símbolo, con borde coloreado
