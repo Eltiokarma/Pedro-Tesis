@@ -3985,14 +3985,16 @@ class BlockItem(QGraphicsItemGroup):
             from icons import icon_for_eq_type, make_qicon
             from PySide6.QtWidgets import QGraphicsPixmapItem
             icon_id = icon_for_eq_type(block.eq_type)
-            ic = make_qicon(icon_id, color="#9aa5b1", size=16)
+            # Color teal del nuevo tema + más grande (18px) + opacity 0.95
+            # para que sean realmente visibles sobre la silueta ISA.
+            ic = make_qicon(icon_id, color="#0d6e78", size=20)
             if ic is not None:
                 self.type_badge = QGraphicsPixmapItem(
-                    ic.pixmap(14, 14), parent=self)
-                self.type_badge.setPos(2, self.H - 16)
+                    ic.pixmap(18, 18), parent=self)
+                self.type_badge.setPos(2, self.H - 20)
                 self.type_badge.setZValue(2.5)
                 self.type_badge.setAcceptedMouseButtons(Qt.NoButton)
-                self.type_badge.setOpacity(0.7)
+                self.type_badge.setOpacity(0.95)
             else:
                 self.type_badge = None
         except Exception:
@@ -6050,6 +6052,15 @@ class FlowsheetMainWindow(QMainWindow):
         # menubar nuevo cubren todas las acciones.  Vista > Toolbars
         # legacy permite re-mostrarlos.
         self._set_legacy_toolbars_visible(False)
+        # Ocultar también los docks legacy (biblioteca, propiedades,
+        # tabla de corrientes, predictor de reactividad) — la nueva UI
+        # los cubre con la paleta + Inspector + burbujas.  El usuario
+        # puede re-mostrarlos desde el menú Vista si los necesita.
+        for _dock_attr in ("lib_dock", "props_dock", "streams_dock",
+                            "reactivity_dock"):
+            _d = getattr(self, _dock_attr, None)
+            if _d is not None:
+                _d.hide()
 
         # selección
         self.scene.selectionChanged.connect(self._on_selection_changed)
@@ -6281,16 +6292,33 @@ class FlowsheetMainWindow(QMainWindow):
         anim_act.triggered.connect(self.toggle_animation)
         m_view.addAction(anim_act)
         m_view.addSeparator()
-        # Toggle docks
-        if hasattr(self, "lib_dock"):
-            m_view.addAction(self.lib_dock.toggleViewAction())
-        if hasattr(self, "streams_dock"):
-            t = self.streams_dock.toggleViewAction()
-            t.setText("Tabla de corrientes")
-            t.setShortcut("Ctrl+T")
-            m_view.addAction(t)
+        # Paleta vertical de equipos (toggle visibilidad)
+        self._palette_visibility_action = QAction("Paleta de equipos", self)
+        self._palette_visibility_action.setCheckable(True)
+        self._palette_visibility_action.setChecked(True)
+        self._palette_visibility_action.setShortcut("Ctrl+P")
+        self._palette_visibility_action.triggered.connect(
+            self._toggle_palette_visibility
+        )
+        m_view.addAction(self._palette_visibility_action)
+        # Inspector dock (slide-out de la nueva UI)
         if hasattr(self, "_inspector_dock") and self._inspector_dock is not None:
             m_view.addAction(self._inspector_dock.toggleViewAction())
+        # Docks legacy (biblioteca, propiedades, tabla, predictor de
+        # reactividad) — agrupados en un sub-menú "Docks legacy" para
+        # mantenerlos accesibles sin ensuciar el menú principal.
+        m_legacy = m_view.addMenu("Docks legacy")
+        for attr, label in (
+            ("lib_dock",        "Biblioteca de equipos (vieja)"),
+            ("props_dock",      "Propiedades (viejo)"),
+            ("streams_dock",    "Tabla de corrientes"),
+            ("reactivity_dock", "Predictor de reactividad"),
+        ):
+            d = getattr(self, attr, None)
+            if d is not None:
+                act = d.toggleViewAction()
+                act.setText(label)
+                m_legacy.addAction(act)
         m_view.addSeparator()
         # Preferencias (tema, densidad, acento)
         m_view.addAction(_ac("&Preferencias…", self._open_preferences, "Ctrl+,"))
@@ -6343,6 +6371,12 @@ class FlowsheetMainWindow(QMainWindow):
             return
         dlg = PreferencesDialog(self)
         dlg.exec()
+
+    def _toggle_palette_visibility(self, visible: bool):
+        """Vista > Paleta de equipos (Ctrl+P): muestra/oculta la
+        paleta vertical flotante sin tocar zoom o demás overlays."""
+        if hasattr(self, "_palette_widget") and self._palette_widget is not None:
+            self._palette_widget.setVisible(bool(visible))
 
     # ---------------------------------------------------
     # EDITOR CHROME WIRING (Parte B — NUEVA_UI)
@@ -6723,6 +6757,7 @@ class FlowsheetMainWindow(QMainWindow):
 
         dock.setWidget(widget)
         self.addDockWidget(Qt.LeftDockWidgetArea, dock)
+        self.lib_dock = dock   # ref para toggle desde Vista
 
     def _build_properties_dock(self):
         dock = QDockWidget(" Propiedades ", self)
@@ -6795,6 +6830,7 @@ class FlowsheetMainWindow(QMainWindow):
 
         dock.setWidget(widget)
         self.addDockWidget(Qt.RightDockWidgetArea, dock)
+        self.props_dock = dock   # ref para toggle desde Vista
 
         # ─── Dock de Reactividad (Fase 8 — predictor de reacciones) ───
         # Aparece al lado del dock de propiedades. Si chemfx no esta
@@ -6941,7 +6977,9 @@ class FlowsheetMainWindow(QMainWindow):
                                   f"{type(e).__name__}: {e}")
             return
         self._rebuild_scene()
-        self.view.zoom_fit()
+        # Zoom 100% por default al cargar (no fit) — el user prefiere
+        # ver el tamaño nativo antes que un fit que puede ampliar/encoger.
+        self.view.zoom_reset()
         self._update_status()
 
     def action_save(self):
@@ -7156,7 +7194,9 @@ class FlowsheetMainWindow(QMainWindow):
         if hasattr(self, "_paper_action"):
             self._paper_action.setChecked(True)
 
-        self.view.zoom_fit()
+        # Zoom 100% por default al cargar (no fit) — el user prefiere
+        # ver el tamaño nativo antes que un fit que puede ampliar/encoger.
+        self.view.zoom_reset()
         self._update_status()
         self.end_action(f"Cargar ejemplo: {key}", before)
 
