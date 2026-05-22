@@ -7233,18 +7233,29 @@ class FlowsheetMainWindow(QMainWindow):
     # ---------------------------------------------------
 
     def edit_block(self, block: Block):
-        """Abre BlockEditDialog y refresca el render."""
-        dlg = BlockEditDialog(self, block)
-        if dlg.exec() == QDialog.Accepted:
+        """Abre BlockInspectorDock (nuevo) y refresca el render al guardar.
+
+        El dock es slide-out, no modal, y se reusa para distintos bloques.
+        Las opciones avanzadas/nicho (custom reactions, FUG columna,
+        separadores mecánicos, batch, flash, dryer, etc.) viven aún en
+        BlockEditDialog y se acceden via el link "Opciones avanzadas…"
+        del propio panel.
+        """
+        # construcción perezosa
+        if not hasattr(self, "_inspector_dock") or self._inspector_dock is None:
+            from block_inspector import BlockInspectorDock
+            self._inspector_dock = BlockInspectorDock(self)
+            self.addDockWidget(Qt.RightDockWidgetArea, self._inspector_dock)
+
+        def _on_save():
+            """Callback tras 'Guardar cambios' — refresca canvas + solver hooks."""
             before = self.begin_action()
-            dlg.apply_to_model()
             self._mark_dirty()
             item = self.scene.block_items.get(block.id)
             if item is not None:
                 self.scene.removeItem(item)
                 del self.scene.block_items[block.id]
                 self._render_block(block)
-                # tooltip nuevo
                 new_item = self.scene.block_items.get(block.id)
                 if new_item is not None:
                     new_item._update_tooltip()
@@ -7253,6 +7264,37 @@ class FlowsheetMainWindow(QMainWindow):
             self._update_status()
             self._on_selection_changed()
             self.end_action(f"Editar {block.name}", before)
+
+        def _open_advanced(b):
+            """Fallback: opciones avanzadas via el dialog legacy."""
+            dlg = BlockEditDialog(self, b)
+            if dlg.exec() == QDialog.Accepted:
+                before = self.begin_action()
+                dlg.apply_to_model()
+                self._mark_dirty()
+                item = self.scene.block_items.get(b.id)
+                if item is not None:
+                    self.scene.removeItem(item)
+                    del self.scene.block_items[b.id]
+                    self._render_block(b)
+                    new_item = self.scene.block_items.get(b.id)
+                    if new_item is not None:
+                        new_item._update_tooltip()
+                    self.refresh_streams_of(b.id)
+                self._refresh_port_colors()
+                self._update_status()
+                self._on_selection_changed()
+                self.end_action(f"Editar {b.name} (avanzado)", before)
+                # repopular el inspector con los valores nuevos
+                self._inspector_dock.show_for(b, self.fs,
+                                              on_save=_on_save,
+                                              open_advanced=_open_advanced)
+
+        self._inspector_dock.show_for(
+            block, self.fs,
+            on_save=_on_save,
+            open_advanced=_open_advanced,
+        )
 
     def edit_stream(self, stream: Stream):
         """Abre StreamEditDialog y refresca el render."""
