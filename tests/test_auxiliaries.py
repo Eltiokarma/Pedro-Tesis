@@ -74,6 +74,10 @@ class TestInstantiation(unittest.TestCase):
         for s in streams:
             self.assertEqual(s.role, "ambient")
             self.assertEqual(s.composition, {"air": 1.0})
+        # los source/sink de ambiente usan el eq_type "Ambient" (ícono de
+        # atmósfera), no un tanque
+        amb = [bl for bl in _aux_blocks(fs) if bl.eq_type == "Ambient"]
+        self.assertEqual(len(amb), 2)
 
     def test_fired_heater_fuel_and_stack(self):
         fs, b = _block("Fired heater — non-reformer")
@@ -147,6 +151,17 @@ class TestCostingFill(unittest.TestCase):
                       if s.dst == b.id and s.dst_port == "shell_in"), None)
         self.assertIsNotNone(cw_in)
         self.assertGreater(cw_in.mass_flow, 0.0)
+
+
+class TestValidationSuppressed(unittest.TestCase):
+    def test_aux_streams_no_warnings(self):
+        import flowsheet_validation as fval
+        fs, b = _block("Heat exch. — floating head")
+        aux.instantiate_auxiliaries(fs, b)
+        issues = fval.validate_all_streams(fs)
+        # ninguna de las issues corresponde a una corriente auxiliar
+        aux_names = {s.name for s in _aux_streams(fs)}
+        self.assertFalse(any(name in aux_names for name, _, _ in issues))
 
 
 class TestBackwardsCompat(unittest.TestCase):

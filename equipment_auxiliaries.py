@@ -136,11 +136,18 @@ for _et in ("Cooling tower — induced draft", "Cooling tower — natural draft"
 
 _SIDE_OUT = {"right": (1, 0), "left": (-1, 0), "top": (0, -1), "bottom": (0, 1)}
 
-# Bloque ligero usado como source/sink visual (tanque pequeño marcado
-# auto_aux → excluido del capex).  Phase 2 reemplaza ambient por íconos de
-# atmósfera.
-_AUX_BLOCK_EQ = "Storage tank — cone roof"
-_AUX_OFFSET   = 110.0     # px del puerto hacia afuera
+# Bloques ligeros usados como source/sink visual (marcados auto_aux →
+# excluidos del capex):
+#   · utility (cooling water, steam, fuel, BFW) → tanque pequeño.
+#   · ambiente (aire, chimenea, blowdown, evaporación) → ícono de atmósfera.
+_UTIL_BLOCK_EQ    = "Storage tank — cone roof"
+_AMBIENT_BLOCK_EQ = "Ambient"
+_AUX_OFFSET       = 110.0     # px del puerto hacia afuera
+
+
+def _aux_block_eq(sink_kind):
+    return (_AMBIENT_BLOCK_EQ if sink_kind in ("ambient_intake", "ambient_vent")
+            else _UTIL_BLOCK_EQ)
 
 
 def _port_xy(block, w, h, side, frac):
@@ -215,7 +222,7 @@ def instantiate_auxiliaries(fs, block):
         # Source/sink (tanque ligero auto_aux).
         bid = fs.new_id()
         aux_b = Block(id=bid, name=_unique_name(fs, sp.label),
-                      eq_type=_AUX_BLOCK_EQ, S=1.0,
+                      eq_type=_aux_block_eq(sp.sink_kind), S=1.0,
                       x=float(sx), y=float(sy))
         aux_b.auto_aux = True
         fs.blocks[bid] = aux_b

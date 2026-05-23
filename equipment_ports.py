@@ -212,6 +212,15 @@ COOLING_TOWER_PORTS = {
     "vapor_loss":    ("top",   0.70),   # pérdida por evaporación
 }
 
+# Atmósfera / ambiente — source/sink de aire, chimenea, blowdown, etc.
+# (corrientes auxiliares auto-instanciadas).  Tiene ambos puertos: salida
+# (cuando actúa de fuente, p.ej. aire de entrada) y entrada (cuando actúa
+# de sumidero, p.ej. chimenea/venteo).
+AMBIENT_PORTS = {
+    "entrada": ("top",    0.5),
+    "salida":  ("bottom", 0.5),
+}
+
 # Fallback (equipos no catalogados)
 DEFAULT_PORTS = {
     "in":  ("left",  0.5),
@@ -287,6 +296,7 @@ EQUIPMENT_PORTS = {
     "Boiler — water tube":          BOILER_PORTS,
     "Cooling tower — induced draft":COOLING_TOWER_PORTS,
     "Cooling tower — natural draft":COOLING_TOWER_PORTS,
+    "Ambient":                      AMBIENT_PORTS,
 }
 
 
