@@ -54,10 +54,13 @@ HX_PORTS = {
     "shell_out": ("left",  0.70),
 }
 
-# Air cooler: solo el lado de proceso (el aire se omite del PFD)
+# Air cooler: lado de proceso + aire ambiente (intake abajo, descarga arriba).
+# El aire lo materializa equipment_auxiliaries como corrientes 'ambient'.
 AIR_COOLER_PORTS = {
-    "proceso_in":  ("left",  0.5),
-    "proceso_out": ("right", 0.5),
+    "proceso_in":  ("left",   0.5),
+    "proceso_out": ("right",  0.5),
+    "aire_in":     ("bottom", 0.5),
+    "aire_out":    ("top",    0.5),
 }
 
 # Reboiler kettle: lado proceso (líquido fondo / vapor de retorno)

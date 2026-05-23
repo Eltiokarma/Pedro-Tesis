@@ -7932,6 +7932,19 @@ class FlowsheetMainWindow(QMainWindow):
         ep.apply_type_defaults(b)
         self.fs.blocks[bid] = b
         self._render_block(b)
+        # Corrientes auxiliares por defecto (cooling water / steam / aire /
+        # combustible / chimenea, etc.) con su source/sink colocado cerca.
+        # Solo al crear de cero (no retroactivo).  Render de lo creado.
+        try:
+            import equipment_auxiliaries as _aux
+            for _new_id in _aux.instantiate_auxiliaries(self.fs, b):
+                if _new_id in self.fs.blocks:
+                    self._render_block(self.fs.blocks[_new_id])
+                elif _new_id in self.fs.streams:
+                    self._render_stream(self.fs.streams[_new_id])
+        except Exception as _e:
+            import logging
+            logging.getLogger(__name__).debug(f"aux instancing fallo: {_e}")
         self._refresh_port_colors()
         self._update_status()
         # Asegurar que el nuevo bloque sea visible — centrar la vista
