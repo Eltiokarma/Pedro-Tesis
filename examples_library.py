@@ -3292,20 +3292,21 @@ class ExampleBuilder:
                                  price=120.0, T=5,
                                  composition=juice,
                                  main_component="water", phase="liquid")
+        # Intermedios: mass_flow=0 (el solver propaga 1000 desde el feed
+        # vía Σin=Σout) y composición sin lock (se hereda del feed).  La T
+        # SÍ queda locked: es el grado de libertad de diseño del problema
+        # (calentar a 72 °C, enfriar a 4 °C) del que el solver deriva los
+        # duties de E-101/E-102.
         # Calentado a 72 °C
-        self._add_example_stream(e101, v101, "S-1", 1000,
+        self._add_example_stream(e101, v101, "S-1", 0.0,
                                  src_port="tube_out", dst_port="alimentacion",
-                                 T=72,
-                                 composition=juice,
-                                 main_component="water", phase="liquid")
+                                 T=72, phase="liquid")
         # Tras retenedor (T constante)
-        self._add_example_stream(v101, e102, "S-2", 1000,
+        self._add_example_stream(v101, e102, "S-2", 0.0,
                                  src_port="liquido",  dst_port="tube_in",
-                                 T=72,
-                                 composition=juice,
-                                 main_component="water", phase="liquid")
-        # Enfriado a 4 °C
-        self._add_example_stream(e102, tk_out, "S-pasteurizado", 1000, role="product",
+                                 T=72, phase="liquid")
+        # Producto: mass_flow calculado; composición spec (locked).
+        self._add_example_stream(e102, tk_out, "S-pasteurizado", 0.0, role="product",
                                  src_port="tube_out", dst_port="entrada",
                                  price=600.0, T=4,
                                  composition=juice,
@@ -4918,44 +4919,44 @@ class ExampleBuilder:
         agua_clar = {"water": 1.0}
         potable   = {"water": 1.0}    # cloro trazas, no se modela
 
-        # Cruda → dosificador
+        # Cruda → dosificador (feed: mass/comp/T locked)
         self._add_example_stream(tk_in, m101, "S-cruda", 1000, role="feed",
                                  src_port="salida", dst_port="alimentacion_1",
                                  price=0.0, T=15,
                                  composition=cruda,
                                  main_component="water", phase="liquid")
-        # M-101 → R-101 (floculador)
-        self._add_example_stream(m101, r101, "S-coag", 1000,
+        # M-101 → R-101 (floculador) — passthrough: mass y comp propagados
+        self._add_example_stream(m101, r101, "S-coag", 0.0,
+                                 src_port="producto", dst_port="alimentacion",
+                                 T=15, phase="liquid")
+        # R-101 → V-101 (sedimentador).  R-101 lleva reacción placeholder,
+        # así que auto_propagate la salta → comp queda como spec (locked);
+        # solo la masa se propaga.
+        self._add_example_stream(r101, v101, "S-floc", 0.0,
                                  src_port="producto", dst_port="alimentacion",
                                  T=15,
                                  composition=cruda,
                                  main_component="water", phase="liquid")
-        # R-101 → V-101 (sedimentador)
-        self._add_example_stream(r101, v101, "S-floc", 1000,
-                                 src_port="producto", dst_port="alimentacion",
-                                 T=15,
-                                 composition=cruda,
-                                 main_component="water", phase="liquid")
-        # V-101: 4 t lodos por liquido_fondo, 996 agua clarificada por vapor port
-        # Mass-balance: 1000 → 4 lodos (50% solids, 50% agua) + 996 agua casi pura
+        # V-101: separa 1000 → S-lodos (spec del separador, locked) +
+        # S-clar (masa deducida 996; comp es resultado de separación, locked).
         self._add_example_stream(v101, tk_lod, "S-lodos", 4, role="waste",
                                  src_port="liquido", dst_port="entrada",
                                  price=0.0, T=15,
                                  composition=lodos,
                                  main_component="raw_water_solids", phase="liquid")
-        self._add_example_stream(v101, f101, "S-clar", 996,
+        self._add_example_stream(v101, f101, "S-clar", 0.0,
                                  src_port="vapor", dst_port="alimentacion",
                                  T=15,
                                  composition=agua_clar,
                                  main_component="water", phase="liquid")
-        # F-101 → M-102 (cloración)
-        self._add_example_stream(f101, m102, "S-fil", 996,
+        # F-101 → M-102 (cloración) — comp de separación (locked), masa deducida
+        self._add_example_stream(f101, m102, "S-fil", 0.0,
                                  src_port="producto", dst_port="alimentacion_1",
                                  T=15,
                                  composition=agua_clar,
                                  main_component="water", phase="liquid")
-        # M-102 → TK potable
-        self._add_example_stream(m102, tk_pot, "S-potable", 996, role="product",
+        # M-102 → TK potable (producto: comp spec locked, masa calculada)
+        self._add_example_stream(m102, tk_pot, "S-potable", 0.0, role="product",
                                  src_port="producto", dst_port="entrada",
                                  price=0.5, T=15,
                                  composition=potable,
