@@ -2,9 +2,8 @@
 examples_library.py — Biblioteca de flowsheets de ejemplo.
 
 Provee la clase ExampleBuilder, que construye flowsheets de ejemplo
-sobre un Flowsheet pasado. Reemplaza el rol que cumplía FlowsheetEditor
-en flowsheet_ui.py (Tk legacy) como contenedor de builders, y unifica
-la función del _ExampleBuilderShim del editor Qt.
+sobre un Flowsheet pasado. Es la única fuente de los 41 ejemplos del
+proyecto, consumida por flowsheet_qt.py (acción "Cargar ejemplo").
 
 Uso:
     from flowsheet_model import Flowsheet
@@ -35,10 +34,10 @@ class ExampleBuilder:
     - 41 builders (`_example_hda`, `_example_methanol`, …,
       `_example_desalination`).
 
-    Los helpers tienen la misma firma que los del shim Qt
-    (_ExampleBuilderShim) y los del FlowsheetEditor Tk.  Los builders
-    se copian byte-a-byte desde `flowsheet_ui.py` — incluidos sus
-    comentarios y blank lines — para preservar comportamiento exacto.
+    Los helpers tienen una firma estable: 5 métodos para crear bloques,
+    streams, extras de OPEX, configurar labor y forzar duties.  Los
+    builders conservan sus comentarios y blank lines originales para
+    documentar las decisiones de diseño de cada ejemplo.
     """
 
     def __init__(self, fs):
@@ -108,10 +107,11 @@ class ExampleBuilder:
             self.fs.blocks[bid].duty_locked = (abs(duty_kw) > 1e-9)
 
     # ─── BUILDERS ─────────────────────────────────────────────
-    # Copiados byte-a-byte desde flowsheet_ui.py (líneas 1140-6451).
-    # Conservan docstrings, comentarios, blank lines y la API
-    # `self._add_example_*` que sigue funcionando porque los helpers
-    # de arriba tienen los mismos nombres.
+    # 41 ejemplos curados (HDA, refinería Talara, planta de cemento,
+    # etc.).  Cada builder configura un flowsheet completo: bloques,
+    # streams, opex extras y labor.  Todos llaman a los 5 helpers
+    # de arriba — `self._add_example_block`, `_add_example_stream`,
+    # `_add_example_extra`, `_set_example_labor`, `_set_block_duty`.
 
     def _example_hda(self):
         """HDA — Hidrodealquilación de tolueno (Douglas / Turton).

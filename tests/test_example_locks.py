@@ -28,7 +28,7 @@ _PARENT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 if _PARENT not in sys.path:
     sys.path.insert(0, _PARENT)
 
-# Stub para Tk antes de importar flowsheet_ui
+# Inicializar mocks para entorno sin display
 from validate_ui import headless_mocks
 headless_mocks()
 

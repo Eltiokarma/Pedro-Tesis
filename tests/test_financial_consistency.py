@@ -274,8 +274,8 @@ class TestRegresionHNO3(unittest.TestCase):
     futuro alguien cambia algo y rompe la coherencia, este test lo
     detecta.
 
-    Parámetros sintéticos basados en orden de magnitud de la HNO3
-    Ostwald de flowsheet_ui (~6 kton/yr HNO3 60%).
+    Parámetros sintéticos basados en orden de magnitud del ejemplo
+    HNO3 Ostwald de examples_library (~6 kton/yr HNO3 60%).
     """
 
     def test_npv_unico(self):

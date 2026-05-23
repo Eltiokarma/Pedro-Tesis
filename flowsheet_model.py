@@ -1,9 +1,8 @@
 """
 FLOWSHEET MODEL — dataclasses puras del modelo de proceso.
 
-Aislado de UI (no depende de Tkinter ni PySide6).  Tanto el editor
-Tk legacy (`flowsheet_ui.py`) como el editor Qt nuevo (`flowsheet_qt.py`)
-importan de acá.
+Aislado de UI (no depende de PySide6).  El editor Qt (`flowsheet_qt.py`)
+y la biblioteca de ejemplos (`examples_library.py`) importan de acá.
 
 Contiene:
   - Constantes geométricas del modelo (BLOCK_W/H, GRID_STEP, etc.)
@@ -11,10 +10,10 @@ Contiene:
   - Block, Stream, Flowsheet (dataclasses)
   - Colores STREAM_ROLE_COLORS (semánticos, reusables)
 
-Los atributos `canvas_*` de Block/Stream son legacy del editor Tk;
-en el editor Qt no se usan (cada item Qt mantiene sus propias
-referencias en el QGraphicsScene).  Quedan en el dataclass para
-backward compat de JSONs.
+Los atributos `canvas_*` de Block/Stream son residuo del editor
+anterior; en el editor Qt no se usan (cada item Qt mantiene sus
+propias referencias en el QGraphicsScene).  Quedan en el dataclass
+para backward compat de JSONs.
 """
 
 from dataclasses import dataclass, field, asdict

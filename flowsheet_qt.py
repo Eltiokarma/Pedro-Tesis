@@ -1,5 +1,5 @@
 """
-FLOWSHEET QT — port de flowsheet_ui.py a PySide6 + QGraphicsView.
+FLOWSHEET QT — editor Qt principal del proyecto (PySide6 + QGraphicsView).
 
 OBJETIVO
 
@@ -5274,7 +5274,7 @@ class StreamItem(QGraphicsPathItem):
             extra = funits.format_flow(s.mass_flow, unit)
         return str(n), extra
 
-    # ---- helpers de routing (réplica simplificada de flowsheet_ui) ----
+    # ---- helpers de routing (cálculo de paths entre puertos de bloques) ----
 
     def _resolve_port(self, b, port_name, default_side):
         ports = ep.get_ports(b.eq_type)
