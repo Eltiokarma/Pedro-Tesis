@@ -726,19 +726,19 @@ class ExampleBuilder:
                                  composition=crudo_mix,
                                  main_component="crude_oil", phase="liquid")
         # Post-bomba
-        self._add_example_stream(p101, e101, "S-1", 100000,
+        self._add_example_stream(p101, e101, "S-1", 0.0,
                                  src_port="descarga", dst_port="tube_in",
                                  T=30,
                                  composition=crudo_mix,
                                  main_component="crude_oil", phase="liquid")
         # Post-preheater (intercambio con productos calientes)
-        self._add_example_stream(e101, f101, "S-2", 100000,
+        self._add_example_stream(e101, f101, "S-2", 0.0,
                                  src_port="tube_out", dst_port="proceso_in",
                                  T=180,
                                  composition=crudo_mix,
                                  main_component="crude_oil", phase="liquid")
         # Post-horno: T de flash zone ~360°C
-        self._add_example_stream(f101, t101, "S-3", 100000,
+        self._add_example_stream(f101, t101, "S-3", 0.0,
                                  src_port="proceso_out", dst_port="alimentacion",
                                  T=360,
                                  composition=crudo_mix,
@@ -750,7 +750,7 @@ class ExampleBuilder:
                                  composition=nafta_mix,
                                  main_component="naphtha", phase="vapor")
         # Nafta producto (condensada)
-        self._add_example_stream(e102, tk_n, "S-nafta", 22000, role="product",
+        self._add_example_stream(e102, tk_n, "S-nafta", 0.0, role="product",
                                  src_port="tube_out", dst_port="entrada",
                                  price=780.0, T=40,
                                  composition=nafta_mix,
@@ -762,7 +762,7 @@ class ExampleBuilder:
                                  composition=kero_mix,
                                  main_component="kerosene", phase="liquid")
         # Querosén producto (enfriado)
-        self._add_example_stream(e103, tk_k, "S-kero", 18000, role="product",
+        self._add_example_stream(e103, tk_k, "S-kero", 0.0, role="product",
                                  src_port="proceso_out", dst_port="entrada",
                                  price=850.0, T=40,
                                  composition=kero_mix,
@@ -774,19 +774,19 @@ class ExampleBuilder:
                                  composition=diesel_mix,
                                  main_component="diesel", phase="liquid")
         # Diésel producto (enfriado)
-        self._add_example_stream(e104, tk_d, "S-diesel", 28000, role="product",
+        self._add_example_stream(e104, tk_d, "S-diesel", 0.0, role="product",
                                  src_port="proceso_out", dst_port="entrada",
                                  price=920.0, T=50,
                                  composition=diesel_mix,
                                  main_component="diesel", phase="liquid")
         # Fondo: residuo atmosférico (32% del feed)
-        self._add_example_stream(t101, e105, "S-res-h", 32000,
+        self._add_example_stream(t101, e105, "S-res-h", 0.0,
                                  src_port="liquido_fondo", dst_port="proceso_in",
                                  T=350,
                                  composition=res_mix,
                                  main_component="atmospheric_residue", phase="liquid")
         # Residuo producto (enfriado)
-        self._add_example_stream(e105, tk_r, "S-residuo", 32000, role="product",
+        self._add_example_stream(e105, tk_r, "S-residuo", 0.0, role="product",
                                  src_port="proceso_out", dst_port="entrada",
                                  price=350.0, T=80,
                                  composition=res_mix,
@@ -1238,13 +1238,13 @@ class ExampleBuilder:
                                  composition=jugo_in,
                                  main_component="water", phase="liquid")
         # Encalado → clarificador
-        self._add_example_stream(r101, v101, "S-1", 680000,
+        self._add_example_stream(r101, v101, "S-1", 0.0,
                                  src_port="producto", dst_port="alimentacion",
                                  T=70,
                                  composition=clarificado,
                                  main_component="water", phase="liquid")
         # Clarificado (al evaporador)
-        self._add_example_stream(v101, ev1, "S-2", 660000,
+        self._add_example_stream(v101, ev1, "S-2", 0.0,
                                  src_port="liquido", dst_port="alimentacion",
                                  T=70,
                                  composition=clarificado,
@@ -1256,29 +1256,29 @@ class ExampleBuilder:
                                  composition=cachaza,
                                  main_component="water", phase="liquid")
         # Tren de 4 evaporadores en serie (cada uno concentra más)
-        self._add_example_stream(ev1, ev2, "S-ev1", 460000,
+        self._add_example_stream(ev1, ev2, "S-ev1", 0.0,
                                  src_port="producto", dst_port="alimentacion",
                                  T=110,
                                  composition=post_ev1,
                                  main_component="water", phase="liquid")
-        self._add_example_stream(ev2, ev3, "S-ev2", 290000,
+        self._add_example_stream(ev2, ev3, "S-ev2", 0.0,
                                  src_port="producto", dst_port="alimentacion",
                                  T=105,
                                  composition=post_ev2,
                                  main_component="water", phase="liquid")
-        self._add_example_stream(ev3, ev4, "S-ev3", 200000,
+        self._add_example_stream(ev3, ev4, "S-ev3", 0.0,
                                  src_port="producto", dst_port="alimentacion",
                                  T=95,
                                  composition=post_ev3,
                                  main_component="water", phase="liquid")
         # Miel madre (final del tren evaporadores)
-        self._add_example_stream(ev4, r102, "S-miel-madre", 155000,
+        self._add_example_stream(ev4, r102, "S-miel-madre", 0.0,
                                  src_port="producto", dst_port="alimentacion",
                                  T=70,
                                  composition=post_ev4,
                                  main_component="sucrose", phase="liquid")
         # Masa cocida al cristalizador (entra al "filtro" = centrífuga proxy)
-        self._add_example_stream(r102, fl101, "S-masa", 155000,
+        self._add_example_stream(r102, fl101, "S-masa", 0.0,
                                  src_port="producto", dst_port="alimentacion",
                                  T=65,
                                  composition=masa_cocida,
@@ -1512,7 +1512,7 @@ class ExampleBuilder:
                                   T=827,
                                   main_component="ethylene", phase="gas")
         # Producto enfriado
-        self._add_example_stream(e101, tk_out, "S-product", 1000, role="product",
+        self._add_example_stream(e101, tk_out, "S-product", 0.0, role="product",
                                   src_port="proceso_out", dst_port="entrada",
                                   price=900.0, T=40,
                                   main_component="ethylene", phase="gas")
@@ -1791,7 +1791,7 @@ class ExampleBuilder:
         self.fs.streams[s_cooled].pipe_diameter_m = 0.050
         self.fs.streams[s_cooled].pipe_K_local = 0.17   # 1 válvula gate
 
-        s_prod = self._add_example_stream(t101, tk_prod, "S-product", 5000,
+        s_prod = self._add_example_stream(t101, tk_prod, "S-product", 0.0,
                                             role="product",
                                             src_port="liquido_fondo", dst_port="entrada",
                                             price=120.0, T=40,
@@ -2664,7 +2664,7 @@ class ExampleBuilder:
                                   composition={"ammonia": 1.0},
                                   phase="liquid")
         # NH3 vapor sobrecalentado a mixer
-        self._add_example_stream(e101, m101, "A2-NH3-vap", 1000,
+        self._add_example_stream(e101, m101, "A2-NH3-vap", 0.0,
                                   src_port="tube_out", dst_port="entrada1",
                                   T=120, phase="gas",
                                   composition={"ammonia": 1.0})
@@ -2676,14 +2676,14 @@ class ExampleBuilder:
                                                  "nitrogen": 0.768},
                                   phase="gas")
         # Aire comprimido
-        self._add_example_stream(k101, m101, "A4-aire-hp", 14000,
+        self._add_example_stream(k101, m101, "A4-aire-hp", 0.0,
                                   src_port="descarga", dst_port="entrada2",
                                   T=200, phase="gas",
                                   composition={"oxygen": 0.232,
                                                  "nitrogen": 0.768})
         # Mezcla al reactor (10% NH3 molar ≈ 6.7% peso, dentro de
         # límites de inflamabilidad)
-        self._add_example_stream(m101, r201, "A5-mix", 15000,
+        self._add_example_stream(m101, r201, "A5-mix", 0.0,
                                   src_port="salida", dst_port="alimentacion",
                                   T=230, phase="gas",
                                   composition={"ammonia": 0.0667,
@@ -2692,7 +2692,7 @@ class ExampleBuilder:
 
         # ============ STREAMS — COMBUSTIÓN + RECUP ============
         # Gas post-quemador (NO, H2O, N2 inerte, O2 exceso, trazas N2O)
-        self._add_example_stream(r201, e201, "A6-gas-hot", 15000,
+        self._add_example_stream(r201, e201, "A6-gas-hot", 0.0,
                                   src_port="producto", dst_port="liq_in",
                                   T=900, phase="gas",
                                   composition={"nitric oxide": 0.112,
@@ -2701,7 +2701,7 @@ class ExampleBuilder:
                                                  "oxygen": 0.062,
                                                  "nitrous oxide": 0.001})
         # Gas tras WHB (900 → 400 °C, vapor recuperado en duty E-201)
-        self._add_example_stream(e201, e202, "A7-gas-whb", 15000,
+        self._add_example_stream(e201, e202, "A7-gas-whb", 0.0,
                                   src_port="cond_out", dst_port="tube_in",
                                   T=400, phase="gas",
                                   composition={"nitric oxide": 0.112,
@@ -2710,7 +2710,7 @@ class ExampleBuilder:
                                                  "oxygen": 0.062,
                                                  "nitrous oxide": 0.001})
         # Gas tras economizador (400 → 200 °C)
-        self._add_example_stream(e202, e203, "A7b-gas-eco", 15000,
+        self._add_example_stream(e202, e203, "A7b-gas-eco", 0.0,
                                   src_port="tube_out", dst_port="proceso_in",
                                   T=200, phase="gas",
                                   composition={"nitric oxide": 0.112,
@@ -2719,7 +2719,7 @@ class ExampleBuilder:
                                                  "oxygen": 0.062,
                                                  "nitrous oxide": 0.001})
         # Gas tras enfriador (200 → 50 °C, parcialmente condensado)
-        self._add_example_stream(e203, v201, "A8-gas-cool", 15000,
+        self._add_example_stream(e203, v201, "A8-gas-cool", 0.0,
                                   src_port="proceso_out", dst_port="alimentacion",
                                   T=50, phase="two_phase",
                                   composition={"nitric oxide": 0.080,
@@ -2735,7 +2735,7 @@ class ExampleBuilder:
                                   composition={"nitric acid": 0.32,
                                                  "water": 0.68})
         # Separador → gas NOx (al compresor)
-        self._add_example_stream(v201, k301, "A9b-gas-NOx", 14205,
+        self._add_example_stream(v201, k301, "A9b-gas-NOx", 0.0,
                                   src_port="vapor", dst_port="succion",
                                   T=50, phase="gas",
                                   composition={"nitric oxide": 0.085,
@@ -2747,7 +2747,7 @@ class ExampleBuilder:
 
         # ============ STREAMS — COMPRESIÓN + OXIDACIÓN ============
         # Gas comprimido a 11 bar
-        self._add_example_stream(k301, r301, "A10-NOx-hp", 14205,
+        self._add_example_stream(k301, r301, "A10-NOx-hp", 0.0,
                                   src_port="descarga", dst_port="alimentacion",
                                   T=120, phase="gas",
                                   composition={"nitric oxide": 0.085,
@@ -2757,7 +2757,7 @@ class ExampleBuilder:
                                                  "oxygen": 0.066,
                                                  "nitrous oxide": 0.001})
         # Gas oxidado (NO → NO2, 90% conv)
-        self._add_example_stream(r301, t401, "A11-NOx-ox", 14205,
+        self._add_example_stream(r301, t401, "A11-NOx-ox", 0.0,
                                   src_port="producto", dst_port="vapor_tope",
                                   T=40, phase="gas",
                                   composition={"nitric oxide": 0.009,
@@ -2790,7 +2790,7 @@ class ExampleBuilder:
                                                  "water": 0.39,
                                                  "nitrogen dioxide": 0.01})
         # Tope: gas de cola (N2 mayor, O2, NOx residual <200 ppm)
-        self._add_example_stream(t401, e501, "A14-tail-gas", 12300,
+        self._add_example_stream(t401, e501, "A14-tail-gas", 0.0,
                                   src_port="vapor_tope", dst_port="tube_in",
                                   T=25, phase="gas",
                                   composition={"nitrogen": 0.880,
@@ -2801,7 +2801,7 @@ class ExampleBuilder:
 
         # ============ STREAMS — PRODUCTO + TAIL ============
         # Bleacher: HNO3 limpio (producto) + vent con NOx stripped
-        self._add_example_stream(v501, tk_hno3, "A13b-HNO3-60", 6100,
+        self._add_example_stream(v501, tk_hno3, "A13b-HNO3-60", 0.0,
                                   role="product",
                                   src_port="liquido_fondo", dst_port="entrada",
                                   price=450.0, T=60, phase="liquid",
@@ -2814,7 +2814,7 @@ class ExampleBuilder:
                                   composition={"nitrogen dioxide": 0.60,
                                                  "water": 0.40})
         # Tail gas precalentado → expander → chimenea
-        self._add_example_stream(e501, t501, "A14b-tail-hot", 12300,
+        self._add_example_stream(e501, t501, "A14b-tail-hot", 0.0,
                                   src_port="tube_out", dst_port="succion",
                                   T=200, phase="gas",
                                   composition={"nitrogen": 0.880,
@@ -2822,7 +2822,7 @@ class ExampleBuilder:
                                                  "water": 0.029,
                                                  "nitric oxide": 0.0008,
                                                  "nitrogen dioxide": 0.0002})
-        self._add_example_stream(t501, tk_stack, "A15-stack", 12300,
+        self._add_example_stream(t501, tk_stack, "A15-stack", 0.0,
                                   role="waste",
                                   src_port="descarga", dst_port="entrada",
                                   price=0.0, T=-10, phase="gas",
@@ -3022,7 +3022,7 @@ class ExampleBuilder:
                                   price=1.5, T=80,
                                   composition={"water": 1.0},
                                   phase="liquid")
-        self._add_example_stream(m101, v101, "S-mix-desal", 525000,
+        self._add_example_stream(m101, v101, "S-mix-desal", 0.0,
                                   src_port="salida", dst_port="alimentacion",
                                   T=130, phase="liquid",
                                   composition={"crude_oil": 0.952,
@@ -3039,7 +3039,7 @@ class ExampleBuilder:
                                   T=130, phase="liquid",
                                   composition={"crude_oil": 1.0})
         # Carga DP1 (precalentada a 360°C)
-        self._add_example_stream(f101, t101, "C1b-feed-DP1", 500000,
+        self._add_example_stream(f101, t101, "C1b-feed-DP1", 0.0,
                                   src_port="salida", dst_port="alimentacion",
                                   T=360, phase="two_phase",
                                   composition={"crude_oil": 1.0})
@@ -3185,7 +3185,7 @@ class ExampleBuilder:
                                                  "hydrogen": 0.04})
 
         # ============ STREAMS — HTD → ULSD ============
-        self._add_example_stream(tk_h2_makeup, r_htd, "C15b-H2-HTD", 1500,
+        self._add_example_stream(tk_h2_makeup, r_htd, "C15b-H2-HTD", 0.0,
                                   src_port="salida", dst_port="aux_in",
                                   T=40, phase="gas",
                                   composition={"hydrogen": 0.999,
@@ -3217,7 +3217,7 @@ class ExampleBuilder:
                                   composition={"methane": 1.0},
                                   phase="gas")
         # H2 purificado (post-PSA)
-        self._add_example_stream(r_smr, tk_h2_makeup, "C15-H2-pure", 2700,
+        self._add_example_stream(r_smr, tk_h2_makeup, "C15-H2-pure", 0.0,
                                   src_port="producto", dst_port="entrada",
                                   T=40, phase="gas",
                                   composition={"hydrogen": 0.999,
@@ -3632,19 +3632,19 @@ class ExampleBuilder:
                                  composition=air_comp,
                                  main_component="nitrogen", phase="gas")
         # Mezcla al convertidor
-        self._add_example_stream(m101, r101, "S-1", 2065,
+        self._add_example_stream(m101, r101, "S-1", 0.0,
                                  src_port="producto", dst_port="alimentacion",
                                  T=420,
                                  composition={"so2": 0.484, **{k: v*(1-0.484) for k,v in air_comp.items()}},
                                  main_component="nitrogen", phase="gas")
         # Salida del convertidor — composición declarada (Modo B)
-        self._add_example_stream(r101, e101, "S-conv", 2065,
+        self._add_example_stream(r101, e101, "S-conv", 0.0,
                                  src_port="producto", dst_port="tube_in",
                                  T=500,
                                  composition=conv_out,
                                  main_component="sulfur_trioxide", phase="gas")
         # Enfriado para absorción
-        self._add_example_stream(e101, abs101, "S-cool", 2065,
+        self._add_example_stream(e101, abs101, "S-cool", 0.0,
                                  src_port="tube_out", dst_port="alimentacion",
                                  T=80,
                                  composition=conv_out,
@@ -3656,7 +3656,7 @@ class ExampleBuilder:
                                  main_component="water", phase="liquid",
                                  composition={"water": 1.0})
         # H2SO4 producto 98 % (Modo B)
-        self._add_example_stream(abs101, tk_acid, "S-H2SO4", 1501, role="product",
+        self._add_example_stream(abs101, tk_acid, "S-H2SO4", 0.0, role="product",
                                  src_port="liquido", dst_port="entrada",
                                  price=140.0, T=70,
                                  composition={"sulfuric_acid": 0.98, "water": 0.02},
@@ -3877,19 +3877,19 @@ class ExampleBuilder:
                                  main_component="ethylene", phase="gas",
                                  composition={"ethylene": 1.0})
         # Etileno comprimido alta P
-        self._add_example_stream(k101, r101, "S-HP", 1000,
+        self._add_example_stream(k101, r101, "S-HP", 0.0,
                                  src_port="descarga", dst_port="alimentacion",
                                  T=80,
                                  main_component="ethylene", phase="gas",
                                  composition={"ethylene": 1.0})
         # Salida reactor: mezcla bifásica (PE sólido suspendido + etileno gas)
-        self._add_example_stream(r101, v101, "S-mix", 1000,
+        self._add_example_stream(r101, v101, "S-mix", 0.0,
                                  src_port="producto", dst_port="alimentacion",
                                  T=250,
                                  composition=rxn_out,
                                  main_component="polyethylene", phase="two_phase")
         # Purga etileno no reaccionado (vapor, vendible como fuel)
-        self._add_example_stream(v101, tk_pur, "S-purga-eth", 700, role="product",
+        self._add_example_stream(v101, tk_pur, "S-purga-eth", 0.0, role="product",
                                  src_port="vapor", dst_port="entrada",
                                  price=600.0, T=80,
                                  main_component="ethylene", phase="gas",
@@ -3990,7 +3990,7 @@ class ExampleBuilder:
                                  main_component="water", phase="liquid",
                                  composition={"water": 1.0})
         # NaOH 100 % (simplificado; planta real es solución 32-50 %)
-        self._add_example_stream(celda, tk_naoh, "S-NaOH", 685, role="product",
+        self._add_example_stream(celda, tk_naoh, "S-NaOH", 0.0, role="product",
                                  src_port="producto", dst_port="entrada",
                                  price=400.0, T=80,
                                  main_component="sodium_hydroxide", phase="liquid",
@@ -4020,7 +4020,7 @@ class ExampleBuilder:
                                  main_component="hydrogen", phase="gas",
                                  composition={"hydrogen": 1.0})
         # Salida quemador: HCl gas (206 t/y)
-        self._add_example_stream(r201, abs201, "S-HCl-gas", 205.69,
+        self._add_example_stream(r201, abs201, "S-HCl-gas", 0.0,
                                  src_port="producto", dst_port="alimentacion",
                                  T=400,
                                  main_component="hydrogen_chloride", phase="gas",
@@ -4033,7 +4033,7 @@ class ExampleBuilder:
                                  main_component="water", phase="liquid",
                                  composition={"water": 1.0})
         # HCl 33 % solución producto
-        self._add_example_stream(abs201, tk_hcl, "S-HCl-33", 624, role="product",
+        self._add_example_stream(abs201, tk_hcl, "S-HCl-33", 0.0, role="product",
                                  src_port="liquido", dst_port="entrada",
                                  price=180.0, T=40,
                                  main_component="hydrogen_chloride", phase="liquid",
@@ -4104,14 +4104,14 @@ class ExampleBuilder:
                                  main_component="limestone", phase="liquid",
                                  composition={"limestone": 1.0})
         # Caliza precalentada (~900 °C, entrada al horno)
-        self._add_example_stream(fh101, r101, "S-1", 1000,
+        self._add_example_stream(fh101, r101, "S-1", 0.0,
                                  src_port="proceso_out", dst_port="alimentacion",
                                  T=900,
                                  main_component="limestone", phase="liquid",
                                  composition={"limestone": 1.0})
         # Salida del horno: clínker + CO2 (Modo B)
         # Sólido (clínker) por el "liquido" port
-        self._add_example_stream(r101, e101, "S-clinker", 560,
+        self._add_example_stream(r101, e101, "S-clinker", 0.0,
                                  src_port="producto", dst_port="proceso_in",
                                  T=1450,
                                  main_component="clinker", phase="liquid",
@@ -4124,7 +4124,7 @@ class ExampleBuilder:
                                  main_component="co2", phase="gas",
                                  composition={"co2": 1.0})
         # Clínker enfriado al silo (la molienda se abstrae)
-        self._add_example_stream(e101, tk_cem, "S-cemento", 560, role="product",
+        self._add_example_stream(e101, tk_cem, "S-cemento", 0.0, role="product",
                                  src_port="proceso_out", dst_port="entrada",
                                  price=85.0, T=60,
                                  main_component="clinker", phase="liquid",
@@ -4198,13 +4198,13 @@ class ExampleBuilder:
                                  main_component="limestone", phase="liquid",
                                  composition={"limestone": 1.0})
         # Mezcla batch al horno
-        self._add_example_stream(m101, r101, "S-batch", 1000,
+        self._add_example_stream(m101, r101, "S-batch", 0.0,
                                  src_port="producto", dst_port="alimentacion",
                                  T=25,
                                  composition=batch_mix,
                                  main_component="silica", phase="liquid")
         # Vidrio fundido al cooler
-        self._add_example_stream(r101, e101, "S-melt", 880,
+        self._add_example_stream(r101, e101, "S-melt", 0.0,
                                  src_port="producto", dst_port="proceso_in",
                                  T=1500,
                                  main_component="glass", phase="liquid",
@@ -4216,7 +4216,7 @@ class ExampleBuilder:
                                  main_component="co2", phase="gas",
                                  composition={"co2": 1.0})
         # Vidrio sólido (~25 °C tras conformado abstraído)
-        self._add_example_stream(e101, tk_gl, "S-glass", 880, role="product",
+        self._add_example_stream(e101, tk_gl, "S-glass", 0.0, role="product",
                                  src_port="proceso_out", dst_port="entrada",
                                  price=400.0, T=200,
                                  main_component="glass", phase="liquid",
@@ -4287,20 +4287,20 @@ class ExampleBuilder:
                                  main_component="sodium_hydroxide", phase="liquid",
                                  composition={"sodium_hydroxide": 1.0})
         # Mezcla al reactor
-        self._add_example_stream(m101, r101, "S-mix", 1135.6,
+        self._add_example_stream(m101, r101, "S-mix", 0.0,
                                  src_port="producto", dst_port="alimentacion",
                                  T=70,
                                  composition=feed_mix,
                                  main_component="vegetable_oil", phase="liquid")
         # Salida reactor a decanter
-        self._add_example_stream(r101, v101, "S-rxn", 1135.6,
+        self._add_example_stream(r101, v101, "S-rxn", 0.0,
                                  src_port="producto", dst_port="alimentacion",
                                  T=80,
                                  composition=rxn_out,
                                  main_component="soap", phase="liquid")
         # Jabón (fase superior, en realidad sólido pero declarado liquid
         # para flow conservation; el motor no maneja fase sólida explícita)
-        self._add_example_stream(v101, tk_soap, "S-soap", 1031.6, role="product",
+        self._add_example_stream(v101, tk_soap, "S-soap", 0.0, role="product",
                                  src_port="vapor", dst_port="entrada",
                                  price=1800.0, T=80,
                                  main_component="soap", phase="liquid",
@@ -4380,19 +4380,19 @@ class ExampleBuilder:
                                  main_component="co2", phase="gas",
                                  composition={"co2": 1.0})
         # Mezcla → compresor
-        self._add_example_stream(m101, k101, "S-mix", 2292,
+        self._add_example_stream(m101, k101, "S-mix", 0.0,
                                  src_port="producto", dst_port="succion",
                                  T=40,
                                  composition=feed_mix,
                                  main_component="co2", phase="gas")
         # Comprimida → reactor
-        self._add_example_stream(k101, r101, "S-HP", 2292,
+        self._add_example_stream(k101, r101, "S-HP", 0.0,
                                  src_port="descarga", dst_port="alimentacion",
                                  T=180,
                                  composition=feed_mix,
                                  main_component="co2", phase="liquid")
         # Salida reactor a flash (Modo B)
-        self._add_example_stream(r101, v101, "S-rxn", 2292,
+        self._add_example_stream(r101, v101, "S-rxn", 0.0,
                                  src_port="producto", dst_port="alimentacion",
                                  T=190,
                                  composition=rxn_out,
@@ -4404,7 +4404,7 @@ class ExampleBuilder:
                                  composition={"ammonia": 0.436, "co2": 0.564},
                                  main_component="co2", phase="gas")
         # Líquido al evaporador (urea + H2O)
-        self._add_example_stream(v101, t101, "S-liq", 2177,
+        self._add_example_stream(v101, t101, "S-liq", 0.0,
                                  src_port="liquido", dst_port="alimentacion",
                                  T=150,
                                  composition=liq_mix,
@@ -4416,7 +4416,7 @@ class ExampleBuilder:
                                  main_component="water", phase="vapor",
                                  composition={"water": 1.0})
         # Urea concentrada / prill (producto final)
-        self._add_example_stream(t101, tk_urea, "S-urea", 1675, role="product",
+        self._add_example_stream(t101, tk_urea, "S-urea", 0.0, role="product",
                                  src_port="producto", dst_port="entrada",
                                  price=550.0, T=130,
                                  main_component="urea", phase="liquid",
@@ -4556,13 +4556,13 @@ class ExampleBuilder:
                                  composition=leche_cruda,
                                  main_component="water", phase="liquid")
         # 3) Clarif → Precalentador (9980 t/y)
-        self._add_example_stream(clar, e101, "S-clar", 9980,
+        self._add_example_stream(clar, e101, "S-clar", 0.0,
                                  src_port="liquido", dst_port="tube_in",
                                  T=4,
                                  composition=clarified,
                                  main_component="water", phase="liquid")
         # 4) Precalentada (40 °C) → Separadora
-        self._add_example_stream(e101, sep, "S-precal", 9980,
+        self._add_example_stream(e101, sep, "S-precal", 0.0,
                                  src_port="tube_out", dst_port="alimentacion",
                                  T=40,
                                  composition=clarified,
@@ -4589,7 +4589,7 @@ class ExampleBuilder:
                                  T=40,
                                  composition=descrem,
                                  main_component="water", phase="liquid")
-        self._add_example_stream(sep, ev1, "S-desc-evap", 8048,
+        self._add_example_stream(sep, ev1, "S-desc-evap", 0.0,
                                  src_port="liquido", dst_port="alimentacion",
                                  T=40,
                                  composition=descrem,
@@ -4597,25 +4597,25 @@ class ExampleBuilder:
 
         # ============ RAMA FLUIDA (1100 t/y at 3 % fat) ============
         # M-101 estandariza (81 crema + 1019 descrem = 1100)
-        self._add_example_stream(m_std, e102, "S-std", 1100,
+        self._add_example_stream(m_std, e102, "S-std", 0.0,
                                  src_port="producto", dst_port="tube_in",
                                  T=40,
                                  composition=fluida,
                                  main_component="water", phase="liquid")
         # Pasteurizador HTST (40 → 72 °C) + regenerativo implícito en E-103
-        self._add_example_stream(e102, p_hom, "S-past", 1100,
+        self._add_example_stream(e102, p_hom, "S-past", 0.0,
                                  src_port="tube_out", dst_port="succion",
                                  T=72,
                                  composition=fluida,
                                  main_component="water", phase="liquid")
         # Homogenizador (sube P a ~150 bar; composición intacta — TRAMPA f)
-        self._add_example_stream(p_hom, e103, "S-homog", 1100,
+        self._add_example_stream(p_hom, e103, "S-homog", 0.0,
                                  src_port="descarga", dst_port="tube_in",
                                  T=72,
                                  composition=fluida,
                                  main_component="water", phase="liquid")
         # Enfriador → TK leche fluida (regeneración 90 % captura calor, 4 °C final)
-        self._add_example_stream(e103, tk_flu, "S-fluida", 1100, role="product",
+        self._add_example_stream(e103, tk_flu, "S-fluida", 0.0, role="product",
                                  src_port="tube_out", dst_port="entrada",
                                  price=900.0, T=4,
                                  composition=fluida,
@@ -4623,13 +4623,13 @@ class ExampleBuilder:
 
         # ============ RAMA MANTEQUILLA (832 crema → 401 manteq + 431 buttermilk) ============
         # Pasteur crema 40 → 85 °C
-        self._add_example_stream(e104, e105, "S-crema-past", 832,
+        self._add_example_stream(e104, e105, "S-crema-past", 0.0,
                                  src_port="tube_out", dst_port="tube_in",
                                  T=85,
                                  composition=crema,
                                  main_component="milk_fat", phase="liquid")
         # Maduración 85 → 12 °C (Cooler)
-        self._add_example_stream(e105, churn, "S-crema-mad", 832,
+        self._add_example_stream(e105, churn, "S-crema-mad", 0.0,
                                  src_port="tube_out", dst_port="alimentacion",
                                  T=12,
                                  composition=crema,
@@ -4640,7 +4640,7 @@ class ExampleBuilder:
                                  price=4500.0, T=14,
                                  composition=manteq,
                                  main_component="milk_fat", phase="liquid")
-        self._add_example_stream(churn, tk_bml, "S-buttermilk", 431, role="product",
+        self._add_example_stream(churn, tk_bml, "S-buttermilk", 0.0, role="product",
                                  src_port="liquido", dst_port="entrada",
                                  price=200.0, T=14,
                                  composition=buttermilk,
@@ -4658,7 +4658,7 @@ class ExampleBuilder:
                                  main_component="water", phase="vapor",
                                  composition={"water": 1.0})
         # EV1 → EV2 (concentrado intermedio)
-        self._add_example_stream(ev1, ev2, "S-mid", 4989,
+        self._add_example_stream(ev1, ev2, "S-mid", 0.0,
                                  src_port="producto", dst_port="alimentacion",
                                  T=50,
                                  composition=mid_evap,
@@ -4670,13 +4670,13 @@ class ExampleBuilder:
                                  main_component="water", phase="vapor",
                                  composition={"water": 1.0})
         # EV2 → UHT (2950 t/y at 26 % ST)
-        self._add_example_stream(ev2, e_uht, "S-conc", 2950,
+        self._add_example_stream(ev2, e_uht, "S-conc", 0.0,
                                  src_port="producto", dst_port="tube_in",
                                  T=50,
                                  composition=leche_evap,
                                  main_component="water", phase="liquid")
         # UHT (115 °C) → TK leche evaporada en lata
-        self._add_example_stream(e_uht, tk_evp, "S-evap", 2950, role="product",
+        self._add_example_stream(e_uht, tk_evp, "S-evap", 0.0, role="product",
                                  src_port="tube_out", dst_port="entrada",
                                  price=1100.0, T=25,
                                  composition=leche_evap,
@@ -4836,13 +4836,13 @@ class ExampleBuilder:
                                  main_component="nitrogen", phase="gas",
                                  composition=air_comp)
         # Aire comprimido
-        self._add_example_stream(k101, e101, "S-HP", 1000,
+        self._add_example_stream(k101, e101, "S-HP", 0.0,
                                  src_port="descarga", dst_port="tube_in",
                                  T=120,
                                  composition=air_comp,
                                  main_component="nitrogen", phase="gas")
         # Aire enfriado
-        self._add_example_stream(e101, purif, "S-cool", 1000,
+        self._add_example_stream(e101, purif, "S-cool", 0.0,
                                  src_port="tube_out", dst_port="alimentacion",
                                  T=25,
                                  composition=air_comp,
@@ -4854,19 +4854,19 @@ class ExampleBuilder:
                                  main_component="water", phase="liquid",
                                  composition={"water": 1.0})
         # Aire purificado a caja fría
-        self._add_example_stream(purif, e102, "S-pure", 995,
+        self._add_example_stream(purif, e102, "S-pure", 0.0,
                                  src_port="liquido", dst_port="tube_in",
                                  T=25,
                                  composition=air_comp,
                                  main_component="nitrogen", phase="gas")
         # Aire criogénico a columna
-        self._add_example_stream(e102, t101, "S-cryo", 995,
+        self._add_example_stream(e102, t101, "S-cryo", 0.0,
                                  src_port="tube_out", dst_port="alimentacion",
                                  T=-95,
                                  composition=air_comp,
                                  main_component="nitrogen", phase="liquid")
         # Tope: N2 ultra-puro (líquido criogénico)
-        self._add_example_stream(t101, tk_n2, "S-N2", 765, role="product",
+        self._add_example_stream(t101, tk_n2, "S-N2", 0.0, role="product",
                                  src_port="vapor_tope", dst_port="entrada",
                                  price=120.0, T=-95,
                                  main_component="nitrogen", phase="liquid",
@@ -5223,25 +5223,25 @@ class ExampleBuilder:
                                  main_component="water", phase="liquid",
                                  composition={"water": 1.0})
         # Bombeada (HP)
-        self._add_example_stream(p101, b101, "S-HP", 100,
+        self._add_example_stream(p101, b101, "S-HP", 0.0,
                                  src_port="descarga", dst_port="proceso_in",
                                  T=30,
                                  main_component="water", phase="liquid",
                                  composition={"water": 1.0})
         # Vapor sobrecalentado (caldera +Q)
-        self._add_example_stream(b101, tur101, "S-steam", 100,
+        self._add_example_stream(b101, tur101, "S-steam", 0.0,
                                  src_port="proceso_out", dst_port="tube_in",
                                  T=450,
                                  main_component="water", phase="vapor",
                                  composition={"water": 1.0})
         # Post-turbina (trabajo extraído → T baja drásticamente)
-        self._add_example_stream(tur101, con101, "S-exp", 100,
+        self._add_example_stream(tur101, con101, "S-exp", 0.0,
                                  src_port="tube_out", dst_port="proceso_in",
                                  T=120,
                                  main_component="water", phase="vapor",
                                  composition={"water": 1.0})
         # Condensado (líquido a TK)
-        self._add_example_stream(con101, tk_out, "S-cond", 100, role="product",
+        self._add_example_stream(con101, tk_out, "S-cond", 0.0, role="product",
                                  src_port="proceso_out", dst_port="entrada",
                                  price=0.0, T=30,
                                  main_component="water", phase="liquid",
@@ -5292,25 +5292,25 @@ class ExampleBuilder:
                                  main_component="water", phase="liquid",
                                  composition={"water": 1.0})
         # Bombeada HP
-        self._add_example_stream(p101, gv101, "S-HP", 100,
+        self._add_example_stream(p101, gv101, "S-HP", 0.0,
                                  src_port="descarga", dst_port="liq_in",
                                  T=30,
                                  main_component="water", phase="liquid",
                                  composition={"water": 1.0})
         # Vapor sobrecalentado del generador
-        self._add_example_stream(gv101, tur101, "S-steam", 100,
+        self._add_example_stream(gv101, tur101, "S-steam", 0.0,
                                  src_port="vap_out", dst_port="tube_in",
                                  T=280,
                                  main_component="water", phase="vapor",
                                  composition={"water": 1.0})
         # Post-turbina
-        self._add_example_stream(tur101, con101, "S-exp", 100,
+        self._add_example_stream(tur101, con101, "S-exp", 0.0,
                                  src_port="tube_out", dst_port="proceso_in",
                                  T=100,
                                  main_component="water", phase="vapor",
                                  composition={"water": 1.0})
         # Condensado
-        self._add_example_stream(con101, tk_out, "S-cond", 100, role="product",
+        self._add_example_stream(con101, tk_out, "S-cond", 0.0, role="product",
                                  src_port="proceso_out", dst_port="entrada",
                                  price=0.0, T=30,
                                  main_component="water", phase="liquid",
@@ -5374,7 +5374,7 @@ class ExampleBuilder:
                                  composition=seawater,
                                  main_component="water", phase="liquid")
         # Precalentada
-        self._add_example_stream(e101, ev1, "S-precal", 1000,
+        self._add_example_stream(e101, ev1, "S-precal", 0.0,
                                  src_port="tube_out", dst_port="alimentacion",
                                  T=60,
                                  composition=seawater,
@@ -5386,7 +5386,7 @@ class ExampleBuilder:
                                  main_component="water", phase="vapor",
                                  composition={"water": 1.0})
         # EV-101 producto → EV-102
-        self._add_example_stream(ev1, ev2, "S-mid1", 750,
+        self._add_example_stream(ev1, ev2, "S-mid1", 0.0,
                                  src_port="producto", dst_port="alimentacion",
                                  T=65,
                                  composition=mid1,
@@ -5398,7 +5398,7 @@ class ExampleBuilder:
                                  main_component="water", phase="vapor",
                                  composition={"water": 1.0})
         # EV-102 producto → EV-103
-        self._add_example_stream(ev2, ev3, "S-mid2", 500,
+        self._add_example_stream(ev2, ev3, "S-mid2", 0.0,
                                  src_port="producto", dst_port="alimentacion",
                                  T=55,
                                  composition=mid2,
@@ -5410,7 +5410,7 @@ class ExampleBuilder:
                                  main_component="water", phase="vapor",
                                  composition={"water": 1.0})
         # EV-103 producto → TK salmuera (waste concentrada)
-        self._add_example_stream(ev3, tk_brn, "S-brine", 300, role="waste",
+        self._add_example_stream(ev3, tk_brn, "S-brine", 0.0, role="waste",
                                  src_port="producto", dst_port="entrada",
                                  price=0.0, T=50,
                                  composition=brine,
