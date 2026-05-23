@@ -227,6 +227,7 @@ def make_qicon(icon_id: str, color: str = "#1a1a1a",
     except ImportError:
         return None
     renderer = QSvgRenderer(QByteArray(svg.encode("utf-8")))
+    size = max(1, int(size))   # evitar QPixmap 0×0 → "Painter not active"
     px = QPixmap(size, size)
     px.fill(Qt.transparent)
     painter = QPainter(px)
