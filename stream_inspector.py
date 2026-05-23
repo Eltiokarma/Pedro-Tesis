@@ -492,21 +492,26 @@ class StreamInspectorPanel(QWidget):
         self.stream = None
         self.fs = None
         self._on_save: Optional[Callable] = None
+        self._on_cancel: Optional[Callable] = None
         self._fields: Dict[str, SpecField] = {}
         self._extras: Dict[str, object] = {}
         self._comp_rows: List[Tuple[str, QLineEdit]] = []
 
-        # suscribirse a cambios de tema
+        # suscribirse a cambios de tema.  Solo RuntimeError es esperado
+        # (QApplication aún no creada en algunos paths de import); el resto
+        # de excepciones se loggean para no perderlas silenciosamente.
         try:
             _PrefsBus.signal().connect(self._on_prefs_changed)
-        except Exception:
-            pass
+        except RuntimeError:
+            pass   # QApplication aún no instanciada
+        except Exception as _e:
+            print(f"[stream_inspector] PrefsBus connect failed: {_e}")
 
         outer = QVBoxLayout(self)
         outer.setContentsMargins(0, 0, 0, 0); outer.setSpacing(0)
 
         self._header = _StreamHeader(self)
-        self._header.closeRequested.connect(self.closeRequested.emit)
+        self._header.closeRequested.connect(self._on_close_requested)
         outer.addWidget(self._header)
 
         self._path = _PathStrip(self)
@@ -582,7 +587,7 @@ class StreamInspectorPanel(QWidget):
             f"padding:6px 14px; }} "
             f"QPushButton:hover {{ background:{TOK['bg_mute']}; }}"
         )
-        self._cancel_btn.clicked.connect(self.closeRequested.emit)
+        self._cancel_btn.clicked.connect(self._on_close_requested)
         lay.addWidget(self._cancel_btn)
 
         self._save_btn = QPushButton("Guardar cambios")
@@ -598,10 +603,21 @@ class StreamInspectorPanel(QWidget):
         return ft
 
     # ── API pública ─────────────────────────────────────
-    def load_stream(self, stream, flowsheet, on_save: Optional[Callable] = None):
+    def load_stream(self, stream, flowsheet,
+                    on_save: Optional[Callable] = None,
+                    on_cancel: Optional[Callable] = None):
+        """Carga un stream para edición.
+
+        on_save:   se invoca tras pulsar Guardar — el callback hace
+                   validación, push undo cmd, refresh canvas.
+        on_cancel: se invoca cuando el user cierra sin guardar (X o
+                   Cancelar) — el callback debería revertir cualquier
+                   mutación que el panel hizo durante la sesión.
+        """
         self.stream = stream
         self.fs = flowsheet
         self._on_save = on_save
+        self._on_cancel = on_cancel
         self._fields.clear(); self._extras.clear(); self._comp_rows.clear()
 
         # Header
@@ -650,13 +666,19 @@ class StreamInspectorPanel(QWidget):
 
     def _stash_current_section(self):
         """Aplica los valores del set actual al stream in-memory.
-        Sin esto, los edits se pierden al cambiar de sección."""
+        Sin esto, los edits se pierden al cambiar de sección.
+
+        Cualquier excepción se logguea pero NO se silencia — perder
+        edits sin warning es peor que un traceback en consola."""
         if self.stream is None:
             return
         try:
             self._apply_to_stream(commit=False)
-        except Exception:
-            pass
+        except Exception as _e:
+            import traceback
+            print(f"[stream_inspector] _stash_current_section failed: "
+                  f"{type(_e).__name__}: {_e}")
+            traceback.print_exc()
 
     def _clear_content(self):
         while self._content_lay.count() > 1:
@@ -775,10 +797,16 @@ class StreamInspectorPanel(QWidget):
         return sect
 
     def _on_role_pick(self, btn):
-        for b in self._role_group.buttons():
-            on = (b is btn)
-            b.setChecked(on)
-            b.setStyleSheet(b.property("on_style") if on else b.property("off_style"))
+        # Guard RuntimeError: si el user cambia de sección rápido entre
+        # clicks, el group puede ser destruido por deleteLater() mientras
+        # esta lambda se procesa.
+        try:
+            for b in self._role_group.buttons():
+                on = (b is btn)
+                b.setChecked(on)
+                b.setStyleSheet(b.property("on_style") if on else b.property("off_style"))
+        except RuntimeError:
+            pass
 
     # ── Sección Termodinámica ────────────────────────
     def _sec_termo(self) -> QFrame:
@@ -880,10 +908,14 @@ class StreamInspectorPanel(QWidget):
         return sect
 
     def _on_phase_pick(self, btn):
-        for b in self._phase_group.buttons():
-            on = (b is btn)
-            b.setChecked(on)
-            b.setStyleSheet(b.property("on_style") if on else b.property("off_style"))
+        # ver _on_role_pick — guard contra rebuild rápido del section
+        try:
+            for b in self._phase_group.buttons():
+                on = (b is btn)
+                b.setChecked(on)
+                b.setStyleSheet(b.property("on_style") if on else b.property("off_style"))
+        except RuntimeError:
+            pass
 
     # ── Sección Composición ─────────────────────────
     def _sec_composicion(self) -> QFrame:
@@ -1071,6 +1103,14 @@ class StreamInspectorPanel(QWidget):
         items = self._current_comp_items()
         total = sum(f for _, f in items if f > 0)
         if total <= 0:
+            # No hay fracciones positivas — el botón es un no-op pero
+            # damos feedback explícito en lugar de silencio.
+            QMessageBox.information(
+                self, "Σ es cero",
+                "No hay fracciones positivas para normalizar.\n\n"
+                "Ingresá al menos una fracción > 0 y volvé a intentar."
+            )
+            self._update_sigma()
             return
         items = [(n, f / total) for n, f in items]
         self._refresh_comp_rows(items)
@@ -1287,11 +1327,29 @@ class StreamInspectorPanel(QWidget):
             QMessageBox.critical(self, "Error al guardar",
                 f"No se pudo aplicar los cambios:\n{e}")
             return
+        # Saved: NO disparar on_cancel ya — limpiar para que un close
+        # subsiguiente (X) no revierta el save recién hecho.
+        self._on_cancel = None
         if self._on_save:
             self._on_save()
         self._update_footer()
         self._update_dof()
         self.saved.emit()
+        # cerrar el dock después de un save exitoso
+        self.closeRequested.emit()
+
+    def _on_close_requested(self):
+        """Handler unificado para X / Cancelar.  Si hay un on_cancel
+        callback (ej. revertir desde un snapshot pre-edit), lo invoca
+        antes de emitir closeRequested para que el dock se oculte."""
+        cb = self._on_cancel
+        self._on_cancel = None    # one-shot — evita doble revert
+        if cb is not None:
+            try:
+                cb()
+            except Exception as _e:
+                print(f"[stream_inspector] on_cancel raised: {_e}")
+        self.closeRequested.emit()
 
     def _apply_to_stream(self, commit: bool = True):
         """Aplica los valores actuales del set renderizado al stream.
@@ -1430,16 +1488,27 @@ class StreamInspectorPanel(QWidget):
 
     def _on_prefs_changed(self):
         """Reload tras un cambio de tema/densidad/acento — preferencia
-        global aplicada por block_inspector._PrefsBus."""
+        global aplicada por block_inspector._PrefsBus.
+
+        Importante: stash de edits in-memory ANTES del reload para no
+        perder lo que el usuario tipeó pero no guardó.  El stream es la
+        fuente de verdad — load_stream lo re-lee."""
         if self.stream is None or self.fs is None:
             return
+        # 1) commit del set actual al stream (preserva edits sin guardar)
+        self._stash_current_section()
+        # 2) recordar sección activa
         active = self._sidebar.active() or "identidad"
-        self.load_stream(self.stream, self.fs, on_save=self._on_save)
+        # 3) reload con las prefs nuevas + on_save y on_cancel preservados
+        self.load_stream(self.stream, self.fs,
+                         on_save=self._on_save, on_cancel=self._on_cancel)
         try:
             self._sidebar.set_active(active)
             self._switch_section(active)
-        except Exception:
-            pass
+        except RuntimeError:
+            pass   # widgets recién destruidos en reload — esperado
+        except Exception as _e:
+            print(f"[stream_inspector] reload section restore failed: {_e}")
 
 
 # ════════════════════════════════════════════════════════
@@ -1468,7 +1537,10 @@ class StreamInspectorDock(QDockWidget):
         self.setWidget(self.panel)
         self.hide()
 
-    def show_for(self, stream, flowsheet, on_save: Optional[Callable] = None):
-        self.panel.load_stream(stream, flowsheet, on_save=on_save)
+    def show_for(self, stream, flowsheet,
+                 on_save: Optional[Callable] = None,
+                 on_cancel: Optional[Callable] = None):
+        self.panel.load_stream(stream, flowsheet,
+                               on_save=on_save, on_cancel=on_cancel)
         self.show()
         self.raise_()
