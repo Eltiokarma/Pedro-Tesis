@@ -196,6 +196,22 @@ class Block:
     cake_moisture:      float      = 0.30
     solid_components:   List[str]  = field(default_factory=list)
 
+    # ---- SEPARADOR MECÁNICO UNIFICADO (η declarada) ----
+    # Modelo phase-based que unifica filtro/centrífuga/ciclón/decanter.
+    # Activado por mech_sep_active; lo resuelve solve_mechanical_separators,
+    # que reparte el feed entre una salida "target" (la fase objetivo) y
+    # una "reject" con eficiencia η.
+    #   mech_sep_target_phase: "solid" | "liquid" | "vapor".  Para el
+    #     decanter (líquido-líquido) se interpreta como la fase PESADA.
+    #   mech_sep_efficiency:   fracción de la fase objetivo recuperada en
+    #     la salida target (el resto se fuga a la reject).
+    # Los flags legacy separator_active/cyclone_active siguen siendo
+    # honrados por el mismo solver (se mapean a este modelo), por lo que
+    # los flowsheets viejos cargan y corren igual que antes.
+    mech_sep_active:        bool   = False
+    mech_sep_efficiency:    float  = 0.95
+    mech_sep_target_phase:  str    = "solid"
+
     # ---- SECADOR (Dryer — drum) ----
     # Si dryer_active=True y eq_type es Dryer — drum, el solver computa
     # AUTOMÁTICAMENTE el producto seco a humedad final + venteo de
