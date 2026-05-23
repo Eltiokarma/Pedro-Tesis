@@ -277,6 +277,7 @@ def check_features():
     _B = _el.ExampleBuilder
     coherence_tests = {
         "smr_eq":      ("_example_smr_equilibrium",    "R-101", 25.0),
+        "hda":         ("_example_hda",                "R-101", 25.0),
         "haber_rec":   ("_example_haber_recycle",      "R-101", 200.0),
         "industrial":  ("_example_industrial_complete","R-101", 80.0),
         "methanol":    ("_example_methanol",           "R-101", 80.0),
