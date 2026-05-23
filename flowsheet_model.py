@@ -212,6 +212,15 @@ class Block:
     mech_sep_efficiency:    float  = 0.95
     mech_sep_target_phase:  str    = "solid"
 
+    # ---- CORRIENTES AUXILIARES AUTO-INSTANCIADAS ----
+    # auto_aux=True  → el bloque es un source/sink de utility o ambiente
+    #   creado por equipment_auxiliaries (no es equipo real: se excluye del
+    #   capex y puede ocultarse con el toggle Ctrl+U).
+    # aux_user_edited=True → el user editó/borró las aux de este bloque; no
+    #   se regeneran al guardar/abrir (respeta su intención).
+    auto_aux:        bool = False
+    aux_user_edited: bool = False
+
     # ---- SECADOR (Dryer — drum) ----
     # Si dryer_active=True y eq_type es Dryer — drum, el solver computa
     # AUTOMÁTICAMENTE el producto seco a humedad final + venteo de
@@ -525,6 +534,14 @@ class Stream:
     #            flotante (src<=0 o dst<=0), se IGNORA.
     stream_kind: str   = "mass"
     energy_kW:   float = 0.0
+
+    # ---- CORRIENTE AUXILIAR AUTO-INSTANCIADA ----
+    # True si la creó equipment_auxiliaries.instantiate_auxiliaries al
+    # instanciar un equipo (cooling water/steam de un HX, aire de un air
+    # cooler, combustible/chimenea de un horno, etc.).  Permite ocultarlas
+    # (toggle Ctrl+U), distinguirlas en validación/export y rellenar su
+    # mass_flow desde el duty sin doble-contar el costo.
+    auto_aux: bool = False
 
     # ---- Capa 4b (predictor) — reactividad en tuberias ----
     # Permite reaccion en el stream (tipicamente OFF; el asistente

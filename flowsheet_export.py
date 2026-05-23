@@ -71,6 +71,8 @@ def collect_equipment_rows(fs, year_target=2024):
     """
     rows = []
     for b in sorted(fs.blocks.values(), key=lambda b: b.name):
+        if getattr(b, "auto_aux", False):
+            continue   # source/sink auxiliar — no es equipo real
         spec = eq.EQUIPMENT_DATA.get(b.eq_type, {})
         # Material auto-detected (or user override)
         material = _block_material(fs, b.id)
@@ -153,6 +155,8 @@ def compute_turton_costing(fs, df_variable, df_fixed, fci_musd,
     sum_cp = 0.0
     sum_cbm = 0.0
     for b in fs.blocks.values():
+        if getattr(b, "auto_aux", False):
+            continue   # source/sink auxiliar — no es equipo real
         spec = eq.EQUIPMENT_DATA.get(b.eq_type, {})
         cat  = spec.get("categoria", "Otros")
         p_op = float(getattr(b, "P_op_bar", 0.0) or 0.0) or 1.0
@@ -555,15 +559,24 @@ def compute_utilities_from_duties(fs):
         # el user modeló el ciclo cerrado y no queremos doble-contar.
         # Detección: input con role='utility' y phase apropiado al duty.
         has_explicit_util_input = False
+        aux_util_inputs = []
         for s_in in (s for s in fs.streams.values() if s.dst == b.id):
-            if s_in.role == "utility":
-                ph = (s_in.phase or "").lower()
-                # Para heaters (duty > 0): vapor/steam entrando
-                if b.duty > 0 and ("vapor" in ph or "gas" in ph):
-                    has_explicit_util_input = True
-                # Para coolers (duty < 0): liquid (CW o refrigerante)
-                elif b.duty < 0 and "liquid" in ph:
-                    has_explicit_util_input = True
+            if s_in.role != "utility":
+                continue
+            # Corriente auxiliar auto-instanciada (header de utility): NO es
+            # un generador real → se cuenta el costo igual y se le rellena el
+            # mass_flow desde el duty (no se saltea).
+            if getattr(s_in, "auto_aux", False):
+                aux_util_inputs.append(s_in)
+                continue
+            # Utility dibujada por el user (ciclo cerrado real: BFW de un
+            # boiler, CW de una torre) con phase apropiado al duty → no
+            # doble-contar.
+            ph = (s_in.phase or "").lower()
+            if b.duty > 0 and ("vapor" in ph or "gas" in ph):
+                has_explicit_util_input = True
+            elif b.duty < 0 and "liquid" in ph:
+                has_explicit_util_input = True
         if has_explicit_util_input:
             summary.append((b.name, "(closed loop)", "—", 0.0, 0.0))
             continue
@@ -576,6 +589,11 @@ def compute_utilities_from_duties(fs):
         util = ep.UTILITIES[util_key]
         consumption = ep.utility_consumption(util_key, b.duty)
         cost = consumption * util["price"]
+        # Rellenar el mass_flow de las corrientes auxiliares con el consumo
+        # calculado (para que el PFD muestre el caudal de utility real).
+        for s_aux in aux_util_inputs:
+            if not getattr(s_aux, "mass_flow_locked", False):
+                s_aux.mass_flow = consumption
         summary.append((b.name, util_key, util["units"],
                         consumption, cost))
         if util_key in agg:

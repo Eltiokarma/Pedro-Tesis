@@ -97,6 +97,8 @@ def compute_fci(fs,
     sum_cp  = 0.0
     sum_cbm = 0.0
     for b in fs.blocks.values():
+        if getattr(b, "auto_aux", False):
+            continue   # source/sink de utility/ambiente — no es equipo real
         spec = eq.EQUIPMENT_DATA.get(b.eq_type, {})
         cat  = spec.get("categoria", "Otros")
         p_op = float(getattr(b, "P_op_bar", 0.0) or 0.0) or 1.0
