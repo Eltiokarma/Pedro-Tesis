@@ -5067,6 +5067,8 @@ class FlowsheetMainWindow(QMainWindow):
         self._connecting_from: int = None
         # herramienta activa de la paleta (select/pan/connect/text)
         self._active_canvas_tool: str = "select"
+        # visibilidad de corrientes auxiliares (toggle Ctrl+U, default ON)
+        self._show_aux: bool = True
 
         # undo/redo
         self.undo_stack = QUndoStack(self)
@@ -5373,6 +5375,14 @@ class FlowsheetMainWindow(QMainWindow):
             self._toggle_palette_visibility
         )
         m_view.addAction(self._palette_visibility_action)
+        # Corrientes auxiliares (cooling water / steam / aire / combustible /
+        # chimenea, etc.) — toggle visibilidad.  Default ON.
+        self._aux_visibility_action = QAction("Mostrar corrientes auxiliares", self)
+        self._aux_visibility_action.setCheckable(True)
+        self._aux_visibility_action.setChecked(getattr(self, "_show_aux", True))
+        self._aux_visibility_action.setShortcut("Ctrl+U")
+        self._aux_visibility_action.triggered.connect(self._toggle_aux_visibility)
+        m_view.addAction(self._aux_visibility_action)
         # Inspector dock (slide-out de la nueva UI)
         if hasattr(self, "_inspector_dock") and self._inspector_dock is not None:
             m_view.addAction(self._inspector_dock.toggleViewAction())
@@ -5449,6 +5459,23 @@ class FlowsheetMainWindow(QMainWindow):
         paleta vertical flotante sin tocar zoom o demás overlays."""
         if hasattr(self, "_palette_widget") and self._palette_widget is not None:
             self._palette_widget.setVisible(bool(visible))
+
+    def _toggle_aux_visibility(self, show: bool):
+        """Vista > Mostrar corrientes auxiliares (Ctrl+U): muestra/oculta
+        todos los bloques y streams auto_aux (utility/ambiente)."""
+        self._show_aux = bool(show)
+        self._apply_aux_visibility()
+
+    def _apply_aux_visibility(self):
+        """Aplica el estado actual de _show_aux a los items auto_aux del
+        canvas.  Llamar tras crear aux y tras reconstruir la escena."""
+        show = getattr(self, "_show_aux", True)
+        for bid, item in self.block_items_iter():
+            if getattr(item.model, "auto_aux", False):
+                item.setVisible(show)
+        for sid, item in self.stream_items_iter():
+            if getattr(item.model, "auto_aux", False):
+                item.setVisible(show)
 
     # ---------------------------------------------------
     # EDITOR CHROME WIRING (Parte B — NUEVA_UI)
@@ -7301,6 +7328,9 @@ class FlowsheetMainWindow(QMainWindow):
         for s in self.fs.streams.values():
             self._render_stream(s)
         self._refresh_port_colors()
+        # Respetar el toggle de corrientes auxiliares (Ctrl+U) tras
+        # cargar / undo / redo.
+        self._apply_aux_visibility()
         # Burbujas: reconcilar tras cargar / undo / redo
         if getattr(self, "_bubble_manager", None) is not None:
             self._bubble_manager.refresh_all()
@@ -7395,30 +7425,49 @@ class FlowsheetMainWindow(QMainWindow):
         if getattr(self, "_bubble_manager", None) is not None:
             self._bubble_manager._refresh_leaders()
 
-    def _delete_block(self, bid):
+    def _remove_block_item(self, bid):
         item = self.scene.block_items.pop(bid, None)
         if item is not None and item.scene() is self.scene:
-            # children del QGraphicsItemGroup (rect, texts, ports,
-            # decoration_items) se eliminan automáticamente con el padre,
-            # pero Python mantiene refs en la lista decoration_items.
-            # Limpiamos para que el GC libere todo.
             if hasattr(item, "decoration_items"):
                 item.decoration_items.clear()
             if hasattr(item, "port_items"):
                 item.port_items.clear()
             self.scene.removeItem(item)
         self.fs.blocks.pop(bid, None)
-        # streams asociados
+
+    def _delete_block(self, bid):
+        self._remove_block_item(bid)
+        # streams asociados (cada _delete_stream limpia los source/sink aux
+        # que queden huérfanos y marca aux_user_edited en el bloque real).
         to_del = [sid for sid, s in self.fs.streams.items()
                   if s.src == bid or s.dst == bid]
         for sid in to_del:
             self._delete_stream(sid)
 
     def _delete_stream(self, sid):
+        s = self.fs.streams.get(sid)
+        aux_endpoints = []
+        if s is not None and getattr(s, "auto_aux", False):
+            for bid in (s.src, s.dst):
+                blk = self.fs.blocks.get(bid)
+                if blk is None:
+                    continue
+                if getattr(blk, "auto_aux", False):
+                    aux_endpoints.append(bid)        # candidato a limpiar
+                else:
+                    # Memoria de edición: si el user borra una corriente
+                    # auxiliar, no la regeneramos al guardar/abrir.
+                    blk.aux_user_edited = True
         item = self.scene.stream_items.pop(sid, None)
         if item is not None:
             item.remove_from_scene(self.scene)
         self.fs.streams.pop(sid, None)
+        # Limpiar source/sink auxiliares que quedaron sin ninguna corriente.
+        for bid in aux_endpoints:
+            if bid in self.fs.blocks and not any(
+                    st.src == bid or st.dst == bid
+                    for st in self.fs.streams.values()):
+                self._remove_block_item(bid)
 
     # ---------------------------------------------------
     # SELECTION
@@ -7942,6 +7991,7 @@ class FlowsheetMainWindow(QMainWindow):
                     self._render_block(self.fs.blocks[_new_id])
                 elif _new_id in self.fs.streams:
                     self._render_stream(self.fs.streams[_new_id])
+            self._apply_aux_visibility()
         except Exception as _e:
             import logging
             logging.getLogger(__name__).debug(f"aux instancing fallo: {_e}")

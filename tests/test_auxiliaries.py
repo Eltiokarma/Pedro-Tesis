@@ -149,6 +149,17 @@ class TestCostingFill(unittest.TestCase):
         self.assertGreater(cw_in.mass_flow, 0.0)
 
 
+class TestValidationSuppressed(unittest.TestCase):
+    def test_aux_streams_no_warnings(self):
+        import flowsheet_validation as fval
+        fs, b = _block("Heat exch. — floating head")
+        aux.instantiate_auxiliaries(fs, b)
+        issues = fval.validate_all_streams(fs)
+        # ninguna de las issues corresponde a una corriente auxiliar
+        aux_names = {s.name for s in _aux_streams(fs)}
+        self.assertFalse(any(name in aux_names for name, _, _ in issues))
+
+
 class TestBackwardsCompat(unittest.TestCase):
     def test_from_dict_no_autopopulate(self):
         # Flowsheet "viejo": un HX sin auto_aux ni aux streams.

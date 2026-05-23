@@ -339,6 +339,12 @@ def validate_all_streams(fs):
     (stream_name, severity, message) — solo para severity != 'ok'."""
     issues = []
     for s in fs.streams.values():
+        # Las corrientes auxiliares auto-instanciadas (cooling water, aire,
+        # combustible, chimenea, …) son generadas por el sistema y conectan
+        # a puertos de utility/ambiente — no deben disparar warnings de
+        # conexión atípica ni de puerto huérfano.
+        if getattr(s, "auto_aux", False):
+            continue
         sev, msg = validate_connection(
             fs, s.src, s.dst, s.src_port, s.dst_port
         )
