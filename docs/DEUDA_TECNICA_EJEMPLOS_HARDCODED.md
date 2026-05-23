@@ -6,7 +6,7 @@
 
 ## El problema
 
-Los 41 builders `_example_*` en `flowsheet_ui.py` declaran todos los
+Los 41 builders `_example_*` en `examples_library.py` declaran todos los
 flujos intermedios con valores literales precalculados a mano:
 
 ```python
@@ -46,8 +46,8 @@ def _add_example_stream(self, ..., lock_mass=None, lock_T=None, lock_comp=None):
 - `lock_*=None` (default) → heurística legacy (back-compat 100 %).
 - `lock_*=bool` → respetar el bool explícito.
 
-Aplicado en los **tres sitios**: `flowsheet_ui.py`, `flowsheet_qt.py`
-shim, y `validate_ui.py` delega al primero.
+Aplicado en `examples_library.py` (única fuente de los 41 ejemplos);
+`flowsheet_qt.py` y `validate_ui.py` la consumen.
 
 Tests de regresión en `tests/test_example_locks.py` verifican que la
 heurística legacy se preserva y que los nuevos params funcionan.
@@ -75,7 +75,7 @@ regresión" y por eso quedó como tarea aparte.
 
 Tras reescribir cada builder y antes de hacer commit:
 
-1. ✅ `python -c "import flowsheet_ui as fu, flowsheet_solver as fs; ..."` → `result.success == True`
+1. ✅ `python -c "import examples_library as el, flowsheet_solver as fs; ..."` → `result.success == True`
 2. ✅ Flujos calculados ≈ los hardcoded antes (tolerancia 0.5 %). Si difieren mucho:
    - Los números "industriales típicos" del comentario estaban mal → corregir
    - O el modelo no captura algo → documentarlo en el docstring (no maquillarlo)
