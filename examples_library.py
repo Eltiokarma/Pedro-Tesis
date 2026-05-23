@@ -3357,13 +3357,13 @@ class ExampleBuilder:
                                  composition=diluted,
                                  main_component="water", phase="liquid")
         # Pre-calentado al efecto 1
-        self._add_example_stream(e101, ev101, "S-1", 1000,
+        self._add_example_stream(e101, ev101, "S-1", 0.0,
                                  src_port="tube_out", dst_port="alimentacion",
                                  T=80,
                                  composition=diluted,
                                  main_component="water", phase="liquid")
-        # Producto efecto 1 → efecto 2  (656 tm: 120 sólidos / 18.3 %)
-        self._add_example_stream(ev101, ev102, "S-2", 656,
+        # Producto efecto 1 → efecto 2 (masa deducida: 1000 − S-vap1; comp spec)
+        self._add_example_stream(ev101, ev102, "S-2", 0.0,
                                  src_port="producto", dst_port="alimentacion",
                                  T=70,
                                  composition=mid,
@@ -3374,7 +3374,7 @@ class ExampleBuilder:
                                  price=0.0, T=85,
                                  main_component="water", phase="vapor")
         # Producto efecto 2 = concentrado final  (342.9 tm: 120 sólidos / 35 %)
-        self._add_example_stream(ev102, tk_out, "S-concentrado", 343, role="product",
+        self._add_example_stream(ev102, tk_out, "S-concentrado", 0.0, role="product",
                                  src_port="producto", dst_port="entrada",
                                  price=900.0, T=55,
                                  composition=concen,
@@ -3434,7 +3434,7 @@ class ExampleBuilder:
                                  price=1200.0, T=180,
                                  main_component="vegetable_oil", phase="liquid")
         # Chips: salida sólida (Modo B: composición declarada)
-        self._add_example_stream(fr101, tk_chip, "S-chips", 526, role="product",
+        self._add_example_stream(fr101, tk_chip, "S-chips", 0.0, role="product",
                                  src_port="liquido",  dst_port="entrada",
                                  price=2500.0, T=170,
                                  composition=chip_out,
@@ -3530,7 +3530,7 @@ class ExampleBuilder:
                                  composition=mosto,
                                  main_component="water", phase="liquid")
         # Post-fermentador: composición declarada (Modo B)
-        self._add_example_stream(r101, v101, "S-fermented", 1000,
+        self._add_example_stream(r101, v101, "S-fermented", 0.0,
                                  src_port="producto", dst_port="alimentacion",
                                  T=22,
                                  composition=fermented,
@@ -3542,13 +3542,13 @@ class ExampleBuilder:
                                  main_component="co2", phase="gas",
                                  composition={"co2": 1.0})
         # Líquido fermentado al pasteurizador (sin CO2 ya)
-        self._add_example_stream(v101, e101, "S-vino", 930.3,
+        self._add_example_stream(v101, e101, "S-vino", 0.0,
                                  src_port="liquido",  dst_port="tube_in",
                                  T=22,
                                  composition=beer_liq,
                                  main_component="water", phase="liquid")
         # Cerveza pasteurizada a 4 °C (producto envasado)
-        self._add_example_stream(e101, tk_out, "S-cerveza", 930.3, role="product",
+        self._add_example_stream(e101, tk_out, "S-cerveza", 0.0, role="product",
                                  src_port="tube_out", dst_port="entrada",
                                  price=1500.0, T=4,
                                  composition=beer_liq,
@@ -5027,14 +5027,14 @@ class ExampleBuilder:
                                  composition=masa,
                                  main_component="starch", phase="liquid")
         # Amasada → fermentador
-        self._add_example_stream(m101, r101, "S-amasada", 1000,
+        self._add_example_stream(m101, r101, "S-amasada", 0.0,
                                  src_port="producto", dst_port="alimentacion",
                                  T=25,
                                  composition=masa,
                                  main_component="starch", phase="liquid")
         # Leudada → horno (composición efectiva igual por simplificación
         # didáctica; la fermentación real produce trazas de CO2/EtOH)
-        self._add_example_stream(r101, h101, "S-leudada", 1000,
+        self._add_example_stream(r101, h101, "S-leudada", 0.0,
                                  src_port="producto", dst_port="tube_in",
                                  T=32,
                                  composition=masa,
@@ -5046,13 +5046,13 @@ class ExampleBuilder:
                                  main_component="water", phase="vapor",
                                  composition={"water": 1.0})
         # Pan caliente al enfriador
-        self._add_example_stream(h101, e101, "S-pan-cal", 880,
+        self._add_example_stream(h101, e101, "S-pan-cal", 0.0,
                                  src_port="tube_out", dst_port="proceso_in",
                                  T=220,
                                  composition=pan,
                                  main_component="starch", phase="liquid")
         # Pan enfriado al silo final
-        self._add_example_stream(e101, tk_pan, "S-pan", 880, role="product",
+        self._add_example_stream(e101, tk_pan, "S-pan", 0.0, role="product",
                                  src_port="proceso_out", dst_port="entrada",
                                  price=2200.0, T=25,
                                  composition=pan,
@@ -5129,7 +5129,7 @@ class ExampleBuilder:
                                  composition=medio,
                                  main_component="water", phase="liquid")
         # Esterilizado a 121 °C
-        self._add_example_stream(e_est, r101, "S-est", 1000,
+        self._add_example_stream(e_est, r101, "S-est", 0.0,
                                  src_port="tube_out", dst_port="alimentacion",
                                  T=24,
                                  composition=medio,
@@ -5141,7 +5141,7 @@ class ExampleBuilder:
                                  main_component="co2", phase="gas",
                                  composition={"co2": 1.0})
         # Caldo + biomasa al separador
-        self._add_example_stream(r101, v101, "S-caldo", 995,
+        self._add_example_stream(r101, v101, "S-caldo", 0.0,
                                  src_port="producto", dst_port="alimentacion",
                                  T=24,
                                  composition=caldo,
@@ -5153,7 +5153,7 @@ class ExampleBuilder:
                                  main_component="biomass", phase="liquid",
                                  composition={"biomass": 1.0})
         # Líquido a extracción
-        self._add_example_stream(v101, f101, "S-liq", 965,
+        self._add_example_stream(v101, f101, "S-liq", 0.0,
                                  src_port="vapor", dst_port="alimentacion",
                                  T=24,
                                  composition=liquid,
@@ -5165,7 +5165,7 @@ class ExampleBuilder:
                                  main_component="penicillin", phase="liquid",
                                  composition={"penicillin": 1.0})
         # Caldo residual (waste)
-        self._add_example_stream(f101, tk_res, "S-residual", 960, role="waste",
+        self._add_example_stream(f101, tk_res, "S-residual", 0.0, role="waste",
                                  src_port="venteo", dst_port="entrada",
                                  price=0.0, T=25,
                                  main_component="water", phase="liquid",
