@@ -4934,173 +4934,6 @@ class FlowsheetView(QGraphicsView):
 # MAIN WINDOW
 # ======================================================
 
-# ======================================================
-# STREAMS TABLE DOCK — tabla de corrientes con conversión de unidades
-# ======================================================
-
-class StreamsTableDock(QDockWidget):
-    """Dock con tabla de TODAS las corrientes del flowsheet.
-
-    Cada fila muestra: Nombre · From (block.port) · To (block.port)
-    · Role · Flujo (en unidad elegida) · T · Cp · Precio (si feed/product).
-
-    El user puede cambiar la unidad de flujo desde el combo superior:
-    tm/año, kg/h, kg/s, t/d, lb/h.  Los labels en el canvas también
-    se actualizan a la nueva unidad.
-
-    Double-click en una fila abre el StreamInspector del stream.
-    """
-
-    (COL_NAME, COL_FROM, COL_TO, COL_ROLE, COL_FLOW, COL_T,
-     COL_PHASE, COL_COMP, COL_CP, COL_PRICE) = range(10)
-
-    def __init__(self, parent, editor):
-        super().__init__(" Corrientes ", parent)
-        self.editor = editor
-        self.setAllowedAreas(Qt.BottomDockWidgetArea | Qt.RightDockWidgetArea)
-        self.setFeatures(QDockWidget.DockWidgetMovable
-                          | QDockWidget.DockWidgetFloatable
-                          | QDockWidget.DockWidgetClosable)
-
-        widget = QWidget()
-        layout = QVBoxLayout(widget)
-        layout.setContentsMargins(6, 6, 6, 6)
-        layout.setSpacing(4)
-
-        # --- toolbar del dock: unidad de flujo + total in/out ---
-        tb_layout = QHBoxLayout()
-        tb_layout.addWidget(QLabel("Unidad de flujo:"))
-        self.unit_combo = QComboBox()
-        for u in funits.FLOW_UNITS_ORDER:
-            self.unit_combo.addItem(u)
-        self.unit_combo.setCurrentText("tm/año")
-        self.unit_combo.currentTextChanged.connect(self._on_unit_changed)
-        tb_layout.addWidget(self.unit_combo)
-
-        self.lbl_summary = QLabel("")
-        self.lbl_summary.setStyleSheet("color: #555;")
-        tb_layout.addWidget(self.lbl_summary)
-        tb_layout.addStretch()
-        layout.addLayout(tb_layout)
-
-        # --- tabla ---
-        cols = ["Nombre", "Desde", "Hacia", "Rol", "Flujo", "T",
-                "Fase", "Composición (mass frac)", "Cp", "Precio"]
-        self.table = QTableWidget(0, len(cols))
-        self.table.setHorizontalHeaderLabels(cols)
-        self.table.setSelectionBehavior(QTableWidget.SelectRows)
-        self.table.setEditTriggers(QTableWidget.NoEditTriggers)
-        self.table.setAlternatingRowColors(True)
-        self.table.horizontalHeader().setStretchLastSection(True)
-        self.table.itemDoubleClicked.connect(self._on_double_click)
-        for col, width in (
-            (self.COL_NAME, 130), (self.COL_FROM, 130), (self.COL_TO, 130),
-            (self.COL_ROLE, 65),  (self.COL_FLOW, 110), (self.COL_T, 65),
-            (self.COL_PHASE, 70), (self.COL_COMP, 280),
-            (self.COL_CP, 60),    (self.COL_PRICE, 90),
-        ):
-            self.table.setColumnWidth(col, width)
-        layout.addWidget(self.table)
-
-        self.setWidget(widget)
-
-    def current_unit(self):
-        return self.unit_combo.currentText()
-
-    def refresh(self):
-        """Reconstruye la tabla desde el flowsheet actual."""
-        fs = self.editor.fs
-        unit = self.current_unit()
-        streams = sorted(fs.streams.values(), key=lambda s: s.name)
-        self.table.setRowCount(len(streams))
-
-        feed_total_tm = 0.0
-        prod_total_tm = 0.0
-        for r, s in enumerate(streams):
-            src_b = fs.blocks.get(s.src)
-            dst_b = fs.blocks.get(s.dst)
-            src_label = (
-                f"{src_b.name}.{s.src_port or '?'}" if src_b else "(borrado)"
-            )
-            dst_label = (
-                f"{dst_b.name}.{s.dst_port or '?'}" if dst_b else "(borrado)"
-            )
-            # Composición compacta: "compA 82.4% · compB 17.6%" para
-            # streams multicomponente; "(compA)" si solo main_component.
-            comp = s.composition or {}
-            if not comp and s.main_component:
-                comp = {s.main_component: 1.0}
-            comp_parts = []
-            for k, v in sorted(comp.items(), key=lambda kv: -kv[1]):
-                if v < 0.001:
-                    continue
-                comp_parts.append(f"{k} {v*100:.1f}%")
-            comp_str = " · ".join(comp_parts) if comp_parts else "—"
-            vals = [
-                s.name,
-                src_label,
-                dst_label,
-                s.role,
-                funits.format_flow(s.mass_flow, unit),
-                f"{s.temperature:g} °C",
-                s.phase or "—",
-                comp_str,
-                f"{s.cp:g}" if s.cp > 0 else "—",
-                (f"${s.price_usd_per_tm:g}/tm"
-                 if s.role in ("feed", "product") and s.price_usd_per_tm
-                 else "—"),
-            ]
-            for c, v in enumerate(vals):
-                item = QTableWidgetItem(str(v))
-                if c in (self.COL_FLOW, self.COL_T, self.COL_CP, self.COL_PRICE):
-                    item.setTextAlignment(Qt.AlignRight | Qt.AlignVCenter)
-                # Tooltip de composición completa (todos los componentes)
-                if c == self.COL_COMP and comp:
-                    tooltip_lines = [f"<b>{s.name} — composición</b>"]
-                    for k, v_ in sorted(comp.items(), key=lambda kv: -kv[1]):
-                        m_i = v_ * s.mass_flow
-                        tooltip_lines.append(
-                            f"&nbsp;&nbsp;{k}: {v_*100:.2f}%  "
-                            f"({m_i:.1f} tm/año)")
-                    item.setToolTip("<br>".join(tooltip_lines))
-                if s.role == "feed":
-                    item.setForeground(QBrush(QColor("#2e7d32")))
-                elif s.role == "product":
-                    item.setForeground(QBrush(QColor("#e65100")))
-                # guardar el sid en la primera columna para edit on dblclick
-                if c == self.COL_NAME:
-                    item.setData(Qt.UserRole, s.id)
-                self.table.setItem(r, c, item)
-
-            if s.role == "feed":
-                feed_total_tm += s.mass_flow
-            elif s.role == "product":
-                prod_total_tm += s.mass_flow
-
-        self.lbl_summary.setText(
-            f"({len(streams)} corrientes · "
-            f"feed: {funits.format_flow(feed_total_tm, unit)} · "
-            f"products: {funits.format_flow(prod_total_tm, unit)})"
-        )
-
-    def _on_unit_changed(self, _unit):
-        """Cambió la unidad de flujo → refresh tabla + labels del canvas."""
-        self.refresh()
-        # también actualizar labels de streams en el canvas
-        for sid, item in self.editor.scene.stream_items.items():
-            item.update_path()
-
-    def _on_double_click(self, item):
-        row = item.row()
-        sid_item = self.table.item(row, self.COL_NAME)
-        if sid_item is None:
-            return
-        sid = sid_item.data(Qt.UserRole)
-        stream = self.editor.fs.streams.get(sid)
-        if stream is not None:
-            self.editor.edit_stream(stream)
-
-
 class FlowsheetMainWindow(QMainWindow):
 
     def __init__(self):
@@ -5972,8 +5805,11 @@ class FlowsheetMainWindow(QMainWindow):
             self.reactivity_dock = None
 
     def _build_streams_dock(self):
-        """Tabla de corrientes con cambio de unidades."""
-        self.streams_dock = StreamsTableDock(self, self)
+        """Tabla de corrientes hi-fi (rediseño parche P2).  Custom
+        layout con NumberPill + composition strip + mass bar + T/P
+        stacked.  Vive en streams_table.py."""
+        from streams_table import StreamsTableDock as _NewStreamsTableDock
+        self.streams_dock = _NewStreamsTableDock(self, self)
         self.addDockWidget(Qt.BottomDockWidgetArea, self.streams_dock)
         self.streams_dock.refresh()
 
