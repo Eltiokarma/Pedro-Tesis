@@ -124,6 +124,7 @@ class ExampleBuilder:
         e101 = self._add_example_block("E-101", "Heat exch. — floating head", 250.0,  300, 220)
         f101 = self._add_example_block("F-101", "Fired heater — non-reformer", 5000.0, 480, 180)
         r101 = self._add_example_block("R-101", "Reactor — jacketed non-agit.",  25.0, 640, 180)
+        self.fs.blocks[r101].P_op_bar = 25.0   # HDA ~25 bar
         e102 = self._add_example_block("E-102", "Heat exch. — air cooler",      180.0, 750, 200)
         v101 = self._add_example_block("V-101", "Vessel — vertical",             20.0, 930, 180)
 
@@ -2338,6 +2339,7 @@ class ExampleBuilder:
                                               30.0, 2460, 180)
         k301     = self._add_example_block("K-301","Compressor — centrifugal",
                                              500.0, 2760, 180)
+        self.fs.blocks[k301].efficiency = 0.70   # auto-size a 7 bar (Cl2 licuef.)
         e302     = self._add_example_block("E-302","Heat exch. — floating head",
                                              120.0, 3060, 180)
         tk_cl2   = self._add_example_block("TK-201","Storage tank — floating roof",
@@ -2484,12 +2486,14 @@ class ExampleBuilder:
                                   T=80, phase="gas",
                                   composition={"chlorine": 0.999,
                                                  "water": 0.001})
-        # Condensación → Cl2 líquido
-        self._add_example_stream(e302, tk_cl2, "S-cl2-liq", 0.0, role="product",
+        # Condensación → Cl2 líquido (almacenado a 7 bar / 700 kPa).
+        s_cl2liq = self._add_example_stream(e302, tk_cl2, "S-cl2-liq", 0.0, role="product",
                                   src_port="tube_out", dst_port="entrada",
                                   price=480.0, T=20, phase="liquid",
                                   composition={"chlorine": 0.999,
                                                  "water": 0.001})
+        self.fs.streams[s_cl2liq].pressure_bar = 7.0
+        self.fs.streams[s_cl2liq].pressure_locked = True
 
         # ============ STREAMS — TREN H2 ============
         self._add_example_stream(e401, tk_h2_prod, "S-h2", 0.0, role="product",
@@ -2845,6 +2849,8 @@ class ExampleBuilder:
         # No le seteamos duty; el reactor lo absorbe internamente.
         # K-501 (turbina expansión) consume W negativo (genera).
         self.fs.blocks[t501].duty = -700.0
+        self.fs.blocks[t501].duty_locked = True
+        self.fs.blocks[t501].delta_p_bar = -9.5   # turbina de expansión 10→0.5 bar
         self.fs.blocks[t501].duty_locked = True
 
         # ============ OPEX EXTRAS ============
