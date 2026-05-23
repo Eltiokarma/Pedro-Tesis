@@ -283,6 +283,102 @@ def check_features():
         return True
 
 
+def check_isentropic_compression():
+    """Verifica la propagación isentrópica de T_out en compresores y
+    turbinas (Cengel cap 7-9).
+
+    NOTA sobre los números: el solver usa Cp(T) REAL de thermo_db, no
+    el cold-air-standard de constante k=1.4 que usan los ejemplos del
+    libro.  Por eso:
+      · Compresor a baja T (300 K, k≈1.40): coincide con Cengel salvo
+        que compressor_sizing clampea η_isen ≤ 0.95 (ningún compresor
+        real es isentrópico-ideal), así que un caso "η=1.0" da T_out
+        ~556 K en vez de los 543 K teóricos.
+      · Turbina a alta T (1300 K, k≈1.30): el Cp del aire crece con T,
+        bajando k → menor caída de T → exhaust MÁS caliente (799 K)
+        que el cold-air-standard de Cengel (717 K).  El código es más
+        preciso; ambos son físicamente defensibles.
+
+    Los chequeos validan la FÍSICA (compresor calienta + W>0; turbina
+    enfría + W<0) y los valores del código con tolerancia ±5 %."""
+    import flowsheet_model as fm
+    import flowsheet_solver as fsv
+    from flowsheet_model import SEC_PER_YEAR, TM_TO_KG
+
+    print(f"\n{'='*70}")
+    print("ISENTROPIC COMPRESSION / EXPANSION (Cengel cap 7-9)")
+    print(f"{'='*70}")
+    issues = []
+
+    def _build(T_in_C, P_in, dp, eta):
+        """Mini-flowsheet: 10 kg/s aire por un Compressor — axial."""
+        fs = fm.Flowsheet()
+        k = fm.Block(id=1, name="K", eq_type="Compressor — axial", S=500,
+                     delta_p_bar=dp, efficiency=eta)
+        fs.blocks[1] = k
+        mf = 10.0 * SEC_PER_YEAR / TM_TO_KG   # 10 kg/s en tm/año
+        feed = fm.Stream(id=2, name="in", src=0, dst=1, mass_flow=mf,
+                         composition={"nitrogen": 0.79, "oxygen": 0.21},
+                         phase="gas", temperature=T_in_C, pressure_bar=P_in)
+        feed.mass_flow_locked = True; feed.composition_locked = True
+        feed.pressure_locked = True;  feed.temperature_locked = True
+        fs.streams[2] = feed
+        out = fm.Stream(id=3, name="out", src=1, dst=0, mass_flow=mf,
+                        composition={"nitrogen": 0.79, "oxygen": 0.21},
+                        phase="gas")
+        fs.streams[3] = out
+        return fs, k, out
+
+    def _within(label, got, expected, pct):
+        ok = abs(got - expected) <= abs(expected) * pct
+        flag = "✓" if ok else "✗"
+        print(f"   {flag} {label}: {got:.1f} (esperado ≈{expected:.1f}, ±{pct*100:.0f}%)")
+        if not ok:
+            issues.append(f"{label}: {got:.1f} ≠ {expected:.1f} ±{pct*100:.0f}%")
+        return ok
+
+    # Caso 1 — compresor aire 27°C, 1→8 bar, η=1.0 (clamp 0.95)
+    print("Caso 1 — compresor aire 27°C, 1→8 bar (η pedido 1.0):")
+    fs, k, out = _build(27.0, 1.0, +7.0, 1.0)
+    fsv.solve(fs)
+    T_out_K = out.temperature + 273.15
+    _within("T_out [K]", T_out_K, 556.0, 0.05)   # 556 = 300+(543.4-300)/0.95
+    _within("duty [kW]", k.duty, 2710.0, 0.05)
+    if k.duty <= 0:
+        issues.append("Caso1: compresor con duty no-positivo")
+
+    # Caso 2 — turbina aire 1027°C, 8→1 bar, η=1.0
+    print("Caso 2 — turbina aire 1027°C, 8→1 bar (η 1.0, expansor):")
+    fs, k, out = _build(1027.0, 8.0, -7.0, 1.0)
+    fsv.solve(fs)
+    T_out_K = out.temperature + 273.15
+    # Con Cp(T) real a 1300 K, k≈1.30 → exhaust ~799 K (Cengel cold-air
+    # k=1.4 daría 717 K).  Validamos el valor del código.
+    _within("T_out [K]", T_out_K, 799.0, 0.05)
+    _within("duty [kW] (gen, negativo)", k.duty, -5880.0, 0.06)
+    if k.duty >= 0:
+        issues.append("Caso2: turbina con duty no-negativo (debería generar)")
+    if T_out_K >= 1300:
+        issues.append("Caso2: turbina no enfrió el gas")
+
+    # Caso 3 — compresor η=0.85
+    print("Caso 3 — compresor aire 27°C, 1→8 bar, η=0.85:")
+    fs, k, out = _build(27.0, 1.0, +7.0, 0.85)
+    fsv.solve(fs)
+    T_out_K = out.temperature + 273.15
+    _within("T_out [K]", T_out_K, 585.0, 0.05)
+    _within("duty [kW]", k.duty, 3040.0, 0.05)
+
+    print(f"\n{'='*70}")
+    if issues:
+        print(f"⚠ ISENTROPIC: {len(issues)} issues:")
+        for i in issues:
+            print(f"   - {i}")
+        return False
+    print("✓ ISENTROPIC COMPRESSION/EXPANSION VERIFICADO")
+    return True
+
+
 def maybe_open_gui():
     """Si PySide6 está disponible, intenta arrancar la app con
     el ejemplo hydraulic_plant cargado."""
@@ -309,6 +405,7 @@ if __name__ == "__main__":
 
     ok1 = run_all_examples()
     ok2 = check_features()
+    ok3 = check_isentropic_compression()
     if args.gui:
         maybe_open_gui()
-    sys.exit(0 if (ok1 and ok2) else 1)
+    sys.exit(0 if (ok1 and ok2 and ok3) else 1)
