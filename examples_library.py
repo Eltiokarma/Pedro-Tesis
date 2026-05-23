@@ -353,19 +353,19 @@ class ExampleBuilder:
                                  composition={"benzene": 0.5, "toluene": 0.5},
                                  main_component="benzene", phase="liquid")
         # Post-bomba: mismo líquido
-        self._add_example_stream(p101, e101, "S-2", 10000,
+        self._add_example_stream(p101, e101, "S-2", 0.0,
                                  src_port="descarga", dst_port="tube_in",
                                  T=26,
                                  composition={"benzene": 0.5, "toluene": 0.5},
                                  main_component="benzene", phase="liquid")
         # Post-preheater: cerca del punto de burbuja
-        self._add_example_stream(e101, t101, "S-3", 10000,
+        self._add_example_stream(e101, t101, "S-3", 0.0,
                                  src_port="tube_out", dst_port="alimentacion",
                                  T=85,
                                  composition={"benzene": 0.5, "toluene": 0.5},
                                  main_component="benzene", phase="liquid")
         # Vapor tope: ~98% benceno (más volátil)
-        self._add_example_stream(t101, e102, "S-4", 5000,
+        self._add_example_stream(t101, e102, "S-4", 0.0,
                                  src_port="vapor_tope",     dst_port="tube_in",
                                  T=82,
                                  composition={"benzene": 0.98, "toluene": 0.02},
@@ -377,12 +377,12 @@ class ExampleBuilder:
                                  composition={"benzene": 0.02, "toluene": 0.98},
                                  main_component="toluene", phase="liquid")
         # Productos condensados al tanque (líquidos)
-        self._add_example_stream(e102, tk1,  "S-benceno", 5000, role="product",
+        self._add_example_stream(e102, tk1,  "S-benceno", 0.0, role="product",
                                  src_port="tube_out", dst_port="entrada",
                                  price=1050.0, T=40,
                                  composition={"benzene": 0.98, "toluene": 0.02},
                                  main_component="benzene", phase="liquid")
-        self._add_example_stream(e103, tk2,  "S-tolueno", 5000, role="product",
+        self._add_example_stream(e103, tk2,  "S-tolueno", 0.0, role="product",
                                  src_port="vap_out",  dst_port="entrada",
                                  price=700.0, T=40,
                                  composition={"benzene": 0.02, "toluene": 0.98},
@@ -430,26 +430,26 @@ class ExampleBuilder:
                                  composition=feed_mix,
                                  main_component="nitrogen", phase="gas")
         # Post-compresor: gas comprimido, T sube por compresión adiabática
-        self._add_example_stream(k101, e101, "S-1", 10000,
+        self._add_example_stream(k101, e101, "S-1", 0.0,
                                  src_port="descarga", dst_port="tube_in",
                                  T=180,
                                  composition=feed_mix,
                                  main_component="nitrogen", phase="gas")
         # Post-preheater: T de operación reactor ~450°C
-        self._add_example_stream(e101, r101, "S-2", 10000,
+        self._add_example_stream(e101, r101, "S-2", 0.0,
                                  src_port="tube_out", dst_port="alimentacion",
                                  T=450,
                                  composition=feed_mix,
                                  main_component="nitrogen", phase="gas")
         # Post-reactor: con NH₃ formado, T sube por exotermia
-        self._add_example_stream(r101, e102, "S-3", 10000,
+        self._add_example_stream(r101, e102, "S-3", 0.0,
                                  src_port="producto", dst_port="tube_in",
                                  T=500,
                                  composition=post_mix,
                                  main_component="nitrogen", phase="gas")
         # Post-cooler: enfriado a ~30°C, NH₃ se condensa parcialmente
         # (a la P alta del proceso 200 bar, NH₃ liq a 30°C).
-        self._add_example_stream(e102, v101, "S-4", 10000,
+        self._add_example_stream(e102, v101, "S-4", 0.0,
                                  src_port="tube_out", dst_port="alimentacion",
                                  T=30,
                                  composition=post_mix,
@@ -460,7 +460,7 @@ class ExampleBuilder:
                                  price=750.0, T=30,
                                  main_component="ammonia", phase="liquid")
         # Purga (gas del flash)
-        self._add_example_stream(v101, tk_purge, "S-purga", 8500, role="product",
+        self._add_example_stream(v101, tk_purge, "S-purga", 0.0, role="product",
                                  src_port="vapor",    dst_port="entrada",
                                  price=120.0, T=30,
                                  composition=purge_mix,
@@ -524,7 +524,7 @@ class ExampleBuilder:
                                  composition=mosto_mix,
                                  main_component="water", phase="liquid")
         # Post-fermentador: vino fermentado
-        self._add_example_stream(r101, v101, "S-1", 10000,
+        self._add_example_stream(r101, v101, "S-1", 0.0,
                                  src_port="producto", dst_port="alimentacion",
                                  T=32,
                                  composition=fermented,
@@ -535,19 +535,19 @@ class ExampleBuilder:
                                  price=0.0, T=32,
                                  main_component="co2", phase="gas")
         # Líquido fermentado a la bomba
-        self._add_example_stream(v101, p101, "S-2", 9472,
+        self._add_example_stream(v101, p101, "S-2", 0.0,
                                  src_port="liquido",  dst_port="succion",
                                  T=32,
                                  composition=post_v,
                                  main_component="water", phase="liquid")
         # Post-bomba
-        self._add_example_stream(p101, e101, "S-3", 9472,
+        self._add_example_stream(p101, e101, "S-3", 0.0,
                                  src_port="descarga", dst_port="tube_in",
                                  T=33,
                                  composition=post_v,
                                  main_component="water", phase="liquid")
         # Post-preheater al destilador
-        self._add_example_stream(e101, t101, "S-4", 9472,
+        self._add_example_stream(e101, t101, "S-4", 0.0,
                                  src_port="tube_out", dst_port="alimentacion",
                                  T=85,
                                  composition=post_v,
@@ -559,19 +559,19 @@ class ExampleBuilder:
                                  composition=top,
                                  main_component="ethanol", phase="vapor")
         # Etanol producto (condensado)
-        self._add_example_stream(e102, tk_eth, "S-EtOH", 612, role="product",
+        self._add_example_stream(e102, tk_eth, "S-EtOH", 0.0, role="product",
                                  src_port="tube_out", dst_port="entrada",
                                  price=950.0, T=40,
                                  composition=top,
                                  main_component="ethanol", phase="liquid")
         # Líquido de fondo (mostly water + glucose residual)
-        self._add_example_stream(t101, e103, "S-fondo", 8860,
+        self._add_example_stream(t101, e103, "S-fondo", 0.0,
                                  src_port="liquido_fondo", dst_port="liq_in",
                                  T=100,
                                  composition=bottom,
                                  main_component="water", phase="liquid")
         # Vinaza al tanque
-        self._add_example_stream(e103, tk_vin, "S-vinaza", 8860, role="product",
+        self._add_example_stream(e103, tk_vin, "S-vinaza", 0.0, role="product",
                                  src_port="cond_out", dst_port="entrada",
                                  price=2.0, T=60,
                                  composition=bottom,
@@ -640,7 +640,7 @@ class ExampleBuilder:
                                  composition=meoh_in,
                                  main_component="methanol", phase="liquid")
         # Post-reactor: efluente bifásico (biodiesel/glicerina)
-        self._add_example_stream(r101, v101, "S-1", 1105,
+        self._add_example_stream(r101, v101, "S-1", 0.0,
                                  src_port="producto", dst_port="alimentacion",
                                  T=60,
                                  composition=post_rxn,
@@ -648,13 +648,13 @@ class ExampleBuilder:
         # Decanter: fase liviana (biodiesel, ~990 kg).  El MeOH residual
         # particiona preferencialmente a la fase polar (glicerina), por
         # eso esta fase ya sale seca y la pesada se lleva el MeOH.
-        self._add_example_stream(v101, e101, "S-bio-wet", 990,
+        self._add_example_stream(v101, e101, "S-bio-wet", 0.0,
                                  src_port="vapor",    dst_port="tube_in",
                                  T=60,
                                  composition=bio_dry,
                                  main_component="biodiesel", phase="liquid")
         # Biodiesel cooled → tanque producto
-        self._add_example_stream(e101, tk_bd, "S-biodiesel", 990, role="product",
+        self._add_example_stream(e101, tk_bd, "S-biodiesel", 0.0, role="product",
                                  src_port="tube_out", dst_port="entrada",
                                  price=1350.0, T=50,
                                  composition=bio_dry,
