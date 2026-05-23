@@ -4805,7 +4805,12 @@ class FlowsheetView(QGraphicsView):
         self.setRenderHint(QPainter.TextAntialiasing, True)
         self.setRenderHint(QPainter.SmoothPixmapTransform, True)
         self.setTransformationAnchor(QGraphicsView.AnchorUnderMouse)
-        self.setResizeAnchor(QGraphicsView.AnchorViewCenter)
+        # NoAnchor en resize: mantiene fija la esquina sup-izq de la escena
+        # cuando el viewport cambia de tamaño.  Así, al abrir el panel de
+        # propiedades (dock a la derecha que come ~520px), el contenido del
+        # canvas NO se desplaza a la izquierda (con AnchorViewCenter el
+        # centro en píxeles se corría y "desordenaba" los bloques).
+        self.setResizeAnchor(QGraphicsView.NoAnchor)
         self.setDragMode(QGraphicsView.RubberBandDrag)
         self.setHorizontalScrollBarPolicy(Qt.ScrollBarAsNeeded)
         self.setVerticalScrollBarPolicy(Qt.ScrollBarAsNeeded)
