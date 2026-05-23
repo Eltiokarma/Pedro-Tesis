@@ -5244,6 +5244,41 @@ class FlowsheetMainWindow(QMainWindow):
             ("🏭 REFINERÍA TALARA — PMRT", "talara"),
         ]:
             m_examples.addAction(label, lambda k=key: self.action_load_example(k))
+        # ── Catálogo educativo (alimentaria, bioproceso, química,
+        #    materiales, energía) — completa los 41 ejemplos del catálogo ──
+        m_examples.addSeparator()
+        for label, key in [
+            ("Pasteurizador HTST de jugo", "pasteurizer"),
+            ("Jugo de piña concentrado (evaporación)", "pineapple"),
+            ("Papas fritas (freído industrial)", "potato_chips"),
+            ("Panificación industrial", "bread"),
+            ("Cervecería — fermentación", "beer"),
+            ("Penicilina por fermentación", "penicillin"),
+            ("LECHE GLORIA — planta láctea integrada", "leche_gloria"),
+        ]:
+            m_examples.addAction(label, lambda k=key: self.action_load_example(k))
+        m_examples.addSeparator()
+        for label, key in [
+            ("Ácido sulfúrico (contacto, V₂O₅)", "sulfuric"),
+            ("Ácido acético (carbonilación Cativa)", "acetic"),
+            ("Polietileno LDPE (autoclave HP)", "ldpe"),
+            ("Cloro-álcali compacto + HCl", "chloralkali_hcl"),
+            ("Urea (Bosch-Meiser, fertilizante)", "urea"),
+            ("Jabón por saponificación", "soap"),
+            ("Etileno por cracking de etano", "ethylene_crk"),
+        ]:
+            m_examples.addAction(label, lambda k=key: self.action_load_example(k))
+        m_examples.addSeparator()
+        for label, key in [
+            ("Cemento Portland (horno rotatorio)", "cement"),
+            ("Vidrio sodocálcico (horno de fusión)", "glass"),
+            ("Separación criogénica de aire O₂/N₂", "air_sep"),
+            ("Tratamiento de agua potable", "water_treat"),
+            ("Central térmica — ciclo Rankine", "rankine"),
+            ("Isla nuclear — circuito 2°", "nuclear"),
+            ("Desalinización MED multi-efecto", "desal"),
+        ]:
+            m_examples.addAction(label, lambda k=key: self.action_load_example(k))
 
         m_file.addSeparator()
         # Exportar — submenu
