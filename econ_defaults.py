@@ -185,7 +185,11 @@ COLUMN_DEFAULTS = {
     "K_souders_brown":       0.06,
     "tray_spacing_m":        0.6,
     "column_head_height_m":  3.0,
-    "tray_efficiency":       1.0,
+    "tray_efficiency":       0.7,    # valor industrial genérico:
+    # 0.5 aminas, 0.65 etanol-agua, 0.80 hidrocarburos livianos,
+    # 0.7 medio razonable. Antes 1.0 (teorico=real) era opt-in
+    # explícito; ahora hay que declarar tray_efficiency=1.0 en el
+    # bloque si querés ese comportamiento.
     "HETP_m":                0.5,
 }
 
