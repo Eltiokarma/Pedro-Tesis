@@ -272,6 +272,43 @@ def check_features():
     if abs(main.mass_flow - 700) > 10:
         issues.append(f"Splitter: mass main = {main.mass_flow:.0f} ≠ 700")
 
+    print("\n8. Coherencia P_op_bar vs presión propagada:")
+    import examples_library as _el
+    _B = _el.ExampleBuilder
+    coherence_tests = {
+        "smr_eq":      ("_example_smr_equilibrium",    "R-101", 25.0),
+        "haber_rec":   ("_example_haber_recycle",      "R-101", 200.0),
+        "industrial":  ("_example_industrial_complete","R-101", 80.0),
+        "methanol":    ("_example_methanol",           "R-101", 80.0),
+        "ammonia":     ("_example_ammonia",            "R-101", 200.0),
+        "hno3_R201":   ("_example_hno3_ostwald",       "R-201", 4.5),
+        "hno3_T401":   ("_example_hno3_ostwald",       "T-401", 11.0),
+        "polyethylene":("_example_polyethylene",       "R-101", 2000.0),
+        "urea":        ("_example_urea",               "R-101", 150.0),
+        "talara_RCA":  ("_example_talara_refinery",    "R-RCA", 10.0),
+        "talara_HTD":  ("_example_talara_refinery",    "R-HTD", 80.0),
+    }
+    for key, (builder, block_name, p_exp) in coherence_tests.items():
+        fs = fm.Flowsheet()
+        getattr(_B(fs), builder)()
+        fsv.solve(fs)
+        b = next((bl for bl in fs.blocks.values() if bl.name == block_name), None)
+        if b is None:
+            issues.append(f"{key}: block {block_name} no existe")
+            continue
+        ins = [s for s in fs.streams.values() if s.dst == b.id]
+        if not ins:
+            issues.append(f"{key}/{block_name}: sin inputs")
+            continue
+        P_in = max(s.pressure_bar for s in ins)
+        tol = max(2.0, p_exp * 0.02)
+        ok = abs(P_in - p_exp) <= tol
+        if not ok:
+            issues.append(f"{key}/{block_name}: P_in={P_in:.1f} ≠ "
+                          f"esperado={p_exp:.1f}")
+        print(f"   {key}/{block_name}: P_in={P_in:.1f}, "
+              f"target={p_exp:.1f}  {'✓' if ok else '✗'}")
+
     print(f"\n{'='*70}")
     if issues:
         print(f"⚠ ENCONTRÉ {len(issues)} ISSUES:")

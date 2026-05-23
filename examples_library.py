@@ -315,6 +315,7 @@ class ExampleBuilder:
         # ---- Calor de reacción: CO + 2H2 → CH3OH, ΔH = -90 kJ/mol ----
         # = -2828 kJ/kg MeOH; con yield mass ~72%, sobre kg input syngas ≈ -2000
         self.fs.blocks[r101].heat_of_reaction = -2000.0  # kJ/kg input
+        self.fs.blocks[r101].P_op_bar = 80.0   # MeOH loop ~80 bar industrial
 
         # ---- Duties inferidos del balance termodinámico ----
         from flowsheet_solver import auto_set_duties_from_thermo
@@ -469,6 +470,7 @@ class ExampleBuilder:
         # ---- Calor de reacción: N₂+3H₂→2NH₃, ΔH ≈ -2700 kJ/kg NH₃ ----
         # Sobre kg de input total con 15% mass yield NH₃: -2700 × 0.15 ≈ -405 kJ/kg input
         self.fs.blocks[r101].heat_of_reaction = -405.0
+        self.fs.blocks[r101].P_op_bar = 200.0   # síntesis NH3 ~200 bar
 
         # ---- Duties auto ----
         from flowsheet_solver import auto_set_duties_from_thermo
@@ -819,6 +821,7 @@ class ExampleBuilder:
         e101 = self._add_example_block("E-101", "Heat exch. — floating head",      1500.0, 290, 220)
         f101 = self._add_example_block("F-101", "Fired heater — non-reformer",    25000.0, 450, 180)
         r101 = self._add_example_block("R-101", "Reactor — jacketed non-agit.",    120.0, 600, 180)
+        self.fs.blocks[r101].P_op_bar = 25.0   # HDA ~25 bar
         e102 = self._add_example_block("E-102", "Heat exch. — air cooler",         900.0, 720, 200)
         v101 = self._add_example_block("V-101", "Vessel — vertical",                50.0, 900, 180)
         # Recycle de gas (H₂ + CH₄ light)
@@ -1033,6 +1036,7 @@ class ExampleBuilder:
         """
         # Equipos
         t101 = self._add_example_block("T-101", "Tower (column shell)",         200.0,  340, 240)  # absorber
+        self.fs.blocks[t101].P_op_bar = 50.0   # absorber MDEA ~50 bar
         v101 = self._add_example_block("V-101", "Vessel — horizontal",           30.0,  500, 460)  # rich flash
         e101 = self._add_example_block("E-101", "Heat exch. — floating head",   800.0,  680, 460)  # lean/rich HX
         t102 = self._add_example_block("T-102", "Tower (column shell)",         150.0,  840, 240)  # stripper
@@ -2591,7 +2595,7 @@ class ExampleBuilder:
                                                14.0, 960, 450)
         self.fs.blocks[r201].reactions = ["R_OSTWALD_BURN"]
         self.fs.blocks[r201].T_op_K = 1173.15   # 900 °C
-        self.fs.blocks[r201].P_op_bar = 4.4
+        self.fs.blocks[r201].P_op_bar = 4.5
         # WHB (waste heat boiler) — genera vapor AP.  S=95 m² (uno de
         # varios bancos paralelos en planta industrial real).
         e201     = self._add_example_block("E-201","Heat exch. — kettle reboiler",
@@ -2631,7 +2635,7 @@ class ExampleBuilder:
                                               60.0, 2760, 540)
         self.fs.blocks[t401].reactions = ["R_ABSORB_NO2"]
         self.fs.blocks[t401].T_op_K = 308.15   # 35 °C, plate cooled
-        self.fs.blocks[t401].P_op_bar = 10.5
+        self.fs.blocks[t401].P_op_bar = 11.0
 
         # ============ SECCIÓN 500 — PRODUCTO + TAIL GAS ============
         # Bleacher (strip de NOx disuelto del HNO3)

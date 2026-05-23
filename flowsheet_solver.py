@@ -2206,6 +2206,61 @@ def _compressor_degenerate_warnings(fs):
     return out
 
 
+def _seed_reactor_pressures(fs):
+    """Pinta (lock) la presión de las corrientes de PROCESO I/O de los
+    bloques que declaran P_op_bar > 1 atm, para que la sección de alta P
+    propague su presión real.  El solver hidráulico NO usaba P_op_bar
+    (solo pressure_locked/delta_p_bar), así que reactores a 25/80/200 bar
+    dejaban sus corrientes en 1.013 → CAPEX/material adyacentes mal.
+
+    Reglas:
+      · Solo corrientes de proceso (role ≠ utility/ambient).
+      · Respeta los locks del user (no sobreescribe).
+      · Idempotente.  Devuelve la cantidad de corrientes fijadas.
+    """
+    ATM = 1.01325
+    # No tocar las corrientes que el USER fijó explícitamente.
+    user_locked = {s.id for s in fs.streams.values()
+                    if getattr(s, "pressure_locked", False)}
+    hi = [b for b in fs.blocks.values()
+           if float(getattr(b, "P_op_bar", 0.0) or 0.0) > ATM + 1e-6]
+
+    def _proc(b, s):
+        return (s.role or "") not in ("utility", "ambient") \
+               and s.id not in user_locked
+
+    n = 0
+    # Pasada 1: salidas.  Pasada 2: entradas — éstas GANAN sobre las salidas
+    # cuando una corriente es salida de un bloque de P_a y entrada de otro de
+    # P_b distinta (let-down/compresor implícito): la corriente entra al
+    # bloque destino a SU presión.  Para el costing del bloque upstream,
+    # effective_pressure ya usa el máximo de sus corrientes, así que no
+    # pierde su sección.
+    for is_input in (False, True):
+        for b in hi:
+            pop = float(b.P_op_bar)
+            for s in fs.streams.values():
+                attached = (s.dst == b.id) if is_input else (s.src == b.id)
+                if attached and _proc(b, s):
+                    s.pressure_bar = pop
+                    s.pressure_locked = True
+                    n += 1
+    return n
+
+
+def effective_pressure(fs, b):
+    """Presión efectiva [bar] de un bloque para costing/material: el máximo
+    entre su P_op_bar declarada y la presión de sus corrientes de proceso
+    conectadas.  Así un HX/vessel/columna en una sección de alta presión
+    hereda la P real aunque no declare P_op_bar (el FP de Turton la usa)."""
+    p = float(getattr(b, "P_op_bar", 0.0) or 0.0)
+    for s in fs.streams.values():
+        if (s.src == b.id or s.dst == b.id) and \
+                (s.role or "") not in ("utility", "ambient"):
+            p = max(p, float(getattr(s, "pressure_bar", 0.0) or 0.0))
+    return p if p >= 1.0 else 1.0
+
+
 def solve_pressure_hydraulic(fs, max_iter=8):
     """Solver hidráulico iterativo — acopla bombas + tuberías +
     downstream para auto-dimensionar bombas/compresores.
@@ -2229,6 +2284,10 @@ def solve_pressure_hydraulic(fs, max_iter=8):
 
     Returns list de mensajes (✓/⚠/✗).
     """
+    # Sembrar P_op_bar de reactores/equipos de alta P como locks en sus
+    # corrientes de proceso (el solver no la usaba) → la sección propaga
+    # su presión real.  Crea locks ⇒ el solver opt-in se activa.
+    _seed_reactor_pressures(fs)
     # Check si vale la pena
     has_locked = any(getattr(s, "pressure_locked", False)
                       for s in fs.streams.values())
