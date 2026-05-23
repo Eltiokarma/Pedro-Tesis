@@ -2625,6 +2625,150 @@ def _passthrough_to(feed, primary_out, secondary_out, phase=None):
         secondary_out.composition = {}
 
 
+# ── Separación mecánica unificada — helpers de fase/densidad ──
+_SOLID_HINT = {
+    "nacl", "sodium chloride", "salt", "sucrose", "sugar", "glucose_solid",
+    "biomass", "cellulose", "starch", "potato_solids", "raw_water_solids",
+    "pineapple_solids", "catalyst", "coke", "carbon", "silica", "sand",
+    "caco3", "calcium carbonate", "clinker", "cement", "crystals", "solids",
+    "gypsum", "ash", "lime",
+}
+_GAS_HINT = {
+    "air", "nitrogen", "oxygen", "hydrogen", "methane", "ethane", "propane",
+    "co", "carbon monoxide", "co2", "carbon dioxide", "ammonia", "chlorine",
+    "cl2", "hcl", "so2", "so3", "nox", "no", "no2", "steam", "flue_gas",
+    "natural gas", "syngas", "ethylene", "propylene",
+}
+
+
+def get_component_phase(name):
+    """Fase default razonable de un componente para separación mecánica.
+    Devuelve 'solid' | 'liquid' | 'gas'.  Usa hints por nombre y, si está,
+    el punto de ebullición del thermo_db (Tb < 25 °C → gas)."""
+    n = (name or "").strip().lower()
+    if not n:
+        return "liquid"
+    if n in _SOLID_HINT or "solid" in n or n.endswith("_s"):
+        return "solid"
+    if n in _GAS_HINT or n.endswith("_g"):
+        return "gas"
+    try:
+        import thermo_db as _td
+        c = _td.get(name)
+        if c is not None:
+            tb = (getattr(c, "tb_C", None) or getattr(c, "boiling_C", None)
+                  or getattr(c, "tboil_C", None))
+            if tb is not None and tb < 25.0:
+                return "gas"
+    except Exception:
+        pass
+    return "liquid"
+
+
+def _component_density(name, T_C=25.0):
+    """Densidad líquida [kg/m³] de un componente; thermo_db si está, si no
+    heurística por nombre.  Usada para el split del decanter por densidad."""
+    try:
+        import thermo_db as _td
+        c = _td.get(name)
+        if c is not None:
+            d = c.density_kg_m3(T_C)
+            if d and d > 0:
+                return float(d)
+    except Exception:
+        pass
+    n = (name or "").lower()
+    if "water" in n or "agua" in n:
+        return 1000.0
+    if "glycer" in n:
+        return 1260.0
+    if any(k in n for k in ("oil", "aceite", "biodiesel", "fame", "hexane",
+                              "benzene", "toluene", "ethanol", "methanol",
+                              "gasolin", "naphtha", "kerosene", "diesel")):
+        return 850.0
+    return 1000.0
+
+
+def _sep_by_phase(b, feed, target_out, reject_out, target_phase, eff):
+    """Reparte el feed entre target_out (fase objetivo × η) y reject_out
+    (resto + fuga).  target_phase ∈ {'solid','liquid','vapor'} ('vapor' se
+    compara contra fase 'gas').  Respeta locks vía _write_output."""
+    if target_out is None or reject_out is None:
+        return f"⚠ MechSep {b.name}: faltan 2 salidas conectadas"
+    want = "gas" if target_phase in ("vapor", "gas") else target_phase
+    comp_in = _comp_masses(feed)
+    if not comp_in:
+        return f"⚠ MechSep {b.name}: feed sin composición"
+    # El user puede declarar explícitamente los componentes de la fase
+    # objetivo (solid_components) y así override del heurístico get_component_phase.
+    override = set(getattr(b, "solid_components", []) or [])
+
+    def _is_target(c):
+        if want == "solid" and override:
+            return c in override
+        return get_component_phase(c) == want
+
+    m_target_phase = sum(m for c, m in comp_in.items() if _is_target(c))
+    if m_target_phase <= 0:
+        phase_out = "gas" if want == "gas" else "liquid"
+        _passthrough_to(feed, reject_out, target_out, phase=phase_out)
+        return (f"⚠ MechSep {b.name}: feed sin fase '{target_phase}' "
+                f"→ pass-through a reject")
+    tgt_masses, rej_masses = {}, {}
+    for c, m in comp_in.items():
+        if _is_target(c):
+            tgt_masses[c] = m * eff
+            rej_masses[c] = m * (1.0 - eff)
+        else:
+            rej_masses[c] = m
+    m_t = sum(tgt_masses.values())
+    m_r = sum(rej_masses.values())
+    tgt_phase_lbl = "liquid" if want != "gas" else "gas"
+    rej_phase_lbl = "gas" if want == "gas" else "liquid"
+    _write_output(target_out, m_t, tgt_masses, phase=tgt_phase_lbl)
+    _write_output(reject_out, m_r, rej_masses, phase=rej_phase_lbl)
+    return (f"✓ MechSep {b.name}: target={m_t:.0f} (fase {target_phase}, "
+            f"η={eff:.2f}), reject={m_r:.0f}")
+
+
+def _sep_liquid_liquid(fs, b, feed, eff):
+    """Decanter por densidad: clasifica componentes en fase pesada/liviana
+    según su densidad vs el promedio másico del feed.  La fase pesada
+    (fase_pesada, target) recupera η de los componentes pesados; el resto
+    fuga a la liviana."""
+    heavy_out, light_out = _pick_outs_by_port(
+        fs, b, ("pesada", "fondo", "solido", "producto"),
+        ("liviana", "liviano", "tope", "liquido", "venteo"))
+    if heavy_out is None or light_out is None:
+        return f"⚠ Decanter {b.name}: faltan 2 salidas conectadas"
+    comp_in = _comp_masses(feed)
+    if not comp_in:
+        return f"⚠ Decanter {b.name}: feed sin composición"
+    T_C = getattr(feed, "temperature", 25.0)
+    dens = {c: _component_density(c, T_C) for c in comp_in}
+    m_tot = sum(comp_in.values())
+    rho_avg = sum(dens[c] * comp_in[c] for c in comp_in) / m_tot if m_tot else 0
+    heavy = {c for c in comp_in if dens[c] >= rho_avg + 1e-6}
+    if not heavy or len(heavy) == len(comp_in):
+        # Densidades indistinguibles → no se puede decantar; pass-through.
+        _passthrough_to(feed, light_out, heavy_out, phase="liquid")
+        return (f"⚠ Decanter {b.name}: densidades no separan "
+                f"(ρ_avg={rho_avg:.0f}) → pass-through")
+    h_masses, l_masses = {}, {}
+    for c, m in comp_in.items():
+        if c in heavy:
+            h_masses[c] = m * eff
+            l_masses[c] = m * (1.0 - eff)
+        else:
+            l_masses[c] = m
+    m_h = sum(h_masses.values())
+    m_l = sum(l_masses.values())
+    _write_output(heavy_out, m_h, h_masses, phase="liquid")
+    _write_output(light_out, m_l, l_masses, phase="liquid")
+    return (f"✓ Decanter {b.name}: pesada={m_h:.0f}, liviana={m_l:.0f} "
+            f"(η={eff:.2f}, ρ_avg={rho_avg:.0f})")
+
+
 def solve_separators(fs):
     """Filtros y centrífugas con separator_active=True.
 
@@ -2644,6 +2788,8 @@ def solve_separators(fs):
     """
     msgs = []
     for b in fs.blocks.values():
+        if getattr(b, "mech_sep_active", False):
+            continue   # el modelo nuevo (solve_mechanical_separators) tiene prioridad
         if not getattr(b, "separator_active", False):
             continue
         feed = _pick_feed(fs, b)
@@ -2905,6 +3051,8 @@ def solve_cyclones(fs):
     """
     msgs = []
     for b in fs.blocks.values():
+        if getattr(b, "mech_sep_active", False):
+            continue   # el modelo nuevo (solve_mechanical_separators) tiene prioridad
         if not getattr(b, "cyclone_active", False):
             continue
         feed = _pick_feed(fs, b)
@@ -2949,6 +3097,54 @@ def solve_cyclones(fs):
     return msgs
 
 
+def solve_mechanical_separators(fs):
+    """Solver UNIFICADO de separadores mecánicos (filtro, centrífuga,
+    ciclón, decanter).  Es el único punto que llama el loop de solve().
+
+    - Honra los flags LEGACY separator_active / cyclone_active llamando a
+      solve_separators / solve_cyclones (comportamiento idéntico al
+      anterior → flowsheets viejos y ejemplos sin cambios).
+    - Resuelve el modelo NUEVO mech_sep_active (phase-based, η declarada)
+      para los 4 eq_types, incluido el Decanter — gravity (líquido-líquido
+      por densidad) que antes no tenía solver.
+
+    Un bloque nunca se procesa dos veces: los legacy usan separator_active/
+    cyclone_active y los nuevos mech_sep_active (excluyentes en la práctica;
+    si coexistieran, mech_sep_active tiene prioridad y se saltea el legacy)."""
+    mech_ids = {b.id for b in fs.blocks.values()
+                 if getattr(b, "mech_sep_active", False)}
+    msgs = []
+    msgs += solve_separators(fs)
+    msgs += solve_cyclones(fs)
+    for b in fs.blocks.values():
+        if b.id not in mech_ids:
+            continue
+        feed = _pick_feed(fs, b)
+        if feed is None:
+            continue
+        et = (b.eq_type or "").lower()
+        eff = max(min(getattr(b, "mech_sep_efficiency", 0.95), 1.0), 0.0)
+        target_phase = getattr(b, "mech_sep_target_phase", "solid") or "solid"
+        if "decanter" in et:
+            msgs.append(_sep_liquid_liquid(fs, b, feed, eff))
+        elif "cyclone" in et:
+            sol_out, gas_out = _pick_outs_by_port(
+                fs, b, ("producto", "solido"), ("venteo", "vapor", "gas"))
+            msgs.append(_sep_by_phase(b, feed, sol_out, gas_out,
+                                       target_phase, eff))
+        elif "centrifuge" in et:
+            t_out, r_out = _pick_outs_by_port(
+                fs, b, ("solido", "producto"), ("liquido", "venteo"))
+            msgs.append(_sep_by_phase(b, feed, t_out, r_out,
+                                       target_phase, eff))
+        else:  # filtro y genéricos
+            t_out, r_out = _pick_outs_by_port(
+                fs, b, ("producto", "solido"), ("venteo", "liquido"))
+            msgs.append(_sep_by_phase(b, feed, t_out, r_out,
+                                       target_phase, eff))
+    return msgs
+
+
 def auto_propagate_compositions(fs):
     """Para cada bloque NO reactivo, calcula la composición de las
     salidas como promedio ponderado por mass_flow de las entradas.
@@ -2990,6 +3186,8 @@ def auto_propagate_compositions(fs):
         if getattr(b, "evaporator_active", False):
             continue
         if getattr(b, "cyclone_active", False):
+            continue
+        if getattr(b, "mech_sep_active", False):
             continue
         ins  = [s for s in fs.streams.values() if s.dst == b.id]
         outs = [s for s in fs.streams.values() if s.src == b.id]
@@ -3506,14 +3704,12 @@ def solve(fs, max_iter=MAX_ITER):
         for _ in range(3):
             if not _solve_mass_iteration(fs):
                 break
-        # Separadores mecánicos (sólido/líquido + gas/sólido) — orden:
-        # ciclones primero (gas/polvo) y luego separadores líquidos
-        # (filtros/centrífugas), secadores, cristalizadores, evaporadores.
-        cyc_msgs = solve_cyclones(fs)
-        for _ in range(3):
-            if not _solve_mass_iteration(fs):
-                break
-        sep_msgs = solve_separators(fs)
+        # Separadores mecánicos UNIFICADOS (filtro/centrífuga/ciclón/
+        # decanter) — un solo solver que honra los flags legacy y el
+        # modelo nuevo mech_sep_active.  Luego secadores, cristalizadores,
+        # evaporadores.
+        sep_msgs = solve_mechanical_separators(fs)
+        cyc_msgs = []
         for _ in range(3):
             if not _solve_mass_iteration(fs):
                 break

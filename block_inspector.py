@@ -330,12 +330,20 @@ def _is_evaporator(eq_type: str) -> bool:
 def _is_cyclone(eq_type: str) -> bool:
     return "cyclone" in (eq_type or "").lower()
 
+def _is_decanter(eq_type: str) -> bool:
+    return "decanter" in (eq_type or "").lower()
+
+def _is_mech_sep_any(eq_type: str) -> bool:
+    """Cualquier separador mecánico unificado (modelo mech_sep_active):
+    filtro, centrífuga, ciclón o decanter."""
+    return (_is_mech_separator(eq_type) or _is_cyclone(eq_type)
+            or _is_decanter(eq_type))
+
 def _has_special_mode(eq_type: str) -> bool:
-    """True si el eq_type tiene un modelo automático nicho (filtro,
-    secador, cristalizador, evaporador, ciclón)."""
-    return (_is_mech_separator(eq_type) or _is_dryer(eq_type)
-            or _is_crystallizer(eq_type) or _is_evaporator(eq_type)
-            or _is_cyclone(eq_type))
+    """True si el eq_type tiene un modelo automático nicho (separador
+    mecánico, secador, cristalizador, evaporador)."""
+    return (_is_mech_sep_any(eq_type) or _is_dryer(eq_type)
+            or _is_crystallizer(eq_type) or _is_evaporator(eq_type))
 
 def _type_short(eq_type: str) -> str:
     """Etiqueta corta tipo 'REACTOR', 'HX', 'PUMP' para el chip del header."""
@@ -1906,33 +1914,59 @@ class BlockInspectorPanel(QWidget):
         sect = QFrame()
         l = QVBoxLayout(sect); l.setContentsMargins(0, 0, 0, 0); l.setSpacing(8)
 
-        if _is_mech_separator(eq_type):
+        if _is_mech_sep_any(eq_type):
+            is_cyc = _is_cyclone(eq_type)
+            is_dec = _is_decanter(eq_type)
+            sub = ("Cyclone gas/sólido" if is_cyc else
+                   "Decanter líquido-líquido" if is_dec else
+                   "Filter / Centrifuge")
+            help_text = (
+                "El solver reparte el feed entre la salida target (la fase "
+                "objetivo × η) y la reject.  Para el decanter, target = fase "
+                "pesada (split por densidad).")
             l.addLayout(self._section_header(
-                "Separación sólido/líquido",
-                sub="Filter / Centrifuge",
-                help_text="Solver computa cake (torta) y madre desde "
-                          "solids_recovery + cake_moisture."
-            ))
-            self._add_active_toggle(l, "separator_active",
-                                    "Activar separador automático",
-                                    getattr(b, "separator_active", False))
-            sr = float(getattr(b, "solids_recovery", 0.95) or 0.95)
-            l.addWidget(self._row("Solids recovery",
-                                  self._spec_field("solids_recovery",
-                                                   value=f"{sr:.3f}",
-                                                   unit="·", state="spec"),
-                                  info="Fracción de sólido que pasa a la torta"))
-            cm = float(getattr(b, "cake_moisture", 0.30) or 0.30)
-            l.addWidget(self._row("Cake moisture",
-                                  self._spec_field("cake_moisture",
-                                                   value=f"{cm:.3f}",
-                                                   unit="·", state="spec"),
-                                  info="Frac. másica de líquido en la torta"))
-            sc = QLineEdit(",".join(getattr(b, "solid_components", []) or []))
-            sc.setPlaceholderText("sucrose, biomass, …  (vacío = main_component)")
-            sc.setStyleSheet(self._line_input_style())
-            self._extras["solid_components"] = sc
-            l.addWidget(self._row("Solid components", sc))
+                "Separación mecánica (η declarada)", sub=sub,
+                help_text=help_text))
+            init_active = (getattr(b, "mech_sep_active", False)
+                           or getattr(b, "separator_active", False)
+                           or getattr(b, "cyclone_active", False))
+            self._add_active_toggle(l, "mech_sep_active",
+                                    "Activar separación automática",
+                                    init_active)
+            # Eficiencia η — inicial desde mech o, si no, del legacy.
+            eff = float(getattr(b, "mech_sep_efficiency", 0.0) or 0.0)
+            if eff <= 0:
+                eff = float((getattr(b, "collection_efficiency", 0.90) if is_cyc
+                             else getattr(b, "solids_recovery", 0.95)) or 0.95)
+            l.addWidget(self._row(
+                "Eficiencia η",
+                self._spec_field("mech_sep_efficiency", value=f"{eff:.3f}",
+                                 unit="·", state="spec"),
+                info="Fracción de la fase objetivo recuperada en la salida target"))
+            # Fase objetivo (combo)
+            default_tp = (getattr(b, "mech_sep_target_phase", "") or
+                          ("liquid" if is_dec else "solid"))
+            tp = QComboBox()
+            for ph in ("solid", "liquid", "vapor"):
+                tp.addItem(ph, ph)
+            try:
+                tp.setCurrentIndex(["solid", "liquid", "vapor"].index(default_tp))
+            except ValueError:
+                tp.setCurrentIndex(0)
+            tp.setEnabled(not is_dec)   # decanter siempre pesada-por-densidad
+            self._extras["mech_sep_target_phase"] = tp
+            l.addWidget(self._row(
+                "Fase objetivo", tp,
+                info=("Decanter: fase pesada por densidad" if is_dec
+                      else "solid / liquid / vapor")))
+            if not is_dec:
+                sc = QLineEdit(",".join(getattr(b, "solid_components", []) or []))
+                sc.setPlaceholderText("sucrose, silica, …  (vacío = heurístico por fase)")
+                sc.setStyleSheet(self._line_input_style())
+                self._extras["solid_components"] = sc
+                l.addWidget(self._row(
+                    "Componentes target", sc,
+                    info="Override explícito de qué componentes son la fase objetivo"))
 
         elif _is_dryer(eq_type):
             l.addLayout(self._section_header(
@@ -1993,26 +2027,6 @@ class BlockInspectorPanel(QWidget):
             vc.setStyleSheet(self._line_input_style())
             self._extras["volatile_component"] = vc
             l.addWidget(self._row("Volatile comp.", vc))
-
-        elif _is_cyclone(eq_type):
-            l.addLayout(self._section_header(
-                "Ciclón gas/sólido",
-                help_text="Solver separa sólidos del gas portador según "
-                          "collection efficiency."
-            ))
-            self._add_active_toggle(l, "cyclone_active",
-                                    "Activar ciclón automático",
-                                    getattr(b, "cyclone_active", False))
-            ce = float(getattr(b, "collection_efficiency", 0.90) or 0.90)
-            l.addWidget(self._row("Collection efficiency",
-                                  self._spec_field("collection_efficiency",
-                                                   value=f"{ce:.3f}",
-                                                   unit="·", state="spec")))
-            sc = QLineEdit(",".join(getattr(b, "solid_components", []) or []))
-            sc.setPlaceholderText("silica, clinker, …  (vacío = main_component)")
-            sc.setStyleSheet(self._line_input_style())
-            self._extras["solid_components"] = sc
-            l.addWidget(self._row("Solid components", sc))
 
         else:
             empty = QLabel("(No hay modos especiales para este tipo de bloque)")
@@ -2402,9 +2416,19 @@ class BlockInspectorPanel(QWidget):
                     "evaporator_active", "cyclone_active"):
             if key in self._extras:
                 setattr(b, key, bool(self._extras[key].isChecked()))
+        # Separador mecánico unificado (mech_sep_active): al guardarlo se
+        # limpia el legacy separator/cyclone_active → mech es la única fuente.
+        if "mech_sep_active" in self._extras:
+            b.mech_sep_active = bool(self._extras["mech_sep_active"].isChecked())
+            if b.mech_sep_active:
+                b.separator_active = False
+                b.cyclone_active = False
+        if "mech_sep_target_phase" in self._extras:
+            cb = self._extras["mech_sep_target_phase"]
+            b.mech_sep_target_phase = cb.currentData() or "solid"
         for key in ("solids_recovery", "cake_moisture", "final_moisture",
                     "crystal_yield", "concentration_factor",
-                    "collection_efficiency"):
+                    "collection_efficiency", "mech_sep_efficiency"):
             if key in f:
                 v = self._parse_num(f[key].value())
                 try:
