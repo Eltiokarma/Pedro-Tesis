@@ -25,6 +25,16 @@ from typing import Dict, Optional
 import equipment_costs as eq
 
 
+def _eff_p(fs, b):
+    """Presión efectiva del bloque para costing/material (P_op_bar ∪ P de
+    sus corrientes de proceso).  Import lazy para evitar ciclo."""
+    try:
+        from flowsheet_solver import effective_pressure
+        return effective_pressure(fs, b)
+    except Exception:
+        return float(getattr(b, "P_op_bar", 0.0) or 0.0) or 1.0
+
+
 def _block_material(fs, block_id, default="CS"):
     """Material auto-detectado del bloque (igual heurística que
     flowsheet_export._block_material).  Definido acá también para
@@ -35,7 +45,7 @@ def _block_material(fs, block_id, default="CS"):
         return default
     if getattr(b, "material", None):
         return b.material
-    p_op = float(getattr(b, "P_op_bar", 0.0) or 0.0) or 1.0
+    p_op = _eff_p(fs, b)
     comps = []
     for s in fs.streams.values():
         if s.src == block_id or s.dst == block_id:
@@ -101,7 +111,7 @@ def compute_fci(fs,
             continue   # source/sink de utility/ambiente — no es equipo real
         spec = eq.EQUIPMENT_DATA.get(b.eq_type, {})
         cat  = spec.get("categoria", "Otros")
-        p_op = float(getattr(b, "P_op_bar", 0.0) or 0.0) or 1.0
+        p_op = _eff_p(fs, b)
         mat  = _block_material(fs, b.id)
         try:
             res = eq.bare_module_cost(b.eq_type, b.S, P_op_bar=p_op,

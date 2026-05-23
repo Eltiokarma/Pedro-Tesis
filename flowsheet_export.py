@@ -32,6 +32,16 @@ import equipment_ports as ep
 import templates as tmpl
 
 
+def _eff_p(fs, b):
+    """Presión efectiva del bloque para costing/material (P_op_bar ∪ P de
+    sus corrientes de proceso).  Import lazy para evitar ciclo."""
+    try:
+        from flowsheet_solver import effective_pressure
+        return effective_pressure(fs, b)
+    except Exception:
+        return float(getattr(b, "P_op_bar", 0.0) or 0.0) or 1.0
+
+
 # ======================================================
 # EQUIPOS DEL PFD
 # ======================================================
@@ -46,7 +56,7 @@ def _block_material(fs, block_id):
     # User override explícito tiene prioridad
     if getattr(b, "material", None):
         return b.material
-    p_op = float(getattr(b, "P_op_bar", 0.0) or 0.0) or 1.0
+    p_op = _eff_p(fs, b)
     comps = []
     for s in fs.streams.values():
         if s.src == block_id or s.dst == block_id:
@@ -80,7 +90,7 @@ def collect_equipment_rows(fs, year_target=2024):
         cp_usd, fbm, cbm, fp, fm = 0.0, 0.0, 0.0, 1.0, 1.0
         fuera_rango = False
         try:
-            p_op = float(getattr(b, "P_op_bar", 0.0) or 0.0) or 1.0
+            p_op = _eff_p(fs, b)
             res = eq.bare_module_cost(b.eq_type, b.S, P_op_bar=p_op,
                                        year_target=year_target,
                                        material=material)
@@ -159,7 +169,7 @@ def compute_turton_costing(fs, df_variable, df_fixed, fci_musd,
             continue   # source/sink auxiliar — no es equipo real
         spec = eq.EQUIPMENT_DATA.get(b.eq_type, {})
         cat  = spec.get("categoria", "Otros")
-        p_op = float(getattr(b, "P_op_bar", 0.0) or 0.0) or 1.0
+        p_op = _eff_p(fs, b)
         mat  = _block_material(fs, b.id)
         try:
             res = eq.bare_module_cost(b.eq_type, b.S, P_op_bar=p_op,
