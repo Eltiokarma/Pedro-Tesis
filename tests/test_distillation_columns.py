@@ -82,12 +82,17 @@ class TestSizeTowerDefaults(unittest.TestCase):
     """Sin overrides: usa COLUMN_DEFAULTS de econ_defaults."""
 
     def test_default_platos_N20(self):
-        # N_real = 20 / 1.0 = 20.  H = 20·0.6 + 3 = 15 m.
-        # D = 0.30 (clamp mínimo, vapor pequeño).  V = π/4·D²·H ≈ 1.06
+        # H se calcula desde la FÓRMULA con los defaults canónicos (no
+        # un literal) para que el test no re-rompa si cambia el default:
+        #   N_real = N / tray_eff ;  H = N_real·tray_space + head
+        # D = 0.30 (clamp mínimo, vapor pequeño).  V = π/4·D²·H
+        d = ed.get_column_defaults()
+        N_real = 20 / d["tray_efficiency"]
+        H_expected = N_real * d["tray_spacing_m"] + d["column_head_height_m"]
         fs, b = _make_tower(N=20)
         V = es.size_tower(b, fs)
         self.assertIsNotNone(V)
-        expected_V = math.pi / 4 * 0.30**2 * 15.0
+        expected_V = math.pi / 4 * 0.30**2 * H_expected
         self.assertAlmostEqual(V, expected_V, delta=0.1)
 
     def test_default_sin_feed_None(self):
@@ -105,10 +110,16 @@ class TestSizeTowerDefaults(unittest.TestCase):
 
 class TestSizeTowerOverrides(unittest.TestCase):
     def test_tray_spacing_override(self):
-        # tray_spacing 0.46 m (18"): H = 20·0.46 + 3 = 12.2 m
+        # Override de tray_spacing a 0.46 m (18"); tray_efficiency queda
+        # en el default canónico (NO se overridea acá), así que la altura
+        # se calcula con ese default vía fórmula:
+        #   N_real = N / tray_eff ;  H = N_real·0.46 + head
+        d = ed.get_column_defaults()
+        N_real = 20 / d["tray_efficiency"]
+        H_expected = N_real * 0.46 + d["column_head_height_m"]
         fs, b = _make_tower(N=20, tray_spacing_m=0.46)
         V = es.size_tower(b, fs)
-        expected_V = math.pi / 4 * 0.30**2 * 12.2
+        expected_V = math.pi / 4 * 0.30**2 * H_expected
         self.assertAlmostEqual(V, expected_V, delta=0.1)
 
     def test_tray_efficiency_aumenta_etapas_reales(self):
@@ -119,10 +130,15 @@ class TestSizeTowerOverrides(unittest.TestCase):
         self.assertAlmostEqual(V, expected_V, delta=0.2)
 
     def test_column_head_height_override(self):
-        # head 5 m: H = 20·0.6 + 5 = 17 m
+        # Override de head a 5 m; tray_efficiency queda en el default
+        # canónico, así que la altura se calcula con ese default:
+        #   N_real = N / tray_eff ;  H = N_real·tray_space + 5.0
+        d = ed.get_column_defaults()
+        N_real = 20 / d["tray_efficiency"]
+        H_expected = N_real * d["tray_spacing_m"] + 5.0
         fs, b = _make_tower(N=20, column_head_height_m=5.0)
         V = es.size_tower(b, fs)
-        expected_V = math.pi / 4 * 0.30**2 * 17.0
+        expected_V = math.pi / 4 * 0.30**2 * H_expected
         self.assertAlmostEqual(V, expected_V, delta=0.1)
 
     def test_override_cero_o_None_usa_default(self):
@@ -185,7 +201,10 @@ class TestColumnDefaultsCanonical(unittest.TestCase):
         self.assertEqual(d["K_souders_brown"],      0.06)
         self.assertEqual(d["tray_spacing_m"],       0.6)
         self.assertEqual(d["column_head_height_m"], 3.0)
-        self.assertEqual(d["tray_efficiency"],      1.0)
+        # tray_efficiency default = 0.7 (valor industrial genérico).
+        # Antes era 1.0 (teorico=real); el cambio sube la altura de
+        # columnas con FUG sin tray_efficiency declarado por ~30-43%.
+        self.assertEqual(d["tray_efficiency"],      0.7)
         self.assertEqual(d["HETP_m"],               0.5)
 
     def test_get_column_defaults_devuelve_copia(self):
