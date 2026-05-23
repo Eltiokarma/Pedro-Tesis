@@ -6917,25 +6917,29 @@ class FlowsheetMainWindow(QMainWindow):
 
     def edit_stream(self, stream: Stream):
         """Abre StreamInspectorDock (slide-out, no-modal).  Reemplaza
-        el dialog modal viejo con el rediseño hi-fi de Parte
-        C (NUEVA_UI_streams).  El callback _on_save se invoca cuando
-        el usuario pulsa Guardar: ahí validamos conexión y refrescamos
-        canvas + burbujas."""
-        # construcción perezosa
+        el dialog modal viejo con el rediseño hi-fi.
+
+        Importante: el panel muta el stream EN VIVO mientras el user
+        edita / cambia de sección.  Para que Cancelar funcione, tomamos
+        un snapshot ANTES de show_for y proveemos dos callbacks:
+
+          · on_save  = validar; si OK pushea undo cmd; si error revierte
+                        desde el snapshot
+          · on_cancel = revierte siempre desde el snapshot
+        """
         if not hasattr(self, "_stream_inspector_dock") or \
                 self._stream_inspector_dock is None:
             from stream_inspector import StreamInspectorDock
             self._stream_inspector_dock = StreamInspectorDock(self)
             self.addDockWidget(Qt.RightDockWidgetArea, self._stream_inspector_dock)
 
+        # Snapshot PRE-edit: capturado antes de que el panel toque nada.
+        # Esto es lo que permite que Cancelar / validación-fallida
+        # revierta limpiamente a estado original.
+        before_snapshot = self.begin_action()
+
         def _on_save():
-            # snapshot ANTES de aplicar — el panel ya aplicó al modelo
-            # cuando llamamos a load_stream + Guardar, así que tomamos
-            # el snapshot post-apply para que el undo deshaga TODO el
-            # bloque de edición.
-            before = self.begin_action()
             self._mark_dirty()
-            # validar conexión (puertos pueden haber cambiado)
             is_floating = (stream.src == -1 or stream.dst == -1)
             if not is_floating:
                 sev, msg = fval.validate_connection(
@@ -6947,7 +6951,7 @@ class FlowsheetMainWindow(QMainWindow):
             if sev == "error":
                 QMessageBox.critical(self, "Conexión inválida",
                     msg + "\n\nLa edición se revierte.")
-                self._apply_snapshot(before)
+                self._apply_snapshot(before_snapshot)
                 return
             if sev == "warn":
                 ans = QMessageBox.question(
@@ -6956,9 +6960,9 @@ class FlowsheetMainWindow(QMainWindow):
                     QMessageBox.Yes | QMessageBox.No, QMessageBox.No,
                 )
                 if ans != QMessageBox.Yes:
-                    self._apply_snapshot(before)
+                    self._apply_snapshot(before_snapshot)
                     return
-            # OK: refrescar canvas
+            # OK: refrescar canvas + pushear undo cmd
             item = self.scene.stream_items.get(stream.id)
             if item is not None:
                 item.update_path()
@@ -6966,9 +6970,27 @@ class FlowsheetMainWindow(QMainWindow):
             self._on_selection_changed()
             if self._bubble_manager is not None:
                 self._bubble_manager.refresh_all()
-            self.end_action(f"Editar {stream.name}", before)
+            self.end_action(f"Editar {stream.name}", before_snapshot)
 
-        self._stream_inspector_dock.show_for(stream, self.fs, on_save=_on_save)
+        def _on_cancel():
+            """Revierte cualquier edición in-memory hecha por el panel
+            (vía _stash_current_section en cada cambio de sección) sin
+            pushear un comando undo."""
+            self._apply_snapshot(before_snapshot)
+            # refrescar la tabla / canvas / burbujas con estado original
+            item = self.scene.stream_items.get(stream.id)
+            if item is not None:
+                item.update_path()
+            if hasattr(self, "streams_dock") and self.streams_dock:
+                try: self.streams_dock.refresh()
+                except Exception: pass
+            if self._bubble_manager is not None:
+                self._bubble_manager.refresh_all()
+
+        self._stream_inspector_dock.show_for(
+            stream, self.fs,
+            on_save=_on_save, on_cancel=_on_cancel,
+        )
 
     def is_connecting(self) -> bool:
         return self._connecting_from is not None
