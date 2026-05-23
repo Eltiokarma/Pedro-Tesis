@@ -1690,7 +1690,17 @@ def solve_columns(fs):
                 dist_stream = outs_sorted[0]
                 bot_stream = outs_sorted[1]
             else:
-                # Heurística final: primer output = distillate, segundo = bottom
+                # Heurística final: primer output = distillate, segundo = bottom.
+                # Esto es FRÁGIL — depende del orden de declaración en el
+                # builder, no de la realidad física.  Emitir warning visible.
+                msgs.append(
+                    f"⚠ {b.name}: identificación distillate/bottom por "
+                    f"ORDEN (no por port ni composition). Verificar "
+                    f"manualmente: outs[0]='{outs[0].name}' (asumido "
+                    f"distillate), outs[1]='{outs[1].name}' (asumido "
+                    f"bottom). Para evitar este warning declarar "
+                    f"src_port='vapor'/'liq' o composition con LK."
+                )
                 dist_stream = outs[0]
                 bot_stream = outs[1]
 
@@ -1730,7 +1740,15 @@ def solve_columns(fs):
                 mws = []
                 for c in comps:
                     co = _td_wh.get(c)
-                    mws.append(co.mw if co and co.mw > 0 else 1.0)
+                    mw = co.mw if co and co.mw > 0 else None
+                    if mw is None:
+                        msgs.append(
+                            f"⚠ {b.name} (WH): MW de '{c}' no resuelto vía "
+                            f"thermo_db, fallback MW=1.0 — conversión "
+                            f"mass/mol puede dar composiciones incorrectas."
+                        )
+                        mw = 1.0
+                    mws.append(mw)
                 z_mol = [zi / m for zi, m in zip(z_mass, mws)]
                 z_sum = sum(z_mol)
                 if z_sum > 0:
@@ -1785,6 +1803,12 @@ def solve_columns(fs):
                         alphas[comp] = a
                     else:
                         alphas[comp] = 1.0   # fallback si NRTL falta
+                        msgs.append(
+                            f"⚠ {b.name} (FH): α relativo de '{comp}' no "
+                            f"resuelto vía NRTL, fallback α=1.0 — "
+                            f"distribución de este componente puede ser "
+                            f"incorrecta."
+                        )
             fh = _fug.fenske_hengstebeck(alphas, full_comp,
                                             res["N_min"], LK, HK,
                                             b.column_x_D_LK, b.column_x_B_LK)
@@ -1943,6 +1967,31 @@ def solve_flashes(fs):
     return msgs
 
 
+def _compressor_degenerate_warnings(fs):
+    """P13: lista de warnings para compresores con sizing degenerado —
+    ΔP≈0 Y sin P_op_bar declarada (≤1 bar).  Datos incompletos del
+    builder: el compresor se dimensiona trivialmente (ΔP=0) y su costing
+    no es realista.  Una entrada por compresor afectado.
+
+    Se llama desde solve_pressure_hydraulic en TODOS sus return points
+    (incluso cuando no hay streams con P locked y el auto-sizing no
+    corre) para que el warning sea visible siempre."""
+    out = []
+    for b in fs.blocks.values():
+        if "compressor" not in b.eq_type.lower():
+            continue
+        if abs(b.delta_p_bar) >= 1e-6:
+            continue   # tiene ΔP (declarado o auto-sized) — OK
+        p_op = getattr(b, "P_op_bar", 0) or 0
+        if p_op <= 1.0:
+            out.append(
+                f"⚠ {b.name}: compresor sin P_op_bar ni delta_p_bar "
+                f"declarados. Sizing degenerado (ΔP=0). Declarar "
+                f"P_op_bar en el bloque para costing realista."
+            )
+    return out
+
+
 def solve_pressure_hydraulic(fs, max_iter=8):
     """Solver hidráulico iterativo — acopla bombas + tuberías +
     downstream para auto-dimensionar bombas/compresores.
@@ -1970,12 +2019,15 @@ def solve_pressure_hydraulic(fs, max_iter=8):
     has_locked = any(getattr(s, "pressure_locked", False)
                       for s in fs.streams.values())
     if not has_locked:
-        return []
+        # Sin streams con P locked el solver no auto-dimensiona ΔP, pero
+        # los compresores degenerados (sin P_op_bar ni delta_p_bar) siguen
+        # siendo deuda visible → emitir el warning P13 igual.
+        return _compressor_degenerate_warnings(fs)
 
     try:
         import pressure_drop as _pd
     except ImportError:
-        return []
+        return _compressor_degenerate_warnings(fs)
 
     msgs = []
     sized_pumps = set()
@@ -2043,6 +2095,10 @@ def solve_pressure_hydraulic(fs, max_iter=8):
             break
         # 3) Re-propagar con las ΔP nuevas
         solve_pressure_propagation(fs)
+
+    # P13: warning post auto-sizing (compresores que quedaron degenerados
+    # PESE a que el solver intentó dimensionarlos via downstream targets).
+    msgs.extend(_compressor_degenerate_warnings(fs))
     return msgs
 
 
