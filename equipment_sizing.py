@@ -53,6 +53,10 @@ U_TYPICAL = {
     # Condensación: U alto (transición de fase + agua/aire del lado frío).
     "Heat exch. — condenser shell-tube":  1000,
     "Heat exch. — condenser air-cooled":  600,
+    # Evaporadores: ebullición forzada con U alto (Turton §11).  El
+    # catálogo solo expone "Evaporator — vertical"; si se agregan otros
+    # tipos (forced circ., falling film) declarar acá su U propio.
+    "Evaporator — vertical":              1500,
 }
 U_DEFAULT = 400
 
@@ -71,6 +75,9 @@ DTLM_TYPICAL = {
     # condensa cambia poco; el lado frío hace la mayor variación).
     "Heat exch. — condenser shell-tube":  15.0,
     "Heat exch. — condenser air-cooled":  20.0,
+    # Evaporador: ΔT moderado entre vapor de calefacción y el líquido
+    # en ebullición (Turton §11, típico 20 K).
+    "Evaporator — vertical":              20.0,
 }
 DTLM_DEFAULT = 40.0
 
@@ -313,26 +320,41 @@ def size_vessel(block, fs) -> Optional[float]:
 
 
 def size_storage_tank(block, fs) -> Optional[float]:
-    """V = caudal · 7 días / ρ — buffer típico de almacenamiento."""
-    flows = [s.mass_flow for s in fs.streams.values()
-              if s.src == block.id or s.dst == block.id]
-    if not flows:
+    """V = caudal · 7 días / ρ — buffer típico de almacenamiento.
+
+    Usa _rho_estimate(stream) para detectar gas vs líquido en lugar de
+    asumir siempre RHO_LIQUID_DEFAULT. Esto corrige el sub-sizing 400x
+    de tanques de gas comprimido (e.g., H₂ a 25 bar tiene ρ≈2 kg/m³,
+    no 800).
+    """
+    streams = [s for s in fs.streams.values()
+                if s.src == block.id or s.dst == block.id]
+    if not streams:
         return None
-    m_yr = max(flows)
-    if m_yr <= 0:
+    # Tomar el stream con mayor flow para dimensionar
+    stream_ref = max(streams, key=lambda s: s.mass_flow)
+    if stream_ref.mass_flow <= 0:
         return None
-    m_s = _flow_kg_s(m_yr)
+    m_s = _flow_kg_s(stream_ref.mass_flow)
+    rho = _rho_estimate(stream_ref)
     tau = 7 * 86400         # 7 días
-    V = m_s / RHO_LIQUID_DEFAULT * tau
+    V = m_s / rho * tau
     return max(V, 10.0)
 
 
 def size_evaporator(block, fs) -> Optional[float]:
-    """A = Q / (U·ΔT).  U=1500, ΔT=20 K típico."""
+    """A = |Q| / (U·ΔT_lm).  Mismo patrón que size_heat_exchanger,
+    permite override por bloque y catálogo por tipo."""
     Q = abs(float(block.duty or 0.0))
     if Q <= 0:
         return None
-    A = Q * 1000.0 / (1500 * 20.0)
+    U_user  = getattr(block, "U_override",    None)
+    dT_user = getattr(block, "dtlm_override", None)
+    U  = (U_user  if (U_user  is not None and U_user  > 0)
+          else U_TYPICAL.get(block.eq_type, 1500))
+    dT = (dT_user if (dT_user is not None and dT_user > 0)
+          else DTLM_TYPICAL.get(block.eq_type, 20.0))
+    A = Q * 1000.0 / (U * dT)
     return max(A, 1.0)
 
 
