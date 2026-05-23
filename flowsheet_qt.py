@@ -3863,11 +3863,13 @@ class StreamItem(QGraphicsPathItem):
             pts = [x1, y1, x2, y2]
         if not pts:
             return
-        # Gap entre la flecha y el bloque destino: acortar el último
-        # segmento ~10px para que la punta de flecha NO toque el SVG.
-        # También un gap chico (4px) en el origen para no tocar el SVG src.
+        # Gap entre la punta de flecha y el NODO (puerto) del bloque.
+        # _resolve_port ancla en el centro del dot del puerto; dejamos un
+        # gap = radio del nodo (~4px) para que la punta toque el nodo sin
+        # taparlo.  (Antes era 10px contra el bounding-box → la flecha
+        # quedaba separada del nodo, que está inset respecto a la caja.)
         import math
-        gap_dst = 10.0
+        gap_dst = 4.0
         gap_src = 4.0
         if len(pts) >= 4:
             # gap destino: pts[-2:-1] son los últimos x,y
@@ -4401,19 +4403,35 @@ class StreamItem(QGraphicsPathItem):
     def _resolve_port(self, b, port_name, default_side):
         ports = ep.get_ports(b.eq_type)
         if port_name and port_name in ports:
+            pname = port_name
             side, frac = ports[port_name]
         else:
             chosen = None
-            for pname, (side, frac) in ports.items():
-                if side == default_side:
-                    chosen = (pname, side, frac)
+            for pn, (sd, fr) in ports.items():
+                if sd == default_side:
+                    chosen = (pn, sd, fr)
                     break
             if chosen is None:
                 pname = next(iter(ports))
                 side, frac = ports[pname]
             else:
                 pname, side, frac = chosen
-        w, h = pfd.block_dims(b.eq_type)
+        # Anclar la flecha al CENTRO REAL del nodo dibujado.  Los dots se
+        # renderizan con item.W/H (= BLOCK_DIMS del glyph ISA × 1.6), que
+        # difieren de pfd.block_dims tras la migración a glyphs ISA — usar
+        # block_dims acá dejaba la punta de la flecha separada del nodo.
+        sc = self.scene()
+        item = sc.block_items.get(b.id) if sc is not None else None
+        if item is not None:
+            ell = getattr(item, "port_items", {}).get(pname)
+            if ell is not None:
+                c = ell.sceneBoundingRect().center()
+                return side, c.x(), c.y()
+            w, h = getattr(item, "W", None), getattr(item, "H", None)
+            if w is None or h is None:
+                w, h = pfd.block_dims(b.eq_type)
+        else:
+            w, h = pfd.block_dims(b.eq_type)
         if side == "right":
             x, y = b.x + w,         b.y + h * frac
         elif side == "left":
