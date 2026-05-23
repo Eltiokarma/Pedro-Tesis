@@ -1967,6 +1967,38 @@ def solve_flashes(fs):
     return msgs
 
 
+def _compressor_polytropic_warnings(fs):
+    """P12: warning para compresores con ΔP>0 cuyo cálculo politrópico
+    (equipment_design.design_compressor_for_block) no resuelve por datos
+    insuficientes (mw_avg, k, composición).  El duty queda sin actualizar
+    (NO se usa la fórmula incompresible — sería peor para gases).
+
+    Se chequea post-loop en solve_pressure_hydraulic porque el msgs de
+    solve_pressure_propagation (donde se calcula el duty) se descarta en
+    las llamadas del loop.  Un compresor con ΔP=0 NO entra acá — ese caso
+    lo cubre _compressor_degenerate_warnings (P13)."""
+    out = []
+    try:
+        import equipment_design as _ed
+    except ImportError:
+        return out
+    for b in fs.blocks.values():
+        if "compressor" not in b.eq_type.lower():
+            continue
+        if getattr(b, "delta_p_bar", 0.0) <= 0:
+            continue   # degenerado (ΔP=0) → lo cubre P13
+        try:
+            res = _ed.design_compressor_for_block(b, fs)
+        except Exception:
+            res = None
+        if not res or res.get("W_act_kW", 0) <= 0:
+            out.append(
+                f"⚠ {b.name}: compresor con datos insuficientes para "
+                f"cálculo politrópico (mw, k, comp). Duty no actualizado."
+            )
+    return out
+
+
 def _compressor_degenerate_warnings(fs):
     """P13: lista de warnings para compresores con sizing degenerado —
     ΔP≈0 Y sin P_op_bar declarada (≤1 bar).  Datos incompletos del
@@ -2099,6 +2131,9 @@ def solve_pressure_hydraulic(fs, max_iter=8):
     # P13: warning post auto-sizing (compresores que quedaron degenerados
     # PESE a que el solver intentó dimensionarlos via downstream targets).
     msgs.extend(_compressor_degenerate_warnings(fs))
+    # P12: warning para compresores con ΔP>0 cuyo cálculo politrópico
+    # falló por datos insuficientes (duty no actualizado).
+    msgs.extend(_compressor_polytropic_warnings(fs))
     return msgs
 
 
@@ -2239,28 +2274,51 @@ def solve_pressure_propagation(fs):
                     s_out.pressure_bar = max(P_out, 0.01)
                     changed = True
 
-            # Para bombas/compresores con ΔP positivo declarado,
-            # calcular duty eléctrico
+            # Para bombas/compresores con ΔP positivo declarado, calcular
+            # duty.  Distinguimos por tipo de equipo:
+            #   · Compresor: delegamos a equipment_design (ec. politrópica
+            #     isentrópica, físicamente correcta para gases — P12).
+            #   · Bomba: fórmula incompresible W = m·ΔP/(ρ·η) (correcta
+            #     para líquidos).
             if is_pump_or_compressor and dp_block > 0 and not _is_duty_locked(b):
-                # W_hyd [kW] = m_kg_s · ΔP_Pa / (ρ · η · 1000)
-                from flowsheet_model import SEC_PER_YEAR, TM_TO_KG
-                m_kg_s = sum(s.mass_flow for s in ins) * TM_TO_KG / SEC_PER_YEAR
-                # ρ: usa el primer inlet con composition
-                rho = None
-                for s_in in ins:
-                    if s_in.composition or s_in.main_component:
-                        try:
-                            comp = s_in.composition or {s_in.main_component: 1.0}
-                            rho = _pd._density_kg_m3(comp, s_in.temperature + 273.15,
-                                                       s_in.phase or "liquid")
-                            if rho: break
-                        except Exception:
-                            pass
-                if rho and rho > 0:
-                    eta = getattr(b, "efficiency", 0.75) or 0.75
-                    W_elec_kW = m_kg_s * dp_block * 1e5 / (rho * eta * 1000.0)
-                    b.duty = W_elec_kW
-                    changed = True
+                if "compressor" in eq_lower:
+                    # Single source of truth: equipment_design.  El sizing
+                    # (size_compressor) ya usa esta misma función → duty y
+                    # sizing quedan consistentes.  Si falla (None/excepción),
+                    # NO caemos a la fórmula incompresible (sería peor para
+                    # gases); dejamos el duty intacto y el warning lo emite
+                    # _compressor_polytropic_warnings post-loop (el msgs de
+                    # ESTA función se descarta en las llamadas del solver
+                    # hidráulico, así que el warning iría perdido acá).
+                    try:
+                        import equipment_design as _ed
+                        res = _ed.design_compressor_for_block(b, fs)
+                        if res and res.get("W_act_kW", 0) > 0:
+                            b.duty = res["W_act_kW"]
+                            changed = True
+                    except Exception:
+                        pass
+                else:
+                    # Bomba: fórmula incompresible (correcta para líquidos).
+                    # W_hyd [kW] = m_kg_s · ΔP_Pa / (ρ · η · 1000)
+                    from flowsheet_model import SEC_PER_YEAR, TM_TO_KG
+                    m_kg_s = sum(s.mass_flow for s in ins) * TM_TO_KG / SEC_PER_YEAR
+                    # ρ: usa el primer inlet con composition
+                    rho = None
+                    for s_in in ins:
+                        if s_in.composition or s_in.main_component:
+                            try:
+                                comp = s_in.composition or {s_in.main_component: 1.0}
+                                rho = _pd._density_kg_m3(comp, s_in.temperature + 273.15,
+                                                           s_in.phase or "liquid")
+                                if rho: break
+                            except Exception:
+                                pass
+                    if rho and rho > 0:
+                        eta = getattr(b, "efficiency", 0.75) or 0.75
+                        W_elec_kW = m_kg_s * dp_block * 1e5 / (rho * eta * 1000.0)
+                        b.duty = W_elec_kW
+                        changed = True
 
         if not changed:
             break
