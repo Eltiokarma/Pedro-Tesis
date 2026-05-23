@@ -310,6 +310,26 @@ def check_features():
         print(f"   {key}/{block_name}: P_in={P_in:.1f}, "
               f"target={p_exp:.1f}  {'✓' if ok else '✗'}")
 
+    print("\n9. Coherencia T compresor (isentrópica vs declarada, los 41):")
+    import audit_temperatures as _at
+    import inspect as _insp
+    _builders = [n for n, _ in _insp.getmembers(_B, predicate=_insp.isfunction)
+                  if n.startswith("_example_")]
+    n_comp = 0
+    for _nm in sorted(_builders):
+        fs = fm.Flowsheet()
+        getattr(_B(fs), _nm)()
+        fsv.solve(fs)
+        for it in _at.audit_compressor_temperatures(fs, tol_C=30.0):
+            n_comp += 1
+            issues.append(
+                f"{_nm}/{it['block']}: T declarada={it['T_declared']:.0f}°C "
+                f"vs isen={it['T_isen']:.0f}°C")
+            print(f"   ✗ {_nm}/{it['block']}: decl={it['T_declared']:.0f}°C "
+                  f"isen={it['T_isen']:.0f}°C")
+    print(f"   compresores incoherentes: {n_comp}  "
+          f"{'✓' if n_comp == 0 else '✗'}")
+
     print(f"\n{'='*70}")
     if issues:
         print(f"⚠ ENCONTRÉ {len(issues)} ISSUES:")

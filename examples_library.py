@@ -436,7 +436,7 @@ class ExampleBuilder:
                                  src_port="descarga", dst_port="tube_in",
                                  T=180,
                                  composition=feed_mix,
-                                 main_component="nitrogen", phase="gas")
+                                 main_component="nitrogen", phase="gas", lock_T=False)
         # Post-preheater: T de operación reactor ~450°C
         self._add_example_stream(e101, r101, "S-2", 0.0,
                                  src_port="tube_out", dst_port="alimentacion",
@@ -472,6 +472,7 @@ class ExampleBuilder:
         # Sobre kg de input total con 15% mass yield NH₃: -2700 × 0.15 ≈ -405 kJ/kg input
         self.fs.blocks[r101].heat_of_reaction = -405.0
         self.fs.blocks[r101].P_op_bar = 200.0   # síntesis NH3 ~200 bar
+        self.fs.blocks[r101].T_op_K = 700.0   # T_op declarada (silencia dof_audit)
 
         # ---- Duties auto ----
         from flowsheet_solver import auto_set_duties_from_thermo
@@ -2485,7 +2486,7 @@ class ExampleBuilder:
                                   src_port="descarga", dst_port="tube_in",
                                   T=80, phase="gas",
                                   composition={"chlorine": 0.999,
-                                                 "water": 0.001})
+                                                 "water": 0.001}, lock_T=False)
         # Condensación → Cl2 líquido (almacenado a 7 bar / 700 kPa).
         s_cl2liq = self._add_example_stream(e302, tk_cl2, "S-cl2-liq", 0.0, role="product",
                                   src_port="tube_out", dst_port="entrada",
@@ -2688,7 +2689,7 @@ class ExampleBuilder:
                                   src_port="descarga", dst_port="entrada2",
                                   T=200, phase="gas",
                                   composition={"oxygen": 0.232,
-                                                 "nitrogen": 0.768})
+                                                 "nitrogen": 0.768}, lock_T=False)
         # Mezcla al reactor (10% NH3 molar ≈ 6.7% peso, dentro de
         # límites de inflamabilidad)
         self._add_example_stream(m101, r201, "A5-mix", 0.0,
@@ -2763,7 +2764,7 @@ class ExampleBuilder:
                                                  "water": 0.054,
                                                  "nitrogen": 0.760,
                                                  "oxygen": 0.066,
-                                                 "nitrous oxide": 0.001})
+                                                 "nitrous oxide": 0.001}, lock_T=False)
         # Gas oxidado (NO → NO2, 90% conv)
         self._add_example_stream(r301, t401, "A11-NOx-ox", 0.0,
                                   src_port="producto", dst_port="vapor_tope",
@@ -3768,7 +3769,7 @@ class ExampleBuilder:
                                  src_port="descarga", dst_port="alimentacion_2",
                                  T=120,
                                  main_component="co", phase="gas",
-                                 composition={"co": 1.0})
+                                 composition={"co": 1.0}, lock_T=False)
         # Mezcla al precalentador
         self._add_example_stream(m101, e101, "S-1", 0.0,
                                  src_port="producto", dst_port="tube_in",
@@ -3891,7 +3892,7 @@ class ExampleBuilder:
                                  src_port="descarga", dst_port="alimentacion",
                                  T=80,
                                  main_component="ethylene", phase="gas",
-                                 composition={"ethylene": 1.0})
+                                 composition={"ethylene": 1.0}, lock_T=False)
         # Salida reactor: mezcla bifásica (PE sólido suspendido + etileno gas)
         self._add_example_stream(r101, v101, "S-mix", 0.0,
                                  src_port="producto", dst_port="alimentacion",
@@ -4400,7 +4401,7 @@ class ExampleBuilder:
                                  src_port="descarga", dst_port="alimentacion",
                                  T=180,
                                  composition=feed_mix,
-                                 main_component="co2", phase="liquid")
+                                 main_component="co2", phase="liquid", lock_T=False)
         # Salida reactor a flash (Modo B)
         self._add_example_stream(r101, v101, "S-rxn", 0.0,
                                  src_port="producto", dst_port="alimentacion",
