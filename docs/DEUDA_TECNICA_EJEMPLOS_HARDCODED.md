@@ -1,8 +1,20 @@
 # Deuda técnica — Ejemplos con flujos hardcoded
 
 > **Origen:** Hallazgo 2 de la auditoría de streams/reactor (2026).
-> **Estado:** Infraestructura implementada. Reescritura de ejemplos
-> pendiente, ejemplo por ejemplo, con verificación de convergencia.
+> **Estado:** ✅ **RESUELTA** (2026).  Infraestructura implementada y los
+> 41 builders reescritos.  Los intermedios ya no van con `mass_flow`
+> hardcoded+locked: el solver propaga el balance Σin=Σout.  Quedan locked
+> solo los specs reales (feeds, un output por split/flash/columna manual,
+> y los tears de recycle).
+>
+> **Resultado verificado:** de 231 streams `internal`, 190 ahora se
+> propagan (antes 0); los 41 que siguen locked son split-specs y tears
+> legítimos.  41/41 ejemplos `solve()` success, flujos post-solve idénticos
+> a los hardcoded previos (tol 0.5 %), 149 tests + `validate_ui.py` 41/41
+> sin regresión.
+>
+> El texto abajo se conserva como registro del problema original y del
+> método de reescritura aplicado.
 
 ## El problema
 

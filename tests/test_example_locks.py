@@ -213,11 +213,20 @@ class TestExistingExamplesUnaffected(unittest.TestCase):
         el.ExampleBuilder._example_hda(fake)
         res = fsv.solve(fake.fs)
         self.assertEqual(len(res.mass_balance_errors), 0)
-        # Antes del fix, todos los streams con mass>0 estaban locked
-        locked_count = sum(1 for s in fake.fs.streams.values()
-                            if s.mass_flow_locked)
-        self.assertGreater(locked_count, 5,
-            "HDA legacy debe seguir con sus streams hardcoded lockeados")
+        # Tras la reescritura de la deuda hardcoded (DEUDA_TECNICA_*.md):
+        # los intermedios ya NO van locked — el solver propaga el balance.
+        # Solo quedan locked los specs reales: feed + tear de recycle + purga.
+        by_name = {s.name: s for s in fake.fs.streams.values()}
+        self.assertTrue(by_name["S-feed-tol"].mass_flow_locked,
+            "el feed fresco debe seguir locked")
+        self.assertTrue(by_name["S-9-recic"].mass_flow_locked,
+            "el tear del recycle debe seguir locked (spec del loop)")
+        for n in ("S-1", "S-2", "S-3", "S-4", "S-5", "S-6", "S-7", "S-8"):
+            self.assertFalse(by_name[n].mass_flow_locked,
+                f"{n} es intermedio: debe propagarse, no quedar hardcoded")
+        # y aun así el balance cierra con los valores correctos
+        self.assertAlmostEqual(by_name["S-1"].mass_flow, 11000, delta=55)
+        self.assertAlmostEqual(by_name["S-benceno"].mass_flow, 8500, delta=43)
 
 
 if __name__ == "__main__":
