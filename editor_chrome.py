@@ -608,6 +608,8 @@ class _ToolButton(QToolButton):
                 "pan":     "✋",
                 "connect": "⟶",
                 "text":    "T",
+                "mass":    "→",
+                "energy":  "⚡",
             }.get(self._id, "?")
             p.drawText(self.rect(), Qt.AlignCenter, glyph)
 
@@ -634,12 +636,20 @@ class EditorPalette(QFrame):
     blockRequested       = Signal(str)        # palette-id (legacy)
     blockTypeRequested   = Signal(str)        # eq_type canónico
     moreRequested        = Signal()
+    streamRequested      = Signal(str)        # 'mass' | 'energy'
 
     TOOLS = [
         ("select",  "Seleccionar (V)"),
         ("pan",     "Pan (espacio)"),
         ("connect", "Conectar stream (C)"),
         ("text",    "Anotación (T)"),
+    ]
+    # Corrientes flotantes: click → crea la flecha en el centro de la
+    # vista; el usuario arrastra los extremos hasta un puerto para
+    # conectarla (el endpoint hace snap al puerto cercano).
+    STREAMS = [
+        ("mass",   "Corriente de masa — arrastrá los extremos a un puerto"),
+        ("energy", "Corriente de energía (kW) — acopla duties entre bloques"),
     ]
     BLOCKS = ["reactor", "mezclador", "separador", "columna",
               "hx", "bomba", "tanque"]
@@ -702,6 +712,17 @@ class EditorPalette(QFrame):
             b = _ToolButton("tool", tid, tip, active=(tid == "select"), parent=self)
             b.clicked.connect(lambda _=False, k=tid: self._on_tool_click(k))
             self._tool_btns[tid] = b
+            lay.addWidget(b, alignment=Qt.AlignHCenter)
+
+        lay.addWidget(self._mk_divider())
+
+        # ── Corrientes (masa / energía) ──
+        self._stream_btns: Dict[str, _ToolButton] = {}
+        for sid, tip in self.STREAMS:
+            b = _ToolButton("stream", sid, tip, parent=self)
+            b.clicked.connect(
+                lambda _=False, k=sid: self.streamRequested.emit(k))
+            self._stream_btns[sid] = b
             lay.addWidget(b, alignment=Qt.AlignHCenter)
 
         lay.addWidget(self._mk_divider())

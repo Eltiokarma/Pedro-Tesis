@@ -156,6 +156,11 @@ def _get_svg_pixmap(eq_type, width, height, svg_str=None):
     if not renderer.isValid():
         return None
 
+    # Guard: dimensiones inválidas → QImage 0×0 haría que QPainter(img)
+    # falle ("Painter not active").  Devolvemos None en vez de pintar.
+    if width <= 0 or height <= 0:
+        return None
+
     # supersampling 2× → render más nítido a HiDPI
     sup = 2
     img = QImage(width * sup, height * sup, QImage.Format_ARGB32)
@@ -3439,6 +3444,14 @@ class BlockItem(QGraphicsItemGroup):
             self.editor.complete_connection(self.model.id)
             event.accept()
             return
+        # Herramienta "connect" activa: el primer click sobre un bloque
+        # inicia la conexión (sin necesidad del menú contextual).
+        if (event.button() == Qt.LeftButton
+            and self.editor is not None
+            and getattr(self.editor, "_active_canvas_tool", "select") == "connect"):
+            self.editor.start_connection(self.model.id)
+            event.accept()
+            return
         # snapshot del estado antes del drag (para undo)
         if (event.button() == Qt.LeftButton and self.editor is not None
             and self.editor._drag_before_snapshot is None):
@@ -4986,6 +4999,8 @@ class FlowsheetMainWindow(QMainWindow):
 
         # state de conexión pendiente (right-click + left-click)
         self._connecting_from: int = None
+        # herramienta activa de la paleta (select/pan/connect/text)
+        self._active_canvas_tool: str = "select"
 
         # undo/redo
         self.undo_stack = QUndoStack(self)
@@ -5379,6 +5394,8 @@ class FlowsheetMainWindow(QMainWindow):
         # Tools: el primer slice solo activa el modo de selección/pan/connect.
         pal.toolSelected.connect(self._on_palette_tool_selected)
         pal.moreRequested.connect(self._on_palette_more_requested)
+        # Corrientes flotantes (masa / energía) desde la paleta nueva.
+        pal.streamRequested.connect(self._add_floating_stream)
 
         # ── Zoom overlay ────────────────────────────────────────
         zm = self._zoom_widget
@@ -5434,6 +5451,10 @@ class FlowsheetMainWindow(QMainWindow):
 
     def _on_palette_tool_selected(self, tool_id: str):
         """Activar herramienta de manipulación del canvas."""
+        self._active_canvas_tool = tool_id
+        # cambiar de herramienta cancela cualquier conexión a medio hacer
+        if tool_id != "connect":
+            self.cancel_connection()
         v = self.view
         if tool_id == "pan":
             v.setDragMode(QGraphicsView.ScrollHandDrag)
