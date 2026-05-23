@@ -2219,21 +2219,32 @@ def _seed_reactor_pressures(fs):
       · Idempotente.  Devuelve la cantidad de corrientes fijadas.
     """
     ATM = 1.01325
+    # No tocar las corrientes que el USER fijó explícitamente.
+    user_locked = {s.id for s in fs.streams.values()
+                    if getattr(s, "pressure_locked", False)}
+    hi = [b for b in fs.blocks.values()
+           if float(getattr(b, "P_op_bar", 0.0) or 0.0) > ATM + 1e-6]
+
+    def _proc(b, s):
+        return (s.role or "") not in ("utility", "ambient") \
+               and s.id not in user_locked
+
     n = 0
-    for b in fs.blocks.values():
-        pop = float(getattr(b, "P_op_bar", 0.0) or 0.0)
-        if pop <= ATM + 1e-6:
-            continue
-        for s in fs.streams.values():
-            if s.src != b.id and s.dst != b.id:
-                continue
-            if (s.role or "") in ("utility", "ambient"):
-                continue
-            if getattr(s, "pressure_locked", False):
-                continue
-            s.pressure_bar = pop
-            s.pressure_locked = True
-            n += 1
+    # Pasada 1: salidas.  Pasada 2: entradas — éstas GANAN sobre las salidas
+    # cuando una corriente es salida de un bloque de P_a y entrada de otro de
+    # P_b distinta (let-down/compresor implícito): la corriente entra al
+    # bloque destino a SU presión.  Para el costing del bloque upstream,
+    # effective_pressure ya usa el máximo de sus corrientes, así que no
+    # pierde su sección.
+    for is_input in (False, True):
+        for b in hi:
+            pop = float(b.P_op_bar)
+            for s in fs.streams.values():
+                attached = (s.dst == b.id) if is_input else (s.src == b.id)
+                if attached and _proc(b, s):
+                    s.pressure_bar = pop
+                    s.pressure_locked = True
+                    n += 1
     return n
 
 
