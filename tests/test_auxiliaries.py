@@ -74,6 +74,10 @@ class TestInstantiation(unittest.TestCase):
         for s in streams:
             self.assertEqual(s.role, "ambient")
             self.assertEqual(s.composition, {"air": 1.0})
+        # los source/sink de ambiente usan el eq_type "Ambient" (ícono de
+        # atmósfera), no un tanque
+        amb = [bl for bl in _aux_blocks(fs) if bl.eq_type == "Ambient"]
+        self.assertEqual(len(amb), 2)
 
     def test_fired_heater_fuel_and_stack(self):
         fs, b = _block("Fired heater — non-reformer")

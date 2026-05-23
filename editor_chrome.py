@@ -58,6 +58,7 @@ BLOCK_DIMS: Dict[str, Tuple[int, int]] = {
     "hx":         (84, 50),
     "bomba":      (56, 50),
     "tanque":     (52, 60),
+    "ambient":    (52, 40),
 }
 
 # Mapeo del tipo del mockup → eq_type canónico del catálogo
@@ -265,9 +266,21 @@ class BlockGlyph:
         p.setPen(QPen(ghost2, 1.0))
         p.drawRect(QRectF(w/2-3, 6, 6, 4))
 
-
-# ════════════════════════════════════════════════════════
-#  EDITOR TOPBAR
+    @staticmethod
+    def _draw_ambient(p, w, h, stroke, fill_brush, sw):
+        # Atmósfera: nube (source/sink de aire, chimenea, blowdown, etc.).
+        # Silueta de nube = unión de lóbulos circulares sobre una base.
+        cx = w / 2.0
+        cy = h * 0.58
+        r = min(w, h) * 0.20
+        cloud = QPainterPath()
+        cloud.setFillRule(Qt.WindingFill)
+        cloud.addEllipse(QPointF(cx - r * 1.15, cy), r, r)
+        cloud.addEllipse(QPointF(cx + r * 1.15, cy), r, r)
+        cloud.addEllipse(QPointF(cx - r * 0.35, cy - r * 0.85), r * 1.15, r * 1.15)
+        cloud.addEllipse(QPointF(cx + r * 0.6, cy - r * 0.5), r * 0.95, r * 0.95)
+        cloud.addRect(QRectF(cx - r * 1.7, cy - r * 0.15, r * 3.4, r * 1.15))
+        p.drawPath(cloud.simplified())
 # ════════════════════════════════════════════════════════
 
 class EditorTopbar(QFrame):
@@ -1083,6 +1096,8 @@ def isa_type_for_eq(eq_type: str) -> str:
     """
     if not eq_type:
         return "tanque"
+    if "ambient" in eq_type.lower() or "atmósfera" in eq_type.lower():
+        return "ambient"
     try:
         import equipment_costs as _ec
         cat = _ec.EQUIPMENT_DATA.get(eq_type, {}).get("categoria", "")
