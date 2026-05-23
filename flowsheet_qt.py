@@ -2585,6 +2585,45 @@ def _avoid_obstacles(pts, obstacles, padding=12, max_iter=8):
     return pts
 
 
+def _simplify_orthogonal(pts, eps=0.5):
+    """Limpia una polyline ortogonal eliminando puntos interiores que son
+    colineales con sus vecinos.  Esto colapsa los tramos "de ida y vuelta
+    sobre la misma línea" (backtracks): tres puntos seguidos sobre el mismo
+    eje (misma x o misma y) donde el del medio es redundante o un pico que
+    sale y vuelve.  Preserva SIEMPRE los extremos (puertos).
+
+    Ejemplos:
+      (0,0)→(10,0)→(5,0)   ⇒  (0,0)→(5,0)     (pico horizontal colapsado)
+      (0,0)→(10,0)→(10,0)  ⇒  (0,0)→(10,0)    (duplicado eliminado)
+    Un detour real (con offset perpendicular intermedio) NO es colineal y
+    se conserva.
+    """
+    if len(pts) < 6:
+        return pts
+    P = [(pts[i], pts[i + 1]) for i in range(0, len(pts) - 1, 2)]
+    changed = True
+    while changed and len(P) > 2:
+        changed = False
+        i = 1
+        while i < len(P) - 1:
+            ax, ay = P[i - 1]
+            bx, by = P[i]
+            cx, cy = P[i + 1]
+            dup = abs(ax - bx) < eps and abs(ay - by) < eps
+            collinear_h = abs(ay - by) < eps and abs(by - cy) < eps
+            collinear_v = abs(ax - bx) < eps and abs(bx - cx) < eps
+            if dup or collinear_h or collinear_v:
+                del P[i]            # punto interior redundante / backtrack
+                changed = True
+            else:
+                i += 1
+    out = []
+    for (x, y) in P:
+        out.append(x)
+        out.append(y)
+    return out
+
+
 def _build_path_with_hops(pts, hops):
     """Construye un QPainterPath siguiendo `pts`, insertando un arc
     (semicírculo) en cada punto de cruce listado en `hops`.
@@ -3863,6 +3902,10 @@ class StreamItem(QGraphicsPathItem):
             pts = [x1, y1, x2, y2]
         if not pts:
             return
+        # Sanear la polyline: quitar backtracks (tramos que van y vuelven
+        # sobre la misma línea, p. ej. detours/lanes que dejan picos
+        # colineales).  Preserva los extremos (puertos).
+        pts = _simplify_orthogonal(pts)
         # Gap entre la punta de flecha y el NODO (puerto) del bloque.
         # _resolve_port ancla en el centro del dot del puerto; dejamos un
         # gap = radio del nodo (~4px) para que la punta toque el nodo sin
