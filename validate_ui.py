@@ -36,17 +36,17 @@ def run_all_examples():
     headless_mocks()
     import flowsheet_model as fm
     import flowsheet_solver as fsv
-    import flowsheet_ui as fu
+    import examples_library as el
 
     class _FakeEditor:
         def __init__(self):
             self.fs = fm.Flowsheet()
             self.labor_workers = 0
-        _add_example_block  = fu.FlowsheetEditor._add_example_block
-        _add_example_stream = fu.FlowsheetEditor._add_example_stream
-        _add_example_extra  = fu.FlowsheetEditor._add_example_extra
-        _set_example_labor  = fu.FlowsheetEditor._set_example_labor
-        _set_block_duty     = fu.FlowsheetEditor._set_block_duty
+        _add_example_block  = el.ExampleBuilder._add_example_block
+        _add_example_stream = el.ExampleBuilder._add_example_stream
+        _add_example_extra  = el.ExampleBuilder._add_example_extra
+        _set_example_labor  = el.ExampleBuilder._set_example_labor
+        _set_block_duty     = el.ExampleBuilder._set_block_duty
 
     examples = [
         '_example_hda', '_example_methanol', '_example_distillation',
@@ -102,7 +102,7 @@ def run_all_examples():
     for name in examples:
         fake = _FakeEditor()
         try:
-            getattr(fu.FlowsheetEditor, name)(fake)
+            getattr(el.ExampleBuilder, name)(fake)
         except AttributeError as e:
             print(f"  ✗ {name:40s} ATRIBUTO FALTANTE: {e}")
             all_ok = False
@@ -148,7 +148,7 @@ def check_features():
     headless_mocks()
     import flowsheet_model as fm
     import flowsheet_solver as fsv
-    import flowsheet_ui as fu
+    import examples_library as el
 
     print(f"\n{'='*70}")
     print("VALIDACIÓN DE FEATURES")
@@ -160,13 +160,13 @@ def check_features():
     print("\n1. Hidráulica auto-sizing:")
     class _FE:
         def __init__(self): self.fs = fm.Flowsheet(); self.labor_workers = 0
-        _add_example_block = fu.FlowsheetEditor._add_example_block
-        _add_example_stream = fu.FlowsheetEditor._add_example_stream
-        _add_example_extra = fu.FlowsheetEditor._add_example_extra
-        _set_example_labor = fu.FlowsheetEditor._set_example_labor
-        _set_block_duty    = fu.FlowsheetEditor._set_block_duty
+        _add_example_block = el.ExampleBuilder._add_example_block
+        _add_example_stream = el.ExampleBuilder._add_example_stream
+        _add_example_extra = el.ExampleBuilder._add_example_extra
+        _set_example_labor = el.ExampleBuilder._set_example_labor
+        _set_block_duty    = el.ExampleBuilder._set_block_duty
     fake = _FE()
-    fu.FlowsheetEditor._example_hydraulic_plant(fake)
+    el.ExampleBuilder._example_hydraulic_plant(fake)
     res = fsv.solve(fake.fs)
     p101 = next(b for b in fake.fs.blocks.values() if b.name == "P-101")
     prod = next(s for s in fake.fs.streams.values() if s.name == "S-product")
@@ -181,7 +181,7 @@ def check_features():
     # Feature 2: Columna FUG automática
     print("\n2. Columna FUG/NRTL automática:")
     fake = _FE()
-    fu.FlowsheetEditor._example_reactor_flash_column(fake)
+    el.ExampleBuilder._example_reactor_flash_column(fake)
     res = fsv.solve(fake.fs)
     t101 = next(b for b in fake.fs.blocks.values() if b.name == "T-101")
     dist = next(s for s in fake.fs.streams.values() if s.name == "S-etanol")

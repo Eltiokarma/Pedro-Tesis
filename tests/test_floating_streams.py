@@ -278,20 +278,20 @@ class TestExamplesNotAffected(unittest.TestCase):
             headless_mocks()
         except Exception:
             pass
-        import flowsheet_ui as fu
+        import examples_library as el
 
         class _F:
             def __init__(self):
                 self.fs = fm.Flowsheet()
                 self.labor_workers = 0
-            _add_example_block  = fu.FlowsheetEditor._add_example_block
-            _add_example_stream = fu.FlowsheetEditor._add_example_stream
-            _add_example_extra  = fu.FlowsheetEditor._add_example_extra
-            _set_example_labor  = fu.FlowsheetEditor._set_example_labor
-            _set_block_duty     = fu.FlowsheetEditor._set_block_duty
+            _add_example_block  = el.ExampleBuilder._add_example_block
+            _add_example_stream = el.ExampleBuilder._add_example_stream
+            _add_example_extra  = el.ExampleBuilder._add_example_extra
+            _set_example_labor  = el.ExampleBuilder._set_example_labor
+            _set_block_duty     = el.ExampleBuilder._set_block_duty
 
         fake = _F()
-        fu.FlowsheetEditor._example_hda(fake)
+        el.ExampleBuilder._example_hda(fake)
         msgs = fsv.apply_energy_streams(fake.fs)
         self.assertEqual(msgs, [],
             "Ejemplos legacy no deben tener streams kind='energy'")

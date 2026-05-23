@@ -330,20 +330,20 @@ class TestSugarMillEndToEnd(unittest.TestCase):
             headless_mocks()
         except Exception:
             pass
-        import flowsheet_ui as fu
+        import examples_library as el
 
         class _Fake:
             def __init__(self):
                 self.fs = fm.Flowsheet()
                 self.labor_workers = 0
-            _add_example_block  = fu.FlowsheetEditor._add_example_block
-            _add_example_stream = fu.FlowsheetEditor._add_example_stream
-            _add_example_extra  = fu.FlowsheetEditor._add_example_extra
-            _set_example_labor  = fu.FlowsheetEditor._set_example_labor
-            _set_block_duty     = fu.FlowsheetEditor._set_block_duty
+            _add_example_block  = el.ExampleBuilder._add_example_block
+            _add_example_stream = el.ExampleBuilder._add_example_stream
+            _add_example_extra  = el.ExampleBuilder._add_example_extra
+            _set_example_labor  = el.ExampleBuilder._set_example_labor
+            _set_block_duty     = el.ExampleBuilder._set_block_duty
 
         fake = _Fake()
-        fu.FlowsheetEditor._example_sugar_mill(fake)
+        el.ExampleBuilder._example_sugar_mill(fake)
         res = fsv.solve(fake.fs)
         self.assertEqual(len(res.mass_balance_errors), 0,
             f"mass errors: {res.mass_balance_errors}")
