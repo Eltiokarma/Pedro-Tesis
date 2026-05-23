@@ -41,6 +41,23 @@ ENERGÍA
   Cp del output se asume igual al del input dominante (no manejamos
   cambio de fase ni Cp(T)).
 
+  COMPRESORES / TURBINAS / FANS (gas compresible):
+    Estos NO usan el balance sensible de arriba — propagan T_out vía
+    relación isentrópica de gas ideal (Cengel cap 7-9), en
+    _propagate_T_compressor_isentropic:
+        T_out_isen = T_in · (P_out/P_in)^((k−1)/k)
+        T_out_real = T_in + (T_out_isen − T_in) / η   (compresor)
+        T_out_real = T_in − η·(T_in − T_out_isen)     (turbina)
+    con k=Cp/Cv y MW de la composición (_compressible_props, usa Cp(T)
+    real de thermo_db — más preciso que el cold-air-standard de k=1.4
+    constante).  Convención: P_out>P_in → compresor (duty>0); P_out<P_in
+    → turbina/expansor (duty<0).  El compresor delega a
+    equipment_design.compressor_sizing (single source of truth con el
+    sizing).  Habilita ciclos Brayton, recompresión de gas caliente y
+    expansores.  Bombas siguen con T_out ≈ T_in (líquido incompresible).
+    Requiere que la presión esté resuelta ANTES (solve_pressure_hydraulic
+    corre antes que _solve_energy_iteration en solve()).
+
 USO
 
     from flowsheet_solver import solve
@@ -717,6 +734,155 @@ def _stream_enthalpy_kW(s):
     return h_sensible + h_latent
 
 
+def _compressible_props(comp: dict, T_K: float):
+    """Devuelve (mw_avg [g/mol], k=Cp/Cv) para una composición de gas.
+
+    MW: Kay's rule (regla aditiva por w_i).
+    k: Cp/(Cp − R/MW) usando thermo_db.cp_mix_kJ_kg_K(phase='gas').
+    R = 8.314 J/(mol·K).
+
+    Fallback si thermo_db no resuelve Cp: k típicos por familia
+    (CO2 1.28, vapor de agua 1.33, hidrocarburos livianos 1.30,
+    diatómicos/aire 1.40)."""
+    try:
+        import thermo_db as _td
+    except ImportError:
+        return (28.96, 1.40)
+    mw_avg = 0.0
+    total_w = 0.0
+    for c, w in comp.items():
+        co = _td.get(c)
+        if co is None or co.mw <= 0:
+            continue
+        mw_avg += w * co.mw
+        total_w += w
+    if total_w <= 0:
+        return (28.96, 1.40)   # fallback aire
+    mw_avg /= total_w
+
+    T_C = T_K - 273.15
+    try:
+        cp_kJ_kg_K = _td.cp_mix_kJ_kg_K(comp, T_C, "gas")
+    except Exception:
+        cp_kJ_kg_K = None
+    if cp_kJ_kg_K is None or cp_kJ_kg_K <= 0:
+        # Fallback heurístico por composición dominante
+        if comp.get("co2", 0) > 0.5 or comp.get("carbon dioxide", 0) > 0.5:
+            k = 1.28
+        elif comp.get("water", 0) > 0.5:
+            k = 1.33
+        elif (comp.get("methane", 0) + comp.get("ethane", 0)
+              + comp.get("propane", 0)) > 0.5:
+            k = 1.30
+        else:
+            k = 1.40   # aire / N2 / O2 / H2
+        return (mw_avg, k)
+
+    R_specific_kJ_kg_K = 8.314 / (mw_avg * 1e-3) / 1000.0
+    cv = cp_kJ_kg_K - R_specific_kJ_kg_K
+    if cv <= 0:
+        return (mw_avg, 1.40)
+    return (mw_avg, cp_kJ_kg_K / cv)
+
+
+def _propagate_T_compressor_isentropic(b, fs, propagated=None, skipped=None,
+                                        tol_T=0.5):
+    """Propaga T_out de un compresor/fan/turbina vía relación isentrópica
+    de gas ideal (Cengel cap 7-9).  Reemplaza el skip silencioso del
+    solver de energía para equipos eléctricos compresibles.
+
+    Convención del proyecto (no hay tipo 'Turbine' separado):
+      · P_out > P_in → COMPRESOR (consume W, sube T, duty > 0)
+      · P_out < P_in → TURBINA/EXPANSOR (genera W, baja T, duty < 0)
+
+    Compresor: delega a equipment_design.compressor_sizing (single source
+    of truth, mismo cálculo que el sizing/duty P12; η_isen clampeado a
+    ≤0.95 ahí).  Turbina: expansión isentrópica manual (η sin clamp).
+
+    NO aplica a bombas (líquido incompresible — T_out ≈ T_in).
+    Respeta temperature_locked / pressure_locked / duty_locked y el rango
+    físico [T_MIN, T_MAX]_REASONABLE.  Devuelve True si propagó algo."""
+    if propagated is None: propagated = []
+    if skipped is None: skipped = []
+    ins  = [s for s in fs.streams.values() if s.dst == b.id]
+    outs = [s for s in fs.streams.values() if s.src == b.id]
+    if len(ins) != 1 or len(outs) != 1:
+        return False
+    feed, out = ins[0], outs[0]
+    if feed.mass_flow <= 0 or feed.pressure_bar <= 0:
+        return False
+    comp = feed.composition or (
+        {feed.main_component: 1.0} if feed.main_component else {})
+    if not comp:
+        return False
+
+    P_in = feed.pressure_bar
+    if getattr(out, "pressure_locked", False) and out.pressure_bar > 0:
+        P_out = out.pressure_bar
+    elif b.delta_p_bar != 0:
+        P_out = P_in + b.delta_p_bar      # delta_p_bar negativo si turbina
+    else:
+        return False                       # falta info de P
+    if P_out <= 0 or abs(P_out - P_in) < 1e-6:
+        return False
+
+    T_in_K = feed.temperature + 273.15
+    from flowsheet_model import SEC_PER_YEAR, TM_TO_KG
+    m_kg_s = feed.mass_flow * TM_TO_KG / SEC_PER_YEAR
+    mw_avg, k = _compressible_props(comp, T_in_K)
+
+    if P_out > P_in:
+        # COMPRESOR — equipment_design (consistente con sizing/duty)
+        try:
+            from equipment_design import compressor_sizing
+            res = compressor_sizing(
+                m_kg_s=m_kg_s, P_in_bar=P_in, P_out_bar=P_out,
+                T_in_K=T_in_K, mw_avg=mw_avg, k=k,
+                eta_isen=b.efficiency or 0.75)
+        except Exception:
+            res = None
+        if res is None:
+            return False
+        T_out_K = res["T_out_K"]
+        W_elec_kW = res["W_act_kW"]        # POSITIVO (consume)
+    else:
+        # TURBINA / EXPANSOR — expansión isentrópica
+        exponent = (k - 1.0) / k
+        ratio = P_out / P_in
+        T_out_isen = T_in_K * (ratio ** exponent)
+        eta = b.efficiency or 0.85         # turbinas tienden a η más alta
+        T_out_K = T_in_K - eta * (T_in_K - T_out_isen)
+        T_avg_C = ((T_in_K + T_out_K) / 2.0) - 273.15
+        try:
+            import thermo_db as _td
+            cp = _td.cp_mix_kJ_kg_K(comp, T_avg_C, "gas")
+        except Exception:
+            cp = None
+        if cp is None or cp <= 0:
+            R = 8.314
+            cp = (R / (mw_avg * 1e-3)) * (k / (k - 1.0)) / 1000.0
+        W_isen_kW = m_kg_s * cp * (T_in_K - T_out_isen)
+        W_elec_kW = -(eta * W_isen_kW)     # NEGATIVO (genera)
+
+    # ── Aplicar resultados (respetando locks + rango) ──
+    t_new_C = T_out_K - 273.15
+    if not (T_MIN_REASONABLE <= t_new_C <= T_MAX_REASONABLE):
+        skipped.append(
+            f"{b.name} → {out.name}: T isentrópica = {t_new_C:.0f} °C fuera "
+            f"de rango físico [-100, 1500].  T mantenida en {out.temperature:g} °C."
+        )
+    elif not _is_temp_locked(out) and abs(t_new_C - out.temperature) > tol_T:
+        out.temperature = t_new_C
+        propagated.append((out.name, t_new_C))
+    # P_out (si no locked)
+    if not getattr(out, "pressure_locked", False) and abs(out.pressure_bar - P_out) > 1e-4:
+        out.pressure_bar = max(P_out, 0.01)
+    # duty (si no locked) — el solver puede re-iterarlo si P cambia upstream
+    if not getattr(b, "duty_locked", False):
+        b.duty = W_elec_kW
+    return True
+
+
 def _solve_energy_iteration(fs, tol_T=0.5, skipped=None):
     """Una pasada propagando T sobre los bloques.
 
@@ -793,8 +959,24 @@ def _solve_energy_iteration(fs, tol_T=0.5, skipped=None):
             return s.mass_flow > 0 and _resolve_cp(s) is not None
         if not all(_stream_ok(s) for s in ins + outs):
             continue
-        # bombas, compresores y fans tienen duty ELÉCTRICO.
+        # Equipos eléctricos (bombas, compresores, fans, turbinas).
+        # Antes se skipeaban sin propagar T.  Ahora:
+        #   · Compresor/Fan/Turbina → propagación isentrópica de gas
+        #     ideal (T_out vía Cengel cap 7-9, ver
+        #     _propagate_T_compressor_isentropic).  Habilita ciclos
+        #     Brayton, recompresión de gas caliente, expansores.
+        #   · Bomba → T_out ≈ T_in (líquido incompresible; ΔT por
+        #     ineficiencia ~1-3 °C, despreciable a P < 100 bar).
         if _ep_mod.is_electrical_equipment(b.eq_type):
+            eq_lower = b.eq_type.lower()
+            if "compressor" in eq_lower or "fan" in eq_lower:
+                _propagate_T_compressor_isentropic(
+                    b, fs, propagated, skipped, tol_T)
+            elif "pump" in eq_lower:
+                if (not _is_temp_locked(outs[0])
+                        and abs(ins[0].temperature - outs[0].temperature) > tol_T):
+                    outs[0].temperature = ins[0].temperature
+                    propagated.append((outs[0].name, ins[0].temperature))
             continue
         # Reactores con cinética/equilibrio (Capas 4 y 5): la T del
         # outlet está fijada por el modo del reactor (T_op_K).  El
