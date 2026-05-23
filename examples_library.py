@@ -267,33 +267,33 @@ class ExampleBuilder:
                                  src_port="descarga", dst_port="tube_in",
                                  price=150.0, T=40,
                                  main_component="syngas", phase="gas")
-        self._add_example_stream(e101, r101, "S-2", 14000,
+        self._add_example_stream(e101, r101, "S-2", 0.0,
                                  src_port="tube_out", dst_port="alimentacion",
                                  T=230,
                                  main_component="syngas", phase="gas")
         # post-reactor: gas con metanol formado en vapor
-        self._add_example_stream(r101, e102, "S-3", 14000,
+        self._add_example_stream(r101, e102, "S-3", 0.0,
                                  src_port="producto", dst_port="proceso_in",
                                  T=260,
                                  main_component="methanol", phase="vapor")
         # post-cooler: parcialmente condensado (two-phase)
-        self._add_example_stream(e102, v101, "S-4", 14000,
+        self._add_example_stream(e102, v101, "S-4", 0.0,
                                  src_port="proceso_out", dst_port="alimentacion",
                                  T=40,
                                  main_component="methanol", phase="liquid")
         # líquido del flash: crude methanol (líquido)
-        self._add_example_stream(v101, t101, "S-5", 10100,
+        self._add_example_stream(v101, t101, "S-5", 0.0,
                                  src_port="liquido",  dst_port="alimentacion",
                                  T=60,
                                  composition={"methanol": 0.94, "water": 0.06},
                                  main_component="methanol", phase="liquid")
         # vapor tope de columna: vapor (componente puro metanol)
-        self._add_example_stream(t101, e103, "S-vap-tope", 9500,
+        self._add_example_stream(t101, e103, "S-vap-tope", 0.0,
                                  src_port="vapor_tope", dst_port="shell_in",
                                  T=68,
                                  main_component="methanol", phase="vapor")
         # producto líquido condensado
-        self._add_example_stream(e103, tk1,  "S-MeOH", 9500, role="product",
+        self._add_example_stream(e103, tk1,  "S-MeOH", 0.0, role="product",
                                  src_port="shell_out", dst_port="entrada",
                                  price=1100.0, T=40,
                                  main_component="methanol", phase="liquid")
@@ -302,7 +302,7 @@ class ExampleBuilder:
                                  src_port="liquido_fondo", dst_port="liq_in",
                                  T=100,
                                  main_component="water", phase="liquid")
-        self._add_example_stream(e104, tk2,  "S-agua", 600, role="product",
+        self._add_example_stream(e104, tk2,  "S-agua", 0.0, role="product",
                                  src_port="cond_out", dst_port="entrada",
                                  price=5.0, T=40,
                                  main_component="water", phase="liquid")
@@ -3754,25 +3754,25 @@ class ExampleBuilder:
                                  main_component="co", phase="gas",
                                  composition={"co": 1.0})
         # CO comprimido a 35 bar
-        self._add_example_stream(k101, m101, "S-CO-HP", 866,
+        self._add_example_stream(k101, m101, "S-CO-HP", 0.0,
                                  src_port="descarga", dst_port="alimentacion_2",
                                  T=120,
                                  main_component="co", phase="gas",
                                  composition={"co": 1.0})
         # Mezcla al precalentador
-        self._add_example_stream(m101, e101, "S-1", 1866,
+        self._add_example_stream(m101, e101, "S-1", 0.0,
                                  src_port="producto", dst_port="tube_in",
                                  T=80,
                                  composition=feed_mix,
                                  main_component="methanol", phase="liquid")
         # Pre-calentado al reactor
-        self._add_example_stream(e101, r101, "S-2", 1866,
+        self._add_example_stream(e101, r101, "S-2", 0.0,
                                  src_port="tube_out", dst_port="alimentacion",
                                  T=180,
                                  composition=feed_mix,
                                  main_component="methanol", phase="liquid")
         # Salida del reactor (Modo B)
-        self._add_example_stream(r101, v101, "S-3", 1866,
+        self._add_example_stream(r101, v101, "S-3", 0.0,
                                  src_port="producto", dst_port="alimentacion",
                                  T=185,
                                  composition=rxn_out,
@@ -3784,7 +3784,7 @@ class ExampleBuilder:
                                  main_component="co", phase="gas",
                                  composition={"co": 1.0})
         # Líquido del flash a columna (1857: 10 MeOH + 1847 AcOH)
-        self._add_example_stream(v101, t101, "S-4", 1857,
+        self._add_example_stream(v101, t101, "S-4", 0.0,
                                  src_port="liquido",    dst_port="alimentacion",
                                  T=180,
                                  composition={"methanol": 0.0054, "acetic_acid": 0.9946},
@@ -3796,19 +3796,19 @@ class ExampleBuilder:
                                  main_component="methanol", phase="vapor",
                                  composition={"methanol": 1.0})
         # Livianos condensados a TK (reciclables, role=waste por simplicidad)
-        self._add_example_stream(e102, tk_liv, "S-livianos", 10, role="waste",
+        self._add_example_stream(e102, tk_liv, "S-livianos", 0.0, role="waste",
                                  src_port="tube_out", dst_port="entrada",
                                  price=0.0, T=45,
                                  main_component="methanol", phase="liquid",
                                  composition={"methanol": 1.0})
         # Fondos: ácido acético glacial al producto
-        self._add_example_stream(t101, e103, "S-fondo", 1847,
+        self._add_example_stream(t101, e103, "S-fondo", 0.0,
                                  src_port="liquido_fondo", dst_port="liq_in",
                                  T=118,
                                  main_component="acetic_acid", phase="liquid",
                                  composition={"acetic_acid": 1.0})
         # Ácido glacial al tanque (producto principal, ~1847 tm/año)
-        self._add_example_stream(e103, tk_ac, "S-AcOH", 1847, role="product",
+        self._add_example_stream(e103, tk_ac, "S-AcOH", 0.0, role="product",
                                  src_port="cond_out", dst_port="entrada",
                                  price=600.0, T=60,
                                  main_component="acetic_acid", phase="liquid",
@@ -4744,14 +4744,15 @@ class ExampleBuilder:
                                  price=550.0, T=25,
                                  main_component="ethane", phase="gas",
                                  composition={"ethane": 1.0})
-        # Precalentado al horno
-        self._add_example_stream(e101, f101, "S-precal", 1000,
+        # Precalentado al horno (intermedio: masa propagada; comp ethano puro
+        # locked porque alimenta el reactor que la necesita para el equilibrio)
+        self._add_example_stream(e101, f101, "S-precal", 0.0,
                                  src_port="tube_out", dst_port="proceso_in",
                                  T=400,
                                  main_component="ethane", phase="gas",
                                  composition={"ethane": 1.0})
         # Post-horno (~700 °C, entrada al reactor)
-        self._add_example_stream(f101, r101, "S-hot", 1000,
+        self._add_example_stream(f101, r101, "S-hot", 0.0,
                                  src_port="proceso_out", dst_port="alimentacion",
                                  T=700,
                                  main_component="ethane", phase="gas",
@@ -4777,8 +4778,9 @@ class ExampleBuilder:
                                  price=950.0, T=-30,
                                  main_component="ethylene", phase="gas",
                                  composition={"ethylene": 0.985, "hydrogen": 0.015})
-        # Fondo: etano + offgas (fuel-gas)
-        self._add_example_stream(t101, tk_off, "S-offgas", 530, role="product",
+        # Fondo: etano + offgas (fuel-gas).  Masa deducida del balance de
+        # T-101 (Σin − S-etileno); comp es spec de separación (locked).
+        self._add_example_stream(t101, tk_off, "S-offgas", 0.0, role="product",
                                  src_port="liquido_fondo", dst_port="entrada",
                                  price=300.0, T=-50,
                                  main_component="ethane", phase="liquid",
