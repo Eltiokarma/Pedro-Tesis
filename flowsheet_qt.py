@@ -6565,7 +6565,7 @@ class FlowsheetMainWindow(QMainWindow):
         # menú de ejemplos
         examples_act = QAction("Ejemplos ▾", self)
         examples_menu = QMenu(self)
-        from flowsheet_ui import FlowsheetEditor as _LegacyEditor
+        from examples_library import ExampleBuilder as _LegacyEditor
         # reusar los example builders del editor legacy
         def make_loader(key):
             return lambda: self.action_load_example(key)
@@ -7027,9 +7027,9 @@ class FlowsheetMainWindow(QMainWindow):
             if ans != QMessageBox.Yes:
                 return
         before = self.begin_action()
-        from flowsheet_ui import FlowsheetEditor as TkEditor
+        from examples_library import ExampleBuilder as TkEditor
         self.fs = Flowsheet()
-        shim = _ExampleBuilderShim(self.fs)
+        shim = TkEditor(self.fs)
         # builder_map: clave → (método del builder, título_PFD, area, drawing_no)
         builder_map = {
             "hda":          (TkEditor._example_hda,
@@ -8907,78 +8907,3 @@ class FlowsheetMainWindow(QMainWindow):
         self.end_action(f"Agregar {name} (flotante {kind})", before)
         return sid
 
-
-# ======================================================
-# SHIM PARA REUSAR LOS EXAMPLE BUILDERS DEL EDITOR TK
-# ======================================================
-# Los `_example_*` methods de FlowsheetEditor (Tk) usan helpers
-# `_add_example_block`, `_add_example_stream`, `_add_example_extra`,
-# `_set_example_labor`, `_set_block_duty` — son lógica pura sobre
-# el modelo, sin Tk.  Acá los re-implementamos contra un shim que
-# expone los mismos helpers.
-
-class _ExampleBuilderShim:
-    """Objeto plano que provee los métodos que los example builders
-    de flowsheet_ui esperan, operando sobre el flowsheet pasado."""
-
-    def __init__(self, fs):
-        self.fs = fs
-
-    def _add_example_block(self, name, eq_type, S, x, y, n=1):
-        bid = self.fs.new_id()
-        b = Block(id=bid, name=name, eq_type=eq_type, S=S, n=n, x=x, y=y)
-        # NO llamar a apply_type_defaults aca: los ejemplos son
-        # "carga" en espiritu (configuracion pre-curada), no creacion
-        # interactiva de usuario. Multiples ejemplos usan
-        # 'Reactor — autoclave' con .reactions=[...] esperando modo
-        # equilibrium (default historico); apply_type_defaults los
-        # pasaria silenciosamente a batch (Patch 3) y romperia el solve
-        # por falta de reactor_volume_L. Los ejemplos que quieren
-        # PFR/CSTR/batch setean reactor_mode explicitamente despues
-        # del _add_example_block (ej. _example_ethane_cracker_pfr).
-        self.fs.blocks[bid] = b
-        return bid
-
-    def _add_example_stream(self, src, dst, name, mass_flow=0.0,
-                            role="internal", src_port="", dst_port="",
-                            price=0.0, T=25.0, cp=0.0,
-                            main_component="", phase="",
-                            composition=None,
-                            lock_mass=None, lock_T=None, lock_comp=None):
-        """Shim Qt — Hallazgo 2: mismo contrato que FlowsheetEditor de Tk
-        con lock_* opcionales (None = heurística vieja)."""
-        sid = self.fs.new_id()
-        s = Stream(
-            id=sid, name=name, src=src, dst=dst,
-            mass_flow=mass_flow, role=role,
-            src_port=src_port, dst_port=dst_port,
-            price_usd_per_tm=price,
-            temperature=T, cp=cp,
-            main_component=main_component,
-            phase=phase,
-            composition=dict(composition) if composition else {},
-        )
-        s.mass_flow_locked   = ((mass_flow > 0) if lock_mass is None
-                                  else bool(lock_mass))
-        s.temperature_locked = ((abs(T - 25.0) > 0.01) if lock_T is None
-                                  else bool(lock_T))
-        s.composition_locked = ((bool(composition) or bool(main_component))
-                                  if lock_comp is None else bool(lock_comp))
-        self.fs.streams[sid] = s
-        return sid
-
-    def _add_example_extra(self, name, flowrate, price, units="tm",
-                           stream="Utilities"):
-        self.fs.opex_extras.append({
-            "name": name, "units": units, "time_basis": "year",
-            "flowrate": float(flowrate), "price_usd_per_unit": float(price),
-            "stream": stream,
-        })
-
-    def _set_example_labor(self, labor_usd_per_year):
-        self.fs.fixed_overrides["Labor"] = float(labor_usd_per_year)
-
-    def _set_block_duty(self, bid, duty_kw):
-        if bid in self.fs.blocks:
-            self.fs.blocks[bid].duty = float(duty_kw)
-            self.fs.blocks[bid].duty_locked = (abs(duty_kw) > 1e-9)
