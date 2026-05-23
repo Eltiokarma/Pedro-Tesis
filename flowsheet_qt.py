@@ -6399,23 +6399,9 @@ class FlowsheetMainWindow(QMainWindow):
             self._bubble_manager.refresh_all()
         # auditar conexiones semánticas
         sem_issues = fval.validate_all_streams(self.fs)
-        # mostrar resumen
-        summary = result.summary()
-        if sem_issues:
-            summary += "\n\n─ Validación semántica de conexiones ─\n"
-            for name, sev, msg in sem_issues:
-                tag = "⚠" if sev == "warn" else "✗"
-                summary += f"\n{tag} {name}:\n"
-                # solo la primera línea del mensaje (compacto)
-                first_line = msg.split("\n")[0] if msg else ""
-                summary += f"  {first_line}\n"
-        dlg = QMessageBox(self)
-        title = "Solver: OK" if (result.success and not sem_issues) \
-                else "Solver: revisar"
-        dlg.setWindowTitle(title)
-        dlg.setText("Resumen del solver:")
-        dlg.setDetailedText(summary)
-        dlg.exec()
+        # mostrar resumen en el diálogo visual de resultado
+        from solver_report import show_solver_report
+        show_solver_report(result, sem_issues, parent=self)
 
         # ─── Hook automático: predictor de reacciones (Fase 8) ───
         # Despues de Solve, correr el analizador pasivo. NO afecta el
