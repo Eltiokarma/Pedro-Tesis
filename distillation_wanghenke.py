@@ -215,7 +215,80 @@ def _solve_tridiagonal(A: List[float], B: List[float],
     return x
 
 
-def wang_henke(comps:       List[str],
+def wang_henke(comps, feed_z, F, T_feed_K, P_bar, N, feed_stage,
+               D_over_F, R, max_iter=30, tol=1e-4, spec=None):
+    """Solver riguroso Wang-Henke (MESH) con condensador/reboiler como
+    etapas de balance propio.  Dos contratos (mutuamente excluyentes):
+
+      · DISEÑO (default, spec=None): D_over_F + R fijos → resuelve las
+        composiciones del destilado y el fondo como OUTPUT del balance.
+      · SPEC (spec={'LK': idx|nombre, 'x_D_LK': t, 'x_B_LK': t}): el user
+        fija pureza objetivo del LK en el destilado + R; el solver ajusta
+        D/F por Newton/bisección externo hasta que x_D_LK[result] = target.
+        Si la pureza es físicamente inalcanzable (azeótropo, N insuficiente),
+        devuelve converged=False con un warning — NO miente reportando
+        convergencia con la pureza pedida (bug que arregla P3).
+
+    Returns: dict (ver _wh_solve_design) + 'warnings' (lista) y, en modo
+    spec, 'spec_achieved' (bool) y 'D_over_F' resuelto.
+
+    NOTE (P3.2): el modo 'spec' es opt-in; el contrato por D/F (diseño)
+    se mantiene como default para backward-compat con solve_columns().
+    """
+    if spec is None:
+        return _wh_solve_design(comps, feed_z, F, T_feed_K, P_bar, N,
+                                feed_stage, D_over_F, R, max_iter, tol)
+
+    # ---- modo SPEC: bisección sobre D/F para alcanzar x_D_LK objetivo ----
+    lk = spec.get("LK", 0)
+    lk_idx = lk if isinstance(lk, int) else (comps.index(lk) if lk in comps else 0)
+    x_D_target = float(spec.get("x_D_LK", 0.9))
+    warnings_sp = []
+
+    def x_top_at(df):
+        r = _wh_solve_design(comps, feed_z, F, T_feed_K, P_bar, N,
+                             feed_stage, df, R, max_iter, tol)
+        return r
+
+    # x_D_LK crece cuando D/F decrece (destilado más chico → más puro).
+    # Cota física: D·x_D_LK ≤ F·z_LK ⇒ D/F ≤ z_LK/x_D_target.
+    z_lk = feed_z[lk_idx] / sum(feed_z) if sum(feed_z) > 0 else feed_z[lk_idx]
+    df_hi = min(0.98, max(0.02, z_lk / max(x_D_target, 1e-6)))
+    df_lo = 0.01
+    best = None
+    for _ in range(40):
+        df_mid = 0.5 * (df_lo + df_hi)
+        r = x_top_at(df_mid)
+        if r is None:
+            df_hi = df_mid
+            continue
+        best = r
+        x_top_lk = r["x_profile"][0][lk_idx]
+        if abs(x_top_lk - x_D_target) < 1e-3:
+            break
+        if x_top_lk < x_D_target:
+            df_hi = df_mid     # bajar D/F → más puro
+        else:
+            df_lo = df_mid
+    if best is None:
+        return None
+    x_top_lk = best["x_profile"][0][lk_idx]
+    spec_achieved = abs(x_top_lk - x_D_target) <= 5e-3
+    best.setdefault("warnings", [])
+    best["spec_achieved"] = spec_achieved
+    best["D_over_F"] = best.get("D", 0.0) / F if F > 0 else None
+    if not spec_achieved:
+        # Pureza inalcanzable: el mejor x_D_LK alcanzable < objetivo.
+        best["converged"] = False
+        best["warnings"].append(
+            f"pureza inalcanzable: x_D_LK máx ≈ {x_top_lk:.3f} < objetivo "
+            f"{x_D_target:.3f} (posible AZEOTROPO o N insuficiente). El solver "
+            f"NO puede alcanzar esta pureza con destilación simple a estas "
+            f"condiciones.")
+    return best
+
+
+def _wh_solve_design(comps:       List[str],
                 feed_z:      List[float],
                 F:           float,
                 T_feed_K:    float,
@@ -226,7 +299,9 @@ def wang_henke(comps:       List[str],
                 R:           float,
                 max_iter:    int   = 30,
                 tol:         float = 1e-4) -> Optional[Dict]:
-    """Solver Wang-Henke (Sum-Rates) para columna multicomponente.
+    """Núcleo Wang-Henke en modo DISEÑO (D/F y R fijos).  Resuelve las
+    composiciones por etapa.  Lo invoca wang_henke() (que además ofrece el
+    modo 'spec' por Newton externo sobre D/F).
 
     Args:
         comps:      lista de C componentes (nombres canónicos thermo_db)
@@ -479,4 +554,5 @@ def wang_henke(comps:       List[str],
         Q_reb_kW=Q_reb_kW,
         D=D, B=B,
         V_var=V_var,
+        warnings=[],
     )
