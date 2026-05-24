@@ -55,3 +55,62 @@ def audit_compressor_temperatures(fs, tol_C=30.0):
                 "delta": T_isen - T_decl,
             })
     return issues
+
+
+def _has_heat_source_upstream(fs, b):
+    """True si algún bloque directamente upstream del reactor es un heater
+    o fired heater (provee el calor para llegar a T_op)."""
+    for s in fs.streams.values():
+        if s.dst != b.id:
+            continue
+        src = fs.blocks.get(s.src)
+        if src is None:
+            continue
+        et = (src.eq_type or "").lower()
+        if "fired" in et or "heater" in et:
+            return True
+    return False
+
+
+def audit_reactor_feed_temperatures(fs, gap_C=50.0):
+    """Detecta "reactores usados como horno": declaran T_op_K muy por encima
+    de la T del feed pero NO tienen un heater/fired_heater upstream que
+    aporte ese calor.  Es la T análoga al bug de los compresores (gap entre
+    T declarada y la física, sin fuente de calor que lo justifique).
+
+    Regla: si T_op − T_feed_max > gap_C y no hay heater/fired upstream → flag.
+
+    Returns:
+        list de dicts {block, T_op, T_feed, gap}.
+    """
+    issues = []
+    for b in fs.blocks.values():
+        if "reactor" not in (b.eq_type or "").lower():
+            continue
+        T_op_K = float(getattr(b, "T_op_K", 0.0) or 0.0)
+        if T_op_K <= 0:
+            continue
+        T_op_C = T_op_K - 273.15
+        ins = [s for s in fs.streams.values()
+                if s.dst == b.id and (s.role or "") not in ("utility", "ambient")]
+        if not ins:
+            continue
+        T_feed = max(s.temperature for s in ins)
+        gap = T_op_C - T_feed
+        if gap <= gap_C:
+            continue
+        # El reactor SÍ tiene fuente de calor (no es defecto) si:
+        #   · hay heater/fired upstream, o
+        #   · tiene duty propio > 0 (jacketed/fired: la chaqueta lo calienta), o
+        #   · la reacción es exotérmica (heat_of_reaction < 0 → autotérmico).
+        duty = float(getattr(b, "duty", 0.0) or 0.0)
+        hor = float(getattr(b, "heat_of_reaction", 0.0) or 0.0)
+        if (_has_heat_source_upstream(fs, b) or duty > 1.0 or hor < -1.0):
+            continue
+        # tipo de defecto: si la reacción DEBERÍA ser exotérmica (combustión/
+        # oxidación) pero hor=0, el fix es declarar hor; si es endotérmica/
+        # neutra, falta un precalentador.
+        issues.append({"block": b.name, "T_op": T_op_C,
+                        "T_feed": T_feed, "gap": gap})
+    return issues
+

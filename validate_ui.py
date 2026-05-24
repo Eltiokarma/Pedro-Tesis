@@ -330,6 +330,21 @@ def check_features():
     print(f"   compresores incoherentes: {n_comp}  "
           f"{'✓' if n_comp == 0 else '✗'}")
 
+    print("\n10. Reactor-como-horno (gap T_op vs T_feed sin fuente, advisory):")
+    n_furn = 0
+    for _nm in sorted(_builders):
+        fs = fm.Flowsheet()
+        getattr(_B(fs), _nm)()
+        fsv.solve(fs)
+        for it in _at.audit_reactor_feed_temperatures(fs, gap_C=50.0):
+            n_furn += 1
+            print(f"   ⚠ {_nm}/{it['block']}: T_op={it['T_op']:.0f}°C, "
+                  f"T_feed={it['T_feed']:.0f}°C, gap={it['gap']:.0f}°C")
+    # ADVISORY: no bloquea la suite (son simplificaciones de modelado
+    # conocidas — reactor autotérmico con hor sin declarar, o feed que
+    # necesita precalentador).  Surface, no fail.
+    print(f"   reactores marcados (advisory, no bloquea): {n_furn}")
+
     print(f"\n{'='*70}")
     if issues:
         print(f"⚠ ENCONTRÉ {len(issues)} ISSUES:")
