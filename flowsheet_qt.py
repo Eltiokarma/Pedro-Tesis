@@ -7586,15 +7586,19 @@ class FlowsheetMainWindow(QMainWindow):
                         if LK != HK and LK in feed.composition and HK in feed.composition:
                             try:
                                 import distillation_fug as fug
+                                import flowsheet_solver as _fsv
+                                T_feed_K = feed.temperature + 273.15
+                                q_feed = _fsv._column_feed_q(feed, T_feed_K, 1.013)
                                 res = fug.design_column(
                                     feed_composition=feed.composition,
                                     F=feed.mass_flow,
-                                    T_K=feed.temperature + 273.15,
+                                    T_K=T_feed_K,
                                     P_bar=1.013,
                                     light_key=LK, heavy_key=HK,
                                     x_D_LK=dist_out.composition.get(LK, 0.9),
                                     x_B_LK=bot_out.composition.get(LK, 0.05),
                                     R_factor=1.3,
+                                    q=q_feed,
                                     T_top_K=dist_out.temperature + 273.15,
                                     T_bot_K=bot_out.temperature + 273.15,
                                 )
@@ -7604,6 +7608,18 @@ class FlowsheetMainWindow(QMainWindow):
                                     txt += f"\nα tope     {res.get('alpha_top',0):.2f}"
                                     txt += f"\nα fondo    {res.get('alpha_bot',0):.2f}"
                                     txt += f"\nα promedio {res.get('alpha_avg',0):.2f}"
+                                    _q = res.get("q", 1.0)
+                                    if abs(_q - 1.0) < 0.02:   _fase = "líq sat"
+                                    elif abs(_q) < 0.02:       _fase = "vap sat"
+                                    elif 0.0 < _q < 1.0:       _fase = "bifásico"
+                                    elif _q > 1.0:             _fase = "líq subenfr"
+                                    else:                      _fase = "vap sobrecalentado"
+                                    txt += f"\nq feed     {_q:.2f}  ({_fase})"
+                                    _ncomp = res.get("n_signif_comps", 0)
+                                    if _ncomp >= 3:
+                                        txt += f"\nMulticomp  {_ncomp} comp · Underwood real"
+                                        if res.get("underwood_fallback"):
+                                            txt += "\n⚠ Underwood mc no convergió, usado binario"
                                     if res.get("N_min") is not None:
                                         txt += f"\nN_min      {res['N_min']:.1f}  (Fenske)"
                                     if res.get("R_min") is not None:
@@ -7620,6 +7636,40 @@ class FlowsheetMainWindow(QMainWindow):
                                         txt += f"\nQ_reb      {res['Q_reb_kW']:+.1f} kW"
                                     for w in res.get("warnings", [])[:2]:
                                         txt += f"\n{w[:120]}"
+
+                                    # ── Bloque WANG-HENKE (MESH) ──
+                                    wh_res = getattr(b, "_wh_result", None)
+                                    if (getattr(b, "column_method", "fug") == "wanghenke"
+                                            and wh_res is not None):
+                                        Twh = wh_res.get("T_profile") or []
+                                        Vwh = wh_res.get("V_profile") or []
+                                        conv = wh_res.get("converged", False)
+                                        txt += "\n\n─ WANG-HENKE (MESH) ─"
+                                        txt += f"\nN etapas   {len(Twh)}"
+                                        txt += f"\nEtapa feed {wh_res.get('feed_stage', '-')}"
+                                        txt += (f"\nConvergió  {'sí' if conv else 'NO'}"
+                                                f" en {wh_res.get('iterations', 0)} iter")
+                                        if Twh:
+                                            txt += f"\nT tope     {Twh[0]-273.15:.1f} °C"
+                                            txt += f"\nT fondo    {Twh[-1]-273.15:.1f} °C"
+                                        if len(Vwh) >= 2:
+                                            txt += f"\nV tope     {Vwh[1]:.2f} mol/s"
+                                            txt += f"\nV fondo    {Vwh[-1]:.2f} mol/s"
+                                        txt += (f"\nΔV/V_avg   {wh_res.get('V_var',0.0)*100:.1f}%"
+                                                f"  (0% = MES; >5% = MESH activo)")
+                                        if wh_res.get("Q_cond_kW") is not None:
+                                            txt += f"\nQ_cond     {wh_res['Q_cond_kW']:+.1f} kW"
+                                        if wh_res.get("Q_reb_kW") is not None:
+                                            txt += f"\nQ_reb      {wh_res['Q_reb_kW']:+.1f} kW"
+                                        be = wh_res.get("balance_err")
+                                        if be is not None:
+                                            txt += f"\nBalance E  {be*100:.1f}%  (cierre global)"
+                                        if not conv:
+                                            txt += "\n✗ NO CONVERGIÓ — revisar N, R_factor, o pureza objetivo"
+                                        for w in wh_res.get("warnings", []):
+                                            wu = w.upper()
+                                            if "AZEOTROPO" in wu or "INALCANZABLE" in wu:
+                                                txt += f"\n✗ {w[:80]}"
                             except Exception:
                                 pass
 

@@ -134,6 +134,20 @@ def collect_equipment_rows(fs, year_target=2024):
             row["Column N"]   = float(getattr(b, "_column_N", 0.0) or 0.0)
             row["Q_reb kW"]   = float(getattr(b, "_column_Q_reb", 0.0) or 0.0)
             row["Q_cond kW"]  = float(getattr(b, "_column_Q_cond", 0.0) or 0.0)
+            # Campos nuevos (P4) — al final del bloque Column para no romper
+            # hojas guardadas (orden de columnas existentes intacto).
+            row["Column q"]      = float(getattr(b, "_column_q", 1.0) or 1.0)
+            row["Column method"] = str(getattr(b, "column_method", "fug") or "fug")
+            _whr = getattr(b, "_wh_result", None)
+            if _whr is not None:
+                row["Column conv"]     = "sí" if _whr.get("converged") else "no"
+                row["Column ΔV/V"]     = float(_whr.get("V_var", 0.0) or 0.0)
+                _be = _whr.get("balance_err")
+                row["Column bal_err%"] = float(_be * 100.0) if _be is not None else 0.0
+            else:
+                row["Column conv"]     = "n/a"
+                row["Column ΔV/V"]     = 0.0
+                row["Column bal_err%"] = 0.0
         # Flash specs
         if getattr(b, "flash_active", False):
             row["Flash T K"]  = float(getattr(b, "flash_T_K", 0.0) or 0.0)

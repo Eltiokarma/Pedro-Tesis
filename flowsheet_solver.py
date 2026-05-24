@@ -2140,6 +2140,7 @@ def solve_columns(fs):
         # estimación inicial; WH refina la distribución de no-keys
         # con balance MESH por etapa.
         method = getattr(b, "column_method", "fug")
+        wh_conv = None      # None = no se corrió WH; True/False = resultado
         if method == "wanghenke":
             try:
                 import distillation_wanghenke as _wh
@@ -2167,12 +2168,32 @@ def solve_columns(fs):
                               for zi, m in zip(z_mass, mws))
                 N_wh = b.column_N_stages or max(int(res["N"]) + 2, 10)
                 fs_wh = max(2, N_wh // 2)
+                # max_iter más alto: cerca de azeótropos WH converge lento
                 wh_res = _wh.wang_henke(
                     comps=comps, feed_z=z_mol, F=F_mol,
                     T_feed_K=T_feed_K, P_bar=1.013,
                     N=N_wh, feed_stage=fs_wh,
                     D_over_F=res["D"] / res["F"],
-                    R=res["R"], max_iter=20)
+                    R=res["R"], max_iter=80)
+                if wh_res is not None:
+                    # Métricas para la UI (P4): etapa de feed + cierre global
+                    wh_res["feed_stage"] = fs_wh
+                    try:
+                        H_F = _wh._enthalpy_liquid(comps, z_mol, T_feed_K)
+                        H_D = _wh._enthalpy_liquid(comps, wh_res["x_profile"][0],
+                                                   wh_res["T_profile"][0])
+                        H_B = _wh._enthalpy_liquid(comps, wh_res["x_profile"][-1],
+                                                   wh_res["T_profile"][-1])
+                        lhs = (F_mol * H_F / 1000.0 + wh_res["Q_reb_kW"]
+                               + wh_res["Q_cond_kW"])
+                        rhs = (wh_res["D"] * H_D + wh_res["B"] * H_B) / 1000.0
+                        wh_res["balance_err"] = (abs(lhs - rhs)
+                                                 / max(abs(wh_res["Q_reb_kW"]), 1e-9))
+                    except Exception:
+                        wh_res["balance_err"] = None
+                    # Persistir para el panel (igual que _column_N, _column_R)
+                    b._wh_result = wh_res
+                    wh_conv = bool(wh_res.get("converged"))
                 if wh_res is not None and wh_res.get("converged"):
                     # Reemplazar res con composiciones WH
                     # Convertir x_top, x_bot de mol → mass
@@ -2265,12 +2286,24 @@ def solve_columns(fs):
         b._column_R = res.get("R")
         b._column_N_feed = res.get("N_feed")
         b._column_alpha_avg = res.get("alpha_avg")
+        b._column_q = res.get("q", 1.0)
 
-        msgs.append(
-            f"✓ Column {b.name}: N={res['N']:.1f}, R={res['R']:.2f}, "
-            f"Q_reb={Q_total:+.1f}kW, "
-            f"D={feed.mass_flow*D_F:.0f} B={feed.mass_flow*B_F:.0f}"
-        )
+        # Flag de convergencia WH para la lista de mensajes (P4.5)
+        if wh_conv is True:
+            _wh_flag = ", WH:conv"
+        elif wh_conv is False:
+            _wh_flag = ", WH:NO conv"
+        else:
+            _wh_flag = ""
+        if wh_conv is False:
+            msgs.append(
+                f"⚠ Column {b.name}: FUG OK pero WH no convergió")
+        else:
+            msgs.append(
+                f"✓ Column {b.name}: N={res['N']:.1f}, R={res['R']:.2f}, "
+                f"Q_reb={Q_total:+.1f}kW, "
+                f"D={feed.mass_flow*D_F:.0f} B={feed.mass_flow*B_F:.0f}{_wh_flag}"
+            )
         if res.get("warnings"):
             for w in res["warnings"]:
                 msgs.append(f"⚠ Column {b.name}: {w[:120]}")
