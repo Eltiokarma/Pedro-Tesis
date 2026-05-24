@@ -561,6 +561,12 @@ def size_whb(block, fs) -> Optional[float]:
 
     ΔH_vap y η salen de la utility de generación elegida (bfw_to_steam_*).
     Si el bloque no resuelve a una utility de generación, devuelve None.
+
+    GUARD DE SUB-ESCALA: si el caudal calculado cae por debajo del S_min
+    de la correlación Sinnott del eq_type, emite un UserWarning y persiste
+    diagnostics en block._whb_diagnostics (con scale_mismatch=True si la
+    diferencia es >5×), devolviendo S clampeado al floor.  Esto evita
+    extrapolar silenciosamente la correlación Sinnott fuera de su rango.
     """
     import equipment_ports as ep
     Q_kW = abs(float(block.duty or 0.0))
@@ -575,8 +581,25 @@ def size_whb(block, fs) -> Optional[float]:
         return None
     dh_vap = util["delta_h"]
     eff    = util.get("efficiency", 0.85)
-    S_kg_per_h = Q_kW * 3600.0 / dh_vap * eff
-    return max(S_kg_per_h, 5_000.0)        # clamp al S_min del Packaged
+    S_real = Q_kW * 3600.0 / dh_vap * eff
+
+    spec  = ec.EQUIPMENT_DATA.get(block.eq_type, {})
+    S_min = float(spec.get("S_min", 0.0) or 0.0)
+    diag = {"steam_rate_kg_h": S_real, "S_min": S_min,
+            "scale_mismatch": False, "warning": ""}
+    if S_min > 0 and S_real < S_min:
+        diag["scale_mismatch"] = (S_real * 5.0 < S_min)
+        diag["warning"] = (
+            f"WHB sub-escala: steam_rate={S_real:.0f} kg/h < "
+            f"S_min={S_min:.0f} kg/h.  Considerá usar "
+            f"'Heat exch. — kettle reboiler' o 'Heat exch. — fixed tube' "
+            f"para esta escala.")
+        import warnings
+        warnings.warn(diag["warning"], UserWarning, stacklevel=2)
+        block._whb_diagnostics = diag
+        return S_min                      # clamp al floor de la correlación
+    block._whb_diagnostics = diag
+    return S_real
 
 
 def autoselect_whb_subtype(steam_kg_per_h):

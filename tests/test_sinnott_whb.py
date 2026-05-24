@@ -84,6 +84,55 @@ class TestWHBSubtypeAutoselect(unittest.TestCase):
                          "Heat exch. — WHB packaged")
 
 
+class TestWHBSubscaleGuard(unittest.TestCase):
+    def _subscale_fs(self, duty_kw):
+        import flowsheet_model as fm
+        fs = fm.Flowsheet()
+        b = fm.Block(id=fs.new_id(), name="E-WHB",
+                     eq_type="Heat exch. — WHB packaged", S=0.0)
+        b.duty = duty_kw
+        b.duty_locked = True
+        fs.blocks[b.id] = b
+        src, dst = fs.new_id(), fs.new_id()
+        for name, s_, d_, T in (("hot-in", src, b.id, 500.0),
+                                 ("hot-out", b.id, dst, 300.0)):
+            sid = fs.new_id()
+            st = fm.Stream(id=sid, name=name, src=s_, dst=d_,
+                           mass_flow=10000.0, temperature=T,
+                           phase="gas", role="internal")
+            st.mass_flow_locked = True
+            st.temperature_locked = True
+            fs.streams[sid] = st
+        return fs, b
+
+    def test_size_whb_subscale_warning(self):
+        import warnings
+        import equipment_sizing as es
+        # duty -111 kW @ T_avg 400 (HP, ΔH 1700, η 0.85) → ~200 kg/h,
+        # muy por debajo del floor 5 000 kg/h del WHB packaged.
+        fs, b = self._subscale_fs(-111.0)
+        with warnings.catch_warnings(record=True) as w:
+            warnings.simplefilter("always")
+            S = es.size_whb(b, fs)
+        self.assertTrue(any("sub-escala" in str(x.message) for x in w),
+                        f"no se emitió warning de sub-escala: {[str(x.message) for x in w]}")
+        self.assertEqual(S, 5_000.0)                       # clamp al floor
+        self.assertTrue(b._whb_diagnostics["scale_mismatch"])
+        self.assertLess(b._whb_diagnostics["steam_rate_kg_h"], 5_000.0)
+
+    def test_size_whb_in_range_no_warning(self):
+        import warnings
+        import equipment_sizing as es
+        # duty -25 000 kW → ~38 000 kg/h, dentro del rango → sin warning.
+        fs, b = self._subscale_fs(-25_000.0)
+        with warnings.catch_warnings(record=True) as w:
+            warnings.simplefilter("always")
+            S = es.size_whb(b, fs)
+        self.assertFalse(any("sub-escala" in str(x.message) for x in w))
+        self.assertGreater(S, 5_000.0)
+        self.assertFalse(b._whb_diagnostics["scale_mismatch"])
+
+
 class TestCatalogAuditability(unittest.TestCase):
     def test_every_entry_has_source_and_correlation(self):
         for name, spec in ec.EQUIPMENT_DATA.items():

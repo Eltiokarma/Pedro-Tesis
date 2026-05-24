@@ -1974,9 +1974,14 @@ class ExampleBuilder:
         self.fs.blocks[r101].reactor_mode = "equilibrium"
         self.fs.blocks[r101].T_op_K = 525.0
         self.fs.blocks[r101].P_op_bar = 80.0
-        # Post-reactor cooler (genera VAPOR HP en WHB)
-        e103 = self._add_example_block("E-103","Heat exch. — kettle reboiler",
-                                           95.0,  1860, 300)
+        # Post-reactor cooler = WHB del loop de síntesis de metanol.
+        # Refit a clase WHB packaged (Sinnott Tabla 6.6): el catálogo
+        # Turton no tenía categoría para WHBs gas-vapor industriales
+        # (ver docs/sinnott_whb_addition_2026-05.md).  S = caudal de
+        # vapor LP [kg/h] generado por los ~22.7 MW de calor de síntesis
+        # (≈31 600 kg/h), NO área.  Autoselect → bfw_to_steam_LP (revenue).
+        e103 = self._add_example_block("E-103","Heat exch. — WHB packaged",
+                                           31583.0,  1860, 300)
 
         # ============ SECCIÓN 200 — SEPARACIÓN ============
         v201 = self._add_example_block("V-201","Vessel — vertical",
@@ -2617,7 +2622,15 @@ class ExampleBuilder:
         # varios bancos paralelos en planta industrial real).
         e201     = self._add_example_block("E-201","Heat exch. — kettle reboiler",
                                                95.0, 1260, 450)
-        # Economizador (gas 400 → 200 °C, calienta otra corriente)
+        # E-202 economizador: gas 400→200 °C, duty 92.6 kW → ~167 kg/h
+        # vapor LP.  En una planta Ostwald INDUSTRIAL real esto sería
+        # parte del tren de recuperación con WHB (cf. Ullmann's "Nitric
+        # Acid").  Pero a la escala chica de este ejemplo (HNO3 piloto/
+        # laboratorio) el caudal recuperable está ~30× por debajo del
+        # floor Sinnott Tabla 6.6 para WHB packaged (5 000 kg/h).  Se
+        # modela como fixed tube + cooling_water; size_whb emite warning
+        # de sub-escala si se intenta refitear.  Trade-off de scope
+        # explícito (no error de modelado).  Ver docs/sinnott_whb_addition_2026-05.md.
         e202     = self._add_example_block("E-202","Heat exch. — fixed tube",
                                               300.0, 1560, 450)
         # Enfriador-condensador (200 → 50 °C, condensa H2O + HNO3 débil)
