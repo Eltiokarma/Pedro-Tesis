@@ -3990,7 +3990,7 @@ class ExampleBuilder:
 
         # R-201 quemador HCl — Modo B
         self.fs.blocks[r201].reactions = ["R028_PLACEHOLDER"]
-        self.fs.blocks[r201].T_op_K    = 1073.0
+        self.fs.blocks[r201].T_op_K    = 673.0    # T del bloque = output quenched 400°C (la flama 800°C se lumpea con el quench)
         self.fs.blocks[r201].P_op_bar  = 1.1
         # ΔH ≈ -184.6 kJ/mol_H2 × 5.69e3/2.016 kmol/y = -521 GJ/y
         # = -16.5 kW continuo.  Por kg input (205.7 t/y): -2534 kJ/kg.
