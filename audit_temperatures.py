@@ -93,10 +93,17 @@ def audit_reactor_feed_temperatures(fs, gap_C=50.0):
         T_op_C = T_op_K - 273.15
         ins = [s for s in fs.streams.values()
                 if s.dst == b.id and (s.role or "") not in ("utility", "ambient")]
+        outs = [s for s in fs.streams.values()
+                 if s.src == b.id and (s.role or "") not in ("utility", "ambient")]
         if not ins:
             continue
         T_feed = max(s.temperature for s in ins)
-        gap = T_op_C - T_feed
+        # La señal de "T_op desconectada de las corrientes" es que NINGUNA
+        # corriente (feed NI producto) se acerca a T_op.  Un quemador
+        # autotérmico declara su producto caliente (≈T_op) → no es defecto;
+        # talara declara feed Y producto muy por debajo de T_op → sí lo es.
+        T_stream_max = max([T_feed] + [s.temperature for s in outs])
+        gap = T_op_C - T_stream_max
         if gap <= gap_C:
             continue
         # El reactor SÍ tiene fuente de calor (no es defecto) si:
