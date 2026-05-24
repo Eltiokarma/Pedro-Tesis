@@ -3598,10 +3598,32 @@ class BlockItem(QGraphicsItemGroup):
                        lambda: self.editor.start_connection(self.model.id))
         menu.addAction(ic_edit or QIcon(), "Editar propiedades… (doble-click)",
                        lambda: self.editor.edit_block(self.model))
+        # Toggle de burbuja de diagnóstico para intercambiadores de calor
+        is_hx = False
+        try:
+            import equipment_costs as _ec
+            is_hx = _ec.EQUIPMENT_DATA.get(self.model.eq_type, {}).get(
+                "categoria") == "Heat exchangers"
+        except Exception:
+            is_hx = False
+        if is_hx:
+            menu.addSeparator()
+            on = bool(getattr(self.model, "bubble_visible", False))
+            menu.addAction(
+                QIcon(),
+                "Ocultar diagnóstico HX" if on else "Mostrar diagnóstico HX",
+                self._toggle_hx_bubble)
+        menu.addSeparator()
         menu.addAction(ic_delete or QIcon(), "Borrar",
                        lambda: self.editor.delete_block(self.model.id))
         menu.exec(event.screenPos())
         event.accept()
+
+    def _toggle_hx_bubble(self):
+        self.model.bubble_visible = not bool(getattr(self.model, "bubble_visible", False))
+        mgr = getattr(self.editor, "_hx_bubble_manager", None)
+        if mgr is not None:
+            mgr.refresh_all()
 
 
 # ======================================================
@@ -5062,6 +5084,7 @@ class FlowsheetMainWindow(QMainWindow):
         # Bubble manager se inicializa al final del __init__ (necesita
         # stream_items_iter pero ese método ya está disponible).
         self._bubble_manager = None
+        self._hx_bubble_manager = None
 
         # state de conexión pendiente (right-click + left-click)
         self._connecting_from: int = None
@@ -5136,6 +5159,22 @@ class FlowsheetMainWindow(QMainWindow):
         except Exception as _e:
             print(f"[bubbles] no se pudo inicializar: {_e}")
             self._bubble_manager = None
+
+        # ── HX diagnostic bubbles (parche HX riguroso) ──
+        # Burbujas ancladas a bloques HX con block.bubble_visible=True.
+        try:
+            from hx_bubbles import HXBubbleManager
+            import hx_edu as _hx_edu
+            self._hx_bubble_manager = HXBubbleManager(
+                self.view,
+                lambda: self.fs,
+                self.block_items_iter,
+                lambda topic: _hx_edu.open_topic(topic, parent=self),
+            )
+            self._hx_bubble_manager.refresh_all()
+        except Exception as _e:
+            print(f"[hx-bubbles] no se pudo inicializar: {_e}")
+            self._hx_bubble_manager = None
 
     def _tick_stream_animation(self):
         """Avanza el offset de chevrons en cada stream y los re-renderiza.
@@ -6069,6 +6108,8 @@ class FlowsheetMainWindow(QMainWindow):
         # Burbujas: limpiar todas (no hay streams)
         if getattr(self, "_bubble_manager", None) is not None:
             self._bubble_manager.refresh_all()
+        if getattr(self, "_hx_bubble_manager", None) is not None:
+            self._hx_bubble_manager.refresh_all()
 
     def action_open(self):
         path, _ = QFileDialog.getOpenFileName(
@@ -6546,6 +6587,8 @@ class FlowsheetMainWindow(QMainWindow):
         # Refrescar burbujas con los valores resueltos
         if self._bubble_manager is not None:
             self._bubble_manager.refresh_all()
+        if self._hx_bubble_manager is not None:
+            self._hx_bubble_manager.refresh_all()
         # auditar conexiones semánticas
         sem_issues = fval.validate_all_streams(self.fs)
         # mostrar resumen en el diálogo visual de resultado
@@ -7105,6 +7148,8 @@ class FlowsheetMainWindow(QMainWindow):
             self._on_selection_changed()
             if self._bubble_manager is not None:
                 self._bubble_manager.refresh_all()
+            if self._hx_bubble_manager is not None:
+                self._hx_bubble_manager.refresh_all()
             self.end_action(f"Editar {stream.name}", before_snapshot)
 
         def _on_cancel():
@@ -7121,6 +7166,8 @@ class FlowsheetMainWindow(QMainWindow):
                 except Exception: pass
             if self._bubble_manager is not None:
                 self._bubble_manager.refresh_all()
+            if self._hx_bubble_manager is not None:
+                self._hx_bubble_manager.refresh_all()
 
         self._stream_inspector_dock.show_for(
             stream, self.fs,
@@ -7334,6 +7381,8 @@ class FlowsheetMainWindow(QMainWindow):
         # Burbujas: reconcilar tras cargar / undo / redo
         if getattr(self, "_bubble_manager", None) is not None:
             self._bubble_manager.refresh_all()
+        if getattr(self, "_hx_bubble_manager", None) is not None:
+            self._hx_bubble_manager.refresh_all()
 
     # ---------------------------------------------------
     # UNDO / REDO infrastructure
@@ -7424,6 +7473,8 @@ class FlowsheetMainWindow(QMainWindow):
         # Burbujas: actualizar leaders (anclas de streams cambiaron)
         if getattr(self, "_bubble_manager", None) is not None:
             self._bubble_manager._refresh_leaders()
+        if getattr(self, "_hx_bubble_manager", None) is not None:
+            self._hx_bubble_manager._refresh_leaders()
 
     def _remove_block_item(self, bid):
         item = self.scene.block_items.pop(bid, None)

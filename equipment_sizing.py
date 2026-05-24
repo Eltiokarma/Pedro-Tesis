@@ -144,25 +144,252 @@ def _flow_kg_s(mass_flow_tm_yr):
 # Sizers por categoría
 # ─────────────────────────────────────────────────────────────
 
-def size_heat_exchanger(block, fs) -> Optional[float]:
-    """A = |Q| / (U · ΔT_lm).  Q de block.duty [kW], devuelve m².
+def _service_label(hot_phase, cold_phase, pc) -> str:
+    """Etiqueta legible del servicio térmico (para la UI rigurosa)."""
+    if pc:
+        pcl = str(pc).lower()
+        if "cond" in pcl:
+            return "condensación de vapor"
+        if "evap" in pcl or "boil" in pcl:
+            return "evaporación de líquido"
+        if "refrig" in pcl:
+            return "refrigerante"
+    _is_vap = lambda p: any(k in (p or "").lower() for k in ("gas", "vap"))
+    h = "gas" if _is_vap(hot_phase) else "líquido"
+    c = "gas" if _is_vap(cold_phase) else "líquido"
+    return f"{h}-{c}"
 
-    Precedencia para U y ΔT_lm:
-      1. block.U_override / block.dtlm_override (si > 0)
-      2. U_TYPICAL[eq_type] / DTLM_TYPICAL[eq_type]
-      3. U_DEFAULT (400) / DTLM_DEFAULT (40)
+
+def _process_streams(fs, block):
+    """Separa corrientes de proceso (role != utility/ambient) de un HX."""
+    ins  = [s for s in fs.streams.values() if s.dst == block.id]
+    outs = [s for s in fs.streams.values() if s.src == block.id]
+    proc_in  = [s for s in ins  if (s.role or "") not in ("utility", "ambient")]
+    proc_out = [s for s in outs if (s.role or "") not in ("utility", "ambient")]
+    return ins, outs, proc_in, proc_out
+
+
+def _pair_by_mass(ins, outs):
+    """Empareja entradas con salidas por mass_flow más cercano (misma
+    línea física conserva caudal).  Devuelve lista de (in, out)."""
+    pairs, used = [], set()
+    for i in ins:
+        best, bd = None, float("inf")
+        for j, o in enumerate(outs):
+            if j in used:
+                continue
+            d = abs((i.mass_flow or 0) - (o.mass_flow or 0))
+            if d < bd:
+                bd, best = d, j
+        if best is not None:
+            used.add(best)
+            pairs.append((i, outs[best]))
+    return pairs
+
+
+def _rigorous_lmtd_cross(fs, block, diag):
+    """ΔT_lm + F + U para un cross-exchange (proceso-proceso).  Devuelve
+    (U, dTlm, F) o None si faltan las 4 T coherentes."""
+    import heat_exchanger_rigorous as hxr
+    ins  = [s for s in fs.streams.values() if s.dst == block.id]
+    outs = [s for s in fs.streams.values() if s.src == block.id]
+    pairs = _pair_by_mass(ins, outs)
+    hot = next(((i, o) for i, o in pairs if i.temperature > o.temperature), None)
+    cold = next(((i, o) for i, o in pairs if o.temperature > i.temperature), None)
+    if hot is None or cold is None:
+        return None
+    T_hi, T_ho = hot[0].temperature, hot[1].temperature
+    T_ci, T_co = cold[0].temperature, cold[1].temperature
+    lmtd, w = hxr.compute_lmtd_real(T_hi, T_ho, T_ci, T_co, flow="counter")
+    if w:
+        diag["warnings"].append(w)
+    if lmtd is None:
+        return None
+    denom_R = (T_co - T_ci)
+    denom_P = (T_hi - T_ci)
+    R = (T_hi - T_ho) / denom_R if abs(denom_R) > 1e-9 else 1.0
+    P = (T_co - T_ci) / denom_P if abs(denom_P) > 1e-9 else 0.0
+    F, wf = hxr.f_correction_factor(R, P, n_shell=1, n_tube=2)
+    if wf:
+        diag["warnings"].append(wf)
+    ap = hxr.check_approach(T_ho, T_ci)
+    if ap:
+        diag["warnings"].append(ap)
+    U = hxr.u_typical_by_service(hot[0].phase, cold[0].phase)
+    diag["T_h_in"], diag["T_h_out"] = T_hi, T_ho
+    diag["T_c_in"], diag["T_c_out"] = T_ci, T_co
+    diag["approach"] = min(T_ho - T_ci, T_hi - T_co)
+    diag["dT_min"]   = 10.0
+    diag["data_source"] = "computed_from_streams"
+    diag["n_shell"], diag["n_tube"] = 1, 2
+    diag["service"] = _service_label(hot[0].phase, cold[0].phase, None)
+    diag["cross_check"] = "cross-exchange (proceso-proceso)"
+    return U, lmtd, F
+
+
+def _rigorous_lmtd_simple(fs, block, diag):
+    """ΔT_lm + U para un HX simple (proceso + utility implícita).  La
+    utility se modela isotérmica a la T representativa de su T_range.
+    Devuelve (U, dTlm, F=1.0) o None si faltan datos."""
+    import heat_exchanger_rigorous as hxr
+    import equipment_ports as ep
+    _, _, proc_in, proc_out = _process_streams(fs, block)
+    if len(proc_in) != 1 or len(proc_out) != 1:
+        return None
+    T_pin, T_pout = proc_in[0].temperature, proc_out[0].temperature
+    duty = float(block.duty or 0.0)
+    T_avg = (T_pin + T_pout) / 2.0
+    util_key = ep.resolve_heat_source(block, T_avg)
+    if not util_key or util_key not in ep.UTILITIES:
+        return None
+    util = ep.UTILITIES[util_key]
+    t_lo, t_hi = util.get("T_range", (None, None))
+    if t_lo is None:
+        return None
+    util_type = util.get("type", "")
+
+    # Cambio de fase del PROCESO: vapor→líquido = condensación;
+    # líquido→vapor = evaporación.  Define el U de servicio.
+    ph_in  = (proc_in[0].phase  or "").lower()
+    ph_out = (proc_out[0].phase or "").lower()
+    _is_vap = lambda p: any(k in p for k in ("vap", "gas"))
+    pc = None
+    if _is_vap(ph_in) and not _is_vap(ph_out):
+        pc = "condensation"
+    elif _is_vap(ph_out) and not _is_vap(ph_in):
+        pc = "evaporation"
+
+    if duty > 0:
+        # calentamiento: la utility (vapor/horno) es el lado CALIENTE,
+        # isotérmica a la T alta de su rango.
+        T_hi = T_ho = t_hi
+        T_ci, T_co = T_pin, T_pout
+        if pc is None and util.get("type") == "heating" \
+                and util_key.startswith("steam"):
+            pc = "condensation"        # vapor de calefacción condensa
+    elif util_type == "generation":
+        # waste-heat boiler: el lado frío VAPORIZA BFW a T constante
+        # (Tsat del vapor producido) — no es el rango sensible de CW.
+        T_sat = float(util.get("T_sat", t_lo))
+        T_ci = T_co = T_sat
+        T_hi, T_ho = T_pin, T_pout
+    else:
+        # enfriamiento: la utility (agua/refrigerante) es el lado FRÍO,
+        # entra a la T baja del rango y sube ~ΔT sensible.
+        T_ci = t_lo
+        T_co = min(t_lo + 15.0, t_hi)
+        T_hi, T_ho = T_pin, T_pout
+        if pc is None and util_key == "refrigeration":
+            pc = "refrigerant"
+
+    lmtd, w = hxr.compute_lmtd_real(T_hi, T_ho, T_ci, T_co, flow="counter")
+    if w:
+        diag["warnings"].append(w)
+    if lmtd is None:
+        return None
+    ap = hxr.check_approach(T_ho, T_ci)
+    if ap:
+        diag["warnings"].append(ap)
+
+    # Guard de rango (punto 5): si la T del proceso excede el T_max de la
+    # utility por >50°C, advertir (típico WHB modelado como cooler normal).
+    t_proc_max = max(T_pin, T_pout)
+    if t_proc_max > t_hi + 50.0:
+        extra = (" — verificar si debería ser un WHB/steam-generator"
+                 if util_type == "cooling" else "")
+        diag["warnings"].append(
+            f"utility '{util_key}' fuera de rango: T_proceso="
+            f"{t_proc_max:.0f}°C vs T_max_util={t_hi:.0f}°C{extra}")
+
+    # U por servicio: si hay cambio de fase usar el U del servicio; si no,
+    # preferir el U calibrado por tipo de equipo (U_TYPICAL) — coherente
+    # con el catálogo y con el sizing previo.
+    if pc is not None:
+        U = hxr.u_typical_by_service(proc_in[0].phase, "water",
+                                     phase_change=pc)
+    else:
+        U = U_TYPICAL.get(block.eq_type) or hxr.u_typical_by_service(
+            proc_in[0].phase, "liquid")
+    diag["T_h_in"], diag["T_h_out"] = T_hi, T_ho
+    diag["T_c_in"], diag["T_c_out"] = T_ci, T_co
+    diag["approach"] = min(T_ho - T_ci, T_hi - T_co)
+    diag["dT_min"]   = 10.0
+    diag["data_source"] = "partial_from_utility_range"
+    diag["n_shell"], diag["n_tube"] = 1, 2
+    diag["service"] = _service_label(proc_in[0].phase, "water", pc)
+    diag["cross_check"] = f"simple HX (utility={util_key})"
+    return U, lmtd, 1.0
+
+
+def size_heat_exchanger(block, fs):
+    """A = |Q| / (U · F · ΔT_lm).  Q de block.duty [kW], devuelve
+    (A_m², diagnostics).
+
+    Cálculo riguroso (heat_exchanger_rigorous):
+      · cross-exchange → ΔT_lm real de las 4 T + factor F (Bowman 1940)
+        + U por servicio (Perry 11-3 / Sinnott 19.1).
+      · HX simple      → ΔT_lm proceso vs T de la utility (T_range).
+    Fallback a U_TYPICAL/DTLM_TYPICAL si faltan datos (con warning).
+
+    Overrides del bloque (U_override / dtlm_override > 0) siempre ganan.
+
+    diagnostics = {U_used, dTlm, F, cross_check, warnings}.
     """
+    diag = {"U_used": None, "dTlm": None, "F": 1.0,
+            "cross_check": None, "warnings": [],
+            "T_h_in": None, "T_h_out": None, "T_c_in": None, "T_c_out": None,
+            "approach": None, "dT_min": 10.0, "data_source": None,
+            "n_shell": 1, "n_tube": 2, "service": None}
+    # Los WHB dedicados (Sinnott) se dimensionan por caudal de vapor [kg/h],
+    # no por área — los maneja size_whb.  Acá NO computamos área para ellos,
+    # pero sí poblamos el diag térmico (ΔT_lm, approach, T's) para la UI.
+    if block.eq_type in WHB_STEAM_SIZED:
+        diag["cross_check"] = "WHB (dimensionado por caudal de vapor, ver size_whb)"
+        try:
+            rig = _rigorous_lmtd_simple(fs, block, diag)
+            if rig is not None:
+                diag["U_used"], diag["dTlm"], diag["F"] = rig
+        except Exception:
+            pass
+        return None, diag
     Q = abs(float(block.duty or 0.0))
     if Q <= 0:
-        return None
+        return None, diag
+
     U_user  = getattr(block, "U_override",    None)
     dT_user = getattr(block, "dtlm_override", None)
-    U  = (U_user  if (U_user  is not None and U_user  > 0)
-          else U_TYPICAL.get(block.eq_type, U_DEFAULT))
-    dT = (dT_user if (dT_user is not None and dT_user > 0)
-          else DTLM_TYPICAL.get(block.eq_type, DTLM_DEFAULT))
-    A = Q * 1000.0 / (U * dT)            # Q en kW → W
-    return max(A, 0.5)
+
+    rig = None
+    try:
+        import flowsheet_solver as _fsv
+        if _fsv.is_cross_exchange(fs, block):
+            rig = _rigorous_lmtd_cross(fs, block, diag)
+        else:
+            rig = _rigorous_lmtd_simple(fs, block, diag)
+    except Exception as e:               # nunca romper el sizing por esto
+        diag["warnings"].append(f"cálculo riguroso falló ({e!r})")
+        rig = None
+
+    if rig is not None:
+        U, dT, F = rig
+    else:
+        diag["warnings"].append(
+            "fallback: U/ΔT_lm de tabla (datos insuficientes para "
+            "cálculo riguroso)")
+        diag["data_source"] = "hardcoded_fallback"
+        U = U_TYPICAL.get(block.eq_type, U_DEFAULT)
+        dT = DTLM_TYPICAL.get(block.eq_type, DTLM_DEFAULT)
+        F = 1.0
+
+    # overrides del usuario tienen precedencia absoluta
+    if U_user is not None and U_user > 0:
+        U = U_user
+    if dT_user is not None and dT_user > 0:
+        dT = dT_user
+
+    diag["U_used"], diag["dTlm"], diag["F"] = U, dT, F
+    A = Q * 1000.0 / (U * F * dT)        # Q en kW → W
+    return max(A, 0.5), diag
 
 
 def size_fired_heater(block, fs) -> Optional[float]:
@@ -358,6 +585,73 @@ def size_evaporator(block, fs) -> Optional[float]:
     return max(A, 1.0)
 
 
+# Clases WHB dedicadas (Sinnott): el parámetro de tamaño S es el caudal de
+# vapor generado [kg/h], no área — se dimensionan con size_whb, no con
+# size_heat_exchanger.  (El kettle reboiler NO está acá: su S sigue siendo
+# área m² y usa el sizer de HX normal.)
+WHB_STEAM_SIZED = (
+    "Heat exch. — WHB packaged",
+    "Heat exch. — WHB field erected",
+)
+
+
+def size_whb(block, fs) -> Optional[float]:
+    """Dimensiona un waste-heat boiler por el caudal de vapor que genera.
+
+        S [kg/h] = |Q [kW]| · 3600 / ΔH_vap [kJ/kg] · η_gen
+
+    ΔH_vap y η salen de la utility de generación elegida (bfw_to_steam_*).
+    Si el bloque no resuelve a una utility de generación, devuelve None.
+
+    GUARD DE SUB-ESCALA: si el caudal calculado cae por debajo del S_min
+    de la correlación Sinnott del eq_type, emite un UserWarning y persiste
+    diagnostics en block._whb_diagnostics (con scale_mismatch=True si la
+    diferencia es >5×), devolviendo S clampeado al floor.  Esto evita
+    extrapolar silenciosamente la correlación Sinnott fuera de su rango.
+    """
+    import equipment_ports as ep
+    Q_kW = abs(float(block.duty or 0.0))
+    if Q_kW <= 0:
+        return None
+    _, _, proc_in, proc_out = _process_streams(fs, block)
+    proc_T = [s.temperature for s in (proc_in + proc_out)]
+    T_avg = (sum(proc_T) / len(proc_T)) if proc_T else 200.0
+    heat_src = ep.resolve_heat_source(block, T_avg)
+    util = ep.UTILITIES.get(heat_src)
+    if not util or util.get("type") != "generation":
+        return None
+    dh_vap = util["delta_h"]
+    eff    = util.get("efficiency", 0.85)
+    S_real = Q_kW * 3600.0 / dh_vap * eff
+
+    spec  = ec.EQUIPMENT_DATA.get(block.eq_type, {})
+    S_min = float(spec.get("S_min", 0.0) or 0.0)
+    diag = {"steam_rate_kg_h": S_real, "S_min": S_min,
+            "scale_mismatch": False, "warning": ""}
+    if S_min > 0 and S_real < S_min:
+        diag["scale_mismatch"] = (S_real * 5.0 < S_min)
+        diag["warning"] = (
+            f"WHB sub-escala: steam_rate={S_real:.0f} kg/h < "
+            f"S_min={S_min:.0f} kg/h.  Considerá usar "
+            f"'Heat exch. — kettle reboiler' o 'Heat exch. — fixed tube' "
+            f"para esta escala.")
+        import warnings
+        warnings.warn(diag["warning"], UserWarning, stacklevel=2)
+        block._whb_diagnostics = diag
+        return S_min                      # clamp al floor de la correlación
+    block._whb_diagnostics = diag
+    return S_real
+
+
+def autoselect_whb_subtype(steam_kg_per_h):
+    """Elige variante Packaged vs Field erected según producción de vapor.
+    Regla simple: ≤50 000 kg/h → Packaged, >50 000 → Field erected.
+    Función auxiliar exportable (todavía NO cableada a la UI ni a
+    autoselect_heat_source)."""
+    return ("Heat exch. — WHB packaged" if steam_kg_per_h <= 50_000
+            else "Heat exch. — WHB field erected")
+
+
 # ─────────────────────────────────────────────────────────────
 # Dispatch + función pública
 # ─────────────────────────────────────────────────────────────
@@ -372,6 +666,14 @@ SIZER_BY_CAT = {
     "Towers":            size_tower,
     "Storage":           size_storage_tank,
     "Evaporators":       size_evaporator,
+}
+
+# Sizers específicos por eq_type — tienen prioridad sobre SIZER_BY_CAT.
+# Los WHB son categoría "Heat exchangers" pero su S es caudal de vapor
+# [kg/h], no área, así que usan size_whb (no size_heat_exchanger).
+SIZER_BY_EQTYPE = {
+    "Heat exch. — WHB packaged":      size_whb,
+    "Heat exch. — WHB field erected": size_whb,
 }
 
 
@@ -390,13 +692,19 @@ def auto_size_blocks(fs, only_if_unset=False) -> List[Tuple[str, float, float, s
     for b in fs.blocks.values():
         spec = ec.EQUIPMENT_DATA.get(b.eq_type, {})
         cat  = spec.get("categoria", "")
-        sizer = SIZER_BY_CAT.get(cat)
+        # eq_type específico (ej. WHB → size_whb) tiene prioridad sobre cat.
+        sizer = SIZER_BY_EQTYPE.get(b.eq_type) or SIZER_BY_CAT.get(cat)
         if sizer is None:
             continue
         try:
             S_new = sizer(b, fs)
         except Exception:
             S_new = None
+        # size_heat_exchanger devuelve (A, diagnostics); el resto float.
+        diag = None
+        if isinstance(S_new, tuple):
+            S_new, diag = S_new
+            b._hx_diagnostics = diag      # inspeccionable desde la UI
         if S_new is None or S_new <= 0:
             continue
         S_old = float(b.S)
@@ -416,6 +724,12 @@ def auto_size_blocks(fs, only_if_unset=False) -> List[Tuple[str, float, float, s
             S_new = S_max
         else:
             reason = "in range"
+        if diag is not None and (diag.get("U_used") or diag.get("warnings")):
+            extra = (f" [U={diag['U_used']:.0f} ΔTlm={diag['dTlm']:.1f} "
+                     f"F={diag['F']:.2f}]") if diag.get("U_used") else ""
+            if diag.get("warnings"):
+                extra += " ⚠ " + "; ".join(diag["warnings"][:2])
+            reason += extra
         b.S = S_new
         results.append((b.name, S_old, S_new, spec.get("S_unit", ""),
                           reason))

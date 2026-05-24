@@ -82,6 +82,10 @@ class Block:
     # utility que provee/recibe el duty (clave de equipment_ports.UTILITIES).
     # vacío → autoselect según signo de duty y T promedio.
     heat_source: str = ""
+    # True → respetar heat_source literal (saltear autoselect_heat_source),
+    # incluso si está vacío.  Útil para forzar "esto es un cooler normal,
+    # no un WHB" desde la UI.  Default False = autoselect activo.
+    heat_source_locked: bool = False
 
     # Calor de reacción para reactores (kJ/kg de input total).
     #   > 0  reacción endotérmica (consume calor del medio)
@@ -97,6 +101,12 @@ class Block:
     # debe inferir el solver desde el balance de energía.  Cargado
     # desde JSON / examples mediante heurística (duty != 0 → locked).
     duty_locked: bool = False
+
+    # True si el user fijó el área/tamaño S a mano (specification).  False
+    # si el solver lo puede auto-dimensionar desde duty + T (size_heat_
+    # exchanger).  Análogo a duty_locked.  Cargado desde JSON / examples
+    # mediante heurística (S > 0 → locked, ver from_dict).
+    S_locked: bool = False
 
     # ---- HIDRÁULICA: ΔP a través del bloque ----
     # Positivo si el bloque SUMA presión (bomba, compresor).
@@ -355,6 +365,18 @@ class Block:
     # serializado como dict.
     reaction_warnings: List[dict] = field(default_factory=list)
 
+    # ---- HX DIAGNOSTIC BUBBLE (parche HX riguroso) ----
+    # Burbuja flotante en el lienzo, anclada al bloque, con el diagnóstico
+    # térmico del HX (ΔT_lm, F, U_eff, approach, avisos).  Análoga a la
+    # StreamBubble pero por bloque.  Default OFF — el user la activa con
+    # click derecho sobre un HX → "Mostrar diagnóstico HX".
+    bubble_visible:  bool = False
+    # Offset [x, y] desde el centro del bloque (en px de viewport), para
+    # que la burbuja siga al bloque en pan/zoom.  [] = offset default.
+    bubble_position: List[float] = field(default_factory=list)
+    # Densidad: "collapsed" | "standard" | "expanded".
+    bubble_density:  str = "standard"
+
     # caches del canvas Tk (no se serializan, no se usan en Qt)
     canvas_rect: Optional[int] = field(default=None, repr=False)
     canvas_text: Optional[int] = field(default=None, repr=False)
@@ -601,6 +623,10 @@ class Flowsheet:
             # inferir desde valor (duty != 0 → user lo declaró).
             if "duty_locked" not in bdict:
                 b.duty_locked = (abs(b.duty) > 1e-9)
+            # S_locked migration: JSONs viejos (sin la clave) traían su S
+            # ya curada/fijada por el user → tratar como locked si S > 0.
+            if "S_locked" not in bdict:
+                b.S_locked = (b.S > 0)
             fs.blocks[int(bid)] = b
         for sid, sdict in d.get("streams", {}).items():
             s = Stream(**{k: v for k, v in sdict.items()

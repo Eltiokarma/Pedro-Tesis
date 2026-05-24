@@ -504,11 +504,18 @@ def collect_stream_rows(fs):
 # ======================================================
 
 def block_avg_temperature(fs, block_id, t_ref=25.0):
-    """T promedio (°C) entre entradas y salidas del bloque."""
-    ts = []
-    for s in fs.streams.values():
-        if (s.src == block_id or s.dst == block_id) and s.cp > 0:
-            ts.append(s.temperature)
+    """T promedio (°C) de las corrientes de PROCESO del bloque.
+
+    Antes exigía s.cp > 0, lo que devolvía t_ref=25 para cualquier bloque
+    cuyas corrientes no traían cp explícito (caso común: los example
+    builders declaran composición, no cp).  Eso hacía que la autoselección
+    de utility viera 25°C en equipos a 900°C → elegía refrigeration para un
+    WHB.  Ahora promedia la T real de las corrientes de proceso (excluye
+    utility/ambient), independiente de cp.
+    """
+    ts = [s.temperature for s in fs.streams.values()
+          if (s.src == block_id or s.dst == block_id)
+          and (s.role or "") not in ("utility", "ambient")]
     if not ts:
         return t_ref
     return sum(ts) / len(ts)
@@ -591,9 +598,7 @@ def compute_utilities_from_duties(fs):
             summary.append((b.name, "(closed loop)", "—", 0.0, 0.0))
             continue
         T_avg = block_avg_temperature(fs, b.id)
-        util_key = b.heat_source or ep.autoselect_heat_source(
-            b.eq_type, b.duty, T_avg
-        )
+        util_key = ep.resolve_heat_source(b, T_avg)
         if not util_key or util_key not in ep.UTILITIES:
             continue
         util = ep.UTILITIES[util_key]
@@ -627,10 +632,14 @@ def compute_utilities_from_duties(fs):
     for util_key, (cons, _cost) in agg.items():
         util = ep.UTILITIES[util_key]
         # Solo reducir heating/cooling thermal — la electricidad no se
-        # "recupera" via heat integration.
+        # "recupera" via heat integration.  La generación de vapor (WHB)
+        # tampoco: ya es recuperación; aplicar HI doble-contaría el ahorro.
         if util.get("type") in ("heating", "cooling"):
             cons_adjusted = cons * hi_factor
             tag = f"{util['name']} (PFD-util, HI×{hi_factor:.2f})"
+        elif util.get("type") == "generation":
+            cons_adjusted = cons
+            tag = f"{util['name']} — exportado (revenue)"
         else:
             cons_adjusted = cons
             tag = f"{util['name']} (PFD-util)"
