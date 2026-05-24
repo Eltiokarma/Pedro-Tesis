@@ -1987,6 +1987,49 @@ def solve_equilibrium_reactors(fs):
     return msgs
 
 
+def _column_feed_q(feed, T_feed_K, P_bar):
+    """Factor de calidad q del feed para el diseño FUG (P1.2).
+
+    q = L/F:  1.0 = líquido saturado · 0.0 = vapor saturado ·
+    0<q<1 = bifásico.  Detecta la fase real del feed; si es bifásico o
+    no está declarada, hace un flash isotérmico (NRTL) a T_feed, P para
+    estimar V/F.  Clamp a [0, 1].  Fallback q=1.0 (compat previa)."""
+    phase = (getattr(feed, "phase", "") or "").lower()
+    if phase == "liquid":
+        return 1.0
+    if phase in ("vapor", "gas"):
+        return 0.0
+    # two_phase con vapor_fraction ya resuelta → q = 1 - V/F directo
+    vf = getattr(feed, "vapor_fraction", None)
+    if phase == "two_phase" and vf is not None:
+        try:
+            return max(0.0, min(1.0, 1.0 - float(vf)))
+        except (TypeError, ValueError):
+            pass
+    # bifásico/mixed/no declarado → flash isotérmico para estimar V/F
+    try:
+        import nrtl as _nrtl
+        import thermo_db as _td
+        comps = list((feed.composition or {}).keys())
+        if not comps:
+            return 1.0
+        z_mol = []
+        for c in comps:
+            co = _td.get(c)
+            mw = co.mw if (co and co.mw > 0) else 1.0
+            z_mol.append(feed.composition[c] / mw)   # mass → mol
+        s = sum(z_mol)
+        if s <= 0:
+            return 1.0
+        z_mol = [zi / s for zi in z_mol]
+        fl = _nrtl.flash_TP(comps, z_mol, T_feed_K, P_bar)
+        if fl is not None and fl.get("V_frac") is not None:
+            return max(0.0, min(1.0, 1.0 - float(fl["V_frac"])))
+    except Exception:
+        pass
+    return 1.0
+
+
 def solve_columns(fs):
     """Para cada bloque tipo Tower con column_active=True, computa
     automáticamente las composiciones del distillate y el bottom usando
@@ -2073,6 +2116,8 @@ def solve_columns(fs):
         T_feed_K = feed.temperature + 273.15
         T_top_K  = dist_stream.temperature + 273.15 if dist_stream.temperature else T_feed_K - 10
         T_bot_K  = bot_stream.temperature + 273.15 if bot_stream.temperature else T_feed_K + 20
+        # q dinámico del feed (P1.2): detecta fase real / flash si bifásico
+        q_feed = _column_feed_q(feed, T_feed_K, 1.013)
         try:
             res = _fug.design_column(
                 feed_composition=feed.composition,
@@ -2082,7 +2127,7 @@ def solve_columns(fs):
                 x_D_LK=b.column_x_D_LK,
                 x_B_LK=b.column_x_B_LK,
                 R_factor=b.column_R_factor,
-                q=1.0, T_top_K=T_top_K, T_bot_K=T_bot_K)
+                q=q_feed, T_top_K=T_top_K, T_bot_K=T_bot_K)
         except Exception as e:
             msgs.append(f"✗ Column {b.name}: error {type(e).__name__}: {e}")
             continue
