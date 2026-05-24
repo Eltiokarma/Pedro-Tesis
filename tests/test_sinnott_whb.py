@@ -47,6 +47,32 @@ class TestSinnottWHBCost(unittest.TestCase):
         self.assertAlmostEqual(direct, via_pc["Cp_target"], delta=1.0)
 
 
+class TestSinnottHandFactor(unittest.TestCase):
+    def test_packaged_cbm_uses_hand(self):
+        # WHB packaged usa Hand factor 3.5 (Sinnott §6.3.3), NO el F_BM
+        # Turton (~3.47).  CBM = Cp · 3.5 ≈ 807 699 × 3.5 ≈ 2 827 000.
+        r = ec.bare_module_cost("Heat exch. — WHB packaged", 50_000,
+                                P_op_bar=30, year_target=2026)
+        self.assertEqual(r["FBM"], 3.5)
+        self.assertAlmostEqual(r["CBM"], r["Cp_target"] * 3.5, delta=1.0)
+        self.assertTrue(2_800_000 <= r["CBM"] <= 2_850_000,
+                        f"CBM={r['CBM']:.0f}")
+
+    def test_field_erected_cbm_uses_hand_4(self):
+        # Field erected (boiler estructural) usa Hand factor 4.0.
+        r = ec.bare_module_cost("Heat exch. — WHB field erected", 100_000,
+                                P_op_bar=40, year_target=2026)
+        self.assertEqual(r["FBM"], 4.0)
+        self.assertAlmostEqual(r["CBM"], r["Cp_target"] * 4.0, delta=1.0)
+
+    def test_turton_entry_still_uses_fbm(self):
+        # Una entry Turton NO debe quedar pegada al Hand factor.
+        r = ec.bare_module_cost("Heat exch. — fixed tube", 100,
+                                P_op_bar=1, year_target=2026)
+        self.assertNotIn("install_method", r)
+        self.assertNotEqual(r["FBM"], 3.5)
+
+
 class TestWHBSubtypeAutoselect(unittest.TestCase):
     def test_autoselect_subtype(self):
         self.assertEqual(es.autoselect_whb_subtype(30_000),

@@ -165,6 +165,8 @@ EQUIPMENT_DATA = {
     "Heat exch. — WHB packaged":
         dict(a=4_600, b=62, n=0.8,
              correlation="sinnott",
+             # Hand factor (Sinnott §6.3.3): 3.5 para HX a presión pre-armado.
+             installation_factor=3.5,
              S_param="Steam generation rate", S_unit="kg/h",
              S_min=5_000, S_max=200_000,
              categoria="Heat exchangers",
@@ -175,6 +177,9 @@ EQUIPMENT_DATA = {
     "Heat exch. — WHB field erected":
         dict(a=-90_000, b=93, n=0.8,
              correlation="sinnott",
+             # Hand factor (Sinnott §6.3.3): 4.0 para boiler estructural
+             # montado in situ (más cercano a pressure vessel que a HX).
+             installation_factor=4.0,
              S_param="Steam generation rate", S_unit="kg/h",
              S_min=20_000, S_max=800_000,
              categoria="Heat exchangers",
@@ -678,6 +683,21 @@ def bare_module_cost(eq_nombre, S, P_op_bar=1.0, year_target=None,
             "CBM": 0.0, "unknown": True, "material": material,
         }
     pc = purchased_cost(eq_nombre, S, year_target=year_target)
+    spec = EQUIPMENT_DATA[eq_nombre]
+    # Sinnott usa el método de Hand (factor propio sobre el purchased cost),
+    # NO el F_BM de Turton (que mezcla factores de presión/material de otra
+    # base).  Aplicar F_BM Turton sobre un Cp Sinnott es inconsistente.
+    if spec.get("correlation") == "sinnott":
+        f_hand = spec.get("installation_factor", 3.5)
+        pc["FBM"]        = f_hand
+        pc["FBM_CS_atm"] = f_hand
+        pc["FP"]         = 1.0
+        pc["FM"]         = 1.0
+        pc["CBM"]        = pc["Cp_target"] * f_hand
+        pc["unknown"]    = False
+        pc["material"]   = material
+        pc["install_method"] = "Hand (Sinnott §6.3.3)"
+        return pc
     fbm, fbm_cs, fp, fm = bare_module_factor(
         eq_nombre, P_op_bar=P_op_bar, material=material)
     cbm = pc["Cp_target"] * fbm
