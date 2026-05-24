@@ -88,6 +88,13 @@ TOK = {
     # chip de tipo
     "tag_bg":       "#ede7d6",
     "tag_ink":      "#6b6253",
+    # catálogo Sinnott (extensión HX riguroso)
+    "sinnott":        "#6e3aa6",
+    "sinnott_ink":    "#4a2873",
+    "sinnott_bg":     "#efebf7",
+    "sinnott_ribbon": "#8a5cc0",
+    "turton_ink":     "#3548b4",
+    "status_fallback":"#5f7bd6",
 }
 
 ROW_PAD   = 12   # cozy
@@ -117,6 +124,9 @@ THEME_LIGHT = {
     "orange": "#c26329", "orange_bg": "#f5e1d0",
     "danger": "#b8453a", "danger_bg": "#f3dcd8",
     "tag_bg": "#ede7d6", "tag_ink": "#6b6253",
+    "sinnott": "#6e3aa6", "sinnott_ink": "#4a2873", "sinnott_bg": "#efebf7",
+    "sinnott_ribbon": "#8a5cc0", "turton_ink": "#3548b4",
+    "status_fallback": "#5f7bd6",
 }
 
 THEME_DARK = {
@@ -133,6 +143,9 @@ THEME_DARK = {
     "orange": "#d18a55", "orange_bg": "#2e2118",
     "danger": "#d97262", "danger_bg": "#2e1a17",
     "tag_bg": "#2a241d", "tag_ink": "#a59a89",
+    "sinnott": "#b598e0", "sinnott_ink": "#d3befa", "sinnott_bg": "#2a2535",
+    "sinnott_ribbon": "#9978c9", "turton_ink": "#b4befa",
+    "status_fallback": "#9aaef0",
 }
 
 # Acentos: 4 presets que sobrescriben los 4 tokens de accent.
@@ -1183,7 +1196,7 @@ class BlockInspectorPanel(QWidget):
         ft = QFrame(self); ft.setObjectName("insFooter")
         ft.setFixedHeight(58)
         lay = QHBoxLayout(ft)
-        lay.setContentsMargins(20, 8, 14, 8); lay.setSpacing(20)
+        lay.setContentsMargins(14, 8, 10, 8); lay.setSpacing(9)
 
         # stats
         self._stat_capex_lbl = QLabel("CAPEX (CBM)")
@@ -1207,6 +1220,24 @@ class BlockInspectorPanel(QWidget):
             val.setStyleSheet(f"color:{TOK['ink']};")
             col.addWidget(caps); col.addWidget(val)
             lay.addLayout(col)
+
+        # stats derivados HX (Área/Steam + ΔT_lm·F) — color atenuado
+        self._stat_hxA_lbl   = QLabel("Área")
+        self._stat_hxA_val   = QLabel("—")
+        self._stat_hxdt_lbl  = QLabel("ΔT_lm·F")
+        self._stat_hxdt_val  = QLabel("—")
+        for caps, val in [
+            (self._stat_hxA_lbl,  self._stat_hxA_val),
+            (self._stat_hxdt_lbl, self._stat_hxdt_val),
+        ]:
+            col = QVBoxLayout(); col.setContentsMargins(0,0,0,0); col.setSpacing(1)
+            caps.setFont(QFont(pfd_fonts.SANS, 7, QFont.Bold))
+            caps.setStyleSheet(f"color:{TOK['ink_soft']}; letter-spacing:1px;")
+            val.setFont(QFont(pfd_fonts.MONO, 11, QFont.Bold))
+            val.setStyleSheet(f"color:{TOK['ink_mute']};")
+            col.addWidget(caps); col.addWidget(val)
+            lay.addLayout(col)
+            caps.setVisible(False); val.setVisible(False)
         lay.addStretch(1)
 
         # cancel
@@ -1264,6 +1295,7 @@ class BlockInspectorPanel(QWidget):
         self.fs = flowsheet
         self._on_save = on_save
         self._open_advanced_cb = open_advanced
+        self._hx_vm_cache = None
         self._fields.clear()
         self._extras.clear()
         self._reaction_rows.clear()
@@ -1462,6 +1494,55 @@ class BlockInspectorPanel(QWidget):
         if self._open_advanced_cb:
             self._open_advanced_cb(self.block)
 
+    # ─── HX riguroso (extensión Sinnott/WHB) ─────────────
+    def _hx_viewmodel(self):
+        """View-model térmico del HX (cacheado por load_block)."""
+        if getattr(self, "_hx_vm_cache", None) is not None:
+            return self._hx_vm_cache
+        try:
+            import hx_inspector as hxui
+            self._hx_vm_cache = hxui.build_hx_viewmodel(self.block, self.fs)
+        except Exception:
+            self._hx_vm_cache = None
+        return self._hx_vm_cache
+
+    def _open_hx_topic(self, topic: str, ctx: dict = None):
+        try:
+            import hx_edu
+            hx_edu.open_topic(topic, parent=self, ctx=ctx)
+        except Exception:
+            pass
+
+    def _append_hx_termo(self, l, b):
+        """Agrega las subsecciones HX-rigurosas a la sección Termodinámica:
+        diseño térmico (4 cards o empty-state), riguroso colapsable y avisos."""
+        try:
+            import hx_inspector as hxui
+        except Exception:
+            return
+        vm = self._hx_viewmodel()
+        if not vm:
+            return
+        on_open = self._open_hx_topic
+        empty = hxui.hx_empty_state(vm, b)
+
+        l.addSpacing(6)
+        l.addWidget(hxui._subsect_header(
+            "Diseño térmico", "click una card para su explicación"))
+        if empty:
+            l.addWidget(hxui.make_empty_state(empty))
+        else:
+            l.addWidget(hxui.make_diagnostic_grid(vm, on_open))
+            l.addSpacing(4)
+            l.addWidget(hxui.RigorousBlock(vm))
+
+        if vm.get("warnings"):
+            n = len(vm["warnings"])
+            l.addSpacing(6)
+            l.addWidget(hxui._subsect_header(
+                "Avisos termodinámicos", f"{n} aviso{'s' if n != 1 else ''}"))
+            l.addWidget(hxui.WarningPanel(vm["warnings"], on_open))
+
     # ─── SECCIONES ───────────────────────────────────────
     def _section_identidad(self, b, eq_type) -> QFrame:
         sect = QFrame()
@@ -1587,6 +1668,10 @@ class BlockInspectorPanel(QWidget):
                                       state="spec" if hor != 0 else "auto")
             l.addWidget(self._row("Calor de reacción", sf_hor,
                                   info="Por kg de input. >0 endo · <0 exo · auto = del catálogo"))
+
+        # HX riguroso: diseño térmico (cards) + riguroso + avisos
+        if _is_hx(eq_type):
+            self._append_hx_termo(l, b)
 
         return sect
 
@@ -2092,6 +2177,14 @@ class BlockInspectorPanel(QWidget):
 
         # HX overrides
         if _is_hx(eq_type):
+            # WHB Sinnott: panel especial con barra de rango de escala
+            vm = self._hx_viewmodel()
+            if vm and vm.get("whb"):
+                try:
+                    import hx_inspector as hxui
+                    l.addWidget(hxui.WHBSubcomponent(vm["whb"], self._open_hx_topic))
+                except Exception:
+                    pass
             U = float(getattr(b, "U_override", None) or 0.0)
             sf_U = self._spec_field("U_override",
                                     value=f"{U:.1f}" if U > 0 else "",
@@ -2192,6 +2285,16 @@ class BlockInspectorPanel(QWidget):
                       "El solver lo recalcula al guardar."
         ))
 
+        # HX: badge de correlación (Turton/Sinnott) + chip de instalación
+        if _is_hx(eq_type):
+            try:
+                import hx_inspector as hxui
+                badges = hxui.make_correlation_badges(b, self._open_hx_topic)
+                if badges:
+                    l.addWidget(badges)
+            except Exception:
+                pass
+
         # CBM (read-only, derivado)
         cbm = self._compute_cbm(b)
         cbm_str = f"{cbm:,.0f}".replace(",", " ") if cbm else "—"
@@ -2231,7 +2334,9 @@ class BlockInspectorPanel(QWidget):
         cbm = self._compute_cbm(b)
         if cbm:
             s = f"${cbm:,.0f}".replace(",", " ")
-            self._stat_capex_val.setText(s + "  USD")
+            if cbm >= 1e6:
+                s = f"${cbm/1e6:.2f}M"
+            self._stat_capex_val.setText(s + " USD")
         else:
             self._stat_capex_val.setText("—")
 
@@ -2251,6 +2356,39 @@ class BlockInspectorPanel(QWidget):
         else:
             self._stat_conv_lbl.setVisible(False)
             self._stat_conv_val.setVisible(False)
+
+        # Stats derivados HX: Área (o Steam si WHB) + ΔT_lm·F efectivo
+        hx_stats = getattr(self, "_stat_hxA_lbl", None)
+        if hx_stats is not None:
+            show = _is_hx(b.eq_type)
+            if show:
+                vm = self._hx_viewmodel()
+                if vm and vm.get("whb"):
+                    self._stat_hxA_lbl.setText("Steam")
+                    self._stat_hxA_val.setText(
+                        f"{int(round(vm['whb']['steam_kg_per_h'])):,}".replace(",", " ")
+                        + " kg/h")
+                else:
+                    self._stat_hxA_lbl.setText("Área")
+                    S = float(getattr(b, "S", 0) or 0)
+                    self._stat_hxA_val.setText(f"{S:,.0f} m²".replace(",", " ") if S else "—")
+                dtlm = (vm or {}).get("dTlm")
+                F = (vm or {}).get("F", 1.0)
+                if dtlm is not None:
+                    eff = dtlm * F
+                    bad = (vm and (vm.get("approach") is not None
+                           and vm["approach"] < 0 or F < 0.75))
+                    self._stat_hxdt_val.setText(f"{eff:.1f} K")
+                    self._stat_hxdt_val.setStyleSheet(
+                        f"color:{TOK['danger'] if bad else TOK['ink_mute']};")
+                else:
+                    self._stat_hxdt_val.setText("—")
+            # Área/Steam siempre que sea HX; ΔT_lm·F sólo si está disponible
+            self._stat_hxA_lbl.setVisible(show)
+            self._stat_hxA_val.setVisible(show)
+            dt_ok = show and (vm or {}).get("dTlm") is not None
+            self._stat_hxdt_lbl.setVisible(dt_ok)
+            self._stat_hxdt_val.setVisible(dt_ok)
 
     def _update_dof_badges(self):
         b = self.block
@@ -2298,6 +2436,8 @@ class BlockInspectorPanel(QWidget):
             return
         if self._on_save:
             self._on_save()
+        # invalida el view-model HX: S/duty pudieron cambiar tras el solver
+        self._hx_vm_cache = None
         # refresca footer post-save (CBM puede haber cambiado por S, P_op)
         self._update_footer()
         self._update_dof_badges()

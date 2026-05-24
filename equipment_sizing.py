@@ -144,6 +144,22 @@ def _flow_kg_s(mass_flow_tm_yr):
 # Sizers por categoría
 # ─────────────────────────────────────────────────────────────
 
+def _service_label(hot_phase, cold_phase, pc) -> str:
+    """Etiqueta legible del servicio térmico (para la UI rigurosa)."""
+    if pc:
+        pcl = str(pc).lower()
+        if "cond" in pcl:
+            return "condensación de vapor"
+        if "evap" in pcl or "boil" in pcl:
+            return "evaporación de líquido"
+        if "refrig" in pcl:
+            return "refrigerante"
+    _is_vap = lambda p: any(k in (p or "").lower() for k in ("gas", "vap"))
+    h = "gas" if _is_vap(hot_phase) else "líquido"
+    c = "gas" if _is_vap(cold_phase) else "líquido"
+    return f"{h}-{c}"
+
+
 def _process_streams(fs, block):
     """Separa corrientes de proceso (role != utility/ambient) de un HX."""
     ins  = [s for s in fs.streams.values() if s.dst == block.id]
@@ -200,6 +216,13 @@ def _rigorous_lmtd_cross(fs, block, diag):
     if ap:
         diag["warnings"].append(ap)
     U = hxr.u_typical_by_service(hot[0].phase, cold[0].phase)
+    diag["T_h_in"], diag["T_h_out"] = T_hi, T_ho
+    diag["T_c_in"], diag["T_c_out"] = T_ci, T_co
+    diag["approach"] = min(T_ho - T_ci, T_hi - T_co)
+    diag["dT_min"]   = 10.0
+    diag["data_source"] = "computed_from_streams"
+    diag["n_shell"], diag["n_tube"] = 1, 2
+    diag["service"] = _service_label(hot[0].phase, cold[0].phase, None)
     diag["cross_check"] = "cross-exchange (proceso-proceso)"
     return U, lmtd, F
 
@@ -287,6 +310,13 @@ def _rigorous_lmtd_simple(fs, block, diag):
     else:
         U = U_TYPICAL.get(block.eq_type) or hxr.u_typical_by_service(
             proc_in[0].phase, "liquid")
+    diag["T_h_in"], diag["T_h_out"] = T_hi, T_ho
+    diag["T_c_in"], diag["T_c_out"] = T_ci, T_co
+    diag["approach"] = min(T_ho - T_ci, T_hi - T_co)
+    diag["dT_min"]   = 10.0
+    diag["data_source"] = "partial_from_utility_range"
+    diag["n_shell"], diag["n_tube"] = 1, 2
+    diag["service"] = _service_label(proc_in[0].phase, "water", pc)
     diag["cross_check"] = f"simple HX (utility={util_key})"
     return U, lmtd, 1.0
 
@@ -306,11 +336,21 @@ def size_heat_exchanger(block, fs):
     diagnostics = {U_used, dTlm, F, cross_check, warnings}.
     """
     diag = {"U_used": None, "dTlm": None, "F": 1.0,
-            "cross_check": None, "warnings": []}
+            "cross_check": None, "warnings": [],
+            "T_h_in": None, "T_h_out": None, "T_c_in": None, "T_c_out": None,
+            "approach": None, "dT_min": 10.0, "data_source": None,
+            "n_shell": 1, "n_tube": 2, "service": None}
     # Los WHB dedicados (Sinnott) se dimensionan por caudal de vapor [kg/h],
-    # no por área — los maneja size_whb.  Acá NO computamos área para ellos.
+    # no por área — los maneja size_whb.  Acá NO computamos área para ellos,
+    # pero sí poblamos el diag térmico (ΔT_lm, approach, T's) para la UI.
     if block.eq_type in WHB_STEAM_SIZED:
         diag["cross_check"] = "WHB (dimensionado por caudal de vapor, ver size_whb)"
+        try:
+            rig = _rigorous_lmtd_simple(fs, block, diag)
+            if rig is not None:
+                diag["U_used"], diag["dTlm"], diag["F"] = rig
+        except Exception:
+            pass
         return None, diag
     Q = abs(float(block.duty or 0.0))
     if Q <= 0:
@@ -336,6 +376,7 @@ def size_heat_exchanger(block, fs):
         diag["warnings"].append(
             "fallback: U/ΔT_lm de tabla (datos insuficientes para "
             "cálculo riguroso)")
+        diag["data_source"] = "hardcoded_fallback"
         U = U_TYPICAL.get(block.eq_type, U_DEFAULT)
         dT = DTLM_TYPICAL.get(block.eq_type, DTLM_DEFAULT)
         F = 1.0
