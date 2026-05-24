@@ -2936,15 +2936,25 @@ class ExampleBuilder:
         self.fs.blocks[r_htn].reactions = ["R_HDS"]
         self.fs.blocks[r_htn].T_op_K = 623.15
         self.fs.blocks[r_htn].P_op_bar = 50.0
+        f_htn    = self._add_example_block("F-HTN","Fired heater — non-reformer",
+                                              1200.0, 1410, 180)   # precal HTN
         # HTD — Hidrotratamiento de Diésel (a ULSD <50 ppm S)
         r_htd    = self._add_example_block("R-HTD","Reactor — autoclave",
                                               14.0, 1560, 840)
         self.fs.blocks[r_htd].reactions = ["R_HDS"]
         self.fs.blocks[r_htd].T_op_K = 653.15
         self.fs.blocks[r_htd].P_op_bar = 80.0
+        f_htd    = self._add_example_block("F-HTD","Fired heater — non-reformer",
+                                              1400.0, 1410, 980)   # precal HTD
+        e_htd    = self._add_example_block("E-HTD","Heat exch. — air cooler",
+                                              250.0, 1710, 980)    # cooler HTD
         # HTF — Hidrotratamiento de Nafta FCC
         r_htf    = self._add_example_block("R-HTF","Reactor — autoclave",
                                               10.0, 2460, 540)
+        f_htf    = self._add_example_block("F-HTF","Fired heater — non-reformer",
+                                              1500.0, 2280, 540)   # precal HTF
+        e_htf    = self._add_example_block("E-HTF","Heat exch. — air cooler",
+                                              200.0, 2660, 540)    # cooler HTF
         self.fs.blocks[r_htf].reactions = ["R_HDS"]
         self.fs.blocks[r_htf].T_op_K = 593.15
         self.fs.blocks[r_htf].P_op_bar = 40.0
@@ -2957,6 +2967,10 @@ class ExampleBuilder:
         self.fs.blocks[r_rca].reactions = ["R_REFORM"]
         self.fs.blocks[r_rca].T_op_K = 793.15
         self.fs.blocks[r_rca].P_op_bar = 10.0
+        f_rca    = self._add_example_block("F-RCA","Fired heater — non-reformer",
+                                              2000.0, 1710, 180)   # precal RCA
+        e_rca    = self._add_example_block("E-RCA","Heat exch. — air cooler",
+                                              250.0, 2010, 180)    # cooler RCA
         # Tanque gasolina 97 octano (producto final reformado)
         tk_gaso97 = self._add_example_block("TK-203","Storage tank — floating roof",
                                             800.0, 2160, 300)
@@ -3072,10 +3086,15 @@ class ExampleBuilder:
                                                  "ethane": 0.30,
                                                  "propane": 0.15,
                                                  "hydrogen sulfide": 0.10})
-        # Nafta → HTN
-        self._add_example_stream(t101, r_htn, "C2-nafta",
-                                  src_port="salida", dst_port="alimentacion",
+        # Nafta → precal HTN (T3: fired heater dedicado → conecta T_op)
+        self._add_example_stream(t101, f_htn, "C2-nafta",
+                                  src_port="salida", dst_port="proceso_in",
                                   T=110, phase="liquid",
+                                  composition={"naphtha": 0.97,
+                                                 "hydrogen sulfide": 0.03})
+        self._add_example_stream(f_htn, r_htn, "C2-hot",
+                                  src_port="proceso_out", dst_port="alimentacion",
+                                  T=340, phase="liquid",
                                   composition={"naphtha": 0.97,
                                                  "hydrogen sulfide": 0.03})
         # Kerosene/Turbo A-1 (directo a tanque)
@@ -3084,10 +3103,15 @@ class ExampleBuilder:
                                   price=900.0, T=180, phase="liquid",
                                   composition={"kerosene": 0.99,
                                                  "hydrogen sulfide": 0.01})
-        # Diésel → HTD
-        self._add_example_stream(t101, r_htd, "C4-diesel",
-                                  src_port="salida", dst_port="alimentacion",
+        # Diésel → precal HTD (T3: fired heater dedicado → conecta T_op)
+        self._add_example_stream(t101, f_htd, "C4-diesel",
+                                  src_port="salida", dst_port="proceso_in",
                                   T=250, phase="liquid",
+                                  composition={"diesel": 0.97,
+                                                 "hydrogen sulfide": 0.03})
+        self._add_example_stream(f_htd, r_htd, "C4-hot",
+                                  src_port="proceso_out", dst_port="alimentacion",
+                                  T=370, phase="liquid",
                                   composition={"diesel": 0.97,
                                                  "hydrogen sulfide": 0.03})
         # Gasóleo atmosférico → mezcla con LCO (a diésel pool)
@@ -3151,11 +3175,23 @@ class ExampleBuilder:
                                   composition={"carbon": 1.0})
 
         # Nafta FCC → HTF (limpieza S)
-        self._add_example_stream(tk_naft_fcc_raw, r_htf, "C9b-naft-FCC-feed",
-                                  src_port="salida", dst_port="alimentacion",
+        self._add_example_stream(tk_naft_fcc_raw, f_htf, "C9b-naft-FCC-feed",
+                                  src_port="salida", dst_port="proceso_in",
                                   T=120, phase="liquid",
                                   composition={"naphtha": 0.97,
                                                  "hydrogen sulfide": 0.03})
+        # Precalentado al hidrotratador (T3: fired heater dedicado)
+        self._add_example_stream(f_htf, r_htf, "C9b-hot",
+                                  src_port="proceso_out", dst_port="alimentacion",
+                                  T=310, phase="liquid",
+                                  composition={"naphtha": 0.97,
+                                                 "hydrogen sulfide": 0.03})
+        # Producto enfriado antes del tanque
+        self._add_example_stream(e_htf, tk_gaso97, "C9c-clean",
+                                  src_port="proceso_out", dst_port="entrada2",
+                                  T=130, phase="liquid",
+                                  composition={"naphtha": 0.9995,
+                                                 "hydrogen sulfide": 0.0005})
 
         # ============ STREAMS — FCK outputs (4) ============
         self._add_example_stream(r_fck, tk_flexigas, "C17-flexigas",
@@ -3189,16 +3225,25 @@ class ExampleBuilder:
                                   T=40, phase="gas",
                                   composition={"hydrogen": 0.999,
                                                  "methane": 0.001})
-        # Nafta limpia → RCA
-        self._add_example_stream(r_htn, r_rca, "C12-nafta-clean",
-                                  src_port="producto", dst_port="alimentacion",
-                                  T=130, phase="liquid",
+        # Nafta limpia → precal RCA (T3: fired heater dedicado → conecta T_op)
+        self._add_example_stream(r_htn, f_rca, "C12-nafta-clean",
+                                  src_port="producto", dst_port="proceso_in",
+                                  T=340, phase="liquid",
                                   composition={"naphtha": 1.0})
-        # Gasolina 97 RON + H2 subproducto → mezcla (modelado como
-        # producto solo, el H2 se considera retornado al pool)
-        self._add_example_stream(r_rca, tk_gaso97, "C13-gasolina97",
+        self._add_example_stream(f_rca, r_rca, "C12-hot",
+                                  src_port="proceso_out", dst_port="alimentacion",
+                                  T=510, phase="liquid",
+                                  composition={"naphtha": 1.0})
+        # Gasolina 97 RON + H2 subproducto: producto reformado caliente,
+        # enfriado en air-cooler antes del tanque (T3)
+        self._add_example_stream(r_rca, e_rca, "C13-hot",
+                                  src_port="producto", dst_port="proceso_in",
+                                  T=520, phase="liquid",
+                                  composition={"gasoline_97": 0.96,
+                                                 "hydrogen": 0.04})
+        self._add_example_stream(e_rca, tk_gaso97, "C13-gasolina97",
                                   role="product",
-                                  src_port="producto", dst_port="entrada",
+                                  src_port="proceso_out", dst_port="entrada",
                                   price=1100.0, T=40, phase="liquid",
                                   composition={"gasoline_97": 0.96,
                                                  "hydrogen": 0.04})
@@ -3209,8 +3254,13 @@ class ExampleBuilder:
                                   T=40, phase="gas",
                                   composition={"hydrogen": 0.999,
                                                  "methane": 0.001})
-        self._add_example_stream(r_htd, tk_ulsd, "C14-ULSD", role="product",
-                                  src_port="producto", dst_port="entrada",
+        self._add_example_stream(r_htd, e_htd, "C14-hot",
+                                  src_port="producto", dst_port="proceso_in",
+                                  T=380, phase="liquid",
+                                  composition={"diesel": 0.9995,
+                                                 "hydrogen sulfide": 0.0005})
+        self._add_example_stream(e_htd, tk_ulsd, "C14-ULSD", role="product",
+                                  src_port="proceso_out", dst_port="entrada",
                                   price=950.0, T=50, phase="liquid",
                                   composition={"diesel": 0.9995,
                                                  "hydrogen sulfide": 0.0005})
@@ -3222,9 +3272,9 @@ class ExampleBuilder:
                                   composition={"hydrogen": 0.999,
                                                  "methane": 0.001})
         # Output HTF: mezcla al pool de gasolinas (al tanque gasolina 97)
-        self._add_example_stream(r_htf, tk_gaso97, "C9c-naft-FCC-clean",
-                                  src_port="producto", dst_port="entrada2",
-                                  T=130, phase="liquid",
+        self._add_example_stream(r_htf, e_htf, "C9c-naft-FCC-clean",
+                                  src_port="producto", dst_port="proceso_in",
+                                  T=320, phase="liquid",
                                   composition={"naphtha": 0.9995,
                                                  "hydrogen sulfide": 0.0005})
 
