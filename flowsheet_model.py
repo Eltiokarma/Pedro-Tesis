@@ -365,6 +365,18 @@ class Block:
     # serializado como dict.
     reaction_warnings: List[dict] = field(default_factory=list)
 
+    # ---- HX DIAGNOSTIC BUBBLE (parche HX riguroso) ----
+    # Burbuja flotante en el lienzo, anclada al bloque, con el diagnóstico
+    # térmico del HX (ΔT_lm, F, U_eff, approach, avisos).  Análoga a la
+    # StreamBubble pero por bloque.  Default OFF — el user la activa con
+    # click derecho sobre un HX → "Mostrar diagnóstico HX".
+    bubble_visible:  bool = False
+    # Offset [x, y] desde el centro del bloque (en px de viewport), para
+    # que la burbuja siga al bloque en pan/zoom.  [] = offset default.
+    bubble_position: List[float] = field(default_factory=list)
+    # Densidad: "collapsed" | "standard" | "expanded".
+    bubble_density:  str = "standard"
+
     # caches del canvas Tk (no se serializan, no se usan en Qt)
     canvas_rect: Optional[int] = field(default=None, repr=False)
     canvas_text: Optional[int] = field(default=None, repr=False)
