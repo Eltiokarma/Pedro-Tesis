@@ -1269,18 +1269,18 @@ class ExampleBuilder:
                                  main_component="water", phase="liquid")
         self._add_example_stream(ev2, ev3, "S-ev2", 0.0,
                                  src_port="producto", dst_port="alimentacion",
-                                 T=105,
+                                 T=95,
                                  composition=post_ev2,
                                  main_component="water", phase="liquid")
         self._add_example_stream(ev3, ev4, "S-ev3", 0.0,
                                  src_port="producto", dst_port="alimentacion",
-                                 T=95,
+                                 T=80,
                                  composition=post_ev3,
                                  main_component="water", phase="liquid")
         # Miel madre (final del tren evaporadores)
         self._add_example_stream(ev4, r102, "S-miel-madre", 0.0,
                                  src_port="producto", dst_port="alimentacion",
-                                 T=70,
+                                 T=65,
                                  composition=post_ev4,
                                  main_component="sucrose", phase="liquid")
         # Masa cocida al cristalizador (entra al "filtro" = centrífuga proxy)
@@ -1566,8 +1566,8 @@ class ExampleBuilder:
         # Layout PFD industrial 1600×960
         tk_fresh = self._add_example_block("TK-101","Storage tank — cone roof", 500.0,  60, 260)
         m101     = self._add_example_block("M-101", "Mixer — static",            5.0, 240, 320)
-        f101     = self._add_example_block("F-101", "Heat exch. — floating head",
-                                            300.0, 400, 320)
+        f101     = self._add_example_block("F-101", "Fired heater — non-reformer",
+                                            5000.0, 400, 320)
         r101     = self._add_example_block("R-101", "Reactor — jacketed agitated",
                                              80.0, 580, 320)
         sep101   = self._add_example_block("V-101", "Vessel — vertical",         50.0, 780, 320)
@@ -1600,11 +1600,11 @@ class ExampleBuilder:
                                   main_component="nitrogen", phase="gas")
         # Mezcla → heater
         self._add_example_stream(m101, f101, "S-mix",
-                                  src_port="salida", dst_port="tube_in",
+                                  src_port="salida", dst_port="proceso_in",
                                   T=80, phase="gas")
         # Heater → Reactor
         self._add_example_stream(f101, r101, "S-precal",
-                                  src_port="tube_out", dst_port="alimentacion",
+                                  src_port="proceso_out", dst_port="alimentacion",
                                   T=400, phase="gas")
         # Reactor → Separador (composición la setea solve_equilibrium_reactors)
         self._add_example_stream(r101, sep101, "S-rx-out",
@@ -1879,7 +1879,7 @@ class ExampleBuilder:
                                   composition={"water": 0.815, "ethanol": 0.085,
                                                  "co2": 0.080, "glucose": 0.020},
                                   phase="liquid")
-        # Cooler → flash
+        # Heater → flash (E-101 calienta 32→87°C; el catálogo no separa heater/cooler)
         self._add_example_stream(e101, v101, "S-cooled",
                                   src_port="proceso_out", dst_port="alimentacion",
                                   T=87, phase="two_phase")
