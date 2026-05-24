@@ -1483,9 +1483,11 @@ class ExampleBuilder:
         r101    = self._add_example_block("R-101", "Reactor — jacketed non-agit.",
                                              80.0, 460, 280)
         e101    = self._add_example_block("E-101", "Heat exch. — air cooler",
-                                           300.0, 660, 280)
+                                           300.0, 660, 280)   # quench TLE 827→400
+        e102    = self._add_example_block("E-102", "Heat exch. — air cooler",
+                                           200.0, 860, 280)   # cooler final 400→40
         tk_out  = self._add_example_block("TK-102","Storage tank — cone roof",
-                                           400.0, 860, 280)
+                                           400.0,1060, 280)
 
         # Configurar R-101 como REACTOR PFR Capa 5
         self.fs.blocks[r101].reactions = ["R011"]
@@ -1512,13 +1514,19 @@ class ExampleBuilder:
                                   T=600,
                                   main_component="ethane", phase="gas",
                                   composition={"ethane": 1.0})
-        # Salida del reactor — composition se calcula automáticamente
+        # Salida del reactor → quench TLE (827→400°C, ΔT manejable en un HX;
+        # un solo cooler 827→40 era irreal).  composition auto.
         self._add_example_stream(r101, e101, "S-cracked",
                                   src_port="producto", dst_port="proceso_in",
                                   T=827,
                                   main_component="ethylene", phase="gas")
-        # Producto enfriado
-        self._add_example_stream(e101, tk_out, "S-product", 0.0, role="product",
+        # Quench parcial → cooler final
+        self._add_example_stream(e101, e102, "S-quench",
+                                  src_port="proceso_out", dst_port="proceso_in",
+                                  T=400,
+                                  main_component="ethylene", phase="gas")
+        # Producto enfriado (400→40)
+        self._add_example_stream(e102, tk_out, "S-product", 0.0, role="product",
                                   src_port="proceso_out", dst_port="entrada",
                                   price=900.0, T=40,
                                   main_component="ethylene", phase="gas")
