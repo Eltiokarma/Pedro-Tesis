@@ -307,6 +307,11 @@ def size_heat_exchanger(block, fs):
     """
     diag = {"U_used": None, "dTlm": None, "F": 1.0,
             "cross_check": None, "warnings": []}
+    # Los WHB dedicados (Sinnott) se dimensionan por caudal de vapor [kg/h],
+    # no por área — los maneja size_whb.  Acá NO computamos área para ellos.
+    if block.eq_type in WHB_STEAM_SIZED:
+        diag["cross_check"] = "WHB (dimensionado por caudal de vapor, ver size_whb)"
+        return None, diag
     Q = abs(float(block.duty or 0.0))
     if Q <= 0:
         return None, diag
@@ -539,6 +544,50 @@ def size_evaporator(block, fs) -> Optional[float]:
     return max(A, 1.0)
 
 
+# Clases WHB dedicadas (Sinnott): el parámetro de tamaño S es el caudal de
+# vapor generado [kg/h], no área — se dimensionan con size_whb, no con
+# size_heat_exchanger.  (El kettle reboiler NO está acá: su S sigue siendo
+# área m² y usa el sizer de HX normal.)
+WHB_STEAM_SIZED = (
+    "Heat exch. — WHB packaged",
+    "Heat exch. — WHB field erected",
+)
+
+
+def size_whb(block, fs) -> Optional[float]:
+    """Dimensiona un waste-heat boiler por el caudal de vapor que genera.
+
+        S [kg/h] = |Q [kW]| · 3600 / ΔH_vap [kJ/kg] · η_gen
+
+    ΔH_vap y η salen de la utility de generación elegida (bfw_to_steam_*).
+    Si el bloque no resuelve a una utility de generación, devuelve None.
+    """
+    import equipment_ports as ep
+    Q_kW = abs(float(block.duty or 0.0))
+    if Q_kW <= 0:
+        return None
+    _, _, proc_in, proc_out = _process_streams(fs, block)
+    proc_T = [s.temperature for s in (proc_in + proc_out)]
+    T_avg = (sum(proc_T) / len(proc_T)) if proc_T else 200.0
+    heat_src = ep.resolve_heat_source(block, T_avg)
+    util = ep.UTILITIES.get(heat_src)
+    if not util or util.get("type") != "generation":
+        return None
+    dh_vap = util["delta_h"]
+    eff    = util.get("efficiency", 0.85)
+    S_kg_per_h = Q_kW * 3600.0 / dh_vap * eff
+    return max(S_kg_per_h, 5_000.0)        # clamp al S_min del Packaged
+
+
+def autoselect_whb_subtype(steam_kg_per_h):
+    """Elige variante Packaged vs Field erected según producción de vapor.
+    Regla simple: ≤50 000 kg/h → Packaged, >50 000 → Field erected.
+    Función auxiliar exportable (todavía NO cableada a la UI ni a
+    autoselect_heat_source)."""
+    return ("Heat exch. — WHB packaged" if steam_kg_per_h <= 50_000
+            else "Heat exch. — WHB field erected")
+
+
 # ─────────────────────────────────────────────────────────────
 # Dispatch + función pública
 # ─────────────────────────────────────────────────────────────
@@ -553,6 +602,14 @@ SIZER_BY_CAT = {
     "Towers":            size_tower,
     "Storage":           size_storage_tank,
     "Evaporators":       size_evaporator,
+}
+
+# Sizers específicos por eq_type — tienen prioridad sobre SIZER_BY_CAT.
+# Los WHB son categoría "Heat exchangers" pero su S es caudal de vapor
+# [kg/h], no área, así que usan size_whb (no size_heat_exchanger).
+SIZER_BY_EQTYPE = {
+    "Heat exch. — WHB packaged":      size_whb,
+    "Heat exch. — WHB field erected": size_whb,
 }
 
 
@@ -571,7 +628,8 @@ def auto_size_blocks(fs, only_if_unset=False) -> List[Tuple[str, float, float, s
     for b in fs.blocks.values():
         spec = ec.EQUIPMENT_DATA.get(b.eq_type, {})
         cat  = spec.get("categoria", "")
-        sizer = SIZER_BY_CAT.get(cat)
+        # eq_type específico (ej. WHB → size_whb) tiene prioridad sobre cat.
+        sizer = SIZER_BY_EQTYPE.get(b.eq_type) or SIZER_BY_CAT.get(cat)
         if sizer is None:
             continue
         try:

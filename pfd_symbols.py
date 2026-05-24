@@ -880,6 +880,8 @@ EQ_TYPE_TO_SYMBOL: Dict[str, str] = {
     'Heat exch. — U-tube': 'hx-utube',
     'Heat exch. — floating head': 'hx-shell-tube',
     'Heat exch. — kettle reboiler': 'hx-kettle',
+    'Heat exch. — WHB packaged': 'hx-kettle',
+    'Heat exch. — WHB field erected': 'hx-kettle',
     'Heat exch. — double pipe': 'hx-double-pipe',
     'Heat exch. — multiple pipe': 'hx-double-pipe',
     'Heat exch. — air cooler': 'hx-air-cooled',

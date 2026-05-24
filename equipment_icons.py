@@ -400,6 +400,9 @@ SVG_ICONS = {
     "Heat exch. — spiral plate":    SVG_HX_SHELL_TUBE,
     "Heat exch. — air cooler":      SVG_HX_AIR_COOLER,
     "Heat exch. — kettle reboiler": SVG_HX_KETTLE,
+    # WHB: visual aproximado (kettle).  TODO: SVG dedicado para WHB.
+    "Heat exch. — WHB packaged":      SVG_HX_KETTLE,
+    "Heat exch. — WHB field erected": SVG_HX_KETTLE,
 
     # Pumps
     "Pump — centrifugal":           SVG_PUMP_CENTRIFUGAL,

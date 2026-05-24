@@ -238,6 +238,9 @@ EQUIPMENT_PORTS = {
     "Heat exch. — spiral plate":    HX_PORTS,
     "Heat exch. — air cooler":      AIR_COOLER_PORTS,
     "Heat exch. — kettle reboiler": REBOILER_PORTS,
+    # WHB (Sinnott): shell-tube clásico — tube=proceso caliente, shell=BFW/steam.
+    "Heat exch. — WHB packaged":      HX_PORTS,
+    "Heat exch. — WHB field erected": HX_PORTS,
     # Condensadores (mismos puertos que su HX padre):
     "Heat exch. — condenser shell-tube":  HX_PORTS,
     "Heat exch. — condenser air-cooled":  AIR_COOLER_PORTS,
@@ -314,6 +317,8 @@ ISA_PREFIX = {
     "Heat exch. — spiral plate":    "E",
     "Heat exch. — air cooler":      "E",
     "Heat exch. — kettle reboiler": "E",
+    "Heat exch. — WHB packaged":      "E",
+    "Heat exch. — WHB field erected": "E",
 
     "Pump — centrifugal":           "P",
     "Pump — positive displacement": "P",
@@ -764,6 +769,15 @@ def is_electrical_equipment(eq_type):
     return eq_type in ELECTRICAL_EQUIPMENT
 
 
+# Tipos de HX que estructuralmente pueden GENERAR vapor (waste-heat boiler):
+# el kettle reboiler (proxy histórico) y las clases WHB dedicadas (Sinnott).
+WHB_EQ_TYPES = (
+    "Heat exch. — kettle reboiler",
+    "Heat exch. — WHB packaged",
+    "Heat exch. — WHB field erected",
+)
+
+
 def autoselect_heat_source(eq_type, duty_kw, T_avg):
     """Elige la utility apropiada para un bloque dado su tipo,
     duty (kW) y temperatura promedio del proceso (°C).
@@ -787,11 +801,11 @@ def autoselect_heat_source(eq_type, duty_kw, T_avg):
         return "fuel_gas"
 
     # duty_kw < 0  → cooling
-    # Un kettle reboiler que extrae calor a alta T es estructuralmente un
-    # waste-heat boiler: vaporiza BFW y EXPORTA vapor (revenue) en vez de
-    # tirar el calor a cooling water.  La utility de generación se elige
-    # por la T del proceso (Tsat del vapor producible).
-    if eq_type == "Heat exch. — kettle reboiler":
+    # Un WHB (kettle reboiler o las clases WHB dedicadas) que extrae calor
+    # a alta T es estructuralmente un waste-heat boiler: vaporiza BFW y
+    # EXPORTA vapor (revenue) en vez de tirar el calor a cooling water.
+    # La utility de generación se elige por la T del proceso (Tsat).
+    if eq_type in WHB_EQ_TYPES:
         if T_avg > 220:
             return "bfw_to_steam_HP"
         if T_avg > 160:

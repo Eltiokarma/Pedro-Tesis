@@ -60,6 +60,30 @@ import cepci
 # 5ª sin re-calibración del año base.
 CEPCI_BASE_TURTON = 397.0
 
+# ======================================================
+# FUENTES BIBLIOGRÁFICAS MIXTAS
+# ======================================================
+# El catálogo combina dos fuentes:
+#
+# 1. Turton et al. (4th ed, 2018) — fuente principal.
+#    Correlación: log10(Cp°) = K1 + K2·log10(S) + K3·[log10(S)]²
+#    Año base: CEPCI 2001 = 397.
+#
+# 2. Sinnott & Towler (6th ed, 2019) — equipos no cubiertos por Turton.
+#    Correlación: C_e = a + b · S^n
+#    Año base: CEPCI 2010 = 550.8 (annual avg, Chemical Engineering mag).
+#    Moneda base: GBP 2010 (BoE avg 2010: 1 GBP = 1.5458 USD).
+#
+# Cada entry tiene `source` y `correlation` para auditabilidad.
+# Hoy Sinnott cubre: Waste Heat Boilers (packaged y field erected).
+
+# CEPCI base de las correlaciones Sinnott (annual 2010, Chemical Engineering).
+CEPCI_BASE_SINNOTT = 550.8
+# Tipo de cambio GBP -> USD usado para convertir Sinnott 2010 a USD 2010
+# (después se escala por CEPCI al año target via cepci.py).
+# Valor: promedio anual 2010 (Bank of England spot rates 2010).
+GBP_TO_USD_2010 = 1.5458
+
 
 # ======================================================
 # EQUIPMENT DATA
@@ -134,6 +158,30 @@ EQUIPMENT_DATA = {
         dict(K1=4.6561, K2=-0.2947, K3=0.2207,
              S_param="Heat transfer area", S_unit="m²",
              S_min=1,   S_max=100,  categoria="Heat exchangers"),
+
+    # -------- WASTE HEAT BOILERS (Sinnott & Towler 6th ed, Tabla 6.6) --------
+    # Correlación C_e = a + b·S^n (GBP 2010), S = caudal de vapor [kg/h].
+    # No están en Turton; cubren el gap de WHBs gas-vapor industriales.
+    "Heat exch. — WHB packaged":
+        dict(a=4_600, b=62, n=0.8,
+             correlation="sinnott",
+             S_param="Steam generation rate", S_unit="kg/h",
+             S_min=5_000, S_max=200_000,
+             categoria="Heat exchangers",
+             source="Sinnott_2019_Table_6.6",
+             P_range_bar=(15, 40),
+             notes=("Waste heat boiler tipo paquete (pre-armado, "
+                    "típico Q ~5-50 MW). Genera vapor saturado 15-40 bar.")),
+    "Heat exch. — WHB field erected":
+        dict(a=-90_000, b=93, n=0.8,
+             correlation="sinnott",
+             S_param="Steam generation rate", S_unit="kg/h",
+             S_min=20_000, S_max=800_000,
+             categoria="Heat exchangers",
+             source="Sinnott_2019_Table_6.6",
+             P_range_bar=(10, 70),
+             notes=("Waste heat boiler de campo (montaje in situ, "
+                    "típico Q >50 MW). Genera vapor 10-70 bar.")),
 
     # -------- COMPRESSORS --------
     "Compressor — centrifugal":
@@ -350,6 +398,14 @@ EQUIPMENT_DATA = {
              S_param="Cooling duty", S_unit="MW",
              S_min=10,  S_max=200, categoria="Utilities"),
 }
+
+# Defaults de auditabilidad: toda entry declara su fuente y su correlación.
+# Las entries Turton (la mayoría) no las traen explícitas → se setean acá.
+# Las Sinnott (WHB) ya las declaran y setdefault no las pisa.
+for _spec in EQUIPMENT_DATA.values():
+    _spec.setdefault("correlation", "turton")
+    _spec.setdefault("source", "Turton_2018_AppA")
+del _spec
 
 
 # ======================================================
@@ -960,6 +1016,65 @@ def info(nombre):
 # CÁLCULO DE Cp°
 # ======================================================
 
+def sinnott_purchased_cost(a, b, n, S, year_target):
+    """Costo de compra según Sinnott & Towler 6th ed (2019), Tabla 6.6.
+
+        C_e = a + b · S^n     (GBP 2010)
+
+    Devuelve USD del year_target, escalado vía CEPCI y convertido desde
+    GBP 2010.
+
+    Fuentes:
+      · Sinnott & Towler, Chemical Engineering Design, 6th ed (2019),
+        Tabla 6.6.
+      · CEPCI 2010 annual avg = 550.8 (Chemical Engineering magazine).
+      · GBP/USD avg 2010 = 1.5458 (Bank of England spot rates).
+    """
+    cost_gbp_2010 = a + b * (S ** n)
+    cost_usd_2010 = cost_gbp_2010 * GBP_TO_USD_2010
+    if year_target is None:
+        return cost_usd_2010
+    cepci_target = cepci.CEPCI.get(year_target, cepci._valor_cepci(year_target))
+    return cost_usd_2010 * (cepci_target / CEPCI_BASE_SINNOTT)
+
+
+def _sinnott_purchased_cost_dict(nombre, spec, S, year_target):
+    """Empaqueta sinnott_purchased_cost en el mismo dict que devuelve
+    purchased_cost (Cp_base/Cp_target/fuera_rango/...), para que
+    bare_module_cost y el resto del pipeline lo consuman igual."""
+    a, b_, n = spec["a"], spec["b"], spec["n"]
+    cp_usd_2010 = sinnott_purchased_cost(a, b_, n, S, None)      # USD 2010
+    yt = year_target if year_target is not None else 2010
+    if year_target is None:
+        factor, cp_target = 1.0, cp_usd_2010
+    else:
+        cepci_t = cepci.CEPCI.get(year_target, cepci._valor_cepci(year_target))
+        factor  = cepci_t / CEPCI_BASE_SINNOTT
+        cp_target = cp_usd_2010 * factor
+    fuera = (S < spec["S_min"]) or (S > spec["S_max"])
+    warning_msg = ""
+    if fuera:
+        warning_msg = (
+            f"{nombre}: S={S} {spec['S_unit']} fuera del rango Sinnott "
+            f"válido [{spec['S_min']}, {spec['S_max']}] {spec['S_unit']}. "
+            f"Costo extrapolado — NO confiable.")
+        import warnings
+        warnings.warn(warning_msg, UserWarning, stacklevel=3)
+    return {
+        "Cp_base":      cp_usd_2010,       # USD 2010 (CEPCI 550.8)
+        "Cp_target":    cp_target,
+        "year_base":    2010,
+        "year_target":  yt,
+        "cepci_factor": factor,
+        "fuera_rango":  fuera,
+        "warning_msg":  warning_msg,
+        "S":            S,
+        "S_min":        spec["S_min"],
+        "S_max":        spec["S_max"],
+        "S_unit":       spec["S_unit"],
+    }
+
+
 def purchased_cost(nombre, S, year_target=None):
     """Calcula Cp° (purchased cost a CS y atm) para `nombre` con
     tamaño S, usando log10(Cp°) = K1 + K2·log10(S) + K3·log10(S)²
@@ -988,6 +1103,10 @@ def purchased_cost(nombre, S, year_target=None):
 
     if S <= 0:
         raise ValueError(f"S debe ser positivo (recibido {S})")
+
+    # Dispatch por correlación: Sinnott (C_e = a + b·S^n) vs Turton (default).
+    if spec.get("correlation") == "sinnott":
+        return _sinnott_purchased_cost_dict(nombre, spec, S, year_target)
 
     logS = math.log10(S)
     log_cp = spec["K1"] + spec["K2"] * logS + spec["K3"] * (logS ** 2)
