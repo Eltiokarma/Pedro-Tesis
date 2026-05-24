@@ -82,6 +82,10 @@ class Block:
     # utility que provee/recibe el duty (clave de equipment_ports.UTILITIES).
     # vacío → autoselect según signo de duty y T promedio.
     heat_source: str = ""
+    # True → respetar heat_source literal (saltear autoselect_heat_source),
+    # incluso si está vacío.  Útil para forzar "esto es un cooler normal,
+    # no un WHB" desde la UI.  Default False = autoselect activo.
+    heat_source_locked: bool = False
 
     # Calor de reacción para reactores (kJ/kg de input total).
     #   > 0  reacción endotérmica (consume calor del medio)

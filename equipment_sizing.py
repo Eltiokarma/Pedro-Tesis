@@ -216,14 +216,14 @@ def _rigorous_lmtd_simple(fs, block, diag):
     T_pin, T_pout = proc_in[0].temperature, proc_out[0].temperature
     duty = float(block.duty or 0.0)
     T_avg = (T_pin + T_pout) / 2.0
-    util_key = getattr(block, "heat_source", "") or ep.autoselect_heat_source(
-        block.eq_type, duty, T_avg)
+    util_key = ep.resolve_heat_source(block, T_avg)
     if not util_key or util_key not in ep.UTILITIES:
         return None
     util = ep.UTILITIES[util_key]
     t_lo, t_hi = util.get("T_range", (None, None))
     if t_lo is None:
         return None
+    util_type = util.get("type", "")
 
     # Cambio de fase del PROCESO: vapor→líquido = condensación;
     # líquido→vapor = evaporación.  Define el U de servicio.
@@ -244,6 +244,12 @@ def _rigorous_lmtd_simple(fs, block, diag):
         if pc is None and util.get("type") == "heating" \
                 and util_key.startswith("steam"):
             pc = "condensation"        # vapor de calefacción condensa
+    elif util_type == "generation":
+        # waste-heat boiler: el lado frío VAPORIZA BFW a T constante
+        # (Tsat del vapor producido) — no es el rango sensible de CW.
+        T_sat = float(util.get("T_sat", t_lo))
+        T_ci = T_co = T_sat
+        T_hi, T_ho = T_pin, T_pout
     else:
         # enfriamiento: la utility (agua/refrigerante) es el lado FRÍO,
         # entra a la T baja del rango y sube ~ΔT sensible.
@@ -261,6 +267,16 @@ def _rigorous_lmtd_simple(fs, block, diag):
     ap = hxr.check_approach(T_ho, T_ci)
     if ap:
         diag["warnings"].append(ap)
+
+    # Guard de rango (punto 5): si la T del proceso excede el T_max de la
+    # utility por >50°C, advertir (típico WHB modelado como cooler normal).
+    t_proc_max = max(T_pin, T_pout)
+    if t_proc_max > t_hi + 50.0:
+        extra = (" — verificar si debería ser un WHB/steam-generator"
+                 if util_type == "cooling" else "")
+        diag["warnings"].append(
+            f"utility '{util_key}' fuera de rango: T_proceso="
+            f"{t_proc_max:.0f}°C vs T_max_util={t_hi:.0f}°C{extra}")
 
     # U por servicio: si hay cambio de fase usar el U del servicio; si no,
     # preferir el U calibrado por tipo de equipo (U_TYPICAL) — coherente

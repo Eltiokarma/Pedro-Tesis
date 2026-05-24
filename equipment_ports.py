@@ -672,6 +672,41 @@ UTILITIES = {
         "T_range":    (-50, 35),
         "efficiency": 0.7,
     },
+    # ── GENERACIÓN DE VAPOR (waste heat boiler) ──────────────────
+    # HX que CEDE calor del proceso vaporizando BFW → exporta vapor.
+    # price NEGATIVO = ingreso por exportación (≈ precio de compra del
+    # steam equivalente).  T_sat = T de saturación del lado frío (para
+    # el LMTD: el agua hierve a T constante, no es el rango de CW).
+    "bfw_to_steam_HP": {
+        "name":       "Steam HP (BFW→export)",
+        "units":      "tm",
+        "price":      -28.0,   # revenue por exportar HP steam
+        "delta_h":    1700,
+        "type":       "generation",
+        "T_range":    (220, 280),
+        "T_sat":      250,
+        "efficiency": 0.85,    # pérdidas: no todo el calor → vapor útil
+    },
+    "bfw_to_steam_MP": {
+        "name":       "Steam MP (BFW→export)",
+        "units":      "tm",
+        "price":      -25.0,
+        "delta_h":    2000,
+        "type":       "generation",
+        "T_range":    (160, 220),
+        "T_sat":      184,
+        "efficiency": 0.85,
+    },
+    "bfw_to_steam_LP": {
+        "name":       "Steam LP (BFW→export)",
+        "units":      "tm",
+        "price":      -20.0,
+        "delta_h":    2200,
+        "type":       "generation",
+        "T_range":    (110, 160),
+        "T_sat":      152,
+        "efficiency": 0.85,
+    },
     "electricity": {
         "name":       "Electricity",
         "units":      "kWh",
@@ -750,10 +785,37 @@ def autoselect_heat_source(eq_type, duty_kw, T_avg):
         if T_avg < 260:
             return "steam_HP"
         return "fuel_gas"
+
     # duty_kw < 0  → cooling
+    # Un kettle reboiler que extrae calor a alta T es estructuralmente un
+    # waste-heat boiler: vaporiza BFW y EXPORTA vapor (revenue) en vez de
+    # tirar el calor a cooling water.  La utility de generación se elige
+    # por la T del proceso (Tsat del vapor producible).
+    if eq_type == "Heat exch. — kettle reboiler":
+        if T_avg > 220:
+            return "bfw_to_steam_HP"
+        if T_avg > 160:
+            return "bfw_to_steam_MP"
+        if T_avg > 110:
+            return "bfw_to_steam_LP"
+    # Resto de coolers: agua o refrigerante (la advertencia de "alta T,
+    # debería ser WHB" la emite size_heat_exchanger en sus diagnostics).
     if T_avg > 35:
         return "cooling_water"
     return "refrigeration"
+
+
+def resolve_heat_source(b, T_avg):
+    """Resuelve la utility de un bloque respetando heat_source_locked.
+
+    · heat_source_locked=True → devuelve b.heat_source LITERAL (incluso
+      vacío) — el user forzó la utility, no se auto-selecciona.
+    · si no, usa b.heat_source si está seteado, o autoselect.
+    """
+    if getattr(b, "heat_source_locked", False):
+        return getattr(b, "heat_source", "") or ""
+    return (getattr(b, "heat_source", "") or
+            autoselect_heat_source(b.eq_type, b.duty, T_avg))
 
 
 def utility_consumption(util_key, duty_kw_abs):
@@ -783,5 +845,7 @@ def utility_consumption(util_key, duty_kw_abs):
     mass_kg = Q_kJ_per_year / delta_h
     if util["type"] == "heating":
         mass_kg /= eff       # ineficiencia del horno/equipo
+    elif util["type"] == "generation":
+        mass_kg *= eff       # sólo η del calor cedido → vapor exportable
     return mass_kg / 1000.0  # tm/año
 
