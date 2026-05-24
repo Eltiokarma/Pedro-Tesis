@@ -98,6 +98,12 @@ class Block:
     # desde JSON / examples mediante heurística (duty != 0 → locked).
     duty_locked: bool = False
 
+    # True si el user fijó el área/tamaño S a mano (specification).  False
+    # si el solver lo puede auto-dimensionar desde duty + T (size_heat_
+    # exchanger).  Análogo a duty_locked.  Cargado desde JSON / examples
+    # mediante heurística (S > 0 → locked, ver from_dict).
+    S_locked: bool = False
+
     # ---- HIDRÁULICA: ΔP a través del bloque ----
     # Positivo si el bloque SUMA presión (bomba, compresor).
     # Negativo si la PIERDE (HX, columna, válvula, filter).
@@ -601,6 +607,10 @@ class Flowsheet:
             # inferir desde valor (duty != 0 → user lo declaró).
             if "duty_locked" not in bdict:
                 b.duty_locked = (abs(b.duty) > 1e-9)
+            # S_locked migration: JSONs viejos (sin la clave) traían su S
+            # ya curada/fijada por el user → tratar como locked si S > 0.
+            if "S_locked" not in bdict:
+                b.S_locked = (b.S > 0)
             fs.blocks[int(bid)] = b
         for sid, sdict in d.get("streams", {}).items():
             s = Stream(**{k: v for k, v in sdict.items()

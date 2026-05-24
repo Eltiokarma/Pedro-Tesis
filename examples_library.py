@@ -50,6 +50,10 @@ class ExampleBuilder:
     def _add_example_block(self, name, eq_type, S, x, y, n=1):
         bid = self.fs.new_id()
         b = Block(id=bid, name=name, eq_type=eq_type, S=S, n=n, x=x, y=y)
+        # Los ejemplos son configuraciones curadas: el área S es una
+        # specification, no algo a auto-dimensionar.  Marcar S_locked
+        # para que solve() compute diagnostics pero NO sobreescriba S.
+        b.S_locked = (S > 0)
         # NO llamar a apply_type_defaults aca: los ejemplos son
         # "carga" en espiritu (configuracion pre-curada), no creacion
         # interactiva de usuario. Multiples ejemplos usan

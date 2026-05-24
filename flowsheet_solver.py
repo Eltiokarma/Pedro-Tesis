@@ -140,6 +140,11 @@ class SolverResult:
     # mínimo violado, F<0.75, cross-exchange que no cierra energía).
     # No degradan success — son advisory de diseño.
     hx_warnings:         List[str]          = field(default_factory=list)
+    # Diagnósticos de diseño térmico por HX (block_id → dict con U_used,
+    # dTlm, F, cross_check, warnings).  Lo puebla solve() corriendo
+    # size_heat_exchanger sobre cada HX (respeta S_locked: computa los
+    # diagnostics aunque no re-dimensione).
+    hx_diagnostics:     Dict[int, dict]     = field(default_factory=dict)
     cycles_detected:    List[List[str]]     = field(default_factory=list)
     recycle_solutions:  List[RecycleSolution] = field(default_factory=list)
 
@@ -662,6 +667,42 @@ def _check_heat_exchangers(fs):
         if w not in warnings_list:
             warnings_list.append(w)
     return warnings_list
+
+
+def _size_heat_exchangers(fs, result):
+    """Corre size_heat_exchanger sobre cada HX y persiste los diagnósticos
+    térmicos (U, ΔT_lm, F, warnings) en block._hx_diagnostics y en
+    result.hx_diagnostics[block_id].
+
+    Re-dimensiona block.S SÓLO si el bloque NO está S_locked (área fijada a
+    mano).  Si está locked, igual computa y persiste los diagnostics para
+    que la UI los muestre — sólo no toca S.
+    """
+    try:
+        import equipment_sizing as _es
+        import equipment_costs as _ec
+    except ImportError:
+        return
+    for b in fs.blocks.values():
+        spec = _ec.EQUIPMENT_DATA.get(b.eq_type, {})
+        if spec.get("categoria") != "Heat exchangers":
+            continue
+        try:
+            out = _es.size_heat_exchanger(b, fs)
+        except Exception:
+            continue
+        if not isinstance(out, tuple):
+            continue                      # contrato inesperado → skip
+        A, diag = out
+        b._hx_diagnostics = diag
+        result.hx_diagnostics[b.id] = diag
+        if A is None or A <= 0:
+            continue
+        if getattr(b, "S_locked", False):
+            continue                      # área fijada por el user: no tocar
+        S_min = spec.get("S_min", 0)
+        S_max = spec.get("S_max", float("inf"))
+        b.S = max(S_min, min(A, S_max))
 
 
 # ======================================================
@@ -4047,6 +4088,9 @@ def solve(fs, max_iter=MAX_ITER):
     # role hygiene — warnings (no errors) sobre streams con role
     # inconsistente que pueden ensuciar costing económico
     result.component_warnings.extend(_check_stream_roles(fs))
+    # sizing + diagnósticos térmicos de HX (persiste block._hx_diagnostics;
+    # re-dimensiona sólo los HX sin S_locked)
+    _size_heat_exchangers(fs, result)
     # auditoría térmica de HX (advisory, no rompe success)
     result.hx_warnings            = _check_heat_exchangers(fs)
     # energy balance errors quedan deshabilitados (no comparables al Cp
