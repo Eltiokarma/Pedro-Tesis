@@ -136,6 +136,10 @@ class SolverResult:
     # son inconsistentes con un balance riguroso por componente.
     # No degrada overall_status — el balance total sigue siendo OK.
     component_warnings:  List[str]          = field(default_factory=list)
+    # Warnings de auditoría térmica de HX (cruces imposibles, approach
+    # mínimo violado, F<0.75, cross-exchange que no cierra energía).
+    # No degradan success — son advisory de diseño.
+    hx_warnings:         List[str]          = field(default_factory=list)
     cycles_detected:    List[List[str]]     = field(default_factory=list)
     recycle_solutions:  List[RecycleSolution] = field(default_factory=list)
 
@@ -213,6 +217,12 @@ class SolverResult:
             lines.append(f"\nWarnings de balance por componente "
                           f"({len(self.component_warnings)}):")
             for w in self.component_warnings:
+                lines.append(f"  · {w}")
+
+        if self.hx_warnings:
+            lines.append(f"\nWarnings de intercambiadores "
+                          f"({len(self.hx_warnings)}):")
+            for w in self.hx_warnings:
                 lines.append(f"  · {w}")
 
         return "\n".join(lines)
@@ -595,6 +605,62 @@ def _check_component_balance(fs, tol_rel=0.02):
             warnings_list.append(
                 f"{b.name} balance por componente: " + "; ".join(bad[:3])
             )
+    return warnings_list
+
+
+def _check_heat_exchangers(fs):
+    """Auditoría térmica de los intercambiadores: cruces imposibles,
+    approach mínimo y factor F<0.75 en configuraciones multi-paso.
+
+    Devuelve list[str] de WARNINGS (no errores — no rompe flujos legacy).
+    Incluye también los warnings acumulados en fs._solver_warnings
+    (ej. cross-exchange que no cierra energía).
+    """
+    import equipment_costs as _eq_mod
+    try:
+        import heat_exchanger_rigorous as hxr
+    except ImportError:
+        return list(getattr(fs, "_solver_warnings", []) or [])
+
+    warnings_list = []
+    for b in fs.blocks.values():
+        spec = _eq_mod.EQUIPMENT_DATA.get(b.eq_type, {})
+        if spec.get("categoria") != "Heat exchangers":
+            continue
+        ins  = [s for s in fs.streams.values() if s.dst == b.id]
+        outs = [s for s in fs.streams.values() if s.src == b.id]
+        if not ins or not outs:
+            continue
+
+        if is_cross_exchange(fs, b):
+            # 4 T reales: verificar cruce + approach + F
+            pairs = _pair_hx_streams(ins, outs)
+            hot = next(((i, o) for i, o in pairs
+                        if i.temperature > o.temperature), None)
+            cold = next(((i, o) for i, o in pairs
+                         if o.temperature > i.temperature), None)
+            if hot is None or cold is None:
+                continue
+            T_hi, T_ho = hot[0].temperature, hot[1].temperature
+            T_ci, T_co = cold[0].temperature, cold[1].temperature
+            _, w = hxr.compute_lmtd_real(T_hi, T_ho, T_ci, T_co, "counter")
+            if w:
+                warnings_list.append(f"{b.name}: {w}")
+            ap = hxr.check_approach(T_ho, T_ci)
+            if ap:
+                warnings_list.append(f"{b.name}: {ap}")
+            dR = (T_co - T_ci)
+            dP = (T_hi - T_ci)
+            R = (T_hi - T_ho) / dR if abs(dR) > 1e-9 else 1.0
+            P = (T_co - T_ci) / dP if abs(dP) > 1e-9 else 0.0
+            _, wf = hxr.f_correction_factor(R, P)
+            if wf:
+                warnings_list.append(f"{b.name}: {wf}")
+
+    # incorporar warnings acumulados durante el solve (dedupe)
+    for w in (getattr(fs, "_solver_warnings", []) or []):
+        if w not in warnings_list:
+            warnings_list.append(w)
     return warnings_list
 
 
@@ -1078,13 +1144,67 @@ def _solve_energy_iteration(fs, tol_T=0.5, skipped=None):
 #     inferido, hay algo mal en T's, fases o composiciones.
 
 
+def _hx_energy_closes(fs, b, ins, outs, tol=0.05):
+    """Verifica que un candidato a cross-exchange cierre energía: el calor
+    cedido por las corrientes que se enfrían ≈ el absorbido por las que se
+    calientan, dentro de `tol` (5%).
+
+    Returns:
+        True  → cierra (recuperador real).
+        False → no cierra (debe consumir utility).
+        None  → no se pudo evaluar (faltan Cp/composición) → indeterminado;
+                el caller conserva el resultado estructural.
+    """
+    pairs = _pair_hx_streams(ins, outs)
+    q_hot = q_cold = 0.0
+    for s_in, s_out in pairs:
+        h_in  = _stream_enthalpy_kW(s_in)
+        h_out = _stream_enthalpy_kW(s_out)
+        if h_in is None or h_out is None:
+            return None
+        dq = h_in - h_out                 # >0: la línea se enfría (cede)
+        if dq > 0:
+            q_hot += dq
+        else:
+            q_cold += -dq
+    if max(q_hot, q_cold) < 1e-6:
+        return None
+    if q_cold < 1e-6 or q_hot < 1e-6:
+        return False                      # un solo sentido térmico → no recupera
+    rel = abs(q_hot - q_cold) / max(q_hot, q_cold)
+    return rel < tol
+
+
+def _pair_hx_streams(ins, outs):
+    """Empareja entradas con salidas por mass_flow más cercano."""
+    pairs, used = [], set()
+    for i in ins:
+        best, bd = None, float("inf")
+        for j, o in enumerate(outs):
+            if j in used:
+                continue
+            d = abs((i.mass_flow or 0) - (o.mass_flow or 0))
+            if d < bd:
+                bd, best = d, j
+        if best is not None:
+            used.add(best)
+            pairs.append((i, outs[best]))
+    return pairs
+
+
 def is_cross_exchange(fs, b):
     """Detecta heat exchangers proceso-proceso (cross-exchange).
 
-    Un HX cross-exchange tiene 2 corrientes entrantes y 2 salientes:
+    Un HX cross-exchange tiene ≥2 corrientes entrantes y ≥2 salientes:
     una corriente caliente que cede calor y una fría que lo recibe.
     No consume utility — sólo recupera calor entre corrientes.
     Casos típicos: feed/effluent HX en HDA, lean/rich HX en aminas.
+
+    Además del chequeo estructural, valida TERMODINÁMICAMENTE que el calor
+    cedido ≈ el recibido (cierre 5%).  Si no cierra, devuelve False y deja
+    que el bloque consuma utility (con warning en fs._solver_warnings).
+    Si no hay datos para evaluar (Cp/comp faltantes), conserva el resultado
+    estructural para no romper flujos legacy.
     """
     import equipment_costs as _eq_mod
     spec = _eq_mod.EQUIPMENT_DATA.get(b.eq_type, {})
@@ -1092,7 +1212,29 @@ def is_cross_exchange(fs, b):
         return False
     ins  = [s for s in fs.streams.values() if s.dst == b.id]
     outs = [s for s in fs.streams.values() if s.src == b.id]
-    return len(ins) >= 2 and len(outs) >= 2
+    if not (len(ins) >= 2 and len(outs) >= 2):
+        return False
+
+    closes = _hx_energy_closes(fs, b, ins, outs)
+    if closes is False:
+        _log_solver_warning(
+            fs, f"{b.name}: cross-exchange no cierra energía (>5%) — "
+                f"tratado como HX con utility de trim")
+        return False
+    return True
+
+
+def _log_solver_warning(fs, msg):
+    """Agrega un warning de solver a fs._solver_warnings (dedupe)."""
+    wl = getattr(fs, "_solver_warnings", None)
+    if wl is None:
+        wl = []
+        try:
+            fs._solver_warnings = wl
+        except Exception:
+            return
+    if msg not in wl:
+        wl.append(msg)
 
 
 def infer_block_duty(fs, b):
@@ -3637,6 +3779,7 @@ def solve(fs, max_iter=MAX_ITER):
         SolverResult.
     """
     result = SolverResult()
+    fs._solver_warnings = []      # reset de warnings acumulados por corrida
 
     # 0. Reset de valores propagados en corridas anteriores.  Sin esto,
     #    al editar un valor lockeado y volver a llamar solve(), los
@@ -3904,6 +4047,8 @@ def solve(fs, max_iter=MAX_ITER):
     # role hygiene — warnings (no errors) sobre streams con role
     # inconsistente que pueden ensuciar costing económico
     result.component_warnings.extend(_check_stream_roles(fs))
+    # auditoría térmica de HX (advisory, no rompe success)
+    result.hx_warnings            = _check_heat_exchangers(fs)
     # energy balance errors quedan deshabilitados (no comparables al Cp
     # simple — comentado en _check_energy_balance del editor)
 

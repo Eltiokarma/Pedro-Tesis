@@ -144,25 +144,190 @@ def _flow_kg_s(mass_flow_tm_yr):
 # Sizers por categoría
 # ─────────────────────────────────────────────────────────────
 
-def size_heat_exchanger(block, fs) -> Optional[float]:
-    """A = |Q| / (U · ΔT_lm).  Q de block.duty [kW], devuelve m².
+def _process_streams(fs, block):
+    """Separa corrientes de proceso (role != utility/ambient) de un HX."""
+    ins  = [s for s in fs.streams.values() if s.dst == block.id]
+    outs = [s for s in fs.streams.values() if s.src == block.id]
+    proc_in  = [s for s in ins  if (s.role or "") not in ("utility", "ambient")]
+    proc_out = [s for s in outs if (s.role or "") not in ("utility", "ambient")]
+    return ins, outs, proc_in, proc_out
 
-    Precedencia para U y ΔT_lm:
-      1. block.U_override / block.dtlm_override (si > 0)
-      2. U_TYPICAL[eq_type] / DTLM_TYPICAL[eq_type]
-      3. U_DEFAULT (400) / DTLM_DEFAULT (40)
+
+def _pair_by_mass(ins, outs):
+    """Empareja entradas con salidas por mass_flow más cercano (misma
+    línea física conserva caudal).  Devuelve lista de (in, out)."""
+    pairs, used = [], set()
+    for i in ins:
+        best, bd = None, float("inf")
+        for j, o in enumerate(outs):
+            if j in used:
+                continue
+            d = abs((i.mass_flow or 0) - (o.mass_flow or 0))
+            if d < bd:
+                bd, best = d, j
+        if best is not None:
+            used.add(best)
+            pairs.append((i, outs[best]))
+    return pairs
+
+
+def _rigorous_lmtd_cross(fs, block, diag):
+    """ΔT_lm + F + U para un cross-exchange (proceso-proceso).  Devuelve
+    (U, dTlm, F) o None si faltan las 4 T coherentes."""
+    import heat_exchanger_rigorous as hxr
+    ins  = [s for s in fs.streams.values() if s.dst == block.id]
+    outs = [s for s in fs.streams.values() if s.src == block.id]
+    pairs = _pair_by_mass(ins, outs)
+    hot = next(((i, o) for i, o in pairs if i.temperature > o.temperature), None)
+    cold = next(((i, o) for i, o in pairs if o.temperature > i.temperature), None)
+    if hot is None or cold is None:
+        return None
+    T_hi, T_ho = hot[0].temperature, hot[1].temperature
+    T_ci, T_co = cold[0].temperature, cold[1].temperature
+    lmtd, w = hxr.compute_lmtd_real(T_hi, T_ho, T_ci, T_co, flow="counter")
+    if w:
+        diag["warnings"].append(w)
+    if lmtd is None:
+        return None
+    denom_R = (T_co - T_ci)
+    denom_P = (T_hi - T_ci)
+    R = (T_hi - T_ho) / denom_R if abs(denom_R) > 1e-9 else 1.0
+    P = (T_co - T_ci) / denom_P if abs(denom_P) > 1e-9 else 0.0
+    F, wf = hxr.f_correction_factor(R, P, n_shell=1, n_tube=2)
+    if wf:
+        diag["warnings"].append(wf)
+    ap = hxr.check_approach(T_ho, T_ci)
+    if ap:
+        diag["warnings"].append(ap)
+    U = hxr.u_typical_by_service(hot[0].phase, cold[0].phase)
+    diag["cross_check"] = "cross-exchange (proceso-proceso)"
+    return U, lmtd, F
+
+
+def _rigorous_lmtd_simple(fs, block, diag):
+    """ΔT_lm + U para un HX simple (proceso + utility implícita).  La
+    utility se modela isotérmica a la T representativa de su T_range.
+    Devuelve (U, dTlm, F=1.0) o None si faltan datos."""
+    import heat_exchanger_rigorous as hxr
+    import equipment_ports as ep
+    _, _, proc_in, proc_out = _process_streams(fs, block)
+    if len(proc_in) != 1 or len(proc_out) != 1:
+        return None
+    T_pin, T_pout = proc_in[0].temperature, proc_out[0].temperature
+    duty = float(block.duty or 0.0)
+    T_avg = (T_pin + T_pout) / 2.0
+    util_key = getattr(block, "heat_source", "") or ep.autoselect_heat_source(
+        block.eq_type, duty, T_avg)
+    if not util_key or util_key not in ep.UTILITIES:
+        return None
+    util = ep.UTILITIES[util_key]
+    t_lo, t_hi = util.get("T_range", (None, None))
+    if t_lo is None:
+        return None
+
+    # Cambio de fase del PROCESO: vapor→líquido = condensación;
+    # líquido→vapor = evaporación.  Define el U de servicio.
+    ph_in  = (proc_in[0].phase  or "").lower()
+    ph_out = (proc_out[0].phase or "").lower()
+    _is_vap = lambda p: any(k in p for k in ("vap", "gas"))
+    pc = None
+    if _is_vap(ph_in) and not _is_vap(ph_out):
+        pc = "condensation"
+    elif _is_vap(ph_out) and not _is_vap(ph_in):
+        pc = "evaporation"
+
+    if duty > 0:
+        # calentamiento: la utility (vapor/horno) es el lado CALIENTE,
+        # isotérmica a la T alta de su rango.
+        T_hi = T_ho = t_hi
+        T_ci, T_co = T_pin, T_pout
+        if pc is None and util.get("type") == "heating" \
+                and util_key.startswith("steam"):
+            pc = "condensation"        # vapor de calefacción condensa
+    else:
+        # enfriamiento: la utility (agua/refrigerante) es el lado FRÍO,
+        # entra a la T baja del rango y sube ~ΔT sensible.
+        T_ci = t_lo
+        T_co = min(t_lo + 15.0, t_hi)
+        T_hi, T_ho = T_pin, T_pout
+        if pc is None and util_key == "refrigeration":
+            pc = "refrigerant"
+
+    lmtd, w = hxr.compute_lmtd_real(T_hi, T_ho, T_ci, T_co, flow="counter")
+    if w:
+        diag["warnings"].append(w)
+    if lmtd is None:
+        return None
+    ap = hxr.check_approach(T_ho, T_ci)
+    if ap:
+        diag["warnings"].append(ap)
+
+    # U por servicio: si hay cambio de fase usar el U del servicio; si no,
+    # preferir el U calibrado por tipo de equipo (U_TYPICAL) — coherente
+    # con el catálogo y con el sizing previo.
+    if pc is not None:
+        U = hxr.u_typical_by_service(proc_in[0].phase, "water",
+                                     phase_change=pc)
+    else:
+        U = U_TYPICAL.get(block.eq_type) or hxr.u_typical_by_service(
+            proc_in[0].phase, "liquid")
+    diag["cross_check"] = f"simple HX (utility={util_key})"
+    return U, lmtd, 1.0
+
+
+def size_heat_exchanger(block, fs):
+    """A = |Q| / (U · F · ΔT_lm).  Q de block.duty [kW], devuelve
+    (A_m², diagnostics).
+
+    Cálculo riguroso (heat_exchanger_rigorous):
+      · cross-exchange → ΔT_lm real de las 4 T + factor F (Bowman 1940)
+        + U por servicio (Perry 11-3 / Sinnott 19.1).
+      · HX simple      → ΔT_lm proceso vs T de la utility (T_range).
+    Fallback a U_TYPICAL/DTLM_TYPICAL si faltan datos (con warning).
+
+    Overrides del bloque (U_override / dtlm_override > 0) siempre ganan.
+
+    diagnostics = {U_used, dTlm, F, cross_check, warnings}.
     """
+    diag = {"U_used": None, "dTlm": None, "F": 1.0,
+            "cross_check": None, "warnings": []}
     Q = abs(float(block.duty or 0.0))
     if Q <= 0:
-        return None
+        return None, diag
+
     U_user  = getattr(block, "U_override",    None)
     dT_user = getattr(block, "dtlm_override", None)
-    U  = (U_user  if (U_user  is not None and U_user  > 0)
-          else U_TYPICAL.get(block.eq_type, U_DEFAULT))
-    dT = (dT_user if (dT_user is not None and dT_user > 0)
-          else DTLM_TYPICAL.get(block.eq_type, DTLM_DEFAULT))
-    A = Q * 1000.0 / (U * dT)            # Q en kW → W
-    return max(A, 0.5)
+
+    rig = None
+    try:
+        import flowsheet_solver as _fsv
+        if _fsv.is_cross_exchange(fs, block):
+            rig = _rigorous_lmtd_cross(fs, block, diag)
+        else:
+            rig = _rigorous_lmtd_simple(fs, block, diag)
+    except Exception as e:               # nunca romper el sizing por esto
+        diag["warnings"].append(f"cálculo riguroso falló ({e!r})")
+        rig = None
+
+    if rig is not None:
+        U, dT, F = rig
+    else:
+        diag["warnings"].append(
+            "fallback: U/ΔT_lm de tabla (datos insuficientes para "
+            "cálculo riguroso)")
+        U = U_TYPICAL.get(block.eq_type, U_DEFAULT)
+        dT = DTLM_TYPICAL.get(block.eq_type, DTLM_DEFAULT)
+        F = 1.0
+
+    # overrides del usuario tienen precedencia absoluta
+    if U_user is not None and U_user > 0:
+        U = U_user
+    if dT_user is not None and dT_user > 0:
+        dT = dT_user
+
+    diag["U_used"], diag["dTlm"], diag["F"] = U, dT, F
+    A = Q * 1000.0 / (U * F * dT)        # Q en kW → W
+    return max(A, 0.5), diag
 
 
 def size_fired_heater(block, fs) -> Optional[float]:
@@ -397,6 +562,11 @@ def auto_size_blocks(fs, only_if_unset=False) -> List[Tuple[str, float, float, s
             S_new = sizer(b, fs)
         except Exception:
             S_new = None
+        # size_heat_exchanger devuelve (A, diagnostics); el resto float.
+        diag = None
+        if isinstance(S_new, tuple):
+            S_new, diag = S_new
+            b._hx_diagnostics = diag      # inspeccionable desde la UI
         if S_new is None or S_new <= 0:
             continue
         S_old = float(b.S)
@@ -416,6 +586,12 @@ def auto_size_blocks(fs, only_if_unset=False) -> List[Tuple[str, float, float, s
             S_new = S_max
         else:
             reason = "in range"
+        if diag is not None and (diag.get("U_used") or diag.get("warnings")):
+            extra = (f" [U={diag['U_used']:.0f} ΔTlm={diag['dTlm']:.1f} "
+                     f"F={diag['F']:.2f}]") if diag.get("U_used") else ""
+            if diag.get("warnings"):
+                extra += " ⚠ " + "; ".join(diag["warnings"][:2])
+            reason += extra
         b.S = S_new
         results.append((b.name, S_old, S_new, spec.get("S_unit", ""),
                           reason))

@@ -56,7 +56,7 @@ class TestSizeHeatExchangerNominal(unittest.TestCase):
 
     def test_fixed_tube_nominal(self):
         b = _mk_block("Heat exch. — fixed tube", duty=1000.0)
-        A = es.size_heat_exchanger(b, None)
+        A, _diag = es.size_heat_exchanger(b, None)
         self.assertIsNotNone(A)
         self.assertAlmostEqual(A, 62.5, delta=0.625)   # 1 % tolerancia
 
@@ -68,12 +68,14 @@ class TestSizeHeatExchangerNominal(unittest.TestCase):
 class TestSizeHeatExchangerDutyCero(unittest.TestCase):
     def test_duty_cero_returns_None(self):
         b = _mk_block("Heat exch. — fixed tube", duty=0.0)
-        self.assertIsNone(es.size_heat_exchanger(b, None))
+        _A, _diag = es.size_heat_exchanger(b, None)
+        self.assertIsNone(_A)
 
     def test_duty_None_returns_None(self):
         b = _mk_block("Heat exch. — fixed tube", duty=0.0)
         b.duty = None
-        self.assertIsNone(es.size_heat_exchanger(b, None))
+        _A, _diag = es.size_heat_exchanger(b, None)
+        self.assertIsNone(_A)
 
 
 # ─────────────────────────────────────────────────────────────
@@ -88,7 +90,7 @@ class TestSizeHeatExchangerOverride(unittest.TestCase):
         b = _mk_block("Heat exch. — fixed tube", duty=1000.0)
         b.U_override = 1500.0
         b.dtlm_override = 10.0
-        A = es.size_heat_exchanger(b, None)
+        A, _diag = es.size_heat_exchanger(b, None)
         # A = 1000 × 1000 / (1500 × 10) = 66.6667
         self.assertAlmostEqual(A, 66.667, delta=0.667)
         # Verificar NO usa tabla (62.5 con U=400/ΔT=40)
@@ -99,7 +101,7 @@ class TestSizeHeatExchangerOverride(unittest.TestCase):
         b = _mk_block("Heat exch. — fixed tube", duty=1000.0)
         b.U_override = 0.0           # 0 = no override
         b.dtlm_override = None       # None = no override
-        A = es.size_heat_exchanger(b, None)
+        A, _diag = es.size_heat_exchanger(b, None)
         self.assertAlmostEqual(A, 62.5, delta=0.625)
 
 
@@ -114,7 +116,7 @@ class TestSizeHeatExchangerClampMinimo(unittest.TestCase):
         b = _mk_block("Heat exch. — fixed tube", duty=0.001)
         # A computado = 0.001 × 1000 / (400 × 40) = 6.25e-5 m²
         # Clampeado a 0.5
-        A = es.size_heat_exchanger(b, None)
+        A, _diag = es.size_heat_exchanger(b, None)
         self.assertAlmostEqual(A, 0.5)
 
 
@@ -159,7 +161,7 @@ class TestCondenserNuevo(unittest.TestCase):
 
     def test_condenser_shell_tube_sizing(self):
         b = _mk_block("Heat exch. — condenser shell-tube", duty=2000.0)
-        A = es.size_heat_exchanger(b, None)
+        A, _diag = es.size_heat_exchanger(b, None)
         self.assertAlmostEqual(A, 133.333, delta=1.33)
         # Confirmar U y ΔTlm de tabla son los nuevos (no defaults)
         self.assertEqual(es.U_TYPICAL["Heat exch. — condenser shell-tube"], 1000)
@@ -167,7 +169,7 @@ class TestCondenserNuevo(unittest.TestCase):
 
     def test_condenser_air_cooled_sizing(self):
         b = _mk_block("Heat exch. — condenser air-cooled", duty=1000.0)
-        A = es.size_heat_exchanger(b, None)
+        A, _diag = es.size_heat_exchanger(b, None)
         # A = 1000 × 1000 / (600 × 20) = 83.33
         self.assertAlmostEqual(A, 83.333, delta=0.833)
 
