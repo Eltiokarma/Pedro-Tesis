@@ -71,11 +71,16 @@ def build_hx_viewmodel(block, fs) -> Optional[dict]:
     if spec.get("categoria") != "Heat exchangers":
         return None
 
-    # refresca diagnostics on-open (el solve/auto_size pudo no haber corrido)
+    # refresca diagnostics on-open (el solve/auto_size pudo no haber corrido).
+    # size_heat_exchanger DEVUELVE (area, diag) pero NO escribe
+    # block._hx_diagnostics (eso lo hace auto_size_blocks); acá capturamos
+    # el diag fresco y lo persistimos para que la UI no lea data stale.
+    diag = None
     try:
-        es.size_heat_exchanger(block, fs)
+        _area, diag = es.size_heat_exchanger(block, fs)
+        block._hx_diagnostics = diag
     except Exception:
-        pass
+        diag = getattr(block, "_hx_diagnostics", None)
     is_whb = block.eq_type in getattr(es, "WHB_STEAM_SIZED", ())
     if is_whb:
         try:
@@ -83,7 +88,7 @@ def build_hx_viewmodel(block, fs) -> Optional[dict]:
         except Exception:
             pass
 
-    diag = dict(getattr(block, "_hx_diagnostics", {}) or {})
+    diag = dict(diag or {})
     F = diag.get("F")
     raw_warnings = diag.get("warnings", []) or []
     warnings = []
@@ -393,9 +398,15 @@ def make_empty_state(kind: str) -> QWidget:
     bd.setFont(QFont(pfd_fonts.SANS, 9)); bd.setStyleSheet(f"color:{TOK['ink_mute']};")
     lay.addWidget(bd)
     if tip:
-        tp = QLabel("💡  " + tip); tp.setAlignment(Qt.AlignCenter); tp.setWordWrap(True)
+        tprow = QFrame()
+        tl2 = QHBoxLayout(tprow); tl2.setContentsMargins(0, 0, 0, 0); tl2.setSpacing(6)
+        tl2.addStretch(1)
+        tl2.addWidget(hi.GlyphLabel("lightbulb", 13, TOK["ink_soft"], 1.6), 0, Qt.AlignTop)
+        tp = QLabel(tip); tp.setWordWrap(True)
         tp.setFont(QFont(pfd_fonts.SANS, 8)); tp.setStyleSheet(f"color:{TOK['ink_soft']};")
-        lay.addWidget(tp)
+        tp.setMaximumWidth(280)
+        tl2.addWidget(tp); tl2.addStretch(1)
+        lay.addWidget(tprow)
     return w
 
 
