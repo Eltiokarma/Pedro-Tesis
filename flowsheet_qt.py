@@ -7505,6 +7505,15 @@ class FlowsheetMainWindow(QMainWindow):
                 f"Entradas:  {len(ins)}  ({in_t:g} tm/año)\n"
                 f"Salidas:   {len(outs)} ({out_t:g} tm/año)"
             )
+            # ---- ΔH térmico a través del bloque (in→out) ----
+            # Σ(ṁ·h)_salida − Σ(ṁ·h)_entrada [kW]; para un HX ≈ duty.
+            if ins and outs:
+                try:
+                    import stream_enthalpy as _se
+                    dH = _se.block_delta_h_kW(ins, outs)
+                    txt += f"\nΔH (in→out) {dH:+.1f} kW  (térmico)"
+                except Exception:
+                    pass
             # ---- Diseño FUG automático para columnas ----
             # Si el bloque es tipo Tower (column) y tiene streams in/out
             # multicomponentes, llama a distillation_fug.design_column

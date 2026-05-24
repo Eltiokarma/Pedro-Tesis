@@ -727,11 +727,23 @@ class BubbleManager:
                 comp = [(k, float(v)) for k, v in items if v]
         except Exception:
             comp = []
+        # Entalpía específica térmica (sensible+latente, ref 25°C líquido)
+        h_val = None
+        try:
+            import stream_enthalpy as _se
+            h_val = _se.specific_enthalpy_kJ_kg(
+                getattr(stream, "composition", {}) or {},
+                float(getattr(stream, "temperature", 25.0) or 25.0),
+                phase,
+                getattr(stream, "vapor_fraction", 0.0) or 0.0,
+            )
+        except Exception:
+            h_val = None
         bub.update_values(
             name=getattr(stream, "name", "?"),
             phase=phase,
             T_K=T_K, P_bar=P_bar, mdot_kg_s=mdot,
-            h_kJ_kg=None,    # TODO: cablear si hay h_total
+            h_kJ_kg=h_val,
             composition=comp,
         )
 
