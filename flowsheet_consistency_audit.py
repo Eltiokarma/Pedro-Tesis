@@ -350,6 +350,26 @@ def _block_has_inputs(fs, bid):
     return any(s.dst == bid for s in fs.streams.values())
 
 
+def _any_reaction_resolves(rxn_ids):
+    """True si al menos una reacción del bloque existe en el catálogo.
+    Las reacciones placeholder (R*_PLACEHOLDER, R_CELDA_*, R_FUSION_*, …) NO
+    resuelven: el reactor NO recalcula composición (especies fuera de
+    thermo_db), así que un lock downstream es load-bearing, no redundante."""
+    if not rxn_ids:
+        return False
+    try:
+        import reactions_db as _rdb
+    except ImportError:
+        return True                        # sin catálogo → comportamiento previo
+    for rid in rxn_ids:
+        try:
+            if _rdb.get(rid) is not None:
+                return True
+        except Exception:
+            pass
+    return False
+
+
 def _audit_redundant_locks(fs, findings):
     for s in fs.streams.values():
         if not getattr(s, "composition_locked", False):
@@ -363,14 +383,26 @@ def _audit_redundant_locks(fs, findings):
         is_tank = "tank" in (src.eq_type or "").lower()
         if is_tank and not _block_has_inputs(fs, src.id):
             continue                       # tanque feeder sin upstream → spec
-        # Unit op activa o reactor → el lock fue IGNORADO (recalculado).
-        is_reactor = bool(getattr(src, "reactions", None)
-                          or getattr(src, "custom_reactions", None))
+        # ¿El upstream RECALCULA la composición? Solo si tiene una reacción
+        # real (no placeholder) o una unit op automática activa.
+        rxn_ids = list(getattr(src, "reactions", None) or [])
+        has_custom = bool(getattr(src, "custom_reactions", None))
+        rxn_recalcs = has_custom or _any_reaction_resolves(rxn_ids)
+        has_rxn_tags = bool(rxn_ids or has_custom)
         active = (getattr(src, "column_active", False)
                   or getattr(src, "flash_active", False)
                   or getattr(src, "splitter_active", False))
-        if is_reactor or active:
-            kind = ("reactor de equilibrio/cinético" if is_reactor
+        if rxn_recalcs or active:
+            # ¿El unit op realmente PUEDE recalcular esta composición? Un
+            # flash/column necesita thermo (Antoine) de cada componente; si
+            # alguno no está en thermo_db (NOx, cortes de petróleo, sales,
+            # sólidos), el unit op se saltea y la composición queda
+            # hardcodeada → load-bearing, no redundante.
+            computable = all(_thermo(c) is not None
+                             for c in _stream_components(s))
+            if active and not rxn_recalcs and not computable:
+                continue
+            kind = ("reactor de equilibrio/cinético" if rxn_recalcs
                     else "unit op automática (column/flash/splitter)")
             findings.append(AuditFinding(
                 category='redundant_lock', severity='info',
@@ -380,6 +412,11 @@ def _audit_redundant_locks(fs, findings):
                          f"ignoró: la composición fue recalculada por la "
                          f"termodinámica."),
                 data={'src_block': src.name, 'reason': 'recalculated'}))
+            continue
+        if has_rxn_tags:
+            # Reactor con reacción placeholder/no resoluble: la composición
+            # hardcodeada representa química que el solver no puede calcular
+            # (especies fuera de thermo_db). El lock es load-bearing.
             continue
         # Equipo no-reactivo (mixer/pump/HX): el lock SÍ se respeta, pero si
         # ningún input tiene composición lockeada el solver pudo propagarla.
