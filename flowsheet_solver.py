@@ -669,6 +669,78 @@ def _check_heat_exchangers(fs):
     return warnings_list
 
 
+def size_utility_streams(fs):
+    """Puebla el mass_flow de las corrientes de SERVICIO auto-generadas
+    (auto_aux, role='utility') de los intercambiadores de calor desde su
+    duty: ṁ_utility = utility_consumption(util_key, duty).
+
+    equipment_auxiliaries.instantiate_auxiliaries() crea estas corrientes
+    (cooling water / steam shell-side) al instanciar el HX pero las deja en
+    mass_flow=0 ('se calcula desde el duty').  Acá se completa ese cálculo,
+    materializando el flujo másico que transporta el calor de/hacia el HX.
+
+    Sólo HX (categoría 'Heat exchangers'): un único loop de utility por
+    bloque.  Hornos/calderas (fuel+aire+chimenea) necesitan estequiometría
+    de combustión y quedan fuera de alcance.  Respeta mass_flow_locked.
+    Devuelve lista de mensajes.
+    """
+    try:
+        import equipment_ports as ep
+        import equipment_costs as ec
+    except ImportError:
+        return []
+    msgs = []
+    for b in fs.blocks.values():
+        if ec.EQUIPMENT_DATA.get(b.eq_type, {}).get("categoria") != "Heat exchangers":
+            continue
+        duty = float(getattr(b, "duty", 0.0) or 0.0)
+        aux = [s for s in fs.streams.values()
+               if getattr(s, "auto_aux", False) and (s.role or "") == "utility"
+               and (s.src == b.id or s.dst == b.id)]
+        if not aux:
+            continue
+        if abs(duty) < 1e-9:
+            for s in aux:
+                if not getattr(s, "mass_flow_locked", False):
+                    s.mass_flow = 0.0
+            continue
+        # T promedio de las corrientes de PROCESO del bloque (para resolver
+        # qué utility aplica: cooling water vs steam vs refrigerante)
+        proc_T = [s.temperature for s in fs.streams.values()
+                  if (s.src == b.id or s.dst == b.id)
+                  and not getattr(s, "auto_aux", False)
+                  and (s.role or "") not in ("utility", "ambient")]
+        T_avg = sum(proc_T) / len(proc_T) if proc_T else 25.0
+        try:
+            util_key = ep.resolve_heat_source(b, T_avg)
+        except Exception:
+            util_key = None
+        if not util_key:
+            continue
+        cons = ep.utility_consumption(util_key, duty)   # tm/año
+        if cons is None or cons <= 0:
+            continue
+        # T de suministro/retorno desde el catálogo de utilities (para que
+        # la corriente quede resuelta y muestre un estado térmico sensato).
+        util = ep.UTILITIES.get(util_key, {})
+        t_lo, t_hi = util.get("T_range", (None, None))
+        utype = util.get("type", "")
+        for s in aux:
+            if not getattr(s, "mass_flow_locked", False):
+                s.mass_flow = float(cons)
+            if t_lo is not None and not getattr(s, "temperature_locked", False):
+                is_supply = (s.dst == b.id)        # entra al HX = suministro
+                if utype == "cooling":
+                    s.temperature = float(t_lo if is_supply else min(t_lo + 15.0, t_hi or t_lo + 15.0))
+                elif utype == "heating":
+                    s.temperature = float((t_hi or t_lo) if is_supply else t_lo)
+                else:
+                    s.temperature = float(t_lo)
+        msgs.append(f"  {b.name}: utility {util_key} ṁ={cons:,.0f} tm/año "
+                    f"(de duty {duty:+.0f} kW)".replace(",", " "))
+    return msgs
+
+
 def _size_heat_exchangers(fs, result):
     """Corre size_heat_exchanger sobre cada HX y persiste los diagnósticos
     térmicos (U, ΔT_lm, F, warnings) en block._hx_diagnostics y en
@@ -4151,6 +4223,14 @@ def solve(fs, max_iter=MAX_ITER):
                     result.energy_balance_errors.append(msg)
             else:
                 result.energy_warnings.append(msg)
+
+    # Materializar el flujo de las corrientes de servicio (utility) de HX
+    # desde el duty ANTES de listar unresolved (si no, quedarían marcadas
+    # como sin resolver por tener mass_flow=0 al momento del chequeo).
+    try:
+        size_utility_streams(fs)
+    except Exception:
+        pass
 
     # 4. Validación + listado de unresolved
     #    Streams con endpoint flotante (src=-1 o dst=-1) se skipean —
