@@ -50,7 +50,7 @@ from PySide6.QtCore import (
     Signal,
 )
 from PySide6.QtGui import (
-    QAction, QPen, QBrush, QColor, QPainter, QFont, QPainterPath,
+    QAction, QActionGroup, QPen, QBrush, QColor, QPainter, QFont, QPainterPath,
     QPolygonF, QPainterPathStroker, QFontMetrics, QKeySequence,
     QTransform, QIcon,
 )
@@ -5438,6 +5438,24 @@ class FlowsheetMainWindow(QMainWindow):
                 act.setText(label)
                 m_legacy.addAction(act)
         m_view.addSeparator()
+        # ── Sistema de unidades global (afecta UI + exportación) ──
+        m_units = m_view.addMenu("&Unidades")
+        self._unit_system_group = QActionGroup(self)
+        self._unit_system_group.setExclusive(True)
+        self._unit_system_actions = {}
+        _cur_sys = funits.current_system()
+        for _sysname in funits.UNIT_SYSTEMS_ORDER:
+            _u = funits.UNIT_SYSTEMS[_sysname]
+            _act = QAction(
+                f"{_sysname}   ({_u['flow']} · {_u['temp']} · {_u['pressure']} · {_u['energy']})",
+                self)
+            _act.setCheckable(True)
+            _act.setChecked(_sysname == _cur_sys)
+            _act.triggered.connect(lambda _checked=False, n=_sysname: self._set_unit_system(n))
+            self._unit_system_group.addAction(_act)
+            self._unit_system_actions[_sysname] = _act
+            m_units.addAction(_act)
+        m_view.addSeparator()
         # Preferencias (tema, densidad, acento)
         m_view.addAction(_ac("&Preferencias…", self._open_preferences, "Ctrl+,"))
         m_view.addSeparator()
@@ -5476,6 +5494,45 @@ class FlowsheetMainWindow(QMainWindow):
         y desde el menú Vista > Toolbars legacy para re-mostrarlas."""
         for tb in self.findChildren(QToolBar):
             tb.setVisible(bool(visible))
+
+    def _set_unit_system(self, name):
+        """Aplica el sistema de unidades global (Vista > Unidades) y refresca
+        todo lo que muestra magnitudes: tabla de corrientes, labels del canvas,
+        burbujas, panel de propiedades y footer.  Afecta también la exportación
+        (que lee funits.active() al exportar)."""
+        funits.set_system(name)
+        # sincronizar el segmented control de flujo del dock
+        if getattr(self, "streams_dock", None) is not None:
+            try:
+                self.streams_dock.select_flow_unit(funits.active_unit("flow"))
+            except Exception:
+                pass
+        # re-render labels de corrientes (caudal) en el canvas
+        if hasattr(self, "scene") and hasattr(self.scene, "stream_items"):
+            for _sid, _item in self.scene.stream_items.items():
+                if hasattr(_item, "update_path"):
+                    try:
+                        _item.update_path()
+                    except Exception:
+                        pass
+        # burbujas de corriente / HX
+        for _mgr in ("_bubble_manager", "_hx_bubble_manager"):
+            m = getattr(self, _mgr, None)
+            if m is not None:
+                try:
+                    m.refresh_all()
+                except Exception:
+                    pass
+        # panel de propiedades (re-disparar la selección actual)
+        try:
+            self._on_selection_changed()
+        except Exception:
+            pass
+        # marcar el preset activo en el menú
+        cur = funits.current_system()
+        for sysname, act in getattr(self, "_unit_system_actions", {}).items():
+            act.setChecked(sysname == cur)
+        self._update_status()
 
     def _open_preferences(self):
         """Vista > Preferencias…  Abre el diálogo de tema/densidad/acento.
@@ -7500,7 +7557,7 @@ class FlowsheetMainWindow(QMainWindow):
                 f"Cat.      {spec.get('categoria', '?')}\n"
                 f"S         {b.S:g} {spec.get('S_unit', '?')}\n"
                 f"n         {b.n}\n"
-                f"Duty      {b.duty:+g} kW\n"
+                f"Duty      {('+' if b.duty > 0 else '')}{funits.fmt_energy(b.duty)}\n"
                 f"Utility   {b.heat_source or '(auto)'}\n\n"
                 f"Entradas:  {len(ins)}  ({in_t:g} tm/año)\n"
                 f"Salidas:   {len(outs)} ({out_t:g} tm/año)"
@@ -7511,7 +7568,8 @@ class FlowsheetMainWindow(QMainWindow):
                 try:
                     import stream_enthalpy as _se
                     dH = _se.block_delta_h_kW(ins, outs)
-                    txt += f"\nΔH (in→out) {dH:+.1f} kW  (térmico)"
+                    txt += (f"\nΔH (in→out) {('+' if dH > 0 else '')}"
+                            f"{funits.fmt_energy(dH)}  (térmico)")
                 except Exception:
                     pass
             # ---- Diseño FUG automático para columnas ----

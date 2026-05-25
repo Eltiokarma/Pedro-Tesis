@@ -623,12 +623,31 @@ class StreamsTableDock(QDockWidget):
         self._current_unit = unit
         self._unit_buttons[unit].setChecked(True)
         self._unit_buttons[unit].setStyleSheet(self._unit_btn_style(True))
+        funits.set_quantity("flow", unit)   # sincronizar con el sistema global
         # refresh tabla + labels del canvas
         self.refresh()
         if hasattr(self.editor, "scene") and hasattr(self.editor.scene, "stream_items"):
             for sid, item in self.editor.scene.stream_items.items():
                 if hasattr(item, "update_path"):
                     item.update_path()
+
+    def select_flow_unit(self, unit: str):
+        """Setea la unidad de flujo del segmented control SIN re-disparar el
+        refresh del canvas (lo usa el cambio de sistema global de unidades)."""
+        if unit not in self._unit_buttons or unit == self._current_unit:
+            if unit in self._unit_buttons:
+                # asegurar highlight consistente
+                for u, btn in self._unit_buttons.items():
+                    on = (u == unit)
+                    btn.setChecked(on)
+                    btn.setStyleSheet(self._unit_btn_style(on))
+            return
+        for u, btn in self._unit_buttons.items():
+            on = (u == unit)
+            btn.setChecked(on)
+            btn.setStyleSheet(self._unit_btn_style(on))
+        self._current_unit = unit
+        self.refresh()
 
     def _on_search_change(self, txt: str):
         self._search_text = (txt or "").lower().strip()

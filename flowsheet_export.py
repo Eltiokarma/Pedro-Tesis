@@ -30,6 +30,20 @@ import pandas as pd
 import equipment_costs as eq
 import equipment_ports as ep
 import templates as tmpl
+import flowsheet_units as funits
+
+
+# ── Columnas con unidad activa (afecta la exportación, Patch C) ──
+# Nombres de columna dinámicos según el sistema de unidades global.
+def _col_flow():  return f"Mass [{funits.active_unit('flow')}]"
+def _col_T():     return f"T [{funits.active_unit('temp')}]"
+def _col_P():     return f"P [{funits.active_unit('pressure')}]"
+def _col_dP():    return f"ΔP [{funits.active_unit('pressure')}]"
+def _col_E():     return f"Duty [{funits.active_unit('energy')}]"
+def _stream_unit_cols():
+    return [_col_flow(), _col_T(), _col_P()]
+def _equip_unit_cols():
+    return [_col_E(), _col_T().replace("T ", "T_op "), _col_P().replace("P ", "P_op "), _col_dP()]
 
 
 def _eff_p(fs, b):
@@ -110,10 +124,13 @@ def collect_equipment_rows(fs, year_target=2024):
             "Size S":     float(b.S),
             "Unit":       spec.get("S_unit", ""),
             "N° units":   int(b.n),
-            "Duty kW":    float(getattr(b, "duty", 0.0)),
-            "T_op K":     float(getattr(b, "T_op_K", 0.0) or 0.0),
-            "P_op bar":   float(getattr(b, "P_op_bar", 0.0) or 0.0),
-            "ΔP bar":     float(getattr(b, "delta_p_bar", 0.0) or 0.0),
+            _col_E():     float(funits.conv_energy(getattr(b, "duty", 0.0))),
+            _col_T().replace("T ", "T_op "):
+                float(funits.conv_temp((getattr(b, "T_op_K", 0.0) or 0.0) - 273.15))
+                if (getattr(b, "T_op_K", 0.0) or 0.0) else 0.0,
+            _col_P().replace("P ", "P_op "):
+                float(funits.conv_pressure(getattr(b, "P_op_bar", 0.0) or 0.0)),
+            _col_dP():    float(funits.conv_pressure(getattr(b, "delta_p_bar", 0.0) or 0.0)),
             "η":          float(getattr(b, "efficiency", 0.0) or 0.0),
             "Reactions":  ",".join(getattr(b, "reactions", []) or []),
             "Heat source": str(getattr(b, "heat_source", "") or ""),
@@ -487,9 +504,9 @@ def collect_stream_rows(fs):
             "From port":  s.src_port or "",
             "To":         b_dst.name if b_dst else "",
             "To port":    s.dst_port or "",
-            "Mass tm/yr":  float(s.mass_flow),
-            "T °C":       float(s.temperature),
-            "P bar":      float(getattr(s, "pressure_bar", 0.0) or 0.0),
+            _col_flow():  float(funits.conv_flow(s.mass_flow)),
+            _col_T():     float(funits.conv_temp(s.temperature)),
+            _col_P():     float(funits.conv_pressure(getattr(s, "pressure_bar", 0.0) or 0.0)),
             "Phase":      s.phase or "",
             "Role":       s.role or "",
             "Price USD/tm": float(getattr(s, "price_usd_per_tm", 0.0) or 0.0),
@@ -503,7 +520,8 @@ def collect_stream_rows(fs):
             ]),
             "Pipe L m":   float(getattr(s, "pipe_length_m", 0.0) or 0.0),
             "Pipe D m":   float(getattr(s, "pipe_diameter_m", 0.0) or 0.0),
-            "Pipe ΔP bar":float(getattr(s, "delta_p_pipe_bar", 0.0) or 0.0),
+            f"Pipe ΔP [{funits.active_unit('pressure')}]":
+                float(funits.conv_pressure(getattr(s, "delta_p_pipe_bar", 0.0) or 0.0)),
         }
         # Composición wt% por componente
         comp = s.composition or {}
@@ -1014,7 +1032,8 @@ def write_3sections_xlsx(path, df_capital, df_fixed, df_variable,
         # Cols dinámicas: union de todas las keys que aparecen en rows
         # (algunos bloques tienen specs de columna, otros no)
         base_cols = ["Tag", "Type", "Category", "Size S", "Unit", "N° units",
-                       "Duty kW", "T_op K", "P_op bar", "ΔP bar", "η",
+                       _col_E(), _col_T().replace("T ", "T_op "),
+                       _col_P().replace("P ", "P_op "), _col_dP(), "η",
                        "Reactions", "Heat source"]
         extra_keys = []
         for row in equipment:
@@ -1048,9 +1067,10 @@ def write_3sections_xlsx(path, df_capital, df_fixed, df_variable,
         ws_s = wb.create_sheet("Streams")
         # Cols dinámicas (wt% por componente varía por proyecto)
         base_cols = ["Stream", "From", "From port", "To", "To port",
-                       "Mass tm/yr", "T °C", "P bar", "Phase", "Role",
+                       _col_flow(), _col_T(), _col_P(), "Phase", "Role",
                        "Price USD/tm", "Cp kJ/kg·K", "Main comp", "Locks",
-                       "Pipe L m", "Pipe D m", "Pipe ΔP bar"]
+                       "Pipe L m", "Pipe D m",
+                       f"Pipe ΔP [{funits.active_unit('pressure')}]"]
         extra_keys = []
         for row in streams:
             for k in row.keys():

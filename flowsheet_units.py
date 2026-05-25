@@ -71,5 +71,135 @@ def format_flow(value_tm_yr, unit):
     if abs(v) < 100:
         return f"{v:.2f} {unit}"
     if abs(v) < 100_000:
-        return f"{v:,.0f} {unit}"
+        return f"{v:,.0f} {unit}".replace(",", " ")
     return f"{v:.3e} {unit}"
+
+
+# ════════════════════════════════════════════════════════
+#  SISTEMA GLOBAL DE UNIDADES (flujo + T + P + energía)
+# ════════════════════════════════════════════════════════
+# Unidades canónicas del modelo: flujo tm/año · T °C · P bar · energía kW.
+# El "sistema activo" elige una unidad de display por magnitud; afecta UI
+# y exportación.  Default = unidades del modelo (no cambia el look actual
+# hasta que el usuario elija otro sistema con el botón global).
+
+TEMP_UNITS_ORDER     = ["°C", "K", "°F"]
+PRESSURE_UNITS_ORDER = ["bar", "kPa", "atm", "psi", "MPa"]
+ENERGY_UNITS_ORDER   = ["kW", "MW", "Gcal/h", "MMBtu/h", "hp"]
+
+# bar × factor = unidad
+PRESSURE_FACTORS = {
+    "bar": 1.0, "kPa": 100.0, "MPa": 0.1,
+    "atm": 1.0 / 1.01325, "psi": 14.503773773,
+}
+# kW × factor = unidad
+ENERGY_FACTORS = {
+    "kW": 1.0, "MW": 1e-3,
+    "Gcal/h": 0.000859845, "MMBtu/h": 0.00341214, "hp": 1.3410220896,
+}
+
+# Presets de sistema de unidades (el "botón general")
+UNIT_SYSTEMS = {
+    "Modelo (tm/año)":      {"flow": "tm/año", "temp": "°C", "pressure": "bar", "energy": "kW"},
+    "Métrico (ingeniería)": {"flow": "kg/h",   "temp": "°C", "pressure": "bar", "energy": "kW"},
+    "SI estricto":          {"flow": "kg/s",   "temp": "K",  "pressure": "kPa", "energy": "kW"},
+    "Imperial (US)":        {"flow": "lb/h",   "temp": "°F", "pressure": "psi", "energy": "MMBtu/h"},
+    "Magnitudes grandes":   {"flow": "t/d",    "temp": "°C", "pressure": "bar", "energy": "MW"},
+}
+UNIT_SYSTEMS_ORDER = ["Modelo (tm/año)", "Métrico (ingeniería)", "SI estricto",
+                      "Imperial (US)", "Magnitudes grandes"]
+
+_ACTIVE = dict(UNIT_SYSTEMS["Modelo (tm/año)"])
+
+
+def active():
+    """Copia del dict de unidades activas (flow/temp/pressure/energy)."""
+    return dict(_ACTIVE)
+
+
+def active_unit(quantity):
+    return _ACTIVE.get(quantity)
+
+
+def set_quantity(quantity, unit):
+    if quantity in _ACTIVE:
+        _ACTIVE[quantity] = unit
+
+
+def set_system(name):
+    """Aplica un preset global.  Devuelve True si existe."""
+    if name in UNIT_SYSTEMS:
+        _ACTIVE.update(UNIT_SYSTEMS[name])
+        return True
+    return False
+
+
+def current_system():
+    """Nombre del preset que coincide con el estado activo, o 'Personalizado'."""
+    for name, units in UNIT_SYSTEMS.items():
+        if all(_ACTIVE.get(k) == v for k, v in units.items()):
+            return name
+    return "Personalizado"
+
+
+# ── Temperatura (canónica °C; offset, no factor puro) ──
+def conv_temp(value_C, unit=None):
+    unit = unit or _ACTIVE["temp"]
+    if value_C is None:
+        return None
+    if unit == "K":
+        return float(value_C) + 273.15
+    if unit in ("°F", "F"):
+        return float(value_C) * 9.0 / 5.0 + 32.0
+    return float(value_C)
+
+
+def fmt_temp(value_C, unit=None):
+    unit = unit or _ACTIVE["temp"]
+    v = conv_temp(value_C, unit)
+    return "—" if v is None else f"{v:.1f} {unit}"
+
+
+# ── Presión (canónica bar) ──
+def conv_pressure(value_bar, unit=None):
+    unit = unit or _ACTIVE["pressure"]
+    if value_bar is None:
+        return None
+    return float(value_bar) * PRESSURE_FACTORS.get(unit, 1.0)
+
+
+def fmt_pressure(value_bar, unit=None):
+    unit = unit or _ACTIVE["pressure"]
+    v = conv_pressure(value_bar, unit)
+    if v is None:
+        return "—"
+    if abs(v) >= 1000:
+        return f"{v:,.0f} {unit}".replace(",", " ")
+    return f"{v:.3g} {unit}"
+
+
+# ── Energía / potencia (canónica kW) ──
+def conv_energy(value_kW, unit=None):
+    unit = unit or _ACTIVE["energy"]
+    if value_kW is None:
+        return None
+    return float(value_kW) * ENERGY_FACTORS.get(unit, 1.0)
+
+
+def fmt_energy(value_kW, unit=None):
+    unit = unit or _ACTIVE["energy"]
+    v = conv_energy(value_kW, unit)
+    if v is None:
+        return "—"
+    if abs(v) >= 10000:
+        return f"{v:,.0f} {unit}".replace(",", " ")
+    return f"{v:.4g} {unit}"
+
+
+# ── Flujo (wrappers que usan la unidad activa por default) ──
+def conv_flow(value_tm_yr, unit=None):
+    return to_display(value_tm_yr, unit or _ACTIVE["flow"])
+
+
+def fmt_flow(value_tm_yr, unit=None):
+    return format_flow(value_tm_yr, unit or _ACTIVE["flow"])
