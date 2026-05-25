@@ -30,18 +30,24 @@ INDUSTRIAL_PSEUDO_FALLBACK = {
     'kerosene', 'diesel', 'atmospheric_residue', 'crude_oil',
 }
 FOOD_PSEUDO_FALLBACK = {'sucrose', 'glucose'}
+# Especies inorgánicas / materiales sin modelo VLE razonable (sales, óxidos,
+# minerales, polímeros, mezclas).  Son reales pero el solver VLE no las modela
+# rigurosamente → auditor genera INFO (no error), no hay nada que "arreglar".
+MATERIAL_PSEUDO_FALLBACK = set()
 
 _PSEUDO_CACHE = None
 
 
 def _load_pseudo_sets():
     """Carga (lazy) los sets de pseudo-componentes desde el JSON curado.
-    Fallback a los sets hardcoded si el archivo no existe o es inválido."""
+    Fallback a los sets hardcoded si el archivo no existe o es inválido.
+    Devuelve (industrial, food, material)."""
     global _PSEUDO_CACHE
     if _PSEUDO_CACHE is not None:
         return _PSEUDO_CACHE
     industrial = set(INDUSTRIAL_PSEUDO_FALLBACK)
     food = set(FOOD_PSEUDO_FALLBACK)
+    material = set(MATERIAL_PSEUDO_FALLBACK)
     path = os.path.join(os.path.dirname(os.path.abspath(__file__)),
                         "data", "pseudo_components.json")
     try:
@@ -51,9 +57,11 @@ def _load_pseudo_sets():
             industrial = set(d["industrial_pseudo"])
         if isinstance(d.get("food_pseudo_allowed"), list):
             food = set(d["food_pseudo_allowed"])
+        if isinstance(d.get("material_pseudo_allowed"), list):
+            material = set(d["material_pseudo_allowed"])
     except (OSError, ValueError):
         pass
-    _PSEUDO_CACHE = (industrial, food)
+    _PSEUDO_CACHE = (industrial, food, material)
     return _PSEUDO_CACHE
 
 
@@ -289,7 +297,7 @@ def _audit_component_balance(fs, findings, tol_rel=0.02):
 # ======================================================================
 
 def _audit_pseudo(fs, findings):
-    industrial, food = _load_pseudo_sets()
+    industrial, food, material = _load_pseudo_sets()
     for s in fs.streams.values():
         seen = set()
         for c in _stream_components(s):
@@ -313,6 +321,16 @@ def _audit_pseudo(fs, findings):
                     message=(f"{s.name}: usa pseudo-componente "
                              f"alimentario/biológico '{c}' — comportamiento "
                              f"aproximado, mantener como tal."),
+                    data={'component': c}))
+            elif c in material:
+                findings.append(AuditFinding(
+                    category='pseudo', severity='info',
+                    target_kind='stream', target_name=s.name,
+                    message=(f"{s.name}: especie inorgánica/material '{c}' "
+                             f"(sal, óxido, mineral, polímero o mezcla) sin "
+                             f"modelo VLE — balances por componente y VLE no "
+                             f"son físicamente significativos; tratar como "
+                             f"pseudo aproximado."),
                     data={'component': c}))
             elif _thermo(c) is None:
                 findings.append(AuditFinding(
