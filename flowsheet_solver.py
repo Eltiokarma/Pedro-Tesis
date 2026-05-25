@@ -669,6 +669,78 @@ def _check_heat_exchangers(fs):
     return warnings_list
 
 
+def size_utility_streams(fs):
+    """Puebla el mass_flow de las corrientes de SERVICIO auto-generadas
+    (auto_aux, role='utility') de los intercambiadores de calor desde su
+    duty: ṁ_utility = utility_consumption(util_key, duty).
+
+    equipment_auxiliaries.instantiate_auxiliaries() crea estas corrientes
+    (cooling water / steam shell-side) al instanciar el HX pero las deja en
+    mass_flow=0 ('se calcula desde el duty').  Acá se completa ese cálculo,
+    materializando el flujo másico que transporta el calor de/hacia el HX.
+
+    Sólo HX (categoría 'Heat exchangers'): un único loop de utility por
+    bloque.  Hornos/calderas (fuel+aire+chimenea) necesitan estequiometría
+    de combustión y quedan fuera de alcance.  Respeta mass_flow_locked.
+    Devuelve lista de mensajes.
+    """
+    try:
+        import equipment_ports as ep
+        import equipment_costs as ec
+    except ImportError:
+        return []
+    msgs = []
+    for b in fs.blocks.values():
+        if ec.EQUIPMENT_DATA.get(b.eq_type, {}).get("categoria") != "Heat exchangers":
+            continue
+        duty = float(getattr(b, "duty", 0.0) or 0.0)
+        aux = [s for s in fs.streams.values()
+               if getattr(s, "auto_aux", False) and (s.role or "") == "utility"
+               and (s.src == b.id or s.dst == b.id)]
+        if not aux:
+            continue
+        if abs(duty) < 1e-9:
+            for s in aux:
+                if not getattr(s, "mass_flow_locked", False):
+                    s.mass_flow = 0.0
+            continue
+        # T promedio de las corrientes de PROCESO del bloque (para resolver
+        # qué utility aplica: cooling water vs steam vs refrigerante)
+        proc_T = [s.temperature for s in fs.streams.values()
+                  if (s.src == b.id or s.dst == b.id)
+                  and not getattr(s, "auto_aux", False)
+                  and (s.role or "") not in ("utility", "ambient")]
+        T_avg = sum(proc_T) / len(proc_T) if proc_T else 25.0
+        try:
+            util_key = ep.resolve_heat_source(b, T_avg)
+        except Exception:
+            util_key = None
+        if not util_key:
+            continue
+        cons = ep.utility_consumption(util_key, duty)   # tm/año
+        if cons is None or cons <= 0:
+            continue
+        # T de suministro/retorno desde el catálogo de utilities (para que
+        # la corriente quede resuelta y muestre un estado térmico sensato).
+        util = ep.UTILITIES.get(util_key, {})
+        t_lo, t_hi = util.get("T_range", (None, None))
+        utype = util.get("type", "")
+        for s in aux:
+            if not getattr(s, "mass_flow_locked", False):
+                s.mass_flow = float(cons)
+            if t_lo is not None and not getattr(s, "temperature_locked", False):
+                is_supply = (s.dst == b.id)        # entra al HX = suministro
+                if utype == "cooling":
+                    s.temperature = float(t_lo if is_supply else min(t_lo + 15.0, t_hi or t_lo + 15.0))
+                elif utype == "heating":
+                    s.temperature = float((t_hi or t_lo) if is_supply else t_lo)
+                else:
+                    s.temperature = float(t_lo)
+        msgs.append(f"  {b.name}: utility {util_key} ṁ={cons:,.0f} tm/año "
+                    f"(de duty {duty:+.0f} kW)".replace(",", " "))
+    return msgs
+
+
 def _size_heat_exchangers(fs, result):
     """Corre size_heat_exchanger sobre cada HX y persiste los diagnósticos
     térmicos (U, ΔT_lm, F, warnings) en block._hx_diagnostics y en
@@ -1987,6 +2059,49 @@ def solve_equilibrium_reactors(fs):
     return msgs
 
 
+def _column_feed_q(feed, T_feed_K, P_bar):
+    """Factor de calidad q del feed para el diseño FUG (P1.2).
+
+    q = L/F:  1.0 = líquido saturado · 0.0 = vapor saturado ·
+    0<q<1 = bifásico.  Detecta la fase real del feed; si es bifásico o
+    no está declarada, hace un flash isotérmico (NRTL) a T_feed, P para
+    estimar V/F.  Clamp a [0, 1].  Fallback q=1.0 (compat previa)."""
+    phase = (getattr(feed, "phase", "") or "").lower()
+    if phase == "liquid":
+        return 1.0
+    if phase in ("vapor", "gas"):
+        return 0.0
+    # two_phase con vapor_fraction ya resuelta → q = 1 - V/F directo
+    vf = getattr(feed, "vapor_fraction", None)
+    if phase == "two_phase" and vf is not None:
+        try:
+            return max(0.0, min(1.0, 1.0 - float(vf)))
+        except (TypeError, ValueError):
+            pass
+    # bifásico/mixed/no declarado → flash isotérmico para estimar V/F
+    try:
+        import nrtl as _nrtl
+        import thermo_db as _td
+        comps = list((feed.composition or {}).keys())
+        if not comps:
+            return 1.0
+        z_mol = []
+        for c in comps:
+            co = _td.get(c)
+            mw = co.mw if (co and co.mw > 0) else 1.0
+            z_mol.append(feed.composition[c] / mw)   # mass → mol
+        s = sum(z_mol)
+        if s <= 0:
+            return 1.0
+        z_mol = [zi / s for zi in z_mol]
+        fl = _nrtl.flash_TP(comps, z_mol, T_feed_K, P_bar)
+        if fl is not None and fl.get("V_frac") is not None:
+            return max(0.0, min(1.0, 1.0 - float(fl["V_frac"])))
+    except Exception:
+        pass
+    return 1.0
+
+
 def solve_columns(fs):
     """Para cada bloque tipo Tower con column_active=True, computa
     automáticamente las composiciones del distillate y el bottom usando
@@ -2073,6 +2188,8 @@ def solve_columns(fs):
         T_feed_K = feed.temperature + 273.15
         T_top_K  = dist_stream.temperature + 273.15 if dist_stream.temperature else T_feed_K - 10
         T_bot_K  = bot_stream.temperature + 273.15 if bot_stream.temperature else T_feed_K + 20
+        # q dinámico del feed (P1.2): detecta fase real / flash si bifásico
+        q_feed = _column_feed_q(feed, T_feed_K, 1.013)
         try:
             res = _fug.design_column(
                 feed_composition=feed.composition,
@@ -2082,7 +2199,7 @@ def solve_columns(fs):
                 x_D_LK=b.column_x_D_LK,
                 x_B_LK=b.column_x_B_LK,
                 R_factor=b.column_R_factor,
-                q=1.0, T_top_K=T_top_K, T_bot_K=T_bot_K)
+                q=q_feed, T_top_K=T_top_K, T_bot_K=T_bot_K)
         except Exception as e:
             msgs.append(f"✗ Column {b.name}: error {type(e).__name__}: {e}")
             continue
@@ -2095,6 +2212,7 @@ def solve_columns(fs):
         # estimación inicial; WH refina la distribución de no-keys
         # con balance MESH por etapa.
         method = getattr(b, "column_method", "fug")
+        wh_conv = None      # None = no se corrió WH; True/False = resultado
         if method == "wanghenke":
             try:
                 import distillation_wanghenke as _wh
@@ -2122,12 +2240,32 @@ def solve_columns(fs):
                               for zi, m in zip(z_mass, mws))
                 N_wh = b.column_N_stages or max(int(res["N"]) + 2, 10)
                 fs_wh = max(2, N_wh // 2)
+                # max_iter más alto: cerca de azeótropos WH converge lento
                 wh_res = _wh.wang_henke(
                     comps=comps, feed_z=z_mol, F=F_mol,
                     T_feed_K=T_feed_K, P_bar=1.013,
                     N=N_wh, feed_stage=fs_wh,
                     D_over_F=res["D"] / res["F"],
-                    R=res["R"], max_iter=20)
+                    R=res["R"], max_iter=80)
+                if wh_res is not None:
+                    # Métricas para la UI (P4): etapa de feed + cierre global
+                    wh_res["feed_stage"] = fs_wh
+                    try:
+                        H_F = _wh._enthalpy_liquid(comps, z_mol, T_feed_K)
+                        H_D = _wh._enthalpy_liquid(comps, wh_res["x_profile"][0],
+                                                   wh_res["T_profile"][0])
+                        H_B = _wh._enthalpy_liquid(comps, wh_res["x_profile"][-1],
+                                                   wh_res["T_profile"][-1])
+                        lhs = (F_mol * H_F / 1000.0 + wh_res["Q_reb_kW"]
+                               + wh_res["Q_cond_kW"])
+                        rhs = (wh_res["D"] * H_D + wh_res["B"] * H_B) / 1000.0
+                        wh_res["balance_err"] = (abs(lhs - rhs)
+                                                 / max(abs(wh_res["Q_reb_kW"]), 1e-9))
+                    except Exception:
+                        wh_res["balance_err"] = None
+                    # Persistir para el panel (igual que _column_N, _column_R)
+                    b._wh_result = wh_res
+                    wh_conv = bool(wh_res.get("converged"))
                 if wh_res is not None and wh_res.get("converged"):
                     # Reemplazar res con composiciones WH
                     # Convertir x_top, x_bot de mol → mass
@@ -2220,12 +2358,24 @@ def solve_columns(fs):
         b._column_R = res.get("R")
         b._column_N_feed = res.get("N_feed")
         b._column_alpha_avg = res.get("alpha_avg")
+        b._column_q = res.get("q", 1.0)
 
-        msgs.append(
-            f"✓ Column {b.name}: N={res['N']:.1f}, R={res['R']:.2f}, "
-            f"Q_reb={Q_total:+.1f}kW, "
-            f"D={feed.mass_flow*D_F:.0f} B={feed.mass_flow*B_F:.0f}"
-        )
+        # Flag de convergencia WH para la lista de mensajes (P4.5)
+        if wh_conv is True:
+            _wh_flag = ", WH:conv"
+        elif wh_conv is False:
+            _wh_flag = ", WH:NO conv"
+        else:
+            _wh_flag = ""
+        if wh_conv is False:
+            msgs.append(
+                f"⚠ Column {b.name}: FUG OK pero WH no convergió")
+        else:
+            msgs.append(
+                f"✓ Column {b.name}: N={res['N']:.1f}, R={res['R']:.2f}, "
+                f"Q_reb={Q_total:+.1f}kW, "
+                f"D={feed.mass_flow*D_F:.0f} B={feed.mass_flow*B_F:.0f}{_wh_flag}"
+            )
         if res.get("warnings"):
             for w in res["warnings"]:
                 msgs.append(f"⚠ Column {b.name}: {w[:120]}")
@@ -4073,6 +4223,14 @@ def solve(fs, max_iter=MAX_ITER):
                     result.energy_balance_errors.append(msg)
             else:
                 result.energy_warnings.append(msg)
+
+    # Materializar el flujo de las corrientes de servicio (utility) de HX
+    # desde el duty ANTES de listar unresolved (si no, quedarían marcadas
+    # como sin resolver por tener mass_flow=0 al momento del chequeo).
+    try:
+        size_utility_streams(fs)
+    except Exception:
+        pass
 
     # 4. Validación + listado de unresolved
     #    Streams con endpoint flotante (src=-1 o dst=-1) se skipean —

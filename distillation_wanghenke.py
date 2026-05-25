@@ -46,6 +46,82 @@ import math
 from typing import Dict, List, Optional, Tuple
 
 
+_R_GAS = 8.314          # J/(mol·K)
+_T_REF_K = 298.15       # K — referencia de entalpía
+
+
+def _cp_liq_J_mol_K(comp_obj, T_K: float) -> float:
+    """Cp líquido [J/(mol·K)].  Fallbacks (regla de pulgar, Watson):
+    Cp_liq ≈ Cp_gas + R si no hay coefs líquidos; 75 J/mol/K (agua) último."""
+    cp = comp_obj.cp_J_mol_K(T_K, "liquid")
+    if cp is not None and cp > 0:
+        return cp
+    cp_gas = comp_obj.cp_J_mol_K(T_K, "gas")
+    if cp_gas is not None and cp_gas > 0:
+        return cp_gas + _R_GAS
+    return 75.0
+
+
+def _h_form_liq_J_mol(comp_obj) -> float:
+    """ΔH_f líquido [J/mol] a T_REF.  Si falta ΔH_f_liq, usa
+    ΔH_f_gas − ΔH_vap(T_REF) (Hess).  0 si no hay ninguno."""
+    if comp_obj.dh_f_liq_kJ_mol is not None:
+        return comp_obj.dh_f_liq_kJ_mol * 1000.0
+    if comp_obj.dh_f_gas_kJ_mol is not None:
+        dhv = comp_obj.delta_h_vap_kJ_mol(_T_REF_K - 273.15)
+        if dhv is not None:
+            return (comp_obj.dh_f_gas_kJ_mol - dhv) * 1000.0
+        return comp_obj.dh_f_gas_kJ_mol * 1000.0
+    return 0.0
+
+
+def _enthalpy_liquid(comps: List[str], x_vec: List[float], T_K: float) -> float:
+    """Entalpía molar del líquido [J/mol], referida a T_REF=298.15 K.
+        H_L ≈ Σ xᵢ·Cp_liq,ᵢ·(T−T_REF) + Σ xᵢ·ΔH_f_liq,ᵢ
+    Cp evaluado en T_mid=(T+T_REF)/2 como 'Cp_avg' del intervalo."""
+    try:
+        import thermo_db as _td
+    except ImportError:
+        return 0.0
+    T_mid = 0.5 * (T_K + _T_REF_K)
+    H = 0.0
+    for i, c in enumerate(comps):
+        xi = x_vec[i]
+        if xi <= 0:
+            continue
+        co = _td.get(c)
+        if co is None:
+            H += xi * 75.0 * (T_K - _T_REF_K)
+            continue
+        cp = _cp_liq_J_mol_K(co, T_mid)
+        H += xi * (cp * (T_K - _T_REF_K) + _h_form_liq_J_mol(co))
+    return H
+
+
+def _enthalpy_vapor(comps: List[str], y_vec: List[float], T_K: float) -> float:
+    """Entalpía molar del vapor [J/mol], referida a T_REF.
+        H_V(T) ≈ H_L(comp=y, T) + Σ yᵢ·ΔH_vap,ᵢ(T)
+    (camino de estado: calentar líquido de comp y a T, luego vaporizar a T).
+    NOTE: equivalente termodinámico a usar Cp_gas + ΔH_vap(T_REF)."""
+    try:
+        import thermo_db as _td
+    except ImportError:
+        return 0.0
+    H = _enthalpy_liquid(comps, y_vec, T_K)
+    T_C = T_K - 273.15
+    for i, c in enumerate(comps):
+        yi = y_vec[i]
+        if yi <= 0:
+            continue
+        co = _td.get(c)
+        if co is None:
+            continue
+        dhv = co.delta_h_vap_kJ_mol(T_C)
+        if dhv is not None:
+            H += yi * dhv * 1000.0
+    return H
+
+
 def _K_values(comps: List[str], x_vec: List[float], T_K: float,
               P_bar: float) -> Optional[List[float]]:
     """Calcula K_i = γ_i · P_i_sat / P para cada componente.
@@ -139,7 +215,80 @@ def _solve_tridiagonal(A: List[float], B: List[float],
     return x
 
 
-def wang_henke(comps:       List[str],
+def wang_henke(comps, feed_z, F, T_feed_K, P_bar, N, feed_stage,
+               D_over_F, R, max_iter=30, tol=1e-4, spec=None):
+    """Solver riguroso Wang-Henke (MESH) con condensador/reboiler como
+    etapas de balance propio.  Dos contratos (mutuamente excluyentes):
+
+      · DISEÑO (default, spec=None): D_over_F + R fijos → resuelve las
+        composiciones del destilado y el fondo como OUTPUT del balance.
+      · SPEC (spec={'LK': idx|nombre, 'x_D_LK': t, 'x_B_LK': t}): el user
+        fija pureza objetivo del LK en el destilado + R; el solver ajusta
+        D/F por Newton/bisección externo hasta que x_D_LK[result] = target.
+        Si la pureza es físicamente inalcanzable (azeótropo, N insuficiente),
+        devuelve converged=False con un warning — NO miente reportando
+        convergencia con la pureza pedida (bug que arregla P3).
+
+    Returns: dict (ver _wh_solve_design) + 'warnings' (lista) y, en modo
+    spec, 'spec_achieved' (bool) y 'D_over_F' resuelto.
+
+    NOTE (P3.2): el modo 'spec' es opt-in; el contrato por D/F (diseño)
+    se mantiene como default para backward-compat con solve_columns().
+    """
+    if spec is None:
+        return _wh_solve_design(comps, feed_z, F, T_feed_K, P_bar, N,
+                                feed_stage, D_over_F, R, max_iter, tol)
+
+    # ---- modo SPEC: bisección sobre D/F para alcanzar x_D_LK objetivo ----
+    lk = spec.get("LK", 0)
+    lk_idx = lk if isinstance(lk, int) else (comps.index(lk) if lk in comps else 0)
+    x_D_target = float(spec.get("x_D_LK", 0.9))
+    warnings_sp = []
+
+    def x_top_at(df):
+        r = _wh_solve_design(comps, feed_z, F, T_feed_K, P_bar, N,
+                             feed_stage, df, R, max_iter, tol)
+        return r
+
+    # x_D_LK crece cuando D/F decrece (destilado más chico → más puro).
+    # Cota física: D·x_D_LK ≤ F·z_LK ⇒ D/F ≤ z_LK/x_D_target.
+    z_lk = feed_z[lk_idx] / sum(feed_z) if sum(feed_z) > 0 else feed_z[lk_idx]
+    df_hi = min(0.98, max(0.02, z_lk / max(x_D_target, 1e-6)))
+    df_lo = 0.01
+    best = None
+    for _ in range(40):
+        df_mid = 0.5 * (df_lo + df_hi)
+        r = x_top_at(df_mid)
+        if r is None:
+            df_hi = df_mid
+            continue
+        best = r
+        x_top_lk = r["x_profile"][0][lk_idx]
+        if abs(x_top_lk - x_D_target) < 1e-3:
+            break
+        if x_top_lk < x_D_target:
+            df_hi = df_mid     # bajar D/F → más puro
+        else:
+            df_lo = df_mid
+    if best is None:
+        return None
+    x_top_lk = best["x_profile"][0][lk_idx]
+    spec_achieved = abs(x_top_lk - x_D_target) <= 5e-3
+    best.setdefault("warnings", [])
+    best["spec_achieved"] = spec_achieved
+    best["D_over_F"] = best.get("D", 0.0) / F if F > 0 else None
+    if not spec_achieved:
+        # Pureza inalcanzable: el mejor x_D_LK alcanzable < objetivo.
+        best["converged"] = False
+        best["warnings"].append(
+            f"pureza inalcanzable: x_D_LK máx ≈ {x_top_lk:.3f} < objetivo "
+            f"{x_D_target:.3f} (posible AZEOTROPO o N insuficiente). El solver "
+            f"NO puede alcanzar esta pureza con destilación simple a estas "
+            f"condiciones.")
+    return best
+
+
+def _wh_solve_design(comps:       List[str],
                 feed_z:      List[float],
                 F:           float,
                 T_feed_K:    float,
@@ -150,7 +299,9 @@ def wang_henke(comps:       List[str],
                 R:           float,
                 max_iter:    int   = 30,
                 tol:         float = 1e-4) -> Optional[Dict]:
-    """Solver Wang-Henke (Sum-Rates) para columna multicomponente.
+    """Núcleo Wang-Henke en modo DISEÑO (D/F y R fijos).  Resuelve las
+    composiciones por etapa.  Lo invoca wang_henke() (que además ofrece el
+    modo 'spec' por Newton externo sobre D/F).
 
     Args:
         comps:      lista de C componentes (nombres canónicos thermo_db)
@@ -190,21 +341,29 @@ def wang_henke(comps:       List[str],
     if D <= 0 or B <= 0:
         return None
 
-    # Initial guess perfiles T y V
-    # T_top: bubble del distillate puro (asumiendo distillate ≈ feed
-    # rico en ligeros).  T_bot: bubble del bottom.
-    # V_n = V_top en sección rectificación, mayor en stripping.
-    # Para simplicidad: T_top ≈ T_feed − 20K, T_bot ≈ T_feed + 30K
-    T_profile = [T_feed_K - 20 + (T_feed_K + 30 - T_feed_K + 20) * (n / N)
-                  for n in range(N)]
-    # V: constante (Constant Molal Overflow) — aproximación inicial
-    V_top = D * (R + 1)
-    V_profile = [V_top] * N
-    L_profile = [V_top - D] * (feed_stage - 1) + \
-                [V_top - D + F] * (N - feed_stage + 1)
+    # Convención de etapas (P2/P3): etapa 0 = CONDENSADOR total,
+    # etapa N-1 = REBOILER parcial, etapas 1..N-2 = bandejas.  El feed
+    # entra en feed_idx (debe ser una bandeja interior).
+    feed_idx = min(max(feed_stage - 1, 1), N - 2) if N >= 3 else feed_stage - 1
+
+    # Initial guess perfiles T y V.  T_top ≈ T_feed − 20K, T_bot ≈ T_feed + 30K
+    T_profile = [T_feed_K - 20 + 50.0 * (n / max(N - 1, 1)) for n in range(N)]
+    # V: Constant Molal Overflow inicial.  V_0=0 (condensador total, no sube
+    # vapor); V_1 = D(R+1) (vapor que entra al condensador); resto = V_1.
+    V_top = D * (R + 1.0)
+    V_profile = [0.0] + [V_top] * (N - 1)
+    # L por balance de materia acumulado desde el tope: L_j = V_{j+1}+ΣF_j−D
+    cumF0 = [F if n >= feed_idx else 0.0 for n in range(N)]
+    L_profile = []
+    for n in range(N):
+        Vnext = V_profile[n + 1] if n + 1 < N else 0.0
+        L_profile.append(Vnext + cumF0[n] - D)
 
     # Initial x: composición ≈ feed con perfil gradient
     x_profile = [list(feed_z) for _ in range(N)]
+
+    # Para el balance de entalpía (P2): H del feed (sat líquido a T_feed_K).
+    H_F = _enthalpy_liquid(comps, feed_z, T_feed_K)
 
     converged = False
     for it in range(max_iter):
@@ -216,77 +375,126 @@ def wang_henke(comps:       List[str],
                 return None
             Ks_per_stage.append(K)
 
-        # 2) Resolver sistema tridiagonal por componente
-        # Balance materia etapa n para componente i:
-        #   L_{n-1}·x_{n-1,i} − (L_n + V_n·K_n,i)·x_n,i + V_{n+1}·K_{n+1,i}·x_{n+1,i}
-        #   = − f_n,i   (donde f_n,i = F·z_i si n = feed_stage, else 0)
-        # Condiciones de frontera:
-        #   etapa 1 (top): L_0 = R·D (reflux), V_1·K_1,i·x_1,i = D·x_D_i
-        #   etapa N (bot): V_{N+1} = 0 (reboiler), L_N·x_N,i = B·x_B_i
+        # 2) Resolver sistema tridiagonal por componente, con el cond/reb
+        #    tratados RIGUROSAMENTE como etapas (P2/P3 — no se fija x_0=x_D):
+        #
+        #   · Etapa 0 (condensador total): x_0,i = y_1,i (la condensación
+        #     total preserva composición).  Fila: x_0,i − (K_1,i/S_1)·x_1,i = 0
+        #     con S_1 = Σ_k K_1,k·x_1,k (normalización, linealizada con x_1
+        #     del iter previo).  El reflujo L_0=R·D entra a la etapa 1 vía
+        #     el término subdiagonal A_1 = L_0 acoplado a x_0 (=condensado).
+        #   · Etapas 1..N-1 (equilibrio; reboiler en N-1 con V_N=0):
+        #       L_{n-1}·x_{n-1} − (L_n + V_n·K_n,i)·x_n + V_{n+1}·K_{n+1,i}·x_{n+1}
+        #       = −F·z_i  (feed sólo en feed_idx)
+        S1 = (sum(Ks_per_stage[1][k] * x_profile[1][k] for k in range(C))
+              if N >= 2 else 1.0)
+        if S1 <= 0:
+            S1 = 1.0
         new_x = [list(x_profile[n]) for n in range(N)]
         for i in range(C):
-            # Tridiagonal A[n-1]·x_{n-1} + B[n]·x_n + C[n]·x_{n+1} = D[n]
             A_diag = [0.0] * N
             Bdiag = [0.0] * N
             Cdiag = [0.0] * N
             Dvec  = [0.0] * N
             for n in range(N):
-                # Subdiagonal A[n] = L_{n-1}  (no aplica en n=0)
-                # Diagonal B[n] = -(L_n + V_n·K_{n,i})
-                # Superdiagonal C[n] = V_{n+1}·K_{n+1,i}  (no aplica en n=N-1)
-                if n > 0:
-                    A_diag[n] = L_profile[n-1]
+                if n == 0:
+                    # Condensador total: x_0 = y_1
+                    Bdiag[0] = 1.0
+                    if N >= 2:
+                        Cdiag[0] = -Ks_per_stage[1][i] / S1
+                    Dvec[0] = 0.0
+                    continue
+                A_diag[n] = L_profile[n - 1]
                 Bdiag[n] = -(L_profile[n] + V_profile[n] * Ks_per_stage[n][i])
                 if n < N - 1:
-                    Cdiag[n] = V_profile[n+1] * Ks_per_stage[n+1][i]
-                # RHS: feed en feed_stage
-                if n == feed_stage - 1:
-                    Dvec[n] = -F * feed_z[i]
-                else:
-                    Dvec[n] = 0.0
-            # Top boundary: en etapa 0, L_{n-1} = R·D (reflujo desde
-            # condensador), entra como término en B/D actualizado.
-            # Para condensador total, x_0 = x_D, así que:
-            #   ecuación etapa 1 (n=0): V_0·K_0·x_0 + ... = ...
-            # Simplificación: tratar el condensador como etapa 0 ficticia
-            # con L_0 = R·D, V_0 = 0 (saliente como D).
-            # Aquí etapa 0 ya es la primer etapa (n=0); el reflujo se
-            # incluye como un "ingreso" extra a la etapa 0 con
-            # composición x_D = x_0 (asumido):
-            # Modificamos B[0]: la etapa 0 RECIBE R·D·x_0 desde encima
-            # → balance: R·D·x_0 + V_1·K_1·x_1 = (L_0 + V_0·K_0)·x_0 + ...
-            # Como L_0 = R·D y V_0 = D (porque condensador), se simplifica
-            # a R·D·x_0 = (R·D + D·K_0)·x_0 + ... que no es elegante.
-            # Para versión simplificada, fijamos las condiciones de frontera
-            # como x_0 = x_D y x_N = x_B y resolvemos las N−2 etapas centrales.
-            # No tratamos rigurosamente el cond/reb aquí.
+                    Cdiag[n] = V_profile[n + 1] * Ks_per_stage[n + 1][i]
+                Dvec[n] = -F * feed_z[i] if n == feed_idx else 0.0
             sol = _solve_tridiagonal(A_diag, Bdiag, Cdiag, Dvec)
             if sol is None:
                 return None
             for n in range(N):
                 new_x[n][i] = max(sol[n], 0.0)
 
-        # 3) Normalizar x_n para que Σx_n,i = 1, y ajustar T_n via bubble
+        # 3) Normalizar x_n (Σx=1) + under-relaxation, y ajustar T_n via bubble.
+        # NOTE: la sustitución sucesiva sin amortiguar oscila cerca de un
+        # azeótropo (K-T fuertemente acoplados); el factor LAM∈(0,1] estabiliza
+        # (Henley-Seader §10.4 — under-relaxation estándar de Wang-Henke).
+        LAM = 0.5
         max_dT = 0.0
         for n in range(N):
             s = sum(new_x[n])
-            if s > 0:
-                new_x[n] = [xi / s for xi in new_x[n]]
-            else:
+            if s <= 0:
                 continue
-            T_new = _bubble_T_from_x(comps, new_x[n], P_bar, T_profile[n])
-            if T_new is None:
-                T_new = T_profile[n]
+            xn_norm = [xi / s for xi in new_x[n]]
+            # under-relaxation de la composición
+            new_x[n] = [x_profile[n][i] + LAM * (xn_norm[i] - x_profile[n][i])
+                        for i in range(C)]
+            T_bub = _bubble_T_from_x(comps, new_x[n], P_bar, T_profile[n])
+            if T_bub is None:
+                T_bub = T_profile[n]
+            T_new = T_profile[n] + LAM * (T_bub - T_profile[n])
             max_dT = max(max_dT, abs(T_new - T_profile[n]))
             T_profile[n] = T_new
 
-        # Convergencia
+        # 4) Balance de entalpía por etapa → corregir V_n (y L_n).
+        #    "Constant molal overflow corregida": V_{j+1} sale de la
+        #    envolvente de energía tope→etapa j (Henley-Seader §10.4),
+        #    con Q_cond del propio balance del condensador.  Activado
+        #    desde el 2º iter (it>=1); el 1º usa V constante.
+        max_dV = float("inf")
+        if it >= 1:
+            # y por etapa (vapor en equilibrio con new_x a la T actual)
+            y_stage = []
+            for n in range(N):
+                Kn = _K_values(comps, new_x[n], T_profile[n], P_bar)
+                if Kn is None:
+                    y_stage.append(list(new_x[n])); continue
+                yv = [Kn[i] * new_x[n][i] for i in range(C)]
+                sy = sum(yv)
+                y_stage.append([v / sy for v in yv] if sy > 0 else list(new_x[n]))
+            H_L = [_enthalpy_liquid(comps, new_x[n], T_profile[n]) for n in range(N)]
+            H_V = [_enthalpy_vapor(comps, y_stage[n], T_profile[n]) for n in range(N)]
+            H_D = H_L[0]                      # destilado = condensado (etapa 0)
+            V1 = D * (R + 1.0)                # vapor al condensador (fijo por R)
+            # Condensador: V_1·H_V_1 + Q_cond = (D+L_0)·H_D = V_1·H_D
+            Q_cond_it = V1 * (H_D - H_V[1]) if N >= 2 else 0.0   # < 0
+            cumF = [F if n >= feed_idx else 0.0 for n in range(N)]
+            newV = [0.0] * N           # V[0]=0 (condensador total)
+            if N >= 2:
+                newV[1] = V1
+            # Recursión de energía: V_{j+1} desde la envolvente tope→etapa j
+            for j in range(1, N - 1):
+                denom = H_V[j + 1] - H_L[j]
+                if abs(denom) < 1e-6:
+                    newV[j + 1] = newV[j]; continue
+                num = (D * (H_D - H_L[j])
+                       + cumF[j] * (H_L[j] - H_F) - Q_cond_it)
+                vj1 = num / denom
+                if not math.isfinite(vj1) or vj1 <= 0:
+                    vj1 = newV[j]             # guard contra V negativo/explosivo
+                newV[j + 1] = vj1
+            # L por balance de materia (envolvente desde tope): L_j = V_{j+1}+ΣF_j−D
+            newL = [0.0] * N
+            for n in range(N):
+                Vnext = newV[n + 1] if n + 1 < N else 0.0
+                Ln = Vnext + cumF[n] - D
+                newL[n] = Ln if Ln > 0 else max(L_profile[n] * 0.5, 1e-6)
+            # Damping para estabilidad numérica
+            beta = 0.5
+            max_dV = 0.0
+            for n in range(N):
+                Vd = (1 - beta) * V_profile[n] + beta * newV[n]
+                max_dV = max(max_dV, abs(Vd - V_profile[n]) / max(V_profile[n], 1e-9))
+                V_profile[n] = Vd
+                L_profile[n] = (1 - beta) * L_profile[n] + beta * newL[n]
+
+        # Convergencia (M+E+S + H): Δx, ΔT y ΔV
         max_dx = 0.0
         for n in range(N):
             for i in range(C):
                 max_dx = max(max_dx, abs(new_x[n][i] - x_profile[n][i]))
         x_profile = new_x
-        if max_dx < tol and max_dT < 0.5:
+        if max_dx < tol and max_dT < 0.5 and max_dV < 1e-3:
             converged = True
             break
 
@@ -308,28 +516,29 @@ def wang_henke(comps:       List[str],
     D_comp = [D * x_profile[0][i] for i in range(C)]
     B_comp = [B * x_profile[-1][i] for i in range(C)]
 
-    # Duties simplificados (ΔH_vap promedio)
-    try:
-        import thermo_db as _td
-        dh_avg = 0.0
-        n_with = 0
-        for i, c in enumerate(comps):
-            comp_obj = _td.get(c)
-            if comp_obj is None:
-                continue
-            dh = comp_obj.delta_h_vap_kJ_mol(T_profile[0] - 273.15)
-            if dh is None:
-                continue
-            dh_avg += feed_z[i] * dh
-            n_with += feed_z[i]
-        if n_with > 0:
-            dh_avg /= n_with
-        else:
-            dh_avg = 35.0  # kJ/mol default
-    except ImportError:
-        dh_avg = 35.0
-    Q_cond_kW = -V_profile[0] * dh_avg / 1000.0   # V en mol/s × kJ/mol /1000 = MW
-    Q_reb_kW  = V_profile[-1] * dh_avg / 1000.0
+    # Duties por balance REAL de entalpía en los extremos (P2.4).
+    # Unidades: V [mol/s] · H [J/mol] = W → /1000 = kW.
+    H_L_fin = [_enthalpy_liquid(comps, x_profile[n], T_profile[n]) for n in range(N)]
+    H_V_fin = [_enthalpy_vapor(comps, y_profile[n], T_profile[n]) for n in range(N)]
+    H_D = H_L_fin[0]      # destilado (líquido, condensador total)
+    H_B = H_L_fin[-1]     # fondo (líquido)
+    V1 = D * (R + 1.0)    # vapor que entra al condensador (desde etapa 1)
+    # Condensador (etapa 0): V1·H_V1 + Q_cond = (D+L0)·H_D = V1·H_D, L0=R·D
+    Q_cond_kW = (V1 * (H_D - H_V_fin[1])) / 1000.0 if N >= 2 else 0.0
+    # Reboiler (etapa N-1): L_{N-2}·H_L + Q_reb = V_{N-1}·H_V + B·H_B
+    if N >= 2:
+        Q_reb_kW = (V_profile[-1] * H_V_fin[-1] + B * H_B
+                    - L_profile[-2] * H_L_fin[-2]) / 1000.0
+    else:
+        Q_reb_kW = -Q_cond_kW
+    # Indicador MES vs MESH: varianza relativa del perfil de vapor en las
+    # etapas con flujo de vapor (1..N-1; la 0 es el condensador, V_0=0).
+    V_active = V_profile[1:] if N >= 2 else V_profile
+    V_avg = sum(V_active) / len(V_active) if V_active else 0.0
+    if V_avg > 0:
+        V_var = (max(V_active) - min(V_active)) / V_avg
+    else:
+        V_var = 0.0
 
     return dict(
         converged=converged,
@@ -344,4 +553,6 @@ def wang_henke(comps:       List[str],
         Q_cond_kW=Q_cond_kW,
         Q_reb_kW=Q_reb_kW,
         D=D, B=B,
+        V_var=V_var,
+        warnings=[],
     )

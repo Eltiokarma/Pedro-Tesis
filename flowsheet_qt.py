@@ -50,7 +50,7 @@ from PySide6.QtCore import (
     Signal,
 )
 from PySide6.QtGui import (
-    QAction, QPen, QBrush, QColor, QPainter, QFont, QPainterPath,
+    QAction, QActionGroup, QPen, QBrush, QColor, QPainter, QFont, QPainterPath,
     QPolygonF, QPainterPathStroker, QFontMetrics, QKeySequence,
     QTransform, QIcon,
 )
@@ -97,6 +97,69 @@ from flowsheet_model import (
     STREAM_ROLE_COLORS, STREAM_ROLE_COLORS_SEL,
     BLOCK_W, BLOCK_H, GRID_STEP, ROUTING_GAP,
 )
+
+
+# ======================================================
+# CATÁLOGO DE EJEMPLOS AGRUPADO POR CATEGORÍA
+# ======================================================
+# Única fuente de verdad para los menús de ejemplos (menubar + toolbar).
+# Cada categoría → lista de (key, label).  Las keys deben existir en el
+# builder_map de action_load_example().
+EXAMPLE_CATEGORIES = [
+    ("Introductorios", [
+        ("hda",          "HDA — Hidrodealquilación de tolueno"),
+        ("methanol",     "Síntesis de metanol"),
+        ("distillation", "Destilación binaria benceno/tolueno"),
+        ("ammonia",      "Síntesis de amoníaco (Haber-Bosch)"),
+        ("ethanol",      "Producción de etanol"),
+        ("biodiesel",    "Producción de biodiesel"),
+        ("cdu",          "Refinería atmosférica simplificada"),
+    ]),
+    ("Reactores y solver avanzado (Capas 4-6)", [
+        ("smr_eq",        "Reformado SMR + WGS (reactor de equilibrio)"),
+        ("ethane_pfr",    "Cracking de etano (reactor PFR cinético)"),
+        ("haber_rec",     "Haber-Bosch con recycle (loop reactivo)"),
+        ("dist_eth_az",   "Destilación azeotrópica etanol-agua (NRTL)"),
+        ("rxn_flash_col", "Reactor + flash + columna AUTOMÁTICOS"),
+        ("hydraulic",     "Planta hidráulica con auto-sizing de bomba"),
+    ]),
+    ("Plantas industriales completas", [
+        ("hda_full",   "HDA completo (Douglas, escala industrial)"),
+        ("gas_sweet",  "Endulzamiento de gas natural (MDEA)"),
+        ("sugar",      "Planta de azúcar (caña)"),
+        ("industrial", "⭐ PLANTA INDUSTRIAL COMPLETA (MeOH + servicios + BOP)"),
+        ("quimpac",    "QUIMPAC — cloro-álcali (membrana)"),
+        ("hno3",       "HNO3 Ostwald (dual-presión)"),
+        ("talara",     "REFINERÍA TALARA — PMRT"),
+    ]),
+    ("Alimentaria y bioproceso", [
+        ("pasteurizer",  "Pasteurizador HTST de jugo"),
+        ("pineapple",    "Jugo de piña concentrado (evaporación)"),
+        ("potato_chips", "Papas fritas (freído industrial)"),
+        ("bread",        "Panificación industrial"),
+        ("beer",         "Cervecería — fermentación"),
+        ("penicillin",   "Penicilina por fermentación"),
+        ("leche_gloria", "LECHE GLORIA — planta láctea integrada"),
+    ]),
+    ("Química", [
+        ("sulfuric",        "Ácido sulfúrico (contacto, V₂O₅)"),
+        ("acetic",          "Ácido acético (carbonilación Cativa)"),
+        ("ldpe",            "Polietileno LDPE (autoclave HP)"),
+        ("chloralkali_hcl", "Cloro-álcali compacto + HCl"),
+        ("urea",            "Urea (Bosch-Meiser, fertilizante)"),
+        ("soap",            "Jabón por saponificación"),
+        ("ethylene_crk",    "Etileno por cracking de etano"),
+    ]),
+    ("Materiales y energía", [
+        ("cement",      "Cemento Portland (horno rotatorio)"),
+        ("glass",       "Vidrio sodocálcico (horno de fusión)"),
+        ("air_sep",     "Separación criogénica de aire O₂/N₂"),
+        ("water_treat", "Tratamiento de agua potable"),
+        ("rankine",     "Central térmica — ciclo Rankine"),
+        ("nuclear",     "Isla nuclear — circuito 2°"),
+        ("desal",       "Desalinización MED multi-efecto"),
+    ]),
+]
 
 
 # ======================================================
@@ -5291,78 +5354,12 @@ class FlowsheetMainWindow(QMainWindow):
         m_file.addAction(_ac("&Guardar…",   self.action_save,
                                QKeySequence.Save, "file-save"))
         m_file.addSeparator()
-        # Ejemplos — submenu
+        # Ejemplos — submenu agrupado por categoría
         m_examples = m_file.addMenu("&Ejemplos")
-        for label, key in [
-            ("HDA — Hidrodealquilación de tolueno", "hda"),
-            ("Síntesis de metanol", "methanol"),
-            ("Destilación binaria benceno/tolueno", "distillation"),
-            ("Síntesis de amoníaco (Haber-Bosch)", "ammonia"),
-            ("Producción de etanol", "ethanol"),
-            ("Producción de biodiesel", "biodiesel"),
-            ("Refinería atmosférica simplificada", "cdu"),
-        ]:
-            m_examples.addAction(label, lambda k=key: self.action_load_example(k))
-        m_examples.addSeparator()
-        for label, key in [
-            ("HDA completo (Douglas, escala industrial)", "hda_full"),
-            ("Endulzamiento de gas natural (MDEA)", "gas_sweet"),
-            ("Planta de azúcar (caña)", "sugar"),
-        ]:
-            m_examples.addAction(label, lambda k=key: self.action_load_example(k))
-        m_examples.addSeparator()
-        for label, key in [
-            ("Reformado SMR + WGS (reactor de equilibrio Capa 4)", "smr_eq"),
-            ("Cracking de etano (reactor PFR Capa 5)", "ethane_pfr"),
-            ("Haber-Bosch con recycle (NH3, loop reactivo)", "haber_rec"),
-            ("Destilación azeotrópica etanol-agua (NRTL Capa 6)", "dist_eth_az"),
-            ("Reactor + flash + columna AUTOMÁTICOS (FUG + NRTL)", "rxn_flash_col"),
-            ("Planta hidráulica con auto-sizing de bomba", "hydraulic"),
-        ]:
-            m_examples.addAction(label, lambda k=key: self.action_load_example(k))
-        m_examples.addSeparator()
-        for label, key in [
-            ("⭐ PLANTA INDUSTRIAL COMPLETA (MeOH + servicios + BOP)", "industrial"),
-            ("🇵🇪 QUIMPAC — cloro-álcali (membrana)", "quimpac"),
-            ("⚗️ HNO3 Ostwald (dual-presión)", "hno3"),
-            ("🏭 REFINERÍA TALARA — PMRT", "talara"),
-        ]:
-            m_examples.addAction(label, lambda k=key: self.action_load_example(k))
-        # ── Catálogo educativo (alimentaria, bioproceso, química,
-        #    materiales, energía) — completa los 41 ejemplos del catálogo ──
-        m_examples.addSeparator()
-        for label, key in [
-            ("Pasteurizador HTST de jugo", "pasteurizer"),
-            ("Jugo de piña concentrado (evaporación)", "pineapple"),
-            ("Papas fritas (freído industrial)", "potato_chips"),
-            ("Panificación industrial", "bread"),
-            ("Cervecería — fermentación", "beer"),
-            ("Penicilina por fermentación", "penicillin"),
-            ("LECHE GLORIA — planta láctea integrada", "leche_gloria"),
-        ]:
-            m_examples.addAction(label, lambda k=key: self.action_load_example(k))
-        m_examples.addSeparator()
-        for label, key in [
-            ("Ácido sulfúrico (contacto, V₂O₅)", "sulfuric"),
-            ("Ácido acético (carbonilación Cativa)", "acetic"),
-            ("Polietileno LDPE (autoclave HP)", "ldpe"),
-            ("Cloro-álcali compacto + HCl", "chloralkali_hcl"),
-            ("Urea (Bosch-Meiser, fertilizante)", "urea"),
-            ("Jabón por saponificación", "soap"),
-            ("Etileno por cracking de etano", "ethylene_crk"),
-        ]:
-            m_examples.addAction(label, lambda k=key: self.action_load_example(k))
-        m_examples.addSeparator()
-        for label, key in [
-            ("Cemento Portland (horno rotatorio)", "cement"),
-            ("Vidrio sodocálcico (horno de fusión)", "glass"),
-            ("Separación criogénica de aire O₂/N₂", "air_sep"),
-            ("Tratamiento de agua potable", "water_treat"),
-            ("Central térmica — ciclo Rankine", "rankine"),
-            ("Isla nuclear — circuito 2°", "nuclear"),
-            ("Desalinización MED multi-efecto", "desal"),
-        ]:
-            m_examples.addAction(label, lambda k=key: self.action_load_example(k))
+        for _cat, _items in EXAMPLE_CATEGORIES:
+            _sub = m_examples.addMenu(_cat)
+            for _key, _label in _items:
+                _sub.addAction(_label, lambda k=_key: self.action_load_example(k))
 
         m_file.addSeparator()
         # Exportar — submenu
@@ -5441,6 +5438,24 @@ class FlowsheetMainWindow(QMainWindow):
                 act.setText(label)
                 m_legacy.addAction(act)
         m_view.addSeparator()
+        # ── Sistema de unidades global (afecta UI + exportación) ──
+        m_units = m_view.addMenu("&Unidades")
+        self._unit_system_group = QActionGroup(self)
+        self._unit_system_group.setExclusive(True)
+        self._unit_system_actions = {}
+        _cur_sys = funits.current_system()
+        for _sysname in funits.UNIT_SYSTEMS_ORDER:
+            _u = funits.UNIT_SYSTEMS[_sysname]
+            _act = QAction(
+                f"{_sysname}   ({_u['flow']} · {_u['temp']} · {_u['pressure']} · {_u['energy']})",
+                self)
+            _act.setCheckable(True)
+            _act.setChecked(_sysname == _cur_sys)
+            _act.triggered.connect(lambda _checked=False, n=_sysname: self._set_unit_system(n))
+            self._unit_system_group.addAction(_act)
+            self._unit_system_actions[_sysname] = _act
+            m_units.addAction(_act)
+        m_view.addSeparator()
         # Preferencias (tema, densidad, acento)
         m_view.addAction(_ac("&Preferencias…", self._open_preferences, "Ctrl+,"))
         m_view.addSeparator()
@@ -5479,6 +5494,45 @@ class FlowsheetMainWindow(QMainWindow):
         y desde el menú Vista > Toolbars legacy para re-mostrarlas."""
         for tb in self.findChildren(QToolBar):
             tb.setVisible(bool(visible))
+
+    def _set_unit_system(self, name):
+        """Aplica el sistema de unidades global (Vista > Unidades) y refresca
+        todo lo que muestra magnitudes: tabla de corrientes, labels del canvas,
+        burbujas, panel de propiedades y footer.  Afecta también la exportación
+        (que lee funits.active() al exportar)."""
+        funits.set_system(name)
+        # sincronizar el segmented control de flujo del dock
+        if getattr(self, "streams_dock", None) is not None:
+            try:
+                self.streams_dock.select_flow_unit(funits.active_unit("flow"))
+            except Exception:
+                pass
+        # re-render labels de corrientes (caudal) en el canvas
+        if hasattr(self, "scene") and hasattr(self.scene, "stream_items"):
+            for _sid, _item in self.scene.stream_items.items():
+                if hasattr(_item, "update_path"):
+                    try:
+                        _item.update_path()
+                    except Exception:
+                        pass
+        # burbujas de corriente / HX
+        for _mgr in ("_bubble_manager", "_hx_bubble_manager"):
+            m = getattr(self, _mgr, None)
+            if m is not None:
+                try:
+                    m.refresh_all()
+                except Exception:
+                    pass
+        # panel de propiedades (re-disparar la selección actual)
+        try:
+            self._on_selection_changed()
+        except Exception:
+            pass
+        # marcar el preset activo en el menú
+        cur = funits.current_system()
+        for sysname, act in getattr(self, "_unit_system_actions", {}).items():
+            act.setChecked(sysname == cur)
+        self._update_status()
 
     def _open_preferences(self):
         """Vista > Preferencias…  Abre el diálogo de tema/densidad/acento.
@@ -5699,64 +5753,15 @@ class FlowsheetMainWindow(QMainWindow):
         # reusar los example builders del editor legacy
         def make_loader(key):
             return lambda: self.action_load_example(key)
-        # Ícono compartido para todos los ejemplos legacy (equipo genérico)
+        # Ícono compartido para todos los ejemplos (equipo genérico)
         _ic_ex = _mk("act-examples", color=_ICON_COLOR, size=18) or QIcon()
-        # Reactor para los 3 ejemplos con reacciones (Capas 4-5)
-        _ic_rxn = _mk("cfg-rxn", color="#c41e3a", size=18) or QIcon()
 
-        examples_menu.addAction(_ic_ex, "HDA — Hidrodealquilación de tolueno",  make_loader("hda"))
-        examples_menu.addAction(_ic_ex, "Síntesis de metanol",                  make_loader("methanol"))
-        examples_menu.addAction(_ic_ex, "Destilación binaria benceno/tolueno",  make_loader("distillation"))
-        examples_menu.addSeparator()
-        examples_menu.addAction(_ic_ex, "Síntesis de amoníaco (Haber-Bosch)",   make_loader("ammonia"))
-        examples_menu.addAction(_ic_ex, "Producción de etanol",                 make_loader("ethanol"))
-        examples_menu.addAction(_ic_ex, "Producción de biodiesel",              make_loader("biodiesel"))
-        examples_menu.addAction(_ic_ex, "Refinería atmosférica simplificada",   make_loader("cdu"))
-        examples_menu.addSeparator()
-        # ---- Procesos industriales completos ----
-        examples_menu.addAction(_ic_ex, "HDA completo (Douglas, escala industrial)", make_loader("hda_full"))
-        examples_menu.addAction(_ic_ex, "Endulzamiento de gas natural (MDEA)",       make_loader("gas_sweet"))
-        examples_menu.addAction(_ic_ex, "Planta de azúcar (caña)",                   make_loader("sugar"))
-        examples_menu.addSeparator()
-        examples_menu.addAction(_ic_rxn, "Reformado SMR + WGS (reactor de equilibrio Capa 4)",
-                                  make_loader("smr_eq"))
-        examples_menu.addAction(_ic_rxn, "Cracking de etano (reactor PFR Capa 5)",
-                                  make_loader("ethane_pfr"))
-        examples_menu.addAction(_ic_rxn, "Haber-Bosch con recycle (NH3, loop reactivo)",
-                                  make_loader("haber_rec"))
-        examples_menu.addSeparator()
-        # Capa 6 NRTL — destilación azeotrópica
-        _ic_az = _mk("an-pinch", color="#1565c0", size=18) or QIcon()
-        examples_menu.addAction(_ic_az,
-            "Destilación azeotrópica etanol-agua (NRTL Capa 6)",
-            make_loader("dist_eth_az"))
-        examples_menu.addAction(_ic_az,
-            "Reactor + flash + columna AUTOMÁTICOS (FUG + NRTL)",
-            make_loader("rxn_flash_col"))
-        examples_menu.addAction(_mk("eq-pump", color="#1565c0", size=18) or QIcon(),
-            "Planta hidráulica con auto-sizing de bomba",
-            make_loader("hydraulic"))
-        examples_menu.addSeparator()
-        # ⭐ Flagship example
-        _ic_flag = _mk("an-case-study", color="#e65100", size=18) or QIcon()
-        examples_menu.addAction(_ic_flag,
-            "⭐ PLANTA INDUSTRIAL COMPLETA (MeOH + servicios + BOP)",
-            make_loader("industrial"))
-        # 🇵🇪 QUIMPAC chlor-alkali
-        examples_menu.addAction(
-            _mk("eq-reactor", color="#1976d2", size=18) or QIcon(),
-            "🇵🇪 QUIMPAC — cloro-álcali (membrana, estilo Oquendo)",
-            make_loader("quimpac"))
-        # ⚗️ HNO3 Ostwald (DuPont)
-        examples_menu.addAction(
-            _mk("eq-reactor", color="#c62828", size=18) or QIcon(),
-            "⚗️ HNO3 Ostwald (dual-presión, estilo DuPont 1920s)",
-            make_loader("hno3"))
-        # 🏭 Refinería Talara (Petroperú)
-        examples_menu.addAction(
-            _mk("eq-tower", color="#5d4037", size=18) or QIcon(),
-            "🏭 REFINERÍA TALARA — PMRT (95k BPD, conversión profunda)",
-            make_loader("talara"))
+        # Mismo catálogo agrupado por categoría que el menubar (single
+        # source of truth: EXAMPLE_CATEGORIES).
+        for _cat, _items in EXAMPLE_CATEGORIES:
+            _sub = examples_menu.addMenu(_cat)
+            for _key, _label in _items:
+                _sub.addAction(_ic_ex, _label, make_loader(_key))
         # Ícono del menú Ejemplos (templates)
         examples_act.setIcon(_mk("act-examples", color=_ICON_COLOR, size=20))
         examples_act.setMenu(examples_menu)
@@ -7552,11 +7557,21 @@ class FlowsheetMainWindow(QMainWindow):
                 f"Cat.      {spec.get('categoria', '?')}\n"
                 f"S         {b.S:g} {spec.get('S_unit', '?')}\n"
                 f"n         {b.n}\n"
-                f"Duty      {b.duty:+g} kW\n"
+                f"Duty      {('+' if b.duty > 0 else '')}{funits.fmt_energy(b.duty)}\n"
                 f"Utility   {b.heat_source or '(auto)'}\n\n"
                 f"Entradas:  {len(ins)}  ({in_t:g} tm/año)\n"
                 f"Salidas:   {len(outs)} ({out_t:g} tm/año)"
             )
+            # ---- ΔH térmico a través del bloque (in→out) ----
+            # Σ(ṁ·h)_salida − Σ(ṁ·h)_entrada [kW]; para un HX ≈ duty.
+            if ins and outs:
+                try:
+                    import stream_enthalpy as _se
+                    dH = _se.block_delta_h_kW(ins, outs)
+                    txt += (f"\nΔH (in→out) {('+' if dH > 0 else '')}"
+                            f"{funits.fmt_energy(dH)}  (térmico)")
+                except Exception:
+                    pass
             # ---- Diseño FUG automático para columnas ----
             # Si el bloque es tipo Tower (column) y tiene streams in/out
             # multicomponentes, llama a distillation_fug.design_column
@@ -7586,15 +7601,19 @@ class FlowsheetMainWindow(QMainWindow):
                         if LK != HK and LK in feed.composition and HK in feed.composition:
                             try:
                                 import distillation_fug as fug
+                                import flowsheet_solver as _fsv
+                                T_feed_K = feed.temperature + 273.15
+                                q_feed = _fsv._column_feed_q(feed, T_feed_K, 1.013)
                                 res = fug.design_column(
                                     feed_composition=feed.composition,
                                     F=feed.mass_flow,
-                                    T_K=feed.temperature + 273.15,
+                                    T_K=T_feed_K,
                                     P_bar=1.013,
                                     light_key=LK, heavy_key=HK,
                                     x_D_LK=dist_out.composition.get(LK, 0.9),
                                     x_B_LK=bot_out.composition.get(LK, 0.05),
                                     R_factor=1.3,
+                                    q=q_feed,
                                     T_top_K=dist_out.temperature + 273.15,
                                     T_bot_K=bot_out.temperature + 273.15,
                                 )
@@ -7604,6 +7623,18 @@ class FlowsheetMainWindow(QMainWindow):
                                     txt += f"\nα tope     {res.get('alpha_top',0):.2f}"
                                     txt += f"\nα fondo    {res.get('alpha_bot',0):.2f}"
                                     txt += f"\nα promedio {res.get('alpha_avg',0):.2f}"
+                                    _q = res.get("q", 1.0)
+                                    if abs(_q - 1.0) < 0.02:   _fase = "líq sat"
+                                    elif abs(_q) < 0.02:       _fase = "vap sat"
+                                    elif 0.0 < _q < 1.0:       _fase = "bifásico"
+                                    elif _q > 1.0:             _fase = "líq subenfr"
+                                    else:                      _fase = "vap sobrecalentado"
+                                    txt += f"\nq feed     {_q:.2f}  ({_fase})"
+                                    _ncomp = res.get("n_signif_comps", 0)
+                                    if _ncomp >= 3:
+                                        txt += f"\nMulticomp  {_ncomp} comp · Underwood real"
+                                        if res.get("underwood_fallback"):
+                                            txt += "\n⚠ Underwood mc no convergió, usado binario"
                                     if res.get("N_min") is not None:
                                         txt += f"\nN_min      {res['N_min']:.1f}  (Fenske)"
                                     if res.get("R_min") is not None:
@@ -7620,6 +7651,40 @@ class FlowsheetMainWindow(QMainWindow):
                                         txt += f"\nQ_reb      {res['Q_reb_kW']:+.1f} kW"
                                     for w in res.get("warnings", [])[:2]:
                                         txt += f"\n{w[:120]}"
+
+                                    # ── Bloque WANG-HENKE (MESH) ──
+                                    wh_res = getattr(b, "_wh_result", None)
+                                    if (getattr(b, "column_method", "fug") == "wanghenke"
+                                            and wh_res is not None):
+                                        Twh = wh_res.get("T_profile") or []
+                                        Vwh = wh_res.get("V_profile") or []
+                                        conv = wh_res.get("converged", False)
+                                        txt += "\n\n─ WANG-HENKE (MESH) ─"
+                                        txt += f"\nN etapas   {len(Twh)}"
+                                        txt += f"\nEtapa feed {wh_res.get('feed_stage', '-')}"
+                                        txt += (f"\nConvergió  {'sí' if conv else 'NO'}"
+                                                f" en {wh_res.get('iterations', 0)} iter")
+                                        if Twh:
+                                            txt += f"\nT tope     {Twh[0]-273.15:.1f} °C"
+                                            txt += f"\nT fondo    {Twh[-1]-273.15:.1f} °C"
+                                        if len(Vwh) >= 2:
+                                            txt += f"\nV tope     {Vwh[1]:.2f} mol/s"
+                                            txt += f"\nV fondo    {Vwh[-1]:.2f} mol/s"
+                                        txt += (f"\nΔV/V_avg   {wh_res.get('V_var',0.0)*100:.1f}%"
+                                                f"  (0% = MES; >5% = MESH activo)")
+                                        if wh_res.get("Q_cond_kW") is not None:
+                                            txt += f"\nQ_cond     {wh_res['Q_cond_kW']:+.1f} kW"
+                                        if wh_res.get("Q_reb_kW") is not None:
+                                            txt += f"\nQ_reb      {wh_res['Q_reb_kW']:+.1f} kW"
+                                        be = wh_res.get("balance_err")
+                                        if be is not None:
+                                            txt += f"\nBalance E  {be*100:.1f}%  (cierre global)"
+                                        if not conv:
+                                            txt += "\n✗ NO CONVERGIÓ — revisar N, R_factor, o pureza objetivo"
+                                        for w in wh_res.get("warnings", []):
+                                            wu = w.upper()
+                                            if "AZEOTROPO" in wu or "INALCANZABLE" in wu:
+                                                txt += f"\n✗ {w[:80]}"
                             except Exception:
                                 pass
 

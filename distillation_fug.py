@@ -405,15 +405,74 @@ def design_column(feed_composition: Dict[str, float],
     if R_min_bin < 0:
         R_min_bin = 0.05    # caso límite: separación trivial
 
+    # ---- Underwood multicomp real + q dinámico ----
+    # design_column hardcodeaba R_min binario; para feeds con 3+ componentes
+    # (z≥0.001) eso subestima R_min, y la fórmula binaria asume q=1 (sat liq).
+    # Acá usamos underwood() real (bisección sobre θ) cuando:
+    #   · hay 3+ componentes significativos (multicomp real), o
+    #   · el feed NO es líquido saturado (q ≠ 1) — la fórmula binaria no
+    #     captura la dependencia con q.
+    # NOTE (dilema P1.1 vs Test D): "mantener binario actual" se respeta para
+    # el caso estándar q≈1 binario (R_min_bin exacto); para q≠1 binario el
+    # binario es inválido (asume q=1) → Underwood real (Henley-Seader §9.3).
+    R_min_used = R_min_bin
+    n_signif = sum(1 for c, zc in feed_composition.items() if zc >= 0.001)
+    underwood_multicomp = False
+    underwood_fallback = False
+    is_multicomp = n_signif >= 3
+    use_underwood = is_multicomp or (abs(q - 1.0) > 1e-3)
+    if use_underwood:
+        # α_c/HK por componente (promedio geom tope-fondo, igual que LK/HK).
+        # Para no-keys usamos la composición del feed como x_vec representativa
+        # (no conocemos x por etapa); el promedio tope-fondo captura el efecto
+        # de T sobre P_sat. NOTE: aproximación estándar de shortcut multicomp.
+        z_dict = {c: zc for c, zc in feed_composition.items() if zc >= 0.001}
+        alphas_dict = {light_key: alpha_avg, heavy_key: 1.0}
+        for c in z_dict:
+            if c in (light_key, heavy_key):
+                continue
+            a_t = relative_volatility(c, heavy_key, feed_composition, T_t, P_bar)
+            a_b = relative_volatility(c, heavy_key, feed_composition, T_b, P_bar)
+            if a_t is None or a_b is None or a_t <= 1e-9 or a_b <= 1e-9:
+                alphas_dict[c] = 0.0   # P_sat≈0 → no-volátil, 100% al fondo
+            else:
+                alphas_dict[c] = math.sqrt(a_t * a_b)
+        # x_D estimado: Fenske-Hengstebeck para multicomp; directo si binario
+        if is_multicomp:
+            fh_est = fenske_hengstebeck(alphas_dict, z_dict, N_min,
+                                        light_key, heavy_key, x_D_LK, x_B_LK)
+            x_D_est = fh_est["x_D"] if fh_est else None
+        else:
+            x_D_est = {light_key: x_D_LK, heavy_key: x_D_HK}
+        # Listas para underwood: solo componentes volátiles (α>0).  Los
+        # no-volátiles (α=0) aportan término 0 y se excluyen (van al fondo).
+        comps_uw = [c for c in z_dict if alphas_dict.get(c, 0.0) > 1e-9]
+        if x_D_est is not None and len(comps_uw) >= 2:
+            alphas_list = [alphas_dict[c] for c in comps_uw]
+            z_list = [z_dict[c] for c in comps_uw]
+            xD_list = [x_D_est.get(c, 0.0) for c in comps_uw]
+            uw = underwood(alphas_list, z_list, q, xD_list)
+            if uw is not None and uw[1] is not None and uw[1] >= 0:
+                R_min_used = uw[1]
+                underwood_multicomp = is_multicomp
+            elif is_multicomp:
+                underwood_fallback = True
+                warnings_list.append(
+                    "Underwood multicomp no convergió, usando aprox binaria")
+        elif is_multicomp:
+            underwood_fallback = True
+            warnings_list.append(
+                "Underwood multicomp no convergió, usando aprox binaria")
+
     # ---- R real = R_factor × R_min ----
-    R = R_factor * R_min_bin
+    R = R_factor * R_min_used
 
     # ---- Gilliland: N real ----
-    N = gilliland(N_min, R, R_min_bin)
+    N = gilliland(N_min, R, R_min_used)
     if N is None:
         warnings_list.append(
-            f"⚠ R={R:.3f} ≤ R_min={R_min_bin:.3f}: imposible.  "
-            f"Aumentar R_factor (>{R_min_bin/R_factor:.2f} requerido).")
+            f"⚠ R={R:.3f} ≤ R_min={R_min_used:.3f}: imposible.  "
+            f"Aumentar R_factor (>{R_min_used/R_factor:.2f} requerido).")
         N = N_min * 2    # fallback heurístico
 
     # ---- Kirkbride: posición del feed ----
@@ -463,9 +522,15 @@ def design_column(feed_composition: Dict[str, float],
         N=N,
         N_feed=N_feed,    # contando desde tope; rectificación = N_feed
         # Reflujos
-        R_min=R_min_bin,
+        R_min=R_min_used,
+        R_min_bin=R_min_bin,
         R=R,
         R_factor=R_factor,
+        # Feed / método
+        q=q,
+        n_signif_comps=n_signif,
+        underwood_multicomp=underwood_multicomp,
+        underwood_fallback=underwood_fallback,
         # Volatilidad
         alpha_avg=alpha_avg,
         alpha_top=alpha_top,
