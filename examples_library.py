@@ -599,65 +599,51 @@ class ExampleBuilder:
         tk_oil  = self._add_example_block("TK-101","Storage tank — cone roof",   200.0,  80, 180)
         tk_meoh = self._add_example_block("TK-102","Storage tank — cone roof",    50.0,  80, 420)
         r101    = self._add_example_block("R-101", "Reactor — jacketed agitated", 30.0, 280, 280)  # transesterificador
-        v101    = self._add_example_block("V-101", "Vessel — horizontal",         15.0, 460, 280)  # decanter
+        v101    = self._add_example_block("V-101", "Decanter — gravity",          15.0, 460, 280)  # decanter L-L
         e101    = self._add_example_block("E-101", "Heat exch. — floating head",  60.0, 640, 200)  # secado biodiesel
         tk_bd   = self._add_example_block("TK-103","Storage tank — cone roof",   150.0, 840, 200)  # biodiesel
         tk_gly  = self._add_example_block("TK-104","Storage tank — cone roof",    50.0, 640, 480)  # glicerina
 
-        # Composiciones (fracción másica) — basis 1000 kg input
-        oil_in   = {"vegetable_oil": 1.0}
-        meoh_in  = {"methanol": 1.0}
-        # post-reactor: mezcla compleja (FAME + glicerina + MeOH residual + traces aceite)
-        post_rxn = {"biodiesel": 0.905, "glycerin": 0.090, "methanol": 0.005}
-        # fase biodiesel (decantación):  ~95% FAME + traces MeOH
-        bio_phase = {"biodiesel": 0.985, "methanol": 0.015}
-        # fase glicerina: glicerina + MeOH residual
-        gly_phase = {"glycerin": 0.85, "methanol": 0.15}
-        # biodiesel seco (post stripping de MeOH)
-        bio_dry   = {"biodiesel": 1.0}
+        # SOLVER-DRIVEN: R-101 corre R021 (transesterificación) en modo stoich;
+        # V-101 (decanter por densidad) separa la fase FAME liviana de la
+        # glicerina pesada.  Solo se declaran los feeds.
+        # R021:  triolein + 3 metanol → 3 oleato de metilo (FAME) + glicerol
+        self.fs.blocks[r101].reactions         = ["R021"]
+        self.fs.blocks[r101].reactor_mode       = "stoich"
+        self.fs.blocks[r101].reactor_conversion = 0.99   # >99% con exceso de MeOH
+        self.fs.blocks[r101].T_op_K             = 333.15   # 60°C
+        self.fs.blocks[r101].P_op_bar           = 1.013
+        self.fs.blocks[v101].mech_sep_active     = True
+        self.fs.blocks[v101].mech_sep_efficiency = 0.95
 
-        # Feeds
+        # Feeds: aceite (triolein como triglicérido modelo) + metanol en
+        # exceso ~20% molar (para que el aceite sea el reactivo limitante).
         self._add_example_stream(tk_oil, r101, "S-oil", 1000, role="feed",
                                  src_port="salida",   dst_port="alimentacion",
                                  price=950.0, T=25,
-                                 composition=oil_in,
-                                 main_component="vegetable_oil", phase="liquid")
-        self._add_example_stream(tk_meoh, r101, "S-meoh", 105, role="feed",
+                                 composition={"triolein": 1.0},
+                                 main_component="triolein", phase="liquid")
+        self._add_example_stream(tk_meoh, r101, "S-meoh", 130, role="feed",
                                  src_port="salida",   dst_port="util_in",
                                  price=480.0, T=25,
-                                 composition=meoh_in,
+                                 composition={"methanol": 1.0},
                                  main_component="methanol", phase="liquid")
-        # Post-reactor: efluente bifásico (biodiesel/glicerina)
+        # Post-reactor: efluente bifásico (FAME + glicerina + MeOH residual)
         self._add_example_stream(r101, v101, "S-1", 0.0,
                                  src_port="producto", dst_port="alimentacion",
-                                 T=60,
-                                 composition=post_rxn,
-                                 main_component="biodiesel", phase="liquid")
-        # Decanter: fase liviana (biodiesel, ~990 kg).  El MeOH residual
-        # particiona preferencialmente a la fase polar (glicerina), por
-        # eso esta fase ya sale seca y la pesada se lleva el MeOH.
+                                 T=60)
+        # Decanter — fase liviana (FAME) → secador
         self._add_example_stream(v101, e101, "S-bio-wet", 0.0,
-                                 src_port="vapor",    dst_port="tube_in",
-                                 T=60,
-                                 composition=bio_dry,
-                                 main_component="biodiesel", phase="liquid")
-        # Biodiesel cooled → tanque producto
+                                 src_port="fase_liviana", dst_port="tube_in",
+                                 T=60)
+        # Biodiesel enfriado → tanque producto
         self._add_example_stream(e101, tk_bd, "S-biodiesel", 0.0, role="product",
                                  src_port="tube_out", dst_port="entrada",
-                                 price=1350.0, T=50,
-                                 composition=bio_dry,
-                                 main_component="biodiesel", phase="liquid")
-        # Decanter: fase pesada (glicerina + MeOH residual, ~115 kg)
-        self._add_example_stream(v101, tk_gly, "S-glycerin", 115, role="product",
-                                 src_port="liquido",  dst_port="entrada",
-                                 price=350.0, T=60,
-                                 composition={"glycerin": 0.78, "methanol": 0.22},
-                                 main_component="glycerin", phase="liquid")
-
-        # ---- Calor de reacción transesterificación ----
-        # ΔH ≈ -7 kJ/mol triglicérido (levemente exotérmica)
-        # = -8 kJ/kg aceite → muy chico
-        self.fs.blocks[r101].heat_of_reaction = -8.0
+                                 price=1350.0, T=50)
+        # Decanter — fase pesada (glicerina + MeOH) → tanque
+        self._add_example_stream(v101, tk_gly, "S-glycerin", 0.0, role="product",
+                                 src_port="fase_pesada",  dst_port="entrada",
+                                 price=350.0, T=60)
 
         # ---- Duties auto ----
         from flowsheet_solver import auto_set_duties_from_thermo

@@ -1462,6 +1462,7 @@ dH_f_liq_298K = -134.5 kJ/mol
 - Tb (1 atm): 290.0 °C
 - Tc: 577.0 °C, Pc: 75.0 bar
 - omega: 0.513
+- rho_ref = 1261.0 kg/m3 @ 20 °C
 
 ### Capa 1 — Antoine [NIST]
 Equation: log10(P_sat / kPa) = A - B / (T_°C + C)
@@ -3309,15 +3310,16 @@ dH_f_liq_298K = -650.0 kJ/mol
 
 ---
 
-## Vegetable Oil (C57H104O6)
+## Triolein (C57H104O6)
 
 ### IDs
-- CAS: N/A
+- CAS: 122-32-7
 - Formula: C57H104O6
 - MW: 885.4 g/mol
 - Tb (1 atm): 415.0 °C
 - Tc: 650.0 °C, Pc: 12.0 bar
 - omega: 1.5
+- rho_ref = 915.0 kg/m3 @ 20 °C
 
 ### Capa 1 — Antoine [FIT]
 Equation: log10(P_sat / kPa) = A - B / (T_°C + C)
@@ -3351,15 +3353,16 @@ dH_f_liq_298K = -2150.0 kJ/mol
 
 ---
 
-## Biodiesel (C19H36O2)
+## Methyl Oleate (C19H36O2)
 
 ### IDs
-- CAS: 67762-38-3
+- CAS: 112-62-9
 - Formula: C19H36O2
 - MW: 296.5 g/mol
 - Tb (1 atm): 345.0 °C
 - Tc: 490.0 °C, Pc: 15.0 bar
 - omega: 0.85
+- rho_ref = 873.0 kg/m3 @ 20 °C
 
 ### Capa 1 — Antoine [FIT]
 Equation: log10(P_sat / kPa) = A - B / (T_°C + C)

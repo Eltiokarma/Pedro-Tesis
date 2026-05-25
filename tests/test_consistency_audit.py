@@ -61,19 +61,29 @@ def test_component_balance_detected():
 
 
 def test_pseudo_components_detected():
-    """Ejemplo biodiesel usa vegetable_oil/biodiesel/glycerin → pseudo."""
-    fake = _build_fake_editor()
-    el.ExampleBuilder._example_biodiesel(fake)
-    res = fsv.solve(fake.fs)
-    report = res.audit_report
+    """Un stream con pseudo-componentes industriales (crude_oil, naphtha)
+    debe generar warnings de pseudo."""
+    fs = fm.Flowsheet()
+    from flowsheet_model import Block, Stream
+    tk  = Block(id=1, name="TK", eq_type="Storage tank — cone roof",
+                S=10, n=1, x=0, y=0)
+    col = Block(id=2, name="COL", eq_type="Tower (column shell)",
+                S=10, n=1, x=100, y=0)
+    fs.blocks = {1: tk, 2: col}
+    s = Stream(id=10, name="S-crudo", src=1, dst=2, mass_flow=100,
+               composition={"crude_oil": 0.6, "naphtha": 0.4},
+               main_component="crude_oil", temperature=25)
+    s.composition_locked = True
+    fs.streams = {10: s}
 
+    report = audit_flowsheet(fs)
     pseudo = report.by_category('pseudo')
     pseudo_names = {f.data.get('component') for f in pseudo}
-    expected = {'vegetable_oil', 'biodiesel', 'glycerin'}
-    overlap = pseudo_names & expected
-    assert overlap, \
+    assert {'crude_oil', 'naphtha'} & pseudo_names, \
         f"No detectó pseudo-componentes industriales. Vio: {pseudo_names}"
-    print(f"  ✓ Biodiesel: {len(pseudo)} hallazgos de pseudo-comps")
+    assert any(f.severity == 'warning' for f in pseudo), \
+        "Los pseudo industriales deben ser severity='warning'"
+    print(f"  ✓ Pseudo industrial: {len(pseudo)} hallazgos detectados")
 
 
 def test_food_pseudo_is_info_not_warning():

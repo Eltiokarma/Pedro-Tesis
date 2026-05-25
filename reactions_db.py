@@ -71,6 +71,8 @@ FORMULA_TO_THERMO = {
     'C6H6':            'benzene',
     'C8H10':           'ethylbenzene',
     'C2H5_C6H5':       'ethylbenzene',  # alias usado en R016 styrene
+    'Triolein':        'triolein',      # R021 biodiesel (C57H104O6)
+    'MeOleate':        'methyl_oleate', # R021 biodiesel (FAME, C19H36O2)
     'Glycerol':        'glycerin',      # nombre alternativo (R021 biodiesel)
     # Bioquímica
     'Glucose':         'glucose',
@@ -95,7 +97,6 @@ FORMULA_TO_THERMO = {
     'vegetable_oil':   'vegetable_oil',
     'glycerin':        'glycerin',
     # No mapeables (no están en thermo_db actual)
-    'Triolein':        None,
     'FAME':            None,
     'Starch_unit':     None,
     'C(s)':            None,
