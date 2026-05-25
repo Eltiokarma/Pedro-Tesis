@@ -1364,8 +1364,14 @@ def infer_block_duty(fs, b):
     if _ep_mod.is_electrical_equipment(b.eq_type):
         return None
 
-    ins  = [s for s in fs.streams.values() if s.dst == b.id]
-    outs = [s for s in fs.streams.values() if s.src == b.id]
+    # Las corrientes de servicio auto-generadas (auto_aux) TRANSPORTAN el
+    # duty; incluirlas en el balance lo vuelve circular (H_out−H_in≈0) y,
+    # si están sin dimensionar (ṁ=0 / Cp irresoluble), fuerzan duty=0.
+    # Se excluyen: el duty se infiere del lado de proceso.
+    ins  = [s for s in fs.streams.values()
+            if s.dst == b.id and not getattr(s, "auto_aux", False)]
+    outs = [s for s in fs.streams.values()
+            if s.src == b.id and not getattr(s, "auto_aux", False)]
     if not ins or not outs:
         return None
 

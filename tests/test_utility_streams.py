@@ -81,6 +81,40 @@ class TestUtilityStreamSizing(unittest.TestCase):
         for s in _util_streams(fs):
             self.assertEqual(s.mass_flow, 0.0)
 
+    def test_aux_no_corrompe_balance_de_duty(self):
+        # infer_block_duty debe IGNORAR las corrientes auto_aux: si las
+        # incluyera (con ṁ=0 / Cp irresoluble) el balance se vuelve circular
+        # y devuelve None → duty=0. Verifica que el duty inferido del lado de
+        # proceso no cambia al añadir las auxiliares.
+        fs = fm.Flowsheet()
+        hid = fs.new_id()
+        hx = fm.Block(id=hid, name="E-1",
+                      eq_type="Heat exch. — floating head", S=50.0)
+        fs.blocks[hid] = hx
+        i1 = fs.new_id()
+        s = fm.Stream(id=i1, name="in", src=0, dst=hid, mass_flow=100000,
+                      phase="liquid", composition={"water": 1.0},
+                      main_component="water")
+        s.temperature = 90.0
+        for a in ("mass_flow_locked", "temperature_locked", "composition_locked"):
+            setattr(s, a, True)
+        fs.streams[i1] = s
+        i2 = fs.new_id()
+        s2 = fm.Stream(id=i2, name="out", src=hid, dst=0, mass_flow=100000,
+                       phase="liquid", composition={"water": 1.0},
+                       main_component="water")
+        s2.temperature = 40.0
+        for a in ("mass_flow_locked", "temperature_locked", "composition_locked"):
+            setattr(s2, a, True)
+        fs.streams[i2] = s2
+        d_no_aux = fsv.infer_block_duty(fs, hx)
+        aux.instantiate_auxiliaries(fs, hx)
+        d_with_aux = fsv.infer_block_duty(fs, hx)
+        self.assertIsNotNone(d_no_aux)
+        self.assertLess(d_no_aux, -1.0)                    # cooling 90→40°C
+        self.assertIsNotNone(d_with_aux)                   # NO se vuelve None
+        self.assertAlmostEqual(d_with_aux, d_no_aux, places=3)
+
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)
