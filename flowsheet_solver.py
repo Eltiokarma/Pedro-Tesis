@@ -75,7 +75,7 @@ DEPENDENCIAS
 """
 
 from dataclasses import dataclass, field
-from typing import Any, Dict, List, Tuple
+from typing import Any, Dict, List, Optional, Tuple
 
 
 # ======================================================
@@ -136,6 +136,12 @@ class SolverResult:
     # son inconsistentes con un balance riguroso por componente.
     # No degrada overall_status — el balance total sigue siendo OK.
     component_warnings:  List[str]          = field(default_factory=list)
+    # Auditoría de consistencia unificada (Frente A): phase, balance por
+    # componente, pseudo-componentes y locks redundantes.  audit_report
+    # tiene el detalle estructurado; las listas planas son para compat UI.
+    audit_report:        Optional['AuditReport'] = None
+    consistency_warnings: List[str]         = field(default_factory=list)
+    consistency_errors:   List[str]         = field(default_factory=list)
     # Warnings de auditoría térmica de HX (cruces imposibles, approach
     # mínimo violado, F<0.75, cross-exchange que no cierra energía).
     # No degradan success — son advisory de diseño.
@@ -229,6 +235,21 @@ class SolverResult:
                           f"({len(self.hx_warnings)}):")
             for w in self.hx_warnings:
                 lines.append(f"  · {w}")
+
+        if self.audit_report:
+            r = self.audit_report
+            if r.n_errors or r.n_warnings:
+                lines.append(f"\nAuditoría de consistencia "
+                             f"({r.n_errors} errores, {r.n_warnings} warnings, "
+                             f"{r.n_infos} infos):")
+                for cat in ('phase', 'component_balance', 'pseudo',
+                            'redundant_lock'):
+                    relevant = [f for f in r.by_category(cat)
+                                if f.severity in ('warning', 'error')]
+                    if relevant:
+                        lines.append(f"  · {cat}: {len(relevant)} hallazgo(s)")
+                        for f in relevant[:5]:
+                            lines.append(f"      {f.message[:120]}")
 
         return "\n".join(lines)
 
@@ -644,7 +665,8 @@ def _check_stream_roles(fs):
 
 def _check_mass_balance(fs, tol_rel=MASS_TOL_REL):
     """Devuelve lista de mensajes para bloques cuyo balance TOTAL falla.
-    El balance por componente se chequea aparte (_check_component_balance)."""
+    El balance por componente se chequea aparte (auditor de consistencia,
+    flowsheet_consistency_audit._audit_component_balance)."""
     errors = []
     for b in fs.blocks.values():
         ins  = [s for s in fs.streams.values() if s.dst == b.id]
@@ -664,89 +686,10 @@ def _check_mass_balance(fs, tol_rel=MASS_TOL_REL):
     return errors
 
 
-def _check_component_balance(fs, tol_rel=0.02):
-    """Verifica balance POR COMPONENTE en cada bloque.  Devuelve lista
-    de mensajes — para WARNINGS (no errores críticos, porque los
-    example builders pueden tener composiciones declaradas
-    inconsistentes que el solver no recalcula).
-
-    Skipea:
-      · Reactores (reactions != []) — la estequiometría cambia comp.
-      · Bloques con streams en mass=0 (no resueltos).
-      · Bloques inmediatamente downstream de un reactor en el mismo
-        flujo (la composición del reactor se propaga, no las specs
-        del example builder).
-
-    Reporta si Σ(mass_in·w_i) ≠ Σ(mass_out·w_i) en >tol_rel para
-    algún componente significativo (>1% del flujo total).
-    """
-    warnings_list = []
-    # Set de bloques que son reactores
-    rxn_blocks = {b.id for b in fs.blocks.values()
-                   if getattr(b, "reactions", None)}
-    # Bloques downstream de un reactor (vía cualquier número de streams,
-    # TRANSITIVO).  Para esos, los outlets son composición HEREDADA via
-    # auto_propagate; los example builders no pueden pre-declarar
-    # composiciones que matcheen exactamente lo que el solver de
-    # equilibrio compute en cada bloque downstream.  Saltamos el check.
-    downstream_of_rxn: set = set()
-    frontier = set(rxn_blocks)
-    while frontier:
-        nxt = set()
-        for s in fs.streams.values():
-            if s.src in frontier and s.dst in fs.blocks \
-                    and s.dst not in downstream_of_rxn \
-                    and s.dst not in rxn_blocks:
-                nxt.add(s.dst)
-        downstream_of_rxn |= nxt
-        frontier = nxt
-
-    for b in fs.blocks.values():
-        if b.id in rxn_blocks:
-            continue   # reactores cambian composición
-        if b.id in downstream_of_rxn:
-            continue   # primera fila después del reactor, hereda
-        # Splitters DISTRIBUYEN (no transforman): si el user lockeó
-        # composiciones distintas por output (ej. cortes de petróleo
-        # en una columna), el per-component check es engañoso.  El
-        # mass balance total se chequea aparte vía _check_mass_balance.
-        if getattr(b, "splitter_active", False):
-            continue
-        ins  = [s for s in fs.streams.values() if s.dst == b.id]
-        outs = [s for s in fs.streams.values() if s.src == b.id]
-        if not ins or not outs:
-            continue
-        if any(s.mass_flow <= 0 for s in ins + outs):
-            continue
-        in_t = sum(s.mass_flow for s in ins)
-        out_t = sum(s.mass_flow for s in outs)
-        comp_in: Dict[str, float] = {}
-        comp_out: Dict[str, float] = {}
-        for s in ins:
-            comp = s.composition or ({s.main_component: 1.0}
-                                       if s.main_component else {})
-            for c, w in comp.items():
-                comp_in[c] = comp_in.get(c, 0.0) + w * s.mass_flow
-        for s in outs:
-            comp = s.composition or ({s.main_component: 1.0}
-                                       if s.main_component else {})
-            for c, w in comp.items():
-                comp_out[c] = comp_out.get(c, 0.0) + w * s.mass_flow
-        # Identificar componentes desbalanceados (>1% del flujo bloque)
-        bad = []
-        for c in set(comp_in) | set(comp_out):
-            ci, co = comp_in.get(c, 0.0), comp_out.get(c, 0.0)
-            if max(ci, co) < 0.01 * max(in_t, out_t):
-                continue
-            d = abs(ci - co)
-            r = d / max(ci, co, 1e-9)
-            if r >= tol_rel:
-                bad.append(f"{c}: in={ci:.0f} out={co:.0f} ({r*100:.0f}%)")
-        if bad:
-            warnings_list.append(
-                f"{b.name} balance por componente: " + "; ".join(bad[:3])
-            )
-    return warnings_list
+# NOTA: el viejo _check_component_balance fue REEMPLAZADO por el Detector 2
+# del auditor unificado (flowsheet_consistency_audit._audit_component_balance).
+# solve() lo invoca vía audit_flowsheet() y vuelca sus hallazgos a
+# result.component_warnings (compat) y result.audit_report (estructurado).
 
 
 def _check_heat_exchangers(fs):
@@ -4488,7 +4431,26 @@ def solve(fs, max_iter=MAX_ITER):
         if s.mass_flow <= 0:
             result.unresolved_streams.append(s.name)
     result.mass_balance_errors    = _check_mass_balance(fs)
-    result.component_warnings     = _check_component_balance(fs)
+    # Auditoría de consistencia unificada (Frente A).  Reemplaza al viejo
+    # _check_component_balance: el Detector 2 del auditor integra esa
+    # lógica.  No rompe solve() si el auditor falla.
+    try:
+        from flowsheet_consistency_audit import audit_flowsheet
+        result.audit_report = audit_flowsheet(fs)
+        for f in result.audit_report.findings:
+            line = f"[{f.category}] {f.message}"
+            if f.severity == 'error':
+                result.consistency_errors.append(line)
+            elif f.severity == 'warning':
+                result.consistency_warnings.append(line)
+            # 'info' sólo queda en el report estructurado
+        # compat UI vieja: component_warnings se nutre del auditor
+        result.component_warnings = [
+            f.message
+            for f in result.audit_report.by_category('component_balance')]
+    except Exception as e:
+        result.consistency_errors.append(
+            f"[audit] auditor falló: {type(e).__name__}: {e}")
     # role hygiene — warnings (no errors) sobre streams con role
     # inconsistente que pueden ensuciar costing económico
     result.component_warnings.extend(_check_stream_roles(fs))
