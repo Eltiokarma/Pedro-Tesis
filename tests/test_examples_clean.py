@@ -27,6 +27,7 @@ CLEAN_EXAMPLES = [
     '_example_ethane_cracker_pfr',
     '_example_ethylene_cracking',
     '_example_biodiesel',
+    '_example_ammonia',
     '_example_pasteurizer',
     # limpios por curación de pseudo-componentes (alimentario/material)
     '_example_pineapple_juice',

@@ -418,62 +418,51 @@ class ExampleBuilder:
         tk_nh3    = self._add_example_block("TK-102","Storage tank — cone roof", 150.0, 980, 540)
         tk_purge  = self._add_example_block("TK-103","Storage tank — cone roof",  50.0, 980, 180)
 
-        # Composiciones (fracción másica).
-        # Feed estequiométrico: 3 H₂ + N₂  ⇒  mass: 6 H₂ : 28 N₂ ⇒ 0.176/0.824
-        feed_mix   = {"hydrogen": 0.176, "nitrogen": 0.824}
-        # Post-reactor (15% conv): se forma 0.15 mass de NH₃, el resto sin reaccionar
-        post_mix   = {"hydrogen": 0.150, "nitrogen": 0.700, "ammonia": 0.150}
-        # Purga (gas no convertido, libre de NH₃)
-        purge_mix  = feed_mix
+        # SOLVER-DRIVEN: R-101 corre R004 (Haber) en modo stoich (15% por
+        # paso); V-101 es un knockout refrigerado a alta P que condensa el NH3
+        # (Psat≈11 bar a 30°C < 200) y ventea N2/H2 (supercríticos).  Solo se
+        # declara el feed estequiométrico.
+        self.fs.blocks[r101].reactions          = ["R004"]
+        self.fs.blocks[r101].reactor_mode        = "stoich"
+        self.fs.blocks[r101].reactor_conversion  = 0.15      # 15% por paso
+        self.fs.blocks[r101].P_op_bar            = 200.0     # síntesis NH3 ~200 bar
+        self.fs.blocks[r101].T_op_K              = 723.15    # 450°C
+        self.fs.blocks[v101].mech_sep_active       = True
+        self.fs.blocks[v101].mech_sep_target_phase = "liquid"
+        self.fs.blocks[v101].mech_sep_efficiency   = 0.97
+        self.fs.blocks[v101].T_op_K                = 303.15  # 30°C
+        self.fs.blocks[v101].P_op_bar              = 200.0
 
-        # Feed: 10000 t/yr de syngas (3H₂+N₂)
+        # Feed estequiométrico 3 H₂ + N₂ ⇒ mass 6:28 = 0.176/0.824
         self._add_example_stream(tk_feed, k101, "S-feed", 10000, role="feed",
                                  src_port="salida",   dst_port="succion",
                                  price=180.0, T=25,
-                                 composition=feed_mix,
+                                 composition={"hydrogen": 0.176, "nitrogen": 0.824},
                                  main_component="nitrogen", phase="gas")
-        # Post-compresor: gas comprimido, T sube por compresión adiabática
+        # Post-compresor (composición propagada; T del compresor)
         self._add_example_stream(k101, e101, "S-1", 0.0,
                                  src_port="descarga", dst_port="tube_in",
-                                 T=180,
-                                 composition=feed_mix,
-                                 main_component="nitrogen", phase="gas", lock_T=False)
+                                 T=180, phase="gas", lock_T=False)
         # Post-preheater: T de operación reactor ~450°C
         self._add_example_stream(e101, r101, "S-2", 0.0,
                                  src_port="tube_out", dst_port="alimentacion",
-                                 T=450,
-                                 composition=feed_mix,
-                                 main_component="nitrogen", phase="gas")
-        # Post-reactor: con NH₃ formado, T sube por exotermia
+                                 T=450, phase="gas")
+        # Post-reactor: NH₃ formado (composición calculada por R004)
         self._add_example_stream(r101, e102, "S-3", 0.0,
                                  src_port="producto", dst_port="tube_in",
-                                 T=500,
-                                 composition=post_mix,
-                                 main_component="nitrogen", phase="gas")
-        # Post-cooler: enfriado a ~30°C, NH₃ se condensa parcialmente
-        # (a la P alta del proceso 200 bar, NH₃ liq a 30°C).
+                                 T=500, phase="gas")
+        # Post-cooler → knockout (enfriado a 30°C, NH₃ condensa parcialmente)
         self._add_example_stream(e102, v101, "S-4", 0.0,
                                  src_port="tube_out", dst_port="alimentacion",
-                                 T=30,
-                                 composition=post_mix,
-                                 main_component="nitrogen", phase="liquid")
-        # NH₃ producto (liquido del flash)
-        self._add_example_stream(v101, tk_nh3, "S-NH3", 1500, role="product",
+                                 T=30)
+        # NH₃ producto (líquido condensado por V-101)
+        self._add_example_stream(v101, tk_nh3, "S-NH3", 0.0, role="product",
                                  src_port="liquido",  dst_port="entrada",
-                                 price=750.0, T=30,
-                                 main_component="ammonia", phase="liquid")
-        # Purga (gas del flash)
+                                 price=750.0, T=30)
+        # Purga (gas no condensado: N₂/H₂)
         self._add_example_stream(v101, tk_purge, "S-purga", 0.0, role="product",
                                  src_port="vapor",    dst_port="entrada",
-                                 price=120.0, T=30,
-                                 composition=purge_mix,
-                                 main_component="nitrogen", phase="gas")
-
-        # ---- Calor de reacción: N₂+3H₂→2NH₃, ΔH ≈ -2700 kJ/kg NH₃ ----
-        # Sobre kg de input total con 15% mass yield NH₃: -2700 × 0.15 ≈ -405 kJ/kg input
-        self.fs.blocks[r101].heat_of_reaction = -405.0
-        self.fs.blocks[r101].P_op_bar = 200.0   # síntesis NH3 ~200 bar
-        self.fs.blocks[r101].T_op_K = 700.0   # T_op declarada (silencia dof_audit)
+                                 price=120.0, T=30)
 
         # ---- Duties auto ----
         from flowsheet_solver import auto_set_duties_from_thermo

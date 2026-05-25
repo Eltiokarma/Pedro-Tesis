@@ -3268,25 +3268,42 @@ _GAS_HINT = {
 }
 
 
-def get_component_phase(name):
-    """Fase default razonable de un componente para separación mecánica.
-    Devuelve 'solid' | 'liquid' | 'gas'.  Usa hints por nombre y, si está,
-    el punto de ebullición del thermo_db (Tb < 25 °C → gas)."""
+def get_component_phase(name, T_C=None, P_bar=None):
+    """Fase de un componente para separación mecánica: 'solid'|'liquid'|'gas'.
+
+    Si se dan T_C y P_bar, usa un criterio de condensabilidad consciente de la
+    presión (condensador a alta P): un componente condensa (→ 'liquid') si NO
+    es supercrítico (T < Tc) y su presión de vapor Psat(T) < P_op.  Esto deja
+    condensar NH3/metanol a 200/80 bar y mantiene N2/H2/CO (supercríticos) como
+    gas, sin depender de parámetros NRTL binarios poco confiables.
+
+    Sin T/P, cae al heurístico por nombre (hints + Tb)."""
     n = (name or "").strip().lower()
     if not n:
         return "liquid"
     if n in _SOLID_HINT or "solid" in n or n.endswith("_s"):
         return "solid"
+    # Criterio de condensabilidad por presión (override de los gas-hints:
+    # NH3/CO2/metanol son "gases" a ambiente pero condensan a alta P).
+    if T_C is not None and P_bar is not None:
+        try:
+            import thermo_db as _td
+            c = _td.get(name)
+            if c is not None:
+                if c.tc_c is not None and T_C >= c.tc_c:
+                    return "gas"                # supercrítico → no condensa
+                psat_kpa = c.vapor_pressure_kPa(T_C)
+                if psat_kpa is not None:
+                    return "liquid" if (psat_kpa / 100.0) < P_bar else "gas"
+        except Exception:
+            pass
     if n in _GAS_HINT or n.endswith("_g"):
         return "gas"
     try:
         import thermo_db as _td
         c = _td.get(name)
-        if c is not None:
-            tb = (getattr(c, "tb_C", None) or getattr(c, "boiling_C", None)
-                  or getattr(c, "tboil_C", None))
-            if tb is not None and tb < 25.0:
-                return "gas"
+        if c is not None and c.tb_c and c.tb_c < 25.0:
+            return "gas"
     except Exception:
         pass
     return "liquid"
@@ -3329,11 +3346,18 @@ def _sep_by_phase(b, feed, target_out, reject_out, target_phase, eff):
     # El user puede declarar explícitamente los componentes de la fase
     # objetivo (solid_components) y así override del heurístico get_component_phase.
     override = set(getattr(b, "solid_components", []) or [])
+    # Condiciones de operación del separador para el criterio de
+    # condensabilidad (condensador a alta P).  T_op_K del bloque si está;
+    # si no, la T del feed.  P del bloque (P_op_bar / flash_P_bar).
+    T_op_K = getattr(b, "T_op_K", 0.0) or 0.0
+    T_C = (T_op_K - 273.15) if T_op_K > 0 else getattr(feed, "temperature", 25.0)
+    P_bar = (getattr(b, "P_op_bar", 0.0) or getattr(b, "flash_P_bar", 0.0)
+             or 1.013)
 
     def _is_target(c):
         if want == "solid" and override:
             return c in override
-        return get_component_phase(c) == want
+        return get_component_phase(c, T_C, P_bar) == want
 
     m_target_phase = sum(m for c, m in comp_in.items() if _is_target(c))
     if m_target_phase <= 0:
@@ -3764,7 +3788,18 @@ def solve_mechanical_separators(fs):
                 fs, b, ("solido", "producto"), ("liquido", "venteo"))
             msgs.append(_sep_by_phase(b, feed, t_out, r_out,
                                        target_phase, eff))
-        else:  # filtro y genéricos
+        elif target_phase in ("liquid", "vapor", "gas"):
+            # Knockout / condensador V-L: la fase objetivo se recupera por su
+            # puerto (líquido condensado o vapor) y el resto sale por el otro.
+            liq_kws = ("liquido", "liquid", "fondo", "pesada", "producto")
+            vap_kws = ("vapor", "gas", "venteo", "tope", "liviana")
+            if target_phase in ("vapor", "gas"):
+                t_out, r_out = _pick_outs_by_port(fs, b, vap_kws, liq_kws)
+            else:
+                t_out, r_out = _pick_outs_by_port(fs, b, liq_kws, vap_kws)
+            msgs.append(_sep_by_phase(b, feed, t_out, r_out,
+                                       target_phase, eff))
+        else:  # filtro y genéricos (sólido/líquido)
             t_out, r_out = _pick_outs_by_port(
                 fs, b, ("producto", "solido"), ("venteo", "liquido"))
             msgs.append(_sep_by_phase(b, feed, t_out, r_out,
