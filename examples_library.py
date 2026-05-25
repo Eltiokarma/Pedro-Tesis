@@ -240,90 +240,73 @@ class ExampleBuilder:
         # manualmente.  Labor se calcula con Turton.
 
     def _example_methanol(self):
-        """Síntesis de metanol simplificada.
-        Syngas (CO + 2H2) → CH3OH. Reactor + flash + columna.
+        """Síntesis de metanol — solver-driven.
+        Syngas (CO + 2H2) → CH3OH (R005, stoich ~60%/paso).  Reactor +
+        knockout a alta presión: V-101 condensa el metanol (Psat≈0.35 bar a
+        40°C << 80 bar) y ventea el CO/H2 sin reaccionar.
 
-        Layout: 2 filas alineadas para que el routing salga limpio.
-          fila 1: K-101 → E-101 → R-101 → E-102 → V-101
-          fila 2: TK-MeOH ← E-103 ← T-101 → E-104 → TK-agua
-        El destilado va a TK-MeOH (izquierda), el agua de fondo va a TK-agua (derecha),
-        sin que ninguna corriente cruce equipos.
+        Solo se declara el feed; el reactor calcula la composición y el
+        knockout separa por condensabilidad (sin VLE NRTL).  No hay columna
+        metanol/agua porque R005 no produce agua (no hay reacción
+        CO2+3H2→CH3OH+H2O en el catálogo).
         """
-        # Layout PFD industrial 1600×960.
-        # Top row: K-101 → E-101 → R-101 → E-102 → V-101 → TK-purga
-        # Bottom row: separación con T-101 al centro
+        # Layout PFD: K-101 → E-101 → R-101 → E-102 → V-101 (knockout)
+        #             V-101 líquido → E-103 → TK-MeOH ; V-101 vapor → TK-purga
         k101 = self._add_example_block("K-101", "Compressor — centrifugal",      800.0,  80, 215)
         e101 = self._add_example_block("E-101", "Heat exch. — floating head",    220.0, 240, 220)
         r101 = self._add_example_block("R-101", "Reactor — jacketed non-agit.",   30.0, 420, 180)
         e102 = self._add_example_block("E-102", "Heat exch. — air cooler",       200.0, 540, 200)
         v101 = self._add_example_block("V-101", "Vessel — vertical",              15.0, 720, 180)
         tk3  = self._add_example_block("TK-103","Storage tank — cone roof",       30.0, 860, 180)   # purga
+        e103 = self._add_example_block("E-103", "Heat exch. — floating head",    140.0, 720, 420)   # secador MeOH
+        tk1  = self._add_example_block("TK-101","Storage tank — floating roof",  400.0, 900, 420)   # metanol
 
-        # fila inferior
-        tk1  = self._add_example_block("TK-101","Storage tank — floating roof",  400.0,  80, 540)   # crude meoh feed to T-101? no, era feed
-        e103 = self._add_example_block("E-103", "Heat exch. — floating head",    140.0, 240, 560)
-        t101 = self._add_example_block("T-101", "Tower (column shell)",           35.0, 460, 460)
-        e104 = self._add_example_block("E-104", "Heat exch. — kettle reboiler",  130.0, 580, 540)
-        tk2  = self._add_example_block("TK-102","Storage tank — cone roof",       50.0, 800, 540)   # agua
-        # tanque metanol producto (lo dibujamos al lado derecho)
-        # Nota: el flujo original de los streams sigue siendo igual
+        # SOLVER-DRIVEN: R-101 corre R005 (CO + 2H2 → CH3OH) en modo stoich;
+        # V-101 es un knockout a alta P (80 bar, 40°C) que condensa el metanol
+        # (Psat≈0.35 bar << 80) y ventea CO/H2 (supercríticos).  NOTA: con la
+        # única reacción del catálogo (R005) NO se forma agua, así que no hay
+        # columna metanol/agua — el knockout entrega el metanol crudo.
+        self.fs.blocks[r101].reactions          = ["R005"]
+        self.fs.blocks[r101].reactor_mode        = "stoich"
+        self.fs.blocks[r101].reactor_conversion  = 0.60     # ~60% por paso
+        self.fs.blocks[r101].T_op_K              = 503.15   # 230°C
+        self.fs.blocks[r101].P_op_bar            = 80.0     # loop MeOH ~80 bar
+        self.fs.blocks[v101].mech_sep_active       = True
+        self.fs.blocks[v101].mech_sep_target_phase = "liquid"
+        self.fs.blocks[v101].mech_sep_efficiency   = 0.95
+        self.fs.blocks[v101].T_op_K                = 313.15  # 40°C
+        self.fs.blocks[v101].P_op_bar              = 80.0
 
-        # Streams con composición + fase declarada (modelo extendido).
-        # El solver de energía usa Cp(T) del catálogo + ΔH_vap si hay
-        # cambio de fase explícito.
-
+        # Feed syngas estequiométrico CO + 2 H₂ ⇒ mass 28:4 = 0.875/0.125
         self._add_example_stream(k101, e101, "S-1", 14000, role="feed",
                                  src_port="descarga", dst_port="tube_in",
                                  price=150.0, T=40,
-                                 main_component="syngas", phase="gas")
+                                 composition={"co": 0.875, "hydrogen": 0.125},
+                                 main_component="co", phase="gas")
         self._add_example_stream(e101, r101, "S-2", 0.0,
                                  src_port="tube_out", dst_port="alimentacion",
-                                 T=230,
-                                 main_component="syngas", phase="gas")
-        # post-reactor: gas con metanol formado en vapor
+                                 T=230, phase="gas")
+        # post-reactor: gas con metanol formado (composición calculada por R005)
         self._add_example_stream(r101, e102, "S-3", 0.0,
                                  src_port="producto", dst_port="proceso_in",
-                                 T=260,
-                                 main_component="methanol", phase="vapor")
-        # post-cooler: parcialmente condensado (two-phase)
+                                 T=260, phase="gas")
+        # post-cooler → knockout (enfriado a 40°C)
         self._add_example_stream(e102, v101, "S-4", 0.0,
                                  src_port="proceso_out", dst_port="alimentacion",
-                                 T=40,
-                                 main_component="methanol", phase="liquid")
-        # líquido del flash: crude methanol (líquido)
-        self._add_example_stream(v101, t101, "S-5", 0.0,
-                                 src_port="liquido",  dst_port="alimentacion",
-                                 T=60,
-                                 composition={"methanol": 0.94, "water": 0.06},
-                                 main_component="methanol", phase="liquid")
-        # vapor tope de columna: vapor (componente puro metanol)
-        self._add_example_stream(t101, e103, "S-vap-tope", 0.0,
-                                 src_port="vapor_tope", dst_port="shell_in",
-                                 T=68,
-                                 main_component="methanol", phase="vapor")
-        # producto líquido condensado
+                                 T=40)
+        # líquido del knockout → secador
+        self._add_example_stream(v101, e103, "S-5", 0.0,
+                                 src_port="liquido",  dst_port="tube_in",
+                                 T=60)
+        # metanol producto
         self._add_example_stream(e103, tk1,  "S-MeOH", 0.0, role="product",
-                                 src_port="shell_out", dst_port="entrada",
-                                 price=1100.0, T=40,
-                                 main_component="methanol", phase="liquid")
-        # fondo de columna: agua líquida
-        self._add_example_stream(t101, e104, "S-fondo", 600,
-                                 src_port="liquido_fondo", dst_port="liq_in",
-                                 T=100,
-                                 main_component="water", phase="liquid")
-        self._add_example_stream(e104, tk2,  "S-agua", 0.0, role="product",
-                                 src_port="cond_out", dst_port="entrada",
-                                 price=5.0, T=40,
-                                 main_component="water", phase="liquid")
+                                 src_port="tube_out", dst_port="entrada",
+                                 price=1100.0, T=40)
         # venteo: gases no condensados (CO, H2)
-        self._add_example_stream(v101, tk3, "S-purge", 3900, role="product",
+        self._add_example_stream(v101, tk3, "S-purge", 0.0, role="product",
                                  src_port="vapor", dst_port="entrada",
-                                 price=0.0, T=40,
-                                 main_component="syngas", phase="gas")
+                                 price=0.0, T=40)
 
-        # ---- Calor de reacción: CO + 2H2 → CH3OH, ΔH = -90 kJ/mol ----
-        # = -2828 kJ/kg MeOH; con yield mass ~72%, sobre kg input syngas ≈ -2000
-        self.fs.blocks[r101].heat_of_reaction = -2000.0  # kJ/kg input
         self.fs.blocks[r101].P_op_bar = 80.0   # MeOH loop ~80 bar industrial
 
         # ---- Duties inferidos del balance termodinámico ----
