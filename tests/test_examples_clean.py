@@ -16,8 +16,13 @@ import flowsheet_model as fm
 import flowsheet_solver as fsv
 import examples_library as el
 
-# Ejemplos ya reescritos solver-driven (limpios):
-CLEAN_EXAMPLES = ['_example_distillation', '_example_ethanol']
+# Ejemplos ya reescritos solver-driven / curados (limpios):
+CLEAN_EXAMPLES = [
+    '_example_distillation',
+    '_example_ethanol',
+    '_example_reactor_flash_column',
+    '_example_pineapple_juice',
+]
 
 
 def _build_fake():

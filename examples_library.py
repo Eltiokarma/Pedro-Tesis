@@ -1830,18 +1830,14 @@ class ExampleBuilder:
         tk_eth = self._add_example_block("TK-103","Storage tank — cone roof",  300.0,1040, 240)
         tk_h2o = self._add_example_block("TK-104","Storage tank — cone roof",  500.0,1040, 480)
 
-        # Configurar reactor R-101 (fermentación glucosa → etanol + CO2)
-        # NOTA: R007 fermentación no está derivada de Capa 3 (no tiene
-        # cinética/equilibrio formal), así que usamos heat_of_reaction
-        # manual y declaramos composición de output del reactor.
-        # En su lugar, hagamos un sistema con R002 WGS que sí tiene NRTL.
-        # Mejor cambiar a algo válido en NRTL: ethanol-water destilación
-        # ENT ya que no tenemos producción de ethanol en NRTL.
-        # Vamos con un caso más simple: feed multicomp → flash → columna.
-
-        # FEED: simulamos salida de un reactor de fermentación = caldo
-        # con eth/water/glucose. Usamos el feed como mezcla ya hecha.
-        # Esto demuestra el FLASH y la COLUMNA automáticos.
+        # Configurar reactor R-101: fermentación de glucosa (R007) en modo
+        # stoich (conversión declarada).  El solver calcula la composición de
+        # salida — ya NO se declara a mano.
+        self.fs.blocks[r101].reactions         = ["R007"]
+        self.fs.blocks[r101].reactor_mode       = "stoich"
+        self.fs.blocks[r101].reactor_conversion = 0.85
+        self.fs.blocks[r101].T_op_K             = 303.15   # 30°C
+        self.fs.blocks[r101].P_op_bar           = 1.013
 
         # Configurar V-101 como flash automático
         self.fs.blocks[v101].flash_active = True
@@ -1856,25 +1852,20 @@ class ExampleBuilder:
         self.fs.blocks[t101].column_x_B_LK = 0.01   # 1% en bottom
         self.fs.blocks[t101].column_R_factor = 1.5
 
-        # Feed: caldo de fermentación 10000 tm/año eth/water/glucose
+        # Feed: mosto azucarado 10000 tm/año (única composición declarada)
         self._add_example_stream(tk_glu, r101, "S-mosto", 10000, role="feed",
                                   src_port="salida", dst_port="alimentacion",
                                   price=80.0, T=30,
                                   composition={"water": 0.85, "glucose": 0.12,
                                                  "ethanol": 0.03},
                                   phase="liquid")
-        # Reactor → cooler (composición del reactor manual: declaramos
-        # post-fermentación). Para no usar R007 que no tiene NRTL.
+        # Reactor → cooler (composición calculada por R007)
         self._add_example_stream(r101, e101, "S-fermentado",
-                                  src_port="producto", dst_port="proceso_in",
-                                  T=32,
-                                  composition={"water": 0.815, "ethanol": 0.085,
-                                                 "co2": 0.080, "glucose": 0.020},
-                                  phase="liquid")
-        # Heater → flash (E-101 calienta 32→87°C; el catálogo no separa heater/cooler)
+                                  src_port="producto", dst_port="proceso_in")
+        # Heater → flash (E-101 lleva a T del flash; el solver infiere phase)
         self._add_example_stream(e101, v101, "S-cooled",
                                   src_port="proceso_out", dst_port="alimentacion",
-                                  T=87, phase="two_phase")
+                                  T=87)
         # Flash → CO2 vapor (calculado por flash_active)
         self._add_example_stream(v101, tk_co2, "S-CO2-vapor", role="waste",
                                   src_port="vapor", dst_port="entrada",
@@ -1891,10 +1882,6 @@ class ExampleBuilder:
         self._add_example_stream(t101, tk_h2o, "S-agua", role="waste",
                                   src_port="liquido_fondo", dst_port="entrada",
                                   price=0.0, T=100)
-
-        # Calor de reacción de la fermentación (R007, exotérmica leve)
-        # NOTA: R007 no está en NRTL pero usa heat_of_reaction declarado.
-        self.fs.blocks[r101].heat_of_reaction = -100.0  # kJ/kg input
 
         self._add_example_extra("Levaduras (Saccharomyces)",
                                  flowrate=20, price=400.0, stream="Consumables")

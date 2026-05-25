@@ -310,9 +310,9 @@ def _audit_pseudo(fs, findings):
                 findings.append(AuditFinding(
                     category='pseudo', severity='info',
                     target_kind='stream', target_name=s.name,
-                    message=(f"{s.name}: usa pseudo-componente alimentario "
-                             f"'{c}' — comportamiento aproximado, mantener "
-                             f"como tal."),
+                    message=(f"{s.name}: usa pseudo-componente "
+                             f"alimentario/biológico '{c}' — comportamiento "
+                             f"aproximado, mantener como tal."),
                     data={'component': c}))
             elif _thermo(c) is None:
                 findings.append(AuditFinding(

@@ -12,10 +12,19 @@
   ],
   "food_pseudo_allowed": [
     "sucrose",
-    "glucose"
+    "glucose",
+    "lactose",
+    "starch",
+    "milk_fat",
+    "milk_protein",
+    "milk_ash",
+    "pineapple_solids",
+    "potato_solids",
+    "biomass",
+    "penicillin"
   ],
   "notes": {
     "industrial_pseudo": "Pseudo-componentes industriales que el Frente C reemplazará por moléculas reales. Auditor genera warning.",
-    "food_pseudo_allowed": "Pseudo-componentes de industria alimentaria que se mantienen como aproximaciones documentadas. Auditor genera INFO (no warning)."
+    "food_pseudo_allowed": "Pseudo-componentes de industria alimentaria/biológica (lácteos, almidón, sólidos de fruta/tubérculo, biomasa, antibiótico) que se mantienen como aproximaciones documentadas — no tienen VLE/DIPPR sensato. Auditor genera INFO (no warning)."
   }
 }
