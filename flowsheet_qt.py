@@ -5433,10 +5433,15 @@ class FlowsheetMainWindow(QMainWindow):
             ("reactivity_dock", "Predictor de reactividad"),
         ):
             d = getattr(self, attr, None)
-            if d is not None:
-                act = d.toggleViewAction()
-                act.setText(label)
-                m_legacy.addAction(act)
+            if d is None:
+                continue
+            # la tabla de corrientes usa la acción robusta del toolbar
+            if attr == "streams_dock" and getattr(self, "_streams_table_action", None):
+                m_legacy.addAction(self._streams_table_action)
+                continue
+            act = d.toggleViewAction()
+            act.setText(label)
+            m_legacy.addAction(act)
         m_view.addSeparator()
         # ── Sistema de unidades global (afecta UI + exportación) ──
         m_units = m_view.addMenu("&Unidades")
@@ -5555,9 +5560,80 @@ class FlowsheetMainWindow(QMainWindow):
 
     def _toggle_aux_visibility(self, show: bool):
         """Vista > Mostrar corrientes auxiliares (Ctrl+U): muestra/oculta
-        todos los bloques y streams auto_aux (utility/ambiente)."""
+        los bloques y streams auto_aux (utility/ambiente).  Si todavía no
+        hay ninguna corriente auto_aux (p.ej. en un ejemplo o archivo
+        cargado), el click las materializa para los intercambiadores de
+        calor que no tengan utility y las muestra."""
+        has_aux = any(getattr(s, "auto_aux", False)
+                      for s in self.fs.streams.values())
+        if not has_aux:
+            n = self._ensure_hx_auxiliaries()
+            if n:
+                self._show_aux = True
+                if getattr(self, "_aux_visibility_action", None) is not None:
+                    self._aux_visibility_action.setChecked(True)
+                self._apply_aux_visibility()
+                self._update_status()
+                return
         self._show_aux = bool(show)
         self._apply_aux_visibility()
+
+    def _toggle_streams_table(self, *args):
+        """Muestra/oculta el dock de la tabla de corrientes de forma robusta
+        (lo trae al frente y le asigna una altura visible al mostrarlo)."""
+        d = getattr(self, "streams_dock", None)
+        if d is None:
+            return
+        if d.isVisible():
+            d.hide()
+        else:
+            if d.isFloating():
+                d.setFloating(False)
+            d.show()
+            d.raise_()
+            try:
+                from PySide6.QtCore import Qt as _Qt
+                self.resizeDocks([d], [260], _Qt.Vertical)
+            except Exception:
+                pass
+            try:
+                d.refresh()
+            except Exception:
+                pass
+
+    def _ensure_hx_auxiliaries(self):
+        """Materializa las corrientes de servicio (cooling water / steam) de
+        los intercambiadores de calor que aún no tengan ninguna corriente
+        utility conectada, las dimensiona desde el duty (solve) y redibuja.
+        Devuelve cuántos HX recibieron auxiliares."""
+        import equipment_auxiliaries as _aux
+        import equipment_costs as _ec
+        import flowsheet_solver as _fsolv
+        # Resolver PRIMERO (duties + flujos de proceso): añadir corrientes
+        # nuevas antes del solve inicial puede interferir con la resolución.
+        try:
+            _fsolv.solve(self.fs)
+        except Exception:
+            pass
+        created = 0
+        for b in list(self.fs.blocks.values()):
+            if _ec.EQUIPMENT_DATA.get(b.eq_type, {}).get("categoria") != "Heat exchangers":
+                continue
+            # no duplicar: saltar HX que ya tienen una corriente utility
+            # (manual o auto) conectada
+            if any((s.src == b.id or s.dst == b.id) and (s.role or "") == "utility"
+                   for s in self.fs.streams.values()):
+                continue
+            if _aux.instantiate_auxiliaries(self.fs, b):
+                created += 1
+        if created:
+            # dimensionar las corrientes nuevas desde el duty + redibujar
+            try:
+                _fsolv.solve(self.fs)
+            except Exception:
+                pass
+            self._rebuild_scene()
+        return created
 
     def _apply_aux_visibility(self):
         """Aplica el estado actual de _show_aux a los items auto_aux del
@@ -5806,15 +5882,25 @@ class FlowsheetMainWindow(QMainWindow):
         add_btn("Auto-size S",     self.action_autosize,    "act-sizing",    toolbar=tb2)
         # Re-bind tb a tb2 para el resto de los add que vienen abajo
         tb = tb2
-        # toggle del dock de tabla de corrientes (creado en
-        # _build_streams_dock); toggleViewAction() ya viene cableado
-        # para mostrar/ocultar y refleja el estado actual.
+        # toggle del dock de tabla de corrientes — acción propia (robusta):
+        # toggleViewAction() a veces re-muestra el dock con altura 0 o detrás
+        # del layout; _toggle_streams_table() lo muestra, lo trae al frente y
+        # le da una altura visible.
         if hasattr(self, "streams_dock") and self.streams_dock is not None:
-            toggle = self.streams_dock.toggleViewAction()
-            toggle.setText("Tabla de corrientes")
-            toggle.setShortcut("Ctrl+T")
-            toggle.setIcon(_mk("wb-table", color=_ICON_COLOR, size=20))
-            tb.addAction(toggle)
+            act = QAction("Tabla de corrientes", self)
+            act.setCheckable(True)
+            act.setChecked(self.streams_dock.isVisible())
+            act.setShortcut("Ctrl+T")
+            act.setIcon(_mk("wb-table", color=_ICON_COLOR, size=20))
+            act.triggered.connect(self._toggle_streams_table)
+            tb.addAction(act)
+            self._streams_table_action = act
+            # mantener el check sincronizado si el dock cambia por otra vía
+            try:
+                self.streams_dock.visibilityChanged.connect(
+                    lambda vis: self._streams_table_action.setChecked(bool(vis)))
+            except Exception:
+                pass
         # toggle del papel de dibujo PFD (marco + leyenda + cuadro de título)
         paper_act = QAction("Marco PFD", self)
         paper_act.setCheckable(True)
