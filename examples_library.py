@@ -4787,6 +4787,16 @@ class ExampleBuilder:
         self.fs.blocks[r101].T_op_K      = 1100.0
         self.fs.blocks[r101].P_op_bar    = 2.0
 
+        # T-101: C2 splitter (column_active).  Separa etileno (LK) de etano
+        # (HK); el H2 no-condensable sale por el tope con el etileno.  Solo
+        # se declara el feed del proceso — el solver calcula el split.
+        self.fs.blocks[t101].column_active   = True
+        self.fs.blocks[t101].column_LK       = "ethylene"
+        self.fs.blocks[t101].column_HK       = "ethane"
+        self.fs.blocks[t101].column_x_D_LK   = 0.98
+        self.fs.blocks[t101].column_x_B_LK   = 0.02
+        self.fs.blocks[t101].column_R_factor = 1.8
+
         # Feed etano (1000 t/y puro)
         self._add_example_stream(tk_in, e101, "S-etano", 1000, role="feed",
                                  src_port="salida", dst_port="tube_in",
@@ -4809,32 +4819,29 @@ class ExampleBuilder:
         # Salida reactor — solver Modo A calcula composición (no la declaramos)
         self._add_example_stream(r101, e102, "S-cracked",
                                  src_port="producto", dst_port="proceso_in",
-                                 T=827,
-                                 main_component="ethylene", phase="gas")
-        # Quench al compresor
+                                 T=827, phase="gas")
+        # Quench al compresor (composición propagada)
         self._add_example_stream(e102, k101, "S-quench",
                                  src_port="proceso_out", dst_port="succion",
-                                 T=40,
-                                 main_component="ethylene", phase="gas")
-        # Comprimido a columna fría
-        self._add_example_stream(k101, t101, "S-comp",
+                                 T=40)
+        # Comprimido a columna fría (composición propagada).  K-101 sube la
+        # presión a ~12 bar — un C2 splitter opera a esa P para licuar el C2
+        # a temperaturas alcanzables (~-40°C) en vez de criogénicas a 1 bar.
+        sid_comp = self._add_example_stream(k101, t101, "S-comp",
                                  src_port="descarga", dst_port="alimentacion",
-                                 T=80,
-                                 main_component="ethylene", phase="gas")
-        # Tope: etileno purificado (composición tope criogénica declarada)
-        self._add_example_stream(t101, tk_eth, "S-etileno", 470, role="product",
+                                 T=80)
+        self.fs.streams[sid_comp].pressure_bar = 12.0
+        self.fs.streams[sid_comp].pressure_locked = True
+        # Tope: corriente de etileno (composición/T/phase calculadas por la
+        # columna; la pureza FUG es modesta porque el par etileno/etano es de
+        # volatilidad relativa baja — un C2 splitter real lleva 100+ platos).
+        self._add_example_stream(t101, tk_eth, "S-etileno", 0.0, role="product",
                                  src_port="vapor_tope", dst_port="entrada",
-                                 price=950.0, T=-30,
-                                 main_component="ethylene", phase="gas",
-                                 composition={"ethylene": 0.985, "hydrogen": 0.015})
-        # Fondo: etano + offgas (fuel-gas).  Masa deducida del balance de
-        # T-101 (Σin − S-etileno); comp es spec de separación (locked).
+                                 price=950.0)
+        # Fondo: etano + offgas (fuel-gas) — calculado por la columna
         self._add_example_stream(t101, tk_off, "S-offgas", 0.0, role="product",
                                  src_port="liquido_fondo", dst_port="entrada",
-                                 price=300.0, T=-50,
-                                 main_component="ethane", phase="liquid",
-                                 composition={"ethane": 0.92, "hydrogen": 0.06,
-                                              "ethylene": 0.02})
+                                 price=300.0)
 
         self._set_example_labor(200_000)
         self._add_example_extra("Gas natural (horno F-101)",
