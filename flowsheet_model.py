@@ -432,6 +432,10 @@ class Stream:
     mass_flow_locked:   bool = False
     temperature_locked: bool = False
     composition_locked: bool = False
+    # phase_locked: True si el user/builder declaró phase explícita.  Los
+    # solvers de unit ops (column/flash/reactor) infieren phase desde la
+    # termo, pero NO sobreescriben una phase declarada.
+    phase_locked:       bool = False
 
     # ---- DISPLAY (UI) ----
     # Número que muestra la pill en el editor.  0 = auto (numeración
@@ -638,6 +642,11 @@ class Flowsheet:
                 s.temperature_locked = abs(s.temperature - T_REF_C) > 0.01
             if "composition_locked" not in sdict:
                 s.composition_locked = bool(s.composition) or bool(s.main_component)
+            if "phase_locked" not in sdict:
+                s.phase_locked = bool(s.phase)
+            if "pressure_locked" not in sdict:
+                s.pressure_locked = (abs(s.pressure_bar - 1.013) > 1e-6
+                                     and s.pressure_bar > 0)
             fs.streams[int(sid)] = s
         fs._next_id        = d.get("_next_id", 1)
         fs.opex_extras     = list(d.get("opex_extras", []))

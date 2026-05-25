@@ -331,6 +331,142 @@ def _is_comp_locked(s):
     return getattr(s, "composition_locked", False)
 
 
+def _is_pressure_locked(s):
+    """True solo si user fijó presión (lock explícito)."""
+    return getattr(s, "pressure_locked", False)
+
+
+def _is_phase_locked(s):
+    """True solo si user/builder declaró phase explícita."""
+    return getattr(s, "phase_locked", False)
+
+
+def _mass_to_mol(mass_frac: Dict[str, float]) -> Dict[str, float]:
+    """Convierte fracciones másicas → molares vía thermo_db (MW). Normaliza.
+    Componentes sin MW resuelto usan MW=1.0 (degrada con gracia)."""
+    try:
+        import thermo_db as _td
+    except ImportError:
+        return {}
+    mol: Dict[str, float] = {}
+    for c, w in mass_frac.items():
+        if w <= 0:
+            continue
+        co = _td.get(c)
+        mw = co.mw if (co and co.mw > 0) else 1.0
+        mol[c] = w / mw
+    tot = sum(mol.values())
+    if tot <= 0:
+        return {}
+    return {c: v / tot for c, v in mol.items()}
+
+
+def _mol_to_mass(mol_frac: Dict[str, float]) -> Dict[str, float]:
+    """Inverso de _mass_to_mol: fracciones molares → másicas. Normaliza."""
+    try:
+        import thermo_db as _td
+    except ImportError:
+        return {}
+    mass: Dict[str, float] = {}
+    for c, n in mol_frac.items():
+        if n <= 0:
+            continue
+        co = _td.get(c)
+        mw = co.mw if (co and co.mw > 0) else 1.0
+        mass[c] = n * mw
+    tot = sum(mass.values())
+    if tot <= 0:
+        return {}
+    return {c: v / tot for c, v in mass.items()}
+
+
+def _boiling_point_K(comp: str, P_bar: float):
+    """Tb de un componente puro a P_bar por bisección sobre Antoine
+    (nrtl._Psat_bar es monótona creciente en T).  None si falta Antoine."""
+    try:
+        import nrtl as _nrtl
+    except ImportError:
+        return None
+    lo, hi = 150.0, 800.0
+    if _nrtl._Psat_bar(comp, lo) is None or _nrtl._Psat_bar(comp, hi) is None:
+        return None
+    for _ in range(80):
+        mid = 0.5 * (lo + hi)
+        pm = _nrtl._Psat_bar(comp, mid)
+        if pm is None:
+            return None
+        if pm < P_bar:
+            lo = mid
+        else:
+            hi = mid
+        if hi - lo < 1e-3:
+            break
+    return 0.5 * (lo + hi)
+
+
+def _infer_phase_from_TP(composition_mass: Dict[str, float],
+                         T_K: float, P_bar: float) -> Tuple[str, float]:
+    """Infiere (phase, vapor_fraction_másica) de una corriente desde su
+    composición (mass frac), T y P usando NRTL + Antoine.
+
+    phase ∈ {'liquid', 'vapor', 'two_phase'}.  vapor_fraction sólo es
+    significativa si phase == 'two_phase'.  Si no se puede resolver
+    (falta Antoine/NRTL) devuelve ('', 0.0) — el caller deja lo que había.
+    NO toca el stream.
+    """
+    if not composition_mass or T_K <= 0 or P_bar <= 0:
+        return ('', 0.0)
+    x_mol = _mass_to_mol(composition_mass)
+    if not x_mol:
+        return ('', 0.0)
+    try:
+        import nrtl as _nrtl
+        import thermo_db as _td
+    except ImportError:
+        return ('', 0.0)
+    names = list(x_mol.keys())
+    z = [x_mol[c] for c in names]
+
+    # Single component (alguno domina con frac molar > 0.99)
+    dominant = [c for c, v in x_mol.items() if v > 0.99]
+    if len(names) == 1 or dominant:
+        comp = dominant[0] if dominant else names[0]
+        Tb = _boiling_point_K(comp, P_bar)
+        if Tb is None:
+            return ('', 0.0)
+        if T_K < Tb - 0.5:
+            return ('liquid', 0.0)
+        if T_K > Tb + 0.5:
+            return ('vapor', 1.0)
+        return ('two_phase', 0.5)
+
+    # Multicomponente: bubble/dew + flash si bifásico
+    bp = _nrtl.bubble_point(names, z, P_bar)
+    dp = _nrtl.dew_point(names, z, P_bar)
+    if bp is None or dp is None:
+        return ('', 0.0)
+    T_bub, T_dew = bp[0], dp[0]
+    if T_K < T_bub:
+        return ('liquid', 0.0)
+    if T_K > T_dew:
+        return ('vapor', 1.0)
+    fl = _nrtl.flash_TP(names, z, T_K, P_bar)
+    if fl is None or fl.get("V_frac") is None:
+        return ('two_phase', 0.5)
+    V = fl["V_frac"]
+    x_l, y_v = fl["x"], fl["y"]
+    mws = []
+    for c in names:
+        co = _td.get(c)
+        mws.append(co.mw if (co and co.mw > 0) else 1.0)
+    L_mass = sum((1 - V) * x_l[i] * mws[i] for i in range(len(names)))
+    V_mass = sum(V * y_v[i] * mws[i] for i in range(len(names)))
+    tot = L_mass + V_mass
+    if tot <= 0:
+        return ('two_phase', 0.5)
+    return ('two_phase', V_mass / tot)
+
+
 def _is_duty_locked(b):
     """True solo si user fijó duty (lock explícito)."""
     return getattr(b, "duty_locked", False)
@@ -2058,6 +2194,24 @@ def solve_equilibrium_reactors(fs):
             if not _is_temp_locked(s_out):
                 s_out.temperature = T_op_C
 
+        # ── Propagar P de operación + inferir phase de los outlets ──
+        # (Frente B).  Sólo corrientes de proceso (no utility/ambient).
+        proc_outs = [s for s in outs
+                     if (s.role or "") not in ("utility", "ambient")]
+        if b.P_op_bar > 0:
+            for s_out in proc_outs:
+                if not _is_pressure_locked(s_out):
+                    s_out.pressure_bar = b.P_op_bar
+        # La composición del outlet a (T_op, P_op) puede caer en cualquier
+        # región; el reactor no decide la fase — la infiere la termo.
+        if out_comp:
+            phase_inf, vfrac = _infer_phase_from_TP(out_comp, T_K, b.P_op_bar)
+            if phase_inf:
+                for s_out in proc_outs:
+                    if not _is_phase_locked(s_out):
+                        s_out.phase = phase_inf
+                        s_out.vapor_fraction = vfrac
+
         msgs.append(f"✓ Reactor {b.name}{adiab_tag}: ΔH_rxn={Q_rxn_kW:+.2f} kW, "
                      f"Q_sens={Q_sensible_kW:+.2f} kW, "
                      f"Q_total={Q_total_kW:+.2f} kW, T_out={T_op_C:.0f}°C, "
@@ -2350,6 +2504,60 @@ def solve_columns(fs):
         if not _is_mass_locked(bot_stream):
             bot_stream.mass_flow = feed.mass_flow * B_F
 
+        # ── Propagación T/P/phase de los outputs (Frente B) ──
+        # T_top = bubble point del distillate a P_col (condensador total);
+        # T_bot = bubble point del bottom a P_col + 0.1 bar (gradiente).
+        import nrtl as _nrtl_col
+        P_col_bar = feed.pressure_bar if feed.pressure_bar > 0 else 1.013
+        x_D_mol = _mass_to_mol(x_D_full)
+        x_B_mol = _mass_to_mol(x_B_full)
+        bp_top = (_nrtl_col.bubble_point(list(x_D_mol.keys()),
+                                         list(x_D_mol.values()), P_col_bar)
+                  if x_D_mol else None)
+        bp_bot = (_nrtl_col.bubble_point(list(x_B_mol.keys()),
+                                         list(x_B_mol.values()), P_col_bar + 0.1)
+                  if x_B_mol else None)
+        T_top_old = dist_stream.temperature
+        T_bot_old = bot_stream.temperature
+        if bp_top:
+            T_top_C = bp_top[0] - 273.15
+            if not _is_temp_locked(dist_stream):
+                dist_stream.temperature = T_top_C
+            if abs(T_top_C - T_top_old) > 10:
+                msgs.append(f"ℹ Column {b.name}: T_top bubble point "
+                            f"{T_top_C:.1f}°C (declarado {T_top_old:.1f}°C).")
+        else:
+            msgs.append(f"⚠ Column {b.name}: bubble_point del distillate no "
+                        f"convergió (falta NRTL o Antoine). T_top no propagada.")
+        if bp_bot:
+            T_bot_C = bp_bot[0] - 273.15
+            if not _is_temp_locked(bot_stream):
+                bot_stream.temperature = T_bot_C
+            if abs(T_bot_C - T_bot_old) > 10:
+                msgs.append(f"ℹ Column {b.name}: T_bot bubble point "
+                            f"{T_bot_C:.1f}°C (declarado {T_bot_old:.1f}°C).")
+        else:
+            msgs.append(f"⚠ Column {b.name}: bubble_point del bottom no "
+                        f"convergió. T_bot no propagada.")
+        # P de outputs
+        if not _is_pressure_locked(dist_stream):
+            dist_stream.pressure_bar = P_col_bar
+        if not _is_pressure_locked(bot_stream):
+            bot_stream.pressure_bar = P_col_bar + 0.1
+        # Phase del distillate por puerto (vapor_tope → vapor;
+        # condensador líquido → liquid).  Bottom siempre líquido saturado.
+        if not _is_phase_locked(dist_stream):
+            port_low = (dist_stream.src_port or "").lower()
+            if any(k in port_low for k in ("vapor", "tope", "top")):
+                dist_stream.phase = "vapor"
+                dist_stream.vapor_fraction = 1.0
+            else:
+                dist_stream.phase = "liquid"
+                dist_stream.vapor_fraction = 0.0
+        if not _is_phase_locked(bot_stream):
+            bot_stream.phase = "liquid"
+            bot_stream.vapor_fraction = 0.0
+
         # Duty del bloque: Q_reb + Q_cond (Q_cond es negativo).  Para
         # columna adiabática, el "duty externo total" es Q_reb (el
         # condensador es un HX separado en el flowsheet típicamente).
@@ -2480,6 +2688,38 @@ def solve_flashes(fs):
                 liq_out.mass_flow = feed.mass_flow * L_frac_mass
             if not _is_temp_locked(liq_out):
                 liq_out.temperature = T_K - 273.15
+
+        # ── Propagar P de operación a los outputs (Frente B) ──
+        if vap_out is not None and not _is_pressure_locked(vap_out):
+            vap_out.pressure_bar = P_bar
+        if liq_out is not None and not _is_pressure_locked(liq_out):
+            liq_out.pressure_bar = P_bar
+
+        # Si V_frac es extremo (0 o 1) el flash produjo single-phase:
+        # reportar y dejar el output complementario con mass≈0.
+        if V_frac_mass < 0.005:
+            msgs.append(
+                f"⚠ Flash {b.name}: V/F_mass={V_frac_mass:.4f} → single-phase "
+                f"liquid a {T_K-273.15:.1f}°C, {P_bar:.2f}bar. Vapor stream "
+                f"{vap_out.name if vap_out else '?'} con mass≈0; revisar si el "
+                f"flash es necesario o si T/P son correctas."
+            )
+            if vap_out is not None:
+                if not _is_mass_locked(vap_out):
+                    vap_out.mass_flow = 0.0
+                if not _is_phase_locked(vap_out):
+                    vap_out.phase = "vapor"
+        elif V_frac_mass > 0.995:
+            msgs.append(
+                f"⚠ Flash {b.name}: V/F_mass={V_frac_mass:.4f} → single-phase "
+                f"vapor a {T_K-273.15:.1f}°C, {P_bar:.2f}bar. Líquido stream "
+                f"{liq_out.name if liq_out else '?'} con mass≈0; revisar."
+            )
+            if liq_out is not None:
+                if not _is_mass_locked(liq_out):
+                    liq_out.mass_flow = 0.0
+                if not _is_phase_locked(liq_out):
+                    liq_out.phase = "liquid"
 
         msgs.append(
             f"✓ Flash {b.name}: V/F_mass={V_frac_mass:.3f}  T={T_K-273.15:.1f}°C  "

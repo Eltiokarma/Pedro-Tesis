@@ -91,6 +91,10 @@ class ExampleBuilder:
                                   else bool(lock_T))
         s.composition_locked = ((bool(composition) or bool(main_component))
                                   if lock_comp is None else bool(lock_comp))
+        # phase declarada por el builder ⇒ lock (los solvers no la pisan).
+        # pressure_locked queda False: los builders no declaran P, el
+        # solver hidráulico puede setearla libremente.
+        s.phase_locked = bool(phase)
         self.fs.streams[sid] = s
         return sid
 
