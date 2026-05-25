@@ -3796,12 +3796,15 @@ class ExampleBuilder:
                                  T=180,
                                  composition={"methanol": 0.0054, "acetic_acid": 0.9946},
                                  main_component="acetic_acid", phase="liquid")
-        # Tope columna (livianos: metanol residual)
-        self._add_example_stream(t101, e102, "S-vap", 10,
+        # Tope columna (livianos: metanol residual).  El tope opera a ~1 bar
+        # (el metanol hierve a ~65°C a 1 atm), no a la P del reactor.
+        _svp = self._add_example_stream(t101, e102, "S-vap", 10,
                                  src_port="vapor_tope", dst_port="tube_in",
                                  T=65,
                                  main_component="methanol", phase="vapor",
                                  composition={"methanol": 1.0})
+        self.fs.streams[_svp].pressure_bar = 1.0
+        self.fs.streams[_svp].pressure_locked = True
         # Livianos condensados a TK (reciclables, role=waste por simplicidad)
         self._add_example_stream(e102, tk_liv, "S-livianos", 0.0, role="waste",
                                  src_port="tube_out", dst_port="entrada",
@@ -4658,24 +4661,28 @@ class ExampleBuilder:
         # EV2 quita 40 % = 2039.  Total: 8048-5098=2950 (evap final).
         # Intermedio EV1→EV2: 8048-3059 = 4989 t/y at ~15 % ST.
         # Vapor EV1: 3059 t/y water, EV2: 2039 t/y water.  Ambos a TK-vap.
-        # EV1 vapor → TK-vap
-        self._add_example_stream(ev1, tk_vap, "S-vap-1", 3059, role="utility",
+        # EV1 vapor → TK-vap.  Evaporador al vacío: P = Psat(55°C) ≈ 0.16 bar.
+        _sv1 = self._add_example_stream(ev1, tk_vap, "S-vap-1", 3059, role="utility",
                                  src_port="venteo", dst_port="entrada",
                                  price=0.0, T=55,
                                  main_component="water", phase="vapor",
                                  composition={"water": 1.0})
+        self.fs.streams[_sv1].pressure_bar = 0.157
+        self.fs.streams[_sv1].pressure_locked = True
         # EV1 → EV2 (concentrado intermedio)
         self._add_example_stream(ev1, ev2, "S-mid", 0.0,
                                  src_port="producto", dst_port="alimentacion",
                                  T=50,
                                  composition=mid_evap,
                                  main_component="water", phase="liquid")
-        # EV2 vapor → TK-vap
-        self._add_example_stream(ev2, tk_vap, "S-vap-2", 2039, role="utility",
+        # EV2 vapor → TK-vap.  P = Psat(50°C) ≈ 0.12 bar.
+        _sv2 = self._add_example_stream(ev2, tk_vap, "S-vap-2", 2039, role="utility",
                                  src_port="venteo", dst_port="entrada",
                                  price=0.0, T=50,
                                  main_component="water", phase="vapor",
                                  composition={"water": 1.0})
+        self.fs.streams[_sv2].pressure_bar = 0.123
+        self.fs.streams[_sv2].pressure_locked = True
         # EV2 → UHT (2950 t/y at 26 % ST)
         self._add_example_stream(ev2, e_uht, "S-conc", 0.0,
                                  src_port="producto", dst_port="tube_in",
@@ -5393,36 +5400,43 @@ class ExampleBuilder:
                                  T=60,
                                  composition=seawater,
                                  main_component="water", phase="liquid")
-        # EV-101 vapor → destilada (250 t)
-        self._add_example_stream(ev1, tk_dst, "S-dist1", 250, role="product",
+        # EV-101 vapor → destilada (250 t).  Efecto bajo vacío: P = Psat(70°C)
+        # ≈ 0.31 bar (un MEE opera a presión decreciente por efecto).
+        _sd1 = self._add_example_stream(ev1, tk_dst, "S-dist1", 250, role="product",
                                  src_port="venteo", dst_port="entrada",
                                  price=2.0, T=70,
                                  main_component="water", phase="vapor",
                                  composition={"water": 1.0})
+        self.fs.streams[_sd1].pressure_bar = 0.312
+        self.fs.streams[_sd1].pressure_locked = True
         # EV-101 producto → EV-102
         self._add_example_stream(ev1, ev2, "S-mid1", 0.0,
                                  src_port="producto", dst_port="alimentacion",
                                  T=65,
                                  composition=mid1,
                                  main_component="water", phase="liquid")
-        # EV-102 vapor → destilada (250 t)
-        self._add_example_stream(ev2, tk_dst, "S-dist2", 250, role="product",
+        # EV-102 vapor → destilada (250 t).  P = Psat(60°C) ≈ 0.20 bar.
+        _sd2 = self._add_example_stream(ev2, tk_dst, "S-dist2", 250, role="product",
                                  src_port="venteo", dst_port="entrada",
                                  price=2.0, T=60,
                                  main_component="water", phase="vapor",
                                  composition={"water": 1.0})
+        self.fs.streams[_sd2].pressure_bar = 0.199
+        self.fs.streams[_sd2].pressure_locked = True
         # EV-102 producto → EV-103
         self._add_example_stream(ev2, ev3, "S-mid2", 0.0,
                                  src_port="producto", dst_port="alimentacion",
                                  T=55,
                                  composition=mid2,
                                  main_component="water", phase="liquid")
-        # EV-103 vapor → destilada (200 t)
-        self._add_example_stream(ev3, tk_dst, "S-dist3", 200, role="product",
+        # EV-103 vapor → destilada (200 t).  P = Psat(50°C) ≈ 0.12 bar.
+        _sd3 = self._add_example_stream(ev3, tk_dst, "S-dist3", 200, role="product",
                                  src_port="venteo", dst_port="entrada",
                                  price=2.0, T=50,
                                  main_component="water", phase="vapor",
                                  composition={"water": 1.0})
+        self.fs.streams[_sd3].pressure_bar = 0.123
+        self.fs.streams[_sd3].pressure_locked = True
         # EV-103 producto → TK salmuera (waste concentrada)
         self._add_example_stream(ev3, tk_brn, "S-brine", 0.0, role="waste",
                                  src_port="producto", dst_port="entrada",

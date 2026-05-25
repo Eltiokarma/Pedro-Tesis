@@ -30,6 +30,11 @@ CLEAN_EXAMPLES = [
     '_example_ammonia',
     '_example_methanol',
     '_example_pasteurizer',
+    # evaporadores al vacío / vapor saturado (corrección de P + tolerancia)
+    '_example_desalination',
+    '_example_leche_gloria',
+    '_example_acetic_acid',
+    '_example_nuclear_steam',
     # limpios por curación de pseudo-componentes (alimentario/material)
     '_example_pineapple_juice',
     '_example_beer_brewing',

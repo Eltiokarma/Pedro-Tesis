@@ -195,6 +195,12 @@ def _audit_phase(fs, findings):
                 continue
             if vfrac >= 0.98 and decl_cmp == "vapor":
                 continue
+            # Componente ~puro en su punto de ebullición (vapor o líquido
+            # saturado): la termo lo marca 'two_phase' por estar en el borde,
+            # pero declarar liquid o vapor es físicamente válido (vapor de un
+            # evaporador, vapor saturado de una caldera, etc.).
+            if comp and max(comp.values()) > 0.95 and decl_cmp in ("liquid", "vapor"):
+                continue
         # Excepción: T fuera del rango Antoine → la inferencia extrapola.
         if _t_out_of_antoine_range(s.main_component, T_C):
             findings.append(AuditFinding(
