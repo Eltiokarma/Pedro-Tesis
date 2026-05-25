@@ -353,50 +353,43 @@ class ExampleBuilder:
         tk1  = self._add_example_block("TK-102","Storage tank — cone roof",  150.0, 900, 180)   # benceno
         tk2  = self._add_example_block("TK-103","Storage tank — cone roof",  150.0, 900, 590)   # tolueno
 
-        # Streams con composición + fase (mezcla benzene+toluene).
-        # Sin reacción química — pura separación física.
+        # SOLVER-DRIVEN: solo se declara el FEED.  La columna T-101
+        # (column_active) calcula composición y caudal de destilado y
+        # fondo; los HX/bombas propagan composición; el solver infiere
+        # T/P/phase de los outputs.
+        self.fs.blocks[t101].column_active   = True
+        self.fs.blocks[t101].column_LK       = "benzene"
+        self.fs.blocks[t101].column_HK       = "toluene"
+        self.fs.blocks[t101].column_x_D_LK   = 0.98   # 98% benceno en destilado
+        self.fs.blocks[t101].column_x_B_LK   = 0.02   # 2% benceno en fondo
+        self.fs.blocks[t101].column_R_factor = 1.5
 
-        # Feed: 50/50 benceno/tolueno líquido a 25°C
+        # Feed: 50/50 benceno/tolueno líquido a 25°C (única composición declarada)
         self._add_example_stream(tk0,  p101, "S-1", 10000, role="feed",
                                  src_port="salida",   dst_port="succion",
                                  price=850.0, T=25,
                                  composition={"benzene": 0.5, "toluene": 0.5},
                                  main_component="benzene", phase="liquid")
-        # Post-bomba: mismo líquido
+        # Post-bomba: composición/T propagadas
         self._add_example_stream(p101, e101, "S-2", 0.0,
-                                 src_port="descarga", dst_port="tube_in",
-                                 T=26,
-                                 composition={"benzene": 0.5, "toluene": 0.5},
-                                 main_component="benzene", phase="liquid")
-        # Post-preheater: cerca del punto de burbuja
+                                 src_port="descarga", dst_port="tube_in")
+        # Post-preheater: T de operación de la columna fijada en UN output
         self._add_example_stream(e101, t101, "S-3", 0.0,
                                  src_port="tube_out", dst_port="alimentacion",
-                                 T=85,
-                                 composition={"benzene": 0.5, "toluene": 0.5},
-                                 main_component="benzene", phase="liquid")
-        # Vapor tope: ~98% benceno (más volátil)
+                                 T=85)
+        # Vapor de tope → condensador (composición/T/phase calculadas)
         self._add_example_stream(t101, e102, "S-4", 0.0,
-                                 src_port="vapor_tope",     dst_port="tube_in",
-                                 T=82,
-                                 composition={"benzene": 0.98, "toluene": 0.02},
-                                 main_component="benzene", phase="vapor")
-        # Líquido fondo: ~98% tolueno (menos volátil)
-        self._add_example_stream(t101, e103, "S-5", 5000,
-                                 src_port="liquido_fondo",  dst_port="liq_in",
-                                 T=110,
-                                 composition={"benzene": 0.02, "toluene": 0.98},
-                                 main_component="toluene", phase="liquid")
-        # Productos condensados al tanque (líquidos)
+                                 src_port="vapor_tope",     dst_port="tube_in")
+        # Líquido de fondo → reboiler (composición/T/phase calculadas)
+        self._add_example_stream(t101, e103, "S-5", 0.0,
+                                 src_port="liquido_fondo",  dst_port="liq_in")
+        # Productos al tanque (composición/phase propagadas; T = almacenamiento)
         self._add_example_stream(e102, tk1,  "S-benceno", 0.0, role="product",
                                  src_port="tube_out", dst_port="entrada",
-                                 price=1050.0, T=40,
-                                 composition={"benzene": 0.98, "toluene": 0.02},
-                                 main_component="benzene", phase="liquid")
+                                 price=1050.0, T=40)
         self._add_example_stream(e103, tk2,  "S-tolueno", 0.0, role="product",
                                  src_port="vap_out",  dst_port="entrada",
-                                 price=700.0, T=40,
-                                 composition={"benzene": 0.02, "toluene": 0.98},
-                                 main_component="toluene", phase="liquid")
+                                 price=700.0, T=40)
 
         # ---- Duties inferidos del balance termodinámico ----
         from flowsheet_solver import auto_set_duties_from_thermo
@@ -518,81 +511,64 @@ class ExampleBuilder:
         tk_eth   = self._add_example_block("TK-103","Storage tank — cone roof",    100.0,1000, 190)  # etanol
         tk_vin   = self._add_example_block("TK-104","Storage tank — cone roof",    200.0,1000, 580)  # vinaza
 
-        # Composiciones (fracción másica).
-        mosto_mix   = {"water": 0.88, "glucose": 0.12}
-        # Post-fermentación: 12% glucosa → 6.1% etanol + 5.3% CO₂ + agua restante
-        fermented   = {"water": 0.876, "ethanol": 0.061, "co2": 0.053, "glucose": 0.010}
-        # Tras venteo CO₂: mismo líquido sin CO₂
-        post_v      = {"water": 0.925, "ethanol": 0.065, "glucose": 0.010}
-        # Tope columna: 95% etanol (azeotrópico)
-        top         = {"ethanol": 0.95, "water": 0.05}
-        # Fondo columna: agua + residuos (vinaza)
-        bottom      = {"water": 0.995, "glucose": 0.005}
+        # SOLVER-DRIVEN: solo se declara el FEED (mosto).  El fermentador
+        # R-101 (stoich, R007) calcula la composición de salida; V-101
+        # (flash) ventea el CO₂; T-101 (column_active) destila etanol/agua.
+        # El solver propaga composición e infiere T/P/phase de los outputs.
+        self.fs.blocks[r101].reactions          = ["R007"]   # fermentación glucosa
+        self.fs.blocks[r101].reactor_mode        = "stoich"
+        self.fs.blocks[r101].reactor_conversion  = 0.92       # 92% azúcares fermentables
+        self.fs.blocks[r101].T_op_K              = 305.15     # 32°C
+        self.fs.blocks[r101].P_op_bar            = 1.013
 
-        # Feed: mosto azucarado
+        self.fs.blocks[v101].flash_active = True
+        self.fs.blocks[v101].flash_T_K    = 305.15           # 32°C
+        self.fs.blocks[v101].flash_P_bar  = 1.013
+
+        self.fs.blocks[t101].column_active   = True
+        self.fs.blocks[t101].column_LK       = "ethanol"
+        self.fs.blocks[t101].column_HK       = "water"
+        self.fs.blocks[t101].column_x_D_LK   = 0.80   # destilado rico en etanol (< azeótropo)
+        self.fs.blocks[t101].column_x_B_LK   = 0.001  # vinaza casi sin etanol
+        self.fs.blocks[t101].column_R_factor = 1.5
+
+        # Feed: mosto azucarado 12% glucosa (única composición declarada)
         self._add_example_stream(tk_mosto, r101, "S-mosto", 10000, role="feed",
                                  src_port="salida",   dst_port="alimentacion",
                                  price=80.0, T=25,
-                                 composition=mosto_mix,
+                                 composition={"water": 0.88, "glucose": 0.12},
                                  main_component="water", phase="liquid")
-        # Post-fermentador: vino fermentado
+        # Post-fermentador → venteo (composición calculada por R007)
         self._add_example_stream(r101, v101, "S-1", 0.0,
-                                 src_port="producto", dst_port="alimentacion",
-                                 T=32,
-                                 composition=fermented,
-                                 main_component="water", phase="liquid")
-        # Venteo CO₂
-        self._add_example_stream(v101, tk_co2, "S-CO2", 528, role="product",
+                                 src_port="producto", dst_port="alimentacion")
+        # Venteo CO₂ (vapor del flash)
+        self._add_example_stream(v101, tk_co2, "S-CO2", 0.0, role="product",
                                  src_port="vapor",    dst_port="entrada",
-                                 price=0.0, T=32,
-                                 main_component="co2", phase="gas")
-        # Líquido fermentado a la bomba
+                                 price=0.0)
+        # Líquido fermentado a la bomba (del flash)
         self._add_example_stream(v101, p101, "S-2", 0.0,
-                                 src_port="liquido",  dst_port="succion",
-                                 T=32,
-                                 composition=post_v,
-                                 main_component="water", phase="liquid")
+                                 src_port="liquido",  dst_port="succion")
         # Post-bomba
         self._add_example_stream(p101, e101, "S-3", 0.0,
-                                 src_port="descarga", dst_port="tube_in",
-                                 T=33,
-                                 composition=post_v,
-                                 main_component="water", phase="liquid")
-        # Post-preheater al destilador
+                                 src_port="descarga", dst_port="tube_in")
+        # Post-preheater al destilador — T de operación fijada en UN output
         self._add_example_stream(e101, t101, "S-4", 0.0,
                                  src_port="tube_out", dst_port="alimentacion",
-                                 T=85,
-                                 composition=post_v,
-                                 main_component="water", phase="liquid")
-        # Vapor de tope (etanol 95%)
-        self._add_example_stream(t101, e102, "S-vap", 612,
-                                 src_port="vapor_tope", dst_port="tube_in",
-                                 T=79,
-                                 composition=top,
-                                 main_component="ethanol", phase="vapor")
+                                 T=85)
+        # Vapor de tope → condensador (composición/T/phase calculadas)
+        self._add_example_stream(t101, e102, "S-vap", 0.0,
+                                 src_port="vapor_tope", dst_port="tube_in")
         # Etanol producto (condensado)
         self._add_example_stream(e102, tk_eth, "S-EtOH", 0.0, role="product",
                                  src_port="tube_out", dst_port="entrada",
-                                 price=950.0, T=40,
-                                 composition=top,
-                                 main_component="ethanol", phase="liquid")
-        # Líquido de fondo (mostly water + glucose residual)
+                                 price=950.0, T=40)
+        # Líquido de fondo → reboiler
         self._add_example_stream(t101, e103, "S-fondo", 0.0,
-                                 src_port="liquido_fondo", dst_port="liq_in",
-                                 T=100,
-                                 composition=bottom,
-                                 main_component="water", phase="liquid")
+                                 src_port="liquido_fondo", dst_port="liq_in")
         # Vinaza al tanque
         self._add_example_stream(e103, tk_vin, "S-vinaza", 0.0, role="product",
                                  src_port="cond_out", dst_port="entrada",
-                                 price=2.0, T=60,
-                                 composition=bottom,
-                                 main_component="water", phase="liquid")
-
-        # ---- Calor de reacción fermentación ----
-        # ΔH ≈ -68 kJ/mol glucosa = -377 kJ/kg glucosa.
-        # Por kg input total con 12% glucosa: -377 × 0.12 ≈ -45 kJ/kg input
-        self.fs.blocks[r101].heat_of_reaction = -45.0
+                                 price=2.0, T=60)
 
         # ---- Duties auto ----
         from flowsheet_solver import auto_set_duties_from_thermo

@@ -160,6 +160,12 @@ def _audit_phase(fs, findings):
             continue                       # sin composición → nada que comparar
         if not (s.phase or ""):
             continue                       # phase no declarada → el solver puede setearla
+        # Solo auditamos phases DECLARADAS (locked) por el builder/user — el
+        # objetivo es cazar hardcodes inconsistentes.  Las phases que el
+        # solver calculó (column/flash/reactor) son consistentes con SU termo
+        # por construcción; re-chequearlas con otro método da falsos positivos.
+        if not getattr(s, "phase_locked", False):
+            continue
         T_C = s.temperature
         P = float(getattr(s, "pressure_bar", 0.0) or 0.0)
         if T_C <= -273.0 or P <= 0:
@@ -172,6 +178,15 @@ def _audit_phase(fs, findings):
         decl_cmp = "vapor" if decl == "gas" else decl
         if decl_cmp == inferred:
             continue                       # consistente
+        # Saturación: una corriente EN su frontera (V_frac≈0 = líquido
+        # saturado en el punto de burbuja; V_frac≈1 = vapor saturado en
+        # el punto de rocío) declarada liquid/vapor es consistente — la
+        # termo la marca 'two_phase' por estar exactamente en el borde.
+        if inferred == "two_phase":
+            if vfrac <= 0.02 and decl_cmp == "liquid":
+                continue
+            if vfrac >= 0.98 and decl_cmp == "vapor":
+                continue
         # Excepción: T fuera del rango Antoine → la inferencia extrapola.
         if _t_out_of_antoine_range(s.main_component, T_C):
             findings.append(AuditFinding(

@@ -401,6 +401,26 @@ def _mol_to_mass(mol_frac: Dict[str, float]) -> Dict[str, float]:
     return {c: v / tot for c, v in mass.items()}
 
 
+# Gases no-condensables a P/T típicas de columna: no condensan en un
+# condensador total, así que se excluyen del cálculo de bubble point de
+# los productos (su presencia traza hundiría la T a valores absurdos).
+_NONCONDENSABLE_GASES = {
+    "co2", "carbon dioxide", "hydrogen", "h2", "nitrogen", "n2",
+    "oxygen", "o2", "methane", "ch4", "co", "carbon monoxide", "argon",
+}
+
+
+def _drop_noncondensables(mol_frac: Dict[str, float]) -> Dict[str, float]:
+    """Quita gases no-condensables de una composición molar y renormaliza.
+    Si todo era no-condensable, devuelve la composición original."""
+    filt = {k: v for k, v in mol_frac.items()
+            if k.lower() not in _NONCONDENSABLE_GASES}
+    tot = sum(filt.values())
+    if tot <= 0:
+        return mol_frac
+    return {k: v / tot for k, v in filt.items()}
+
+
 def _boiling_point_K(comp: str, P_bar: float):
     """Tb de un componente puro a P_bar por bisección sobre Antoine
     (nrtl._Psat_bar es monótona creciente en T).  None si falta Antoine."""
@@ -1928,6 +1948,12 @@ def solve_equilibrium_reactors(fs):
                             mode=mode, rxn_ids=all_rxn_ids,
                             inlet_composition=agg, inlet_mass_kg_s=m_in_kg_s,
                             T_K=T_K, P_bar=b.P_op_bar, V_reactor_L=V_L)
+                    elif mode == "stoich":
+                        res_iter = _rdb.solve_stoichiometric_reactor(
+                            rxn_ids=all_rxn_ids, inlet_composition=agg,
+                            inlet_mass_kg_s=m_in_kg_s, T_K=T_K,
+                            P_bar=b.P_op_bar,
+                            conversion=getattr(b, "reactor_conversion", 0.95))
                     else:
                         break
                 except Exception:
@@ -2013,6 +2039,13 @@ def solve_equilibrium_reactors(fs):
                 inlet_composition=agg,
                 inlet_mass_kg_s=m_in_kg_s,
                 T_K=T_K, P_bar=b.P_op_bar)
+        elif mode == "stoich":
+            res = _rdb.solve_stoichiometric_reactor(
+                rxn_ids=all_rxn_ids,
+                inlet_composition=agg,
+                inlet_mass_kg_s=m_in_kg_s,
+                T_K=T_K, P_bar=b.P_op_bar,
+                conversion=getattr(b, "reactor_conversion", 0.95))
         elif mode in ("pfr", "cstr"):
             V_L = getattr(b, "reactor_volume_L", 0.0) or 0.0
             if V_L <= 0:
@@ -2450,13 +2483,26 @@ def solve_columns(fs):
         # ── Propagación T/P/phase de los outputs (Frente B) ──
         # T_top = bubble point del distillate a P_col (condensador total);
         # T_bot = bubble point del bottom a P_col + 0.1 bar (gradiente).
+        # Los gases no-condensables (CO₂, H₂, N₂, CH₄…) que el FUG manda al
+        # tope NO condensan en un condensador total: se excluyen del cálculo
+        # de T para no hundir el bubble point a valores absurdos (-60°C).
         import nrtl as _nrtl_col
         P_col_bar = feed.pressure_bar if feed.pressure_bar > 0 else 1.013
-        x_D_mol = _mass_to_mol(x_D_full)
-        x_B_mol = _mass_to_mol(x_B_full)
-        bp_top = (_nrtl_col.bubble_point(list(x_D_mol.keys()),
-                                         list(x_D_mol.values()), P_col_bar)
-                  if x_D_mol else None)
+        x_D_mol = _drop_noncondensables(_mass_to_mol(x_D_full))
+        x_B_mol = _drop_noncondensables(_mass_to_mol(x_B_full))
+        # ¿el destilado sale como VAPOR (tope) o como LÍQUIDO (condensador)?
+        port_low = (dist_stream.src_port or "").lower()
+        dist_is_vapor = any(k in port_low for k in ("vapor", "tope", "top"))
+        # Destilado vapor → su T es el punto de ROCÍO; destilado líquido →
+        # punto de BURBUJA.  El fondo siempre sale como líquido saturado.
+        if dist_is_vapor:
+            bp_top = (_nrtl_col.dew_point(list(x_D_mol.keys()),
+                                          list(x_D_mol.values()), P_col_bar)
+                      if x_D_mol else None)
+        else:
+            bp_top = (_nrtl_col.bubble_point(list(x_D_mol.keys()),
+                                             list(x_D_mol.values()), P_col_bar)
+                      if x_D_mol else None)
         bp_bot = (_nrtl_col.bubble_point(list(x_B_mol.keys()),
                                          list(x_B_mol.values()), P_col_bar + 0.1)
                   if x_B_mol else None)
@@ -2467,10 +2513,11 @@ def solve_columns(fs):
             if not _is_temp_locked(dist_stream):
                 dist_stream.temperature = T_top_C
             if abs(T_top_C - T_top_old) > 10:
-                msgs.append(f"ℹ Column {b.name}: T_top bubble point "
+                msgs.append(f"ℹ Column {b.name}: T_top "
+                            f"{'rocío' if dist_is_vapor else 'burbuja'} "
                             f"{T_top_C:.1f}°C (declarado {T_top_old:.1f}°C).")
         else:
-            msgs.append(f"⚠ Column {b.name}: bubble_point del distillate no "
+            msgs.append(f"⚠ Column {b.name}: dew/bubble point del distillate no "
                         f"convergió (falta NRTL o Antoine). T_top no propagada.")
         if bp_bot:
             T_bot_C = bp_bot[0] - 273.15
@@ -2490,8 +2537,7 @@ def solve_columns(fs):
         # Phase del distillate por puerto (vapor_tope → vapor;
         # condensador líquido → liquid).  Bottom siempre líquido saturado.
         if not _is_phase_locked(dist_stream):
-            port_low = (dist_stream.src_port or "").lower()
-            if any(k in port_low for k in ("vapor", "tope", "top")):
+            if dist_is_vapor:
                 dist_stream.phase = "vapor"
                 dist_stream.vapor_fraction = 1.0
             else:

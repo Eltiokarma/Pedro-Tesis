@@ -142,8 +142,13 @@ class Block:
     #   'cstr'        — algebraico Newton-Raphson con cinética (Capa 5).
     #                    Robusto incluso para cinéticas stiff.
     #   'batch'       — integración RK4 dN/dt, V constante, P emergente
+    #   'batch'       — integración RK4 dN/dt, V constante, P emergente
     #                    (Capa 5).  Requiere reactor_volume_L > 0 y
     #                    batch_time_s > 0.  P NO constante.
+    #   'stoich'      — conversión declarada explícitamente (reactor_conversion),
+    #                    sin Keq ni cinética.  Para reacciones irreversibles /
+    #                    biológicas / con termo estimada donde el equilibrio
+    #                    no aplica (R007 fermentación, R021 transesterificación).
     reactor_mode: str = "equilibrium"
     # Volumen del reactor en LITROS (no m³, para valores amigables).
     # Solo aplica si reactor_mode ∈ {'pfr', 'cstr', 'batch'}.
@@ -151,6 +156,9 @@ class Block:
     # Tiempo de tanda [s].  Solo aplica si reactor_mode == 'batch'.
     # El batch integra dN/dt de 0 a este tiempo a V constante.
     batch_time_s: float = 3600.0
+    # Conversión fraccional (0..1) del reactivo limitante de la PRIMERA
+    # reacción.  Solo aplica si reactor_mode == 'stoich'.
+    reactor_conversion: float = 0.95
 
     # ---- COLUMNA DE DESTILACIÓN (FUG / McCabe-Thiele, Capa 6) ----
     # Si column_active es True y el bloque es tipo Tower/column, el
