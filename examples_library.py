@@ -1503,17 +1503,15 @@ class ExampleBuilder:
         self._add_example_stream(r101, e101, "S-cracked",
                                   src_port="producto", dst_port="proceso_in",
                                   T=827,
-                                  main_component="ethylene", phase="gas")
+                                  phase="gas")
         # Quench parcial → cooler final
         self._add_example_stream(e101, e102, "S-quench",
                                   src_port="proceso_out", dst_port="proceso_in",
-                                  T=400,
-                                  main_component="ethylene", phase="gas")
+                                  T=400, phase="gas")
         # Producto enfriado (400→40)
         self._add_example_stream(e102, tk_out, "S-product", 0.0, role="product",
                                   src_port="proceso_out", dst_port="entrada",
-                                  price=900.0, T=40,
-                                  main_component="ethylene", phase="gas")
+                                  price=900.0, T=40, phase="gas")
 
         # OPEX: catalizador no aplica (cracking térmico sin catalizador)
         # pero sí gas natural para el horno:
@@ -3361,9 +3359,7 @@ class ExampleBuilder:
         # Producto: mass_flow calculado; composición spec (locked).
         self._add_example_stream(e102, tk_out, "S-pasteurizado", 0.0, role="product",
                                  src_port="tube_out", dst_port="entrada",
-                                 price=600.0, T=4,
-                                 composition=juice,
-                                 main_component="water", phase="liquid")
+                                 price=600.0, T=4, phase="liquid")
 
         # Duties auto desde Cp del mosto
         from flowsheet_solver import auto_set_duties_from_thermo

@@ -16,12 +16,31 @@ import flowsheet_model as fm
 import flowsheet_solver as fsv
 import examples_library as el
 
-# Ejemplos ya reescritos solver-driven / curados (limpios):
+# Ejemplos limpios (0 hallazgos warning/error/redundant) tras el Frente C:
+# reescritos solver-driven, curación de pseudo-componentes y afinado del
+# auditor (locks load-bearing no se marcan como redundantes).
 CLEAN_EXAMPLES = [
+    # solver-driven / rewrites
     '_example_distillation',
     '_example_ethanol',
     '_example_reactor_flash_column',
+    '_example_ethane_cracker_pfr',
+    '_example_pasteurizer',
+    # limpios por curación de pseudo-componentes (alimentario/material)
     '_example_pineapple_juice',
+    '_example_beer_brewing',
+    '_example_bread_baking',
+    '_example_penicillin',
+    # limpios por afinado del detector redundant_lock (química inorgánica)
+    '_example_chloralkali_hcl',
+    '_example_quimpac_chloralkali',
+    '_example_hno3_ostwald',
+    '_example_cement',
+    '_example_glass',
+    '_example_polyethylene',
+    '_example_sulfuric_acid',
+    '_example_urea',
+    '_example_water_treatment',
 ]
 
 
