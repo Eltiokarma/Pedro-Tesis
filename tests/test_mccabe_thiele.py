@@ -72,6 +72,27 @@ def test_design_from_block_columns():
     assert found >= 3
 
 
+def test_sizing_from_block():
+    """design_from_block debe adjuntar 'sizing' con etapas reales (E_o) y
+    diámetro (Souders-Brown) físicamente razonables."""
+    fs = _build('_example_distillation')
+    b = next(x for x in fs.blocks.values() if getattr(x, 'column_active', False))
+    d = mt.design_from_block(b, fs)
+    sz = d.get('sizing')
+    assert sz is not None
+    assert sz['alpha_avg'] is not None and sz['alpha_avg'] > 1.0   # LK más volátil
+    assert 0.1 <= sz['E_o'] <= 0.95
+    assert sz['N_real'] >= d['N_stages']                          # reales ≥ teóricas
+    assert sz['diameter_m'] is not None and 0.05 < sz['diameter_m'] < 20.0
+
+
+def test_oconnell_monotonic():
+    """E_o decrece al subir α·μ (O'Connell)."""
+    e1 = mt.oconnell_efficiency(2.0, 0.3)
+    e2 = mt.oconnell_efficiency(5.0, 0.5)
+    assert e1 is not None and e2 is not None and e1 > e2
+
+
 def test_matplotlib_render_smoke():
     """El path de dibujo (matplotlib) no debe romper con un diseño real."""
     try:

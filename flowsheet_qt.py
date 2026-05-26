@@ -8091,12 +8091,20 @@ class FlowsheetMainWindow(QMainWindow):
             fig.tight_layout()
             self._mccabe_canvas.draw_idle()
             rmin = d["R_min"]
-            self._mccabe_caption.setText(
+            cap = (
                 f"McCabe-Thiele {d['LK']}/{d['HK']} — recomendado del modelo:  "
-                f"N = {d['N_stages']} etapas (feed en {d['feed_stage']}),  "
+                f"N = {d['N_stages']} etapas teóricas (feed en {d['feed_stage']}),  "
                 f"R = {d['R']:.2f}"
                 + (f"  (R_min {rmin:.2f})" if rmin else "")
                 + f",  z_F={d['z_F']:.2f} → x_D={d['x_D']:.2f}/x_B={d['x_B']:.2f}")
+            sz = d.get("sizing") or {}
+            if sz.get("N_real"):
+                cap += (f"\nEtapas reales ≈ {sz['N_real']} "
+                        f"(E_o={sz['E_o']:.2f} O'Connell, α={sz['alpha_avg']:.2f})")
+            if sz.get("diameter_m"):
+                cap += (f"   ·   Ø columna ≈ {sz['diameter_m']:.2f} m "
+                        f"(Souders-Brown, plato perforado, 70% inundación)")
+            self._mccabe_caption.setText(cap)
             panel.setVisible(True)
         except Exception:
             panel.setVisible(False)

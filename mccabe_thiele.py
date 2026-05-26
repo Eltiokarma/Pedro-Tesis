@@ -65,6 +65,69 @@ def _x_from_y(yq: float, xs: List[float], ys: List[float]) -> float:
     return xs[-1]
 
 
+def _alpha_avg(xs, ys) -> Optional[float]:
+    """Volatilidad relativa promedio (media geométrica en la región media)."""
+    import math
+    logs = []
+    for x, y in zip(xs, ys):
+        if 0.02 < x < 0.98 and 0.0 < y < 1.0:
+            a = (y / (1 - y)) / (x / (1 - x))
+            if a > 0:
+                logs.append(math.log(a))
+    if not logs:
+        return None
+    return math.exp(sum(logs) / len(logs))
+
+
+def oconnell_efficiency(alpha: float, mu_L_cP: float = 0.3) -> Optional[float]:
+    """Eficiencia global de plato (O'Connell): E_o = 0.492·(α·μ_L)^(−0.245).
+    μ_L en cP.  Acotada a [0.1, 0.95]."""
+    if alpha is None or alpha <= 0 or mu_L_cP <= 0:
+        return None
+    E = 0.492 * (alpha * mu_L_cP) ** (-0.245)
+    return max(0.1, min(0.95, E))
+
+
+# K_v de Souders-Brown por tipo de plato [m/s · (kg/m³ adim)].
+_TRAY_KV = {"sieve": 0.060, "valve": 0.080, "bubblecap": 0.050}
+
+
+def sizing(design: Dict, F_mol_s: float, rho_L: float, rho_V: float,
+           MW_v_kg_mol: float, mu_L_cP: float = 0.3,
+           tray: str = "sieve", spacing_m: float = 0.6) -> Dict:
+    """Dimensionamiento de la columna: etapas reales (O'Connell) + diámetro
+    (Souders-Brown).  Devuelve un dict con N_real, E_o, diameter_m,
+    U_flood/U_op, pct_flood, V_mol_s.  Campos None si falta data."""
+    import math
+    xs, ys = design["equilibrium"]
+    alpha = _alpha_avg(xs, ys)
+    E_o = oconnell_efficiency(alpha, mu_L_cP)
+    N_real = int(math.ceil(design["N_stages"] / E_o)) if E_o else None
+    out = {"alpha_avg": alpha, "E_o": E_o, "N_real": N_real,
+           "diameter_m": None, "U_flood": None, "U_op": None,
+           "pct_flood": None, "V_mol_s": None}
+    try:
+        if (F_mol_s and F_mol_s > 0 and rho_V > 0 and rho_L > rho_V
+                and MW_v_kg_mol > 0):
+            x_D, x_B, z_F = design["x_D"], design["x_B"], design["z_F"]
+            D_over_F = ((z_F - x_B) / (x_D - x_B)) if (x_D - x_B) > 1e-9 else 0.0
+            D_mol = max(0.0, D_over_F) * F_mol_s
+            V_mol = D_mol * (design["R"] + 1.0)
+            Kv = _TRAY_KV.get(tray, 0.060)
+            U_flood = Kv * math.sqrt((rho_L - rho_V) / rho_V) * \
+                (spacing_m / 0.6) ** 0.5
+            U_op = 0.7 * U_flood
+            m_dot_v = V_mol * MW_v_kg_mol            # kg/s
+            Q_v = m_dot_v / rho_V                    # m³/s
+            A = Q_v / U_op if U_op > 0 else 0.0
+            dia = math.sqrt(4 * A / math.pi) if A > 0 else None
+            out.update(diameter_m=dia, U_flood=U_flood, U_op=U_op,
+                       pct_flood=70.0, V_mol_s=V_mol)
+    except Exception:
+        pass
+    return out
+
+
 def design_from_block(block, fs) -> Optional[Dict]:
     """Construye el diagrama McCabe-Thiele de un bloque columna directamente
     desde el modelo: z_F del feed (fracción molar de LK en el binario LK/HK),
@@ -99,8 +162,34 @@ def design_from_block(block, fs) -> Optional[Dict]:
         return None
     z_F = n_lk / (n_lk + n_hk)
     P = float(getattr(feed, "pressure_bar", 1.013) or 1.013)
-    return design(LK, HK, z_F, x_D, x_B, R=None, R_factor=R_factor,
-                  q=1.0, P_bar=P)
+    d = design(LK, HK, z_F, x_D, x_B, R=None, R_factor=R_factor,
+               q=1.0, P_bar=P)
+    if d is None:
+        return None
+    # Dimensionamiento desde el modelo (etapas reales + diámetro).
+    try:
+        import nrtl as _nrtl
+        feed_kg_s = feed.mass_flow / 31536.0          # tm/año → kg/s
+        F_mol = 0.0
+        for c, mf in comp.items():
+            o = _td.get(c)
+            if o and o.mw > 0 and mf > 0:
+                F_mol += mf * feed_kg_s * 1000.0 / o.mw   # mol/s
+        oLK, oHK = _td.get(LK), _td.get(HK)
+        if oLK and oHK and oLK.mw > 0 and oHK.mw > 0:
+            MW_v = (x_D * oLK.mw + (1 - x_D) * oHK.mw) / 1000.0   # kg/mol
+            bp = _nrtl.bubble_point([LK, HK], [x_D, 1 - x_D], P)
+            T_top = bp[0] if bp else (getattr(feed, "temperature", 25.0) + 273.15)
+            rho_V = (P * 1e5) * MW_v / (8.314462618 * T_top) if T_top > 0 else 0.0
+            T_C = T_top - 273.15
+            rL = oLK.density_kg_m3(T_C)
+            rH = oHK.density_kg_m3(T_C)
+            rho_L = (x_D * rL + (1 - x_D) * rH) if (rL and rH) else None
+            if rho_L and rho_V:
+                d["sizing"] = sizing(d, F_mol, rho_L, rho_V, MW_v)
+    except Exception:
+        pass
+    return d
 
 
 def _r_min(xs, ys, z_F, x_D, q):
