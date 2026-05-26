@@ -233,6 +233,66 @@ def test_all_examples_hydraulics():
     return all_ok
 
 
+def test_breakdown_renders_for_all_pumps():
+    """Para cada ejemplo, toda bomba/compresor auto-dimensionada con anchor
+    debe producir un desglose con items >= 1 y total_dp_bar ≈ delta_p_bar."""
+    headless_mocks()
+    import inspect
+    import flowsheet_model as fm
+    import flowsheet_solver as fsv
+    import examples_library as el
+    import hydraulic_defaults as hd
+
+    class _FE:
+        def __init__(self): self.fs = fm.Flowsheet(); self.labor_workers = 0
+        _add_example_block = el.ExampleBuilder._add_example_block
+        _add_example_stream = el.ExampleBuilder._add_example_stream
+        _add_example_extra = el.ExampleBuilder._add_example_extra
+        _set_example_labor = el.ExampleBuilder._set_example_labor
+        _set_block_duty    = el.ExampleBuilder._set_block_duty
+
+    methods = [n for n, _ in inspect.getmembers(el.ExampleBuilder,
+                                                predicate=inspect.isfunction)
+               if n.startswith('_example_')]
+    print(f"\n{'='*70}")
+    print("VALIDACIÓN — desglose ΔP por bomba/compresor")
+    print(f"{'='*70}")
+
+    all_ok = True
+    checked = 0
+    for name in methods:
+        fake = _FE()
+        try:
+            getattr(el.ExampleBuilder, name)(fake)
+            hd.apply_example_hydraulics(fake.fs, name)
+            fsv.solve(fake.fs)
+        except Exception as e:
+            print(f"  ✗ {name}: CRASH {type(e).__name__}: {e}")
+            all_ok = False
+            continue
+        for b in fake.fs.blocks.values():
+            if not hd._is_rotative(b.eq_type) or b.delta_p_bar <= 0.01:
+                continue
+            bd = fsv._trace_downstream_itemized(fake.fs, b.id)
+            if bd is None:
+                continue                   # sin anchor → caso conocido
+            if len(bd["items"]) < 1:
+                print(f"  ✗ {name}/{b.name}: 0 items")
+                all_ok = False
+                continue
+            err = abs(bd["total_dp_bar"] - b.delta_p_bar)
+            if err >= 0.05:
+                print(f"  ✗ {name}/{b.name}: items suman "
+                      f"{bd['total_dp_bar']:.3f}, bomba dice "
+                      f"{b.delta_p_bar:.3f} (err={err:.3f})")
+                all_ok = False
+                continue
+            checked += 1
+    print(f"  ✓ {checked} bombas/compresores con desglose consistente")
+    print(f"RESULT desglose: {'TODOS PASAN ✓' if all_ok else 'HAY FALLAS ✗'}")
+    return all_ok
+
+
 def check_features():
     """Verifica que los features clave estén funcionando."""
     headless_mocks()
@@ -570,6 +630,7 @@ if __name__ == "__main__":
     ok2 = check_features()
     ok3 = check_isentropic_compression()
     ok4 = test_all_examples_hydraulics()
+    ok5 = test_breakdown_renders_for_all_pumps()
     if args.gui:
         maybe_open_gui()
-    sys.exit(0 if (ok1 and ok2 and ok3 and ok4) else 1)
+    sys.exit(0 if (ok1 and ok2 and ok3 and ok4 and ok5) else 1)

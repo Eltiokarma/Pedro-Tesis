@@ -7823,6 +7823,38 @@ class FlowsheetMainWindow(QMainWindow):
                 except Exception:
                     pass
 
+                # ---- Desglose ΔP itemizado: de dónde viene la ΔP ----
+                try:
+                    bd = fsolv._trace_downstream_itemized(self.fs, b.id)
+                    if bd is not None and bd["items"]:
+                        txt += "\n\n─ Desglose hidráulico ─"
+                        txt += (f"\nOrigen:  {bd['origin_stream_name']} @ "
+                                f"{bd['origin_P_bar']:.3f} bar 🔒")
+                        txt += (f"\nDestino: {bd['target_stream_name']} @ "
+                                f"{bd['target_P_bar']:.3f} bar 🔒")
+                        txt += f"\nΔP total: {bd['total_dp_bar']:.3f} bar"
+                        txt += "\n\nAporte por elemento:"
+                        total = bd["total_dp_bar"]
+                        for it in sorted(bd["items"],
+                                         key=lambda x: -x["dp_bar"]):
+                            pct = (100 * it["dp_bar"] / total
+                                   if total > 0 else 0.0)
+                            bar_len = (max(1, int(32 * it["dp_bar"] / total))
+                                       if (total > 0 and it["dp_bar"] > 0)
+                                       else 0)
+                            bar = "█" * bar_len + "·" * (32 - bar_len)
+                            txt += (f"\n  {bar} {it['dp_bar']:6.3f} bar "
+                                    f"({pct:5.1f}%) {it['detail'][:40]}")
+                        txt += f"\n  Suma: {total:.3f} bar  ✓ cierra"
+                    elif is_pump and bd is None:
+                        txt += ("\n\n─ Desglose hidráulico ─"
+                                "\nSin anchor downstream — ΔP no resoluble "
+                                "automáticamente. Declará pressure_locked en "
+                                "algún stream downstream para activar el "
+                                "auto-sizing.")
+                except Exception:
+                    pass
+
             self.prop_label.setText(txt)
 
             # ---- Perfil PFR / batch / barras CSTR ----

@@ -3005,6 +3005,103 @@ def _find_downstream_target(fs, start_block_id, _pd):
     return (None, 0.0)
 
 
+def _trace_downstream_itemized(fs, start_block_id):
+    """Como _find_downstream_target, pero devuelve el desglose itemizado de
+    la ΔP que la bomba/compresor entrega: cada tramo de tubería y cada caída
+    de equipo entre la succión y el anchor downstream, más un item
+    'destination_delta' = (P_target − P_origin) que captura la subida neta de
+    presión del sistema.
+
+    Invariante: sum(items.dp_bar) == ΔP que el solver dimensionó para el
+    bloque (= block.delta_p_bar), porque usa el MISMO BFS y los mismos ΔP que
+    _find_downstream_target.
+
+    Returns dict | None (None si el bloque no tiene succión o no hay anchor
+    downstream locked).
+    """
+    try:
+        import pressure_drop as _pd
+    except ImportError:
+        _pd = None
+    blk = fs.blocks.get(start_block_id)
+    if blk is None:
+        return None
+    ins = [s for s in fs.streams.values()
+           if s.dst == start_block_id and s.mass_flow >= 0]
+    if not ins:
+        return None
+    origin = min(ins, key=lambda s: (s.pressure_bar if s.pressure_bar > 0
+                                      else float("inf")))
+    origin_P = origin.pressure_bar
+    origin_name = origin.name
+
+    def _pipe_dp(stream):
+        if _pd is None:
+            return 0.0
+        try:
+            r = _pd.stream_pressure_drop(stream)
+            return r["delta_P_bar"] if r else 0.0
+        except Exception:
+            return 0.0
+
+    visited_blocks = {start_block_id}
+    visited_streams = set()
+    # Cola: (stream, items_acumulados_en_esta_rama)
+    queue = [(s, []) for s in fs.streams.values()
+             if s.src == start_block_id]
+    while queue:
+        stream, items_acc = queue.pop(0)
+        if stream.id in visited_streams:
+            continue
+        visited_streams.add(stream.id)
+        new_items = list(items_acc)
+        dp_pipe = _pipe_dp(stream)
+        if dp_pipe > 1e-9:
+            new_items.append({
+                "kind": "pipe", "ref": stream.name, "dp_bar": dp_pipe,
+                "detail": (f"Pipe {stream.name} "
+                           f"({getattr(stream,'pipe_length_m',0):.0f} m, "
+                           f"D={getattr(stream,'pipe_diameter_m',0)*1000:.0f} mm, "
+                           f"K={getattr(stream,'pipe_K_local',0):.1f})")})
+        if getattr(stream, "pressure_locked", False):
+            dd = stream.pressure_bar - origin_P
+            cand = new_items + [{
+                "kind": "destination_delta", "ref": stream.name, "dp_bar": dd,
+                "detail": (f"Δ destino−origen "
+                           f"({stream.name} − {origin_name})")}]
+            total = sum(it["dp_bar"] for it in cand)
+            # Mirror del solver: si el ΔP necesario hacia este anchor es ≤0
+            # (succión ya por encima del target, p.ej. compresor de reciclo en
+            # sección de alta P), este target NO dimensiona la bomba → no hay
+            # desglose atribuible.
+            if total <= 0.05:
+                return None
+            return dict(
+                target_P_bar=stream.pressure_bar,
+                target_stream_name=stream.name,
+                origin_P_bar=origin_P, origin_stream_name=origin_name,
+                items=cand, total_dp_bar=total)
+        dst_id = stream.dst
+        if dst_id in visited_blocks or dst_id not in fs.blocks:
+            continue
+        visited_blocks.add(dst_id)
+        dst = fs.blocks[dst_id]
+        dp_block = getattr(dst, "delta_p_bar", 0.0)
+        eq_dst = dst.eq_type.lower()
+        is_pump_compr = ("pump" in eq_dst or "compressor" in eq_dst
+                         or "fan" in eq_dst or "bomba" in eq_dst)
+        if is_pump_compr and dp_block > 0:
+            continue                       # la próxima bomba se encarga
+        if dp_block < 0:
+            new_items.append({
+                "kind": "block", "ref": dst.name, "dp_bar": abs(dp_block),
+                "detail": f"{dst.name} {dst.eq_type}"})
+        for s2 in fs.streams.values():
+            if s2.src == dst_id and s2.id not in visited_streams:
+                queue.append((s2, list(new_items)))
+    return None
+
+
 def solve_pressure_propagation(fs):
     """Propaga presión P a través del flowsheet.
 
