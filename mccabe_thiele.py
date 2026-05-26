@@ -173,6 +173,29 @@ def packed_design(design: Dict, packing: str = "pall", n: int = 200) -> Dict:
                 Z_packed_m=design["N_stages"] * HETP)
 
 
+def find_azeotropes(xs, ys, tol: float = 1e-3) -> List[float]:
+    """Azeótropos del binario = cruces interiores de la curva de equilibrio
+    con la diagonal y=x (excluye los extremos triviales x=0, x=1).
+    Devuelve la lista de x_az (fracción molar de LK)."""
+    az = []
+    for i in range(1, len(xs)):
+        if xs[i] <= 0.02 or xs[i] >= 0.98:
+            continue
+        d0 = ys[i - 1] - xs[i - 1]
+        d1 = ys[i] - xs[i]
+        if abs(d1) < tol:
+            az.append(xs[i])
+        elif (d0 < 0) != (d1 < 0):           # cambio de signo → cruce
+            t = d0 / (d0 - d1) if (d0 - d1) != 0 else 0.0
+            az.append(xs[i - 1] + t * (xs[i] - xs[i - 1]))
+    # de-duplicar
+    out = []
+    for a in az:
+        if not any(abs(a - b) < 0.02 for b in out):
+            out.append(a)
+    return out
+
+
 def design_from_block(block, fs) -> Optional[Dict]:
     """Construye el diagrama McCabe-Thiele de un bloque columna directamente
     desde el modelo: z_F del feed (fracción molar de LK en el binario LK/HK),
@@ -207,10 +230,28 @@ def design_from_block(block, fs) -> Optional[Dict]:
         return None
     z_F = n_lk / (n_lk + n_hk)
     P = float(getattr(feed, "pressure_bar", 1.013) or 1.013)
+    eq = equilibrium_curve(LK, HK, P)
+    azeos = find_azeotropes(*eq) if eq else []
     d = design(LK, HK, z_F, x_D, x_B, R=None, R_factor=R_factor,
                q=1.0, P_bar=P)
     if d is None:
-        return None
+        # No escalonable: devolver diagnóstico para que el panel EXPLIQUE
+        # por qué (azeótropo / specs inconsistentes) en vez de ocultarse.
+        if eq is None:
+            return None
+        blocking = [a for a in azeos if x_B < a < x_D]
+        if blocking:
+            msg = (f"Azeótropo en x≈{blocking[0]:.3f} ({LK}/{HK}): no se puede "
+                   f"separar más allá por destilación simple — x_D={x_D:.2f}/"
+                   f"x_B={x_B:.2f} inalcanzable. Requiere destilación "
+                   f"azeotrópica/extractiva.")
+        else:
+            msg = (f"Specs no escalonables para {LK}/{HK} "
+                   f"(revisar R/q/purezas o pureza objetivo).")
+        return dict(feasible=False, equilibrium=eq, azeotropes=azeos,
+                    x_D=x_D, x_B=x_B, z_F=z_F, LK=LK, HK=HK, message=msg)
+    d["feasible"] = True
+    d["azeotropes"] = azeos
     # Dimensionamiento desde el modelo (etapas reales + diámetro).
     try:
         import nrtl as _nrtl

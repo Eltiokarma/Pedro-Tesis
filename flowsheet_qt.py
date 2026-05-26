@@ -8062,6 +8062,34 @@ class FlowsheetMainWindow(QMainWindow):
         if d is None or self._mccabe_canvas is None:
             panel.setVisible(False)
             return
+        # Caso infactible: azeótropo o specs no escalonables → mostrar la
+        # curva de equilibrio + el porqué, en vez de ocultar el panel.
+        if not d.get("feasible", True):
+            try:
+                fig = self._mccabe_fig
+                fig.clear()
+                ax = fig.add_subplot(111)
+                xs, ys = d["equilibrium"]
+                ax.plot([0, 1], [0, 1], color="#b8b0a0", lw=0.8)
+                ax.plot(xs, ys, color="#1f6feb", lw=1.4)
+                for a in d.get("azeotropes", []):
+                    ax.plot([a], [a], "o", color="#d11", ms=6)
+                    ax.axvline(a, color="#d11", lw=0.7, ls="--")
+                for xv, c in ((d["x_D"], "#2a9d4a"), (d["x_B"], "#9d2a8a")):
+                    ax.axvline(xv, color=c, lw=0.5, ls=":")
+                ax.set_xlim(0, 1)
+                ax.set_ylim(0, 1)
+                ax.set_xlabel(f"x ({d['LK']})", fontsize=8)
+                ax.set_ylabel(f"y ({d['LK']})", fontsize=8)
+                ax.tick_params(labelsize=7)
+                ax.set_aspect("equal", adjustable="box")
+                fig.tight_layout()
+                self._mccabe_canvas.draw_idle()
+                self._mccabe_caption.setText("⚠ " + d.get("message", ""))
+                panel.setVisible(True)
+            except Exception:
+                panel.setVisible(False)
+            return
         try:
             fig = self._mccabe_fig
             fig.clear()
@@ -8082,6 +8110,8 @@ class FlowsheetMainWindow(QMainWindow):
             for xv, c in ((d["x_D"], "#2a9d4a"), (d["z_F"], "#888"),
                           (d["x_B"], "#9d2a8a")):
                 ax.axvline(xv, color=c, lw=0.5, ls=":")
+            for a in d.get("azeotropes", []):
+                ax.axvline(a, color="#d11", lw=0.6, ls="--")
             ax.set_xlim(0, 1)
             ax.set_ylim(0, 1)
             ax.set_xlabel(f"x ({d['LK']})", fontsize=8)

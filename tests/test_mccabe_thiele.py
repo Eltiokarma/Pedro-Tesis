@@ -112,6 +112,35 @@ def test_packing_attached_from_block():
     assert d.get('packing') and d['packing']['Z_packed_m'] > 0
 
 
+def test_find_azeotropes():
+    """ethanol/water tiene azeótropo (~0.9 mol); benzene/toluene no."""
+    az_ew = mt.find_azeotropes(*mt.equilibrium_curve('ethanol', 'water'))
+    assert len(az_ew) >= 1 and 0.85 < az_ew[0] < 0.97
+    az_bt = mt.find_azeotropes(*mt.equilibrium_curve('benzene', 'toluene'))
+    assert az_bt == []
+
+
+def test_infeasible_diagnostic_azeotrope():
+    """Una columna con x_D por encima del azeótropo devuelve un diagnóstico
+    (feasible=False) que lo explica, no None silencioso."""
+    fs = _build('_example_ethanol')
+    b = next(x for x in fs.blocks.values() if getattr(x, 'column_active', False))
+    b.column_x_D_LK = 0.95          # > azeótropo etanol/agua (~0.91)
+    d = mt.design_from_block(b, fs)
+    assert d is not None
+    assert d.get('feasible') is False
+    assert d.get('azeotropes')          # detectó el azeótropo
+    assert 'eótropo' in d.get('message', '') or 'azeo' in d.get('message', '').lower()
+
+
+def test_feasible_has_azeotropes_field():
+    fs = _build('_example_distillation')
+    b = next(x for x in fs.blocks.values() if getattr(x, 'column_active', False))
+    d = mt.design_from_block(b, fs)
+    assert d.get('feasible') is True
+    assert d.get('azeotropes') == []     # benzene/toluene: sin azeótropo
+
+
 def test_matplotlib_render_smoke():
     """El path de dibujo (matplotlib) no debe romper con un diseño real."""
     try:
