@@ -8043,6 +8043,52 @@ class FlowsheetMainWindow(QMainWindow):
 
             self.prop_label.setText(txt)
 
+    def _draw_flash_for_block(self, b):
+        """Para un Vessel con flash_active ~binario: dibuja el flash en el
+        diagrama x-y (curva de equilibrio + punto de operación z_F + las
+        composiciones de las fases x/y) calculado desde el modelo."""
+        panel = getattr(self, "mccabe_panel", None)
+        if panel is None or self._mccabe_canvas is None:
+            if panel:
+                panel.setVisible(False)
+            return
+        try:
+            import distillation_simple as _ds
+            f = _ds.flash_from_block(b, self.fs)
+        except Exception:
+            f = None
+        if f is None:
+            panel.setVisible(False)
+            return
+        try:
+            fig = self._mccabe_fig
+            fig.clear()
+            ax = fig.add_subplot(111)
+            xs, ys = f["equilibrium"]
+            ax.plot([0, 1], [0, 1], color="#b8b0a0", lw=0.8)
+            ax.plot(xs, ys, color="#1f6feb", lw=1.4)
+            # tie-line del flash: x_liq — z_F — y_vap sobre la curva/diagonal
+            ax.plot([f["x_LK"], f["y_LK"]], [f["x_LK"], f["y_LK"]],
+                    color="#d4691e", lw=0.8, ls="--")
+            ax.plot([f["x_LK"]], [f["y_LK"]], "o", color="#d4691e", ms=6)
+            ax.axvline(f["z_F"], color="#888", lw=0.6, ls=":")
+            ax.set_xlim(0, 1)
+            ax.set_ylim(0, 1)
+            ax.set_xlabel(f"x ({f['LK']})", fontsize=8)
+            ax.set_ylabel(f"y ({f['LK']})", fontsize=8)
+            ax.tick_params(labelsize=7)
+            ax.set_aspect("equal", adjustable="box")
+            fig.tight_layout()
+            self._mccabe_canvas.draw_idle()
+            self._mccabe_caption.setText(
+                f"Flash binario {f['LK']}/{f['HK']} @ {f['T_K']-273.15:.0f}°C, "
+                f"{f['P_bar']:.2f} bar — del modelo:  V/F = {f['V_frac']:.2f},  "
+                f"x({f['LK']})={f['x_LK']:.3f} (líq) / y={f['y_LK']:.3f} (vap),  "
+                f"z_F={f['z_F']:.2f}")
+            panel.setVisible(True)
+        except Exception:
+            panel.setVisible(False)
+
     def _draw_mccabe_for_block(self, b):
         """Si b es una columna binaria resoluble, recomienda y dibuja su
         diagrama McCabe-Thiele (curva de equilibrio + rectas de operación +
@@ -8052,7 +8098,10 @@ class FlowsheetMainWindow(QMainWindow):
         if panel is None:
             return
         if not getattr(b, "column_active", False):
-            panel.setVisible(False)
+            if getattr(b, "flash_active", False):
+                self._draw_flash_for_block(b)
+            else:
+                panel.setVisible(False)
             return
         try:
             import mccabe_thiele as _mt
