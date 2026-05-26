@@ -400,6 +400,16 @@ def _ensure_loaded() -> Dict[str, ComponentThermo]:
 # API PÚBLICA
 # ======================================================
 
+# Alias de nombres pseudo legacy → molécula real equivalente.  Mantienen
+# resolubles los flowsheets viejos (y ejemplos de aceite genérico) sin
+# migración de schema: 'vegetable_oil' es modelado como triolein y
+# 'biodiesel' como oleato de metilo (mismas fórmulas C57H104O6 / C19H36O2).
+_ALIASES = {
+    "vegetable_oil": "triolein",
+    "biodiesel":     "methyl_oleate",
+}
+
+
 def get(name: str) -> Optional[ComponentThermo]:
     """Devuelve el ComponentThermo por nombre (case-insensitive,
     underscore-tolerant).  None si no existe."""
@@ -408,7 +418,12 @@ def get(name: str) -> Optional[ComponentThermo]:
         return db[name]
     # fallback: lowercase + underscores
     norm = name.lower().replace("-", "_").replace(" ", "_")
-    return db.get(norm)
+    if norm in db:
+        return db[norm]
+    alias = _ALIASES.get(norm)
+    if alias is not None:
+        return db.get(alias)
+    return None
 
 
 def has(name: str) -> bool:

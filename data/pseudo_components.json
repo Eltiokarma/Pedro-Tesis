@@ -1,0 +1,53 @@
+{
+  "industrial_pseudo": [
+    "syngas",
+    "vegetable_oil",
+    "naphtha",
+    "kerosene",
+    "diesel",
+    "gasoline_97",
+    "atmospheric_residue",
+    "crude_oil"
+  ],
+  "material_pseudo_allowed": [
+    "sodium chloride",
+    "sodium_chloride",
+    "sodium hydroxide",
+    "sodium_hydroxide",
+    "sodium carbonate",
+    "soda_ash",
+    "calcium carbonate",
+    "limestone",
+    "magnesium hydroxide",
+    "silica",
+    "clinker",
+    "glass",
+    "carbon",
+    "sulfuric acid",
+    "sulfuric_acid",
+    "nitric acid",
+    "nitrogen dioxide",
+    "polyethylene",
+    "soap",
+    "urea",
+    "raw_water_solids"
+  ],
+  "food_pseudo_allowed": [
+    "sucrose",
+    "glucose",
+    "lactose",
+    "starch",
+    "milk_fat",
+    "milk_protein",
+    "milk_ash",
+    "pineapple_solids",
+    "potato_solids",
+    "biomass",
+    "penicillin"
+  ],
+  "notes": {
+    "industrial_pseudo": "Pseudo-componentes industriales que el Frente C reemplazará por moléculas reales. Auditor genera warning.",
+    "food_pseudo_allowed": "Pseudo-componentes de industria alimentaria/biológica (lácteos, almidón, sólidos de fruta/tubérculo, biomasa, antibiótico) que se mantienen como aproximaciones documentadas — no tienen VLE/DIPPR sensato. Auditor genera INFO (no warning).",
+    "material_pseudo_allowed": "Especies inorgánicas/materiales reales (sales, óxidos, minerales, ácidos electrolíticos, polímeros, mezclas) que el solver VLE no modela rigurosamente. No se reemplazan por moléculas VLE — se aceptan como pseudo. Auditor genera INFO (no error)."
+  }
+}

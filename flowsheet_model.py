@@ -142,8 +142,13 @@ class Block:
     #   'cstr'        — algebraico Newton-Raphson con cinética (Capa 5).
     #                    Robusto incluso para cinéticas stiff.
     #   'batch'       — integración RK4 dN/dt, V constante, P emergente
+    #   'batch'       — integración RK4 dN/dt, V constante, P emergente
     #                    (Capa 5).  Requiere reactor_volume_L > 0 y
     #                    batch_time_s > 0.  P NO constante.
+    #   'stoich'      — conversión declarada explícitamente (reactor_conversion),
+    #                    sin Keq ni cinética.  Para reacciones irreversibles /
+    #                    biológicas / con termo estimada donde el equilibrio
+    #                    no aplica (R007 fermentación, R021 transesterificación).
     reactor_mode: str = "equilibrium"
     # Volumen del reactor en LITROS (no m³, para valores amigables).
     # Solo aplica si reactor_mode ∈ {'pfr', 'cstr', 'batch'}.
@@ -151,6 +156,9 @@ class Block:
     # Tiempo de tanda [s].  Solo aplica si reactor_mode == 'batch'.
     # El batch integra dN/dt de 0 a este tiempo a V constante.
     batch_time_s: float = 3600.0
+    # Conversión fraccional (0..1) del reactivo limitante de la PRIMERA
+    # reacción.  Solo aplica si reactor_mode == 'stoich'.
+    reactor_conversion: float = 0.95
 
     # ---- COLUMNA DE DESTILACIÓN (FUG / McCabe-Thiele, Capa 6) ----
     # Si column_active es True y el bloque es tipo Tower/column, el
@@ -432,6 +440,10 @@ class Stream:
     mass_flow_locked:   bool = False
     temperature_locked: bool = False
     composition_locked: bool = False
+    # phase_locked: True si el user/builder declaró phase explícita.  Los
+    # solvers de unit ops (column/flash/reactor) infieren phase desde la
+    # termo, pero NO sobreescriben una phase declarada.
+    phase_locked:       bool = False
 
     # ---- DISPLAY (UI) ----
     # Número que muestra la pill en el editor.  0 = auto (numeración
@@ -638,6 +650,11 @@ class Flowsheet:
                 s.temperature_locked = abs(s.temperature - T_REF_C) > 0.01
             if "composition_locked" not in sdict:
                 s.composition_locked = bool(s.composition) or bool(s.main_component)
+            if "phase_locked" not in sdict:
+                s.phase_locked = bool(s.phase)
+            if "pressure_locked" not in sdict:
+                s.pressure_locked = (abs(s.pressure_bar - 1.013) > 1e-6
+                                     and s.pressure_bar > 0)
             fs.streams[int(sid)] = s
         fs._next_id        = d.get("_next_id", 1)
         fs.opex_extras     = list(d.get("opex_extras", []))

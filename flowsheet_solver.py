@@ -75,7 +75,7 @@ DEPENDENCIAS
 """
 
 from dataclasses import dataclass, field
-from typing import Any, Dict, List, Tuple
+from typing import Any, Dict, List, Optional, Tuple
 
 
 # ======================================================
@@ -136,6 +136,12 @@ class SolverResult:
     # son inconsistentes con un balance riguroso por componente.
     # No degrada overall_status — el balance total sigue siendo OK.
     component_warnings:  List[str]          = field(default_factory=list)
+    # Auditoría de consistencia unificada (Frente A): phase, balance por
+    # componente, pseudo-componentes y locks redundantes.  audit_report
+    # tiene el detalle estructurado; las listas planas son para compat UI.
+    audit_report:        Optional['AuditReport'] = None
+    consistency_warnings: List[str]         = field(default_factory=list)
+    consistency_errors:   List[str]         = field(default_factory=list)
     # Warnings de auditoría térmica de HX (cruces imposibles, approach
     # mínimo violado, F<0.75, cross-exchange que no cierra energía).
     # No degradan success — son advisory de diseño.
@@ -229,6 +235,21 @@ class SolverResult:
                           f"({len(self.hx_warnings)}):")
             for w in self.hx_warnings:
                 lines.append(f"  · {w}")
+
+        if self.audit_report:
+            r = self.audit_report
+            if r.n_errors or r.n_warnings:
+                lines.append(f"\nAuditoría de consistencia "
+                             f"({r.n_errors} errores, {r.n_warnings} warnings, "
+                             f"{r.n_infos} infos):")
+                for cat in ('phase', 'component_balance', 'pseudo',
+                            'redundant_lock'):
+                    relevant = [f for f in r.by_category(cat)
+                                if f.severity in ('warning', 'error')]
+                    if relevant:
+                        lines.append(f"  · {cat}: {len(relevant)} hallazgo(s)")
+                        for f in relevant[:5]:
+                            lines.append(f"      {f.message[:120]}")
 
         return "\n".join(lines)
 
@@ -329,6 +350,162 @@ def _is_temp_locked(s):
 def _is_comp_locked(s):
     """True solo si user fijó composición (lock explícito)."""
     return getattr(s, "composition_locked", False)
+
+
+def _is_pressure_locked(s):
+    """True solo si user fijó presión (lock explícito)."""
+    return getattr(s, "pressure_locked", False)
+
+
+def _is_phase_locked(s):
+    """True solo si user/builder declaró phase explícita."""
+    return getattr(s, "phase_locked", False)
+
+
+def _mass_to_mol(mass_frac: Dict[str, float]) -> Dict[str, float]:
+    """Convierte fracciones másicas → molares vía thermo_db (MW). Normaliza.
+    Componentes sin MW resuelto usan MW=1.0 (degrada con gracia)."""
+    try:
+        import thermo_db as _td
+    except ImportError:
+        return {}
+    mol: Dict[str, float] = {}
+    for c, w in mass_frac.items():
+        if w <= 0:
+            continue
+        co = _td.get(c)
+        mw = co.mw if (co and co.mw > 0) else 1.0
+        mol[c] = w / mw
+    tot = sum(mol.values())
+    if tot <= 0:
+        return {}
+    return {c: v / tot for c, v in mol.items()}
+
+
+def _mol_to_mass(mol_frac: Dict[str, float]) -> Dict[str, float]:
+    """Inverso de _mass_to_mol: fracciones molares → másicas. Normaliza."""
+    try:
+        import thermo_db as _td
+    except ImportError:
+        return {}
+    mass: Dict[str, float] = {}
+    for c, n in mol_frac.items():
+        if n <= 0:
+            continue
+        co = _td.get(c)
+        mw = co.mw if (co and co.mw > 0) else 1.0
+        mass[c] = n * mw
+    tot = sum(mass.values())
+    if tot <= 0:
+        return {}
+    return {c: v / tot for c, v in mass.items()}
+
+
+# Gases no-condensables a P/T típicas de columna: no condensan en un
+# condensador total, así que se excluyen del cálculo de bubble point de
+# los productos (su presencia traza hundiría la T a valores absurdos).
+_NONCONDENSABLE_GASES = {
+    "co2", "carbon dioxide", "hydrogen", "h2", "nitrogen", "n2",
+    "oxygen", "o2", "methane", "ch4", "co", "carbon monoxide", "argon",
+}
+
+
+def _drop_noncondensables(mol_frac: Dict[str, float]) -> Dict[str, float]:
+    """Quita gases no-condensables de una composición molar y renormaliza.
+    Si todo era no-condensable, devuelve la composición original."""
+    filt = {k: v for k, v in mol_frac.items()
+            if k.lower() not in _NONCONDENSABLE_GASES}
+    tot = sum(filt.values())
+    if tot <= 0:
+        return mol_frac
+    return {k: v / tot for k, v in filt.items()}
+
+
+def _boiling_point_K(comp: str, P_bar: float):
+    """Tb de un componente puro a P_bar por bisección sobre Antoine
+    (nrtl._Psat_bar es monótona creciente en T).  None si falta Antoine."""
+    try:
+        import nrtl as _nrtl
+    except ImportError:
+        return None
+    lo, hi = 150.0, 800.0
+    if _nrtl._Psat_bar(comp, lo) is None or _nrtl._Psat_bar(comp, hi) is None:
+        return None
+    for _ in range(80):
+        mid = 0.5 * (lo + hi)
+        pm = _nrtl._Psat_bar(comp, mid)
+        if pm is None:
+            return None
+        if pm < P_bar:
+            lo = mid
+        else:
+            hi = mid
+        if hi - lo < 1e-3:
+            break
+    return 0.5 * (lo + hi)
+
+
+def _infer_phase_from_TP(composition_mass: Dict[str, float],
+                         T_K: float, P_bar: float) -> Tuple[str, float]:
+    """Infiere (phase, vapor_fraction_másica) de una corriente desde su
+    composición (mass frac), T y P usando NRTL + Antoine.
+
+    phase ∈ {'liquid', 'vapor', 'two_phase'}.  vapor_fraction sólo es
+    significativa si phase == 'two_phase'.  Si no se puede resolver
+    (falta Antoine/NRTL) devuelve ('', 0.0) — el caller deja lo que había.
+    NO toca el stream.
+    """
+    if not composition_mass or T_K <= 0 or P_bar <= 0:
+        return ('', 0.0)
+    x_mol = _mass_to_mol(composition_mass)
+    if not x_mol:
+        return ('', 0.0)
+    try:
+        import nrtl as _nrtl
+        import thermo_db as _td
+    except ImportError:
+        return ('', 0.0)
+    names = list(x_mol.keys())
+    z = [x_mol[c] for c in names]
+
+    # Single component (alguno domina con frac molar > 0.99)
+    dominant = [c for c, v in x_mol.items() if v > 0.99]
+    if len(names) == 1 or dominant:
+        comp = dominant[0] if dominant else names[0]
+        Tb = _boiling_point_K(comp, P_bar)
+        if Tb is None:
+            return ('', 0.0)
+        if T_K < Tb - 0.5:
+            return ('liquid', 0.0)
+        if T_K > Tb + 0.5:
+            return ('vapor', 1.0)
+        return ('two_phase', 0.5)
+
+    # Multicomponente: bubble/dew + flash si bifásico
+    bp = _nrtl.bubble_point(names, z, P_bar)
+    dp = _nrtl.dew_point(names, z, P_bar)
+    if bp is None or dp is None:
+        return ('', 0.0)
+    T_bub, T_dew = bp[0], dp[0]
+    if T_K < T_bub:
+        return ('liquid', 0.0)
+    if T_K > T_dew:
+        return ('vapor', 1.0)
+    fl = _nrtl.flash_TP(names, z, T_K, P_bar)
+    if fl is None or fl.get("V_frac") is None:
+        return ('two_phase', 0.5)
+    V = fl["V_frac"]
+    x_l, y_v = fl["x"], fl["y"]
+    mws = []
+    for c in names:
+        co = _td.get(c)
+        mws.append(co.mw if (co and co.mw > 0) else 1.0)
+    L_mass = sum((1 - V) * x_l[i] * mws[i] for i in range(len(names)))
+    V_mass = sum(V * y_v[i] * mws[i] for i in range(len(names)))
+    tot = L_mass + V_mass
+    if tot <= 0:
+        return ('two_phase', 0.5)
+    return ('two_phase', V_mass / tot)
 
 
 def _is_duty_locked(b):
@@ -508,7 +685,8 @@ def _check_stream_roles(fs):
 
 def _check_mass_balance(fs, tol_rel=MASS_TOL_REL):
     """Devuelve lista de mensajes para bloques cuyo balance TOTAL falla.
-    El balance por componente se chequea aparte (_check_component_balance)."""
+    El balance por componente se chequea aparte (auditor de consistencia,
+    flowsheet_consistency_audit._audit_component_balance)."""
     errors = []
     for b in fs.blocks.values():
         ins  = [s for s in fs.streams.values() if s.dst == b.id]
@@ -528,89 +706,10 @@ def _check_mass_balance(fs, tol_rel=MASS_TOL_REL):
     return errors
 
 
-def _check_component_balance(fs, tol_rel=0.02):
-    """Verifica balance POR COMPONENTE en cada bloque.  Devuelve lista
-    de mensajes — para WARNINGS (no errores críticos, porque los
-    example builders pueden tener composiciones declaradas
-    inconsistentes que el solver no recalcula).
-
-    Skipea:
-      · Reactores (reactions != []) — la estequiometría cambia comp.
-      · Bloques con streams en mass=0 (no resueltos).
-      · Bloques inmediatamente downstream de un reactor en el mismo
-        flujo (la composición del reactor se propaga, no las specs
-        del example builder).
-
-    Reporta si Σ(mass_in·w_i) ≠ Σ(mass_out·w_i) en >tol_rel para
-    algún componente significativo (>1% del flujo total).
-    """
-    warnings_list = []
-    # Set de bloques que son reactores
-    rxn_blocks = {b.id for b in fs.blocks.values()
-                   if getattr(b, "reactions", None)}
-    # Bloques downstream de un reactor (vía cualquier número de streams,
-    # TRANSITIVO).  Para esos, los outlets son composición HEREDADA via
-    # auto_propagate; los example builders no pueden pre-declarar
-    # composiciones que matcheen exactamente lo que el solver de
-    # equilibrio compute en cada bloque downstream.  Saltamos el check.
-    downstream_of_rxn: set = set()
-    frontier = set(rxn_blocks)
-    while frontier:
-        nxt = set()
-        for s in fs.streams.values():
-            if s.src in frontier and s.dst in fs.blocks \
-                    and s.dst not in downstream_of_rxn \
-                    and s.dst not in rxn_blocks:
-                nxt.add(s.dst)
-        downstream_of_rxn |= nxt
-        frontier = nxt
-
-    for b in fs.blocks.values():
-        if b.id in rxn_blocks:
-            continue   # reactores cambian composición
-        if b.id in downstream_of_rxn:
-            continue   # primera fila después del reactor, hereda
-        # Splitters DISTRIBUYEN (no transforman): si el user lockeó
-        # composiciones distintas por output (ej. cortes de petróleo
-        # en una columna), el per-component check es engañoso.  El
-        # mass balance total se chequea aparte vía _check_mass_balance.
-        if getattr(b, "splitter_active", False):
-            continue
-        ins  = [s for s in fs.streams.values() if s.dst == b.id]
-        outs = [s for s in fs.streams.values() if s.src == b.id]
-        if not ins or not outs:
-            continue
-        if any(s.mass_flow <= 0 for s in ins + outs):
-            continue
-        in_t = sum(s.mass_flow for s in ins)
-        out_t = sum(s.mass_flow for s in outs)
-        comp_in: Dict[str, float] = {}
-        comp_out: Dict[str, float] = {}
-        for s in ins:
-            comp = s.composition or ({s.main_component: 1.0}
-                                       if s.main_component else {})
-            for c, w in comp.items():
-                comp_in[c] = comp_in.get(c, 0.0) + w * s.mass_flow
-        for s in outs:
-            comp = s.composition or ({s.main_component: 1.0}
-                                       if s.main_component else {})
-            for c, w in comp.items():
-                comp_out[c] = comp_out.get(c, 0.0) + w * s.mass_flow
-        # Identificar componentes desbalanceados (>1% del flujo bloque)
-        bad = []
-        for c in set(comp_in) | set(comp_out):
-            ci, co = comp_in.get(c, 0.0), comp_out.get(c, 0.0)
-            if max(ci, co) < 0.01 * max(in_t, out_t):
-                continue
-            d = abs(ci - co)
-            r = d / max(ci, co, 1e-9)
-            if r >= tol_rel:
-                bad.append(f"{c}: in={ci:.0f} out={co:.0f} ({r*100:.0f}%)")
-        if bad:
-            warnings_list.append(
-                f"{b.name} balance por componente: " + "; ".join(bad[:3])
-            )
-    return warnings_list
+# NOTA: el viejo _check_component_balance fue REEMPLAZADO por el Detector 2
+# del auditor unificado (flowsheet_consistency_audit._audit_component_balance).
+# solve() lo invoca vía audit_flowsheet() y vuelca sus hallazgos a
+# result.component_warnings (compat) y result.audit_report (estructurado).
 
 
 def _check_heat_exchangers(fs):
@@ -1849,6 +1948,12 @@ def solve_equilibrium_reactors(fs):
                             mode=mode, rxn_ids=all_rxn_ids,
                             inlet_composition=agg, inlet_mass_kg_s=m_in_kg_s,
                             T_K=T_K, P_bar=b.P_op_bar, V_reactor_L=V_L)
+                    elif mode == "stoich":
+                        res_iter = _rdb.solve_stoichiometric_reactor(
+                            rxn_ids=all_rxn_ids, inlet_composition=agg,
+                            inlet_mass_kg_s=m_in_kg_s, T_K=T_K,
+                            P_bar=b.P_op_bar,
+                            conversion=getattr(b, "reactor_conversion", 0.95))
                     else:
                         break
                 except Exception:
@@ -1934,6 +2039,13 @@ def solve_equilibrium_reactors(fs):
                 inlet_composition=agg,
                 inlet_mass_kg_s=m_in_kg_s,
                 T_K=T_K, P_bar=b.P_op_bar)
+        elif mode == "stoich":
+            res = _rdb.solve_stoichiometric_reactor(
+                rxn_ids=all_rxn_ids,
+                inlet_composition=agg,
+                inlet_mass_kg_s=m_in_kg_s,
+                T_K=T_K, P_bar=b.P_op_bar,
+                conversion=getattr(b, "reactor_conversion", 0.95))
         elif mode in ("pfr", "cstr"):
             V_L = getattr(b, "reactor_volume_L", 0.0) or 0.0
             if V_L <= 0:
@@ -2057,6 +2169,24 @@ def solve_equilibrium_reactors(fs):
         for s_out in outs:
             if not _is_temp_locked(s_out):
                 s_out.temperature = T_op_C
+
+        # ── Propagar P de operación + inferir phase de los outlets ──
+        # (Frente B).  Sólo corrientes de proceso (no utility/ambient).
+        proc_outs = [s for s in outs
+                     if (s.role or "") not in ("utility", "ambient")]
+        if b.P_op_bar > 0:
+            for s_out in proc_outs:
+                if not _is_pressure_locked(s_out):
+                    s_out.pressure_bar = b.P_op_bar
+        # La composición del outlet a (T_op, P_op) puede caer en cualquier
+        # región; el reactor no decide la fase — la infiere la termo.
+        if out_comp:
+            phase_inf, vfrac = _infer_phase_from_TP(out_comp, T_K, b.P_op_bar)
+            if phase_inf:
+                for s_out in proc_outs:
+                    if not _is_phase_locked(s_out):
+                        s_out.phase = phase_inf
+                        s_out.vapor_fraction = vfrac
 
         msgs.append(f"✓ Reactor {b.name}{adiab_tag}: ΔH_rxn={Q_rxn_kW:+.2f} kW, "
                      f"Q_sens={Q_sensible_kW:+.2f} kW, "
@@ -2350,6 +2480,73 @@ def solve_columns(fs):
         if not _is_mass_locked(bot_stream):
             bot_stream.mass_flow = feed.mass_flow * B_F
 
+        # ── Propagación T/P/phase de los outputs (Frente B) ──
+        # T_top = bubble point del distillate a P_col (condensador total);
+        # T_bot = bubble point del bottom a P_col + 0.1 bar (gradiente).
+        # Los gases no-condensables (CO₂, H₂, N₂, CH₄…) que el FUG manda al
+        # tope NO condensan en un condensador total: se excluyen del cálculo
+        # de T para no hundir el bubble point a valores absurdos (-60°C).
+        import nrtl as _nrtl_col
+        P_col_bar = feed.pressure_bar if feed.pressure_bar > 0 else 1.013
+        x_D_mol = _drop_noncondensables(_mass_to_mol(x_D_full))
+        x_B_mol = _drop_noncondensables(_mass_to_mol(x_B_full))
+        # ¿el destilado sale como VAPOR (tope) o como LÍQUIDO (condensador)?
+        port_low = (dist_stream.src_port or "").lower()
+        dist_is_vapor = any(k in port_low for k in ("vapor", "tope", "top"))
+        # Destilado vapor → su T es el punto de ROCÍO; destilado líquido →
+        # punto de BURBUJA.  El fondo siempre sale como líquido saturado.
+        if dist_is_vapor:
+            bp_top = (_nrtl_col.dew_point(list(x_D_mol.keys()),
+                                          list(x_D_mol.values()), P_col_bar)
+                      if x_D_mol else None)
+        else:
+            bp_top = (_nrtl_col.bubble_point(list(x_D_mol.keys()),
+                                             list(x_D_mol.values()), P_col_bar)
+                      if x_D_mol else None)
+        bp_bot = (_nrtl_col.bubble_point(list(x_B_mol.keys()),
+                                         list(x_B_mol.values()), P_col_bar + 0.1)
+                  if x_B_mol else None)
+        T_top_old = dist_stream.temperature
+        T_bot_old = bot_stream.temperature
+        if bp_top:
+            T_top_C = bp_top[0] - 273.15
+            if not _is_temp_locked(dist_stream):
+                dist_stream.temperature = T_top_C
+            if abs(T_top_C - T_top_old) > 10:
+                msgs.append(f"ℹ Column {b.name}: T_top "
+                            f"{'rocío' if dist_is_vapor else 'burbuja'} "
+                            f"{T_top_C:.1f}°C (declarado {T_top_old:.1f}°C).")
+        else:
+            msgs.append(f"⚠ Column {b.name}: dew/bubble point del distillate no "
+                        f"convergió (falta NRTL o Antoine). T_top no propagada.")
+        if bp_bot:
+            T_bot_C = bp_bot[0] - 273.15
+            if not _is_temp_locked(bot_stream):
+                bot_stream.temperature = T_bot_C
+            if abs(T_bot_C - T_bot_old) > 10:
+                msgs.append(f"ℹ Column {b.name}: T_bot bubble point "
+                            f"{T_bot_C:.1f}°C (declarado {T_bot_old:.1f}°C).")
+        else:
+            msgs.append(f"⚠ Column {b.name}: bubble_point del bottom no "
+                        f"convergió. T_bot no propagada.")
+        # P de outputs
+        if not _is_pressure_locked(dist_stream):
+            dist_stream.pressure_bar = P_col_bar
+        if not _is_pressure_locked(bot_stream):
+            bot_stream.pressure_bar = P_col_bar + 0.1
+        # Phase del distillate por puerto (vapor_tope → vapor;
+        # condensador líquido → liquid).  Bottom siempre líquido saturado.
+        if not _is_phase_locked(dist_stream):
+            if dist_is_vapor:
+                dist_stream.phase = "vapor"
+                dist_stream.vapor_fraction = 1.0
+            else:
+                dist_stream.phase = "liquid"
+                dist_stream.vapor_fraction = 0.0
+        if not _is_phase_locked(bot_stream):
+            bot_stream.phase = "liquid"
+            bot_stream.vapor_fraction = 0.0
+
         # Duty del bloque: Q_reb + Q_cond (Q_cond es negativo).  Para
         # columna adiabática, el "duty externo total" es Q_reb (el
         # condensador es un HX separado en el flowsheet típicamente).
@@ -2480,6 +2677,38 @@ def solve_flashes(fs):
                 liq_out.mass_flow = feed.mass_flow * L_frac_mass
             if not _is_temp_locked(liq_out):
                 liq_out.temperature = T_K - 273.15
+
+        # ── Propagar P de operación a los outputs (Frente B) ──
+        if vap_out is not None and not _is_pressure_locked(vap_out):
+            vap_out.pressure_bar = P_bar
+        if liq_out is not None and not _is_pressure_locked(liq_out):
+            liq_out.pressure_bar = P_bar
+
+        # Si V_frac es extremo (0 o 1) el flash produjo single-phase:
+        # reportar y dejar el output complementario con mass≈0.
+        if V_frac_mass < 0.005:
+            msgs.append(
+                f"⚠ Flash {b.name}: V/F_mass={V_frac_mass:.4f} → single-phase "
+                f"liquid a {T_K-273.15:.1f}°C, {P_bar:.2f}bar. Vapor stream "
+                f"{vap_out.name if vap_out else '?'} con mass≈0; revisar si el "
+                f"flash es necesario o si T/P son correctas."
+            )
+            if vap_out is not None:
+                if not _is_mass_locked(vap_out):
+                    vap_out.mass_flow = 0.0
+                if not _is_phase_locked(vap_out):
+                    vap_out.phase = "vapor"
+        elif V_frac_mass > 0.995:
+            msgs.append(
+                f"⚠ Flash {b.name}: V/F_mass={V_frac_mass:.4f} → single-phase "
+                f"vapor a {T_K-273.15:.1f}°C, {P_bar:.2f}bar. Líquido stream "
+                f"{liq_out.name if liq_out else '?'} con mass≈0; revisar."
+            )
+            if liq_out is not None:
+                if not _is_mass_locked(liq_out):
+                    liq_out.mass_flow = 0.0
+                if not _is_phase_locked(liq_out):
+                    liq_out.phase = "liquid"
 
         msgs.append(
             f"✓ Flash {b.name}: V/F_mass={V_frac_mass:.3f}  T={T_K-273.15:.1f}°C  "
@@ -3039,25 +3268,42 @@ _GAS_HINT = {
 }
 
 
-def get_component_phase(name):
-    """Fase default razonable de un componente para separación mecánica.
-    Devuelve 'solid' | 'liquid' | 'gas'.  Usa hints por nombre y, si está,
-    el punto de ebullición del thermo_db (Tb < 25 °C → gas)."""
+def get_component_phase(name, T_C=None, P_bar=None):
+    """Fase de un componente para separación mecánica: 'solid'|'liquid'|'gas'.
+
+    Si se dan T_C y P_bar, usa un criterio de condensabilidad consciente de la
+    presión (condensador a alta P): un componente condensa (→ 'liquid') si NO
+    es supercrítico (T < Tc) y su presión de vapor Psat(T) < P_op.  Esto deja
+    condensar NH3/metanol a 200/80 bar y mantiene N2/H2/CO (supercríticos) como
+    gas, sin depender de parámetros NRTL binarios poco confiables.
+
+    Sin T/P, cae al heurístico por nombre (hints + Tb)."""
     n = (name or "").strip().lower()
     if not n:
         return "liquid"
     if n in _SOLID_HINT or "solid" in n or n.endswith("_s"):
         return "solid"
+    # Criterio de condensabilidad por presión (override de los gas-hints:
+    # NH3/CO2/metanol son "gases" a ambiente pero condensan a alta P).
+    if T_C is not None and P_bar is not None:
+        try:
+            import thermo_db as _td
+            c = _td.get(name)
+            if c is not None:
+                if c.tc_c is not None and T_C >= c.tc_c:
+                    return "gas"                # supercrítico → no condensa
+                psat_kpa = c.vapor_pressure_kPa(T_C)
+                if psat_kpa is not None:
+                    return "liquid" if (psat_kpa / 100.0) < P_bar else "gas"
+        except Exception:
+            pass
     if n in _GAS_HINT or n.endswith("_g"):
         return "gas"
     try:
         import thermo_db as _td
         c = _td.get(name)
-        if c is not None:
-            tb = (getattr(c, "tb_C", None) or getattr(c, "boiling_C", None)
-                  or getattr(c, "tboil_C", None))
-            if tb is not None and tb < 25.0:
-                return "gas"
+        if c is not None and c.tb_c and c.tb_c < 25.0:
+            return "gas"
     except Exception:
         pass
     return "liquid"
@@ -3100,11 +3346,18 @@ def _sep_by_phase(b, feed, target_out, reject_out, target_phase, eff):
     # El user puede declarar explícitamente los componentes de la fase
     # objetivo (solid_components) y así override del heurístico get_component_phase.
     override = set(getattr(b, "solid_components", []) or [])
+    # Condiciones de operación del separador para el criterio de
+    # condensabilidad (condensador a alta P).  T_op_K del bloque si está;
+    # si no, la T del feed.  P del bloque (P_op_bar / flash_P_bar).
+    T_op_K = getattr(b, "T_op_K", 0.0) or 0.0
+    T_C = (T_op_K - 273.15) if T_op_K > 0 else getattr(feed, "temperature", 25.0)
+    P_bar = (getattr(b, "P_op_bar", 0.0) or getattr(b, "flash_P_bar", 0.0)
+             or 1.013)
 
     def _is_target(c):
         if want == "solid" and override:
             return c in override
-        return get_component_phase(c) == want
+        return get_component_phase(c, T_C, P_bar) == want
 
     m_target_phase = sum(m for c, m in comp_in.items() if _is_target(c))
     if m_target_phase <= 0:
@@ -3535,7 +3788,18 @@ def solve_mechanical_separators(fs):
                 fs, b, ("solido", "producto"), ("liquido", "venteo"))
             msgs.append(_sep_by_phase(b, feed, t_out, r_out,
                                        target_phase, eff))
-        else:  # filtro y genéricos
+        elif target_phase in ("liquid", "vapor", "gas"):
+            # Knockout / condensador V-L: la fase objetivo se recupera por su
+            # puerto (líquido condensado o vapor) y el resto sale por el otro.
+            liq_kws = ("liquido", "liquid", "fondo", "pesada", "producto")
+            vap_kws = ("vapor", "gas", "venteo", "tope", "liviana")
+            if target_phase in ("vapor", "gas"):
+                t_out, r_out = _pick_outs_by_port(fs, b, vap_kws, liq_kws)
+            else:
+                t_out, r_out = _pick_outs_by_port(fs, b, liq_kws, vap_kws)
+            msgs.append(_sep_by_phase(b, feed, t_out, r_out,
+                                       target_phase, eff))
+        else:  # filtro y genéricos (sólido/líquido)
             t_out, r_out = _pick_outs_by_port(
                 fs, b, ("producto", "solido"), ("venteo", "liquido"))
             msgs.append(_sep_by_phase(b, feed, t_out, r_out,
@@ -4248,7 +4512,26 @@ def solve(fs, max_iter=MAX_ITER):
         if s.mass_flow <= 0:
             result.unresolved_streams.append(s.name)
     result.mass_balance_errors    = _check_mass_balance(fs)
-    result.component_warnings     = _check_component_balance(fs)
+    # Auditoría de consistencia unificada (Frente A).  Reemplaza al viejo
+    # _check_component_balance: el Detector 2 del auditor integra esa
+    # lógica.  No rompe solve() si el auditor falla.
+    try:
+        from flowsheet_consistency_audit import audit_flowsheet
+        result.audit_report = audit_flowsheet(fs)
+        for f in result.audit_report.findings:
+            line = f"[{f.category}] {f.message}"
+            if f.severity == 'error':
+                result.consistency_errors.append(line)
+            elif f.severity == 'warning':
+                result.consistency_warnings.append(line)
+            # 'info' sólo queda en el report estructurado
+        # compat UI vieja: component_warnings se nutre del auditor
+        result.component_warnings = [
+            f.message
+            for f in result.audit_report.by_category('component_balance')]
+    except Exception as e:
+        result.consistency_errors.append(
+            f"[audit] auditor falló: {type(e).__name__}: {e}")
     # role hygiene — warnings (no errors) sobre streams con role
     # inconsistente que pueden ensuciar costing económico
     result.component_warnings.extend(_check_stream_roles(fs))

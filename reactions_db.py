@@ -71,6 +71,8 @@ FORMULA_TO_THERMO = {
     'C6H6':            'benzene',
     'C8H10':           'ethylbenzene',
     'C2H5_C6H5':       'ethylbenzene',  # alias usado en R016 styrene
+    'Triolein':        'triolein',      # R021 biodiesel (C57H104O6)
+    'MeOleate':        'methyl_oleate', # R021 biodiesel (FAME, C19H36O2)
     'Glycerol':        'glycerin',      # nombre alternativo (R021 biodiesel)
     # Bioquímica
     'Glucose':         'glucose',
@@ -95,7 +97,6 @@ FORMULA_TO_THERMO = {
     'vegetable_oil':   'vegetable_oil',
     'glycerin':        'glycerin',
     # No mapeables (no están en thermo_db actual)
-    'Triolein':        None,
     'FAME':            None,
     'Starch_unit':     None,
     'C(s)':            None,
@@ -1364,6 +1365,112 @@ def solve_equilibrium_reactor_from_composition(
         heat_of_reaction_kJ_per_kg=heat_of_reaction_kJ_per_kg,
         duty_kW=dh_total_kW,
         xi=res['xi'],
+        unmapped=unmapped,
+    )
+
+
+def solve_stoichiometric_reactor(
+        rxn_ids:           List[str],
+        inlet_composition: Dict[str, float],
+        inlet_mass_kg_s:   float,
+        T_K:               float,
+        P_bar:             float = 1.0,
+        conversion:        float = 0.95) -> Optional[Dict]:
+    """Aplica la PRIMERA reacción del set al reactivo limitante con la
+    conversión declarada (0..1), sin Keq ni cinética.  Para reacciones
+    irreversibles / biológicas / con termo estimada donde el equilibrio
+    no aplica (R007 fermentación, R021 transesterificación).
+
+    Mismo contrato de salida que solve_equilibrium_reactor_from_composition:
+        outlet_composition, outlet_mass_kg_s, heat_of_reaction_kJ_per_kg,
+        duty_kW, xi, unmapped.
+    heat_of_reaction usa ΔH(T) (Kirchhoff vía Reaction.dh_rxn_kJ_mol, con
+    fallback a ΔH_298).  None si falta thermo_db o no hay reactivos válidos.
+    """
+    try:
+        import thermo_db as _td
+    except ImportError:
+        return None
+    if not rxn_ids:
+        return None
+    rxn = get(rxn_ids[0])
+    if rxn is None or not rxn.stoich:
+        return None
+    conv = max(0.0, min(1.0, float(conversion)))
+
+    total_frac = sum(v for v in inlet_composition.values() if v > 0)
+    if total_frac <= 0:
+        return None
+    norm_comp = {k: v / total_frac for k, v in inlet_composition.items() if v > 0}
+
+    feed_moles: Dict[str, float] = {}
+    inert_mass_per_s: Dict[str, float] = {}
+    unmapped: List[str] = []
+    for thermo_n, frac in norm_comp.items():
+        m_kg_per_s = frac * inlet_mass_kg_s
+        formula = formula_for(thermo_n)
+        comp_obj = _td.get(thermo_n)
+        if comp_obj is None or comp_obj.mw <= 0 or formula is None:
+            inert_mass_per_s[thermo_n] = (inert_mass_per_s.get(thermo_n, 0.0)
+                                          + m_kg_per_s)
+            if formula is None:
+                unmapped.append(thermo_n)
+            continue
+        feed_moles[formula] = (feed_moles.get(formula, 0.0)
+                               + m_kg_per_s * 1000.0 / comp_obj.mw)
+    if not feed_moles:
+        return None
+
+    # Reactivo limitante: min(moles_disponibles / |ν|) entre los reactivos
+    # presentes en el feed.
+    ratios = []
+    for e in rxn.stoich:
+        if e.nu < 0:
+            avail = feed_moles.get(e.formula, 0.0)
+            ratios.append(avail / float(-e.nu))
+    if not ratios:
+        return None
+    xi = conv * min(ratios)        # extent [mol/s]
+    if xi < 0:
+        xi = 0.0
+
+    moles_out: Dict[str, float] = dict(feed_moles)
+    for e in rxn.stoich:
+        moles_out[e.formula] = max(0.0, moles_out.get(e.formula, 0.0)
+                                   + e.nu * xi)
+
+    outlet_mass_per_s: Dict[str, float] = {}
+    for formula, mol_per_s in moles_out.items():
+        if mol_per_s < 1e-15:
+            continue
+        thermo_n = thermo_name(formula)
+        if thermo_n is None:
+            continue
+        comp_obj = _td.get(thermo_n)
+        if comp_obj is None or comp_obj.mw <= 0:
+            continue
+        outlet_mass_per_s[thermo_n] = (outlet_mass_per_s.get(thermo_n, 0.0)
+                                       + mol_per_s * comp_obj.mw / 1000.0)
+    for thermo_n, m in inert_mass_per_s.items():
+        outlet_mass_per_s[thermo_n] = outlet_mass_per_s.get(thermo_n, 0.0) + m
+
+    dh_T = rxn.dh_rxn_kJ_mol(T_K)
+    if dh_T is None:
+        dh_T = rxn.dh_rxn_298_kJ_mol
+    dh_total_kW = dh_T * xi          # kJ/mol · mol/s = kW
+    heat_of_reaction_kJ_per_kg = (dh_total_kW / inlet_mass_kg_s
+                                  if inlet_mass_kg_s > 0 else 0.0)
+
+    total_out = sum(outlet_mass_per_s.values())
+    outlet_composition = ({k: v / total_out for k, v in outlet_mass_per_s.items()}
+                          if total_out > 0 else {})
+
+    return dict(
+        outlet_composition=outlet_composition,
+        outlet_mass_kg_s=total_out,
+        heat_of_reaction_kJ_per_kg=heat_of_reaction_kJ_per_kg,
+        duty_kW=dh_total_kW,
+        xi={rxn.id: xi},
         unmapped=unmapped,
     )
 
