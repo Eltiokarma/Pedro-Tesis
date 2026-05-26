@@ -93,6 +93,25 @@ def test_oconnell_monotonic():
     assert e1 is not None and e2 is not None and e1 > e2
 
 
+def test_packed_design():
+    """Alternativa de torre de relleno: NTU ≈ N teóricas (λ≈1) y altura
+    Z = N·HETP positiva."""
+    d = mt.design('benzene', 'toluene', z_F=0.5, x_D=0.95, x_B=0.05, R=1.5)
+    pk = mt.packed_design(d, packing='pall')
+    assert pk['NTU'] > 0
+    assert pk['NTU_rect'] > 0 and pk['NTU_strip'] > 0
+    # NTU del mismo orden que las etapas teóricas
+    assert 0.5 * d['N_stages'] <= pk['NTU'] <= 2.0 * d['N_stages']
+    assert abs(pk['Z_packed_m'] - d['N_stages'] * pk['HETP_m']) < 1e-6
+
+
+def test_packing_attached_from_block():
+    fs = _build('_example_distillation')
+    b = next(x for x in fs.blocks.values() if getattr(x, 'column_active', False))
+    d = mt.design_from_block(b, fs)
+    assert d.get('packing') and d['packing']['Z_packed_m'] > 0
+
+
 def test_matplotlib_render_smoke():
     """El path de dibujo (matplotlib) no debe romper con un diseño real."""
     try:

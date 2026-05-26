@@ -8104,6 +8104,11 @@ class FlowsheetMainWindow(QMainWindow):
             if sz.get("diameter_m"):
                 cap += (f"   ·   Ø columna ≈ {sz['diameter_m']:.2f} m "
                         f"(Souders-Brown, plato perforado, 70% inundación)")
+            pk = d.get("packing") or {}
+            if pk.get("Z_packed_m"):
+                cap += (f"\nAlternativa relleno (Pall rings): NTU ≈ "
+                        f"{pk['NTU']:.1f}, altura ≈ {pk['Z_packed_m']:.1f} m "
+                        f"(N·HETP, HETP={pk['HETP_m']:.2f} m)")
             self._mccabe_caption.setText(cap)
             panel.setVisible(True)
         except Exception:

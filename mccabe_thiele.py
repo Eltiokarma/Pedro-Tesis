@@ -128,6 +128,51 @@ def sizing(design: Dict, F_mol_s: float, rho_L: float, rho_V: float,
     return out
 
 
+# HETP típico [m] por tipo de relleno (random + estructurado).
+_PACKING_HETP = {
+    "raschig": 0.50, "pall": 0.40, "imtp": 0.35, "mp250": 0.30, "mp500": 0.20,
+}
+
+
+def packed_design(design: Dict, packing: str = "pall", n: int = 200) -> Dict:
+    """Alternativa de torre de relleno para la misma separación.
+
+    NTU por la integral de Sherwood ∫ dy_op/(y_eq − y_op) a lo largo de las
+    rectas de operación (rectificación + agotamiento), y altura empacada
+    Z = N_teóricas · HETP del relleno elegido.
+    """
+    xs, ys = design["equilibrium"]
+    rs, ri = design["rect"]
+    ss, si = design["strip"]
+    x_D, x_B = design["x_D"], design["x_B"]
+    x_int = design["feed_point"][0]
+    HETP = _PACKING_HETP.get(packing, 0.40)
+
+    def yeq(x):
+        return _interp(x, xs, ys)
+
+    NTU_rect = 0.0
+    if x_D > x_int:
+        dx = (x_D - x_int) / n
+        for i in range(n):
+            x = x_int + (i + 0.5) * dx
+            denom = yeq(x) - (rs * x + ri)
+            if abs(denom) > 1e-4:
+                NTU_rect += (rs * dx) / denom
+    NTU_strip = 0.0
+    if x_int > x_B:
+        dx = (x_int - x_B) / n
+        for i in range(n):
+            x = x_B + (i + 0.5) * dx
+            denom = yeq(x) - (ss * x + si)
+            if abs(denom) > 1e-4:
+                NTU_strip += (ss * dx) / denom
+    NTU = abs(NTU_rect) + abs(NTU_strip)
+    return dict(packing=packing, HETP_m=HETP,
+                NTU_rect=abs(NTU_rect), NTU_strip=abs(NTU_strip), NTU=NTU,
+                Z_packed_m=design["N_stages"] * HETP)
+
+
 def design_from_block(block, fs) -> Optional[Dict]:
     """Construye el diagrama McCabe-Thiele de un bloque columna directamente
     desde el modelo: z_F del feed (fracción molar de LK en el binario LK/HK),
@@ -187,6 +232,10 @@ def design_from_block(block, fs) -> Optional[Dict]:
             rho_L = (x_D * rL + (1 - x_D) * rH) if (rL and rH) else None
             if rho_L and rho_V:
                 d["sizing"] = sizing(d, F_mol, rho_L, rho_V, MW_v)
+    except Exception:
+        pass
+    try:
+        d["packing"] = packed_design(d)
     except Exception:
         pass
     return d
