@@ -6420,6 +6420,14 @@ class FlowsheetMainWindow(QMainWindow):
             return
         builder, title, area, dwg_no = entry
         builder(shim)
+        # Inicialización hidráulica: presiones típicas + anchor downstream
+        # para que el solver auto-dimensione bombas/compresores (ΔP, W_elec,
+        # NPSHa) en vez de dejarlos en cero.  Idempotente, no pisa locks.
+        try:
+            from hydraulic_defaults import apply_example_hydraulics
+            apply_example_hydraulics(self.fs, builder.__name__)
+        except Exception:
+            pass
         # Los example builders del editor Tk legacy posicionan bloques
         # para una silueta de 130x60.  Las siluetas ISA nuevas son
         # más grandes (reactor 86x127, tower 76x216, hx 151x60) y

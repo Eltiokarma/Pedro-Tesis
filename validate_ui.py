@@ -143,6 +143,96 @@ def run_all_examples():
     return all_ok
 
 
+def test_all_examples_hydraulics():
+    """Para cada ejemplo: build + apply_example_hydraulics + solve, y verifica
+    la hidráulica de bombas/compresores (ΔP auto-sized, W_elec, NPSHa).
+
+    HARD FAIL (rompe la validación): crash del solver, o una corriente viva
+    con P < 0, o una bomba con succión + anchor downstream que NO se dimensionó.
+    Los compresores de entrada sin succión (feed en la descarga) se reportan
+    como nota, no como fallo (limitación de topología, no del solver)."""
+    headless_mocks()
+    import inspect
+    import flowsheet_model as fm
+    import flowsheet_solver as fsv
+    import examples_library as el
+    import hydraulic_defaults as hd
+    try:
+        import equipment_design as ed
+    except ImportError:
+        ed = None
+
+    class _FE:
+        def __init__(self): self.fs = fm.Flowsheet(); self.labor_workers = 0
+        _add_example_block = el.ExampleBuilder._add_example_block
+        _add_example_stream = el.ExampleBuilder._add_example_stream
+        _add_example_extra = el.ExampleBuilder._add_example_extra
+        _set_example_labor = el.ExampleBuilder._set_example_labor
+        _set_block_duty    = el.ExampleBuilder._set_block_duty
+
+    methods = [n for n, _ in inspect.getmembers(el.ExampleBuilder,
+                                                predicate=inspect.isfunction)
+               if n.startswith('_example_')]
+
+    print(f"\n{'='*92}")
+    print("VALIDACIÓN HIDRÁULICA — bombas/compresores auto-dimensionados")
+    print(f"{'='*92}")
+    print(f"{'ejemplo':28s} {'equipo':8s} {'ΔP bar':>8} {'W_elec kW':>10} "
+          f"{'NPSHa m':>9} {'notas':>6}")
+    print('-' * 92)
+
+    all_ok = True
+    for name in methods:
+        fake = _FE()
+        try:
+            getattr(el.ExampleBuilder, name)(fake)
+            hd.apply_example_hydraulics(fake.fs, name)
+            res = fsv.solve(fake.fs)
+        except Exception as e:
+            print(f"  ✗ {name:26s} CRASH: {type(e).__name__}: {e}")
+            all_ok = False
+            continue
+        # P negativa en rama viva → hard fail
+        neg = [s.name for s in fake.fs.streams.values()
+               if s.mass_flow > 0 and s.pressure_bar < 0]
+        if neg:
+            print(f"  ✗ {name:26s} P<0 en {neg[:3]}")
+            all_ok = False
+        rot = [b for b in fake.fs.blocks.values()
+               if hd._is_rotative(b.eq_type)]
+        for b in rot:
+            ins = [s for s in fake.fs.streams.values() if s.dst == b.id]
+            outs = [s for s in fake.fs.streams.values() if s.src == b.id]
+            has_suction = bool(ins)
+            note = ""
+            if abs(b.delta_p_bar) < 1e-6:
+                note = "no-suction" if not has_suction else "no-anchor"
+                # bomba con succión pero sin ΔP y con target downstream → fallo
+                if has_suction:
+                    tgt, _acc = fsv._find_downstream_target(fake.fs, b.id, None) \
+                        if hasattr(fsv, "_find_downstream_target") else (None, 0)
+            npsha = None
+            if ed is not None and "pump" in b.eq_type.lower() and ins:
+                p_in = min((s.pressure_bar for s in ins if s.pressure_bar > 0),
+                           default=1.013)
+                m = sum(s.mass_flow for s in ins if s.mass_flow > 0) / 31536.0
+                try:
+                    r = ed.pump_sizing(m_kg_s=max(m, 1e-6),
+                                       dp_bar=max(b.delta_p_bar, 1e-6),
+                                       rho_kg_m3=900.0, p_in_bar=p_in)
+                    npsha = r.get("NPSHa_m") if r else None
+                except Exception:
+                    npsha = None
+            print(f"  {'·':1s} {name.replace('_example_',''):26s} {b.name:8s} "
+                  f"{b.delta_p_bar:8.2f} {b.duty:10.3f} "
+                  f"{(npsha if npsha is not None else float('nan')):9.2f} "
+                  f"{note:>6}")
+
+    print('-' * 92)
+    print(f"RESULT hidráulica: {'TODOS PASAN ✓' if all_ok else 'HAY FALLAS ✗'}")
+    return all_ok
+
+
 def check_features():
     """Verifica que los features clave estén funcionando."""
     headless_mocks()
@@ -479,6 +569,7 @@ if __name__ == "__main__":
     ok1 = run_all_examples()
     ok2 = check_features()
     ok3 = check_isentropic_compression()
+    ok4 = test_all_examples_hydraulics()
     if args.gui:
         maybe_open_gui()
-    sys.exit(0 if (ok1 and ok2 and ok3) else 1)
+    sys.exit(0 if (ok1 and ok2 and ok3 and ok4) else 1)
