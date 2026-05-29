@@ -7937,6 +7937,116 @@ class FlowsheetMainWindow(QMainWindow):
             except Exception:
                 pass
 
+            # ---- Evidencia textual por tipo de equipo (HX, flash, mech_sep,
+            # splitter, tanque, horno) — mismo patrón que la sección Reactor:
+            # mostrar LO QUE EL SOLVER ya computó, no info genérica.
+            try:
+                eq_lower = (b.eq_type or "").lower()
+                # ── Intercambiador / Fired heater: _hx_diagnostics ──
+                hxd = getattr(b, "_hx_diagnostics", None)
+                if hxd and isinstance(hxd, dict):
+                    txt += "\n\n── Intercambiador ──"
+                    Th_i = hxd.get("T_h_in"); Th_o = hxd.get("T_h_out")
+                    Tc_i = hxd.get("T_c_in"); Tc_o = hxd.get("T_c_out")
+                    if Th_i is not None and Th_o is not None:
+                        txt += f"\nCaliente    {Th_i:.1f} → {Th_o:.1f} °C"
+                    if Tc_i is not None and Tc_o is not None:
+                        txt += f"\nFrío        {Tc_i:.1f} → {Tc_o:.1f} °C"
+                    if hxd.get("dTlm") is not None:
+                        txt += f"\nΔT_LMTD     {hxd['dTlm']:.1f} °C"
+                    if hxd.get("approach") is not None:
+                        txt += (f"\nApproach    {hxd['approach']:.1f} °C"
+                                f"  (ΔT_min={hxd.get('dT_min', 0):.0f} °C)")
+                    if hxd.get("U_used"):
+                        txt += f"\nU usado     {hxd['U_used']:.0f} W/m²·K"
+                    if hxd.get("F") is not None:
+                        txt += f"\nF correc.   {hxd['F']:.2f}"
+                    if hxd.get("service"):
+                        txt += f"\nServicio    {hxd['service']}"
+                    elif hxd.get("cross_check"):
+                        txt += f"\nServicio    {hxd['cross_check']}"
+                    for w in (hxd.get("warnings") or [])[:3]:
+                        txt += f"\n⚠ {w}"
+                elif "fired" in eq_lower and abs(b.duty) > 1e-9:
+                    # Fired heater sin _hx_diagnostics: al menos duty + combustible inferido
+                    txt += "\n\n── Horno ──"
+                    txt += f"\nDuty        {b.duty:+.1f} kW (calor al proceso)"
+                    txt += f"\nT_proceso   ver streams in/out arriba"
+
+                # ── Flash drum (Vessel con flash_active) ──
+                if getattr(b, "flash_active", False):
+                    txt += "\n\n── Flash drum ──"
+                    if b.flash_T_K > 0:
+                        txt += f"\nT_op        {b.flash_T_K - 273.15:.1f} °C"
+                    if b.flash_P_bar > 0:
+                        txt += f"\nP_op        {b.flash_P_bar:.2f} bar"
+                    txt += ("\nDivide la corriente de entrada en vapor "
+                            "(volátiles) y líquido por VLE isotérmico NRTL.")
+
+                # ── Separador mecánico (mech_sep_active) ──
+                if getattr(b, "mech_sep_active", False):
+                    txt += "\n\n── Separador mecánico ──"
+                    tgt = getattr(b, "mech_sep_target_phase", "solid") or "solid"
+                    eff = getattr(b, "mech_sep_efficiency", None)
+                    is_decanter = "decanter" in eq_lower
+                    if is_decanter:
+                        txt += "\nTipo        Decanter L-L por densidad"
+                    elif "cyclone" in eq_lower:
+                        txt += "\nTipo        Ciclón"
+                    elif "centrifuge" in eq_lower:
+                        txt += "\nTipo        Centrífuga"
+                    else:
+                        txt += "\nTipo        Filtro / knockout genérico"
+                    # 'Fase obj.' sólo tiene sentido cuando el solver separa
+                    # POR FASE; en decanters opera por DENSIDAD, no por fase.
+                    if not is_decanter:
+                        txt += f"\nFase obj.   {tgt}"
+                    if eff is not None:
+                        txt += f"\nη recup.    {eff * 100:.1f} %"
+                    if b.T_op_K > 0:
+                        txt += f"\nT_op        {b.T_op_K - 273.15:.1f} °C"
+                    if b.P_op_bar > 0:
+                        txt += f"\nP_op        {b.P_op_bar:.2f} bar"
+
+                # ── Splitter (mass splitter por fracciones declaradas) ──
+                if getattr(b, "splitter_active", False):
+                    fracs = list(getattr(b, "splitter_fractions", []) or [])
+                    if fracs:
+                        txt += "\n\n── Splitter ──"
+                        for i, f in enumerate(fracs):
+                            txt += f"\nSalida {i+1}    {f * 100:.1f} %"
+                        s = sum(fracs)
+                        if abs(s - 1.0) > 1e-3:
+                            txt += f"\n⚠ fracciones suman {s:.3f} (≠ 1)"
+
+                # ── Storage tank ──
+                if "tank" in eq_lower or "storage" in eq_lower:
+                    if b.S > 0:
+                        # Para tanques, S es volumen en m³ (catálogo Turton).
+                        txt += "\n\n── Tanque ──"
+                        txt += f"\nCapacidad   {b.S:.1f} m³"
+                        # Estimar residencia si hay un stream principal
+                        in_ms = [s for s in self.fs.streams.values()
+                                  if s.dst == b.id and s.mass_flow > 0]
+                        out_ms = [s for s in self.fs.streams.values()
+                                  if s.src == b.id and s.mass_flow > 0]
+                        flow = max([s.mass_flow for s in (in_ms or out_ms)],
+                                    default=0)
+                        if flow > 0 and b.S > 0:
+                            # tm/año → m³/h con ρ≈1000 (estimación rápida);
+                            # solo para dar un orden de magnitud de residencia.
+                            m3_h = (flow * 1000.0 / 1000.0) / 8760.0  # ~m³/h
+                            if m3_h > 0:
+                                tau_h = b.S / m3_h
+                                if tau_h >= 48:
+                                    txt += (f"\nResidencia  ≈ {tau_h/24:.1f} días "
+                                            f"(tanque sobredim. p/ flujo actual)")
+                                else:
+                                    txt += (f"\nResidencia  ≈ {tau_h:.1f} h "
+                                            f"(estim. con ρ=1000)")
+            except Exception:
+                pass
+
             self.prop_label.setText(txt)
 
             # ---- Perfil PFR / batch / barras CSTR ----
