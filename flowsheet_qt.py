@@ -6052,6 +6052,27 @@ class FlowsheetMainWindow(QMainWindow):
         layout.addWidget(self.pfr_panel)
         self._pfr_current_block = None
 
+        # ---- Diagrama McCabe-Thiele (oculto hasta seleccionar una columna) ----
+        # Recomienda la columna (etapas, etapa de feed, R_min) desde el modelo.
+        self.mccabe_panel = QWidget()
+        mcc_lay = QVBoxLayout(self.mccabe_panel)
+        mcc_lay.setContentsMargins(0, 4, 0, 0)
+        self._mccabe_caption = QLabel("")
+        self._mccabe_caption.setWordWrap(True)
+        self._mccabe_caption.setStyleSheet("font-size: 8pt;")
+        mcc_lay.addWidget(self._mccabe_caption)
+        if _MPL_OK:
+            self._mccabe_fig = Figure(figsize=(3.4, 3.2), dpi=90)
+            self._mccabe_canvas = _MplCanvas(self._mccabe_fig)
+            self._mccabe_canvas.setMinimumHeight(260)
+            mcc_lay.addWidget(self._mccabe_canvas)
+        else:
+            mcc_lay.addWidget(QLabel(
+                "matplotlib no disponible — McCabe-Thiele no se grafica."))
+            self._mccabe_canvas = None
+        self.mccabe_panel.setVisible(False)
+        layout.addWidget(self.mccabe_panel)
+
         layout.addStretch(1)
 
         self.results_box = QTextEdit()
@@ -7887,6 +7908,8 @@ class FlowsheetMainWindow(QMainWindow):
                         + f"\n\n(Reactor {mode}: corré Solve con "
                           "reactor_volume_L > 0 para ver el gráfico)"
                     )
+            # Columna: recomendar y dibujar el McCabe-Thiele desde el modelo.
+            self._draw_mccabe_for_block(b)
         elif isinstance(it, StreamItem):
             for other in self.scene.block_items.values():
                 other.set_selected_visual(False)
@@ -7894,6 +7917,8 @@ class FlowsheetMainWindow(QMainWindow):
             self._pfr_current_block = None
             if hasattr(self, "pfr_panel"):
                 self.pfr_panel.setVisible(False)
+            if hasattr(self, "mccabe_panel"):
+                self.mccabe_panel.setVisible(False)
             s = it.model
             # defensa: si los bloques referenciados ya no existen
             # (stream huérfano por inconsistencia de modelo), mostrar
@@ -8017,6 +8042,156 @@ class FlowsheetMainWindow(QMainWindow):
                     pass
 
             self.prop_label.setText(txt)
+
+    def _draw_flash_for_block(self, b):
+        """Para un Vessel con flash_active ~binario: dibuja el flash en el
+        diagrama x-y (curva de equilibrio + punto de operación z_F + las
+        composiciones de las fases x/y) calculado desde el modelo."""
+        panel = getattr(self, "mccabe_panel", None)
+        if panel is None or self._mccabe_canvas is None:
+            if panel:
+                panel.setVisible(False)
+            return
+        try:
+            import distillation_simple as _ds
+            f = _ds.flash_from_block(b, self.fs)
+        except Exception:
+            f = None
+        if f is None:
+            panel.setVisible(False)
+            return
+        try:
+            fig = self._mccabe_fig
+            fig.clear()
+            ax = fig.add_subplot(111)
+            xs, ys = f["equilibrium"]
+            ax.plot([0, 1], [0, 1], color="#b8b0a0", lw=0.8)
+            ax.plot(xs, ys, color="#1f6feb", lw=1.4)
+            # tie-line del flash: x_liq — z_F — y_vap sobre la curva/diagonal
+            ax.plot([f["x_LK"], f["y_LK"]], [f["x_LK"], f["y_LK"]],
+                    color="#d4691e", lw=0.8, ls="--")
+            ax.plot([f["x_LK"]], [f["y_LK"]], "o", color="#d4691e", ms=6)
+            ax.axvline(f["z_F"], color="#888", lw=0.6, ls=":")
+            ax.set_xlim(0, 1)
+            ax.set_ylim(0, 1)
+            ax.set_xlabel(f"x ({f['LK']})", fontsize=8)
+            ax.set_ylabel(f"y ({f['LK']})", fontsize=8)
+            ax.tick_params(labelsize=7)
+            ax.set_aspect("equal", adjustable="box")
+            fig.tight_layout()
+            self._mccabe_canvas.draw_idle()
+            self._mccabe_caption.setText(
+                f"Flash binario {f['LK']}/{f['HK']} @ {f['T_K']-273.15:.0f}°C, "
+                f"{f['P_bar']:.2f} bar — del modelo:  V/F = {f['V_frac']:.2f},  "
+                f"x({f['LK']})={f['x_LK']:.3f} (líq) / y={f['y_LK']:.3f} (vap),  "
+                f"z_F={f['z_F']:.2f}")
+            panel.setVisible(True)
+        except Exception:
+            panel.setVisible(False)
+
+    def _draw_mccabe_for_block(self, b):
+        """Si b es una columna binaria resoluble, recomienda y dibuja su
+        diagrama McCabe-Thiele (curva de equilibrio + rectas de operación +
+        q-line + escalera de etapas) calculado desde el modelo.  Si no,
+        oculta el panel."""
+        panel = getattr(self, "mccabe_panel", None)
+        if panel is None:
+            return
+        if not getattr(b, "column_active", False):
+            if getattr(b, "flash_active", False):
+                self._draw_flash_for_block(b)
+            else:
+                panel.setVisible(False)
+            return
+        try:
+            import mccabe_thiele as _mt
+            d = _mt.design_from_block(b, self.fs)
+        except Exception:
+            d = None
+        if d is None or self._mccabe_canvas is None:
+            panel.setVisible(False)
+            return
+        # Caso infactible: azeótropo o specs no escalonables → mostrar la
+        # curva de equilibrio + el porqué, en vez de ocultar el panel.
+        if not d.get("feasible", True):
+            try:
+                fig = self._mccabe_fig
+                fig.clear()
+                ax = fig.add_subplot(111)
+                xs, ys = d["equilibrium"]
+                ax.plot([0, 1], [0, 1], color="#b8b0a0", lw=0.8)
+                ax.plot(xs, ys, color="#1f6feb", lw=1.4)
+                for a in d.get("azeotropes", []):
+                    ax.plot([a], [a], "o", color="#d11", ms=6)
+                    ax.axvline(a, color="#d11", lw=0.7, ls="--")
+                for xv, c in ((d["x_D"], "#2a9d4a"), (d["x_B"], "#9d2a8a")):
+                    ax.axvline(xv, color=c, lw=0.5, ls=":")
+                ax.set_xlim(0, 1)
+                ax.set_ylim(0, 1)
+                ax.set_xlabel(f"x ({d['LK']})", fontsize=8)
+                ax.set_ylabel(f"y ({d['LK']})", fontsize=8)
+                ax.tick_params(labelsize=7)
+                ax.set_aspect("equal", adjustable="box")
+                fig.tight_layout()
+                self._mccabe_canvas.draw_idle()
+                self._mccabe_caption.setText("⚠ " + d.get("message", ""))
+                panel.setVisible(True)
+            except Exception:
+                panel.setVisible(False)
+            return
+        try:
+            fig = self._mccabe_fig
+            fig.clear()
+            ax = fig.add_subplot(111)
+            xs, ys = d["equilibrium"]
+            ax.plot([0, 1], [0, 1], color="#b8b0a0", lw=0.8)          # diagonal
+            ax.plot(xs, ys, color="#1f6feb", lw=1.4, label="equilibrio")
+            sx = [p[0] for p in d["stages"]]
+            sy = [p[1] for p in d["stages"]]
+            ax.plot(sx, sy, color="#d4691e", lw=1.0)                  # escalera
+            rs, ri = d["rect"]
+            ss, si = d["strip"]
+            xfp = d["feed_point"][0]
+            ax.plot([xfp, d["x_D"]], [rs * xfp + ri, rs * d["x_D"] + ri],
+                    color="#2a9d4a", lw=1.1)                          # rect
+            ax.plot([d["x_B"], xfp], [ss * d["x_B"] + si, ss * xfp + si],
+                    color="#9d2a8a", lw=1.1)                          # strip
+            for xv, c in ((d["x_D"], "#2a9d4a"), (d["z_F"], "#888"),
+                          (d["x_B"], "#9d2a8a")):
+                ax.axvline(xv, color=c, lw=0.5, ls=":")
+            for a in d.get("azeotropes", []):
+                ax.axvline(a, color="#d11", lw=0.6, ls="--")
+            ax.set_xlim(0, 1)
+            ax.set_ylim(0, 1)
+            ax.set_xlabel(f"x ({d['LK']})", fontsize=8)
+            ax.set_ylabel(f"y ({d['LK']})", fontsize=8)
+            ax.tick_params(labelsize=7)
+            ax.set_aspect("equal", adjustable="box")
+            fig.tight_layout()
+            self._mccabe_canvas.draw_idle()
+            rmin = d["R_min"]
+            cap = (
+                f"McCabe-Thiele {d['LK']}/{d['HK']} — recomendado del modelo:  "
+                f"N = {d['N_stages']} etapas teóricas (feed en {d['feed_stage']}),  "
+                f"R = {d['R']:.2f}"
+                + (f"  (R_min {rmin:.2f})" if rmin else "")
+                + f",  z_F={d['z_F']:.2f} → x_D={d['x_D']:.2f}/x_B={d['x_B']:.2f}")
+            sz = d.get("sizing") or {}
+            if sz.get("N_real"):
+                cap += (f"\nEtapas reales ≈ {sz['N_real']} "
+                        f"(E_o={sz['E_o']:.2f} O'Connell, α={sz['alpha_avg']:.2f})")
+            if sz.get("diameter_m"):
+                cap += (f"   ·   Ø columna ≈ {sz['diameter_m']:.2f} m "
+                        f"(Souders-Brown, plato perforado, 70% inundación)")
+            pk = d.get("packing") or {}
+            if pk.get("Z_packed_m"):
+                cap += (f"\nAlternativa relleno (Pall rings): NTU ≈ "
+                        f"{pk['NTU']:.1f}, altura ≈ {pk['Z_packed_m']:.1f} m "
+                        f"(N·HETP, HETP={pk['HETP_m']:.2f} m)")
+            self._mccabe_caption.setText(cap)
+            panel.setVisible(True)
+        except Exception:
+            panel.setVisible(False)
 
     def _redraw_pfr_profile(self):
         """Dibuja el visual del reactor actual según su modo:
