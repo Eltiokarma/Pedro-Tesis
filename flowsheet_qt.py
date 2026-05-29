@@ -6073,6 +6073,29 @@ class FlowsheetMainWindow(QMainWindow):
         self.mccabe_panel.setVisible(False)
         layout.addWidget(self.mccabe_panel)
 
+        # ---- Perfil tray-by-tray (oculto hasta seleccionar una columna) ----
+        # 9º método del widget: T y composición por etapa.  Fuente:
+        # Wang-Henke MESH si existe, fallback al McCabe-Thiele (CMO binario).
+        # NUNCA etiqueta uno como el otro: el badge es explícito.
+        self.profile_panel = QWidget()
+        prof_lay = QVBoxLayout(self.profile_panel)
+        prof_lay.setContentsMargins(0, 4, 0, 0)
+        self._profile_caption = QLabel("")
+        self._profile_caption.setWordWrap(True)
+        self._profile_caption.setStyleSheet("font-size: 8pt;")
+        prof_lay.addWidget(self._profile_caption)
+        if _MPL_OK:
+            self._profile_fig = Figure(figsize=(3.4, 2.8), dpi=90)
+            self._profile_canvas = _MplCanvas(self._profile_fig)
+            self._profile_canvas.setMinimumHeight(240)
+            prof_lay.addWidget(self._profile_canvas)
+        else:
+            prof_lay.addWidget(QLabel(
+                "matplotlib no disponible — perfil no se grafica."))
+            self._profile_canvas = None
+        self.profile_panel.setVisible(False)
+        layout.addWidget(self.profile_panel)
+
         layout.addStretch(1)
 
         self.results_box = QTextEdit()
@@ -7910,15 +7933,19 @@ class FlowsheetMainWindow(QMainWindow):
                     )
             # Columna: recomendar y dibujar el McCabe-Thiele desde el modelo.
             self._draw_mccabe_for_block(b)
+            # Perfil tray-by-tray (9º método): T y x_LK por etapa.
+            self._draw_profile_for_block(b)
         elif isinstance(it, StreamItem):
             for other in self.scene.block_items.values():
                 other.set_selected_visual(False)
-            # Ocultar panel de perfil al seleccionar streams
+            # Ocultar paneles de perfil al seleccionar streams
             self._pfr_current_block = None
             if hasattr(self, "pfr_panel"):
                 self.pfr_panel.setVisible(False)
             if hasattr(self, "mccabe_panel"):
                 self.mccabe_panel.setVisible(False)
+            if hasattr(self, "profile_panel"):
+                self.profile_panel.setVisible(False)
             s = it.model
             # defensa: si los bloques referenciados ya no existen
             # (stream huérfano por inconsistencia de modelo), mostrar
@@ -8042,6 +8069,92 @@ class FlowsheetMainWindow(QMainWindow):
                     pass
 
             self.prop_label.setText(txt)
+
+    def _draw_profile_for_block(self, b):
+        """Perfil tray-by-tray (T y x_LK por etapa) de una columna activa.
+        Fuente: Wang-Henke si está convergido en _wh_result, fallback al
+        McCabe-Thiele que ya construyó el panel del medio.  Multicomp WH
+        agrega trazas adicionales; McCabe muestra solo el LK + nota CMO.
+        El badge de procedencia es EXPLÍCITO — nunca se confunden fuentes."""
+        panel = getattr(self, "profile_panel", None)
+        if panel is None:
+            return
+        if not getattr(b, "column_active", False):
+            panel.setVisible(False)
+            return
+        try:
+            import tray_profile as _tp
+            p = _tp.build_stage_profile(b, self.fs)
+        except Exception:
+            p = None
+        if p is None or self._profile_canvas is None:
+            panel.setVisible(False)
+            return
+        try:
+            fig = self._profile_fig
+            fig.clear()
+            ax = fig.add_subplot(111)
+            stages = p["stages"]
+            if not stages:
+                # caso azeótropo / no-escalonable: solo aviso, sin curva
+                ax.text(0.5, 0.5, "⚠ " + (p.get("message") or "perfil truncado"),
+                        ha="center", va="center", fontsize=8,
+                        transform=ax.transAxes, wrap=True)
+                ax.set_xticks([]); ax.set_yticks([])
+                fig.tight_layout()
+                self._profile_canvas.draw_idle()
+                self._profile_caption.setText(
+                    f"Perfil — {p['badge']}: {p.get('message','')}")
+                panel.setVisible(True)
+                return
+            xs = [s["stage"] for s in stages]
+            Ts = [s["T_C"] for s in stages]
+            xL = [s["x_LK"] for s in stages]
+            # T(°C) eje izq (rojo), x_LK eje der (azul)
+            ax.plot(xs, Ts, color="#d23", marker="o", ms=3, lw=1.0,
+                    label=f"T (°C)")
+            ax.set_xlabel("etapa  (1 = tope)", fontsize=8)
+            ax.set_ylabel("T (°C)", color="#d23", fontsize=8)
+            ax.tick_params(axis="y", labelcolor="#d23", labelsize=7)
+            ax.tick_params(axis="x", labelsize=7)
+            ax2 = ax.twinx()
+            ax2.plot(xs, xL, color="#1f6feb", marker="s", ms=3, lw=1.0,
+                     label=f"x_{p['LK']}")
+            ax2.set_ylabel(f"x ({p['LK']})", color="#1f6feb", fontsize=8)
+            ax2.tick_params(axis="y", labelcolor="#1f6feb", labelsize=7)
+            ax2.set_ylim(0, 1)
+            # Trazas de OTRAS comps (modo multicomp WH) — punteadas, sin label
+            for name, vals in (p.get("other_traces") or {}).items():
+                if len(vals) == len(xs):
+                    ax2.plot(xs, vals, color="#888", ls=":", lw=0.8)
+            # Etapa de feed + marcas extremos
+            n_feed = int(p.get("n_feed") or 0)
+            if 1 <= n_feed <= len(stages):
+                ax.axvline(n_feed, color="#888", ls="--", lw=0.7)
+                ax.annotate("feed", xy=(n_feed, Ts[n_feed - 1]),
+                            xytext=(3, 3), textcoords="offset points",
+                            fontsize=7, color="#555")
+            ax.annotate("cond.", xy=(xs[0], Ts[0]),
+                        xytext=(3, -10), textcoords="offset points",
+                        fontsize=7, color="#555")
+            ax.annotate("reb.", xy=(xs[-1], Ts[-1]),
+                        xytext=(-22, -10), textcoords="offset points",
+                        fontsize=7, color="#555")
+            fig.tight_layout()
+            self._profile_canvas.draw_idle()
+            cap = (f"Perfil de la columna — {p['badge']}:  "
+                   f"N = {p['n_stages']} etapas, feed = {p['n_feed']}, "
+                   f"{p['LK']}/{p['HK']}")
+            if p["source"] == "mccabe":
+                cap += ("\nT por etapa = bubble point del binario "
+                        "(líquido saturado, CMO).  Perfil multicomponente "
+                        "riguroso requiere column_method = 'wanghenke'.")
+            if p.get("truncated"):
+                cap = "⚠ " + (p.get("message") or "perfil truncado") + " — " + cap
+            self._profile_caption.setText(cap)
+            panel.setVisible(True)
+        except Exception:
+            panel.setVisible(False)
 
     def _draw_flash_for_block(self, b):
         """Para un Vessel con flash_active ~binario: dibuja el flash en el
