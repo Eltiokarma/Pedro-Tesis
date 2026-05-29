@@ -7899,6 +7899,44 @@ class FlowsheetMainWindow(QMainWindow):
                 except Exception:
                     pass
 
+            # ---- Resumen del REACTOR (modo, reacciones, conversión, calor)
+            # Hace visible LO QUE EL SOLVER COMPUTÓ: hasta acá sólo se veía
+            # 'Tipo', 'Duty' y 'ΔH', sin evidencia de la química o las specs.
+            try:
+                rxs = list(getattr(b, "reactions", None) or [])
+                cust = list(getattr(b, "custom_reactions", None) or [])
+                mode = getattr(b, "reactor_mode", "") or ""
+                if rxs or cust or mode in ("pfr", "cstr", "batch", "stoich"):
+                    txt += "\n\n── Reactor ──"
+                    if mode:
+                        txt += f"\nModo        {mode}"
+                    if rxs:
+                        txt += f"\nReacciones  {', '.join(rxs)}"
+                    if cust:
+                        txt += f"\nCustom      {len(cust)} reacción(es) ad-hoc"
+                    if (mode == "stoich"
+                            and getattr(b, "reactor_conversion", None) is not None):
+                        txt += (f"\nConversión  "
+                                f"{b.reactor_conversion * 100:.1f} % del "
+                                f"reactivo limitante (declarado)")
+                    if getattr(b, "T_op_K", 0) and b.T_op_K > 0:
+                        txt += f"\nT_op        {b.T_op_K - 273.15:.1f} °C"
+                    if getattr(b, "P_op_bar", 0) and b.P_op_bar > 0:
+                        txt += f"\nP_op        {b.P_op_bar:.2f} bar"
+                    if mode in ("pfr", "cstr", "batch") and \
+                            getattr(b, "reactor_volume_L", 0) > 0:
+                        txt += f"\nVolumen     {b.reactor_volume_L:.1f} L"
+                    if mode == "batch" and getattr(b, "batch_time_s", 0) > 0:
+                        txt += f"\nt_batch     {b.batch_time_s:.0f} s"
+                    hor = getattr(b, "heat_of_reaction", None)
+                    if hor is not None and abs(hor) > 1e-9:
+                        sign = ("exotérmica" if hor < 0
+                                else "endotérmica")
+                        txt += (f"\nCalor rx    {hor:+.2f} kJ/kg input "
+                                f"({sign})")
+            except Exception:
+                pass
+
             self.prop_label.setText(txt)
 
             # ---- Perfil PFR / batch / barras CSTR ----
@@ -8087,83 +8125,102 @@ class FlowsheetMainWindow(QMainWindow):
             p = _tp.build_stage_profile(b, self.fs)
         except Exception:
             p = None
-        if p is None or self._profile_canvas is None:
+        if p is None:
             panel.setVisible(False)
             return
-        try:
-            fig = self._profile_fig
-            fig.clear()
-            ax = fig.add_subplot(111)
-            stages = p["stages"]
-            if not stages:
-                # caso azeótropo / no-escalonable: solo aviso, sin curva
-                ax.text(0.5, 0.5, "⚠ " + (p.get("message") or "perfil truncado"),
-                        ha="center", va="center", fontsize=8,
-                        transform=ax.transAxes, wrap=True)
-                ax.set_xticks([]); ax.set_yticks([])
-                fig.tight_layout()
-                self._profile_canvas.draw_idle()
-                self._profile_caption.setText(
-                    f"Perfil — {p['badge']}: {p.get('message','')}")
-                panel.setVisible(True)
-                return
-            xs = [s["stage"] for s in stages]
-            Ts = [s["T_C"] for s in stages]
-            xL = [s["x_LK"] for s in stages]
-            # T(°C) eje izq (rojo), x_LK eje der (azul)
-            ax.plot(xs, Ts, color="#d23", marker="o", ms=3, lw=1.0,
-                    label=f"T (°C)")
-            ax.set_xlabel("etapa  (1 = tope)", fontsize=8)
-            ax.set_ylabel("T (°C)", color="#d23", fontsize=8)
-            ax.tick_params(axis="y", labelcolor="#d23", labelsize=7)
-            ax.tick_params(axis="x", labelsize=7)
-            ax2 = ax.twinx()
-            ax2.plot(xs, xL, color="#1f6feb", marker="s", ms=3, lw=1.0,
-                     label=f"x_{p['LK']}")
-            ax2.set_ylabel(f"x ({p['LK']})", color="#1f6feb", fontsize=8)
-            ax2.tick_params(axis="y", labelcolor="#1f6feb", labelsize=7)
-            ax2.set_ylim(0, 1)
-            # Trazas de OTRAS comps (modo multicomp WH) — punteadas, sin label
-            for name, vals in (p.get("other_traces") or {}).items():
-                if len(vals) == len(xs):
-                    ax2.plot(xs, vals, color="#888", ls=":", lw=0.8)
-            # Etapa de feed + marcas extremos
+        # CAPTION (siempre — evidencia textual del perfil).  Para columnas
+        # binarias casi-ideales, ya cubre los extremos: x y T del tope, fondo
+        # y etapa de feed, más el badge de procedencia explícito.
+        stages = p["stages"]
+        if not stages:
+            cap = ("⚠ " + (p.get("message") or "perfil truncado")
+                   + f"  ·  {p['badge']}")
+        else:
+            top = stages[0]
+            bot = stages[-1]
             n_feed = int(p.get("n_feed") or 0)
-            if 1 <= n_feed <= len(stages):
-                ax.axvline(n_feed, color="#888", ls="--", lw=0.7)
-                ax.annotate("feed", xy=(n_feed, Ts[n_feed - 1]),
-                            xytext=(3, 3), textcoords="offset points",
-                            fontsize=7, color="#555")
-            ax.annotate("cond.", xy=(xs[0], Ts[0]),
-                        xytext=(3, -10), textcoords="offset points",
-                        fontsize=7, color="#555")
-            ax.annotate("reb.", xy=(xs[-1], Ts[-1]),
-                        xytext=(-22, -10), textcoords="offset points",
-                        fontsize=7, color="#555")
-            fig.tight_layout()
-            self._profile_canvas.draw_idle()
+            feed_stage = stages[n_feed - 1] if 1 <= n_feed <= len(stages) else None
             cap = (f"Perfil de la columna — {p['badge']}:  "
                    f"N = {p['n_stages']} etapas, feed = {p['n_feed']}, "
-                   f"{p['LK']}/{p['HK']}")
+                   f"{p['LK']}/{p['HK']}\n"
+                   f"  tope (etapa 1): x_{p['LK']}={top['x_LK']:.3f},  "
+                   f"T={top['T_C']:.1f}°C   ·   "
+                   f"fondo (etapa {p['n_stages']}): x_{p['LK']}={bot['x_LK']:.3f},  "
+                   f"T={bot['T_C']:.1f}°C")
+            if feed_stage:
+                cap += (f"\n  feed (etapa {p['n_feed']}): "
+                        f"x_{p['LK']}={feed_stage['x_LK']:.3f},  "
+                        f"T={feed_stage['T_C']:.1f}°C")
             if p["source"] == "mccabe":
-                cap += ("\nT por etapa = bubble point del binario "
-                        "(líquido saturado, CMO).  Perfil multicomponente "
-                        "riguroso requiere column_method = 'wanghenke'.")
+                cap += ("\n  T por etapa = bubble point del binario "
+                        "(líquido saturado, CMO).  Multicomp riguroso "
+                        "requiere column_method='wanghenke'.")
             if p.get("truncated"):
-                cap = "⚠ " + (p.get("message") or "perfil truncado") + " — " + cap
-            self._profile_caption.setText(cap)
-            panel.setVisible(True)
-        except Exception:
-            panel.setVisible(False)
+                cap = "⚠ " + cap
+        self._profile_caption.setText(cap)
+        # CANVAS (opcional — solo si matplotlib-Qt está disponible).
+        if self._profile_canvas is not None:
+            try:
+                self._draw_profile_canvas(p)
+            except Exception:
+                pass
+        panel.setVisible(True)
+
+    def _draw_profile_canvas(self, p):
+        """Dibuja la figura del perfil tray-by-tray (T y x_LK por etapa) en
+        el canvas.  Separado del caption para que la evidencia textual
+        siempre llegue al panel aunque el canvas falle."""
+        fig = self._profile_fig
+        fig.clear()
+        ax = fig.add_subplot(111)
+        stages = p["stages"]
+        if not stages:
+            ax.text(0.5, 0.5, "⚠ " + (p.get("message") or "perfil truncado"),
+                    ha="center", va="center", fontsize=8,
+                    transform=ax.transAxes, wrap=True)
+            ax.set_xticks([]); ax.set_yticks([])
+            fig.tight_layout()
+            self._profile_canvas.draw_idle()
+            return
+        xs = [s["stage"] for s in stages]
+        Ts = [s["T_C"] for s in stages]
+        xL = [s["x_LK"] for s in stages]
+        ax.plot(xs, Ts, color="#d23", marker="o", ms=3, lw=1.0,
+                label="T (°C)")
+        ax.set_xlabel("etapa  (1 = tope)", fontsize=8)
+        ax.set_ylabel("T (°C)", color="#d23", fontsize=8)
+        ax.tick_params(axis="y", labelcolor="#d23", labelsize=7)
+        ax.tick_params(axis="x", labelsize=7)
+        ax2 = ax.twinx()
+        ax2.plot(xs, xL, color="#1f6feb", marker="s", ms=3, lw=1.0,
+                 label=f"x_{p['LK']}")
+        ax2.set_ylabel(f"x ({p['LK']})", color="#1f6feb", fontsize=8)
+        ax2.tick_params(axis="y", labelcolor="#1f6feb", labelsize=7)
+        ax2.set_ylim(0, 1)
+        for _name, vals in (p.get("other_traces") or {}).items():
+            if len(vals) == len(xs):
+                ax2.plot(xs, vals, color="#888", ls=":", lw=0.8)
+        n_feed = int(p.get("n_feed") or 0)
+        if 1 <= n_feed <= len(stages):
+            ax.axvline(n_feed, color="#888", ls="--", lw=0.7)
+            ax.annotate("feed", xy=(n_feed, Ts[n_feed - 1]),
+                        xytext=(3, 3), textcoords="offset points",
+                        fontsize=7, color="#555")
+        ax.annotate("cond.", xy=(xs[0], Ts[0]),
+                    xytext=(3, -10), textcoords="offset points",
+                    fontsize=7, color="#555")
+        ax.annotate("reb.", xy=(xs[-1], Ts[-1]),
+                    xytext=(-22, -10), textcoords="offset points",
+                    fontsize=7, color="#555")
+        fig.tight_layout()
+        self._profile_canvas.draw_idle()
 
     def _draw_flash_for_block(self, b):
         """Para un Vessel con flash_active ~binario: dibuja el flash en el
         diagrama x-y (curva de equilibrio + punto de operación z_F + las
         composiciones de las fases x/y) calculado desde el modelo."""
         panel = getattr(self, "mccabe_panel", None)
-        if panel is None or self._mccabe_canvas is None:
-            if panel:
-                panel.setVisible(False)
+        if panel is None:
             return
         try:
             import distillation_simple as _ds
@@ -8173,34 +8230,36 @@ class FlowsheetMainWindow(QMainWindow):
         if f is None:
             panel.setVisible(False)
             return
-        try:
-            fig = self._mccabe_fig
-            fig.clear()
-            ax = fig.add_subplot(111)
-            xs, ys = f["equilibrium"]
-            ax.plot([0, 1], [0, 1], color="#b8b0a0", lw=0.8)
-            ax.plot(xs, ys, color="#1f6feb", lw=1.4)
-            # tie-line del flash: x_liq — z_F — y_vap sobre la curva/diagonal
-            ax.plot([f["x_LK"], f["y_LK"]], [f["x_LK"], f["y_LK"]],
-                    color="#d4691e", lw=0.8, ls="--")
-            ax.plot([f["x_LK"]], [f["y_LK"]], "o", color="#d4691e", ms=6)
-            ax.axvline(f["z_F"], color="#888", lw=0.6, ls=":")
-            ax.set_xlim(0, 1)
-            ax.set_ylim(0, 1)
-            ax.set_xlabel(f"x ({f['LK']})", fontsize=8)
-            ax.set_ylabel(f"y ({f['LK']})", fontsize=8)
-            ax.tick_params(labelsize=7)
-            ax.set_aspect("equal", adjustable="box")
-            fig.tight_layout()
-            self._mccabe_canvas.draw_idle()
-            self._mccabe_caption.setText(
-                f"Flash binario {f['LK']}/{f['HK']} @ {f['T_K']-273.15:.0f}°C, "
-                f"{f['P_bar']:.2f} bar — del modelo:  V/F = {f['V_frac']:.2f},  "
-                f"x({f['LK']})={f['x_LK']:.3f} (líq) / y={f['y_LK']:.3f} (vap),  "
-                f"z_F={f['z_F']:.2f}")
-            panel.setVisible(True)
-        except Exception:
-            panel.setVisible(False)
+        # CAPTION (siempre — evidencia textual del cálculo).
+        self._mccabe_caption.setText(
+            f"Flash binario {f['LK']}/{f['HK']} @ {f['T_K']-273.15:.0f}°C, "
+            f"{f['P_bar']:.2f} bar — del modelo:  V/F = {f['V_frac']:.2f},  "
+            f"x({f['LK']})={f['x_LK']:.3f} (líq) / y={f['y_LK']:.3f} (vap),  "
+            f"z_F={f['z_F']:.2f}")
+        # CANVAS (solo si matplotlib-Qt está disponible).
+        if self._mccabe_canvas is not None:
+            try:
+                fig = self._mccabe_fig
+                fig.clear()
+                ax = fig.add_subplot(111)
+                xs, ys = f["equilibrium"]
+                ax.plot([0, 1], [0, 1], color="#b8b0a0", lw=0.8)
+                ax.plot(xs, ys, color="#1f6feb", lw=1.4)
+                ax.plot([f["x_LK"], f["y_LK"]], [f["x_LK"], f["y_LK"]],
+                        color="#d4691e", lw=0.8, ls="--")
+                ax.plot([f["x_LK"]], [f["y_LK"]], "o", color="#d4691e", ms=6)
+                ax.axvline(f["z_F"], color="#888", lw=0.6, ls=":")
+                ax.set_xlim(0, 1)
+                ax.set_ylim(0, 1)
+                ax.set_xlabel(f"x ({f['LK']})", fontsize=8)
+                ax.set_ylabel(f"y ({f['LK']})", fontsize=8)
+                ax.tick_params(labelsize=7)
+                ax.set_aspect("equal", adjustable="box")
+                fig.tight_layout()
+                self._mccabe_canvas.draw_idle()
+            except Exception:
+                pass
+        panel.setVisible(True)
 
     def _draw_mccabe_for_block(self, b):
         """Si b es una columna binaria resoluble, recomienda y dibuja su
@@ -8221,67 +8280,14 @@ class FlowsheetMainWindow(QMainWindow):
             d = _mt.design_from_block(b, self.fs)
         except Exception:
             d = None
-        if d is None or self._mccabe_canvas is None:
+        if d is None:
             panel.setVisible(False)
             return
-        # Caso infactible: azeótropo o specs no escalonables → mostrar la
-        # curva de equilibrio + el porqué, en vez de ocultar el panel.
+        # CAPTION (siempre — texto es la evidencia del cálculo aunque
+        # matplotlib-Qt no esté disponible y el canvas no se pueda dibujar).
         if not d.get("feasible", True):
-            try:
-                fig = self._mccabe_fig
-                fig.clear()
-                ax = fig.add_subplot(111)
-                xs, ys = d["equilibrium"]
-                ax.plot([0, 1], [0, 1], color="#b8b0a0", lw=0.8)
-                ax.plot(xs, ys, color="#1f6feb", lw=1.4)
-                for a in d.get("azeotropes", []):
-                    ax.plot([a], [a], "o", color="#d11", ms=6)
-                    ax.axvline(a, color="#d11", lw=0.7, ls="--")
-                for xv, c in ((d["x_D"], "#2a9d4a"), (d["x_B"], "#9d2a8a")):
-                    ax.axvline(xv, color=c, lw=0.5, ls=":")
-                ax.set_xlim(0, 1)
-                ax.set_ylim(0, 1)
-                ax.set_xlabel(f"x ({d['LK']})", fontsize=8)
-                ax.set_ylabel(f"y ({d['LK']})", fontsize=8)
-                ax.tick_params(labelsize=7)
-                ax.set_aspect("equal", adjustable="box")
-                fig.tight_layout()
-                self._mccabe_canvas.draw_idle()
-                self._mccabe_caption.setText("⚠ " + d.get("message", ""))
-                panel.setVisible(True)
-            except Exception:
-                panel.setVisible(False)
-            return
-        try:
-            fig = self._mccabe_fig
-            fig.clear()
-            ax = fig.add_subplot(111)
-            xs, ys = d["equilibrium"]
-            ax.plot([0, 1], [0, 1], color="#b8b0a0", lw=0.8)          # diagonal
-            ax.plot(xs, ys, color="#1f6feb", lw=1.4, label="equilibrio")
-            sx = [p[0] for p in d["stages"]]
-            sy = [p[1] for p in d["stages"]]
-            ax.plot(sx, sy, color="#d4691e", lw=1.0)                  # escalera
-            rs, ri = d["rect"]
-            ss, si = d["strip"]
-            xfp = d["feed_point"][0]
-            ax.plot([xfp, d["x_D"]], [rs * xfp + ri, rs * d["x_D"] + ri],
-                    color="#2a9d4a", lw=1.1)                          # rect
-            ax.plot([d["x_B"], xfp], [ss * d["x_B"] + si, ss * xfp + si],
-                    color="#9d2a8a", lw=1.1)                          # strip
-            for xv, c in ((d["x_D"], "#2a9d4a"), (d["z_F"], "#888"),
-                          (d["x_B"], "#9d2a8a")):
-                ax.axvline(xv, color=c, lw=0.5, ls=":")
-            for a in d.get("azeotropes", []):
-                ax.axvline(a, color="#d11", lw=0.6, ls="--")
-            ax.set_xlim(0, 1)
-            ax.set_ylim(0, 1)
-            ax.set_xlabel(f"x ({d['LK']})", fontsize=8)
-            ax.set_ylabel(f"y ({d['LK']})", fontsize=8)
-            ax.tick_params(labelsize=7)
-            ax.set_aspect("equal", adjustable="box")
-            fig.tight_layout()
-            self._mccabe_canvas.draw_idle()
+            cap = "⚠ " + (d.get("message", "") or "Specs no escalonables.")
+        else:
             rmin = d["R_min"]
             cap = (
                 f"McCabe-Thiele {d['LK']}/{d['HK']} — recomendado del modelo:  "
@@ -8301,10 +8307,53 @@ class FlowsheetMainWindow(QMainWindow):
                 cap += (f"\nAlternativa relleno (Pall rings): NTU ≈ "
                         f"{pk['NTU']:.1f}, altura ≈ {pk['Z_packed_m']:.1f} m "
                         f"(N·HETP, HETP={pk['HETP_m']:.2f} m)")
-            self._mccabe_caption.setText(cap)
-            panel.setVisible(True)
-        except Exception:
-            panel.setVisible(False)
+        self._mccabe_caption.setText(cap)
+        # CANVAS (opcional — solo si matplotlib-Qt está disponible).
+        if self._mccabe_canvas is not None:
+            try:
+                self._draw_mccabe_canvas(d)
+            except Exception:
+                pass
+        panel.setVisible(True)
+
+    def _draw_mccabe_canvas(self, d):
+        """Dibuja la figura McCabe-Thiele (rama factible + rama infactible
+        con sólo equilibrio y marcas).  Separado del caption para que la
+        evidencia textual siempre llegue al panel aunque el canvas falle."""
+        fig = self._mccabe_fig
+        fig.clear()
+        ax = fig.add_subplot(111)
+        xs, ys = d["equilibrium"]
+        ax.plot([0, 1], [0, 1], color="#b8b0a0", lw=0.8)
+        ax.plot(xs, ys, color="#1f6feb", lw=1.4)
+        if not d.get("feasible", True):
+            for a in d.get("azeotropes", []):
+                ax.plot([a], [a], "o", color="#d11", ms=6)
+                ax.axvline(a, color="#d11", lw=0.7, ls="--")
+            for xv, c in ((d["x_D"], "#2a9d4a"), (d["x_B"], "#9d2a8a")):
+                ax.axvline(xv, color=c, lw=0.5, ls=":")
+        else:
+            sx = [p[0] for p in d["stages"]]
+            sy = [p[1] for p in d["stages"]]
+            ax.plot(sx, sy, color="#d4691e", lw=1.0)
+            rs, ri = d["rect"]; ss, si = d["strip"]
+            xfp = d["feed_point"][0]
+            ax.plot([xfp, d["x_D"]], [rs * xfp + ri, rs * d["x_D"] + ri],
+                    color="#2a9d4a", lw=1.1)
+            ax.plot([d["x_B"], xfp], [ss * d["x_B"] + si, ss * xfp + si],
+                    color="#9d2a8a", lw=1.1)
+            for xv, c in ((d["x_D"], "#2a9d4a"), (d["z_F"], "#888"),
+                          (d["x_B"], "#9d2a8a")):
+                ax.axvline(xv, color=c, lw=0.5, ls=":")
+            for a in d.get("azeotropes", []):
+                ax.axvline(a, color="#d11", lw=0.6, ls="--")
+        ax.set_xlim(0, 1); ax.set_ylim(0, 1)
+        ax.set_xlabel(f"x ({d['LK']})", fontsize=8)
+        ax.set_ylabel(f"y ({d['LK']})", fontsize=8)
+        ax.tick_params(labelsize=7)
+        ax.set_aspect("equal", adjustable="box")
+        fig.tight_layout()
+        self._mccabe_canvas.draw_idle()
 
     def _redraw_pfr_profile(self):
         """Dibuja el visual del reactor actual según su modo:
