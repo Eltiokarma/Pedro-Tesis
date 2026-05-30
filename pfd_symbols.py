@@ -873,6 +873,57 @@ SYMBOLS: Dict[str, dict] = {
         ],
         'body': '<path d="M 0 18 A 30 18 0 0 1 60 18 L 60 102 A 30 18 0 0 1 0 102 Z" fill="#fff" stroke="#0d0d0d" stroke-width="1.6"/>',
     },
+    # Auxiliares auto_aux:
+    # · 'atmosphere' — fuente/sumidero abierto a la atmósfera (aire, fuel,
+    #   chimenea, blowdown, evap).  Nube con flecha de intake/vent.
+    # · 'utility-header' — header de utility (supply + return) en lazo
+    #   CERRADO (CW, vapor, chaqueta).  Dos tuberías paralelas etiquetadas
+    #   SUP / RET; ambas conectan al equipo formando el lazo visible.
+    'atmosphere': {
+        'name': 'Atmósfera / ambiente',
+        'category': 'auxiliares',
+        'standard': 'aux',
+        'w': 56.0, 'h': 40.0,
+        'ports': [
+            ('entrada', 28.0, 0.0),
+            ('salida',  28.0, 40.0),
+        ],
+        'body': (
+            '<path d="M 10 28 Q 0 28 2 20 Q -2 10 12 12 Q 16 4 26 8 '
+            'Q 38 2 44 12 Q 56 10 54 20 Q 58 28 46 28 Z" '
+            'fill="#eef4fb" stroke="#0d0d0d" stroke-width="1.2"/>\n'
+            '<line x1="28" y1="0" x2="28" y2="10" stroke="#0d0d0d" '
+            'stroke-width="1.0" stroke-dasharray="2 1.5"/>\n'
+            '<line x1="28" y1="30" x2="28" y2="40" stroke="#0d0d0d" '
+            'stroke-width="1.0" stroke-dasharray="2 1.5"/>'
+        ),
+    },
+    'utility-header': {
+        'name': 'Header de utility (lazo cerrado)',
+        'category': 'auxiliares',
+        'standard': 'aux',
+        'w': 80.0, 'h': 30.0,
+        # supply (top)  → puerto 'salida'  (sale hacia el equipo)
+        # return (bot)  → puerto 'entrada' (vuelve del equipo)
+        'ports': [
+            ('salida',  80.0,  9.0),
+            ('entrada', 80.0, 21.0),
+        ],
+        'body': (
+            '<rect x="0" y="4"  width="80" height="10" fill="#dfe9f6" '
+            'stroke="#0d0d0d" stroke-width="1.2"/>\n'
+            '<rect x="0" y="16" width="80" height="10" fill="#f6eadf" '
+            'stroke="#0d0d0d" stroke-width="1.2"/>\n'
+            '<text x="38" y="11.5" text-anchor="middle" '
+            'font-family="\'IBM Plex Sans\', sans-serif" font-size="6.5" '
+            'font-weight="700" fill="#0d0d0d">SUP</text>\n'
+            '<text x="38" y="23.5" text-anchor="middle" '
+            'font-family="\'IBM Plex Sans\', sans-serif" font-size="6.5" '
+            'font-weight="700" fill="#0d0d0d">RET</text>\n'
+            '<path d="M 4 14 L 4 16" stroke="#0d0d0d" stroke-width="0.8"/>\n'
+            '<path d="M 76 14 L 76 16" stroke="#0d0d0d" stroke-width="0.8"/>'
+        ),
+    },
 }
 
 EQ_TYPE_TO_SYMBOL: Dict[str, str] = {
@@ -930,6 +981,10 @@ EQ_TYPE_TO_SYMBOL: Dict[str, str] = {
     'Boiler — water tube':             'fired-heater',
     'Cooling tower — induced draft':   'column-stripper',
     'Cooling tower — natural draft':   'column-stripper',
+
+    # Auxiliares (auto_aux, no en capex):
+    'Ambient':         'atmosphere',
+    'Utility header':  'utility-header',
 }
 
 

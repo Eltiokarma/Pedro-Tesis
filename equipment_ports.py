@@ -221,6 +221,13 @@ AMBIENT_PORTS = {
     "salida":  ("bottom", 0.5),
 }
 
+# Header de utility (lazo cerrado): supply en top, return en bottom — ambos
+# puertos del mismo lado para que las dos corrientes se vean como UN lazo.
+UTIL_HEADER_PORTS = {
+    "salida":  ("right", 0.30),   # supply OUT  → al equipo
+    "entrada": ("right", 0.70),   # return IN   ← del equipo
+}
+
 # Fallback (equipos no catalogados)
 DEFAULT_PORTS = {
     "in":  ("left",  0.5),
@@ -300,6 +307,7 @@ EQUIPMENT_PORTS = {
     "Cooling tower — induced draft":COOLING_TOWER_PORTS,
     "Cooling tower — natural draft":COOLING_TOWER_PORTS,
     "Ambient":                      AMBIENT_PORTS,
+    "Utility header":               UTIL_HEADER_PORTS,
 }
 
 

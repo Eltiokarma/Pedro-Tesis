@@ -54,11 +54,19 @@ def _block_ports(fs, block_id):
 
 class TestInstantiation(unittest.TestCase):
     def test_hx_shell_utility(self):
+        """HX shell-and-tube → LAZO CERRADO: un header SUP/RET compartido,
+        una bomba de circulación auto_aux y 3 corrientes (HDR→pump,
+        pump→HX, HX→HDR)."""
         fs, b = _block("Heat exch. — floating head")
         ids = aux.instantiate_auxiliaries(fs, b)
         streams = _aux_streams(fs)
-        self.assertEqual(len(streams), 2)           # shell_in + shell_out
-        self.assertEqual(len(_aux_blocks(fs)), 2)   # source + sink
+        self.assertEqual(len(streams), 3)           # supply (2 tramos) + return
+        # 2 bloques aux: header (Utility header) + bomba de circulación
+        ablk = _aux_blocks(fs)
+        self.assertEqual(len(ablk), 2)
+        eq_types = sorted(b_.eq_type for b_ in ablk)
+        self.assertEqual(eq_types, ["Pump — centrifugal", "Utility header"])
+        # puertos del HX usados: shell_in (supply, dst) y shell_out (return, src)
         ports = _block_ports(fs, b.id)
         self.assertEqual(ports, {"shell_in", "shell_out"})
         for s in streams:
@@ -98,10 +106,15 @@ class TestInstantiation(unittest.TestCase):
         self.assertEqual(ports, {"makeup", "blowdown", "vapor_loss"})
 
     def test_reactor_jacket(self):
+        """Chaqueta de reactor: LAZO CERRADO con header + bomba auto_aux."""
         fs, b = _block("Reactor — jacketed agitated")
         aux.instantiate_auxiliaries(fs, b)
         ports = _block_ports(fs, b.id)
         self.assertEqual(ports, {"util_in", "util_out"})
+        # 3 streams del lazo + header + bomba
+        self.assertEqual(len(_aux_streams(fs)), 3)
+        eq_types = sorted(b_.eq_type for b_ in _aux_blocks(fs))
+        self.assertEqual(eq_types, ["Pump — centrifugal", "Utility header"])
 
     def test_no_spec_no_aux(self):
         fs, b = _block("Pump — centrifugal")
@@ -115,15 +128,19 @@ class TestInstantiation(unittest.TestCase):
         self.assertEqual(ids, [])
 
     def test_no_duplicate_existing_port(self):
+        """Si uno de los puertos del lazo cerrado ya tiene stream, todo el
+        cycle se salta (no duplicamos header ni la mitad del lazo)."""
         fs, b = _block("Heat exch. — floating head")
         # ya hay un stream en shell_in
         sid = fs.new_id()
         fs.streams[sid] = fm.Stream(id=sid, name="S-x", src=99, dst=b.id,
                                     dst_port="shell_in")
         aux.instantiate_auxiliaries(fs, b)
-        ports = _block_ports(fs, b.id)
-        self.assertNotIn("shell_in", ports)   # no se duplicó
-        self.assertIn("shell_out", ports)
+        # el cycle 'shell' se saltó entero — no debe haber streams auto_aux
+        # de utility creados.
+        aux_util = [s for s in _aux_streams(fs)
+                    if (s.role or "") == "utility"]
+        self.assertEqual(aux_util, [])
 
 
 class TestCostingFill(unittest.TestCase):
