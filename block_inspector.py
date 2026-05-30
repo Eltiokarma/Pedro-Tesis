@@ -2338,6 +2338,7 @@ class BlockInspectorPanel(QWidget):
         text_blocks: List[Tuple[str, Optional[str]]] = [
             ("Reactor",                _ev.reactor_text(b)),
             ("Intercambiador (HX)",    _ev.hx_text(b)),
+            ("HX — Utility / lazo cerrado", _ev.utility_aux_text(b, fs)),
             ("Flash",                  _ev.flash_text(b)),
             ("Separador mecánico",     _ev.mech_sep_text(b)),
             ("Splitter",               _ev.splitter_text(b)),
@@ -2347,6 +2348,8 @@ class BlockInspectorPanel(QWidget):
             ("Bomba",                  _ev.pump_text(b, fs)),
             ("Compresor",              _ev.compressor_text(b, fs)),
             ("Hidráulica (ΔP)",        _ev.hydraulic_breakdown_text(b, fs)),
+            ("Balance de masa",        _ev.mass_balance_text(b, fs)),
+            ("Balance de energía",     _ev.energy_balance_text(b, fs)),
         ]
         for title, txt in text_blocks:
             if not txt:

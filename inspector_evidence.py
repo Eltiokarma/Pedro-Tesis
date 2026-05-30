@@ -362,6 +362,223 @@ def hydraulic_breakdown_text(block, fs) -> Optional[str]:
 
 
 # ─────────────────────────────────────────────────────────────────────
+#  BALANCE DE MASA — IN/OUT por corriente con error de cierre
+# ─────────────────────────────────────────────────────────────────────
+
+def _stream_label(s) -> str:
+    name = (getattr(s, "name", "") or "")[:14]
+    comp = getattr(s, "composition", None) or {}
+    if comp:
+        main = max(comp, key=comp.get)
+        return f"{name:14s} {main[:10]:10s}"
+    phase = (getattr(s, "phase", "") or "")[:10]
+    return f"{name:14s} {phase:10s}"
+
+
+def _is_proc(s) -> bool:
+    """Process stream: excluye auxiliares automáticas (utility/ambient)."""
+    return (not getattr(s, "auto_aux", False)
+            and (getattr(s, "role", "") or "") not in ("utility", "ambient"))
+
+
+def mass_balance_text(block, fs) -> Optional[str]:
+    """Tabla IN/OUT del bloque con flujo, comp. principal, fase y T.
+    Evidencia clara de que el solver cerró el balance global de masa.
+
+    Sólo cuenta corrientes de PROCESO (excluye CW/steam/aire auto_aux,
+    que están en su propia tarjeta y no entran al balance del lado
+    proceso — su energía ya va en el duty)."""
+    try:
+        if fs is None:
+            return None
+        ins  = [s for s in fs.streams.values()
+                if s.dst == block.id and s.mass_flow > 0 and _is_proc(s)]
+        outs = [s for s in fs.streams.values()
+                if s.src == block.id and s.mass_flow > 0 and _is_proc(s)]
+        aux_n = sum(1 for s in fs.streams.values()
+                    if (s.src == block.id or s.dst == block.id)
+                    and not _is_proc(s) and s.mass_flow > 0)
+        if not ins and not outs:
+            return None
+        lines = ["IN  (tm/año)"]
+        m_in = 0.0
+        for s in ins:
+            lines.append(f"  {_stream_label(s)}  {s.mass_flow:10.1f}  "
+                         f"T={s.temperature:5.1f}°C")
+            m_in += s.mass_flow
+        lines.append(f"  Σ IN  = {m_in:10.1f} tm/año")
+        lines.append("")
+        lines.append("OUT (tm/año)")
+        m_out = 0.0
+        for s in outs:
+            lines.append(f"  {_stream_label(s)}  {s.mass_flow:10.1f}  "
+                         f"T={s.temperature:5.1f}°C")
+            m_out += s.mass_flow
+        lines.append(f"  Σ OUT = {m_out:10.1f} tm/año")
+        if m_in > 0:
+            err = (m_out - m_in) / m_in * 100.0
+            tag = "✓ cierra" if abs(err) < 0.5 else f"⚠ err {err:+.2f}%"
+            lines.append(f"  ΔM    = {m_out - m_in:+10.1f}     ({tag})")
+        if aux_n:
+            lines.append("")
+            lines.append(f"(+ {aux_n} auxiliar(es) utility/ambient — ver "
+                         f"'HX — Utility / lazo cerrado')")
+        return "\n".join(lines)
+    except Exception:
+        return None
+
+
+# ─────────────────────────────────────────────────────────────────────
+#  BALANCE DE ENERGÍA — H_in, H_out, Q, W, error de cierre
+# ─────────────────────────────────────────────────────────────────────
+
+def energy_balance_text(block, fs) -> Optional[str]:
+    """Σ H_in vs Σ H_out + Q (duty) + W (eléctrica de bombas/compresores).
+    Cierra el primer principio para el bloque (evidencia del solver)."""
+    try:
+        if fs is None:
+            return None
+        import flowsheet_solver as _fsv
+        ins  = [s for s in fs.streams.values()
+                if s.dst == block.id and s.mass_flow > 0 and _is_proc(s)]
+        outs = [s for s in fs.streams.values()
+                if s.src == block.id and s.mass_flow > 0 and _is_proc(s)]
+        if not ins and not outs:
+            return None
+        H_in  = 0.0; H_in_n  = 0
+        H_out = 0.0; H_out_n = 0
+        for s in ins:
+            h = _fsv._stream_enthalpy_kW(s)
+            if h is not None:
+                H_in += h; H_in_n += 1
+        for s in outs:
+            h = _fsv._stream_enthalpy_kW(s)
+            if h is not None:
+                H_out += h; H_out_n += 1
+        # nada calculable → no mostramos
+        if H_in_n == 0 and H_out_n == 0:
+            return None
+        Q = float(getattr(block, "duty", 0.0) or 0.0)         # +cal / -enf
+        W = 0.0
+        eq = (block.eq_type or "").lower()
+        if "pump" in eq or "compressor" in eq or "fan" in eq or "bomba" in eq:
+            try:
+                import equipment_design as _ed
+                if "pump" in eq or "bomba" in eq:
+                    ps = _ed.design_pump_for_block(block, fs)
+                    W = float(ps["W_shaft_kW"]) if ps else 0.0
+                else:
+                    cs = _ed.design_compressor_for_block(block, fs)
+                    W = float(cs["W_act_kW"]) if cs else 0.0
+            except Exception:
+                pass
+        # convención: Q y W se aportan al fluido → H_out - H_in = Q + W
+        rhs = Q + W
+        lhs = H_out - H_in
+        err = lhs - rhs
+        scale = max(abs(H_in), abs(H_out), abs(Q), 1.0)
+        err_pct = err / scale * 100.0
+        tag = "✓ cierra" if abs(err_pct) < 5.0 else f"⚠ err {err_pct:+.1f}%"
+        lines = [
+            f"H_in   = {H_in:10.2f} kW     ({H_in_n} corriente/s)",
+            f"H_out  = {H_out:10.2f} kW     ({H_out_n} corriente/s)",
+            f"ΔH     = {lhs:+10.2f} kW",
+            f"Q duty = {Q:+10.2f} kW",
+        ]
+        if abs(W) > 1e-6:
+            lines.append(f"W_shaft= {W:+10.2f} kW")
+        lines.append(f"Cierre : ΔH − (Q+W) = {err:+8.2f} kW   ({tag})")
+        lines.append("Referencia: líquido a 25 °C, latente sumado si fase=vapor.")
+        return "\n".join(lines)
+    except Exception:
+        return None
+
+
+# ─────────────────────────────────────────────────────────────────────
+#  HX — UTILITY AUX: flujo, ΔT, W_pump de circulación
+# ─────────────────────────────────────────────────────────────────────
+
+def utility_aux_text(block, fs) -> Optional[str]:
+    """Para HX: identifica la utility, su flujo (kg/h), ΔT supply-return y
+    estima la potencia de la bomba/ventilador de circulación.
+
+    Los circuitos de CW y vapor se modelan en el solver como par de
+    corrientes auto_aux 'utility', pero el equipo de impulsión (bomba CW,
+    bomba de condensado) no está dibujado en el PFD.  Acá lo calculamos
+    para que el OPEX y el primer principio del lazo cierren."""
+    try:
+        if fs is None:
+            return None
+        import equipment_costs as _ec
+        if (_ec.EQUIPMENT_DATA.get(block.eq_type, {}).get("categoria")
+                != "Heat exchangers"):
+            return None
+        aux = [s for s in fs.streams.values()
+               if getattr(s, "auto_aux", False)
+               and (s.role or "") == "utility"
+               and (s.src == block.id or s.dst == block.id)]
+        if not aux:
+            return None
+        # Flow medio (entrada == salida en mass, son la misma corriente
+        # circulando: tomamos el mayor por si una quedó en 0).
+        m_tm = max([float(s.mass_flow or 0.0) for s in aux] + [0.0])
+        if m_tm <= 0:
+            return None
+        # ΔT supply/return desde T de las corrientes aux
+        Tin  = next((s.temperature for s in aux if s.dst == block.id), None)
+        Tout = next((s.temperature for s in aux if s.src == block.id), None)
+        # Identificar utility
+        import equipment_ports as _ep
+        proc_T = [s.temperature for s in fs.streams.values()
+                  if (s.src == block.id or s.dst == block.id)
+                  and not getattr(s, "auto_aux", False)
+                  and (s.role or "") not in ("utility", "ambient")]
+        T_avg = sum(proc_T)/len(proc_T) if proc_T else 25.0
+        util_key = ""
+        try:
+            util_key = _ep.resolve_heat_source(block, T_avg) or ""
+        except Exception:
+            pass
+        util = _ep.UTILITIES.get(util_key, {})
+        util_name = util.get("name", util_key or "utility")
+        # kg/h desde tm/año
+        m_kg_h = (m_tm * 1000.0) / 8760.0
+        lines = [
+            f"Servicio    {util_name}",
+            f"ṁ aux       {m_kg_h:,.0f} kg/h    ({m_tm:,.1f} tm/año)",
+        ]
+        if Tin is not None and Tout is not None:
+            lines.append(f"T sup/ret   {Tin:.1f} → {Tout:.1f} °C "
+                         f"(ΔT={Tout - Tin:+.1f} °C)")
+        # W_pump estimado: head típico CW loop ≈ 25 m, condensado ≈ 20 m
+        # Air cooler usa ventilador con W eléctrica ≈ duty/200 (regla de
+        # dedo industrial: 0.5 kW elec por 100 kW disipados).
+        eq = (block.eq_type or "").lower()
+        duty = abs(float(getattr(block, "duty", 0.0) or 0.0))
+        if "air cooler" in eq or "air-cooled" in eq:
+            W_aux = duty * 0.005          # 0.5% del duty (típico fan)
+            lines.append(f"W ventilador ≈ {W_aux:.2f} kW elec "
+                         f"(0.5% del duty disipado, regla de dedo)")
+        else:
+            # bomba de circulación
+            head_m = 20.0 if ("kettle" in eq or "reboiler" in eq) else 25.0
+            rho    = 1000.0                # kg/m³ agua
+            g      = 9.81
+            eta    = 0.65                  # bomba CW típica
+            m_kg_s = m_kg_h / 3600.0
+            Q_m3_s = m_kg_s / rho
+            W_hyd  = rho * g * head_m * Q_m3_s / 1000.0   # kW
+            W_el   = W_hyd / (eta * 0.95)
+            lines.append(f"W_bomba circ ≈ {W_el:.2f} kW elec "
+                         f"(head≈{head_m:.0f} m, η={eta:.2f}, η_motor=0.95)")
+            lines.append(f"           → Lazo CERRADO: no está dibujado en el "
+                         f"PFD pero suma al OPEX")
+        return "\n".join(lines)
+    except Exception:
+        return None
+
+
+# ─────────────────────────────────────────────────────────────────────
 #  FIGURAS MATPLOTLIB (devuelven Figure embebible — caller decide si la usa)
 # ─────────────────────────────────────────────────────────────────────
 
