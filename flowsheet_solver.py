@@ -3315,26 +3315,50 @@ def solve_pressure_propagation(fs):
         if not changed:
             break
 
-    # Post-iteración: detectar mezcladores con presión de inputs disparejas.
-    # Si dos inlets difieren > 0.5 bar al converger, el modelo no es físico:
-    # el lado de alta P se throttla implícitamente (work desperdicio) o el de
+    # Post-iteración: detectar bloques que MEZCLAN físicamente sus entradas
+    # con presiones disparejas (Δ > 0.5 bar).  El modelo no es físico — el
+    # lado de alta P se throttla implícitamente (work desperdicio) o el de
     # baja necesita compresión/bombeo upstream.
+    #
+    # NO aplica a HXs (shell y tube son lados separados, no se mezclan),
+    # ni a torres (puertos diferenciados feed/reflujo/vapor), ni a auto_aux
+    # (headers de utility por diseño reciben dispares).
     for b in fs.blocks.values():
+        eq_l = (b.eq_type or "").lower()
+        if getattr(b, "auto_aux", False):
+            continue
+        if "heat exch" in eq_l or "fired heater" in eq_l or "boiler" in eq_l \
+                or "cooling tower" in eq_l:
+            continue
+        if "tower" in eq_l or "column" in eq_l:
+            continue
         ins = [s for s in fs.streams.values() if s.dst == b.id]
         if len(ins) < 2:
             continue
-        ps = [s.pressure_bar for s in ins if s.pressure_bar > 0]
-        if len(ps) < 2:
+        # Filtrar streams sin presión resuelta o de utility/ambient (que
+        # entran por puertos distintos al de proceso).
+        proc_ins = [s for s in ins
+                    if s.pressure_bar > 0
+                    and (s.role or "") not in ("utility", "ambient")
+                    and not getattr(s, "auto_aux", False)]
+        if len(proc_ins) < 2:
             continue
+        # Para tanques/vessels (NO mixers): si las entradas van a puertos
+        # distintos (vapor-in vs liquid-in en un knock-out, p.ej.), no se
+        # mezclan físicamente.  Los mixers en cambio SIEMPRE mezclan todos
+        # sus inlets, incluso si usan entrada1/entrada2 labelados.
+        is_mixer = ("mixer" in eq_l or "mix " in eq_l
+                    or getattr(b, "mixer_active", False))
+        if not is_mixer:
+            ports = {s.dst_port for s in proc_ins if s.dst_port}
+            if len(ports) > 1:
+                continue
+        ps = [s.pressure_bar for s in proc_ins]
         P_hi = max(ps); P_lo = min(ps)
         if P_hi - P_lo <= 0.5:
             continue
-        # Ignoramos splitters/headers que conceptualmente reciben streams
-        # de presiones distintas (header de utility, etc.).
-        if getattr(b, "auto_aux", False):
-            continue
-        hi = next(s for s in ins if s.pressure_bar == P_hi)
-        lo = next(s for s in ins if s.pressure_bar == P_lo)
+        hi = next(s for s in proc_ins if s.pressure_bar == P_hi)
+        lo = next(s for s in proc_ins if s.pressure_bar == P_lo)
         _log_solver_warning(
             fs,
             f"⚠ {b.name} ({b.eq_type}): mezcla '{lo.name}' a {P_lo:.2f} bar "
