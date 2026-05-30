@@ -573,14 +573,35 @@ def _solve_mass_iteration(fs):
         if not ins or not outs:
             continue
 
-        unknown_ins   = [s for s in ins
+        # Las corrientes de SERVICIO AUTO-GENERADAS (auto_aux con role
+        # utility/ambient: agua de enfriamiento shell-side, aire de un
+        # air-cooler) están en el lado OPUESTO al proceso de un HX y NO se
+        # mezclan con él: forman su propio balance (in=out) y se dimensionan
+        # desde el duty (size_utility_streams / size_air_cooler_streams).
+        # Excluirlas del balance de PROCESO para que no bloqueen la deducción
+        # de la corriente de proceso cuando el servicio aún no tiene flujo (si
+        # no, con 2 incógnitas —proc + servicio— el balance no cierra y toda
+        # la cadena aguas abajo queda sin resolver).
+        #
+        # SOLO las auto_aux: una corriente role='utility' declarada por el
+        # builder que en realidad es de proceso —p.ej. el vapor evaporado de
+        # un evaporador, tagueado utility para no entrar al OPEX— SÍ debe
+        # contar en el balance de masa.
+        def _is_hx_service(s):
+            return getattr(s, "auto_aux", False) and (s.role or "") in ("utility", "ambient")
+        proc_ins  = [s for s in ins  if not _is_hx_service(s)]
+        proc_outs = [s for s in outs if not _is_hx_service(s)]
+        if not proc_ins or not proc_outs:
+            continue          # bloque puramente de servicio (header CW, etc.)
+
+        unknown_ins   = [s for s in proc_ins
                           if not _is_mass_locked(s) and s.mass_flow == 0]
-        unknown_outs  = [s for s in outs
+        unknown_outs  = [s for s in proc_outs
                           if not _is_mass_locked(s) and s.mass_flow == 0]
 
         if not unknown_ins and len(unknown_outs) == 1:
-            sum_in        = sum(s.mass_flow for s in ins)
-            sum_known_out = sum(s.mass_flow for s in outs
+            sum_in        = sum(s.mass_flow for s in proc_ins)
+            sum_known_out = sum(s.mass_flow for s in proc_outs
                                  if s is not unknown_outs[0])
             deduced = sum_in - sum_known_out
             if deduced >= 0:    # permitir flujo cero (caso bypass cerrado)
@@ -588,8 +609,8 @@ def _solve_mass_iteration(fs):
                 propagated.append((unknown_outs[0].name, deduced))
 
         elif not unknown_outs and len(unknown_ins) == 1:
-            sum_out       = sum(s.mass_flow for s in outs)
-            sum_known_in  = sum(s.mass_flow for s in ins
+            sum_out       = sum(s.mass_flow for s in proc_outs)
+            sum_known_in  = sum(s.mass_flow for s in proc_ins
                                  if s is not unknown_ins[0])
             deduced = sum_out - sum_known_in
             if deduced >= 0:
@@ -4687,6 +4708,13 @@ def solve(fs, max_iter=MAX_ITER):
     cyc_msgs = []
     for outer in range(5):
         prev_count = sum(1 for s in fs.streams.values() if s.composition)
+        # También rastrear masa resuelta: en un segundo solve (p.ej. tras
+        # instanciar auxiliares) las composiciones PERSISTEN de la corrida
+        # anterior, así que cortar solo por 'composición estable' puede
+        # terminar el loop ANTES de que un splitter/flash reciba su feed ya
+        # propagado en esta pasada (su salida quedaría en 0).  Seguir
+        # iterando mientras se resuelva masa nueva evita ese corte temprano.
+        prev_mass = sum(1 for s in fs.streams.values() if s.mass_flow > 0)
         # Splitters: distribuyen mass, propagan composición igual
         split_msgs = solve_splitters(fs)
         for _ in range(3):
@@ -4726,7 +4754,8 @@ def solve(fs, max_iter=MAX_ITER):
                 break
         auto_propagate_compositions(fs)
         new_count = sum(1 for s in fs.streams.values() if s.composition)
-        if new_count == prev_count:
+        new_mass = sum(1 for s in fs.streams.values() if s.mass_flow > 0)
+        if new_count == prev_count and new_mass == prev_mass:
             break
 
     for m in (split_msgs + flash_msgs + col_msgs

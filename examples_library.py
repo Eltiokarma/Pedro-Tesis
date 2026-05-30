@@ -2095,12 +2095,12 @@ class ExampleBuilder:
 
         # Columna → tope → condensador
         self._add_example_stream(t201, e201, "S-vap",
-                                  src_port="vapor_tope", dst_port="shell_in",
+                                  src_port="vapor_tope", dst_port="proceso_in",
                                   T=65, phase="vapor")
         # Condensador → KO drum (masa heredada del FUG, ≈19000 kg/h
         # con gases co-destilados — el KO los separa)
         self._add_example_stream(e201, v202, "S-MeOH-mix",
-                                  src_port="shell_out", dst_port="alimentacion",
+                                  src_port="proceso_out", dst_port="alimentacion",
                                   T=40, phase="liquid")
         # KO drum → tanque MeOH (líquido limpio, 85% del flujo)
         self._add_example_stream(v202, tk_meoh, "S-MeOH", role="product",
@@ -3864,11 +3864,13 @@ class ExampleBuilder:
         self.fs.streams[s_co_hp].pressure_bar = 35.0
         self.fs.streams[s_co_hp].pressure_locked = True
         # Mezcla al precalentador
+        # MeOH líquido + CO gas a 80°C/35bar: el CO es gas permanente
+        # (T_eb −191°C), así que la mezcla está en dos fases (V_frac≈0.48).
         self._add_example_stream(m101, e101, "S-1", 0.0,
                                  src_port="producto", dst_port="tube_in",
                                  T=80,
                                  composition=feed_mix,
-                                 main_component="methanol", phase="liquid")
+                                 main_component="methanol", phase="two_phase")
         # Pre-calentado al reactor
         self._add_example_stream(e101, r101, "S-2", 0.0,
                                  src_port="tube_out", dst_port="alimentacion",
