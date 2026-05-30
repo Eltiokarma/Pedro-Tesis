@@ -768,6 +768,63 @@ def _check_heat_exchangers(fs):
     return warnings_list
 
 
+def size_aux_circulation_pumps(fs):
+    """Para cada bomba auto_aux de un lazo cerrado (creada por
+    equipment_auxiliaries con delta_p_bar fijo), computa
+    ``duty = W_elec_kW`` desde m·ΔP/(ρ·η).
+
+    Se llama DESPUÉS de ``size_utility_streams`` porque depende del
+    mass_flow del lazo recién dimensionado.  El duty queda como kW
+    eléctrica → ``compute_utilities_from_duties`` lo recoge automáticamente
+    como consumo de la utility "electricity" y lo carga al OPEX.
+    """
+    try:
+        import pressure_drop as _pd
+    except ImportError:
+        return []
+    from flowsheet_model import SEC_PER_YEAR, TM_TO_KG
+    msgs = []
+    for b in fs.blocks.values():
+        if not getattr(b, "auto_aux", False):
+            continue
+        eq_lower = (b.eq_type or "").lower()
+        if "pump" not in eq_lower:
+            continue
+        if _is_duty_locked(b):
+            continue
+        dp_block = float(getattr(b, "delta_p_bar", 0.0) or 0.0)
+        if dp_block <= 1e-6:
+            continue
+        ins = [s for s in fs.streams.values() if s.dst == b.id]
+        if not ins:
+            continue
+        feed = ins[0]
+        m_tm = float(feed.mass_flow or 0.0)
+        if m_tm <= 0:
+            b.duty = 0.0
+            continue
+        comp = feed.composition or {feed.main_component: 1.0}
+        try:
+            rho = _pd._density_kg_m3(comp, feed.temperature + 273.15,
+                                       feed.phase or "liquid")
+        except Exception:
+            rho = None
+        if not rho or rho <= 0:
+            continue
+        eta = float(getattr(b, "efficiency", 0.65) or 0.65)
+        m_kg_s = m_tm * TM_TO_KG / SEC_PER_YEAR
+        # W_shaft [kW] = m·ΔP/(ρ·η) — fórmula incompresible (líquidos).
+        # Convertimos a eléctrica con η_motor 0.95 para que el OPEX use kW
+        # consumidos del transformador, no kW al eje.
+        W_shaft = m_kg_s * dp_block * 1e5 / (rho * eta * 1000.0)
+        W_elec  = W_shaft / 0.95
+        if abs(W_elec - (b.duty or 0.0)) > 1e-4:
+            b.duty = float(W_elec)
+            msgs.append(f"  {b.name}: lazo cerrado ṁ={m_tm:,.0f} tm/año, "
+                        f"W_elec={W_elec:.3f} kW (head≈{dp_block * 1e5 / (rho * 9.81):.1f} m, η={eta:.2f})".replace(",", " "))
+    return msgs
+
+
 def size_utility_streams(fs):
     """Puebla el mass_flow de las corrientes de SERVICIO auto-generadas
     (auto_aux, role='utility') de los intercambiadores de calor desde su
@@ -4625,6 +4682,14 @@ def solve(fs, max_iter=MAX_ITER):
     # como sin resolver por tener mass_flow=0 al momento del chequeo).
     try:
         size_utility_streams(fs)
+    except Exception:
+        pass
+
+    # Computar duty de las bombas de circulación auto_aux (lazos cerrados
+    # CW/jacket/kettle) ahora que el flujo del lazo está dimensionado.
+    # compute_utilities_from_duties lo carga al OPEX eléctrico abajo.
+    try:
+        size_aux_circulation_pumps(fs)
     except Exception:
         pass
 
