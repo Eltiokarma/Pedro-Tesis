@@ -1022,9 +1022,11 @@ class ExampleBuilder:
         water_back = {"water": 1.0}
 
         # --- Loop principal ---
-        # Gas ácido entra al absorber por abajo
+        # Gas ácido entra al absorber (puerto de feed lateral, NO al fondo
+        # de líquido — el gas asciende dentro de la columna en contracorriente
+        # con el solvente amina que cae desde arriba).
         self._add_example_stream(tk_gas_acido, t101, "S-gas-acido", 1000000, role="feed",
-                                 src_port="salida", dst_port="liquido_fondo",
+                                 src_port="salida", dst_port="alimentacion",
                                  price=180.0, T=40,
                                  composition=gas_acido,
                                  main_component="methane", phase="gas")
@@ -1533,7 +1535,11 @@ class ExampleBuilder:
         # tren multi-etapa (1 bar → 200 bar) ANTES del mixer con el recycle.
         # Sin él tendrías un mixer mezclando 1 bar con 200 bar (no físico).
         k101     = self._add_example_block("K-101", "Compressor — centrifugal", 200.0, 200, 260)
-        m101     = self._add_example_block("M-101", "Mixer — static",            5.0, 340, 320)
+        # After-cooler post K-101: la compresión 1→200 bar sube T isen a
+        # ~330°C; un after-cooler con CW lleva a 80°C antes de mezclar con
+        # el recycle (práctica industrial estándar en Haber multi-etapa).
+        e102     = self._add_example_block("E-102", "Heat exch. — floating head", 50.0, 280, 260)
+        m101     = self._add_example_block("M-101", "Mixer — static",            5.0, 380, 320)
         f101     = self._add_example_block("F-101", "Fired heater — non-reformer",
                                             5000.0, 480, 320)
         r101     = self._add_example_block("R-101", "Reactor — jacketed agitated",
@@ -1574,15 +1580,24 @@ class ExampleBuilder:
             main_component="nitrogen", phase="gas")
         self.fs.streams[s_fresh].pressure_bar = 1.013
         self.fs.streams[s_fresh].pressure_locked = True
-        # K-101 → M-101 (descarga a 200 bar — ya iguala al recycle)
-        s_fresh_hp = self._add_example_stream(
-            k101, m101, "S-fresh-hp",
-            src_port="descarga", dst_port="entrada1",
+        # K-101 → E-102 (descarga isentrópica ~330°C, 200 bar)
+        s_hp_hot = self._add_example_stream(
+            k101, e102, "S-fresh-hp",
+            src_port="descarga", dst_port="tube_in",
+            T=333,
+            composition={"nitrogen": 0.824, "hydrogen": 0.176},
+            main_component="nitrogen", phase="gas")
+        self.fs.streams[s_hp_hot].pressure_bar = 200.0
+        self.fs.streams[s_hp_hot].pressure_locked = True
+        # E-102 → M-101 (después del after-cooler, 80°C, 200 bar)
+        s_hp_cool = self._add_example_stream(
+            e102, m101, "S-fresh-cool",
+            src_port="tube_out", dst_port="entrada1",
             T=80,
             composition={"nitrogen": 0.824, "hydrogen": 0.176},
             main_component="nitrogen", phase="gas")
-        self.fs.streams[s_fresh_hp].pressure_bar = 200.0
-        self.fs.streams[s_fresh_hp].pressure_locked = True
+        self.fs.streams[s_hp_cool].pressure_bar = 200.0
+        self.fs.streams[s_hp_cool].pressure_locked = True
         # Mezcla → heater
         self._add_example_stream(m101, f101, "S-mix",
                                   src_port="salida", dst_port="proceso_in",
@@ -2704,8 +2719,12 @@ class ExampleBuilder:
 
         # ============ STREAMS — COMBUSTIÓN + RECUP ============
         # Gas post-quemador (NO, H2O, N2 inerte, O2 exceso, trazas N2O)
+        # WHB E-201: el gas caliente del reactor (900°C, NO+vapor de agua)
+        # entra por el lado servicio (steam_in) — actúa como MEDIO CALEFACTOR
+        # que vaporiza el BFW del lado proceso (liq_in/vap_out).  Sale por
+        # cond_out hacia el siguiente HX como A7.
         self._add_example_stream(r201, e201, "A6-gas-hot", 0.0,
-                                  src_port="producto", dst_port="liq_in",
+                                  src_port="producto", dst_port="steam_in",
                                   T=900, phase="gas",
                                   composition={"nitric oxide": 0.112,
                                                  "water": 0.106,
@@ -4821,9 +4840,13 @@ class ExampleBuilder:
         r101    = self._add_example_block("R-101", "Reactor — jacketed non-agit.", 35.0, 600, 260)
         e102    = self._add_example_block("E-102", "Heat exch. — air cooler",   200.0, 780, 260)
         k101    = self._add_example_block("K-101", "Compressor — centrifugal", 600.0, 960, 260)
-        t101    = self._add_example_block("T-101", "Tower (column shell)",      35.0,1140, 380)
-        tk_eth  = self._add_example_block("TK-102","Vessel — vertical", 200.0,1340, 200)
-        tk_off  = self._add_example_block("TK-103","Storage tank — cone roof", 100.0,1340, 540)
+        # After-cooler: el K-101 sube T isentrópica a ~157°C; enfriar a 40°C
+        # antes de la columna fría es práctica industrial.  Sin él la
+        # declaración de T_descarga=80°C no es físicamente coherente.
+        e103    = self._add_example_block("E-103", "Heat exch. — air cooler",   90.0,1080, 260)
+        t101    = self._add_example_block("T-101", "Tower (column shell)",      35.0,1260, 380)
+        tk_eth  = self._add_example_block("TK-102","Vessel — vertical", 200.0,1440, 200)
+        tk_off  = self._add_example_block("TK-103","Storage tank — cone roof", 100.0,1440, 540)
 
         # R-101 Modo A real: R011 (derivable, equilibrium converge)
         self.fs.blocks[r101].reactions   = ["R011"]
@@ -4867,14 +4890,21 @@ class ExampleBuilder:
         self._add_example_stream(e102, k101, "S-quench",
                                  src_port="proceso_out", dst_port="succion",
                                  T=40)
-        # Comprimido a columna fría (composición propagada).  K-101 sube la
-        # presión a ~12 bar — un C2 splitter opera a esa P para licuar el C2
-        # a temperaturas alcanzables (~-40°C) en vez de criogénicas a 1 bar.
-        sid_comp = self._add_example_stream(k101, t101, "S-comp",
-                                 src_port="descarga", dst_port="alimentacion",
-                                 T=80)
+        # Comprimido: K-101 sube de 1 a 12 bar; T isentrópica ≈ 157°C.
+        # El after-cooler E-103 lleva la corriente a 40°C antes de entrar a
+        # T-101 (C2 splitter opera a 12 bar para licuar el C2 a ~-40°C en
+        # vez de criogénicas a 1 bar).
+        sid_comp = self._add_example_stream(k101, e103, "S-comp",
+                                 src_port="descarga", dst_port="proceso_in",
+                                 T=157, phase="vapor")
         self.fs.streams[sid_comp].pressure_bar = 12.0
         self.fs.streams[sid_comp].pressure_locked = True
+        # After-cooler → columna
+        sid_cool = self._add_example_stream(e103, t101, "S-cool",
+                                 src_port="proceso_out", dst_port="alimentacion",
+                                 T=40, phase="vapor")
+        self.fs.streams[sid_cool].pressure_bar = 12.0
+        self.fs.streams[sid_cool].pressure_locked = True
         # Tope: corriente de etileno (composición/T/phase calculadas por la
         # columna; la pureza FUG es modesta porque el par etileno/etano es de
         # volatilidad relativa baja — un C2 splitter real lleva 100+ platos).
