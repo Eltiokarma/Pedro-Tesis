@@ -292,8 +292,32 @@ INCOMPATIBLE_ERROR = {
 # VALIDACIÓN
 # ======================================================
 
-def validate_connection(fs, src_id, dst_id, src_port, dst_port):
+# Normalización de phases declarados en streams para encajar con los tipos
+# de puerto.  Si el user escribe "vapor" lo tratamos como "gas" para la
+# matriz de compatibilidad.
+_PHASE_TO_PORT_TYPE = {
+    "gas":        "gas",
+    "vapor":      "gas",
+    "two_phase":  "gas",      # mezcla; el lado vapor es el limitante
+    "liquid":     "liquid",
+    "fuel":       "fuel",
+    "flue_gas":   "flue_gas",
+    "solid":      "solid",
+    "slurry":     "slurry",
+    "steam":      "steam",
+    "condensate": "condensate",
+}
+
+
+def validate_connection(fs, src_id, dst_id, src_port, dst_port,
+                        stream_phase=None):
     """Valida una conexión propuesta entre dos puertos.
+
+    `stream_phase` (opcional): si el stream tiene un `phase` declarado por
+    el user (gas/vapor/liquid/solid/…), úsalo como la verdad para validar
+    el destino — un tanque "liquid" que en realidad almacena gas (TK de
+    N2/CO/aire) deja de disparar 'compresor no puede aspirar liquido'
+    cuando el stream declara phase='gas'.
 
     Returns:
         (severity, message)
@@ -309,6 +333,15 @@ def validate_connection(fs, src_id, dst_id, src_port, dst_port):
 
     src_type = get_port_fluid_type(src_block.eq_type, src_port)
     dst_type = get_port_fluid_type(dst_block.eq_type, dst_port)
+
+    # Si el stream declara fase, esa es la verdad — no la inferida por
+    # eq_type.  Sobreescribimos src_type para reflejar lo que realmente
+    # sale del source.  El dst_type del puerto sigue siendo el "espera"
+    # del equipo destino.
+    if stream_phase:
+        eff = _PHASE_TO_PORT_TYPE.get(stream_phase.lower())
+        if eff:
+            src_type = eff
 
     # 1. Caso explícitamente prohibido
     error_msg = INCOMPATIBLE_ERROR.get((src_type, dst_type))
@@ -346,7 +379,8 @@ def validate_all_streams(fs):
         if getattr(s, "auto_aux", False):
             continue
         sev, msg = validate_connection(
-            fs, s.src, s.dst, s.src_port, s.dst_port
+            fs, s.src, s.dst, s.src_port, s.dst_port,
+            stream_phase=(getattr(s, "phase", "") or "") or None,
         )
         if sev != "ok":
             issues.append((s.name, sev, msg))

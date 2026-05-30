@@ -200,11 +200,16 @@ class ExampleBuilder:
                                  src_port="vapor_tope", dst_port="tube_in",
                                  T=85,
                                  main_component="benzene", phase="vapor")
-        # Reciclo del reboiler: tolueno líquido
-        self._add_example_stream(e104, p101, "S-9-recic", 2150,
-                                 src_port="cond_out", dst_port="succion",
-                                 T=110,
-                                 main_component="toluene", phase="liquid")
+        # Reciclo del reboiler: tolueno líquido.  El reboiler está a P de
+        # columna (~25 bar) pero el recycle pasa por una válvula de
+        # let-down implícita antes de entrar al pump → suction a 1 bar.
+        s9 = self._add_example_stream(
+            e104, p101, "S-9-recic", 2150,
+            src_port="cond_out", dst_port="succion",
+            T=110,
+            main_component="toluene", phase="liquid")
+        self.fs.streams[s9].pressure_bar = 1.013
+        self.fs.streams[s9].pressure_locked = True
         # Producto: benceno líquido condensado
         self._add_example_stream(e103, tk1,  "S-benceno", 0.0, role="product",
                                  src_port="tube_out",  dst_port="entrada",
@@ -934,12 +939,18 @@ class ExampleBuilder:
                                  T=110,
                                  composition=tol_recyc,
                                  main_component="toluene", phase="vapor")
-        # Tolueno reciclado al P-101 (mezclado con feed fresco)
-        self._add_example_stream(e108, p101, "S-tol-recic", 20000,
-                                 src_port="tube_out", dst_port="succion",
-                                 T=40,
-                                 composition=tol_recyc,
-                                 main_component="toluene", phase="liquid")
+        # Tolueno reciclado al P-101 (mezclado con feed fresco).  El recycle
+        # viene del HX E-108 que está en línea de columna a alta P, pero
+        # pasa por una válvula de let-down implícita antes del pump suction
+        # → 1 bar para igualar a S-feed-tol.
+        s_recic = self._add_example_stream(
+            e108, p101, "S-tol-recic", 20000,
+            src_port="tube_out", dst_port="succion",
+            T=40,
+            composition=tol_recyc,
+            main_component="toluene", phase="liquid")
+        self.fs.streams[s_recic].pressure_bar = 1.013
+        self.fs.streams[s_recic].pressure_locked = True
         # Fondo T-103: difenilo + pesados (purga)
         self._add_example_stream(t103, e109, "S-14", 1400,
                                  src_port="liquido_fondo", dst_port="liq_in",
@@ -1030,12 +1041,17 @@ class ExampleBuilder:
                                  composition=rich_amine,
                                  main_component="water", phase="liquid")
         # Flash V-101: vapor (HC disueltos) → fuel gas off-page
-        # (lo unimos al tanque de gas ácido para simplificar, simbólicamente)
-        self._add_example_stream(v101, tk_acid, "S-flash-vap", 50000, role="product",
-                                 src_port="vapor", dst_port="entrada",
-                                 price=80.0, T=55,
-                                 composition=flash_vap,
-                                 main_component="methane", phase="gas")
+        # (lo unimos al tanque de gas ácido para simplificar, simbólicamente).
+        # Sale del flash V-101 a 50 bar pero pasa por válvula de let-down
+        # implícita antes del tanque para igualar la P del S-acid-gas (1 bar).
+        s_fvap = self._add_example_stream(
+            v101, tk_acid, "S-flash-vap", 50000, role="product",
+            src_port="vapor", dst_port="entrada",
+            price=80.0, T=55,
+            composition=flash_vap,
+            main_component="methane", phase="gas")
+        self.fs.streams[s_fvap].pressure_bar = 1.013
+        self.fs.streams[s_fvap].pressure_locked = True
         # Líquido del flash a la HX lean/rich (lado frío de la amina rica)
         self._add_example_stream(v101, e101, "S-rich-cold", 0.0,
                                  src_port="liquido", dst_port="tube_in",
@@ -1898,6 +1914,10 @@ class ExampleBuilder:
                                               500.0,   60, 300)
         k101 = self._add_example_block("K-101","Compressor — centrifugal",
                                           1200.0,  360, 300)
+        # K-101 main syngas compressor: succión 1 bar → descarga 80 bar
+        # (matchea P_op del reactor para que M-101 reciba igualadas).
+        # delta_p auto-dimensionado por el solver desde la P locked de S-1.
+        self.fs.blocks[k101].efficiency = 0.75
         e101 = self._add_example_block("E-101","Heat exch. — air cooler",
                                           250.0,   660, 300)
         # Mixer (fresh + recycle de syngas)
@@ -2018,9 +2038,14 @@ class ExampleBuilder:
                                                  "water": 0.05},
                                   phase="gas")
         # Post-compresor (T sube a 200°C, ΔP=80 bar)
-        self._add_example_stream(k101, e101, "S-1", 0.0,
-                                  src_port="descarga", dst_port="proceso_in",
-                                  T=200, phase="gas")
+        s1 = self._add_example_stream(
+            k101, e101, "S-1", 0.0,
+            src_port="descarga", dst_port="proceso_in",
+            T=200, phase="gas")
+        # Lock P descarga K-101 → auto-sizing del compressor + igualada al
+        # M-101 con S-recycle (que también viene a 80 bar via K-202).
+        self.fs.streams[s1].pressure_bar = 80.0
+        self.fs.streams[s1].pressure_locked = True
         # Post-intercooler
         self._add_example_stream(e101, m101, "S-2", 0.0,
                                   src_port="proceso_out", dst_port="entrada1",
@@ -2549,6 +2574,9 @@ class ExampleBuilder:
         # Compresor aire 1 → 4.8 bar
         k101     = self._add_example_block("K-101","Compressor — centrifugal",
                                             1500.0,  360, 600)
+        # K-101 air compressor: 1 → 4.5 bar (matchea NH3 vapor del storage)
+        self.fs.blocks[k101].delta_p_bar = 3.5
+        self.fs.blocks[k101].efficiency = 0.75
         # Mezclador NH3 + aire (10% NH3 molar)
         m101     = self._add_example_block("M-101","Mixer — static",
                                                 5.0,  660, 450)
@@ -2641,11 +2669,17 @@ class ExampleBuilder:
                                   price=420.0, T=25,
                                   composition={"ammonia": 1.0},
                                   phase="liquid")
-        # NH3 vapor sobrecalentado a mixer
-        self._add_example_stream(e101, m101, "A2-NH3-vap", 0.0,
-                                  src_port="tube_out", dst_port="entrada1",
-                                  T=120, phase="gas",
-                                  composition={"ammonia": 1.0})
+        # NH3 vapor sobrecalentado a mixer.  En Ostwald real el NH3
+        # líquido se almacena a presión (~10 bar a 25°C) y al vaporizar
+        # mantiene la P de almacenaje → llega al mixer a 4.5 bar
+        # matcheando al aire comprimido (sin necesidad de un booster).
+        a2 = self._add_example_stream(
+            e101, m101, "A2-NH3-vap", 0.0,
+            src_port="tube_out", dst_port="entrada1",
+            T=120, phase="gas",
+            composition={"ammonia": 1.0})
+        self.fs.streams[a2].pressure_bar = 4.5
+        self.fs.streams[a2].pressure_locked = True
         # Aire filtrado (gratis, atmósfera)
         self._add_example_stream(tk_aire, k101, "A3-aire", 14000, role="feed",
                                   src_port="salida", dst_port="succion",
@@ -3741,6 +3775,9 @@ class ExampleBuilder:
         """
         # Layout 1.8× (planta industrial mediana)
         tk_meoh = self._add_example_block("TK-101", "Storage tank — cone roof", 200.0,  60, 200)
+        # Bomba de feed: MeOH líquido 1 bar → 35 bar antes del mixer.
+        # Sin ella la mezcla con S-CO-HP (35 bar) sería incoherente.
+        p101    = self._add_example_block("P-101",  "Pump — centrifugal",        10.0, 260, 200)
         tk_co   = self._add_example_block("TK-102", "Storage tank — cone roof", 150.0,  60, 400)
         k101    = self._add_example_block("K-101",  "Compressor — centrifugal", 450.0, 260, 400)
         m101    = self._add_example_block("M-101",  "Mixer — static",            2.0, 460, 300)
@@ -3758,6 +3795,10 @@ class ExampleBuilder:
         self.fs.blocks[r101].reactions = ["R026_PLACEHOLDER"]
         self.fs.blocks[r101].T_op_K    = 458.0
         self.fs.blocks[r101].P_op_bar  = 35.0
+
+        # P-101 (MeOH feed pump): 1 → 35 bar
+        self.fs.blocks[p101].delta_p_bar = 34.0
+        self.fs.blocks[p101].efficiency = 0.75
         # ΔH = -133.8 kJ/mol_MeOH × (990 g/y / 32.04 g/mol) = -4135 GJ/y
         # = -131 kW continuo.  Por kg input total (1866 t/y): -2216 kJ/kg.
         self.fs.blocks[r101].heat_of_reaction = -2216.0
@@ -3769,12 +3810,24 @@ class ExampleBuilder:
         # (un poco de CO en exceso queda; mass: 10 MeOH consume 10·(28/32)=8.75 CO)
         rxn_out  = {"methanol": 0.0053, "co": 0.0048, "acetic_acid": 0.9899}
 
-        # Feed metanol líquido (1000 tm/año puro)
-        self._add_example_stream(tk_meoh, m101, "S-MeOH", 1000, role="feed",
-                                 src_port="salida",   dst_port="alimentacion_1",
-                                 price=500.0, T=25,
-                                 main_component="methanol", phase="liquid",
-                                 composition={"methanol": 1.0})
+        # Feed metanol líquido (1000 tm/año puro) → P-101 (succión a 1 bar)
+        s_meoh = self._add_example_stream(
+            tk_meoh, p101, "S-MeOH", 1000, role="feed",
+            src_port="salida",   dst_port="succion",
+            price=500.0, T=25,
+            main_component="methanol", phase="liquid",
+            composition={"methanol": 1.0})
+        self.fs.streams[s_meoh].pressure_bar = 1.013
+        self.fs.streams[s_meoh].pressure_locked = True
+        # P-101 → M-101 (MeOH líquido a 35 bar, iguala la P del CO comprimido)
+        s_meoh_hp = self._add_example_stream(
+            p101, m101, "S-MeOH-hp", 0.0,
+            src_port="descarga", dst_port="alimentacion_1",
+            T=27,
+            main_component="methanol", phase="liquid",
+            composition={"methanol": 1.0})
+        self.fs.streams[s_meoh_hp].pressure_bar = 35.0
+        self.fs.streams[s_meoh_hp].pressure_locked = True
         # CO succión (gas industrial)
         self._add_example_stream(tk_co, k101, "S-CO", 866, role="feed",
                                  src_port="salida",   dst_port="succion",
@@ -3782,11 +3835,15 @@ class ExampleBuilder:
                                  main_component="co", phase="gas",
                                  composition={"co": 1.0})
         # CO comprimido a 35 bar
-        self._add_example_stream(k101, m101, "S-CO-HP", 0.0,
-                                 src_port="descarga", dst_port="alimentacion_2",
-                                 T=120,
-                                 main_component="co", phase="gas",
-                                 composition={"co": 1.0}, lock_T=False)
+        s_co_hp = self._add_example_stream(
+            k101, m101, "S-CO-HP", 0.0,
+            src_port="descarga", dst_port="alimentacion_2",
+            T=120,
+            main_component="co", phase="gas",
+            composition={"co": 1.0}, lock_T=False)
+        # Lock de P para que K-101 auto-dimensione y M-101 mezcle a 35 bar
+        self.fs.streams[s_co_hp].pressure_bar = 35.0
+        self.fs.streams[s_co_hp].pressure_locked = True
         # Mezcla al precalentador
         self._add_example_stream(m101, e101, "S-1", 0.0,
                                  src_port="producto", dst_port="tube_in",
