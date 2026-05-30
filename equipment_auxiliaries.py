@@ -161,6 +161,26 @@ _PUMP_BLOCK_EQ    = "Pump — centrifugal"
 _AUX_OFFSET       = 110.0     # px del puerto hacia afuera
 _PUMP_INSET       = 55.0      # px entre header y bomba de circulación
 
+# Head típico de la bomba de circulación según el lazo (m de columna de
+# fluido).  Se convierte a Δp para que el solver compute W eléctrica:
+#   Δp_bar = head_m · ρ · g / 1e5    (ρ≈1000 kg/m³ agua, ρ_steam ≈ 600)
+# El solver lee block.delta_p_bar y calcula b.duty = W_elec_kW que
+# compute_utilities_from_duties carga al OPEX eléctrico automáticamente.
+_CYCLE_HEAD_M = {
+    "shell":        25.0,     # CW shell-and-tube (lazo planta)
+    "jacket":       25.0,     # CW chaqueta de reactor
+    "kettle_steam": 20.0,     # condensado del reboiler (vuelve al boiler)
+}
+
+
+def _cycle_pump_dp_bar(cycle_id: str) -> float:
+    """Δp de la bomba de circulación para este lazo (bar).
+
+    La bomba siempre está sobre la rama LÍQUIDA del lazo (supply para CW,
+    return para steam): usamos ρ=1000 kg/m³ (agua) para convertir el head."""
+    head_m = _CYCLE_HEAD_M.get(cycle_id, 25.0)
+    return head_m * 1000.0 * 9.81 / 1e5
+
 
 def _aux_block_eq(sink_kind):
     return (_AMBIENT_BLOCK_EQ if sink_kind in ("ambient_intake", "ambient_vent")
@@ -270,55 +290,72 @@ def instantiate_auxiliaries(fs, block):
                      x=float(pump_x), y=float(pump_y))
         pump.auto_aux = True
         pump.efficiency = 0.65          # bomba CW típica
+        # Δp del lazo en bar — el solver lo usa para calcular b.duty
+        # (= W_elec_kW), y compute_utilities_from_duties lo carga al OPEX
+        # eléctrico automáticamente.  No hace falta tocar el solver.
+        pump.delta_p_bar = _cycle_pump_dp_bar(cycle)
         fs.blocks[pid] = pump
         created.append(pid)
 
-        # Crear streams del lazo: supply (header → pump → block) +
-        # return (block → header).  La bomba va sólo en la rama supply.
+        # La bomba va sobre la RAMA LÍQUIDA del lazo:
+        #   · CW (shell/jacket): supply y return son ambos líquido → pump
+        #     en supply (boost antes del HX), return va directo HX→HDR.
+        #   · Kettle steam: supply=vapor (driven por presión del boiler),
+        #     return=condensado líquido → pump en el RETURN
+        #     (condensate pump), supply va directo HDR→HX.
         supply_specs = [sp for sp in sps if sp.direction == "in"]
         return_specs = [sp for sp in sps if sp.direction == "out"]
+        supply_is_vapor = any((sp.phase or "").lower() in ("vapor", "gas")
+                              for sp in supply_specs)
+        pump_on_return = supply_is_vapor
+
+        def _branch_through_pump(sp, with_pump: bool):
+            """Crea 1 o 2 tramos para el spec.  Si with_pump=True, la bomba
+            se intercala entre el header y el equipo (sentido según
+            sp.direction)."""
+            comp = dict(sp.composition_hint or {})
+            base = dict(role=sp.role, phase=sp.phase, composition=comp,
+                        main_component=(max(comp, key=comp.get) if comp else ""))
+            if not with_pump:
+                sid = fs.new_id()
+                if sp.direction == "in":
+                    src, dst, sp_port, dp_port = hid, block.id, "salida", sp.port_name
+                else:
+                    src, dst, sp_port, dp_port = block.id, hid, sp.port_name, "entrada"
+                s = Stream(id=sid, name=_aux_stream_name(fs, sp),
+                           src=src, dst=dst, src_port=sp_port, dst_port=dp_port,
+                           mass_flow=0.0, **base)
+                s.auto_aux = True
+                s.mass_flow_locked = False
+                s.composition_locked = bool(comp)
+                fs.streams[sid] = s
+                return [sid]
+            # con bomba
+            if sp.direction == "in":
+                # header → pump → block
+                edges = [(hid, pid, "salida", "in"),
+                         (pid, block.id, "out", sp.port_name)]
+            else:
+                # block → pump → header
+                edges = [(block.id, pid, sp.port_name, "in"),
+                         (pid, hid, "out", "entrada")]
+            ids = []
+            for src, dst, sp_port, dp_port in edges:
+                sid = fs.new_id()
+                s = Stream(id=sid, name=_aux_stream_name(fs, sp),
+                           src=src, dst=dst, src_port=sp_port, dst_port=dp_port,
+                           mass_flow=0.0, **base)
+                s.auto_aux = True
+                s.mass_flow_locked = False
+                s.composition_locked = bool(comp)
+                fs.streams[sid] = s
+                ids.append(sid)
+            return ids
+
         for sp in supply_specs:
-            comp = dict(sp.composition_hint or {})
-            # Tramo 1: header → pump
-            s1id = fs.new_id()
-            s1 = Stream(id=s1id, name=_aux_stream_name(fs, sp),
-                        src=hid, dst=pid,
-                        src_port="salida", dst_port="in",
-                        mass_flow=0.0, role=sp.role, phase=sp.phase,
-                        composition=comp,
-                        main_component=(max(comp, key=comp.get) if comp else ""))
-            s1.auto_aux = True
-            s1.mass_flow_locked = False
-            s1.composition_locked = bool(comp)
-            fs.streams[s1id] = s1
-            created.append(s1id)
-            # Tramo 2: pump → block
-            s2id = fs.new_id()
-            s2 = Stream(id=s2id, name=_aux_stream_name(fs, sp),
-                        src=pid, dst=block.id,
-                        src_port="out", dst_port=sp.port_name,
-                        mass_flow=0.0, role=sp.role, phase=sp.phase,
-                        composition=comp,
-                        main_component=(max(comp, key=comp.get) if comp else ""))
-            s2.auto_aux = True
-            s2.mass_flow_locked = False
-            s2.composition_locked = bool(comp)
-            fs.streams[s2id] = s2
-            created.append(s2id)
+            created.extend(_branch_through_pump(sp, with_pump=not pump_on_return))
         for sp in return_specs:
-            comp = dict(sp.composition_hint or {})
-            sid = fs.new_id()
-            s = Stream(id=sid, name=_aux_stream_name(fs, sp),
-                       src=block.id, dst=hid,
-                       src_port=sp.port_name, dst_port="entrada",
-                       mass_flow=0.0, role=sp.role, phase=sp.phase,
-                       composition=comp,
-                       main_component=(max(comp, key=comp.get) if comp else ""))
-            s.auto_aux = True
-            s.mass_flow_locked = False
-            s.composition_locked = bool(comp)
-            fs.streams[sid] = s
-            created.append(sid)
+            created.extend(_branch_through_pump(sp, with_pump=pump_on_return))
 
     # ── B) Aux abiertas (sin cycle_id): par source/sink separado, como antes
     for sp in open_specs:

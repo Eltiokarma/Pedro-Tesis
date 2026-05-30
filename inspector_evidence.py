@@ -560,16 +560,10 @@ def utility_aux_text(block, fs) -> Optional[str]:
             lines.append(f"W ventilador ≈ {W_aux:.2f} kW elec "
                          f"(0.5% del duty disipado, regla de dedo)")
         else:
-            # bomba de circulación (auto_aux en el PFD).  Si la bomba
-            # auto_aux existe la mencionamos por nombre.
-            head_m = 20.0 if ("kettle" in eq or "reboiler" in eq) else 25.0
-            rho    = 1000.0                # kg/m³ agua
-            g      = 9.81
-            eta    = 0.65                  # bomba CW típica
-            m_kg_s = m_kg_h / 3600.0
-            Q_m3_s = m_kg_s / rho
-            W_hyd  = rho * g * head_m * Q_m3_s / 1000.0   # kW
-            W_el   = W_hyd / (eta * 0.95)
+            # bomba de circulación auto_aux dibujada en el PFD.  Si existe,
+            # leemos el W real del solver (block.duty = W_elec_kW) en vez
+            # de re-estimar — eso garantiza que el número del Diagnóstico
+            # coincida con el que va al OPEX.
             pump = next(
                 (bb for bb in fs.blocks.values()
                  if getattr(bb, "auto_aux", False)
@@ -578,11 +572,26 @@ def utility_aux_text(block, fs) -> Optional[str]:
                          and (s.src == block.id or s.dst == block.id)
                          for s in fs.streams.values())),
                 None)
-            pump_tag = f" ({pump.name})" if pump else ""
-            lines.append(f"W_bomba circ ≈ {W_el:.2f} kW elec{pump_tag} "
-                         f"(head≈{head_m:.0f} m, η={eta:.2f}, η_motor=0.95)")
+            if pump is not None and abs(pump.duty or 0.0) > 1e-6:
+                W_el = float(pump.duty)
+                head_m = pump.delta_p_bar * 1e5 / (1000.0 * 9.81)
+                eta = float(pump.efficiency or 0.65)
+                lines.append(f"W_bomba circ = {W_el:.3f} kW elec "
+                             f"({pump.name}; head≈{head_m:.0f} m, η={eta:.2f}, η_motor=0.95)")
+                lines.append(f"           → del solver hidráulico; carga al "
+                             f"OPEX eléctrico ({W_el * 8760:,.0f} kWh/año)".replace(",", " "))
+            else:
+                # Fallback: estimación cuando no hay bomba en el modelo.
+                head_m = 20.0 if ("kettle" in eq or "reboiler" in eq) else 25.0
+                rho, g, eta = 1000.0, 9.81, 0.65
+                m_kg_s = m_kg_h / 3600.0
+                Q_m3_s = m_kg_s / rho
+                W_hyd  = rho * g * head_m * Q_m3_s / 1000.0
+                W_el   = W_hyd / (eta * 0.95)
+                lines.append(f"W_bomba circ ≈ {W_el:.3f} kW elec "
+                             f"(estimado; head≈{head_m:.0f} m, η={eta:.2f}, η_motor=0.95)")
             lines.append("           → Lazo CERRADO: header SUP/RET + bomba "
-                         "auto_aux dibujados en el PFD; W suma al OPEX")
+                         "auto_aux dibujados en el PFD")
         return "\n".join(lines)
     except Exception:
         return None
