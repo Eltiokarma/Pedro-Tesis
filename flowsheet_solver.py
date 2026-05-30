@@ -3188,6 +3188,44 @@ def _trace_downstream_itemized(fs, start_block_id):
     return None
 
 
+def anchor_ambient_pressures(fs, P_atm: float = 1.013):
+    """Ancla a presión atmosférica los streams conectados a bloques Ambient.
+
+    Físicamente la atmósfera es un baño infinito a 1 atm.  Cualquier stream
+    que la tenga como origen (intake de aire) o destino (venteo / chimenea /
+    blowdown) debe estar a P_atm en ese extremo — el ΔP entre la planta
+    presurizada y la atmósfera lo absorbe una válvula de let-down (vent) o
+    el sopladero (intake) implícito en la línea.
+
+    Sin este anclaje el solver propaga la P upstream hasta la nube
+    (p.ej. 200 bar de un purge de Haber), lo cual es no físico y confunde
+    al lector del PFD.
+
+    Respeta `pressure_locked` — si el user fijó otra P explícitamente, no
+    se sobrescribe.  Marca el stream con pressure_locked=True al final
+    para que las pasadas siguientes del solver no la pisen.
+    """
+    n_anchored = 0
+    for b in fs.blocks.values():
+        if (b.eq_type or "") != "Ambient":
+            continue
+        for s in fs.streams.values():
+            if s.src != b.id and s.dst != b.id:
+                continue
+            if getattr(s, "pressure_locked", False):
+                continue
+            # SIEMPRE lockear, aunque ya esté en P_atm — sin el lock la
+            # propagation downstream del solver pisa el valor con la P de
+            # upstream (p.ej. 200 bar de un purge de Haber).
+            s.pressure_bar = float(P_atm)
+            try:
+                s.pressure_locked = True
+            except Exception:
+                pass
+            n_anchored += 1
+    return n_anchored
+
+
 def solve_pressure_propagation(fs):
     """Propaga presión P a través del flowsheet.
 
@@ -4664,6 +4702,17 @@ def solve(fs, max_iter=MAX_ITER):
     #     equipos downstream hasta el próximo stream con P locked.
     #     Si no hay nada locked, usa los ΔP declarados directamente.
     p_msgs = solve_pressure_hydraulic(fs)
+    # POST-PASO: anclar a 1 atm los streams conectados a bloques Ambient
+    # (intakes de aire, venteos, chimeneas).  Se hace DESPUÉS de
+    # solve_pressure_hydraulic porque su propagation ignora locks que
+    # añadimos artificialmente y termina pisando gradientes que setean
+    # los unit-op solvers (p.ej. el +0.1 bar del bottom de columna).
+    # Al final del flujo: bottoms con su gradiente correcto + venteos
+    # a P atmosférica, ambos coherentes.
+    try:
+        anchor_ambient_pressures(fs)
+    except Exception:
+        pass
     for m in p_msgs:
         if m.startswith("✗"):
             result.energy_balance_errors.append(m)
