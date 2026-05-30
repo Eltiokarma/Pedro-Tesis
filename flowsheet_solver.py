@@ -793,9 +793,24 @@ def size_utility_streams(fs):
         if ec.EQUIPMENT_DATA.get(b.eq_type, {}).get("categoria") != "Heat exchangers":
             continue
         duty = float(getattr(b, "duty", 0.0) or 0.0)
+        # Bloques auxiliares directamente conectados al HX (header SUP/RET,
+        # bomba de circulación en lazo cerrado).  Expandimos el "aux" del
+        # HX para incluir todos los streams del lazo (también el tramo
+        # HDR→pump que no toca el HX) y así dimensionar el ciclo entero.
+        aux_near = set()
+        for s in fs.streams.values():
+            if not (getattr(s, "auto_aux", False) and (s.role or "") == "utility"):
+                continue
+            if s.src == b.id and s.dst in fs.blocks \
+                    and getattr(fs.blocks[s.dst], "auto_aux", False):
+                aux_near.add(s.dst)
+            elif s.dst == b.id and s.src in fs.blocks \
+                    and getattr(fs.blocks[s.src], "auto_aux", False):
+                aux_near.add(s.src)
         aux = [s for s in fs.streams.values()
                if getattr(s, "auto_aux", False) and (s.role or "") == "utility"
-               and (s.src == b.id or s.dst == b.id)]
+               and (s.src == b.id or s.dst == b.id
+                    or s.src in aux_near or s.dst in aux_near)]
         if not aux:
             continue
         if abs(duty) < 1e-9:
@@ -828,7 +843,21 @@ def size_utility_streams(fs):
             if not getattr(s, "mass_flow_locked", False):
                 s.mass_flow = float(cons)
             if t_lo is not None and not getattr(s, "temperature_locked", False):
-                is_supply = (s.dst == b.id)        # entra al HX = suministro
+                # supply = sale del header / entra al HX; return = sale del HX
+                # / entra al header.  Para tramos intermedios (HDR→pump) usar
+                # tipo del bloque conectado: si proviene del header es supply.
+                src_b = fs.blocks.get(s.src)
+                dst_b = fs.blocks.get(s.dst)
+                if s.dst == b.id:
+                    is_supply = True
+                elif s.src == b.id:
+                    is_supply = False
+                elif src_b is not None and src_b.eq_type == "Utility header":
+                    is_supply = True
+                elif dst_b is not None and dst_b.eq_type == "Utility header":
+                    is_supply = False
+                else:
+                    is_supply = True
                 if utype == "cooling":
                     s.temperature = float(t_lo if is_supply else min(t_lo + 15.0, t_hi or t_lo + 15.0))
                 elif utype == "heating":

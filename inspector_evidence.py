@@ -560,7 +560,8 @@ def utility_aux_text(block, fs) -> Optional[str]:
             lines.append(f"W ventilador ≈ {W_aux:.2f} kW elec "
                          f"(0.5% del duty disipado, regla de dedo)")
         else:
-            # bomba de circulación
+            # bomba de circulación (auto_aux en el PFD).  Si la bomba
+            # auto_aux existe la mencionamos por nombre.
             head_m = 20.0 if ("kettle" in eq or "reboiler" in eq) else 25.0
             rho    = 1000.0                # kg/m³ agua
             g      = 9.81
@@ -569,10 +570,19 @@ def utility_aux_text(block, fs) -> Optional[str]:
             Q_m3_s = m_kg_s / rho
             W_hyd  = rho * g * head_m * Q_m3_s / 1000.0   # kW
             W_el   = W_hyd / (eta * 0.95)
-            lines.append(f"W_bomba circ ≈ {W_el:.2f} kW elec "
+            pump = next(
+                (bb for bb in fs.blocks.values()
+                 if getattr(bb, "auto_aux", False)
+                 and "pump" in (bb.eq_type or "").lower()
+                 and any((s.src == bb.id or s.dst == bb.id)
+                         and (s.src == block.id or s.dst == block.id)
+                         for s in fs.streams.values())),
+                None)
+            pump_tag = f" ({pump.name})" if pump else ""
+            lines.append(f"W_bomba circ ≈ {W_el:.2f} kW elec{pump_tag} "
                          f"(head≈{head_m:.0f} m, η={eta:.2f}, η_motor=0.95)")
-            lines.append(f"           → Lazo CERRADO: no está dibujado en el "
-                         f"PFD pero suma al OPEX")
+            lines.append("           → Lazo CERRADO: header SUP/RET + bomba "
+                         "auto_aux dibujados en el PFD; W suma al OPEX")
         return "\n".join(lines)
     except Exception:
         return None
