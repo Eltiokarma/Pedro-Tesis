@@ -213,7 +213,7 @@ class ExampleBuilder:
         # Producto: benceno líquido condensado
         self._add_example_stream(e103, tk1,  "S-benceno", 0.0, role="product",
                                  src_port="tube_out",  dst_port="entrada",
-                                 price=1150.0, T=40,
+                                 price=1150.0, T=45,
                                  main_component="benzene", phase="liquid")
         # Purga: gas (H₂ + metano formado)
         self._add_example_stream(v101, tk2,  "S-purga-H2", 350, role="product",
@@ -306,7 +306,7 @@ class ExampleBuilder:
         # metanol producto
         self._add_example_stream(e103, tk1,  "S-MeOH", 0.0, role="product",
                                  src_port="tube_out", dst_port="entrada",
-                                 price=1100.0, T=40)
+                                 price=1100.0, T=45)
         # venteo: gases no condensados (CO, H2)
         self._add_example_stream(v101, tk3, "S-purge", 0.0, role="product",
                                  src_port="vapor", dst_port="entrada",
@@ -374,10 +374,10 @@ class ExampleBuilder:
         # Productos al tanque (composición/phase propagadas; T = almacenamiento)
         self._add_example_stream(e102, tk1,  "S-benceno", 0.0, role="product",
                                  src_port="tube_out", dst_port="entrada",
-                                 price=1050.0, T=40)
+                                 price=1050.0, T=45)
         self._add_example_stream(e103, tk2,  "S-tolueno", 0.0, role="product",
                                  src_port="vap_out",  dst_port="entrada",
-                                 price=700.0, T=40)
+                                 price=700.0, T=45)
 
         # ---- Duties inferidos del balance termodinámico ----
         from flowsheet_solver import auto_set_duties_from_thermo
@@ -538,7 +538,7 @@ class ExampleBuilder:
         # Etanol producto (condensado)
         self._add_example_stream(e102, tk_eth, "S-EtOH", 0.0, role="product",
                                  src_port="tube_out", dst_port="entrada",
-                                 price=950.0, T=40)
+                                 price=950.0, T=45)
         # Líquido de fondo → reboiler
         self._add_example_stream(t101, e103, "S-fondo", 0.0,
                                  src_port="liquido_fondo", dst_port="liq_in")
@@ -703,7 +703,7 @@ class ExampleBuilder:
         # Nafta producto (condensada)
         self._add_example_stream(e102, tk_n, "S-nafta", 0.0, role="product",
                                  src_port="tube_out", dst_port="entrada",
-                                 price=780.0, T=40,
+                                 price=780.0, T=45,
                                  composition=nafta_mix,
                                  main_component="naphtha", phase="liquid")
         # Corte alto: querosén (18% del feed, ~30% desde el tope de la columna)
@@ -893,7 +893,7 @@ class ExampleBuilder:
         # Off-gas (a fuel del horno)
         self._add_example_stream(e104, tk_fuel, "S-fuel", 0.0, role="product",
                                  src_port="tube_out", dst_port="entrada",
-                                 price=180.0, T=40,
+                                 price=180.0, T=45,
                                  composition=t101_top,
                                  main_component="methane", phase="gas")
         # Fondo estabilizadora: benceno + tolueno al sig. paso
@@ -905,7 +905,7 @@ class ExampleBuilder:
         # Después del reboiler T-101 (su vapor sube; el líquido neto va al sig.)
         self._add_example_stream(e105, t102, "S-9", 0.0,
                                  src_port="cond_out", dst_port="alimentacion",
-                                 T=125,
+                                 T=135,
                                  composition=t101_bot,
                                  main_component="benzene", phase="liquid")
 
@@ -918,7 +918,7 @@ class ExampleBuilder:
         # Benceno producto
         self._add_example_stream(e106, tk_bz, "S-benceno", 0.0, role="product",
                                  src_port="tube_out", dst_port="entrada",
-                                 price=1150.0, T=40,
+                                 price=1150.0, T=45,
                                  composition=bz_pure,
                                  main_component="benzene", phase="liquid")
         # Fondo T-102: tolueno (+ algo de benceno) al sig. paso
@@ -929,7 +929,7 @@ class ExampleBuilder:
                                  main_component="toluene", phase="liquid")
         self._add_example_stream(e107, t103, "S-12", 0.0,
                                  src_port="cond_out", dst_port="alimentacion",
-                                 T=120,
+                                 T=130,
                                  composition=tol_recyc,
                                  main_component="toluene", phase="liquid")
 
@@ -946,7 +946,7 @@ class ExampleBuilder:
         s_recic = self._add_example_stream(
             e108, p101, "S-tol-recic", 20000,
             src_port="tube_out", dst_port="succion",
-            T=40,
+            T=45,
             composition=tol_recyc,
             main_component="toluene", phase="liquid")
         self.fs.streams[s_recic].pressure_bar = 1.013
@@ -1714,7 +1714,7 @@ class ExampleBuilder:
         # m_bottom = feed - distillate = 10000 - 1242 = 8758 tm/año
         self._add_example_stream(e103, tk_h2o, "S-bottom", 8758, role="waste",
                                   src_port="cond_out", dst_port="entrada",
-                                  price=0.0, T=40,
+                                  price=0.0, T=45,
                                   composition=bottom_comp, phase="liquid")
 
         # OPEX extras
@@ -2121,7 +2121,7 @@ class ExampleBuilder:
         # ≈950 kg/h del bottom de T-201, mayormente water)
         self._add_example_stream(e202, tk_h2o, "S-water", role="waste",
                                   src_port="cond_out", dst_port="entrada",
-                                  price=0.0, T=40, phase="liquid")
+                                  price=0.0, T=45, phase="liquid")
 
         # ── RECYCLE DE SYNGAS ────────────────────────────────
         # V-203 splitter: 9.1% al flare como purga (limita acumulación
@@ -5383,7 +5383,7 @@ class ExampleBuilder:
         # Condensado (líquido a TK)
         self._add_example_stream(con101, tk_out, "S-cond", 0.0, role="product",
                                  src_port="proceso_out", dst_port="entrada",
-                                 price=0.0, T=30,
+                                 price=0.0, T=40,
                                  main_component="water", phase="liquid",
                                  composition={"water": 1.0})
 
@@ -5452,7 +5452,7 @@ class ExampleBuilder:
         # Condensado
         self._add_example_stream(con101, tk_out, "S-cond", 0.0, role="product",
                                  src_port="proceso_out", dst_port="entrada",
-                                 price=0.0, T=30,
+                                 price=0.0, T=40,
                                  main_component="water", phase="liquid",
                                  composition={"water": 1.0})
 
