@@ -1513,21 +1513,29 @@ class ExampleBuilder:
         """
         # Layout PFD industrial 1600×960
         tk_fresh = self._add_example_block("TK-101","Storage tank — cone roof", 500.0,  60, 260)
-        m101     = self._add_example_block("M-101", "Mixer — static",            5.0, 240, 320)
+        # Compresor de syngas: en Haber industrial el feed fresco entra al
+        # tren multi-etapa (1 bar → 200 bar) ANTES del mixer con el recycle.
+        # Sin él tendrías un mixer mezclando 1 bar con 200 bar (no físico).
+        k101     = self._add_example_block("K-101", "Compressor — centrifugal", 200.0, 200, 260)
+        m101     = self._add_example_block("M-101", "Mixer — static",            5.0, 340, 320)
         f101     = self._add_example_block("F-101", "Fired heater — non-reformer",
-                                            5000.0, 400, 320)
+                                            5000.0, 480, 320)
         r101     = self._add_example_block("R-101", "Reactor — jacketed agitated",
-                                             80.0, 580, 320)
-        sep101   = self._add_example_block("V-101", "Vessel — vertical",         50.0, 780, 320)
-        psplt    = self._add_example_block("V-102", "Vessel — vertical",         20.0, 780, 500)
-        tk_nh3   = self._add_example_block("TK-102","Storage tank — cone roof", 300.0, 980, 260)
-        tk_purge = self._add_example_block("TK-103","Storage tank — cone roof",  50.0, 980, 500)
+                                             80.0, 640, 320)
+        sep101   = self._add_example_block("V-101", "Vessel — vertical",         50.0, 800, 320)
+        psplt    = self._add_example_block("V-102", "Vessel — vertical",         20.0, 800, 500)
+        tk_nh3   = self._add_example_block("TK-102","Storage tank — cone roof", 300.0,1000, 260)
+        tk_purge = self._add_example_block("TK-103","Storage tank — cone roof",  50.0,1000, 500)
 
         # Configurar R-101 como reactor de equilibrio Haber
         self.fs.blocks[r101].reactions = ["R004"]
         self.fs.blocks[r101].reactor_mode = "equilibrium"
         self.fs.blocks[r101].T_op_K = 700.0
         self.fs.blocks[r101].P_op_bar = 200.0
+
+        # K-101 (feed compressor): boost 1 bar → 200 bar
+        self.fs.blocks[k101].delta_p_bar = 199.0
+        self.fs.blocks[k101].efficiency = 0.72
 
         # Basis: 1000 tm/año feed fresco N2+H2 estequiométrico
         # N2:H2 = 1:3 molar → mass = 28+6 = 34 g; mfrac N2=0.824, H2=0.176
@@ -1541,11 +1549,24 @@ class ExampleBuilder:
         # lo demás se propaga por mixer + reactor + balance).  Por eso
         # NO declaramos main_component en streams intermedios: el flag
         # composition_locked se activaría y bloquearía la propagación.
-        self._add_example_stream(tk_fresh, m101, "S-fresh", 1000, role="feed",
-                                  src_port="salida", dst_port="entrada1",
-                                  price=0.0, T=25,
-                                  composition={"nitrogen": 0.824, "hydrogen": 0.176},
-                                  main_component="nitrogen", phase="gas")
+        # TK-101 → K-101 (succión a 1 bar)
+        s_fresh = self._add_example_stream(
+            tk_fresh, k101, "S-fresh", 1000, role="feed",
+            src_port="salida", dst_port="succion",
+            price=0.0, T=25,
+            composition={"nitrogen": 0.824, "hydrogen": 0.176},
+            main_component="nitrogen", phase="gas")
+        self.fs.streams[s_fresh].pressure_bar = 1.013
+        self.fs.streams[s_fresh].pressure_locked = True
+        # K-101 → M-101 (descarga a 200 bar — ya iguala al recycle)
+        s_fresh_hp = self._add_example_stream(
+            k101, m101, "S-fresh-hp",
+            src_port="descarga", dst_port="entrada1",
+            T=80,
+            composition={"nitrogen": 0.824, "hydrogen": 0.176},
+            main_component="nitrogen", phase="gas")
+        self.fs.streams[s_fresh_hp].pressure_bar = 200.0
+        self.fs.streams[s_fresh_hp].pressure_locked = True
         # Mezcla → heater
         self._add_example_stream(m101, f101, "S-mix",
                                   src_port="salida", dst_port="proceso_in",

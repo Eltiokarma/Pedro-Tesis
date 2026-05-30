@@ -3314,6 +3314,34 @@ def solve_pressure_propagation(fs):
 
         if not changed:
             break
+
+    # Post-iteración: detectar mezcladores con presión de inputs disparejas.
+    # Si dos inlets difieren > 0.5 bar al converger, el modelo no es físico:
+    # el lado de alta P se throttla implícitamente (work desperdicio) o el de
+    # baja necesita compresión/bombeo upstream.
+    for b in fs.blocks.values():
+        ins = [s for s in fs.streams.values() if s.dst == b.id]
+        if len(ins) < 2:
+            continue
+        ps = [s.pressure_bar for s in ins if s.pressure_bar > 0]
+        if len(ps) < 2:
+            continue
+        P_hi = max(ps); P_lo = min(ps)
+        if P_hi - P_lo <= 0.5:
+            continue
+        # Ignoramos splitters/headers que conceptualmente reciben streams
+        # de presiones distintas (header de utility, etc.).
+        if getattr(b, "auto_aux", False):
+            continue
+        hi = next(s for s in ins if s.pressure_bar == P_hi)
+        lo = next(s for s in ins if s.pressure_bar == P_lo)
+        _log_solver_warning(
+            fs,
+            f"⚠ {b.name} ({b.eq_type}): mezcla '{lo.name}' a {P_lo:.2f} bar "
+            f"con '{hi.name}' a {P_hi:.2f} bar (Δ={P_hi - P_lo:.1f} bar).  "
+            f"Físicamente '{lo.name}' debería pasar por bomba/compresor para "
+            f"igualar la presión antes del mezclador, o '{hi.name}' por una "
+            f"válvula de control (implícitamente throttled — work desperdicio).")
     return msgs
 
 

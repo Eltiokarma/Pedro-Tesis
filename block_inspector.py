@@ -2438,6 +2438,27 @@ class BlockInspectorPanel(QWidget):
             except Exception:
                 pass
 
+        # Reactores: perfil PFR, curva batch o barras CSTR/stoich
+        if _is_reactor(b.eq_type):
+            try:
+                fig, _r = _ev.reactor_figure(b, fs)
+                if fig is not None:
+                    mode = (getattr(b, "reactor_mode", "") or "").upper() or "REACTOR"
+                    out.append(self._diag_canvas_card(
+                        f"Reactor {mode}", _MplCanvas(fig)))
+            except Exception:
+                pass
+
+        # Heat exchangers: diagrama T vs Q
+        if _is_hx(b.eq_type):
+            try:
+                fig, _h = _ev.hx_tq_figure(b, fs)
+                if fig is not None:
+                    out.append(self._diag_canvas_card(
+                        "Diagrama T-Q", _MplCanvas(fig)))
+            except Exception:
+                pass
+
         return out
 
     def _diag_canvas_card(self, title: str, canvas) -> QFrame:
