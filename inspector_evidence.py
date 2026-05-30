@@ -693,6 +693,179 @@ def profile_figure(block, fs):
         return None, None
 
 
+def reactor_figure(block, fs):
+    """Devuelve (Figure, dict) para reactores según su modo:
+       · pfr   → perfil espacial (conversión o flujo molar vs L/V)
+       · batch → curva especies vs tiempo
+       · cstr  → barras entrada/salida (CSTR no tiene perfil temporal)
+       · stoich/equilibrium/... sin perfil persistido → None
+    """
+    try:
+        import matplotlib
+        matplotlib.use("Agg")
+        from matplotlib.figure import Figure
+        mode = getattr(block, "reactor_mode", "") or ""
+        if mode == "pfr":
+            prof = getattr(block, "_pfr_profile", None)
+            if not prof or not prof.get("points"):
+                return None, None
+            pts = prof["points"]
+            fig = Figure(figsize=(3.4, 2.8), dpi=90)
+            ax = fig.add_subplot(111)
+            xs = [p["L_frac"] for p in pts]
+            species = sorted({sp for p in pts for sp in (p.get("X") or {})})
+            any_curve = False
+            for sp in species:
+                ys = [(p.get("X") or {}).get(sp, 0.0) * 100.0 for p in pts]
+                if max(ys) < 1e-3:
+                    continue
+                ax.plot(xs, ys, lw=1.2, label=sp)
+                any_curve = True
+            if not any_curve:
+                return None, None
+            ax.set_xlabel("L / L_total", fontsize=8)
+            ax.set_ylabel("Conversión (%)", fontsize=8)
+            ax.set_title(f"Perfil PFR — {block.name}", fontsize=9, fontweight="bold")
+            ax.tick_params(labelsize=7)
+            ax.grid(True, alpha=0.3, linestyle="--")
+            ax.legend(fontsize=6, loc="best", ncol=2)
+            for s in ("top", "right"): ax.spines[s].set_visible(False)
+            fig.tight_layout()
+            return fig, prof
+        if mode == "batch":
+            prof = getattr(block, "_batch_profile", None)
+            if not prof or not prof.get("points"):
+                return None, None
+            pts = prof["points"]
+            fig = Figure(figsize=(3.4, 2.8), dpi=90)
+            ax = fig.add_subplot(111)
+            xs = [p["t_s"] for p in pts]
+            species = sorted({sp for p in pts for sp in (p.get("X") or {})})
+            any_curve = False
+            for sp in species:
+                ys = [(p.get("X") or {}).get(sp, 0.0) * 100.0 for p in pts]
+                if max(ys) < 1e-3:
+                    continue
+                ax.plot(xs, ys, lw=1.2, label=sp)
+                any_curve = True
+            if not any_curve:
+                return None, None
+            ax.set_xlabel("Tiempo (s)", fontsize=8)
+            ax.set_ylabel("Conversión (%)", fontsize=8)
+            t_tot = prof.get("t_total_s", xs[-1] if xs else 0)
+            ax.set_title(f"Batch — {block.name}  (t={t_tot:.0f}s)",
+                         fontsize=9, fontweight="bold")
+            ax.tick_params(labelsize=7)
+            ax.grid(True, alpha=0.3, linestyle="--")
+            ax.legend(fontsize=6, loc="best", ncol=2)
+            for s in ("top", "right"): ax.spines[s].set_visible(False)
+            fig.tight_layout()
+            return fig, prof
+        if mode == "cstr" or fs is not None:
+            # CSTR (o cualquier reactor steady-state con stoich/equilibrium):
+            # barras de % másico entrada vs salida — evidencia del balance.
+            if fs is None:
+                return None, None
+            ins = [s for s in fs.streams.values() if s.dst == block.id]
+            outs = [s for s in fs.streams.values() if s.src == block.id]
+            def _agg(streams):
+                tot, m = {}, 0.0
+                for s in streams:
+                    comp = s.composition or {}; mf = s.mass_flow or 0.0
+                    m += mf
+                    for k, v in comp.items(): tot[k] = tot.get(k, 0.0) + v * mf
+                return {k: v/m for k, v in tot.items()} if m > 0 else {}
+            cin, cout = _agg(ins), _agg(outs)
+            if not cin and not cout:
+                return None, None
+            species = sorted(set(cin) | set(cout))
+            if not species:
+                return None, None
+            fig = Figure(figsize=(3.4, 2.8), dpi=90)
+            ax = fig.add_subplot(111)
+            x = list(range(len(species))); w = 0.38
+            ax.bar([xi - w/2 for xi in x],
+                   [cin.get(s, 0.0) * 100 for s in species], w,
+                   label="Entrada", color="#5c6bc0")
+            ax.bar([xi + w/2 for xi in x],
+                   [cout.get(s, 0.0) * 100 for s in species], w,
+                   label="Salida", color="#ef6c00")
+            ax.set_xticks(x)
+            ax.set_xticklabels(species, fontsize=6, rotation=40, ha="right")
+            ax.set_ylabel("% másico", fontsize=8)
+            ax.tick_params(labelsize=7)
+            ax.grid(True, axis="y", alpha=0.3, linestyle="--")
+            ax.legend(fontsize=7, loc="best")
+            ttl = f"{(mode or 'reactor').upper()} — {block.name}"
+            ax.set_title(ttl, fontsize=9, fontweight="bold")
+            for s in ("top", "right"): ax.spines[s].set_visible(False)
+            fig.tight_layout()
+            return fig, {"composition_in": cin, "composition_out": cout}
+        return None, None
+    except Exception:
+        return None, None
+
+
+def hx_tq_figure(block, fs):
+    """Diagrama T vs Q (cumulative duty) para un HX: dos líneas — caliente
+    y frío — desde T_in hasta T_out, con el approach mínimo marcado.
+    Evidencia visual del primer principio del intercambiador."""
+    try:
+        import matplotlib
+        matplotlib.use("Agg")
+        from matplotlib.figure import Figure
+        import equipment_costs as _ec
+        if (_ec.EQUIPMENT_DATA.get(block.eq_type, {}).get("categoria")
+                != "Heat exchangers"):
+            return None, None
+        hxd = getattr(block, "_hx_diagnostics", None)
+        if not (hxd and isinstance(hxd, dict)):
+            return None, None
+        Thi, Tho = hxd.get("T_h_in"), hxd.get("T_h_out")
+        Tci, Tco = hxd.get("T_c_in"), hxd.get("T_c_out")
+        if None in (Thi, Tho, Tci, Tco):
+            return None, None
+        duty = abs(float(getattr(block, "duty", 0.0) or 0.0))
+        if duty <= 0:
+            return None, None
+        fig = Figure(figsize=(3.4, 2.8), dpi=90)
+        ax = fig.add_subplot(111)
+        # caliente: cede duty Q (cae de Thi a Tho mientras Q acumula)
+        # frío:     recibe duty Q (sube de Tci a Tco)
+        # Counter-current: en x=0 está el extremo de salida del cold (Tco)
+        # y entrada del hot (Thi); en x=Q el extremo opuesto.
+        ax.plot([0, duty], [Thi, Tho], color="#d23",  lw=1.6, label="Caliente")
+        ax.plot([0, duty], [Tco, Tci], color="#1f6feb", lw=1.6, label="Frío")
+        # marcar approach mínimo
+        approach = hxd.get("approach")
+        if approach is not None:
+            # extremo donde el approach es mínimo (counter-current: usualmente
+            # el lado caliente-out / frío-in)
+            dT_left  = Thi - Tco
+            dT_right = Tho - Tci
+            if dT_right < dT_left:
+                x_app = duty; T_h_app, T_c_app = Tho, Tci
+            else:
+                x_app = 0.0;  T_h_app, T_c_app = Thi, Tco
+            ax.annotate(f"ΔT_min = {approach:.1f} °C",
+                        xy=(x_app, (T_h_app + T_c_app)/2),
+                        xytext=(0.5 * duty, max(Thi, Tco) + 5),
+                        fontsize=7, ha="center", color="#444",
+                        arrowprops=dict(arrowstyle="->", color="#888", lw=0.7))
+        ax.set_xlabel("Q acumulado (kW)", fontsize=8)
+        ax.set_ylabel("T (°C)", fontsize=8)
+        ax.tick_params(labelsize=7)
+        ax.grid(True, alpha=0.3, linestyle="--")
+        ax.legend(fontsize=7, loc="best")
+        ax.set_title(f"T-Q — {block.name}  (duty={duty:.1f} kW)",
+                     fontsize=9, fontweight="bold")
+        for s in ("top", "right"): ax.spines[s].set_visible(False)
+        fig.tight_layout()
+        return fig, hxd
+    except Exception:
+        return None, None
+
+
 def flash_figure(block, fs):
     """Devuelve (Figure, flash_dict) o (None, None) — para Vessels con
     flash_active genuinamente bifásicos en proyección binaria."""
