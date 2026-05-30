@@ -383,6 +383,7 @@ def _sections_for(eq_type: str) -> List[str]:
     secs.append("sizing")
     secs.append("utility")
     secs.append("economia")
+    secs.append("diagnostico")
     return secs
 
 
@@ -978,6 +979,7 @@ class _InspectorSidebar(QFrame):
         "sizing":      "Sizing",
         "utility":     "Utility",
         "economia":    "Economía",
+        "diagnostico": "Diagnóstico",
     }
     SECTION_ICON = {
         "identidad":   "T",
@@ -989,6 +991,7 @@ class _InspectorSidebar(QFrame):
         "sizing":      "□",
         "utility":     "♨",
         "economia":    "$",
+        "diagnostico": "i",
     }
 
     def __init__(self, parent=None):
@@ -1460,6 +1463,7 @@ class BlockInspectorPanel(QWidget):
             "sizing":      self._section_sizing,
             "utility":     self._section_utility,
             "economia":    self._section_economia,
+            "diagnostico": self._section_diagnostico,
         }
         fn = builders.get(key)
         if fn:
@@ -2303,6 +2307,151 @@ class BlockInspectorPanel(QWidget):
                                   unit="USD", state="auto", allow_toggle=False)
         l.addWidget(self._row("C_BM (bare module)", sf_cbm))
         return sect
+
+    # ─── Diagnóstico ─────────────────────────────────────
+    def _section_diagnostico(self, b, eq_type) -> QFrame:
+        """Evidencia textual del solver + figuras matplotlib (cuando aplica).
+        Single source of truth: inspector_evidence (modulo Qt-free)."""
+        sect = QFrame()
+        l = QVBoxLayout(sect); l.setContentsMargins(0, 0, 0, 0); l.setSpacing(8)
+        l.addLayout(self._section_header(
+            "Diagnóstico",
+            help_text="Evidencia textual y gráfica de los cálculos del solver "
+                      "para este bloque (T, presión, conversión, ΔP itemizado, "
+                      "McCabe-Thiele, perfil tray-by-tray, flash VLE)."
+        ))
+
+        try:
+            import inspector_evidence as _ev
+        except Exception as exc:
+            err = QLabel(f"⚠ inspector_evidence no disponible: {exc}")
+            err.setWordWrap(True)
+            err.setFont(QFont(pfd_fonts.SANS, 9))
+            err.setStyleSheet(f"color:{TOK['danger']};")
+            l.addWidget(err)
+            return sect
+
+        fs = self.fs
+        any_added = False
+
+        # 1) Bloques de texto por tipo de equipo --------------------
+        text_blocks: List[Tuple[str, Optional[str]]] = [
+            ("Reactor",                _ev.reactor_text(b)),
+            ("Intercambiador (HX)",    _ev.hx_text(b)),
+            ("Flash",                  _ev.flash_text(b)),
+            ("Separador mecánico",     _ev.mech_sep_text(b)),
+            ("Splitter",               _ev.splitter_text(b)),
+            ("Tanque",                 _ev.tank_text(b, fs)),
+            ("Columna — McCabe",       _ev.mccabe_text(b, fs)),
+            ("Columna — Perfil",       _ev.profile_text(b, fs)),
+            ("Bomba",                  _ev.pump_text(b, fs)),
+            ("Compresor",              _ev.compressor_text(b, fs)),
+            ("Hidráulica (ΔP)",        _ev.hydraulic_breakdown_text(b, fs)),
+        ]
+        for title, txt in text_blocks:
+            if not txt:
+                continue
+            l.addWidget(self._diag_text_card(title, txt))
+            any_added = True
+
+        # 2) Figuras matplotlib (si el backend Qt está disponible) ----
+        canvas_widgets = self._diag_figures(b, fs)
+        for w in canvas_widgets:
+            l.addWidget(w)
+            any_added = True
+
+        if not any_added:
+            ph = QLabel("Sin evidencia disponible para este bloque "
+                        "(el solver aún no produjo diagnóstico o el tipo "
+                        "no tiene métricas asociadas).")
+            ph.setWordWrap(True)
+            ph.setFont(QFont(pfd_fonts.SANS, 9))
+            ph.setStyleSheet(f"color:{TOK['ink_soft']}; font-style:italic;")
+            l.addWidget(ph)
+
+        return sect
+
+    def _diag_text_card(self, title: str, body: str) -> QFrame:
+        """Tarjeta con título + cuerpo monospace para un bloque de evidencia."""
+        card = QFrame(); card.setObjectName("diagCard")
+        cl = QVBoxLayout(card); cl.setContentsMargins(10, 8, 10, 8); cl.setSpacing(4)
+        t = QLabel(title)
+        t.setFont(QFont(pfd_fonts.SANS, 9, QFont.Bold))
+        t.setStyleSheet(f"color:{TOK['ink']};")
+        cl.addWidget(t)
+        body_lbl = QLabel(body)
+        body_lbl.setFont(QFont(pfd_fonts.MONO, 9))
+        body_lbl.setStyleSheet(f"color:{TOK['ink']};")
+        body_lbl.setWordWrap(True)
+        body_lbl.setTextInteractionFlags(Qt.TextSelectableByMouse)
+        cl.addWidget(body_lbl)
+        card.setStyleSheet(
+            f"#diagCard {{ background: {TOK['bg_mute']}; "
+            f"border: 1px solid {TOK['line']}; border-radius: 6px; }}"
+        )
+        return card
+
+    def _diag_figures(self, b, fs) -> List[QWidget]:
+        """Crea canvases QtAgg para las figuras disponibles.  Devuelve [] si
+        matplotlib-Qt no está, o si ninguna figura aplica."""
+        out: List[QWidget] = []
+        try:
+            import matplotlib
+            matplotlib.use("QtAgg")
+            from matplotlib.backends.backend_qtagg import (
+                FigureCanvas as _MplCanvas
+            )
+        except Exception:
+            return out
+        try:
+            import inspector_evidence as _ev
+        except Exception:
+            return out
+
+        # McCabe + Profile para columnas
+        if getattr(b, "column_active", False):
+            try:
+                fig, _d = _ev.mccabe_figure(b, fs)
+                if fig is not None:
+                    out.append(self._diag_canvas_card(
+                        "McCabe-Thiele", _MplCanvas(fig)))
+            except Exception:
+                pass
+            try:
+                fig, _p = _ev.profile_figure(b, fs)
+                if fig is not None:
+                    out.append(self._diag_canvas_card(
+                        "Perfil tray-by-tray", _MplCanvas(fig)))
+            except Exception:
+                pass
+
+        # Flash binario para Vessels con flash_active
+        if getattr(b, "flash_active", False):
+            try:
+                fig, _f = _ev.flash_figure(b, fs)
+                if fig is not None:
+                    out.append(self._diag_canvas_card(
+                        "Flash VLE binario", _MplCanvas(fig)))
+            except Exception:
+                pass
+
+        return out
+
+    def _diag_canvas_card(self, title: str, canvas) -> QFrame:
+        """Tarjeta con título + canvas matplotlib embebido."""
+        card = QFrame(); card.setObjectName("diagCard")
+        cl = QVBoxLayout(card); cl.setContentsMargins(10, 8, 10, 8); cl.setSpacing(6)
+        t = QLabel(title)
+        t.setFont(QFont(pfd_fonts.SANS, 9, QFont.Bold))
+        t.setStyleSheet(f"color:{TOK['ink']};")
+        cl.addWidget(t)
+        canvas.setMinimumHeight(280)
+        cl.addWidget(canvas)
+        card.setStyleSheet(
+            f"#diagCard {{ background: {TOK['bg_elev']}; "
+            f"border: 1px solid {TOK['line']}; border-radius: 6px; }}"
+        )
+        return card
 
     @staticmethod
     def _combo_style() -> str:
