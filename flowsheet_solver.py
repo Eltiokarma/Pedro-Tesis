@@ -926,6 +926,63 @@ def size_utility_streams(fs):
     return msgs
 
 
+# Propiedades del aire ambiente para dimensionar el lado-aire de los
+# air-coolers.  El aire es un baño atmosférico (role='ambient'): NO entra
+# al OPEX como utility con precio, pero su corriente necesita un flujo
+# másico real para (a) cerrar el balance del air-cooler y deducir la
+# corriente de proceso de salida, y (b) mostrar un estado térmico sensato.
+_CP_AIR_KJ_KGK = 1.005     # cp aire seco
+_DT_AIR_C      = 15.0      # ΔT típico del aire a través del haz de un air-cooler
+
+
+def size_air_cooler_streams(fs):
+    """Puebla mass_flow + T de las corrientes de AMBIENTE (aire) de los
+    air-coolers desde su duty:  ṁ_air = |Q| / (cp_air · ΔT_air).
+
+    Las crea ``equipment_auxiliaries`` con role='ambient' y mass_flow=0
+    ('se calcula desde el duty').  A diferencia de las utilities de lazo
+    cerrado (cooling water shell-side), el aire es abierto y no tiene
+    utility_key ni precio, por lo que ``size_utility_streams`` —que sólo
+    procesa role='utility'— las ignora.  Esta función las completa.
+
+    El intake queda a T ambiente y el venteo a T_ambiente + ΔT (el aire
+    absorbe el calor cedido por el proceso).  Respeta los locks del user.
+    Devuelve lista de mensajes.
+    """
+    from flowsheet_model import SEC_PER_YEAR
+    msgs = []
+    T_ambient = 25.0
+    AIR_COOLERS = ("Heat exch. — air cooler", "Heat exch. — condenser air-cooled")
+    for b in fs.blocks.values():
+        if (b.eq_type or "") not in AIR_COOLERS:
+            continue
+        air = [s for s in fs.streams.values()
+               if getattr(s, "auto_aux", False) and (s.role or "") == "ambient"
+               and (s.src == b.id or s.dst == b.id)]
+        if not air:
+            continue
+        duty = float(getattr(b, "duty", 0.0) or 0.0)
+        if abs(duty) < 1e-9:
+            for s in air:
+                if not getattr(s, "mass_flow_locked", False):
+                    s.mass_flow = 0.0
+            continue
+        # Q[kW] = ṁ[kg/s]·cp·ΔT  →  ṁ; luego kg/s → tm/año.
+        m_kg_s = abs(duty) / (_CP_AIR_KJ_KGK * _DT_AIR_C)
+        cons = m_kg_s * SEC_PER_YEAR / 1000.0          # tm/año
+        for s in air:
+            if not getattr(s, "mass_flow_locked", False):
+                s.mass_flow = float(cons)
+            if not getattr(s, "temperature_locked", False):
+                # intake = entra al bloque (dst==b); venteo = sale (src==b)
+                is_intake = (s.dst == b.id)
+                s.temperature = float(T_ambient if is_intake
+                                       else T_ambient + _DT_AIR_C)
+        msgs.append(f"  {b.name}: aire ṁ={cons:,.0f} tm/año "
+                    f"(de duty {duty:+.0f} kW, ΔT={_DT_AIR_C:.0f}°C)".replace(",", " "))
+    return msgs
+
+
 def _size_heat_exchangers(fs, result):
     """Corre size_heat_exchanger sobre cada HX y persiste los diagnósticos
     térmicos (U, ΔT_lm, F, warnings) en block._hx_diagnostics y en
@@ -4783,6 +4840,26 @@ def solve(fs, max_iter=MAX_ITER):
     # como sin resolver por tener mass_flow=0 al momento del chequeo).
     try:
         size_utility_streams(fs)
+    except Exception:
+        pass
+
+    # Lado-aire de los air-coolers (role='ambient'): dimensionar desde el
+    # duty.  size_utility_streams sólo cubre role='utility', así que el aire
+    # quedaba en mass_flow=0 → marcado unresolved y, peor, bloqueaba la
+    # deducción de la corriente de PROCESO de salida del air-cooler (con el
+    # intake/venteo sin resolver el balance Σin=Σout tenía >1 incógnita).
+    try:
+        size_air_cooler_streams(fs)
+    except Exception:
+        pass
+
+    # Re-cerrar el balance de masa ahora que las auxiliares (utility + aire)
+    # tienen flujo: corrientes de proceso que dependían de ellas (p.ej. el
+    # condensado de un condensador air-cooled) ya pueden deducirse.
+    try:
+        for _ in range(MAX_ITER):
+            if not _solve_mass_iteration(fs):
+                break
     except Exception:
         pass
 
