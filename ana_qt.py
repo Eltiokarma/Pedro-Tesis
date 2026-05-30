@@ -1337,6 +1337,8 @@ Pedro-Tesis · ana_qt.py · methodology Turton 4th ed Ch 7-10
 # ─────────────────────────────────────────────────────────────
 
 def main():
+    import ui_scaling
+    ui_scaling.enable_high_dpi()
     app = QApplication(sys.argv)
     app.setStyle("Fusion")
     win = AnaMainWindow()
