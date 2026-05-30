@@ -2418,7 +2418,36 @@ class _StreamHandle(QGraphicsEllipseItem):
                         pass
         return prev_pt, next_pt
 
+    def _stream_alive(self) -> bool:
+        """Verifica que el stream subyacente sigue en fs.streams.  Si fue
+        borrado por _delete_stream pero el handle quedó en escena (caso
+        edge: selección Qt, scene listing race condition), evita acceder
+        al modelo huérfano y crashear."""
+        try:
+            si = self._stream_item
+            return si is not None and si.model is not None \
+                and si.fs is not None \
+                and si.model.id in si.fs.streams
+        except Exception:
+            return False
+
+    def _self_destruct(self):
+        """Quita el handle de la escena si su stream fue borrado."""
+        try:
+            sc = self.scene()
+            if sc is not None:
+                sc.removeItem(self)
+        except Exception:
+            pass
+
     def itemChange(self, change, value):
+        # GUARD: si el stream subyacente fue borrado pero el handle
+        # quedó vivo (caso reportado: borrar nodo + drag posterior →
+        # crash), abortamos sin tocar modelo.
+        if change == QGraphicsItem.ItemPositionHasChanged \
+                and not self._stream_alive():
+            self._self_destruct()
+            return super().itemChange(change, value)
         if change == QGraphicsItem.ItemPositionChange and self.scene():
             # 1. snap a grilla
             nx = round(value.x() / GRID_STEP) * GRID_STEP
@@ -2999,6 +3028,24 @@ class _EndpointHandle(QGraphicsEllipseItem):
         event.accept()
 
     def itemChange(self, change, value):
+        # GUARD: si el stream subyacente fue borrado pero el handle quedó
+        # vivo (caso reportado: borrar nodo + drag posterior → crash), nos
+        # auto-destruimos sin tocar modelo.
+        if change == QGraphicsItem.ItemPositionHasChanged:
+            try:
+                si = self._stream_item
+                alive = (si is not None and si.model is not None
+                         and si.fs is not None
+                         and si.model.id in si.fs.streams)
+            except Exception:
+                alive = False
+            if not alive:
+                try:
+                    sc = self.scene()
+                    if sc is not None: sc.removeItem(self)
+                except Exception:
+                    pass
+                return super().itemChange(change, value)
         if change == QGraphicsItem.ItemPositionChange and self.scene():
             # Snap a grilla durante el drag (suave)
             nx = round(value.x() / GRID_STEP) * GRID_STEP
@@ -3067,6 +3114,21 @@ class _EndpointHandle(QGraphicsEllipseItem):
         accidental al clickear), restaurar la pos del handle al modelo
         original (el modelo nunca fue modificado, solo la pos visual).
         """
+        # GUARD: stream borrado mientras el handle estaba siendo arrastrado.
+        try:
+            si = self._stream_item
+            alive = (si is not None and si.model is not None
+                     and si.fs is not None
+                     and si.model.id in si.fs.streams)
+        except Exception:
+            alive = False
+        if not alive:
+            try:
+                sc = self.scene()
+                if sc is not None: sc.removeItem(self)
+            except Exception:
+                pass
+            return
         if not getattr(self, "_drag_committed", False):
             # Drag accidental sin commit — restaurar handle al modelo
             self._sync_pos_from_model()
