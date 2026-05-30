@@ -207,6 +207,62 @@ def _unique_name(fs, base):
     return f"{base}-{i}"
 
 
+def _bbox_overlap(x1, y1, w1, h1, x2, y2, w2, h2, pad=8.0):
+    """¿Se solapan las bounding boxes (con padding)?  pad evita pegar
+    bloques al ras."""
+    return not (x1 + w1 + pad <= x2 or x2 + w2 + pad <= x1
+                 or y1 + h1 + pad <= y2 or y2 + h2 + pad <= y1)
+
+
+def _resolve_aux_position(fs, sx, sy, w, h, dx, dy, exclude_id=None,
+                            max_tries=8, step=90.0):
+    """Encuentra una posición libre cerca de (sx, sy) para un bloque aux.
+
+    Estrategia:
+      1. Comprueba colisión con TODOS los bloques existentes (auto_aux
+         incluidos).
+      2. Si overlap, empuja primero en la dirección (dx, dy) — hacia
+         afuera del puerto del equipo padre.
+      3. Si tras `max_tries` intentos sigue chocando, prueba con offset
+         perpendicular (para "rodear" el bloque que estorba).
+    """
+    try:
+        import pfd_symbols as pfd
+    except ImportError:
+        pfd = None
+
+    def _free_at(x, y):
+        for b in fs.blocks.values():
+            if exclude_id is not None and b.id == exclude_id:
+                continue
+            try:
+                bw, bh = (pfd.block_dims(b.eq_type) if pfd else (80.0, 80.0))
+            except Exception:
+                bw, bh = 80.0, 80.0
+            if _bbox_overlap(x, y, w, h, b.x, b.y, bw, bh):
+                return False
+        return True
+
+    cx, cy = sx, sy
+    # 1) push en dirección del puerto
+    for _ in range(max_tries):
+        if _free_at(cx, cy):
+            return cx, cy
+        cx += dx * step + (0 if dx else step * 0.3)
+        cy += dy * step + (0 if dy else step * 0.3)
+    # 2) probar perpendicular (rodear obstáculo)
+    px, py = (-dy, dx) if (dx or dy) else (1.0, 0.0)
+    for sign in (+1, -1):
+        cx2, cy2 = sx + px * step * 1.5 * sign, sy + py * step * 1.5 * sign
+        for _ in range(max_tries):
+            if _free_at(cx2, cy2):
+                return cx2, cy2
+            cx2 += dx * step + px * step * 0.4 * sign
+            cy2 += dy * step + py * step * 0.4 * sign
+    # Fallback: devolver la última posición probada (caso degenerado)
+    return cx, cy
+
+
 def instantiate_auxiliaries(fs, block):
     """Crea las corrientes auxiliares (source/sink + stream) para `block`.
 
@@ -268,6 +324,14 @@ def instantiate_auxiliaries(fs, block):
         dx, dy = _SIDE_OUT.get(side, (1, 0))
         hx_x = px + dx * _AUX_OFFSET - 40.0
         hx_y = py + dy * _AUX_OFFSET - 15.0
+        # Anti-overlap: si la posición candidata pisa otro bloque, empuja
+        # más afuera en la dirección del puerto.
+        try:
+            hdr_w, hdr_h = pfd.block_dims(_HEADER_BLOCK_EQ)
+        except Exception:
+            hdr_w, hdr_h = 80.0, 30.0
+        hx_x, hx_y = _resolve_aux_position(fs, hx_x, hx_y, hdr_w, hdr_h,
+                                            dx, dy, exclude_id=None)
 
         # Header (utility) block — compartido por todas las corrientes
         # del lazo (mismo bloque).
@@ -284,6 +348,12 @@ def instantiate_auxiliaries(fs, block):
         pump_x = hx_x - dx * _PUMP_INSET if side in ("right", "left") \
             else hx_x + 25.0
         pump_y = hx_y + 20.0 if side in ("right", "left") else hx_y - dy * _PUMP_INSET
+        try:
+            pump_w, pump_h = pfd.block_dims(_PUMP_BLOCK_EQ)
+        except Exception:
+            pump_w, pump_h = 60.0, 60.0
+        pump_x, pump_y = _resolve_aux_position(
+            fs, pump_x, pump_y, pump_w, pump_h, dx, dy, exclude_id=None)
         pid = fs.new_id()
         pump = Block(id=pid, name=_unique_name(fs, f"P-{cycle[:5]}"),
                      eq_type=_PUMP_BLOCK_EQ, S=0.5,
@@ -371,10 +441,18 @@ def instantiate_auxiliaries(fs, block):
         dx, dy = _SIDE_OUT.get(side, (0, -1))
         sx = px + dx * _AUX_OFFSET - 30.0
         sy = py + dy * _AUX_OFFSET - 30.0
+        # Anti-overlap: empuja en la dirección del puerto si pisa otro bloque.
+        aux_eq_t = _aux_block_eq(sp.sink_kind)
+        try:
+            aux_w, aux_h = pfd.block_dims(aux_eq_t)
+        except Exception:
+            aux_w, aux_h = 60.0, 60.0
+        sx, sy = _resolve_aux_position(fs, sx, sy, aux_w, aux_h, dx, dy,
+                                         exclude_id=None)
 
         bid = fs.new_id()
         aux_b = Block(id=bid, name=_unique_name(fs, sp.label),
-                      eq_type=_aux_block_eq(sp.sink_kind), S=1.0,
+                      eq_type=aux_eq_t, S=1.0,
                       x=float(sx), y=float(sy))
         aux_b.auto_aux = True
         fs.blocks[bid] = aux_b
