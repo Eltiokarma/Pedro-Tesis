@@ -46,65 +46,96 @@ Numeración: empieza en 101 (101–199 = unidad de proceso 1).
 # CATÁLOGOS DE PUERTOS POR CATEGORÍA
 # ======================================================
 
-# Heat exchanger genérico (shell-and-tube): 4 puertos
+# Heat exchanger genérico (shell-and-tube): 4 puertos de proceso/servicio
+# + vent del shell + drenaje del shell para flexibilidad de armado.
 HX_PORTS = {
-    "tube_in":   ("left",  0.30),
-    "tube_out":  ("right", 0.30),
-    "shell_in":  ("right", 0.70),
-    "shell_out": ("left",  0.70),
+    "tube_in":    ("left",   0.30),
+    "tube_out":   ("right",  0.30),
+    "shell_in":   ("right",  0.70),
+    "shell_out":  ("left",   0.70),
+    "shell_vent": ("top",    0.5),     # venteo del shell-side
+    "shell_drain":("bottom", 0.5),     # drenaje del shell-side
 }
 
-# Air cooler: lado de proceso + aire ambiente (intake abajo, descarga arriba).
-# El aire lo materializa equipment_auxiliaries como corrientes 'ambient'.
+# Air cooler: proceso + aire + un par adicional para multi-pass (manifold
+# de 2 pasos por tubo, común en air-coolers grandes).
 AIR_COOLER_PORTS = {
-    "proceso_in":  ("left",   0.5),
-    "proceso_out": ("right",  0.5),
-    "aire_in":     ("bottom", 0.5),
-    "aire_out":    ("top",    0.5),
+    "proceso_in":   ("left",   0.30),
+    "proceso_out":  ("right",  0.30),
+    "proceso_in_2": ("left",   0.70),
+    "proceso_out_2":("right",  0.70),
+    "aire_in":      ("bottom", 0.5),
+    "aire_out":     ("top",    0.5),
 }
 
-# Reboiler kettle: lado proceso (líquido fondo / vapor de retorno)
-# + lado servicio (vapor / condensado)
+# Reboiler kettle: lado proceso + lado servicio + vent / drain.
 REBOILER_PORTS = {
-    "liq_in":     ("left",  0.30),    # del fondo de la columna
-    "vap_out":    ("right", 0.30),    # vapor de retorno
-    "steam_in":   ("left",  0.70),
-    "cond_out":   ("right", 0.70),
+    "liq_in":      ("left",   0.30),
+    "vap_out":     ("right",  0.30),
+    "steam_in":    ("left",   0.70),
+    "cond_out":    ("right",  0.70),
+    "vent":        ("top",    0.50),
+    "drain":       ("bottom", 0.50),
 }
 
 # Pump
 PUMP_PORTS = {
-    "succion":   ("left",  0.5),
-    "descarga":  ("right", 0.5),
+    "succion":   ("left",   0.5),
+    "descarga":  ("right",  0.5),
+    "drain":     ("bottom", 0.5),     # drenaje de casing
 }
 
-# Compressor / Fan
+# Compressor / Fan — succion, descarga, intercooler tap (gas grande),
+# drain del casing.
 COMPRESSOR_PORTS = {
-    "succion":   ("left",  0.5),
-    "descarga":  ("right", 0.5),
+    "succion":         ("left",   0.5),
+    "descarga":        ("right",  0.5),
+    "intercooler_in":  ("top",    0.30),
+    "intercooler_out": ("top",    0.70),
+    "drain":           ("bottom", 0.5),
 }
 
-# Reactor con servicios de utilidad (chaqueta o serpentín)
+# Reactor con servicios de utilidad (chaqueta o serpentín).
 REACTOR_PORTS = {
-    "alimentacion":   ("left",  0.35),
-    "alimentacion_2": ("left",  0.65),    # co-feed opcional
-    "producto":       ("right", 0.5),
-    "util_in":        ("top",   0.30),
-    "util_out":       ("top",   0.70),
+    "alimentacion":   ("left",   0.25),
+    "alimentacion_2": ("left",   0.50),    # co-feed
+    "alimentacion_3": ("left",   0.75),    # third feed (cat., promoter)
+    "producto":       ("right",  0.30),
+    "producto_2":     ("right",  0.70),    # side draw o purge
+    "util_in":        ("top",    0.30),
+    "util_out":       ("top",    0.70),
+    "venteo":         ("top",    0.50),    # alivio de presión
+    "drenaje":        ("bottom", 0.5),
 }
 
-# Vessel vertical (flash drum, separador)
+# Vessel vertical (flash drum, separador): más puertos para drenaje, vent,
+# segunda alimentación, recirculación.
 VESSEL_VERT_PORTS = {
-    "alimentacion": ("left",   0.5),
-    "vapor":        ("top",    0.5),
-    "liquido":      ("bottom", 0.5),
+    "alimentacion":   ("left",   0.40),
+    "alimentacion_2": ("left",   0.70),
+    "vapor":          ("top",    0.5),
+    "venteo":         ("top",    0.20),    # alivio
+    "liquido":        ("bottom", 0.5),
+    "drenaje":        ("bottom", 0.20),
+    "recirculacion":  ("right",  0.5),
+    # Aliases compat con Storage tank (algunos ejemplos viejos usan estos
+    # nombres): entrada → alimentacion, salida → liquido.
+    "entrada":        ("left",   0.40),
+    "salida":         ("bottom", 0.5),
 }
 
-# Vessel horizontal (KO drum)
+# Vessel horizontal (KO drum): similar al vertical pero con vapor + drain
+# laterales.
 VESSEL_HORZ_PORTS = {
-    "alimentacion": ("left",   0.5),
-    "vapor":        ("top",    0.7),
-    "liquido":      ("right",  0.5),
+    "alimentacion":   ("left",   0.40),
+    "alimentacion_2": ("left",   0.70),
+    "vapor":          ("top",    0.70),
+    "venteo":         ("top",    0.30),
+    "liquido":        ("right",  0.5),
+    "drenaje":        ("bottom", 0.20),
+    "interfase":      ("bottom", 0.70),    # extracción de interfase
+    "entrada":        ("left",   0.40),
+    "salida":         ("right",  0.5),
 }
 
 # Tower / columna — con múltiples cortes laterales y alimentaciones
@@ -129,67 +160,98 @@ TOWER_PORTS = {
     "stripping_steam":   ("bottom", 0.50),
 }
 
-# Storage tank
+# Storage tank: entradas/salidas + vent + drenaje + recirculación
 TANK_PORTS = {
-    "entrada": ("top",    0.5),
-    "salida":  ("bottom", 0.5),
+    "entrada":       ("top",    0.30),
+    "entrada_2":     ("top",    0.70),     # segunda alimentación (makeup)
+    "salida":        ("bottom", 0.30),
+    "recirculacion": ("right",  0.5),      # loop de mezcla / circulation
+    "venteo":        ("top",    0.5),      # vent atmospheric
+    "drenaje":       ("bottom", 0.70),     # drain to sewer
 }
 
-# Fired heater / horno
+# Fired heater / horno: multi-pass + aire de combustión.
 FURNACE_PORTS = {
-    "proceso_in":  ("left",   0.5),
-    "proceso_out": ("right",  0.5),
-    "combustible": ("bottom", 0.30),
-    "chimenea":    ("top",    0.5),
+    "proceso_in":    ("left",   0.30),
+    "proceso_out":   ("right",  0.30),
+    "proceso_in_2":  ("left",   0.70),     # 2do paso de tubo
+    "proceso_out_2": ("right",  0.70),
+    "combustible":   ("bottom", 0.30),
+    "aire_in":       ("bottom", 0.70),     # aire de combustión forzada
+    "chimenea":      ("top",    0.5),
 }
 
-# Solids: filter, dryer, evaporator, crystallizer
+# Solids: filter, dryer, evaporator, crystallizer.
 SOLIDS_PORTS = {
-    "alimentacion": ("left",   0.5),
-    "producto":     ("right",  0.5),
-    "util_in":      ("top",    0.5),
-    "venteo":       ("top",    0.20),
+    "alimentacion":   ("left",   0.5),
+    "producto":       ("right",  0.30),
+    "producto_2":     ("right",  0.70),    # licor madre / segunda fase
+    "util_in":        ("top",    0.30),
+    "util_out":       ("top",    0.70),
+    "venteo":         ("top",    0.5),
+    "drenaje":        ("bottom", 0.5),
 }
 
-# Mixer: 2 entradas, 1 salida (no equilibrio químico, solo mezclado)
+# Mixer: 4 entradas, 1 salida — para flexibilidad cuando el user
+# necesita mezclar más de 2 corrientes.
 MIXER_PORTS = {
-    "alimentacion_1": ("left",  0.30),
-    "alimentacion_2": ("left",  0.70),
-    "producto":       ("right", 0.50),
+    "alimentacion_1": ("left",   0.20),
+    "alimentacion_2": ("left",   0.45),
+    "alimentacion_3": ("left",   0.65),
+    "alimentacion_4": ("left",   0.85),
+    "producto":       ("right",  0.50),
+    # aliases para compat con ejemplos viejos
+    "entrada1":       ("left",   0.20),
+    "entrada2":       ("left",   0.45),
+    "salida":         ("right",  0.50),
 }
 
-# Splitter: 1 entrada, 2 salidas (flow divider)
+# Splitter: 1 entrada, 4 salidas (flow divider con varias rutas).
 SPLITTER_PORTS = {
-    "alimentacion":   ("left",  0.50),
-    "producto_1":     ("right", 0.30),
-    "producto_2":     ("right", 0.70),
+    "alimentacion":   ("left",   0.50),
+    "producto_1":     ("right",  0.20),
+    "producto_2":     ("right",  0.45),
+    "producto_3":     ("right",  0.65),
+    "producto_4":     ("right",  0.85),
+    # aliases compat
+    "entrada":        ("left",   0.50),
+    "salida_1":       ("right",  0.20),
+    "salida_2":       ("right",  0.45),
 }
 
-# Cyclone gas/sólido: feed lateral, gas arriba, sólido abajo
+# Cyclone gas/sólido: feed lateral, gas arriba, sólido abajo + venteo extra.
 CYCLONE_PORTS = {
     "alimentacion":   ("left",   0.30),
+    "alimentacion_2": ("left",   0.70),
     "venteo":         ("top",    0.50),
     "producto":       ("bottom", 0.50),
+    "drenaje":        ("bottom", 0.20),
 }
 
-# Decanter: 1 entrada, 2 fases por densidad (liviana arriba, pesada abajo)
+# Decanter: 1+ entrada, 2 fases + drenaje de interfase.
 DECANTER_PORTS = {
-    "alimentacion":   ("left",   0.50),
+    "alimentacion":   ("left",   0.30),
+    "alimentacion_2": ("left",   0.70),
     "fase_liviana":   ("right",  0.30),
     "fase_pesada":    ("right",  0.70),
+    "interfase":      ("bottom", 0.50),
+    "venteo":         ("top",    0.50),
 }
 
-# Centrifuga (disc): líquido + sólido por separado
+# Centrifuga: líquido + sólido + agua de lavado.
 CENTRIFUGE_PORTS = {
-    "alimentacion":   ("left",   0.50),
+    "alimentacion":   ("left",   0.30),
+    "agua_lavado":    ("top",    0.30),    # wash water
     "liquido":        ("right",  0.30),
     "solido":         ("bottom", 0.50),
+    "drenaje":        ("bottom", 0.80),
 }
 
-# Válvulas: simple 1-in / 1-out
+# Válvulas: 1-in / 1-out + drenaje
 VALVE_PORTS = {
     "alimentacion":   ("left",   0.50),
     "producto":       ("right",  0.50),
+    "drenaje":        ("bottom", 0.50),
 }
 
 # Boiler de vapor (caldera) — recibe agua + combustible, produce
@@ -233,6 +295,111 @@ DEFAULT_PORTS = {
     "in":  ("left",  0.5),
     "out": ("right", 0.5),
 }
+
+
+# ======================================================
+# CLASIFICACIÓN POR TIPO — para colorear los puertos
+# ======================================================
+# Cada puerto se clasifica en uno de:
+#   process_in   — entrada de proceso (feed, alimentación, succión, reflujo)
+#   process_out  — salida de proceso (producto, descarga, vapor_tope,
+#                   liquido_fondo, fase_*)
+#   utility_in   — entrada de servicio (steam, CW, jacket, shell, util_in)
+#   utility_out  — salida de servicio (cond, jacket out, shell out)
+#   fuel         — combustible
+#   vent         — venteo / atmósfera / chimenea / blowdown
+#   drain        — drenaje
+#   aux          — fallback (puerto raro o multi-uso)
+
+PORT_KIND_BY_NAME = {
+    # ── PROCESO IN ─────────────────────────────────────────
+    "tube_in":         "process_in",
+    "proceso_in":      "process_in",
+    "proceso_in_2":    "process_in",
+    "alimentacion":    "process_in",
+    "alimentacion_1":  "process_in",
+    "alimentacion_2":  "process_in",
+    "alimentacion_3":  "process_in",
+    "alimentacion_4":  "process_in",
+    "alimentacion_alta":"process_in",
+    "alimentacion_baja":"process_in",
+    "entrada":         "process_in",
+    "entrada1":        "process_in",
+    "entrada2":        "process_in",
+    "entrada_2":       "process_in",
+    "succion":         "process_in",
+    "reflujo":         "process_in",
+    "reboiler":        "process_in",
+    "liq_in":          "process_in",
+    "agua_in":         "process_in",
+    "agua_caliente":   "process_in",      # cooling tower warm return
+    "stripping_steam": "process_in",
+    "makeup":          "process_in",
+    "in":              "process_in",
+    # ── PROCESO OUT ────────────────────────────────────────
+    "tube_out":        "process_out",
+    "proceso_out":     "process_out",
+    "proceso_out_2":   "process_out",
+    "producto":        "process_out",
+    "producto_1":      "process_out",
+    "producto_2":      "process_out",
+    "producto_3":      "process_out",
+    "producto_4":      "process_out",
+    "salida":          "process_out",
+    "salida_1":        "process_out",
+    "salida_2":        "process_out",
+    "descarga":        "process_out",
+    "vapor":           "process_out",
+    "vapor_tope":      "process_out",
+    "vapor_out":       "process_out",
+    "vap_out":         "process_out",
+    "liquido":         "process_out",
+    "liquido_fondo":   "process_out",
+    "fase_liviana":    "process_out",
+    "fase_pesada":     "process_out",
+    "solido":          "process_out",
+    "agua_fria":       "process_out",     # cooling tower cold supply
+    "extraccion_lateral":"process_out",
+    "extraccion_alta": "process_out",
+    "extraccion_media":"process_out",
+    "extraccion_baja": "process_out",
+    "interfase":       "process_out",
+    "recirculacion":   "process_out",
+    "out":             "process_out",
+    # ── UTILITY IN ─────────────────────────────────────────
+    "shell_in":        "utility_in",
+    "util_in":         "utility_in",
+    "steam_in":        "utility_in",
+    "intercooler_in":  "utility_in",
+    "agua_lavado":     "utility_in",
+    # ── UTILITY OUT ────────────────────────────────────────
+    "shell_out":       "utility_out",
+    "util_out":        "utility_out",
+    "cond_out":        "utility_out",
+    "intercooler_out": "utility_out",
+    # ── FUEL ───────────────────────────────────────────────
+    "combustible":     "fuel",
+    # ── VENT / ATMOSPHERE ──────────────────────────────────
+    "chimenea":        "vent",
+    "venteo":          "vent",
+    "vent":            "vent",
+    "shell_vent":      "vent",
+    "vapor_loss":      "vent",
+    "blowdown":        "vent",
+    "aire_in":         "vent",            # intake atmosférico
+    "aire_out":        "vent",
+    # ── DRAIN ──────────────────────────────────────────────
+    "drenaje":         "drain",
+    "drain":           "drain",
+    "shell_drain":     "drain",
+}
+
+
+def get_port_kind(eq_type: str, port_name: str) -> str:
+    """Clasifica un puerto en una de 8 categorías para colorearlo.
+    Returns 'process_in' | 'process_out' | 'utility_in' | 'utility_out'
+            | 'fuel' | 'vent' | 'drain' | 'aux'."""
+    return PORT_KIND_BY_NAME.get(port_name, "aux")
 
 
 EQUIPMENT_PORTS = {
