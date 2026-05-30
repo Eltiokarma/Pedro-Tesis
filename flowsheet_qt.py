@@ -260,6 +260,37 @@ COLOR_BLOCK_TEXT    = QColor("#1a1a1a")
 COLOR_BLOCK_SUB     = QColor("#6c6c70")
 COLOR_PORT_FREE     = QColor("#bbbbbb")
 COLOR_PORT_CONN     = QColor("#1565c0")
+# Paleta por tipo de puerto — se usa cuando el puerto está libre para
+# guiar visualmente al user (qué clase de stream se espera).  Cuando el
+# puerto se conecta, el color del puerto se satura (relleno sólido).
+# Conjunto compatible con daltonismo (verde ≠ rojo + diferencias de tono):
+COLOR_PORT_IN       = QColor("#2e7d32")   # verde — proceso entra
+COLOR_PORT_OUT      = QColor("#1565c0")   # azul — proceso sale
+COLOR_PORT_UTIL_IN  = QColor("#ef6c00")   # naranja — utility entra (CW/steam)
+COLOR_PORT_UTIL_OUT = QColor("#bf360c")   # naranja oscuro — utility sale
+COLOR_PORT_FUEL     = QColor("#5d4037")   # marrón — combustible
+COLOR_PORT_VENT     = QColor("#9e9e9e")   # gris — venteo / atmósfera
+COLOR_PORT_DRAIN    = QColor("#455a64")   # gris azulado — drenaje
+COLOR_PORT_AUX      = QColor("#7e57c2")   # violeta — auxiliar genérico
+# Tinte claro = puerto libre (con su color tenue como hint)
+# Color saturado = puerto conectado (mismo hue, alpha pleno)
+def _port_tint(color: QColor) -> QColor:
+    """Devuelve una versión clara del color (alpha 60%, mismo hue)
+    para puertos libres — el user ve el HINT del tipo pero no
+    confunde con un puerto activo."""
+    c = QColor(color)
+    c.setAlpha(110)
+    return c
+PORT_KIND_COLORS = {
+    "process_in":  COLOR_PORT_IN,
+    "process_out": COLOR_PORT_OUT,
+    "utility_in":  COLOR_PORT_UTIL_IN,
+    "utility_out": COLOR_PORT_UTIL_OUT,
+    "fuel":        COLOR_PORT_FUEL,
+    "vent":        COLOR_PORT_VENT,
+    "drain":       COLOR_PORT_DRAIN,
+    "aux":         COLOR_PORT_AUX,
+}
 COLOR_LABEL_BG      = QColor(255, 255, 255, 220)
 
 # ---- Status visual (semáforo del solver) ----
@@ -3345,20 +3376,32 @@ class BlockItem(QGraphicsItemGroup):
                 stub.setPen(QPen(QColor("#0d0d0d"), 1.6))
                 stub.setZValue(0.5)   # encima del rect, debajo del puerto
                 self.decoration_items.append(stub)
+            kind = ep.get_port_kind(self.model.eq_type, pname)
+            base_color = PORT_KIND_COLORS.get(kind, COLOR_PORT_AUX)
             ell = QGraphicsEllipseItem(cx - r, cy - r, 2*r, 2*r, parent=self)
-            ell.setBrush(QBrush(COLOR_PORT_FREE))
-            ell.setPen(QPen(QColor("#333333"), 1))
+            ell.setBrush(QBrush(_port_tint(base_color)))
+            ell.setPen(QPen(base_color, 1.2))
             ell.setData(0, pname)
+            ell.setData(1, kind)
             ell.setZValue(3)
             self.port_items[pname] = ell
+            # tooltip — el user ve qué clase es ese puerto al hover
+            ell.setToolTip(f"{pname}  ·  {kind.replace('_', ' ')}")
 
     def update_port_colors(self, used_ports: set):
-        """Marca puertos conectados en azul, libres en gris."""
+        """Pinta cada puerto según (a) tipo, (b) estado conectado.
+
+        · Conectado → relleno sólido del color por tipo (alpha 100%).
+        · Libre     → relleno tinte claro (alpha 110/255) — el user ve
+                       el HINT del tipo pero no confunde con uno activo.
+        """
         for pname, ell in self.port_items.items():
+            kind = ell.data(1) or "aux"
+            base_color = PORT_KIND_COLORS.get(kind, COLOR_PORT_AUX)
             if pname in used_ports:
-                ell.setBrush(QBrush(COLOR_PORT_CONN))
+                ell.setBrush(QBrush(base_color))           # saturado
             else:
-                ell.setBrush(QBrush(COLOR_PORT_FREE))
+                ell.setBrush(QBrush(_port_tint(base_color)))  # tinte
 
     def update_warning_badge(self) -> None:
         """Muestra/oculta el badge de alerta en la esquina superior

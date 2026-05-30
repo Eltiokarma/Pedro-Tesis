@@ -191,9 +191,17 @@ class TestReactorPorts(unittest.TestCase):
         self.assertEqual(port, "alimentacion_2")
 
     def test_autoselect_ambos_usados_fallback(self):
-        # Ambos puertos left ocupados → cae a top (util_in)
+        # Con la ampliación de puertos del reactor, queda alimentacion_3
+        # libre como tercer feed antes de caer al util_in.
         port = ep.autoselect_inlet("Reactor — autoclave",
                                      used_ports=["alimentacion", "alimentacion_2"])
+        self.assertEqual(port, "alimentacion_3")
+
+    def test_autoselect_todos_feeds_usados_fallback_util(self):
+        # Cuando los 3 feeds están ocupados, recae sobre util_in (top).
+        port = ep.autoselect_inlet(
+            "Reactor — autoclave",
+            used_ports=["alimentacion", "alimentacion_2", "alimentacion_3"])
         self.assertEqual(port, "util_in")
 
 
