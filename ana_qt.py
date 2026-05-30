@@ -122,7 +122,8 @@ class AnaMainWindow(QMainWindow):
     def __init__(self):
         super().__init__()
         self.setWindowTitle("Análisis Económico — Pedro-Tesis")
-        self.resize(1280, 800)
+        import ui_scaling
+        ui_scaling.fit_to_screen(self, 1280, 800)
         self.setAcceptDrops(True)              # drag & drop xlsx
         self._dark_mode = False
 

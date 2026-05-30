@@ -5208,7 +5208,8 @@ class FlowsheetMainWindow(QMainWindow):
     def __init__(self):
         super().__init__()
         self.setWindowTitle("Diagrama de proceso — Qt edition")
-        self.resize(1400, 820)
+        import ui_scaling
+        ui_scaling.fit_to_screen(self, 1400, 820)
 
         # Registrar IBM Plex Sans / Mono para tags y especs (Aspen style).
         # Idempotente — si Qt no encuentra las TTFs, cae al sistema.
