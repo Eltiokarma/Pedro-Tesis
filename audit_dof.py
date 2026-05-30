@@ -73,6 +73,30 @@ EXAMPLES = [
 ]
 
 
+# ─────────────────────────────────────────────────────────────
+# Falsos positivos CONOCIDOS y aceptados de find_conflicts.
+#
+# find_conflicts usa un residual de energía SIMPLIFICADO
+#   (h_out - h_in - duty - m_in·heat_of_reaction)
+# que no modela todas las formas de energía.  En estos dos bloques el
+# residual no cierra dentro de tolerancia, PERO el solver real cierra el
+# balance de energía con 0 errores (verificado en validate_ui.py).  No
+# son subespecificación ni overspec reales — se documentan y se ignoran:
+#
+#   · quimpac_chloralkali / R-201: celda electrolítica.  El `duty` es
+#     potencia ELÉCTRICA que alimenta la reacción endotérmica, no calor
+#     sensible al fluido (heat_of_reaction=0).  Análogo a la exención que
+#     find_conflicts ya hace para bombas/compresores eléctricos.
+#   · potato_chips / FR-101: freidora.  El `duty` cubre evaporación de
+#     agua del producto (cambio de fase), no contemplada en el residual.
+#
+# Decisión (auditoría DOF): dejarlos documentados; el solver los resuelve.
+KNOWN_CONFLICT_FALSE_POSITIVES = {
+    ("_example_quimpac_chloralkali", "R-201"),
+    ("_example_potato_chips",        "FR-101"),
+}
+
+
 def audit_one(name):
     fake = _FakeEditor()
     getattr(el.ExampleBuilder, name)(fake)
@@ -86,8 +110,16 @@ def audit_one(name):
     n_under = sum(1 for r in rows if r["dof"] > 0)
     n_redund = sum(1 for r in rows if r["dof"] < 0)
 
-    # 3) Conflictos numéricos de locks (overspec real)
-    conflicts = fsv.find_conflicts(fs)
+    # 3) Conflictos numéricos de locks (overspec real).  Separa los
+    #    falsos positivos conocidos y aceptados (ver whitelist arriba).
+    all_conflicts = fsv.find_conflicts(fs)
+    conflicts, known = [], []
+    for c in all_conflicts:
+        block = c.split(":", 1)[0].strip()
+        if (name, block) in KNOWN_CONFLICT_FALSE_POSITIVES:
+            known.append(c)
+        else:
+            conflicts.append(c)
 
     return {
         "name": name,
@@ -97,6 +129,7 @@ def audit_one(name):
         "n_under_aspen": n_under,
         "n_redund_aspen": n_redund,
         "conflicts": conflicts,
+        "known_conflicts": known,
     }
 
 
@@ -107,7 +140,7 @@ def main():
     print("AUDITORÍA DE GRADOS DE LIBERTAD (sistema sudoku) — catálogo de ejemplos")
     print("=" * 100)
     print(f"{'ejemplo':38s} {'topo':>6} {'indet':>6} {'under':>6} {'over':>5} "
-          f"{'a-under':>8} {'a-redun':>8} {'confl':>6}")
+          f"{'a-under':>8} {'a-redun':>8} {'confl':>6} {'(fp)':>5}")
     print("-" * 100)
 
     fully_ok = []
@@ -133,10 +166,11 @@ def main():
         mark = "✓" if clean else "⚠"
         (fully_ok if clean else has_issue).append(name)
 
+        kf = len(r["known_conflicts"])
         print(f"  {mark} {name:36s} {topo:>6} {rep.n_indeterminable_mass:>6} "
               f"{rep.n_under:>6} {rep.n_over:>5} "
               f"{r['n_under_aspen']:>8} {r['n_redund_aspen']:>8} "
-              f"{len(r['conflicts']):>6}")
+              f"{len(r['conflicts']):>6} {kf:>5}")
 
         if verbose and not clean:
             for b in rep.blocks:
@@ -150,7 +184,8 @@ def main():
     print("-" * 100)
     print(f"Leyenda:  topo=status topológico | indet=streams sin masa determinable | "
           f"under/over=bloques DOF topológico")
-    print(f"          a-under/a-redun=bloques under/redundant (DOF Aspen) | confl=conflictos numéricos de locks")
+    print(f"          a-under/a-redun=bloques under/redundant (DOF Aspen) | confl=conflictos reales | "
+          f"(fp)=conflictos falsos-positivos conocidos (solver cierra OK)")
     print()
     print(f"RESUMEN:  {len(fully_ok)}/{len(EXAMPLES)} ejemplos limpios "
           f"(masa determinable + DOF=0 + sin conflictos)")
@@ -180,6 +215,23 @@ def main():
             print(f"   conflicto: {c}")
     if not any_hard:
         print("\n  Ninguna falla dura: todos los ejemplos tienen masa determinable y locks sin conflicto.")
+
+    # Falsos positivos conocidos y aceptados (documentados, no son fallas)
+    print()
+    print("=" * 100)
+    print("FALSOS POSITIVOS CONOCIDOS de find_conflicts (documentados — solver cierra OK)")
+    print("=" * 100)
+    any_fp = False
+    for name in EXAMPLES:
+        try:
+            r = audit_one(name)
+        except Exception:
+            continue
+        for c in r["known_conflicts"]:
+            any_fp = True
+            print(f"  · {name.replace('_example_','')}: {c}")
+    if not any_fp:
+        print("  (ninguno)")
 
 
 if __name__ == "__main__":
