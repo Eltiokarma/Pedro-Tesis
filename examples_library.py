@@ -142,7 +142,7 @@ class ExampleBuilder:
         e103 = self._add_example_block("E-103", "Heat exch. — floating head",   160.0, 300, 560)
         p101 = self._add_example_block("P-101", "Pump — centrifugal",            15.0,  80, 555)
         tk1  = self._add_example_block("TK-101","Storage tank — cone roof",     500.0, 820, 540)   # benceno
-        tk2  = self._add_example_block("TK-102","Storage tank — cone roof",     100.0,1060, 180)   # purga
+        tk2  = self._add_example_block("TK-102","Vessel — vertical",     100.0,1060, 180)   # purga
         # tanque de tolueno fresco
         tk3  = self._add_example_block("TK-103","Storage tank — cone roof",     300.0,  80, 200)
 
@@ -479,7 +479,7 @@ class ExampleBuilder:
         tk_mosto = self._add_example_block("TK-101","Storage tank — cone roof", 300.0,  80, 200)
         r101     = self._add_example_block("R-101", "Reactor — jacketed agitated", 80.0, 240, 180)  # fermentador
         v101     = self._add_example_block("V-101", "Vessel — vertical",            20.0, 360, 180)  # venteo CO₂
-        tk_co2   = self._add_example_block("TK-102","Storage tank — cone roof",     30.0, 480, 60)   # CO₂ venteo
+        tk_co2   = self._add_example_block("TK-102","Vessel — vertical",     30.0, 480, 60)   # CO₂ venteo
         p101     = self._add_example_block("P-101", "Pump — centrifugal",           10.0, 360, 460)
         e101     = self._add_example_block("E-101", "Heat exch. — floating head",  160.0, 480, 460)
         t101     = self._add_example_block("T-101", "Tower (column shell)",          40.0, 660, 380)
@@ -776,7 +776,7 @@ class ExampleBuilder:
         # Recycle de gas (H₂ + CH₄ light)
         k101 = self._add_example_block("K-101", "Compressor — centrifugal",        300.0, 980, 60)
         # Purga de gas (10% del recycle, para evitar acumulación de CH₄)
-        tk_purga = self._add_example_block("TK-102","Storage tank — cone roof",     50.0, 1100, 60)
+        tk_purga = self._add_example_block("TK-102","Vessel — vertical",     50.0, 1100, 60)
 
         # ============ Tren de destilación (fila inferior + lado) ============
         # Estabilizadora: T-101 separa light ends (CH₄ disuelto, gas en el líquido)
@@ -784,7 +784,7 @@ class ExampleBuilder:
         t101 = self._add_example_block("T-101", "Tower (column shell)",             80.0, 220, 380)  # stabilizer
         e104 = self._add_example_block("E-104", "Heat exch. — floating head",      300.0, 360, 380)  # cond top T-101 (gas fuel)
         e105 = self._add_example_block("E-105", "Heat exch. — kettle reboiler",    300.0, 220, 620)  # reboiler T-101
-        tk_fuel = self._add_example_block("TK-103","Storage tank — cone roof",      50.0, 500, 380)  # off-gas (fuel gas)
+        tk_fuel = self._add_example_block("TK-103","Vessel — vertical",      50.0, 500, 380)  # off-gas (fuel gas)
         # Columna de benceno: T-102 producto cabeza
         t102 = self._add_example_block("T-102", "Tower (column shell)",            100.0, 640, 440)
         e106 = self._add_example_block("E-106", "Heat exch. — floating head",      500.0, 760, 320)  # cond top T-102 (benceno)
@@ -1002,8 +1002,8 @@ class ExampleBuilder:
         p101 = self._add_example_block("P-101", "Pump — centrifugal",            40.0,  500, 685)  # bomba amina recycle
         tk_makeup = self._add_example_block("TK-101","Storage tank — cone roof", 30.0,  100, 660)  # makeup amina
         # Productos off-page
-        tk_gas_dulce = self._add_example_block("TK-102","Storage tank — cone roof", 100.0, 340, 60)   # gas dulce
-        tk_acid      = self._add_example_block("TK-103","Storage tank — cone roof", 30.0, 1180, 300)  # gas ácido (a Claus)
+        tk_gas_dulce = self._add_example_block("TK-102","Vessel — vertical", 100.0, 340, 60)   # gas dulce
+        tk_acid      = self._add_example_block("TK-103","Vessel — vertical", 30.0, 1180, 300)  # gas ácido (a Claus)
         # Feed gas off-page
         tk_gas_acido = self._add_example_block("TK-104","Storage tank — cone roof", 200.0, 100, 320)
 
@@ -1155,7 +1155,7 @@ class ExampleBuilder:
         v101     = self._add_example_block("V-101", "Vessel — vertical",          80.0, 400, 180)  # clarificador
         tk_cach  = self._add_example_block("TK-102","Storage tank — cone roof",  100.0, 240, 460)  # cachaza
         # Tanque de vapor de agua condensada (venteos de evaporadores + secador).
-        tk_vap   = self._add_example_block("TK-105","Storage tank — cone roof", 1000.0, 540,  60)  # vapor recuperado
+        tk_vap   = self._add_example_block("TK-105","Vessel — vertical", 1000.0, 540,  60)  # vapor recuperado
         # Tren de 4 evaporadores (en realidad serían 5, simplificamos a 4)
         ev1      = self._add_example_block("EV-101","Evaporator — vertical",     400.0, 540, 180)
         ev2      = self._add_example_block("EV-102","Evaporator — vertical",     350.0, 720, 180)
@@ -1330,7 +1330,7 @@ class ExampleBuilder:
                                            400.0, 800, 320)   # syngas cooler
         v101     = self._add_example_block("V-101", "Vessel — vertical",
                                             25.0, 980, 320)   # KO drum
-        tk_syn   = self._add_example_block("TK-103","Storage tank — cone roof",
+        tk_syn   = self._add_example_block("TK-103","Vessel — vertical",
                                            300.0,1180, 220)   # syngas seco producto
         tk_h2o   = self._add_example_block("TK-104","Storage tank — cone roof",
                                            400.0,1180, 460)   # agua condensada
@@ -1444,7 +1444,7 @@ class ExampleBuilder:
                                            300.0, 660, 280)   # quench TLE 827→400
         e102    = self._add_example_block("E-102", "Heat exch. — air cooler",
                                            200.0, 860, 280)   # cooler final 400→40
-        tk_out  = self._add_example_block("TK-102","Storage tank — cone roof",
+        tk_out  = self._add_example_block("TK-102","Vessel — vertical",
                                            400.0,1060, 280)
 
         # Configurar R-101 como REACTOR PFR Capa 5
@@ -1541,7 +1541,7 @@ class ExampleBuilder:
         sep101   = self._add_example_block("V-101", "Vessel — vertical",         50.0, 800, 320)
         psplt    = self._add_example_block("V-102", "Vessel — vertical",         20.0, 800, 500)
         tk_nh3   = self._add_example_block("TK-102","Storage tank — cone roof", 300.0,1000, 260)
-        tk_purge = self._add_example_block("TK-103","Storage tank — cone roof",  50.0,1000, 500)
+        tk_purge = self._add_example_block("TK-103","Ambient",  50.0,1000, 500)
 
         # Configurar R-101 como reactor de equilibrio Haber
         self.fs.blocks[r101].reactions = ["R004"]
@@ -1818,9 +1818,9 @@ class ExampleBuilder:
         r101   = self._add_example_block("R-101", "Reactor — jacketed agitated", 50.0, 260, 280)
         e101   = self._add_example_block("E-101", "Heat exch. — air cooler",    180.0, 460, 280)
         v101   = self._add_example_block("V-101", "Vessel — vertical",           25.0, 640, 280)
-        tk_co2 = self._add_example_block("TK-102","Storage tank — cone roof",  100.0, 820, 140)
+        tk_co2 = self._add_example_block("TK-102","Ambient",  100.0, 820, 140)
         t101   = self._add_example_block("T-101", "Tower (column shell)",        45.0, 840, 360)
-        tk_eth = self._add_example_block("TK-103","Storage tank — cone roof",  300.0,1040, 240)
+        tk_eth = self._add_example_block("TK-103","Vessel — vertical",  300.0,1040, 240)
         tk_h2o = self._add_example_block("TK-104","Storage tank — cone roof",  500.0,1040, 480)
 
         # Configurar reactor R-101: fermentación de glucosa (R007) en modo
@@ -1961,7 +1961,7 @@ class ExampleBuilder:
         self.fs.blocks[v203].splitter_active = True
         self.fs.blocks[v203].splitter_fractions = [0.0909, 0.9091]  # purge / recycle
         # Flare se corre a la derecha para dejar lugar a V-203
-        tk_flare = self._add_example_block("TK-203","Storage tank — cone roof",
+        tk_flare = self._add_example_block("TK-203","Ambient",
                                               100.0, 2460,  60)
         # Columna abajo de V-201
         t201 = self._add_example_block("T-201","Tower (column shell)",
@@ -2012,7 +2012,7 @@ class ExampleBuilder:
         tk_blowdown = self._add_example_block("TK-302","Storage tank — cone roof",
                                                  100.0, 960,1440)
         # Header de vapor MP — alimenta a E-202 como utility (ciclo cerrado)
-        tk_steam = self._add_example_block("TK-305","Storage tank — cone roof",
+        tk_steam = self._add_example_block("TK-305","Vessel — vertical",
                                               200.0,1260,1200)
 
         # Cooling tower loop (y=1560)
@@ -2338,7 +2338,7 @@ class ExampleBuilder:
         # ============ TREN DE H2 ============
         e401     = self._add_example_block("E-401","Heat exch. — air cooler",
                                               50.0, 2160, 480)
-        tk_h2_prod = self._add_example_block("TK-202","Storage tank — cone roof",
+        tk_h2_prod = self._add_example_block("TK-202","Vessel — vertical",
                                              200.0, 2460, 480)
 
         # ============ TREN DE NAOH (evaporador 32% → 50%) ============
@@ -2348,7 +2348,7 @@ class ExampleBuilder:
         tk_naoh  = self._add_example_block("TK-203","Storage tank — floating roof",
                                              800.0, 2460, 780)
         # Vapor de agua (waste — al sistema de condensado / atmosfera)
-        tk_vapor = self._add_example_block("TK-108","Storage tank — cone roof",
+        tk_vapor = self._add_example_block("TK-108","Vessel — vertical",
                                              100.0, 2460,1020)
 
         # ============ STREAMS — PURIFICACIÓN ============
@@ -2649,7 +2649,7 @@ class ExampleBuilder:
         tk_hno3  = self._add_example_block("TK-201","Storage tank — floating roof",
                                             800.0, 3360, 720)
         # Vent del bleacher (NOx stripped, va a chimenea via expander)
-        tk_vent  = self._add_example_block("TK-105","Storage tank — cone roof",
+        tk_vent  = self._add_example_block("TK-105","Ambient",
                                              100.0, 3060, 960)
 
         # Precalentador tail gas (calienta gas de cola con calor residual)
@@ -2659,7 +2659,7 @@ class ExampleBuilder:
         t501     = self._add_example_block("K-501","Compressor — axial",
                                             1000.0, 3360, 360)
         # Chimenea (post-DeNOx, atmósfera)
-        tk_stack = self._add_example_block("TK-301","Storage tank — cone roof",
+        tk_stack = self._add_example_block("TK-301","Ambient",
                                              100.0, 3660, 360)
 
         # ============ STREAMS — ALIMENTACIÓN ============
@@ -2918,7 +2918,7 @@ class ExampleBuilder:
         self.fs.blocks[t101].splitter_fractions = [0.02, 0.18, 0.13,
                                                      0.22, 0.08, 0.37]
         # Tanques de cortes inmediatos (algunos van a downstream, otros directo)
-        tk_fuel_gas = self._add_example_block("TK-201","Storage tank — cone roof",
+        tk_fuel_gas = self._add_example_block("TK-201","Vessel — vertical",
                                               150.0, 1260, 120)
         tk_turbo = self._add_example_block("TK-202","Storage tank — floating roof",
                                             600.0, 1860, 660)
@@ -2996,13 +2996,13 @@ class ExampleBuilder:
                                             150.0, 2160, 540)
         tk_lco   = self._add_example_block("TK-205","Storage tank — floating roof",
                                             400.0, 2160, 720)
-        tk_glp_fcc = self._add_example_block("TK-206","Storage tank — cone roof",
+        tk_glp_fcc = self._add_example_block("TK-206","Vessel — vertical",
                                             200.0, 2160, 900)
         tk_slurry = self._add_example_block("TK-207","Storage tank — cone roof",
                                             100.0, 2160,1080)
-        tk_gasseco = self._add_example_block("TK-208","Storage tank — cone roof",
+        tk_gasseco = self._add_example_block("TK-208","Vessel — vertical",
                                              100.0, 2160,1260)
-        tk_coque_fcc = self._add_example_block("TK-209","Storage tank — cone roof",
+        tk_coque_fcc = self._add_example_block("TK-209","Vessel — vertical",
                                              100.0, 2460,1080)
 
         # ============ FCK — FLEXICOKING ============
@@ -3012,13 +3012,13 @@ class ExampleBuilder:
         self.fs.blocks[r_fck].reactions = ["R_FCK"]
         self.fs.blocks[r_fck].splitter_active = True
         self.fs.blocks[r_fck].splitter_fractions = [0.40, 0.25, 0.30, 0.05]
-        tk_flexigas = self._add_example_block("TK-210","Storage tank — cone roof",
+        tk_flexigas = self._add_example_block("TK-210","Vessel — vertical",
                                               100.0, 2160,1440)
         tk_naft_fck = self._add_example_block("TK-211","Storage tank — cone roof",
                                               150.0, 2160,1620)
         tk_gasoleo_fck = self._add_example_block("TK-212","Storage tank — cone roof",
                                               200.0, 2460,1620)
-        tk_coque_neto = self._add_example_block("TK-213","Storage tank — cone roof",
+        tk_coque_neto = self._add_example_block("TK-213","Vessel — vertical",
                                               100.0, 2460,1440)
 
         # ============ PLANTA H2 (SMR) — auxiliar ============
@@ -3028,9 +3028,9 @@ class ExampleBuilder:
         r_smr    = self._add_example_block("R-SMR","Reactor — autoclave",
                                               14.0, 3060,  60)
         self.fs.blocks[r_smr].reactions = ["R_SMR"]
-        tk_h2_makeup = self._add_example_block("TK-214","Storage tank — cone roof",
+        tk_h2_makeup = self._add_example_block("TK-214","Vessel — vertical",
                                             200.0, 3360,  60)
-        tk_co2   = self._add_example_block("TK-215","Storage tank — cone roof",
+        tk_co2   = self._add_example_block("TK-215","Ambient",
                                              100.0, 3360, 240)
         # NOTA: el H2 de planta H2 + el H2 subproducto del RCA cubren la
         # demanda de HTD+HTN+HTF.  En este ejemplo no cerramos el balance
@@ -3404,8 +3404,8 @@ class ExampleBuilder:
         ev102  = self._add_example_block("EV-102", "Evaporator — vertical",      30.0, 640, 220)
         tk_out = self._add_example_block("TK-102", "Storage tank — cone roof",   90.0, 840, 220)
         # tanques de vapor (utility) para visualizar el efluente
-        tk_v1  = self._add_example_block("TK-V1",  "Storage tank — cone roof",  100.0, 440,  60)
-        tk_v2  = self._add_example_block("TK-V2",  "Storage tank — cone roof",   90.0, 640,  60)
+        tk_v1  = self._add_example_block("TK-V1",  "Vessel — vertical",  100.0, 440,  60)
+        tk_v2  = self._add_example_block("TK-V2",  "Vessel — vertical",   90.0, 640,  60)
 
         # Composiciones por etapa
         diluted   = {"water": 0.880, "pineapple_solids": 0.120}    # 12 %
@@ -3479,7 +3479,7 @@ class ExampleBuilder:
         tk_oil   = self._add_example_block("TK-102", "Storage tank — cone roof", 150.0,  80, 400)
         fr101    = self._add_example_block("FR-101", "Vessel — vertical",         20.0, 320, 300)  # freidora
         tk_chip  = self._add_example_block("TK-103", "Storage tank — cone roof", 200.0, 560, 300)  # chips
-        tk_vap   = self._add_example_block("TK-VAP", "Storage tank — cone roof", 100.0, 320,  80)  # vapor agua
+        tk_vap   = self._add_example_block("TK-VAP", "Vessel — vertical", 100.0, 320,  80)  # vapor agua
 
         papa_cruda = {"potato_solids": 0.20, "water": 0.80}
         chip_out   = {"potato_solids": 0.380, "water": 0.020, "vegetable_oil": 0.600}
@@ -3565,7 +3565,7 @@ class ExampleBuilder:
         tk_in   = self._add_example_block("TK-101", "Storage tank — cone roof", 250.0,  80, 240)
         r101    = self._add_example_block("R-101", "Reactor — jacketed agitated", 35.0, 260, 240)
         v101    = self._add_example_block("V-101", "Vessel — vertical",            12.0, 460, 240)
-        tk_co2  = self._add_example_block("TK-102", "Storage tank — cone roof",    90.0, 460,  80)
+        tk_co2  = self._add_example_block("TK-102", "Vessel — vertical",    90.0, 460,  80)
         e101    = self._add_example_block("E-101", "Heat exch. — floating head",   50.0, 640, 240)
         tk_out  = self._add_example_block("TK-103", "Storage tank — cone roof",   200.0, 820, 240)
 
@@ -3662,7 +3662,7 @@ class ExampleBuilder:
         tk_h2o  = self._add_example_block("TK-103", "Storage tank — cone roof",  90.0, 600, 480)
         abs101  = self._add_example_block("ABS-101","Vessel — vertical",          20.0, 780, 380)
         tk_acid = self._add_example_block("TK-104", "Storage tank — cone roof", 200.0, 980, 380)
-        tk_vent = self._add_example_block("TK-105", "Storage tank — cone roof", 100.0, 980, 200)
+        tk_vent = self._add_example_block("TK-105", "Ambient", 100.0, 980, 200)
 
         # Convertidor R-101 — Modo B con R006 como referencia educativa.
         self.fs.blocks[r101].reactions = ["R006_PLACEHOLDER"]
@@ -3784,7 +3784,7 @@ class ExampleBuilder:
         e101    = self._add_example_block("E-101",  "Heat exch. — floating head", 80.0, 660, 300)
         r101    = self._add_example_block("R-101",  "Reactor — jacketed agitated", 35.0, 860, 300)
         v101    = self._add_example_block("V-101",  "Vessel — vertical",          25.0,1060, 300)
-        tk_purg = self._add_example_block("TK-103", "Storage tank — cone roof",  90.0,1060,  80)
+        tk_purg = self._add_example_block("TK-103", "Ambient",  90.0,1060,  80)
         t101    = self._add_example_block("T-101",  "Tower (column shell)",       45.0,1260, 380)
         e102    = self._add_example_block("E-102",  "Heat exch. — floating head", 60.0,1460, 200)
         e103    = self._add_example_block("E-103",  "Heat exch. — kettle reboiler", 80.0,1460, 560)
@@ -3945,7 +3945,7 @@ class ExampleBuilder:
         r101    = self._add_example_block("R-101",  "Reactor — autoclave",         5.0, 480, 280)
         v101    = self._add_example_block("V-101",  "Vessel — vertical",          15.0, 680, 280)
         tk_pe   = self._add_example_block("TK-102", "Storage tank — cone roof", 200.0, 880, 380)
-        tk_pur  = self._add_example_block("TK-103", "Storage tank — cone roof", 150.0, 880, 180)
+        tk_pur  = self._add_example_block("TK-103", "Vessel — vertical", 150.0, 880, 180)
 
         # R-101 — Modo B con R027 placeholder
         self.fs.blocks[r101].reactions = ["R027_PLACEHOLDER"]
@@ -4040,8 +4040,8 @@ class ExampleBuilder:
         celda   = self._add_example_block("R-101",  "Reactor — autoclave",       12.0, 280, 300)
         # Productos directos de la celda
         tk_naoh = self._add_example_block("TK-103", "Storage tank — cone roof", 300.0, 480, 540)
-        tk_cl2  = self._add_example_block("TK-104", "Storage tank — cone roof", 200.0, 480, 360)
-        tk_h2p  = self._add_example_block("TK-105", "Storage tank — cone roof", 100.0, 480, 180)
+        tk_cl2  = self._add_example_block("TK-104", "Vessel — vertical", 200.0, 480, 360)
+        tk_h2p  = self._add_example_block("TK-105", "Vessel — vertical", 100.0, 480, 180)
         # Quemador HCl + absorción
         r201    = self._add_example_block("R-201",  "Reactor — jacketed non-agit.", 20.0, 720, 280)
         tk_h2o2 = self._add_example_block("TK-106", "Storage tank — cone roof", 100.0, 720, 480)
@@ -4172,7 +4172,7 @@ class ExampleBuilder:
         r101    = self._add_example_block("R-101",  "Reactor — jacketed non-agit.", 25.0, 460, 280)
         e101    = self._add_example_block("E-101",  "Heat exch. — air cooler",   200.0, 660, 360)
         tk_cem  = self._add_example_block("TK-102", "Storage tank — cone roof", 300.0, 860, 360)
-        tk_co2  = self._add_example_block("TK-103", "Storage tank — cone roof", 100.0, 460,  60)
+        tk_co2  = self._add_example_block("TK-103", "Ambient", 100.0, 460,  60)
 
         # R-101 — Modo B con R029 placeholder
         self.fs.blocks[r101].reactions = ["R029_PLACEHOLDER"]
@@ -4254,7 +4254,7 @@ class ExampleBuilder:
         r101    = self._add_example_block("R-101",  "Reactor — jacketed non-agit.", 30.0, 500, 360)
         e101    = self._add_example_block("E-101",  "Heat exch. — air cooler",   100.0, 720, 460)
         tk_gl   = self._add_example_block("TK-104", "Storage tank — cone roof", 250.0, 920, 460)
-        tk_co2  = self._add_example_block("TK-105", "Storage tank — cone roof", 100.0, 500, 100)
+        tk_co2  = self._add_example_block("TK-105", "Ambient", 100.0, 500, 100)
 
         # R-101 — Modo B fusión vidrio (sin reacción en DB)
         self.fs.blocks[r101].reactions = ["R_FUSION_GLASS"]
@@ -4434,9 +4434,9 @@ class ExampleBuilder:
         k101    = self._add_example_block("K-101",  "Compressor — centrifugal", 600.0, 460, 300)
         r101    = self._add_example_block("R-101",  "Reactor — autoclave",       12.0, 660, 300)
         v101    = self._add_example_block("V-101",  "Vessel — vertical",         18.0, 860, 300)
-        tk_purg = self._add_example_block("TK-103", "Storage tank — cone roof", 100.0, 860, 100)
+        tk_purg = self._add_example_block("TK-103", "Ambient", 100.0, 860, 100)
         t101    = self._add_example_block("EV-101", "Evaporator — vertical",     30.0,1060, 380)
-        tk_h2o  = self._add_example_block("TK-104", "Storage tank — cone roof", 100.0,1060, 200)
+        tk_h2o  = self._add_example_block("TK-104", "Ambient", 100.0,1060, 200)
         tk_urea = self._add_example_block("TK-105", "Storage tank — cone roof", 300.0,1260, 380)
 
         # R-101 — Modo B con R031 placeholder
@@ -4588,7 +4588,7 @@ class ExampleBuilder:
         # Fila 4 (y=860): RAMA EVAPORADA  (descremada → EV1+EV2 vacío → UHT → lata)
         ev1     = self._add_example_block("EV-101","Evaporator — vertical",     150.0, 800, 860)
         ev2     = self._add_example_block("EV-102","Evaporator — vertical",     120.0,1000, 860)
-        tk_vap  = self._add_example_block("TK-006","Storage tank — cone roof",  200.0, 900,1040)  # vapor (utility)
+        tk_vap  = self._add_example_block("TK-006","Vessel — vertical",  200.0, 900,1040)  # vapor (utility)
         e_uht   = self._add_example_block("E-106", "Heat exch. — floating head", 50.0,1200, 860)
         tk_evp  = self._add_example_block("TK-007","Storage tank — cone roof",  500.0,1400, 860)
 
@@ -4822,7 +4822,7 @@ class ExampleBuilder:
         e102    = self._add_example_block("E-102", "Heat exch. — air cooler",   200.0, 780, 260)
         k101    = self._add_example_block("K-101", "Compressor — centrifugal", 600.0, 960, 260)
         t101    = self._add_example_block("T-101", "Tower (column shell)",      35.0,1140, 380)
-        tk_eth  = self._add_example_block("TK-102","Storage tank — cone roof", 200.0,1340, 200)
+        tk_eth  = self._add_example_block("TK-102","Vessel — vertical", 200.0,1340, 200)
         tk_off  = self._add_example_block("TK-103","Storage tank — cone roof", 100.0,1340, 540)
 
         # R-101 Modo A real: R011 (derivable, equilibrium converge)
@@ -5105,7 +5105,7 @@ class ExampleBuilder:
         m101    = self._add_example_block("M-101", "Mixer — static",            2.0, 240, 280)
         r101    = self._add_example_block("R-101", "Reactor — jacketed agitated", 30.0, 420, 280)
         h101    = self._add_example_block("H-101", "Heat exch. — floating head", 80.0, 600, 280)
-        tk_vap  = self._add_example_block("TK-V",  "Storage tank — cone roof", 100.0, 600,  80)
+        tk_vap  = self._add_example_block("TK-V",  "Vessel — vertical", 100.0, 600,  80)
         e101    = self._add_example_block("E-101", "Heat exch. — air cooler",   80.0, 780, 280)
         tk_pan  = self._add_example_block("TK-102","Storage tank — cone roof", 250.0, 960, 280)
 
@@ -5199,7 +5199,7 @@ class ExampleBuilder:
         tk_med  = self._add_example_block("TK-101", "Storage tank — cone roof", 250.0,  60, 300)
         e_est   = self._add_example_block("E-EST",  "Heat exch. — floating head", 60.0, 240, 300)
         r101    = self._add_example_block("R-101",  "Reactor — jacketed agitated", 35.0, 420, 300)
-        tk_co2  = self._add_example_block("TK-CO2", "Storage tank — cone roof",  90.0, 420,  80)
+        tk_co2  = self._add_example_block("TK-CO2", "Ambient",  90.0, 420,  80)
         v101    = self._add_example_block("V-101",  "Vessel — vertical",          40.0, 620, 300)
         tk_bio  = self._add_example_block("TK-102", "Storage tank — cone roof", 100.0, 620, 520)
         f101    = self._add_example_block("F-101",  "Filter — belt",              25.0, 820, 300)
@@ -5454,7 +5454,7 @@ class ExampleBuilder:
         ev2     = self._add_example_block("EV-102", "Evaporator — vertical",     60.0, 600, 280)
         ev3     = self._add_example_block("EV-103", "Evaporator — vertical",     40.0, 780, 280)
         tk_brn  = self._add_example_block("TK-002", "Storage tank — cone roof", 100.0, 960, 380)
-        tk_dst  = self._add_example_block("TK-003", "Storage tank — cone roof", 200.0, 600, 100)
+        tk_dst  = self._add_example_block("TK-003", "Vessel — vertical", 200.0, 600, 100)
 
         # Composiciones
         seawater  = {"water": 0.965, "sodium_chloride": 0.035}
