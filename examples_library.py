@@ -4955,6 +4955,17 @@ class ExampleBuilder:
         tk_o2   = self._add_example_block("TK-103","Storage tank — cone roof", 100.0,1160, 580)
         tk_wst  = self._add_example_block("TK-W",  "Storage tank — cone roof",  90.0, 600, 480)
 
+        # T-101 con diseño automático: destilación criogénica N2/O2.
+        # El solver corre FUG + McCabe (VLE NRTL con Antoine extrapolado a
+        # ~80 K) y calcula N etapas, Ø, altura y perfil por plato.  α(N2/O2)
+        # ≈ 4.2 a 1.3 bar → separación muy factible.
+        self.fs.blocks[t101].column_active   = True
+        self.fs.blocks[t101].column_LK       = "nitrogen"   # más volátil (Tb −196 °C)
+        self.fs.blocks[t101].column_HK       = "oxygen"     # menos volátil (Tb −183 °C)
+        self.fs.blocks[t101].column_x_D_LK   = 0.999        # N2 99.9 % en tope
+        self.fs.blocks[t101].column_x_B_LK   = 0.005        # 0.5 % N2 en fondo (O2 99.5 %)
+        self.fs.blocks[t101].column_R_factor = 1.5
+
         # Feed aire (1000 t/y, composición másica real)
         air_comp = {"nitrogen": 0.767, "oxygen": 0.233}
         # Sólo N2/O2 en el aire feed; el waste tiene trazas H2O+CO2 abstraídas
