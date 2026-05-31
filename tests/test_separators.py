@@ -325,41 +325,24 @@ class TestSugarMillEndToEnd(unittest.TestCase):
     sus modelos internos.  Sin esto, los outputs serían inválidos."""
 
     def test_sugar_mill_solves_clean(self):
-        try:
-            from validate_ui import headless_mocks
-            headless_mocks()
-        except Exception:
-            pass
-        import examples_library as el
-
-        class _Fake:
-            def __init__(self):
-                self.fs = fm.Flowsheet()
-                self.labor_workers = 0
-            _add_example_block  = el.ExampleBuilder._add_example_block
-            _add_example_stream = el.ExampleBuilder._add_example_stream
-            _add_example_extra  = el.ExampleBuilder._add_example_extra
-            _set_example_labor  = el.ExampleBuilder._set_example_labor
-            _set_block_duty     = el.ExampleBuilder._set_block_duty
-
-        fake = _Fake()
-        el.ExampleBuilder._example_sugar_mill(fake)
-        res = fsv.solve(fake.fs)
+        import examples_registry as reg
+        fs = reg.load_example('sugar')
+        res = fsv.solve(fs)
         self.assertEqual(len(res.mass_balance_errors), 0,
             f"mass errors: {res.mass_balance_errors}")
         self.assertEqual(len(res.energy_balance_errors), 0,
             f"eng errors: {res.energy_balance_errors}")
 
         # Verificar que FL-101 y DR-101 escribieron outputs calculados
-        s_az_humedo = next(s for s in fake.fs.streams.values()
+        s_az_humedo = next(s for s in fs.streams.values()
                               if s.name == "S-az-humedo")
-        s_melaza    = next(s for s in fake.fs.streams.values()
+        s_melaza    = next(s for s in fs.streams.values()
                               if s.name == "S-melaza")
-        s_azucar    = next(s for s in fake.fs.streams.values()
+        s_azucar    = next(s for s in fs.streams.values()
                               if s.name == "S-azucar")
-        s_vap_dry   = next(s for s in fake.fs.streams.values()
+        s_vap_dry   = next(s for s in fs.streams.values()
                               if s.name == "S-vap-dry")
-        s_masa      = next(s for s in fake.fs.streams.values()
+        s_masa      = next(s for s in fs.streams.values()
                               if s.name == "S-masa")
 
         # Mass balance FL-101: cake + mother = masa cocida

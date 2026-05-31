@@ -6,24 +6,15 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 import flowsheet_model as fm
 import flowsheet_solver as fsv
-import examples_library as el
+import examples_registry as reg
 import mccabe_thiele as mt
 
 
-def _build(example_name):
-    class _FE:
-        def __init__(self):
-            self.fs = fm.Flowsheet()
-            self.labor_workers = 0
-        _add_example_block  = el.ExampleBuilder._add_example_block
-        _add_example_stream = el.ExampleBuilder._add_example_stream
-        _add_example_extra  = el.ExampleBuilder._add_example_extra
-        _set_example_labor  = el.ExampleBuilder._set_example_labor
-        _set_block_duty     = el.ExampleBuilder._set_block_duty
-    fake = _FE()
-    getattr(el.ExampleBuilder, example_name)(fake)
-    fsv.solve(fake.fs)
-    return fake.fs
+def _build(clave):
+    """Carga un ejemplo desde su JSON canónico (registry) y lo resuelve."""
+    fs = reg.load_example(clave)
+    fsv.solve(fs)
+    return fs
 
 
 def test_design_benzene_toluene():
@@ -58,8 +49,8 @@ def test_invalid_specs_return_none():
 def test_design_from_block_columns():
     """Los ejemplos con column_active deben recomendar un diagrama."""
     found = 0
-    for ex in ('_example_distillation', '_example_ethanol',
-               '_example_reactor_flash_column'):
+    for ex in ('distillation', 'ethanol',
+               'rxn_flash_col'):
         fs = _build(ex)
         cols = [b for b in fs.blocks.values()
                 if getattr(b, 'column_active', False)]
@@ -75,7 +66,7 @@ def test_design_from_block_columns():
 def test_sizing_from_block():
     """design_from_block debe adjuntar 'sizing' con etapas reales (E_o) y
     diámetro (Souders-Brown) físicamente razonables."""
-    fs = _build('_example_distillation')
+    fs = _build('distillation')
     b = next(x for x in fs.blocks.values() if getattr(x, 'column_active', False))
     d = mt.design_from_block(b, fs)
     sz = d.get('sizing')
@@ -106,7 +97,7 @@ def test_packed_design():
 
 
 def test_packing_attached_from_block():
-    fs = _build('_example_distillation')
+    fs = _build('distillation')
     b = next(x for x in fs.blocks.values() if getattr(x, 'column_active', False))
     d = mt.design_from_block(b, fs)
     assert d.get('packing') and d['packing']['Z_packed_m'] > 0
@@ -123,7 +114,7 @@ def test_find_azeotropes():
 def test_infeasible_diagnostic_azeotrope():
     """Una columna con x_D por encima del azeótropo devuelve un diagnóstico
     (feasible=False) que lo explica, no None silencioso."""
-    fs = _build('_example_ethanol')
+    fs = _build('ethanol')
     b = next(x for x in fs.blocks.values() if getattr(x, 'column_active', False))
     b.column_x_D_LK = 0.95          # > azeótropo etanol/agua (~0.91)
     d = mt.design_from_block(b, fs)
@@ -134,7 +125,7 @@ def test_infeasible_diagnostic_azeotrope():
 
 
 def test_feasible_has_azeotropes_field():
-    fs = _build('_example_distillation')
+    fs = _build('distillation')
     b = next(x for x in fs.blocks.values() if getattr(x, 'column_active', False))
     d = mt.design_from_block(b, fs)
     assert d.get('feasible') is True

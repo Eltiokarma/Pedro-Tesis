@@ -10,21 +10,8 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 import flowsheet_model as fm
 import flowsheet_solver as fsv
-import examples_library as el
+import examples_registry as reg
 from flowsheet_consistency_audit import audit_flowsheet
-
-
-def _build_fake_editor():
-    class _FE:
-        def __init__(self):
-            self.fs = fm.Flowsheet()
-            self.labor_workers = 0
-        _add_example_block  = el.ExampleBuilder._add_example_block
-        _add_example_stream = el.ExampleBuilder._add_example_stream
-        _add_example_extra  = el.ExampleBuilder._add_example_extra
-        _set_example_labor  = el.ExampleBuilder._set_example_labor
-        _set_block_duty     = el.ExampleBuilder._set_block_duty
-    return _FE()
 
 
 def test_component_balance_detected():
@@ -88,9 +75,8 @@ def test_pseudo_components_detected():
 
 def test_food_pseudo_is_info_not_warning():
     """Sucrose y glucose son food pseudo → severity='info', no 'warning'."""
-    fake = _build_fake_editor()
-    el.ExampleBuilder._example_sugar_mill(fake)
-    res = fsv.solve(fake.fs)
+    fs = reg.load_example('sugar')
+    res = fsv.solve(fs)
     report = res.audit_report
 
     food_findings = [f for f in report.by_category('pseudo')
@@ -133,9 +119,8 @@ def test_phase_inconsistency_detected():
 
 def test_audit_in_solver_result():
     """audit_report debe estar en SolverResult tras solve()."""
-    fake = _build_fake_editor()
-    el.ExampleBuilder._example_reactor_flash_column(fake)
-    res = fsv.solve(fake.fs)
+    fs = reg.load_example('rxn_flash_col')
+    res = fsv.solve(fs)
     assert res.audit_report is not None
     print(f"  ✓ audit_report integrado en SolverResult "
           f"({len(res.audit_report.findings)} findings totales)")

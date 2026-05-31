@@ -35,42 +35,16 @@ headless_mocks()
 
 import flowsheet_model as fm
 import flowsheet_solver as fsv
-import examples_library as el
+import examples_registry as reg
 import dof_audit as da
 
 
-class _FakeEditor:
-    def __init__(self):
-        self.fs = fm.Flowsheet()
-        self.labor_workers = 0
-    _add_example_block  = el.ExampleBuilder._add_example_block
-    _add_example_stream = el.ExampleBuilder._add_example_stream
-    _add_example_extra  = el.ExampleBuilder._add_example_extra
-    _set_example_labor  = el.ExampleBuilder._set_example_labor
-    _set_block_duty     = el.ExampleBuilder._set_block_duty
-
-
-EXAMPLES = [
-    '_example_hda', '_example_methanol', '_example_distillation',
-    '_example_ammonia', '_example_ethanol', '_example_biodiesel',
-    '_example_crude_distillation', '_example_hda_full',
-    '_example_gas_sweetening', '_example_sugar_mill',
-    '_example_smr_equilibrium', '_example_ethane_cracker_pfr',
-    '_example_haber_recycle', '_example_distillation_ethanol_water',
-    '_example_reactor_flash_column', '_example_hydraulic_plant',
-    '_example_industrial_complete', '_example_quimpac_chloralkali',
-    '_example_hno3_ostwald', '_example_talara_refinery',
-    '_example_pasteurizer', '_example_pineapple_juice',
-    '_example_potato_chips', '_example_beer_brewing',
-    '_example_sulfuric_acid', '_example_acetic_acid',
-    '_example_polyethylene', '_example_chloralkali_hcl',
-    '_example_cement', '_example_glass', '_example_soap',
-    '_example_urea', '_example_leche_gloria',
-    '_example_ethylene_cracking', '_example_air_separation',
-    '_example_water_treatment', '_example_bread_baking',
-    '_example_penicillin', '_example_rankine_cycle',
-    '_example_nuclear_steam', '_example_desalination',
-]
+# Los ejemplos se cargan desde data/examples/<clave>.json vía el registry
+# (data-driven); los builders imperativos fueron retirados.  Orden = orden
+# del menú (manifest).  Cada entrada es (clave, builder) — el builder se
+# conserva como string-key para la whitelist y para mostrar el nombre
+# familiar en la tabla.
+EXAMPLES = [(e["clave"], e["builder"]) for e in reg.list_examples()]
 
 
 # ─────────────────────────────────────────────────────────────
@@ -97,10 +71,8 @@ KNOWN_CONFLICT_FALSE_POSITIVES = {
 }
 
 
-def audit_one(name):
-    fake = _FakeEditor()
-    getattr(el.ExampleBuilder, name)(fake)
-    fs = fake.fs
+def audit_one(clave, builder):
+    fs = reg.load_example(clave)
 
     # 1) DOF topológico estructural
     rep = da.analyze_flowsheet(fs)
@@ -116,13 +88,13 @@ def audit_one(name):
     conflicts, known = [], []
     for c in all_conflicts:
         block = c.split(":", 1)[0].strip()
-        if (name, block) in KNOWN_CONFLICT_FALSE_POSITIVES:
+        if (builder, block) in KNOWN_CONFLICT_FALSE_POSITIVES:
             known.append(c)
         else:
             conflicts.append(c)
 
     return {
-        "name": name,
+        "name": builder,
         "fs": fs,
         "rep": rep,
         "rows": rows,
@@ -146,12 +118,12 @@ def main():
     fully_ok = []
     has_issue = []
 
-    for name in EXAMPLES:
+    for clave, builder in EXAMPLES:
         try:
-            r = audit_one(name)
+            r = audit_one(clave, builder)
         except Exception as e:
-            print(f"  ✗ {name:36s} ERROR builder/audit: {type(e).__name__}: {e}")
-            has_issue.append(name)
+            print(f"  ✗ {builder:36s} ERROR carga/audit: {type(e).__name__}: {e}")
+            has_issue.append(builder)
             continue
 
         rep = r["rep"]
@@ -164,10 +136,10 @@ def main():
                  and rep.total_dof == 0
                  and not r["conflicts"])
         mark = "✓" if clean else "⚠"
-        (fully_ok if clean else has_issue).append(name)
+        (fully_ok if clean else has_issue).append(builder)
 
         kf = len(r["known_conflicts"])
-        print(f"  {mark} {name:36s} {topo:>6} {rep.n_indeterminable_mass:>6} "
+        print(f"  {mark} {builder:36s} {topo:>6} {rep.n_indeterminable_mass:>6} "
               f"{rep.n_under:>6} {rep.n_over:>5} "
               f"{r['n_under_aspen']:>8} {r['n_redund_aspen']:>8} "
               f"{len(r['conflicts']):>6} {kf:>5}")
@@ -198,16 +170,16 @@ def main():
     print("DETALLE DE FALLAS DURAS (masa indeterminable o conflicto de locks)")
     print("=" * 100)
     any_hard = False
-    for name in EXAMPLES:
+    for clave, builder in EXAMPLES:
         try:
-            r = audit_one(name)
+            r = audit_one(clave, builder)
         except Exception:
             continue
         rep = r["rep"]
         if rep.n_indeterminable_mass == 0 and not r["conflicts"]:
             continue
         any_hard = True
-        print(f"\n▶ {name.replace('_example_','')}")
+        print(f"\n▶ {builder.replace('_example_','')}")
         if rep.n_indeterminable_mass:
             indet = [ss.name for ss in rep.streams if ss.mass_status == "unknown"]
             print(f"   masa indeterminable ({rep.n_indeterminable_mass}): {', '.join(indet[:12])}")
@@ -222,14 +194,14 @@ def main():
     print("FALSOS POSITIVOS CONOCIDOS de find_conflicts (documentados — solver cierra OK)")
     print("=" * 100)
     any_fp = False
-    for name in EXAMPLES:
+    for clave, builder in EXAMPLES:
         try:
-            r = audit_one(name)
+            r = audit_one(clave, builder)
         except Exception:
             continue
         for c in r["known_conflicts"]:
             any_fp = True
-            print(f"  · {name.replace('_example_','')}: {c}")
+            print(f"  · {builder.replace('_example_','')}: {c}")
     if not any_fp:
         print("  (ninguno)")
 

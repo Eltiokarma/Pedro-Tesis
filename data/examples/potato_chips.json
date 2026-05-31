@@ -502,7 +502,7 @@
    "id": 8,
    "is_pipe": false,
    "main_component": "vegetable_oil",
-   "mass_flow": 526,
+   "mass_flow": 0.0,
    "mass_flow_locked": false,
    "name": "S-chips",
    "phase": "liquid",

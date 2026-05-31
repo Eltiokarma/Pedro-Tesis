@@ -423,6 +423,17 @@ def get(name: str) -> Optional[ComponentThermo]:
     alias = _ALIASES.get(norm)
     if alias is not None:
         return db.get(alias)
+    # Overlay de estimados (Capa 4b): el sourceado ya falló → consultar
+    # el overlay DESPUÉS (sourceado gana siempre).  Aditivo, no muta el .md.
+    try:
+        import estimated_overlay as _ov
+        comp = _ov.get(name)
+        if comp is None and norm != name:
+            comp = _ov.get(norm)
+        if comp is not None:
+            return comp
+    except Exception:
+        pass
     return None
 
 

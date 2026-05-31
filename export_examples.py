@@ -1,25 +1,22 @@
 """
-export_examples.py — Exporter one-time de builders imperativos a JSON
-declarativo (Fase 1 de la migración de ejemplos).
+export_examples.py — Regenerador de data/examples/_golden.json.
 
-Corre cada builder _example_* de examples_library.ExampleBuilder en modo
-headless (patrón _FakeEditor de validate_ui.py), y vuelca por cada ejemplo:
+Los builders imperativos fueron retirados: los 41 JSON de data/examples/ son
+la ÚNICA fuente de verdad (versionados a mano).  Este script ya NO genera los
+<clave>.json; solo REGENERA el golden a partir de ellos, cargando cada uno
+vía el registry (from_dict), resolviéndolo y volcando:
 
-  · data/examples/<clave_menu>.json   → el to_dict() del flowsheet armado.
-      El NOMBRE DEL ARCHIVO es la CLAVE DEL MENÚ (flowsheet_qt.py builder_map),
-      NO nombre[9:].  Hay ~21 alias (crude_distillation→cdu, etc.); el mapeo
-      se extrae vía AST con tools_extract_menu_map.extract_menu_map().
-
-  · data/examples/_golden.json        → golden values de cada ejemplo:
+  · data/examples/_golden.json → golden values de cada ejemplo:
       overall_status, n_blocks, n_streams, mass_errors, energy_errors,
-      sum_duty (Σ duties post-solve, OBLIGATORIO — canario de idempotencia
-      del recycle), e ISBL si el ejemplo lo computa.
+      sum_duty (Σ duties post-solve, canario de idempotencia del recycle),
+      e ISBL si el ejemplo lo computa.
+
+Solo correr (con escritura) cuando se cambia DELIBERADAMENTE un ejemplo y se
+quiere actualizar su golden.  Para validar sin tocar nada, usar gate_examples.py.
 
 USO:
-    python export_examples.py            # genera JSON + golden
+    python export_examples.py            # regenera _golden.json desde los JSON
     python export_examples.py --check    # no escribe, solo imprime resumen
-
-RESTRICCIÓN: consume to_dict() tal cual.  Cero cambios a la serialización.
 """
 import os
 import sys
@@ -40,33 +37,6 @@ def _headless_mocks():
               'tkinter', 'tkinter.ttk', 'tkinter.messagebox',
               'tkinter.filedialog', 'tkinter.simpledialog', 'tkinter.font']:
         sys.modules.setdefault(m, MagicMock())
-
-
-def _make_fake_editor():
-    """Replica el _FakeEditor de validate_ui.py: un objeto con .fs y los
-    5 helpers de ExampleBuilder enganchados como métodos."""
-    import flowsheet_model as fm
-    import examples_library as el
-
-    class _FakeEditor:
-        def __init__(self):
-            self.fs = fm.Flowsheet()
-            self.labor_workers = 0
-        _add_example_block = el.ExampleBuilder._add_example_block
-        _add_example_stream = el.ExampleBuilder._add_example_stream
-        _add_example_extra = el.ExampleBuilder._add_example_extra
-        _set_example_labor = el.ExampleBuilder._set_example_labor
-        _set_block_duty = el.ExampleBuilder._set_block_duty
-
-    return _FakeEditor()
-
-
-def build_flowsheet(builder_name):
-    """Corre un builder y devuelve el Flowsheet armado (SIN solve)."""
-    import examples_library as el
-    fake = _make_fake_editor()
-    getattr(el.ExampleBuilder, builder_name)(fake)
-    return fake.fs
 
 
 def _compute_isbl(fs):
@@ -111,42 +81,42 @@ def golden(fs, res):
     return g
 
 
-def run_one(builder_name):
-    """Construye, resuelve y devuelve (to_dict, golden) de un builder."""
+def run_one(clave):
+    """Golden POST-solve de un ejemplo cargado desde su JSON canónico.
+
+    Carga data/examples/<clave>.json vía el registry (from_dict), resuelve y
+    computa el golden.  Los JSON son la fuente de verdad (los builders fueron
+    retirados); este script solo REGENERA _golden.json a partir de ellos."""
+    import examples_registry as reg
     import flowsheet_solver as fsv
-    fs = build_flowsheet(builder_name)
+    fs = reg.load_example(clave)
     res = fsv.solve(fs)
-    return fs.to_dict(), golden(fs, res)
+    return golden(fs, res)
 
 
 def export_all(write=True):
-    """Exporta los 41 ejemplos.  Devuelve (n_exportados, golden_dict)."""
-    _headless_mocks()
-    from tools_extract_menu_map import extract_menu_map
-    menu_map = extract_menu_map()      # builder -> (clave, nombre, cat, pfd)
+    """Regenera data/examples/_golden.json desde los JSON canónicos.
 
-    if write:
-        os.makedirs(DATA_DIR, exist_ok=True)
+    NO toca los <clave>.json (son la fuente de verdad, versionada a mano);
+    solo recomputa el golden post-solve.  Devuelve (n, golden_dict)."""
+    _headless_mocks()
+    import examples_registry as reg
 
     golden_all = {}
     n = 0
-    for builder_name, (key, nombre, cat, pfd) in sorted(menu_map.items()):
-        data, g = run_one(builder_name)
-        golden_all[key] = g
-        if write:
-            path = os.path.join(DATA_DIR, f"{key}.json")
-            with open(path, "w", encoding="utf-8") as f:
-                json.dump(data, f, ensure_ascii=False, indent=1, sort_keys=True)
+    for e in reg.list_examples():
+        clave = e["clave"]
+        g = run_one(clave)
+        golden_all[clave] = g
         n += 1
-        print(f"  {key:18s} <- {builder_name:34s} "
-              f"{g['overall_status']:>8} b{g['n_blocks']} s{g['n_streams']} "
-              f"duty={g['sum_duty']:.1f}")
+        print(f"  {clave:18s} {g['overall_status']:>8} "
+              f"b{g['n_blocks']} s{g['n_streams']} duty={g['sum_duty']:.1f}")
 
     if write:
         with open(GOLDEN_PATH, "w", encoding="utf-8") as f:
             json.dump(golden_all, f, ensure_ascii=False, indent=1,
                       sort_keys=True)
-        print(f"\nEscritos {n} JSON + _golden.json en {DATA_DIR}")
+        print(f"\nRegenerado _golden.json ({n} ejemplos) en {DATA_DIR}")
     else:
         print(f"\n[--check] {n} ejemplos procesados (sin escribir)")
     return n, golden_all
