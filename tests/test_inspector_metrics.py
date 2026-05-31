@@ -134,7 +134,8 @@ def test_mech_sep_metrics_matches_text():
 
 
 def test_flash_metrics_matches_text():
-    for clave in ("hda_full", "biodiesel", "ammonia", "distillation"):
+    # flash_active aparece en rxn_flash_col / ethanol (scan del manifest).
+    for clave in ("rxn_flash_col", "ethanol"):
         fs = _solve(clave)
         blk = _first(fs, lambda b: ev.flash_metrics(b) is not None)
         if blk is not None:
@@ -167,7 +168,12 @@ def test_tank_metrics_matches_text():
 
 
 def test_utility_aux_metrics_matches_text():
-    for clave in ("distillation", "hda_full", "ammonia", "talara"):
+    # NOTA: utility_aux_metrics requiere HX con corrientes auto_aux role=utility,
+    # condición que NO se da en ninguno de los 41 ejemplos del manifest (scan
+    # completo → vacío). El skip es permanente con el catálogo actual; la
+    # consistencia se garantiza por construcción (misma fuente/formato que
+    # utility_aux_text). Se cubre en cuanto un ejemplo tenga lazo utility.
+    for clave in (e["clave"] for e in reg.list_examples()):
         fs = _solve(clave)
         blk = _first(fs, lambda b: ev.utility_aux_metrics(b, fs) is not None)
         if blk is not None:
@@ -175,4 +181,4 @@ def test_utility_aux_metrics_matches_text():
                                ev.utility_aux_text(blk, fs),
                                f"utility_aux[{clave}]")
             return
-    pytest.skip("sin utility aux en los ejemplos probados")
+    pytest.skip("utility_aux no aplica en ningún ejemplo del manifest actual")
