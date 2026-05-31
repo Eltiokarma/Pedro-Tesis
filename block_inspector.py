@@ -2334,28 +2334,60 @@ class BlockInspectorPanel(QWidget):
         fs = self.fs
         any_added = False
 
-        # 1) Bloques de texto por tipo de equipo --------------------
-        text_blocks: List[Tuple[str, Optional[str]]] = [
-            ("Reactor",                _ev.reactor_text(b)),
-            ("Intercambiador (HX)",    _ev.hx_text(b)),
-            ("HX — Utility / lazo cerrado", _ev.utility_aux_text(b, fs)),
-            ("Flash",                  _ev.flash_text(b)),
-            ("Separador mecánico",     _ev.mech_sep_text(b)),
-            ("Splitter",               _ev.splitter_text(b)),
-            ("Tanque",                 _ev.tank_text(b, fs)),
-            ("Columna — McCabe",       _ev.mccabe_text(b, fs)),
-            ("Columna — Perfil",       _ev.profile_text(b, fs)),
-            ("Bomba",                  _ev.pump_text(b, fs)),
-            ("Compresor",              _ev.compressor_text(b, fs)),
-            ("Hidráulica (ΔP)",        _ev.hydraulic_breakdown_text(b, fs)),
-            ("Balance de masa",        _ev.mass_balance_text(b, fs)),
-            ("Balance de energía",     _ev.energy_balance_text(b, fs)),
+        # 1) Bloques de evidencia por tipo de equipo ----------------
+        # Por cada familia: si *_metrics() devuelve dict → tarjeta rica
+        # (_render_evidence); si None → fallback al *_text() actual.
+        # (title, metrics_fn, text_fn) — ambas leen la MISMA fuente.
+        evidence_specs = [
+            ("Reactor",                lambda: _ev.reactor_metrics(b),
+                                       lambda: _ev.reactor_text(b)),
+            ("Intercambiador (HX)",    lambda: _ev.hx_metrics(b),
+                                       lambda: _ev.hx_text(b)),
+            ("HX — Utility / lazo cerrado", lambda: _ev.utility_aux_metrics(b, fs),
+                                       lambda: _ev.utility_aux_text(b, fs)),
+            ("Flash",                  lambda: _ev.flash_metrics(b),
+                                       lambda: _ev.flash_text(b)),
+            ("Separador mecánico",     lambda: _ev.mech_sep_metrics(b),
+                                       lambda: _ev.mech_sep_text(b)),
+            ("Splitter",               lambda: _ev.splitter_metrics(b),
+                                       lambda: _ev.splitter_text(b)),
+            ("Tanque",                 lambda: _ev.tank_metrics(b, fs),
+                                       lambda: _ev.tank_text(b, fs)),
+            ("Columna — McCabe",       lambda: _ev.mccabe_metrics(b, fs),
+                                       lambda: _ev.mccabe_text(b, fs)),
+            ("Columna — Perfil",       lambda: _ev.profile_metrics(b, fs),
+                                       lambda: _ev.profile_text(b, fs)),
+            ("Bomba",                  lambda: _ev.pump_metrics(b, fs),
+                                       lambda: _ev.pump_text(b, fs)),
+            ("Compresor",              lambda: _ev.compressor_metrics(b, fs),
+                                       lambda: _ev.compressor_text(b, fs)),
+            ("Hidráulica (ΔP)",        lambda: _ev.hydraulic_breakdown_metrics(b, fs),
+                                       lambda: _ev.hydraulic_breakdown_text(b, fs)),
+            ("Balance de masa",        lambda: _ev.mass_balance_metrics(b, fs),
+                                       lambda: _ev.mass_balance_text(b, fs)),
+            ("Balance de energía",     lambda: _ev.energy_balance_metrics(b, fs),
+                                       lambda: _ev.energy_balance_text(b, fs)),
         ]
-        for title, txt in text_blocks:
-            if not txt:
-                continue
-            l.addWidget(self._diag_text_card(title, txt))
-            any_added = True
+        for title, metrics_fn, text_fn in evidence_specs:
+            m = None
+            try:
+                m = metrics_fn()
+            except Exception:
+                m = None
+            if m and (m.get("metrics") or m.get("status") or m.get("bars")):
+                try:
+                    l.addWidget(self._render_evidence(title, m))
+                    any_added = True
+                    continue
+                except Exception:
+                    pass   # cae al fallback de texto
+            try:
+                txt = text_fn()
+            except Exception:
+                txt = None
+            if txt:
+                l.addWidget(self._diag_text_card(title, txt))
+                any_added = True
 
         # 2) Figuras matplotlib (si el backend Qt está disponible) ----
         canvas_widgets = self._diag_figures(b, fs)
@@ -2388,6 +2420,67 @@ class BlockInspectorPanel(QWidget):
         body_lbl.setWordWrap(True)
         body_lbl.setTextInteractionFlags(Qt.TextSelectableByMouse)
         cl.addWidget(body_lbl)
+        card.setStyleSheet(
+            f"#diagCard {{ background: {TOK['bg_mute']}; "
+            f"border: 1px solid {TOK['line']}; border-radius: 6px; }}"
+        )
+        return card
+
+    def _render_evidence(self, title: str, metrics: dict) -> QFrame:
+        """Tarjeta rica de evidencia (handoff §5): StatusBadges + MetricGrid
+        (cards + gauges) + DeltaBars.  Reusa el contenedor #diagCard.
+
+        Headless-safe: importa inspector_widgets lazy; si falla, el caller
+        cae al _diag_text_card.  La figura NO se embebe acá — sigue saliendo
+        de _diag_figures (intacto) para no duplicarla.
+        """
+        from inspector_widgets import (MetricCard, MetricGrid, StatusBadge,
+                                       GaugePill, DeltaBar)
+        card = QFrame(); card.setObjectName("diagCard")
+        cl = QVBoxLayout(card)
+        cl.setContentsMargins(10, 8, 10, 8); cl.setSpacing(6)
+        # título
+        t = QLabel(title)
+        t.setFont(QFont(pfd_fonts.SANS, 9, QFont.Bold))
+        t.setStyleSheet(f"color:{TOK['ink']};")
+        cl.addWidget(t)
+        # status badges (header)
+        badges = metrics.get("status") or []
+        if badges:
+            hb = QHBoxLayout(); hb.setSpacing(6); hb.setContentsMargins(0, 0, 0, 0)
+            for s in badges:
+                hb.addWidget(StatusBadge(s.get("text", ""), s.get("kind", "neutral")))
+            hb.addStretch(1)
+            hwrap = QFrame(); hwrap.setLayout(hb)
+            cl.addWidget(hwrap)
+        # grid de cards + gauges
+        grid = MetricGrid()
+        any_grid = False
+        for m in metrics.get("metrics") or []:
+            grid.add(MetricCard(**{k: v for k, v in m.items()
+                                   if k in ("key", "label", "value", "unit",
+                                            "state", "sub", "flag", "span")}))
+            any_grid = True
+        for g in metrics.get("gauges") or []:
+            kw = {k: v for k, v in g.items()
+                  if k in ("key", "label", "value", "text", "suffix",
+                           "marker", "color", "span")}
+            kw.setdefault("span", 2)
+            grid.add(GaugePill(**kw))
+            any_grid = True
+        if any_grid:
+            cl.addWidget(grid)
+        # delta bars
+        for b in metrics.get("bars") or []:
+            cl.addWidget(DeltaBar(**{k: v for k, v in b.items()
+                                     if k in ("label", "frac", "value", "kind")}))
+        # warnings (texto, como el _diag_text_card)
+        for w in metrics.get("warnings") or []:
+            wl = QLabel(f"⚠ {w}")
+            wl.setWordWrap(True)
+            wl.setFont(QFont(pfd_fonts.SANS, 8))
+            wl.setStyleSheet(f"color:{TOK['amber']};")
+            cl.addWidget(wl)
         card.setStyleSheet(
             f"#diagCard {{ background: {TOK['bg_mute']}; "
             f"border: 1px solid {TOK['line']}; border-radius: 6px; }}"
