@@ -102,7 +102,11 @@ class MetricCard(QFrame):
         p = QPainter(self)
         p.setRenderHint(QPainter.Antialiasing, True)
         w, h = self.width(), self.height()
+        if w < 6 or h < 6:
+            return   # demasiado chico para pintar (evita rects negativos / GDI)
         r = 8.0
+        pad_l = 12
+        text_w = max(0, w - pad_l - 6)   # nunca negativo (Windows GDI)
         # fondo + borde redondeado
         path = QPainterPath()
         path.addRoundedRect(QRectF(0.5, 0.5, w - 1, h - 1), r, r)
@@ -115,14 +119,13 @@ class MetricCard(QFrame):
         p.fillRect(QRectF(0, 0, 3, h),
                    QBrush(QColor(_tok(_STATE_RIBBON[self._state]))))
         p.restore()
-        # textos
-        pad_l = 12
+        # textos (todos los anchos clampados a >=0 — Windows GDI dibsection)
         # label
         p.setPen(QColor(_tok("ink_soft")))
         f_lab = QFont(pfd_fonts.SANS, 7, QFont.Bold)
         f_lab.setLetterSpacing(QFont.AbsoluteSpacing, 0.5)
         p.setFont(f_lab)
-        p.drawText(QRectF(pad_l, 6, w - pad_l - 6, 14),
+        p.drawText(QRectF(pad_l, 6, text_w, 14),
                    Qt.AlignLeft | Qt.AlignVCenter, self._label.upper())
         # valor (tinta semántica si aplica) + unidad
         ink = _tok(_STATE_INK.get(self._state, "ink"), "ink") \
@@ -133,21 +136,22 @@ class MetricCard(QFrame):
         fm = p.fontMetrics()
         val_w = fm.horizontalAdvance(self._value)
         y_val = 22
-        p.drawText(QRectF(pad_l, y_val, w - pad_l - 6, 24),
+        p.drawText(QRectF(pad_l, y_val, text_w, 24),
                    Qt.AlignLeft | Qt.AlignVCenter, self._value)
         if self._unit:
             p.setPen(QColor(_tok("ink_soft")))
             p.setFont(QFont(pfd_fonts.MONO, 9))
-            p.drawText(QRectF(pad_l + val_w + 4, y_val, w - pad_l - val_w - 8, 24),
+            unit_w = max(0, w - pad_l - val_w - 8)
+            p.drawText(QRectF(pad_l + val_w + 4, y_val, unit_w, 24),
                        Qt.AlignLeft | Qt.AlignVCenter, self._unit)
         # sub
         if self._sub:
             p.setPen(QColor(_tok("ink_mute")))
             p.setFont(QFont(pfd_fonts.SANS, 8))
-            p.drawText(QRectF(pad_l, h - 16, w - pad_l - 6, 14),
+            p.drawText(QRectF(pad_l, h - 16, text_w, 14),
                        Qt.AlignLeft | Qt.AlignVCenter, str(self._sub))
-        # flag (chip arriba-derecha)
-        if self._flag:
+        # flag (chip arriba-derecha) — sólo si entra
+        if self._flag and w > 60:
             p.setFont(QFont(pfd_fonts.SANS, 7, QFont.Bold))
             ftxt = str(self._flag)
             fw = p.fontMetrics().horizontalAdvance(ftxt) + 10
@@ -240,17 +244,20 @@ class StatusBadge(QFrame):
     def paintEvent(self, ev):
         p = QPainter(self)
         p.setRenderHint(QPainter.Antialiasing, True)
-        ink_t, bg_t = _KIND_TOKENS[self._kind]
         w, h = self.width(), self.height()
+        if w < 6 or h < 6:
+            return
+        ink_t, bg_t = _KIND_TOKENS[self._kind]
         p.setBrush(QBrush(QColor(_tok(bg_t)))); p.setPen(Qt.NoPen)
         p.drawRoundedRect(QRectF(0, 0, w, h), 6, 6)
+        txt_w = max(0, w - 24)
         # dot
         p.setBrush(QBrush(QColor(_tok(ink_t))))
         p.drawEllipse(QRectF(8, h / 2 - 3.5, 7, 7))
         # texto
         p.setPen(QColor(_tok(ink_t)))
         p.setFont(QFont(pfd_fonts.SANS, 9, QFont.DemiBold))
-        p.drawText(QRectF(20, 0, w - 24, h),
+        p.drawText(QRectF(20, 0, txt_w, h),
                    Qt.AlignLeft | Qt.AlignVCenter, self._text)
 
 
@@ -284,6 +291,8 @@ class GaugePill(QWidget):
         p = QPainter(self)
         p.setRenderHint(QPainter.Antialiasing, True)
         w, h = self.width(), self.height()
+        if w < 8 or h < 8:
+            return
         m = 10
         diam = min(w - 2 * m, (h - 18) * 2)
         diam = max(diam, 20)
@@ -350,10 +359,12 @@ class DeltaBar(QFrame):
         p = QPainter(self)
         p.setRenderHint(QPainter.Antialiasing, True)
         w, h = self.width(), self.height()
-        lab_w = min(140, int(w * 0.34))
-        val_w = 64
+        if w < 6 or h < 6:
+            return
+        lab_w = max(0, min(140, int(w * 0.34)))
+        val_w = min(64, max(0, w - lab_w - 12))
         track_x = lab_w + 6
-        track_w = max(10, w - lab_w - val_w - 12)
+        track_w = max(2, w - lab_w - val_w - 12)
         # label
         p.setPen(QColor(_tok("ink_mute")))
         p.setFont(QFont(pfd_fonts.MONO, 8))
