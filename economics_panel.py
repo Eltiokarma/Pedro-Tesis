@@ -16,7 +16,7 @@ prioriza correcto y funcional, con widgets nombrados y estructura limpia.
 """
 from PySide6.QtWidgets import (
     QDialog, QVBoxLayout, QHBoxLayout, QFormLayout, QGroupBox, QLabel,
-    QDoubleSpinBox, QSpinBox, QCheckBox, QPushButton, QTextEdit,
+    QDoubleSpinBox, QSpinBox, QCheckBox, QComboBox, QPushButton, QTextEdit,
     QDialogButtonBox,
 )
 from PySide6.QtGui import QFont
@@ -155,6 +155,36 @@ class EconomicsPanel(QDialog):
 
         root.addWidget(box)
 
+        # Depreciación: lineal (default) o MACRS 5/7/15
+        dep_box = QGroupBox("Depreciación")
+        dep_form = QFormLayout(dep_box)
+        self.combo_dep = QComboBox()
+        # itemData = (dep_method, macrs_class)
+        self.combo_dep.addItem("Lineal", ("straight_line", None))
+        self.combo_dep.addItem("MACRS 5 años", ("macrs", 5))
+        self.combo_dep.addItem("MACRS 7 años", ("macrs", 7))
+        self.combo_dep.addItem("MACRS 15 años", ("macrs", 15))
+        self.combo_dep.setToolTip(
+            "Lineal = base/período (default, comportamiento histórico).\n"
+            "MACRS = depreciación acelerada IRS (tax-shield temprano).")
+        dep_form.addRow("Método:", self.combo_dep)
+
+        self.spin_dep_years = QSpinBox()
+        self.spin_dep_years.setRange(1, 60)
+        self.spin_dep_years.setValue(d_years)
+        self.spin_dep_years.setToolTip("Período de depreciación lineal (años).")
+        dep_form.addRow("Período lineal (años):", self.spin_dep_years)
+
+        def _on_dep_changed(*_a):
+            data = self.combo_dep.currentData()
+            if not data:
+                return
+            method, _ = data
+            self.spin_dep_years.setEnabled(method == "straight_line")
+        self.combo_dep.currentIndexChanged.connect(_on_dep_changed)
+        _on_dep_changed()
+        root.addWidget(dep_box)
+
         # Botón Calcular
         self.btn_calc = QPushButton("Calcular")
         self.btn_calc.clicked.connect(self._run)
@@ -192,6 +222,12 @@ class EconomicsPanel(QDialog):
         }
         if self.chk_isbl.isChecked():
             inputs["isbl_override_usd"] = float(self.spin_isbl.value()) * 1e6
+        method, macrs_class = self.combo_dep.currentData()
+        inputs["dep_method"] = method
+        if method == "macrs":
+            inputs["macrs_class"] = int(macrs_class)
+        else:
+            inputs["dep_years"] = int(self.spin_dep_years.value())
         return inputs
 
     # ── ejecución ────────────────────────────────────────────────────
@@ -244,7 +280,13 @@ class EconomicsPanel(QDialog):
             f"<b>Veredicto:</b> {econ.get('veredicto', '—')}"
             f"   ·   status: {status}{warn}")
 
+        depinfo = econ.get("depreciation", {})
+        _dm = depinfo.get("method", "straight_line")
+        dep_label = ("Lineal" if _dm == "straight_line"
+                     else f"MACRS {depinfo.get('macrs_class')} años")
         lines = []
+        lines.append(f"Depreciación: {dep_label}")
+        lines.append("")
         lines.append("INDICADORES DE RENTABILIDAD")
         lines.append("─" * 46)
         lines.append(f"  NPV                 {_fmt_usd(econ.get('NPV_usd'))}")

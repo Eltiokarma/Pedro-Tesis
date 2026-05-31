@@ -760,7 +760,9 @@ def profitability_indicators(revenue_usd_yr, com_d_usd_yr, fci_usd,
                               depreciable_base_usd=None,
                               working_capital_usd=0.0,
                               useful_life_yr=None,
-                              alpha_d=0.180, alpha=0.305):
+                              alpha_d=0.180, alpha=0.305,
+                              dep_method="straight_line",
+                              dep_years=None, macrs_class=5):
     """Calcula indicadores económicos clásicos a partir de:
         revenue_usd_yr:        ingresos anuales (Σ products + byproducts)
         com_d_usd_yr:          cost of manufacture con dep (Turton 8.2)
@@ -807,27 +809,72 @@ def profitability_indicators(revenue_usd_yr, com_d_usd_yr, fci_usd,
     # consistencia financiera).
     tax_deductible_opex = com_d_usd_yr + (alpha - 2.0 * alpha_d) * fci_usd
     gross_profit = revenue_usd_yr - com_d_usd_yr      # Turton display
-    depreciation = depreciable_base_usd / max(useful_life_yr, 1)
+    # Depreciación lineal embebida en la deducción (base/vida).  dep_years
+    # (período lineal del panel), si se pasa, override de useful_life_yr.
+    sl_life      = int(dep_years) if dep_years else useful_life_yr
+    depreciation = depreciable_base_usd / max(sl_life, 1)
     taxable      = revenue_usd_yr - tax_deductible_opex
     tax          = max(0.0, taxable) * tax_rate
     net_profit   = taxable - tax
     cash_flow    = net_profit + depreciation
     # CAPEX total año 0 = FCI + WC.  WC se recupera year_op final.
     capex_year0  = fci_usd + working_capital_usd
-    # Indicadores
-    if cash_flow > 0:
-        pbp_simple = capex_year0 / cash_flow
+    roi_simple   = (net_profit / fci_usd * 100.0) if fci_usd > 0 else 0.0
+
+    _method = str(dep_method).lower()
+    if _method in ("macrs",):
+        # ── MACRS: depreciación acelerada → tax-shield variable año a año.
+        # Modelo tax-shield estándar sobre EBITDA = revenue − (cash-opex +
+        # M+T+I) = revenue − tax_deductible_opex + Dep_SL.  Con Dep_SL
+        # constante reproduce EXACTO la rama lineal (mismo cash_flow); con
+        # MACRS, dep(t) reduce el tax temprano → CF temprano mayor → NPV
+        # mayor.  NPV/IRR vía indicators sobre el VECTOR de cash flow.
+        import depreciation as _dep
+        import indicators as _ind
+        ebitda   = revenue_usd_yr - tax_deductible_opex + depreciation
+        sched    = _dep.depreciation_schedule(
+            depreciable_base_usd, method="macrs", macrs_class=macrs_class)
+        # alinear contra años de operación (pad ceros / truncar cola)
+        dep_vec  = (sched + [0.0] * years_op)[:years_op]
+        cf_years, net_years, tax_years = [], [], []
+        for d_t in dep_vec:
+            taxable_t = ebitda - d_t
+            tax_t     = max(0.0, taxable_t) * tax_rate
+            net_t     = taxable_t - tax_t
+            cf_years.append(net_t + d_t)           # = ebitda − tax_t
+            net_years.append(net_t)
+            tax_years.append(tax_t)
+        # vector completo: año 0 = −CAPEX; último año + recuperación WC
+        cf_vector = [-capex_year0] + list(cf_years)
+        cf_vector[-1] += working_capital_usd
+        npv = _ind.npv(cf_vector, disc_rate)
+        irr = _ind.irr(cf_vector)
+        # payback acumulado (ignora WC, como la rama lineal)
+        pbp_simple = _cumulative_payback(capex_year0, cf_years)
+        # agregados de display = promedio anual (para lineal == constante)
+        n = max(len(cf_years), 1)
+        cash_flow    = sum(cf_years) / n
+        net_profit   = sum(net_years) / n
+        tax          = sum(tax_years) / n
+        depreciation = sum(dep_vec) / n
+        dep_schedule = dep_vec
+        cf_schedule  = cf_years
     else:
-        pbp_simple = float("inf")
-    roi_simple = (net_profit / fci_usd * 100.0) if fci_usd > 0 else 0.0
-    # NPV (discounted cash flow over years_op).  Año 0 = -CAPEX_total
-    # (FCI + WC).  Último año = CF + recuperación WC.
-    npv = -capex_year0
-    for yr in range(1, years_op + 1):
-        cf_yr = cash_flow + (working_capital_usd if yr == years_op else 0.0)
-        npv += cf_yr / (1.0 + disc_rate) ** yr
-    # IRR aproximado por bisección (NPV=0).  Modela WC recovery final.
-    irr = _solve_irr_wc(cash_flow, capex_year0, working_capital_usd, years_op)
+        # ── LINEAL (default) — comportamiento histórico, VERBATIM.
+        if cash_flow > 0:
+            pbp_simple = capex_year0 / cash_flow
+        else:
+            pbp_simple = float("inf")
+        # NPV (discounted cash flow over years_op).  Año 0 = -CAPEX_total
+        # (FCI + WC).  Último año = CF + recuperación WC.
+        npv = -capex_year0
+        for yr in range(1, years_op + 1):
+            cf_yr = cash_flow + (working_capital_usd if yr == years_op else 0.0)
+            npv += cf_yr / (1.0 + disc_rate) ** yr
+        # IRR aproximado por bisección (NPV=0).  Modela WC recovery final.
+        irr = _solve_irr_wc(cash_flow, capex_year0, working_capital_usd, years_op)
+        dep_schedule = [depreciation] * years_op
+        cf_schedule  = [cash_flow] * years_op
     # Veredicto explícito
     veredicto = "VIABLE" if npv > 0 else "INVIABLE"
     pbp_str = (f"{pbp_simple:.2f}" if pbp_simple != float("inf")
@@ -856,7 +903,24 @@ def profitability_indicators(revenue_usd_yr, com_d_usd_yr, fci_usd,
         "disc_rate":       disc_rate,
         "tax_rate":        tax_rate,
         "depreciable_base":depreciable_base_usd,
+        "dep_method":      _method,
+        "macrs_class":     (macrs_class if _method == "macrs" else None),
+        "Depreciation schedule": dep_schedule,
+        "Cash flow schedule":    cf_schedule,
     }
+
+
+def _cumulative_payback(capex_year0, cf_years):
+    """Payback simple por flujo acumulado (ignora WC, como la rama lineal).
+    Para CF constante reproduce capex_year0/CF.  ∞ si nunca se recupera."""
+    cum = 0.0
+    for i, cf in enumerate(cf_years):
+        if cf <= 0:
+            continue
+        if cum + cf >= capex_year0:
+            return i + (capex_year0 - cum) / cf
+        cum += cf
+    return float("inf")
 
 
 def _solve_irr(cash_flow_yr, fci_usd, years_op, max_iter=50):

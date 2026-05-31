@@ -84,7 +84,23 @@ def gate_equivalence_and_smoke():
         txt = panel.txt_results.toPlainText()
         if "NPV" not in txt:
             fails.append((clave, "render sin 'NPV' en el texto"))
-        print(f"     · {clave}: NPV={npv_panel:,.0f}  IRR={irr_panel}  ✓render")
+
+        # (d) MACRS: panel == simulate(macrs).  Seteamos el combo a MACRS 7.
+        panel.combo_dep.setCurrentIndex(panel.combo_dep.findText("MACRS 7 años"))
+        panel._run()
+        npv_macrs_panel = panel.last_result["economics"]["NPV_usd"]
+        out_m = se.simulate(fs.to_dict(), run_economics=True,
+                            econ_inputs=panel.collect_econ_inputs())
+        npv_macrs_sim = out_m["economics"]["NPV_usd"]
+        if abs((npv_macrs_panel or 0) - (npv_macrs_sim or 0)) > _TOL:
+            fails.append((clave, f"MACRS panel NPV={npv_macrs_panel} != "
+                                 f"simulate {npv_macrs_sim}"))
+        # MACRS7 debe diferir del lineal (sanity: el método sí se aplica)
+        if abs((npv_macrs_panel or 0) - (npv_panel or 0)) < 1.0:
+            fails.append((clave, "MACRS7 NPV == lineal (método no aplicado?)"))
+        panel.combo_dep.setCurrentIndex(panel.combo_dep.findText("Lineal"))
+        print(f"     · {clave}: lineal NPV={npv_panel:,.0f}  "
+              f"MACRS7 NPV={npv_macrs_panel:,.0f}  ✓render")
 
     ok = not fails
     print(f"  {'✓' if ok else '✗'} Gate 2/3 (equivalencia+smoke Qt): "

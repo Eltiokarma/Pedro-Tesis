@@ -215,6 +215,10 @@ def _economics(fs, econ_inputs):
     useful  = int(econ_inputs.get("useful_life", years))
     year_t  = int(econ_inputs.get("year_target", 2024))
     isbl_override = econ_inputs.get("isbl_override_usd")  # None → desde bloques
+    # Depreciación: 'straight_line' (default, no cambia nada) o 'macrs'.
+    dep_method = str(econ_inputs.get("dep_method", "straight_line"))
+    macrs_class = int(econ_inputs.get("macrs_class", 5))
+    dep_years = econ_inputs.get("dep_years")            # None → useful_life
 
     opex = fexp.categorize_opex(fs)                      # {revenue,crm,cut,cwt,col}
     cd = capex.compute_fci(fs, year_target=year_t,
@@ -232,12 +236,15 @@ def _economics(fs, econ_inputs):
         revenue_usd_yr=opex["revenue"], com_d_usd_yr=com["COM_d"],
         fci_usd=fci, depreciable_base_usd=dep, working_capital_usd=wc,
         useful_life_yr=useful, years_op=years, tax_rate=tax, disc_rate=disc,
+        dep_method=dep_method, macrs_class=macrs_class, dep_years=dep_years,
     )
     return _jsonsafe({
         "inputs": {"tax_rate": tax, "discount_rate": disc,
                    "project_life": years, "useful_life": useful,
                    "year_target": year_t,
-                   "isbl_override_usd": isbl_override},
+                   "isbl_override_usd": isbl_override,
+                   "dep_method": dep_method, "macrs_class": macrs_class,
+                   "dep_years": dep_years},
         "opex_usd_yr": opex,
         "capex": {"fci_grass_roots_usd": fci, "working_capital_usd": wc,
                   "depreciable_base_usd": dep,
@@ -256,6 +263,12 @@ def _economics(fs, econ_inputs):
         "gross_profit_usd_yr": prof.get("Gross profit"),
         "net_profit_usd_yr": prof.get("Net profit"),
         "veredicto": prof.get("Veredicto"),
+        "depreciation": {
+            "method": prof.get("dep_method"),
+            "macrs_class": prof.get("macrs_class"),
+            "schedule_usd_yr": prof.get("Depreciation schedule"),
+        },
+        "cash_flow_schedule_usd_yr": prof.get("Cash flow schedule"),
     })
 
 
