@@ -1106,6 +1106,145 @@ def write_3sections_xlsx(path, df_capital, df_fixed, df_variable,
     wb.save(path)
 
 
+def _resolve_labor_usd(fs):
+    """Labor (COL) en USD/yr del flowsheet: override manual del user
+    (fs.fixed_overrides['Labor']) o auto-Turton §8.3 si no hay override.
+    Misma lógica que write_project_xlsx inyecta en df_fixed['Labor'].
+    PURO (sin disco, sin UI)."""
+    overrides = getattr(fs, "fixed_overrides", None) or {}
+    if "Labor" in overrides:
+        return float(overrides["Labor"])
+    if getattr(fs, "blocks", None):
+        return float(ep.turton_labor_cost(fs.blocks.values())["labor_usd_yr"])
+    return 0.0
+
+
+def _collect_pfd_opex_rows(fs, feeds, products):
+    """Filas (PFD) de costos operativos variables derivadas del flowsheet:
+    productos, feeds, wastes, utility streams externos, opex_extras manuales
+    y utilities auto-calculadas desde duties.  PURO (sin disco, sin UI).
+
+    Extraído verbatim del cuerpo de write_project_xlsx para que tanto el
+    xlsx (Save) como categorize_opex/simulate consuman la MISMA fuente.
+    TODOS los streams con price != 0 (o role explícito) se contabilizan."""
+    new_rows = []
+    seen_ids = set()
+    for s in products:
+        new_rows.append({
+            "variable operating costs": f"{s.name} (PFD)",
+            "units":              "tm",
+            "time basis":         "year",
+            "flowrate":           float(s.mass_flow),
+            "price usd/units":    float(getattr(s, "price_usd_per_tm", 0.0)),
+            "stream":             "Key Products",
+        })
+        seen_ids.add(s.id)
+    for s in feeds:
+        new_rows.append({
+            "variable operating costs": f"{s.name} (PFD)",
+            "units":              "tm",
+            "time basis":         "year",
+            "flowrate":           float(s.mass_flow),
+            "price usd/units":    float(getattr(s, "price_usd_per_tm", 0.0)),
+            "stream":             "Raw Materials",
+        })
+        seen_ids.add(s.id)
+    # Wastes — costos de disposición / byproducts vendibles.
+    for s in fs.streams.values():
+        if s.id in seen_ids:
+            continue
+        if s.role == "waste":
+            new_rows.append({
+                "variable operating costs": f"{s.name} (PFD waste)",
+                "units":              "tm",
+                "time basis":         "year",
+                "flowrate":           float(s.mass_flow),
+                "price usd/units":    float(getattr(s, "price_usd_per_tm", 0.0)),
+                "stream":             "Waste / Byproduct",
+            })
+            seen_ids.add(s.id)
+    # Utility streams declarados como feed externo (BFW, fuel gas, etc.)
+    for s in fs.streams.values():
+        if s.id in seen_ids:
+            continue
+        if s.role == "utility":
+            src_b = fs.blocks.get(s.src)
+            is_external_feed = (src_b is not None
+                                and "Storage tank" in (src_b.eq_type or ""))
+            if is_external_feed and s.price_usd_per_tm > 0:
+                new_rows.append({
+                    "variable operating costs": f"{s.name} (PFD utility)",
+                    "units":              "tm",
+                    "time basis":         "year",
+                    "flowrate":           float(s.mass_flow),
+                    "price usd/units":    float(s.price_usd_per_tm),
+                    "stream":             "Utilities",
+                })
+                seen_ids.add(s.id)
+    for ex in fs.opex_extras:
+        new_rows.append({
+            "variable operating costs": f"{ex.get('name','?')} (PFD)",
+            "units":              ex.get("units", "tm"),
+            "time basis":         ex.get("time_basis", "year"),
+            "flowrate":           float(ex.get("flowrate", 0.0)),
+            "price usd/units":    float(ex.get("price_usd_per_unit", 0.0)),
+            "stream":             ex.get("stream", "Utilities"),
+        })
+
+    # utilities (PFD-util) auto-calculadas desde duties
+    auto_rows, _summary = compute_utilities_from_duties(fs)
+    for ex in auto_rows:
+        new_rows.append({
+            "variable operating costs": ex["name"],
+            "units":              ex["units"],
+            "time basis":         ex["time_basis"],
+            "flowrate":           ex["flowrate"],
+            "price usd/units":    ex["price_usd_per_unit"],
+            "stream":             ex["stream"],
+        })
+    return new_rows
+
+
+def categorize_opex(fs):
+    """Agrega los costos operativos del flowsheet por categoría económica.
+    PURO (sin disco, sin DataFrames, sin UI).
+
+    Devuelve {revenue, crm, cut, cwt, col} en USD/yr, con la MISMA
+    categorización que ana_qt._run_solver y compute_turton_costing aplican
+    sobre df_variable/df_fixed:
+      · Raw Materials      → crm
+      · Utilities          → cut
+      · Waste / Byproduct  → cwt (price<0, disposición) | revenue (price>0)
+      · Key Products       → revenue
+      · Labor              → col (override o auto-Turton)
+    """
+    feeds    = [s for s in fs.streams.values() if s.role == "feed"]
+    products = [s for s in fs.streams.values() if s.role == "product"]
+    rows = _collect_pfd_opex_rows(fs, feeds, products)
+
+    crm = cut = cwt = revenue = 0.0
+    for r in rows:
+        stream = str(r.get("stream", "")).strip()
+        flow   = float(r.get("flowrate", 0.0) or 0.0)
+        price  = float(r.get("price usd/units", 0.0) or 0.0)
+        cost   = flow * price
+        if stream == "Raw Materials":
+            crm += cost
+        elif stream == "Utilities":
+            cut += cost
+        elif stream == "Waste / Byproduct":
+            if price < 0:
+                cwt += abs(cost)
+            elif price > 0:
+                revenue += cost
+        elif stream == "Key Products":
+            revenue += cost
+    return {
+        "revenue": revenue, "crm": crm, "cut": cut, "cwt": cwt,
+        "col": _resolve_labor_usd(fs),
+    }
+
+
 def write_project_xlsx(path, fs, isbl, feeds, products, base_xlsx=None):
     """Genera el xlsx que ANA.py importa.
 
@@ -1158,93 +1297,9 @@ def write_project_xlsx(path, fs, isbl, feeds, products, base_xlsx=None):
         df_variable = df_variable[~mask].reset_index(drop=True)
 
     # append filas (PFD): products, feeds, wastes, utility streams,
-    # opex_extras manuales.  TODOS los streams con price != 0 (o role
-    # explícito) se contabilizan — antes solo feed/product se exportaban.
-    new_rows = []
-    seen_ids = set()
-    for s in products:
-        new_rows.append({
-            "variable operating costs": f"{s.name} (PFD)",
-            "units":              "tm",
-            "time basis":         "year",
-            "flowrate":           float(s.mass_flow),
-            "price usd/units":    float(getattr(s, "price_usd_per_tm", 0.0)),
-            "stream":             "Key Products",
-        })
-        seen_ids.add(s.id)
-    for s in feeds:
-        new_rows.append({
-            "variable operating costs": f"{s.name} (PFD)",
-            "units":              "tm",
-            "time basis":         "year",
-            "flowrate":           float(s.mass_flow),
-            "price usd/units":    float(getattr(s, "price_usd_per_tm", 0.0)),
-            "stream":             "Raw Materials",
-        })
-        seen_ids.add(s.id)
-    # Wastes — costos de disposición / byproducts vendibles.
-    # En Talara: coque, slurry, gas seco (todos role='product' o
-    # 'waste' con price > 0).  Antes los wastes con price>0 se
-    # perdían silenciosamente.
-    for s in fs.streams.values():
-        if s.id in seen_ids:
-            continue
-        if s.role == "waste":
-            new_rows.append({
-                "variable operating costs": f"{s.name} (PFD waste)",
-                "units":              "tm",
-                "time basis":         "year",
-                "flowrate":           float(s.mass_flow),
-                # waste con price>0: ingreso (subproducto vendible)
-                # waste con price<0: gasto (tratamiento)
-                # waste con price=0: ignored en NPV pero queda registrado
-                "price usd/units":    float(getattr(s, "price_usd_per_tm", 0.0)),
-                "stream":             "Waste / Byproduct",
-            })
-            seen_ids.add(s.id)
-    # Utility streams declarados como feed externo (BFW, fuel gas,
-    # H2SO4 secado, etc.) — antes se ignoraban si role='utility'.
-    for s in fs.streams.values():
-        if s.id in seen_ids:
-            continue
-        if s.role == "utility":
-            # Solo si entra al proceso desde un tanque source (no
-            # interno) — para evitar doble-conteo con auto-utilities
-            # que se calculan desde duty.  Marca con price>0 (compra).
-            src_b = fs.blocks.get(s.src)
-            is_external_feed = (src_b is not None
-                                and "Storage tank" in (src_b.eq_type or ""))
-            if is_external_feed and s.price_usd_per_tm > 0:
-                new_rows.append({
-                    "variable operating costs": f"{s.name} (PFD utility)",
-                    "units":              "tm",
-                    "time basis":         "year",
-                    "flowrate":           float(s.mass_flow),
-                    "price usd/units":    float(s.price_usd_per_tm),
-                    "stream":             "Utilities",
-                })
-                seen_ids.add(s.id)
-    for ex in fs.opex_extras:
-        new_rows.append({
-            "variable operating costs": f"{ex.get('name','?')} (PFD)",
-            "units":              ex.get("units", "tm"),
-            "time basis":         ex.get("time_basis", "year"),
-            "flowrate":           float(ex.get("flowrate", 0.0)),
-            "price usd/units":    float(ex.get("price_usd_per_unit", 0.0)),
-            "stream":             ex.get("stream", "Utilities"),
-        })
-
-    # utilities (PFD-util) auto-calculadas desde duties
-    auto_rows, _summary = compute_utilities_from_duties(fs)
-    for ex in auto_rows:
-        new_rows.append({
-            "variable operating costs": ex["name"],
-            "units":              ex["units"],
-            "time basis":         ex["time_basis"],
-            "flowrate":           ex["flowrate"],
-            "price usd/units":    ex["price_usd_per_unit"],
-            "stream":             ex["stream"],
-        })
+    # opex_extras manuales y utilities auto desde duties.  Lógica pura
+    # extraída a _collect_pfd_opex_rows (compartida con categorize_opex).
+    new_rows = _collect_pfd_opex_rows(fs, feeds, products)
 
     if new_rows:
         df_variable = pd.concat(
