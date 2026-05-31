@@ -219,6 +219,12 @@ def _economics(fs, econ_inputs):
     dep_method = str(econ_inputs.get("dep_method", "straight_line"))
     macrs_class = int(econ_inputs.get("macrs_class", 5))
     dep_years = econ_inputs.get("dep_years")            # None → useful_life
+    # Enriquecimiento opt-in del cash flow (default = caso simple → no cambia
+    # nada): construcción, ramp-up, royalties, desfase de impuestos.
+    construction_schedule = econ_inputs.get("construction_schedule")
+    rampup_schedule = econ_inputs.get("rampup_schedule")
+    royalties_pct = float(econ_inputs.get("royalties_pct", 0.0) or 0.0)
+    tax_lag = bool(econ_inputs.get("tax_lag", False))
 
     opex = fexp.categorize_opex(fs)                      # {revenue,crm,cut,cwt,col}
     cd = capex.compute_fci(fs, year_target=year_t,
@@ -232,11 +238,26 @@ def _economics(fs, econ_inputs):
         CUT_usd=opex["cut"], CRM_usd=opex["crm"], CWT_usd=opex["cwt"],
         depreciable_base_usd=dep, useful_life_yr=useful,
     )
+    # Split variable/fijo del costo cash para el ramp-up: variable =
+    # γ·(CRM+CUT+CWT) (escala con producción); el resto (labor + M+T+I) es fijo.
+    _var_cash = None
+    if construction_schedule is not None or rampup_schedule is not None \
+       or royalties_pct or tax_lag:
+        try:
+            import econ_defaults as _ed
+            _gamma = _ed.get_com_coeffs().get("gamma_variable", 1.23)
+        except Exception:
+            _gamma = 1.23
+        _var_cash = _gamma * (opex["crm"] + opex["cut"] + opex["cwt"])
+
     prof = ec.profitability_indicators(
         revenue_usd_yr=opex["revenue"], com_d_usd_yr=com["COM_d"],
         fci_usd=fci, depreciable_base_usd=dep, working_capital_usd=wc,
         useful_life_yr=useful, years_op=years, tax_rate=tax, disc_rate=disc,
         dep_method=dep_method, macrs_class=macrs_class, dep_years=dep_years,
+        construction_schedule=construction_schedule,
+        rampup_schedule=rampup_schedule, royalties_pct=royalties_pct,
+        tax_lag=tax_lag, variable_opex_usd_yr=_var_cash,
     )
     return _jsonsafe({
         "inputs": {"tax_rate": tax, "discount_rate": disc,
@@ -244,7 +265,10 @@ def _economics(fs, econ_inputs):
                    "year_target": year_t,
                    "isbl_override_usd": isbl_override,
                    "dep_method": dep_method, "macrs_class": macrs_class,
-                   "dep_years": dep_years},
+                   "dep_years": dep_years,
+                   "construction_schedule": construction_schedule,
+                   "rampup_schedule": rampup_schedule,
+                   "royalties_pct": royalties_pct, "tax_lag": tax_lag},
         "opex_usd_yr": opex,
         "capex": {"fci_grass_roots_usd": fci, "working_capital_usd": wc,
                   "depreciable_base_usd": dep,

@@ -762,7 +762,10 @@ def profitability_indicators(revenue_usd_yr, com_d_usd_yr, fci_usd,
                               useful_life_yr=None,
                               alpha_d=0.180, alpha=0.305,
                               dep_method="straight_line",
-                              dep_years=None, macrs_class=5):
+                              dep_years=None, macrs_class=5,
+                              construction_schedule=None, rampup_schedule=None,
+                              royalties_pct=0.0, tax_lag=False,
+                              variable_opex_usd_yr=None):
     """Calcula indicadores económicos clásicos a partir de:
         revenue_usd_yr:        ingresos anuales (Σ products + byproducts)
         com_d_usd_yr:          cost of manufacture con dep (Turton 8.2)
@@ -822,7 +825,51 @@ def profitability_indicators(revenue_usd_yr, com_d_usd_yr, fci_usd,
     roi_simple   = (net_profit / fci_usd * 100.0) if fci_usd > 0 else 0.0
 
     _method = str(dep_method).lower()
-    if _method in ("macrs",):
+    # ── ENRIQUECIDO (opt-in): ramp-up / royalties / desfase de impuestos /
+    # construcción.  Delega a cash_flow.build_cash_flow (motor año-por-año
+    # validado contra el viejo).  Sin estos params, NADA cambia (Gate 1a/2).
+    _enriched = (construction_schedule is not None or rampup_schedule is not None
+                 or bool(royalties_pct) or bool(tax_lag))
+    if _enriched:
+        import cash_flow as _cf
+        import depreciation as _dep
+        ccop = tax_deductible_opex - depreciation     # costo cash (sin dep)
+        var_cash = (variable_opex_usd_yr
+                    if variable_opex_usd_yr is not None else ccop)
+        fix_cash = ccop - var_cash
+        if _method == "macrs":
+            _sched = _dep.depreciation_schedule(
+                depreciable_base_usd, method="macrs", macrs_class=macrs_class)
+            dep_vec = (_sched + [0.0] * years_op)[:years_op]
+        else:
+            dep_vec = [depreciation] * years_op
+        _cons = list(construction_schedule) if construction_schedule else [1.0]
+        _ramp = list(rampup_schedule) if rampup_schedule else [1.0]
+        cfr = _cf.build_cash_flow(
+            fci_usd, working_capital_usd,
+            revenue_usd_yr=revenue_usd_yr, variable_opex_usd_yr=var_cash,
+            fixed_opex_usd_yr=fix_cash, dep_schedule=dep_vec,
+            tax_rate=tax_rate, disc_rate=disc_rate,
+            construction_schedule=_cons, rampup_schedule=_ramp,
+            royalties_pct=(royalties_pct or 0.0), royalties_on_base=False,
+            tax_lag=bool(tax_lag))
+        npv = cfr["NPV"]
+        irr = cfr["IRR"]
+        t_start = len(_cons)
+        op_cf  = cfr["CF"][t_start:]
+        op_dep = cfr["Dep"][t_start:]
+        op_tax = cfr["Taxes"][t_start:]
+        op_gp  = cfr["GP"][t_start:]
+        nop = max(len(op_cf), 1)
+        cash_flow    = sum(op_cf) / nop
+        depreciation = sum(op_dep) / nop
+        tax          = sum(op_tax) / nop
+        net_profit   = sum(op_gp[i] - op_tax[i]
+                           for i in range(len(op_gp))) / nop
+        pbp_simple   = _cumulative_payback(capex_year0, op_cf)
+        dep_schedule = op_dep
+        cf_schedule  = op_cf
+    elif _method in ("macrs",):
         # ── MACRS: depreciación acelerada → tax-shield variable año a año.
         # Modelo tax-shield estándar sobre EBITDA = revenue − (cash-opex +
         # M+T+I) = revenue − tax_deductible_opex + Dep_SL.  Con Dep_SL

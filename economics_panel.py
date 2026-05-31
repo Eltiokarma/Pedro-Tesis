@@ -17,7 +17,7 @@ prioriza correcto y funcional, con widgets nombrados y estructura limpia.
 from PySide6.QtWidgets import (
     QDialog, QVBoxLayout, QHBoxLayout, QFormLayout, QGroupBox, QLabel,
     QDoubleSpinBox, QSpinBox, QCheckBox, QComboBox, QPushButton, QTextEdit,
-    QDialogButtonBox,
+    QDialogButtonBox, QLineEdit,
 )
 from PySide6.QtGui import QFont
 from PySide6.QtCore import Qt
@@ -52,6 +52,23 @@ def _fmt_pct(x):
         return f"{float(x):.1f} %"
     except (TypeError, ValueError):
         return str(x)
+
+
+def _parse_csv(text):
+    """'0.5, 0.75, 1.0' -> [0.5, 0.75, 1.0].  [] si vacío/ inválido."""
+    text = (text or "").strip()
+    if not text:
+        return []
+    out = []
+    for tok in text.replace(";", ",").split(","):
+        tok = tok.strip()
+        if not tok:
+            continue
+        try:
+            out.append(float(tok))
+        except ValueError:
+            return []
+    return out
 
 
 def _fmt_yr(x):
@@ -185,6 +202,26 @@ class EconomicsPanel(QDialog):
         _on_dep_changed()
         root.addWidget(dep_box)
 
+        # Cash flow enriquecido (opt-in; vacío/0 = caso simple)
+        cf_box = QGroupBox("Cash flow (opcional — vacío = caso simple)")
+        cf_form = QFormLayout(cf_box)
+        self.edit_constr = QLineEdit()
+        self.edit_constr.setPlaceholderText("ej: 0.6,0.4  (vacío = 1 año, año 0)")
+        self.edit_constr.setToolTip("Fracción de CapEx por año de construcción (CSV).")
+        cf_form.addRow("Construcción (FC):", self.edit_constr)
+        self.edit_ramp = QLineEdit()
+        self.edit_ramp.setPlaceholderText("ej: 0.5,0.75,1.0  (vacío = plena)")
+        self.edit_ramp.setToolTip("Fracción de capacidad por año de operación (ramp-up, CSV).")
+        cf_form.addRow("Ramp-up (VCOP):", self.edit_ramp)
+        self.spin_roy = QDoubleSpinBox()
+        self.spin_roy.setRange(0.0, 0.5); self.spin_roy.setSingleStep(0.01)
+        self.spin_roy.setDecimals(3); self.spin_roy.setValue(0.0)
+        self.spin_roy.setToolTip("Royalties como fracción de ingresos (rev·pct).")
+        cf_form.addRow("Royalties (frac):", self.spin_roy)
+        self.chk_taxlag = QCheckBox("Desfase de impuestos (1 año)")
+        cf_form.addRow(self.chk_taxlag)
+        root.addWidget(cf_box)
+
         # Botón Calcular
         self.btn_calc = QPushButton("Calcular")
         self.btn_calc.clicked.connect(self._run)
@@ -233,6 +270,16 @@ class EconomicsPanel(QDialog):
             inputs["macrs_class"] = int(macrs_class)
         else:
             inputs["dep_years"] = int(self.spin_dep_years.value())
+        # Cash flow enriquecido (opt-in). Schedules solo si hay CSV; royalties
+        # y tax_lag se pasan siempre (0/False = caso simple, no enriquece).
+        constr = _parse_csv(self.edit_constr.text())
+        ramp = _parse_csv(self.edit_ramp.text())
+        if constr:
+            inputs["construction_schedule"] = constr
+        if ramp:
+            inputs["rampup_schedule"] = ramp
+        inputs["royalties_pct"] = float(self.spin_roy.value())
+        inputs["tax_lag"] = bool(self.chk_taxlag.isChecked())
         return inputs
 
     def _open_montecarlo(self):
