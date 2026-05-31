@@ -1,9 +1,8 @@
 """
 indicators.py — NPV / IRR sobre vectores de cash flow año-por-año.  PURO.
 
-Rescatado de montecarlo._npv / _irr_biseccion (cluster legacy a retirar).
-Single source = este módulo; las copias en montecarlo.py quedan duplicadas
-hasta el retiro de ana_qt.
+Rescatado de montecarlo._npv / _irr_biseccion (cluster legacy ya retirado).
+Single source = este módulo.
 
 Convención: el cash flow es una lista [cf_0, cf_1, ..., cf_N] donde el índice
 es el año (cf_0 = año 0 = -CAPEX).  Opcionalmente `years` da los exponentes

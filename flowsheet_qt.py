@@ -6828,9 +6828,7 @@ class FlowsheetMainWindow(QMainWindow):
         flowsheet actual y muestra NPV/IRR/Payback/ROI/COM ahí mismo, sin
         xlsx temporal ni subproceso.  El diagrama queda intacto.
 
-        Reemplaza el bridge legacy (xlsx + ana_qt subprocess), preservado
-        en _action_launch_analysis_xlsx_legacy pero ya NO invocado (su
-        retiro es un commit posterior)."""
+        (Reemplazó al bridge legacy xlsx→subprocess ana_qt, ya retirado.)"""
         if not self.fs.blocks:
             ans = QMessageBox.question(
                 self, "Sin proceso modelado",
@@ -6870,94 +6868,6 @@ class FlowsheetMainWindow(QMainWindow):
                                   f"{type(e).__name__}: {e}")
             return
         self.status.showMessage(f"Exportado: {path}", 6000)
-
-    def _action_launch_analysis_xlsx_legacy(self):
-        """[LEGACY — ya NO invocado desde el botón] Genera xlsx temporal y
-        lanza ana_qt.py como subprocess.  Preservado para retiro en commit
-        posterior; el panel in-process lo reemplaza."""
-        if not self.fs.blocks:
-            ans = QMessageBox.question(
-                self, "Sin proceso modelado",
-                "El diagrama está vacío. ¿Abrir el análisis económico igual?",
-            )
-            if ans != QMessageBox.Yes:
-                return
-            feeds, products, isbl = [], [], None
-        else:
-            # validar mass balance (energía es informativa, no bloquea)
-            mb_errors = fsolv._check_mass_balance(self.fs, tol_rel=0.005)
-            if mb_errors:
-                ans = QMessageBox.question(
-                    self, "Balance de masa no cuadra",
-                    "Los siguientes equipos no cierran balance:\n\n"
-                    + "\n".join(f"   · {m}" for m in mb_errors)
-                    + "\n\nUn análisis económico con masas inconsistentes "
-                      "puede dar resultados engañosos.  ¿Forzar igual?",
-                )
-                if ans != QMessageBox.Yes:
-                    return
-
-            # calcular ISBL via Lang
-            try:
-                equipos = [
-                    {"nombre": b.eq_type, "S": b.S, "n": b.n}
-                    for b in self.fs.blocks.values()
-                ]
-                res = eq.lang_fci(equipos, plant_type="Fluid processing",
-                                   year_target=2024)
-                isbl = eq.isbl_implicito(res["FCI_MMUSD"], 0.30, 0.10, 0.10)
-            except Exception as e:
-                QMessageBox.critical(self, "Error de cálculo",
-                                      f"{type(e).__name__}: {e}")
-                return
-            feeds    = [s for s in self.fs.streams.values() if s.role == "feed"]
-            products = [s for s in self.fs.streams.values() if s.role == "product"]
-
-        # opción de xlsx base
-        usar_xlsx = QMessageBox.question(
-            self, "Análisis económico",
-            "El diagrama de bloques queda intacto en esta ventana.\n\n"
-            "¿Usar un .xlsx base existente para el análisis?\n\n"
-            "  Sí        → seleccionás el archivo\n"
-            "  No        → plantilla Turton + feeds/products del diagrama",
-            QMessageBox.Yes | QMessageBox.No | QMessageBox.Cancel,
-        )
-        if usar_xlsx == QMessageBox.Cancel:
-            return
-
-        base_xlsx = None
-        if usar_xlsx == QMessageBox.Yes:
-            base_xlsx, _ = QFileDialog.getOpenFileName(
-                self, "Proyecto .xlsx base", "", "Excel (*.xlsx *.xls)"
-            )
-            if not base_xlsx:
-                return
-
-        # generar xlsx temporal
-        import tempfile
-        try:
-            tmp_dir = tempfile.gettempdir()
-            tmp_path = os.path.join(tmp_dir, f"ANA_from_PFD_{os.getpid()}.xlsx")
-            fexp.write_project_xlsx(tmp_path, self.fs, isbl, feeds, products,
-                                     base_xlsx)
-        except Exception as e:
-            QMessageBox.critical(self, "Falló la generación del xlsx",
-                                  f"{type(e).__name__}: {e}")
-            return
-
-        # lanzar ANA.py como subprocess
-        # Preferir el nuevo ana_qt (PySide6, look unificado con SVG icons).
-        # Fallback a ANA.py (Tkinter legacy) si ana_qt no está disponible.
-        cwd = os.path.dirname(os.path.abspath(__file__))
-        if os.path.exists(os.path.join(cwd, "ana_qt.py")):
-            cmd = [sys.executable, "ana_qt.py", "--import", tmp_path]
-        else:
-            cmd = [sys.executable, "ANA.py", "--import", tmp_path]
-        try:
-            subprocess.Popen(cmd, cwd=cwd)
-        except Exception as e:
-            QMessageBox.critical(self, "Falló el lanzamiento",
-                                  f"{type(e).__name__}: {e}")
 
     # ---------------------------------------------------
     # EXPORT (PDF / SVG / PNG)

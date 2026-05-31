@@ -3,9 +3,9 @@ depreciation.py — Tablas y schedule de depreciación.  SINGLE SOURCE del
 motor vivo.  PURO (sin UI, sin estado).
 
 Rescatado de flujoflujoclass.CashFlowModel.calcular_depreciacion (cluster
-legacy ANA/Monte Carlo que se va a retirar).  Mientras dure ese retiro las
-copias en flujoflujoclass.py y montecarlo.py quedan DUPLICADAS; el single
-source es ESTE módulo y las copias se eliminan junto con ana_qt.
+legacy ANA/Monte Carlo).  El single source es ESTE módulo; la copia que
+queda en flujoflujoclass.py es legacy (la usa el bridge batch, no el motor
+económico vivo).
 
 MACRS — GDS half-year convention (IRS Pub. 946):
   · 5-year   → 6 factores
