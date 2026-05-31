@@ -127,6 +127,13 @@ class ComponentThermo:
         if abs(denom) < 1e-9:
             return None
         log10_P = self.antoine_A - self.antoine_B / denom
+        # Acotar el exponente: a T muy fuera del rango Antoine el valor
+        # diverge y 10**log10_P desborda float (OverflowError).  Clamp a un
+        # rango físico amplio (1e-30 .. 1e30 kPa) — no afecta valores válidos.
+        if log10_P > 30.0:
+            return 1e30
+        if log10_P < -30.0:
+            return 0.0
         return 10.0 ** log10_P
 
     def delta_h_vap_kJ_mol(self, T_C: float) -> Optional[float]:
