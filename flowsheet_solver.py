@@ -4657,6 +4657,84 @@ def solve(fs, max_iter=MAX_ITER):
         for scc in recycle_sccs for bid in scc
     )
     n_outer_iter = 30 if reactor_in_scc else 1
+
+    # Mensajes de los unit ops (4cb).  Declarados ACÁ porque
+    # _run_unit_ops_loop (definida más abajo) los escribe vía nonlocal y
+    # puede invocarse desde DENTRO del loop de reactores cuando el recycle
+    # del reactor pasa por un separador/columna.
+    flash_msgs = []
+    col_msgs = []
+    split_msgs = []
+    sep_msgs = []
+    dry_msgs = []
+    cry_msgs = []
+    evp_msgs = []
+    cyc_msgs = []
+
+    def _run_unit_ops_loop():
+        """Una corrida completa del loop de unit ops (splitters, flashes,
+        separadores, columnas).  Extraída como función para poder llamarla
+        TAMBIÉN dentro del loop de reactores (4c): cuando un reactor está en
+        un recycle loop cuyo tear pasa por un flash/columna (p.ej. el
+        recycle de metanol de industrial_complete vuelve por V-201/V-203),
+        los separadores deben correr ENTRE iteraciones del reactor para
+        propagar la composición del recycle de vuelta al inlet.  Sin esto el
+        reactor veía un inlet sin recycle y el solve no era idempotente
+        (1er solve ≠ 2do)."""
+        nonlocal split_msgs, flash_msgs, sep_msgs, cyc_msgs
+        nonlocal dry_msgs, cry_msgs, evp_msgs, col_msgs
+        for _outer in range(5):
+            prev_count = sum(1 for s in fs.streams.values() if s.composition)
+            # También rastrear masa resuelta: en un segundo solve (p.ej. tras
+            # instanciar auxiliares) las composiciones PERSISTEN de la corrida
+            # anterior, así que cortar solo por 'composición estable' puede
+            # terminar el loop ANTES de que un splitter/flash reciba su feed ya
+            # propagado en esta pasada (su salida quedaría en 0).  Seguir
+            # iterando mientras se resuelva masa nueva evita ese corte temprano.
+            prev_mass = sum(1 for s in fs.streams.values() if s.mass_flow > 0)
+            # Splitters: distribuyen mass, propagan composición igual
+            split_msgs = solve_splitters(fs)
+            for _ in range(3):
+                if not _solve_mass_iteration(fs):
+                    break
+            # Flash drums (separación VLE)
+            flash_msgs = solve_flashes(fs)
+            for _ in range(3):
+                if not _solve_mass_iteration(fs):
+                    break
+            # Separadores mecánicos UNIFICADOS (filtro/centrífuga/ciclón/
+            # decanter) — un solo solver que honra los flags legacy y el
+            # modelo nuevo mech_sep_active.  Luego secadores, cristalizadores,
+            # evaporadores.
+            sep_msgs = solve_mechanical_separators(fs)
+            cyc_msgs = []
+            for _ in range(3):
+                if not _solve_mass_iteration(fs):
+                    break
+            dry_msgs = solve_dryers(fs)
+            for _ in range(3):
+                if not _solve_mass_iteration(fs):
+                    break
+            cry_msgs = solve_crystallizers(fs)
+            for _ in range(3):
+                if not _solve_mass_iteration(fs):
+                    break
+            evp_msgs = solve_evaporators(fs)
+            for _ in range(3):
+                if not _solve_mass_iteration(fs):
+                    break
+            auto_propagate_compositions(fs)
+            # Columnas (separación FUG)
+            col_msgs = solve_columns(fs)
+            for _ in range(3):
+                if not _solve_mass_iteration(fs):
+                    break
+            auto_propagate_compositions(fs)
+            new_count = sum(1 for s in fs.streams.values() if s.composition)
+            new_mass = sum(1 for s in fs.streams.values() if s.mass_flow > 0)
+            if new_count == prev_count and new_mass == prev_mass:
+                break
+
     rxn_msgs = []
     for outer in range(n_outer_iter):
         # Snapshot de composiciones actuales
@@ -4679,6 +4757,15 @@ def solve(fs, max_iter=MAX_ITER):
                 scc_streams = _streams_in_scc(scc, fs)
                 if not all(s.mass_flow > 0 for s in scc_streams):
                     _solve_recycle_wegstein(fs, scc, max_iter=10)
+            # Correr los separadores/columnas AHORA para propagar la
+            # composición del recycle de vuelta al inlet del reactor antes
+            # de la próxima iteración.  Sin esto, si el tear del recycle
+            # pasa por un flash/columna (industrial_complete: el metanol
+            # vuelve por V-201/V-203), el reactor veía un inlet sin recycle
+            # y el solve no era idempotente.  _run_unit_ops_loop se define
+            # más abajo pero ya está ligada en este scope al ejecutarse.
+            _run_unit_ops_loop()
+            auto_propagate_compositions(fs)
         # Check convergencia: compare composiciones
         if outer > 0:
             max_diff = 0.0
@@ -4695,68 +4782,11 @@ def solve(fs, max_iter=MAX_ITER):
         if m.startswith("✗") or m.startswith("⚠"):
             result.energy_balance_errors.append(m)
 
-    # 4cb. Unit ops automáticos (splitters, flashes, columnas) — loop
-    #      topológico para que cada unit op tenga su feed resuelto
-    #      cuando se ejecuta.  Repetimos hasta no haber cambios.
-    flash_msgs = []
-    col_msgs = []
-    split_msgs = []
-    sep_msgs = []
-    dry_msgs = []
-    cry_msgs = []
-    evp_msgs = []
-    cyc_msgs = []
-    for outer in range(5):
-        prev_count = sum(1 for s in fs.streams.values() if s.composition)
-        # También rastrear masa resuelta: en un segundo solve (p.ej. tras
-        # instanciar auxiliares) las composiciones PERSISTEN de la corrida
-        # anterior, así que cortar solo por 'composición estable' puede
-        # terminar el loop ANTES de que un splitter/flash reciba su feed ya
-        # propagado en esta pasada (su salida quedaría en 0).  Seguir
-        # iterando mientras se resuelva masa nueva evita ese corte temprano.
-        prev_mass = sum(1 for s in fs.streams.values() if s.mass_flow > 0)
-        # Splitters: distribuyen mass, propagan composición igual
-        split_msgs = solve_splitters(fs)
-        for _ in range(3):
-            if not _solve_mass_iteration(fs):
-                break
-        # Flash drums (separación VLE)
-        flash_msgs = solve_flashes(fs)
-        for _ in range(3):
-            if not _solve_mass_iteration(fs):
-                break
-        # Separadores mecánicos UNIFICADOS (filtro/centrífuga/ciclón/
-        # decanter) — un solo solver que honra los flags legacy y el
-        # modelo nuevo mech_sep_active.  Luego secadores, cristalizadores,
-        # evaporadores.
-        sep_msgs = solve_mechanical_separators(fs)
-        cyc_msgs = []
-        for _ in range(3):
-            if not _solve_mass_iteration(fs):
-                break
-        dry_msgs = solve_dryers(fs)
-        for _ in range(3):
-            if not _solve_mass_iteration(fs):
-                break
-        cry_msgs = solve_crystallizers(fs)
-        for _ in range(3):
-            if not _solve_mass_iteration(fs):
-                break
-        evp_msgs = solve_evaporators(fs)
-        for _ in range(3):
-            if not _solve_mass_iteration(fs):
-                break
-        auto_propagate_compositions(fs)
-        # Columnas (separación FUG)
-        col_msgs = solve_columns(fs)
-        for _ in range(3):
-            if not _solve_mass_iteration(fs):
-                break
-        auto_propagate_compositions(fs)
-        new_count = sum(1 for s in fs.streams.values() if s.composition)
-        new_mass = sum(1 for s in fs.streams.values() if s.mass_flow > 0)
-        if new_count == prev_count and new_mass == prev_mass:
-            break
+    # 4cb. Unit ops automáticos (splitters, flashes, columnas).  La función
+    #      _run_unit_ops_loop ya corrió DENTRO del loop de reactores cuando
+    #      había reactor en SCC; acá se asegura una pasada final (idempotente)
+    #      para flowsheets sin reactor en recycle.
+    _run_unit_ops_loop()
 
     for m in (split_msgs + flash_msgs + col_msgs
               + cyc_msgs + sep_msgs + dry_msgs + cry_msgs + evp_msgs):
