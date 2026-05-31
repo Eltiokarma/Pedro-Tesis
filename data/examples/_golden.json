@@ -1,0 +1,371 @@
+{
+ "acetic": {
+  "ISBL": 3517650.68,
+  "energy_errors": 0,
+  "mass_errors": 0,
+  "n_blocks": 14,
+  "n_streams": 13,
+  "overall_status": "warning",
+  "sum_duty": 16.57227
+ },
+ "air_sep": {
+  "ISBL": 2859386.45,
+  "energy_errors": 0,
+  "mass_errors": 0,
+  "n_blocks": 9,
+  "n_streams": 8,
+  "overall_status": "warning",
+  "sum_duty": 9.184045
+ },
+ "ammonia": {
+  "ISBL": 7922613.62,
+  "energy_errors": 0,
+  "mass_errors": 0,
+  "n_blocks": 8,
+  "n_streams": 7,
+  "overall_status": "warning",
+  "sum_duty": 902.914507
+ },
+ "beer": {
+  "ISBL": 1737716.21,
+  "energy_errors": 0,
+  "mass_errors": 0,
+  "n_blocks": 6,
+  "n_streams": 5,
+  "overall_status": "ok",
+  "sum_duty": -1.277669
+ },
+ "biodiesel": {
+  "ISBL": 1425779.71,
+  "energy_errors": 0,
+  "mass_errors": 0,
+  "n_blocks": 7,
+  "n_streams": 6,
+  "overall_status": "ok",
+  "sum_duty": 4.173938
+ },
+ "bread": {
+  "ISBL": 1956122.41,
+  "energy_errors": 0,
+  "mass_errors": 0,
+  "n_blocks": 7,
+  "n_streams": 6,
+  "overall_status": "ok",
+  "sum_duty": 9.474989
+ },
+ "cdu": {
+  "ISBL": 6730533.43,
+  "energy_errors": 0,
+  "mass_errors": 0,
+  "n_blocks": 13,
+  "n_streams": 12,
+  "overall_status": "ok",
+  "sum_duty": 139.847827
+ },
+ "cement": {
+  "ISBL": 4326315.1,
+  "energy_errors": 0,
+  "mass_errors": 0,
+  "n_blocks": 6,
+  "n_streams": 5,
+  "overall_status": "ok",
+  "sum_duty": 2.32623
+ },
+ "chloralkali_hcl": {
+  "ISBL": 6995082.73,
+  "energy_errors": 0,
+  "mass_errors": 0,
+  "n_blocks": 10,
+  "n_streams": 10,
+  "overall_status": "ok",
+  "sum_duty": -4.032988
+ },
+ "desal": {
+  "ISBL": 7846017.16,
+  "energy_errors": 0,
+  "mass_errors": 0,
+  "n_blocks": 7,
+  "n_streams": 8,
+  "overall_status": "ok",
+  "sum_duty": 55.451533
+ },
+ "dist_eth_az": {
+  "ISBL": 2117796.99,
+  "energy_errors": 0,
+  "mass_errors": 0,
+  "n_blocks": 8,
+  "n_streams": 7,
+  "overall_status": "ok",
+  "sum_duty": 15.872564
+ },
+ "distillation": {
+  "ISBL": 1498311.58,
+  "energy_errors": 0,
+  "mass_errors": 0,
+  "n_blocks": 8,
+  "n_streams": 7,
+  "overall_status": "ok",
+  "sum_duty": 134.739189
+ },
+ "ethane_pfr": {
+  "ISBL": 6542565.43,
+  "energy_errors": 0,
+  "mass_errors": 0,
+  "n_blocks": 6,
+  "n_streams": 5,
+  "overall_status": "ok",
+  "sum_duty": 70.815324
+ },
+ "ethanol": {
+  "ISBL": 3192951.41,
+  "energy_errors": 0,
+  "mass_errors": 0,
+  "n_blocks": 11,
+  "n_streams": 10,
+  "overall_status": "warning",
+  "sum_duty": 1376.689335
+ },
+ "ethylene_crk": {
+  "ISBL": 6897010.16,
+  "energy_errors": 0,
+  "mass_errors": 0,
+  "n_blocks": 10,
+  "n_streams": 9,
+  "overall_status": "ok",
+  "sum_duty": 95.295355
+ },
+ "gas_sweet": {
+  "ISBL": 12772945.7,
+  "energy_errors": 0,
+  "mass_errors": 0,
+  "n_blocks": 13,
+  "n_streams": 16,
+  "overall_status": "ok",
+  "sum_duty": 4227.051582
+ },
+ "glass": {
+  "ISBL": 1146665.34,
+  "energy_errors": 0,
+  "mass_errors": 0,
+  "n_blocks": 8,
+  "n_streams": 7,
+  "overall_status": "ok",
+  "sum_duty": 207.557078
+ },
+ "haber_rec": {
+  "ISBL": 25103084.27,
+  "energy_errors": 0,
+  "mass_errors": 0,
+  "n_blocks": 10,
+  "n_streams": 10,
+  "overall_status": "ok",
+  "sum_duty": -71.023002
+ },
+ "hda": {
+  "ISBL": 9414377.2,
+  "energy_errors": 0,
+  "mass_errors": 0,
+  "n_blocks": 12,
+  "n_streams": 12,
+  "overall_status": "ok",
+  "sum_duty": -103.905947
+ },
+ "hda_full": {
+  "ISBL": 31216425.33,
+  "energy_errors": 0,
+  "mass_errors": 0,
+  "n_blocks": 22,
+  "n_streams": 24,
+  "overall_status": "ok",
+  "sum_duty": -731.364826
+ },
+ "hno3": {
+  "ISBL": 10890477.56,
+  "energy_errors": 0,
+  "mass_errors": 0,
+  "n_blocks": 21,
+  "n_streams": 21,
+  "overall_status": "warning",
+  "sum_duty": -795.5875
+ },
+ "hydraulic": {
+  "ISBL": 974463.65,
+  "energy_errors": 0,
+  "mass_errors": 0,
+  "n_blocks": 5,
+  "n_streams": 4,
+  "overall_status": "ok",
+  "sum_duty": 9.360386
+ },
+ "industrial": {
+  "ISBL": 22026405.31,
+  "energy_errors": 0,
+  "mass_errors": 0,
+  "n_blocks": 28,
+  "n_streams": 30,
+  "overall_status": "warning",
+  "sum_duty": -5168.303581
+ },
+ "ldpe": {
+  "ISBL": 2447864.43,
+  "energy_errors": 0,
+  "mass_errors": 0,
+  "n_blocks": 6,
+  "n_streams": 5,
+  "overall_status": "ok",
+  "sum_duty": 70.579141
+ },
+ "leche_gloria": {
+  "ISBL": 12072696.92,
+  "energy_errors": 0,
+  "mass_errors": 0,
+  "n_blocks": 20,
+  "n_streams": 21,
+  "overall_status": "ok",
+  "sum_duty": 414.061462
+ },
+ "methanol": {
+  "ISBL": 3902733.2,
+  "energy_errors": 0,
+  "mass_errors": 0,
+  "n_blocks": 8,
+  "n_streams": 7,
+  "overall_status": "warning",
+  "sum_duty": -300.268263
+ },
+ "nuclear": {
+  "ISBL": 1563415.42,
+  "energy_errors": 0,
+  "mass_errors": 0,
+  "n_blocks": 6,
+  "n_streams": 5,
+  "overall_status": "ok",
+  "sum_duty": 0.132372
+ },
+ "pasteurizer": {
+  "ISBL": 642814.97,
+  "energy_errors": 0,
+  "mass_errors": 0,
+  "n_blocks": 5,
+  "n_streams": 4,
+  "overall_status": "ok",
+  "sum_duty": -0.117503
+ },
+ "penicillin": {
+  "ISBL": 4504039.32,
+  "energy_errors": 0,
+  "mass_errors": 0,
+  "n_blocks": 9,
+  "n_streams": 8,
+  "overall_status": "ok",
+  "sum_duty": -0.000531
+ },
+ "pineapple": {
+  "ISBL": 4324345.3,
+  "energy_errors": 0,
+  "mass_errors": 0,
+  "n_blocks": 7,
+  "n_streams": 6,
+  "overall_status": "ok",
+  "sum_duty": 52.073118
+ },
+ "potato_chips": {
+  "ISBL": 1139870.93,
+  "energy_errors": 0,
+  "mass_errors": 0,
+  "n_blocks": 5,
+  "n_streams": 4,
+  "overall_status": "ok",
+  "sum_duty": 76.0
+ },
+ "quimpac": {
+  "ISBL": 51087300.91,
+  "energy_errors": 0,
+  "mass_errors": 0,
+  "n_blocks": 23,
+  "n_streams": 23,
+  "overall_status": "ok",
+  "sum_duty": 1583.757543
+ },
+ "rankine": {
+  "ISBL": 271826049.8,
+  "energy_errors": 0,
+  "mass_errors": 0,
+  "n_blocks": 6,
+  "n_streams": 5,
+  "overall_status": "ok",
+  "sum_duty": 0.132372
+ },
+ "rxn_flash_col": {
+  "ISBL": 3641892.79,
+  "energy_errors": 0,
+  "mass_errors": 0,
+  "n_blocks": 8,
+  "n_streams": 7,
+  "overall_status": "ok",
+  "sum_duty": 430.751476
+ },
+ "smr_eq": {
+  "ISBL": 10297711.46,
+  "energy_errors": 0,
+  "mass_errors": 0,
+  "n_blocks": 9,
+  "n_streams": 8,
+  "overall_status": "ok",
+  "sum_duty": -30.425025
+ },
+ "soap": {
+  "ISBL": 1334989.54,
+  "energy_errors": 0,
+  "mass_errors": 0,
+  "n_blocks": 7,
+  "n_streams": 6,
+  "overall_status": "ok",
+  "sum_duty": 6.818021
+ },
+ "sugar": {
+  "ISBL": 57523418.64,
+  "energy_errors": 0,
+  "mass_errors": 0,
+  "n_blocks": 14,
+  "n_streams": 17,
+  "overall_status": "ok",
+  "sum_duty": 38911.08384
+ },
+ "sulfuric": {
+  "ISBL": 1081290.32,
+  "energy_errors": 0,
+  "mass_errors": 0,
+  "n_blocks": 9,
+  "n_streams": 8,
+  "overall_status": "ok",
+  "sum_duty": -54.937067
+ },
+ "talara": {
+  "ISBL": 66034527.89,
+  "energy_errors": 0,
+  "mass_errors": 0,
+  "n_blocks": 39,
+  "n_streams": 42,
+  "overall_status": "ok",
+  "sum_duty": 8795.081043
+ },
+ "urea": {
+  "ISBL": 5083702.08,
+  "energy_errors": 0,
+  "mass_errors": 0,
+  "n_blocks": 10,
+  "n_streams": 9,
+  "overall_status": "ok",
+  "sum_duty": 136.495623
+ },
+ "water_treat": {
+  "ISBL": 6032495.65,
+  "energy_errors": 0,
+  "mass_errors": 0,
+  "n_blocks": 8,
+  "n_streams": 7,
+  "overall_status": "ok",
+  "sum_duty": 0.0
+ }
+}
