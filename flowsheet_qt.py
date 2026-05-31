@@ -5894,8 +5894,6 @@ class FlowsheetMainWindow(QMainWindow):
         # menú de ejemplos
         examples_act = QAction("Ejemplos ▾", self)
         examples_menu = QMenu(self)
-        from examples_library import ExampleBuilder as _LegacyEditor
-        # reusar los example builders del editor legacy
         def make_loader(key):
             return lambda: self.action_load_example(key)
         # Ícono compartido para todos los ejemplos (equipo genérico)
