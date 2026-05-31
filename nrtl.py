@@ -236,13 +236,46 @@ def _Psat_bar(comp_name: str, T_K: float) -> Optional[float]:
 # Punto de burbuja y rocío
 # ============================================================
 
+# Límites del barrido de temperatura en el Newton de bubble/dew point.
+# El piso era 200 K, lo que excluía sistemas criogénicos (N₂/O₂ hierven
+# a ~80–95 K).  Se baja a 40 K para admitir destilación criogénica
+# (separación de aire) sin afectar el rango ambiental.
+_T_FLOOR_K = 40.0
+_T_CEIL_K  = 700.0
+
+
+def _estimate_T_init(names: List[str], default: float = 350.0) -> float:
+    """Semilla de temperatura para el Newton, promediando los puntos de
+    ebullición (Tb) de los componentes.  Para mezclas ambientales da ~Tb
+    normal (cerca del default); para criogénicas arranca cerca de ~85 K en
+    vez de 350 K, evitando que el solver tenga que cruzar todo el rango
+    (y choque contra el piso) antes de converger."""
+    try:
+        import thermo_db as _td
+    except ImportError:
+        return default
+    tbs = []
+    for nm in names:
+        c = _td.get(nm)
+        if c is not None and getattr(c, "tb_c", 0.0):
+            tbs.append(c.tb_c + 273.15)
+    if not tbs:
+        return default
+    T0 = sum(tbs) / len(tbs)
+    # Acotar al rango válido del solver con un pequeño margen.
+    return min(max(T0, _T_FLOOR_K + 10.0), _T_CEIL_K - 10.0)
+
+
 def bubble_point(names: List[str], x_vec: List[float], P_bar: float,
-                  T_init_K: float = 350.0, tol: float = 1e-4,
+                  T_init_K: Optional[float] = None, tol: float = 1e-4,
                   max_iter: int = 60) -> Optional[Tuple[float, List[float]]]:
     """Punto de burbuja: dada composición líquida x y P, encontrar T_bub
     tal que Σᵢ xᵢ·γᵢ(T,x)·Pᵢ_sat(T) = P, y luego yᵢ = xᵢ·γᵢ·Pᵢ_sat/P.
 
     Newton-Raphson sobre T.
+
+    T_init_K None → se estima desde los Tb de los componentes (admite
+    sistemas criogénicos sin tener que pasar una semilla explícita).
 
     Returns: (T_bub_K, y_vec) o None si no converge / falta data.
     """
@@ -254,7 +287,7 @@ def bubble_point(names: List[str], x_vec: List[float], P_bar: float,
         return None
     x = [xi / s for xi in x_vec]   # renormalizar
 
-    T = T_init_K
+    T = _estimate_T_init(names) if T_init_K is None else T_init_K
     for it in range(max_iter):
         g = gamma(names, x, T)
         if g is None:
@@ -280,22 +313,25 @@ def bubble_point(names: List[str], x_vec: List[float], P_bar: float,
             return None
         T_new = T - f / df
         # Damping para evitar T negativa o explosiva
-        if T_new < 200:
-            T_new = 0.5 * (T + 200)
-        if T_new > 700:
-            T_new = 0.5 * (T + 700)
+        if T_new < _T_FLOOR_K:
+            T_new = 0.5 * (T + _T_FLOOR_K)
+        if T_new > _T_CEIL_K:
+            T_new = 0.5 * (T + _T_CEIL_K)
         T = T_new
     return None
 
 
 def dew_point(names: List[str], y_vec: List[float], P_bar: float,
-              T_init_K: float = 350.0, tol: float = 1e-4,
+              T_init_K: Optional[float] = None, tol: float = 1e-4,
               max_iter: int = 60) -> Optional[Tuple[float, List[float]]]:
     """Punto de rocío: dada composición vapor y y P, encontrar T_dew
     tal que Σᵢ yᵢ·P / (γᵢ·Pᵢ_sat) = 1, con xᵢ correspondiente.
 
     Resuelto iterativamente: γᵢ depende de xᵢ que depende de γᵢ.
     Fixed-point con damping.
+
+    T_init_K None → se estima desde los Tb de los componentes (admite
+    sistemas criogénicos).
     """
     n = len(names)
     if n != len(y_vec):
@@ -306,7 +342,7 @@ def dew_point(names: List[str], y_vec: List[float], P_bar: float,
     y = [yi / s for yi in y_vec]
     # Estimación inicial: x = y (mezcla ideal)
     x = list(y)
-    T = T_init_K
+    T = _estimate_T_init(names) if T_init_K is None else T_init_K
 
     for it in range(max_iter):
         g = gamma(names, x, T)
@@ -334,8 +370,8 @@ def dew_point(names: List[str], y_vec: List[float], P_bar: float,
         if abs(df) < 1e-12:
             return None
         T_new = T - (s_x - 1.0) / df
-        if T_new < 200: T_new = 0.5 * (T + 200)
-        if T_new > 700: T_new = 0.5 * (T + 700)
+        if T_new < _T_FLOOR_K: T_new = 0.5 * (T + _T_FLOOR_K)
+        if T_new > _T_CEIL_K:  T_new = 0.5 * (T + _T_CEIL_K)
         T = T_new
         # Update x para próxima iteración (damped)
         x = [0.5 * (xi + xni / s_x) for xi, xni in zip(x, x_new)]

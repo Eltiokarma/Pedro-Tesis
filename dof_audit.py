@@ -127,6 +127,7 @@ def _determinable_masses(fs: Flowsheet) -> Set[int]:
             if (getattr(b, "flash_active", False)
                     or getattr(b, "column_active", False)
                     or getattr(b, "separator_active", False)
+                    or getattr(b, "mech_sep_active", False)
                     or getattr(b, "dryer_active", False)
                     or getattr(b, "crystallizer_active", False)
                     or getattr(b, "evaporator_active", False)
@@ -173,10 +174,12 @@ def _determinable_compositions(fs: Flowsheet) -> Set[int]:
                 continue
             # Bloques chemistry-aware: outputs siempre se computan
             chem_aware = (bool(getattr(b, "reactions", None))
+                          or bool(getattr(b, "custom_reactions", None))
                           or getattr(b, "splitter_active", False)
                           or getattr(b, "flash_active", False)
                           or getattr(b, "column_active", False)
                           or getattr(b, "separator_active", False)
+                          or getattr(b, "mech_sep_active", False)
                           or getattr(b, "dryer_active", False)
                           or getattr(b, "crystallizer_active", False)
                           or getattr(b, "evaporator_active", False)

@@ -29,6 +29,8 @@ def main():
     import flowsheet_qt as fq
     from flowsheet_model import Flowsheet
 
+    import ui_scaling
+    ui_scaling.enable_high_dpi()
     app = QApplication(sys.argv)
     app.setApplicationName("Diagrama de proceso (Qt)")
 

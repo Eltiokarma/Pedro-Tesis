@@ -2,7 +2,8 @@
 FLOWSHEET MODEL — dataclasses puras del modelo de proceso.
 
 Aislado de UI (no depende de PySide6).  El editor Qt (`flowsheet_qt.py`)
-y la biblioteca de ejemplos (`examples_library.py`) importan de acá.
+y el registry de ejemplos (`examples_registry.py`, vía from_dict) importan
+de acá.
 
 Contiene:
   - Constantes geométricas del modelo (BLOCK_W/H, GRID_STEP, etc.)

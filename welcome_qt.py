@@ -74,7 +74,8 @@ class WelcomeWindow(QMainWindow):
     def __init__(self):
         super().__init__()
         self.setWindowTitle("Tesis — Análisis de proceso y económico")
-        self.resize(720, 560)
+        import ui_scaling
+        ui_scaling.fit_to_screen(self, 720, 560)
 
         self.action = None
         self.payload = None

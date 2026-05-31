@@ -105,61 +105,24 @@ from flowsheet_model import (
 # Única fuente de verdad para los menús de ejemplos (menubar + toolbar).
 # Cada categoría → lista de (key, label).  Las keys deben existir en el
 # builder_map de action_load_example().
-EXAMPLE_CATEGORIES = [
-    ("Introductorios", [
-        ("hda",          "HDA — Hidrodealquilación de tolueno"),
-        ("methanol",     "Síntesis de metanol"),
-        ("distillation", "Destilación binaria benceno/tolueno"),
-        ("ammonia",      "Síntesis de amoníaco (Haber-Bosch)"),
-        ("ethanol",      "Producción de etanol"),
-        ("biodiesel",    "Producción de biodiesel"),
-        ("cdu",          "Refinería atmosférica simplificada"),
-    ]),
-    ("Reactores y solver avanzado (Capas 4-6)", [
-        ("smr_eq",        "Reformado SMR + WGS (reactor de equilibrio)"),
-        ("ethane_pfr",    "Cracking de etano (reactor PFR cinético)"),
-        ("haber_rec",     "Haber-Bosch con recycle (loop reactivo)"),
-        ("dist_eth_az",   "Destilación azeotrópica etanol-agua (NRTL)"),
-        ("rxn_flash_col", "Reactor + flash + columna AUTOMÁTICOS"),
-        ("hydraulic",     "Planta hidráulica con auto-sizing de bomba"),
-    ]),
-    ("Plantas industriales completas", [
-        ("hda_full",   "HDA completo (Douglas, escala industrial)"),
-        ("gas_sweet",  "Endulzamiento de gas natural (MDEA)"),
-        ("sugar",      "Planta de azúcar (caña)"),
-        ("industrial", "⭐ PLANTA INDUSTRIAL COMPLETA (MeOH + servicios + BOP)"),
-        ("quimpac",    "QUIMPAC — cloro-álcali (membrana)"),
-        ("hno3",       "HNO3 Ostwald (dual-presión)"),
-        ("talara",     "REFINERÍA TALARA — PMRT"),
-    ]),
-    ("Alimentaria y bioproceso", [
-        ("pasteurizer",  "Pasteurizador HTST de jugo"),
-        ("pineapple",    "Jugo de piña concentrado (evaporación)"),
-        ("potato_chips", "Papas fritas (freído industrial)"),
-        ("bread",        "Panificación industrial"),
-        ("beer",         "Cervecería — fermentación"),
-        ("penicillin",   "Penicilina por fermentación"),
-        ("leche_gloria", "LECHE GLORIA — planta láctea integrada"),
-    ]),
-    ("Química", [
-        ("sulfuric",        "Ácido sulfúrico (contacto, V₂O₅)"),
-        ("acetic",          "Ácido acético (carbonilación Cativa)"),
-        ("ldpe",            "Polietileno LDPE (autoclave HP)"),
-        ("chloralkali_hcl", "Cloro-álcali compacto + HCl"),
-        ("urea",            "Urea (Bosch-Meiser, fertilizante)"),
-        ("soap",            "Jabón por saponificación"),
-        ("ethylene_crk",    "Etileno por cracking de etano"),
-    ]),
-    ("Materiales y energía", [
-        ("cement",      "Cemento Portland (horno rotatorio)"),
-        ("glass",       "Vidrio sodocálcico (horno de fusión)"),
-        ("air_sep",     "Separación criogénica de aire O₂/N₂"),
-        ("water_treat", "Tratamiento de agua potable"),
-        ("rankine",     "Central térmica — ciclo Rankine"),
-        ("nuclear",     "Isla nuclear — circuito 2°"),
-        ("desal",       "Desalinización MED multi-efecto"),
-    ]),
-]
+def _load_example_categories():
+    """Fase 2: el catálogo del menú se puebla DESDE el registry data-driven
+    (data/examples/manifest.json), no hardcodeado.  Devuelve el mismo formato
+    que consumen los dos menús: [(categoria, [(clave, label), ...]), ...] en
+    el orden del manifest (= orden histórico del menú).
+
+    Fallback defensivo: si el registry/manifest no está disponible (entorno
+    roto), devuelve [] — los menús quedan vacíos pero la app no crashea al
+    construir la UI."""
+    try:
+        import examples_registry as _reg
+        return [(cat, [(e["clave"], e["label"]) for e in items])
+                for cat, items in _reg.list_categories()]
+    except Exception:
+        return []
+
+
+EXAMPLE_CATEGORIES = _load_example_categories()
 
 
 # ======================================================
@@ -5208,7 +5171,8 @@ class FlowsheetMainWindow(QMainWindow):
     def __init__(self):
         super().__init__()
         self.setWindowTitle("Diagrama de proceso — Qt edition")
-        self.resize(1400, 820)
+        import ui_scaling
+        ui_scaling.fit_to_screen(self, 1400, 820)
 
         # Registrar IBM Plex Sans / Mono para tags y especs (Aspen style).
         # Idempotente — si Qt no encuentra las TTFs, cae al sistema.
@@ -5597,6 +5561,8 @@ class FlowsheetMainWindow(QMainWindow):
                               None, "act-money"))
         m_sim.addAction(_ac("Análisis económico →", self.action_launch_analysis,
                               None, "an-case-study"))
+        m_sim.addAction(_ac("Exportar a Excel…", self.action_export_xlsx,
+                              None, "act-money"))
 
     def _set_legacy_toolbars_visible(self, visible: bool):
         """Muestra/oculta las QToolBars legacy.  Usado en __init__ para
@@ -5930,8 +5896,6 @@ class FlowsheetMainWindow(QMainWindow):
         # menú de ejemplos
         examples_act = QAction("Ejemplos ▾", self)
         examples_menu = QMenu(self)
-        from examples_library import ExampleBuilder as _LegacyEditor
-        # reusar los example builders del editor legacy
         def make_loader(key):
             return lambda: self.action_load_example(key)
         # Ícono compartido para todos los ejemplos (equipo genérico)
@@ -6026,6 +5990,7 @@ class FlowsheetMainWindow(QMainWindow):
         add_btn("Calcular",        self.action_compute,           "sim-refresh")
         add_btn("Perfil econ.…",         self.action_econ_profile,    "act-money")
         add_btn("Análisis económico →", self.action_launch_analysis, "an-case-study")
+        add_btn("Exportar a Excel…", self.action_export_xlsx, "act-money")
         tb.addSeparator()
 
         # menú Exportar
@@ -6402,206 +6367,41 @@ class FlowsheetMainWindow(QMainWindow):
             if ans != QMessageBox.Yes:
                 return
         before = self.begin_action()
-        from examples_library import ExampleBuilder as TkEditor
-        self.fs = Flowsheet()
-        shim = TkEditor(self.fs)
-        # builder_map: clave → (método del builder, título_PFD, area, drawing_no)
-        builder_map = {
-            "hda":          (TkEditor._example_hda,
-                              "HDA — Hidrodealquilación de tolueno",
-                              "100 — Reacción / Sep.", "PFD-HDA-001"),
-            "methanol":     (TkEditor._example_methanol,
-                              "Síntesis de metanol", "100 — Reacción / Sep.",
-                              "PFD-MeOH-001"),
-            "distillation": (TkEditor._example_distillation,
-                              "Destilación binaria benceno/tolueno",
-                              "200 — Separación", "PFD-BTX-001"),
-            "ammonia":      (TkEditor._example_ammonia,
-                              "Síntesis de amoníaco (Haber-Bosch)",
-                              "100 — Reacción", "PFD-NH3-001"),
-            "ethanol":      (TkEditor._example_ethanol,
-                              "Producción de etanol (fermentación + destilación)",
-                              "200 — Fermentación / Sep.", "PFD-EtOH-001"),
-            "biodiesel":    (TkEditor._example_biodiesel,
-                              "Producción de biodiesel (transesterificación)",
-                              "100 — Reacción / Sep.", "PFD-BD-001"),
-            "cdu":          (TkEditor._example_crude_distillation,
-                              "Refinería atmosférica simplificada (CDU)",
-                              "100 — Destilación primaria", "PFD-CDU-001"),
-            # ---- Procesos industriales completos (mayor escala, recycles) ----
-            "hda_full":     (TkEditor._example_hda_full,
-                              "HDA completo (Douglas) — escala industrial",
-                              "100 — Reacción / Separación", "PFD-HDA-FULL"),
-            "gas_sweet":    (TkEditor._example_gas_sweetening,
-                              "Endulzamiento de gas natural (MDEA)",
-                              "200 — Tratamiento de gas", "PFD-GAS-001"),
-            "sugar":        (TkEditor._example_sugar_mill,
-                              "Planta de azúcar (caña → cristalización)",
-                              "100 — Cristalización", "PFD-SUGAR-001"),
-            "smr_eq":       (TkEditor._example_smr_equilibrium,
-                              "Reformado SMR + WGS — reactor de equilibrio (Capa 4)",
-                              "100 — Reacción", "PFD-SMR-EQ-001"),
-            "ethane_pfr":   (TkEditor._example_ethane_cracker_pfr,
-                              "Cracking de etano — reactor PFR cinético (Capa 5)",
-                              "100 — Pirólisis", "PFD-ETH-PFR-001"),
-            "haber_rec":    (TkEditor._example_haber_recycle,
-                              "Haber-Bosch con recycle — NH3 con loop reactivo",
-                              "100 — Síntesis NH3", "PFD-NH3-REC-001"),
-            "dist_eth_az":  (TkEditor._example_distillation_ethanol_water,
-                              "Destilación azeotrópica etanol-agua (NRTL Capa 6)",
-                              "200 — Separación", "PFD-ETH-AZ-001"),
-            "rxn_flash_col": (TkEditor._example_reactor_flash_column,
-                               "Tren reactor + flash + columna AUTOMÁTICOS",
-                               "100 — Demo solver", "PFD-AUTO-001"),
-            "hydraulic":    (TkEditor._example_hydraulic_plant,
-                              "Planta hidráulica — bomba auto-sized",
-                              "200 — Hidráulica", "PFD-HYD-001"),
-            "industrial":   (TkEditor._example_industrial_complete,
-                              "PLANTA INDUSTRIAL COMPLETA — MeOH + servicios + BOP",
-                              "100/200/300 — Plant Integration",
-                              "PFD-INDUSTRIAL-001"),
-            "quimpac":      (TkEditor._example_quimpac_chloralkali,
-                              "QUIMPAC — Cloro-álcali (celda de membrana)",
-                              "100/200/300 — Chlor-Alkali Plant",
-                              "PFD-QUIMPAC-001"),
-            "hno3":         (TkEditor._example_hno3_ostwald,
-                              "HNO3 Ostwald — DuPont dual-presión",
-                              "100/200/300/400/500 — Ostwald Plant",
-                              "PFD-OSTWALD-001"),
-            "talara":       (TkEditor._example_talara_refinery,
-                              "REFINERÍA TALARA — PMRT Petroperú",
-                              "100-900 — Conversión Profunda",
-                              "PFD-TALARA-001"),
-            # ── Catálogo educativo Lote 1 (alimentaria simple) ──
-            "pasteurizer":  (TkEditor._example_pasteurizer,
-                              "Pasteurizador HTST de jugo",
-                              "100 — Alimentaria",
-                              "PFD-PAST-001"),
-            "pineapple":    (TkEditor._example_pineapple_juice,
-                              "Jugo de piña concentrado (evaporación)",
-                              "100 — Alimentaria",
-                              "PFD-PINE-001"),
-            "potato_chips": (TkEditor._example_potato_chips,
-                              "Papas fritas (freído industrial)",
-                              "100 — Alimentaria",
-                              "PFD-CHIP-001"),
-            # ── Catálogo educativo Lote 2 (bioproceso + química gratis) ──
-            "beer":         (TkEditor._example_beer_brewing,
-                              "Cervecería — fermentación batch→continuo",
-                              "100 — Bioproceso",
-                              "PFD-BEER-001"),
-            "sulfuric":     (TkEditor._example_sulfuric_acid,
-                              "Ácido sulfúrico (contacto, V₂O₅)",
-                              "100 — Inorgánica pesada",
-                              "PFD-H2SO4-001"),
-            # ── Catálogo educativo Lote 3 (química fina + polímeros) ──
-            "acetic":       (TkEditor._example_acetic_acid,
-                              "Ácido acético (carbonilación Cativa)",
-                              "100 — Química fina",
-                              "PFD-AcOH-001"),
-            "ldpe":         (TkEditor._example_polyethylene,
-                              "Polietileno LDPE (autoclave HP)",
-                              "100 — Polímeros",
-                              "PFD-LDPE-001"),
-            # ── Catálogo educativo Lote 4a (inorgánica + materiales) ──
-            "chloralkali_hcl": (TkEditor._example_chloralkali_hcl,
-                              "Cloro-álcali compacto + HCl",
-                              "100 — Inorgánica pesada",
-                              "PFD-CAHCL-001"),
-            "cement":       (TkEditor._example_cement,
-                              "Cemento Portland (horno rotatorio)",
-                              "100 — Materiales",
-                              "PFD-CEM-001"),
-            "glass":        (TkEditor._example_glass,
-                              "Vidrio sodocálcico (horno de fusión)",
-                              "100 — Materiales",
-                              "PFD-GLASS-001"),
-            # ── Catálogo educativo Lote 4b (saponificación + urea) ──
-            "soap":         (TkEditor._example_soap,
-                              "Jabón por saponificación",
-                              "100 — Consumo / química",
-                              "PFD-SOAP-001"),
-            "urea":         (TkEditor._example_urea,
-                              "Urea (Bosch-Meiser, fertilizante)",
-                              "100 — Fertilizantes",
-                              "PFD-UREA-001"),
-            "leche_gloria": (TkEditor._example_leche_gloria,
-                              "LECHE GLORIA — Planta láctea integrada",
-                              "100 — Alimentaria (caso integrado)",
-                              "PFD-GLORIA-001"),
-            # ── Catálogo educativo Lote 5 (industrias adicionales) ──
-            "ethylene_crk": (TkEditor._example_ethylene_cracking,
-                              "Etileno por cracking de etano (R011 Modo A)",
-                              "100 — Petroquímica",
-                              "PFD-ETH-001"),
-            "air_sep":      (TkEditor._example_air_separation,
-                              "Separación criogénica de aire O₂/N₂",
-                              "100 — Gases industriales",
-                              "PFD-AIRSEP-001"),
-            "water_treat":  (TkEditor._example_water_treatment,
-                              "Tratamiento de agua potable",
-                              "200 — Servicios / ambiental",
-                              "PFD-WATER-001"),
-            "bread":        (TkEditor._example_bread_baking,
-                              "Panificación industrial (batch→continuo)",
-                              "100 — Alimentaria",
-                              "PFD-BREAD-001"),
-            "penicillin":   (TkEditor._example_penicillin,
-                              "Penicilina por fermentación (batch→continuo)",
-                              "100 — Farmacéutica",
-                              "PFD-PEN-001"),
-            # ── Catálogo educativo Lote 6 (Tier 2 ilustrativos) ──
-            "rankine":      (TkEditor._example_rankine_cycle,
-                              "Central térmica — ciclo Rankine (Tier 2)",
-                              "200 — Energía (ilustrativo)",
-                              "PFD-RANK-001"),
-            "nuclear":      (TkEditor._example_nuclear_steam,
-                              "Isla nuclear — circuito 2° (Tier 2)",
-                              "200 — Energía (ilustrativo)",
-                              "PFD-NUC-001"),
-            "desal":        (TkEditor._example_desalination,
-                              "Desalinización MED multi-efecto (Tier 2)",
-                              "200 — Agua (ilustrativo)",
-                              "PFD-DESAL-001"),
-        }
-        entry = builder_map.get(key)
-        if entry is None:
+        import examples_registry as _reg
+        # Fase 2: el ejemplo se carga desde data/examples/<clave>.json vía el
+        # registry (data-driven), en vez de correr un builder imperativo.
+        # La metadata del marco PFD (nombre/área/código) viene del manifest.
+        meta = _reg.get_metadata(key)
+        if meta is None:
             return
-        builder, title, area, dwg_no = entry
-        builder(shim)
-        # Inicialización hidráulica: presiones típicas + anchor downstream
-        # para que el solver auto-dimensione bombas/compresores (ΔP, W_elec,
-        # NPSHa) en vez de dejarlos en cero.  Idempotente, no pisa locks.
+        self.fs = _reg.load_example(key)
+        title  = meta["nombre"]
+        area   = meta["capa"]
+        dwg_no = meta["codigo_pfd"]
+        # apply_example_hydraulics se indexa por el nombre del builder
+        # (_example_*), que el manifest conserva como string-key de
+        # hydraulic_defaults.EXAMPLE_PRESETS.
+        builder_key = meta["builder"]
         try:
             from hydraulic_defaults import apply_example_hydraulics
-            apply_example_hydraulics(self.fs, builder.__name__)
+            apply_example_hydraulics(self.fs, builder_key)
         except Exception:
             pass
-        # Los example builders del editor Tk legacy posicionan bloques
-        # para una silueta de 130x60.  Las siluetas ISA nuevas son
-        # más grandes (reactor 86x127, tower 76x216, hx 151x60) y
-        # quedan apachurradas con las posiciones originales.
-        # Expandimos las posiciones por un factor para dar respiro
-        # tanto a los bloques como a las corrientes.
+        # Los JSON traen las posiciones legacy (silueta 130x60); las siluetas
+        # ISA nuevas son más grandes y quedan apachurradas → expandir.
         self._expand_block_spacing(factor=1.7)
-        # Estado inicial: stale (azul). El user ve los bloques en azul
-        # hasta que apriete F5 para correr el solver y verificar el
-        # balance del ejemplo.
         self._last_overall_status = None
         self._dirty_after_solve = True
         self._rebuild_scene()
 
         # Auto-mostrar el marco PFD con los datos del ejemplo
-        self.scene.set_paper_visible(False)        # reset si había uno previo
+        self.scene.set_paper_visible(False)
         self.scene.paper_frame = None
         self.scene.set_paper_visible(True, project_title=title,
                                        area=area, drawing_no=dwg_no)
         if hasattr(self, "_paper_action"):
             self._paper_action.setChecked(True)
 
-        # Zoom 100% nativo y centrar la vista en el centroide del
-        # diagrama.  Así el user ve el proceso entero centrado al
-        # cargar el ejemplo, sin scroll necesario para encontrarlo.
         self.view.zoom_reset()
         self._center_view_on_blocks()
         self._update_status()
@@ -7024,8 +6824,11 @@ class FlowsheetMainWindow(QMainWindow):
                 6000)
 
     def action_launch_analysis(self):
-        """Genera xlsx temporal y lanza ANA.py como subprocess.
-        El diagrama queda intacto en esta ventana."""
+        """Abre el panel económico IN-PROCESS: corre simulate() sobre el
+        flowsheet actual y muestra NPV/IRR/Payback/ROI/COM ahí mismo, sin
+        xlsx temporal ni subproceso.  El diagrama queda intacto.
+
+        (Reemplazó al bridge legacy xlsx→subprocess ana_qt, ya retirado.)"""
         if not self.fs.blocks:
             ans = QMessageBox.question(
                 self, "Sin proceso modelado",
@@ -7033,82 +6836,38 @@ class FlowsheetMainWindow(QMainWindow):
             )
             if ans != QMessageBox.Yes:
                 return
-            feeds, products, isbl = [], [], None
-        else:
-            # validar mass balance (energía es informativa, no bloquea)
-            mb_errors = fsolv._check_mass_balance(self.fs, tol_rel=0.005)
-            if mb_errors:
-                ans = QMessageBox.question(
-                    self, "Balance de masa no cuadra",
-                    "Los siguientes equipos no cierran balance:\n\n"
-                    + "\n".join(f"   · {m}" for m in mb_errors)
-                    + "\n\nUn análisis económico con masas inconsistentes "
-                      "puede dar resultados engañosos.  ¿Forzar igual?",
-                )
-                if ans != QMessageBox.Yes:
-                    return
+        try:
+            from economics_panel import EconomicsPanel
+            EconomicsPanel(self.fs, self).exec()
+        except Exception as e:
+            QMessageBox.critical(self, "Falló el panel económico",
+                                  f"{type(e).__name__}: {e}")
 
-            # calcular ISBL via Lang
-            try:
-                equipos = [
-                    {"nombre": b.eq_type, "S": b.S, "n": b.n}
-                    for b in self.fs.blocks.values()
-                ]
-                res = eq.lang_fci(equipos, plant_type="Fluid processing",
-                                   year_target=2024)
-                isbl = eq.isbl_implicito(res["FCI_MMUSD"], 0.30, 0.10, 0.10)
-            except Exception as e:
-                QMessageBox.critical(self, "Error de cálculo",
-                                      f"{type(e).__name__}: {e}")
-                return
+    def action_export_xlsx(self):
+        """Exporta el proyecto a .xlsx vía el write_project_xlsx existente
+        (Save explícito, desacoplado del panel económico)."""
+        if not self.fs.blocks:
+            QMessageBox.information(self, "Exportar a Excel",
+                                    "El diagrama está vacío.")
+            return
+        path, _ = QFileDialog.getSaveFileName(
+            self, "Exportar proyecto a Excel", "", "Excel (*.xlsx)")
+        if not path:
+            return
+        if not path.lower().endswith(".xlsx"):
+            path += ".xlsx"
+        try:
             feeds    = [s for s in self.fs.streams.values() if s.role == "feed"]
             products = [s for s in self.fs.streams.values() if s.role == "product"]
-
-        # opción de xlsx base
-        usar_xlsx = QMessageBox.question(
-            self, "Análisis económico",
-            "El diagrama de bloques queda intacto en esta ventana.\n\n"
-            "¿Usar un .xlsx base existente para el análisis?\n\n"
-            "  Sí        → seleccionás el archivo\n"
-            "  No        → plantilla Turton + feeds/products del diagrama",
-            QMessageBox.Yes | QMessageBox.No | QMessageBox.Cancel,
-        )
-        if usar_xlsx == QMessageBox.Cancel:
-            return
-
-        base_xlsx = None
-        if usar_xlsx == QMessageBox.Yes:
-            base_xlsx, _ = QFileDialog.getOpenFileName(
-                self, "Proyecto .xlsx base", "", "Excel (*.xlsx *.xls)"
-            )
-            if not base_xlsx:
-                return
-
-        # generar xlsx temporal
-        import tempfile
-        try:
-            tmp_dir = tempfile.gettempdir()
-            tmp_path = os.path.join(tmp_dir, f"ANA_from_PFD_{os.getpid()}.xlsx")
-            fexp.write_project_xlsx(tmp_path, self.fs, isbl, feeds, products,
-                                     base_xlsx)
+            import capex as _capex
+            isbl = _capex.compute_fci(self.fs).get("sum_cbm")
+            isbl_musd = (isbl / 1e6) if isbl else None
+            fexp.write_project_xlsx(path, self.fs, isbl_musd, feeds, products)
         except Exception as e:
-            QMessageBox.critical(self, "Falló la generación del xlsx",
+            QMessageBox.critical(self, "Falló la exportación",
                                   f"{type(e).__name__}: {e}")
             return
-
-        # lanzar ANA.py como subprocess
-        # Preferir el nuevo ana_qt (PySide6, look unificado con SVG icons).
-        # Fallback a ANA.py (Tkinter legacy) si ana_qt no está disponible.
-        cwd = os.path.dirname(os.path.abspath(__file__))
-        if os.path.exists(os.path.join(cwd, "ana_qt.py")):
-            cmd = [sys.executable, "ana_qt.py", "--import", tmp_path]
-        else:
-            cmd = [sys.executable, "ANA.py", "--import", tmp_path]
-        try:
-            subprocess.Popen(cmd, cwd=cwd)
-        except Exception as e:
-            QMessageBox.critical(self, "Falló el lanzamiento",
-                                  f"{type(e).__name__}: {e}")
+        self.status.showMessage(f"Exportado: {path}", 6000)
 
     # ---------------------------------------------------
     # EXPORT (PDF / SVG / PNG)

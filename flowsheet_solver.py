@@ -573,14 +573,35 @@ def _solve_mass_iteration(fs):
         if not ins or not outs:
             continue
 
-        unknown_ins   = [s for s in ins
+        # Las corrientes de SERVICIO AUTO-GENERADAS (auto_aux con role
+        # utility/ambient: agua de enfriamiento shell-side, aire de un
+        # air-cooler) están en el lado OPUESTO al proceso de un HX y NO se
+        # mezclan con él: forman su propio balance (in=out) y se dimensionan
+        # desde el duty (size_utility_streams / size_air_cooler_streams).
+        # Excluirlas del balance de PROCESO para que no bloqueen la deducción
+        # de la corriente de proceso cuando el servicio aún no tiene flujo (si
+        # no, con 2 incógnitas —proc + servicio— el balance no cierra y toda
+        # la cadena aguas abajo queda sin resolver).
+        #
+        # SOLO las auto_aux: una corriente role='utility' declarada por el
+        # builder que en realidad es de proceso —p.ej. el vapor evaporado de
+        # un evaporador, tagueado utility para no entrar al OPEX— SÍ debe
+        # contar en el balance de masa.
+        def _is_hx_service(s):
+            return getattr(s, "auto_aux", False) and (s.role or "") in ("utility", "ambient")
+        proc_ins  = [s for s in ins  if not _is_hx_service(s)]
+        proc_outs = [s for s in outs if not _is_hx_service(s)]
+        if not proc_ins or not proc_outs:
+            continue          # bloque puramente de servicio (header CW, etc.)
+
+        unknown_ins   = [s for s in proc_ins
                           if not _is_mass_locked(s) and s.mass_flow == 0]
-        unknown_outs  = [s for s in outs
+        unknown_outs  = [s for s in proc_outs
                           if not _is_mass_locked(s) and s.mass_flow == 0]
 
         if not unknown_ins and len(unknown_outs) == 1:
-            sum_in        = sum(s.mass_flow for s in ins)
-            sum_known_out = sum(s.mass_flow for s in outs
+            sum_in        = sum(s.mass_flow for s in proc_ins)
+            sum_known_out = sum(s.mass_flow for s in proc_outs
                                  if s is not unknown_outs[0])
             deduced = sum_in - sum_known_out
             if deduced >= 0:    # permitir flujo cero (caso bypass cerrado)
@@ -588,8 +609,8 @@ def _solve_mass_iteration(fs):
                 propagated.append((unknown_outs[0].name, deduced))
 
         elif not unknown_outs and len(unknown_ins) == 1:
-            sum_out       = sum(s.mass_flow for s in outs)
-            sum_known_in  = sum(s.mass_flow for s in ins
+            sum_out       = sum(s.mass_flow for s in proc_outs)
+            sum_known_in  = sum(s.mass_flow for s in proc_ins
                                  if s is not unknown_ins[0])
             deduced = sum_out - sum_known_in
             if deduced >= 0:
@@ -923,6 +944,63 @@ def size_utility_streams(fs):
                     s.temperature = float(t_lo)
         msgs.append(f"  {b.name}: utility {util_key} ṁ={cons:,.0f} tm/año "
                     f"(de duty {duty:+.0f} kW)".replace(",", " "))
+    return msgs
+
+
+# Propiedades del aire ambiente para dimensionar el lado-aire de los
+# air-coolers.  El aire es un baño atmosférico (role='ambient'): NO entra
+# al OPEX como utility con precio, pero su corriente necesita un flujo
+# másico real para (a) cerrar el balance del air-cooler y deducir la
+# corriente de proceso de salida, y (b) mostrar un estado térmico sensato.
+_CP_AIR_KJ_KGK = 1.005     # cp aire seco
+_DT_AIR_C      = 15.0      # ΔT típico del aire a través del haz de un air-cooler
+
+
+def size_air_cooler_streams(fs):
+    """Puebla mass_flow + T de las corrientes de AMBIENTE (aire) de los
+    air-coolers desde su duty:  ṁ_air = |Q| / (cp_air · ΔT_air).
+
+    Las crea ``equipment_auxiliaries`` con role='ambient' y mass_flow=0
+    ('se calcula desde el duty').  A diferencia de las utilities de lazo
+    cerrado (cooling water shell-side), el aire es abierto y no tiene
+    utility_key ni precio, por lo que ``size_utility_streams`` —que sólo
+    procesa role='utility'— las ignora.  Esta función las completa.
+
+    El intake queda a T ambiente y el venteo a T_ambiente + ΔT (el aire
+    absorbe el calor cedido por el proceso).  Respeta los locks del user.
+    Devuelve lista de mensajes.
+    """
+    from flowsheet_model import SEC_PER_YEAR
+    msgs = []
+    T_ambient = 25.0
+    AIR_COOLERS = ("Heat exch. — air cooler", "Heat exch. — condenser air-cooled")
+    for b in fs.blocks.values():
+        if (b.eq_type or "") not in AIR_COOLERS:
+            continue
+        air = [s for s in fs.streams.values()
+               if getattr(s, "auto_aux", False) and (s.role or "") == "ambient"
+               and (s.src == b.id or s.dst == b.id)]
+        if not air:
+            continue
+        duty = float(getattr(b, "duty", 0.0) or 0.0)
+        if abs(duty) < 1e-9:
+            for s in air:
+                if not getattr(s, "mass_flow_locked", False):
+                    s.mass_flow = 0.0
+            continue
+        # Q[kW] = ṁ[kg/s]·cp·ΔT  →  ṁ; luego kg/s → tm/año.
+        m_kg_s = abs(duty) / (_CP_AIR_KJ_KGK * _DT_AIR_C)
+        cons = m_kg_s * SEC_PER_YEAR / 1000.0          # tm/año
+        for s in air:
+            if not getattr(s, "mass_flow_locked", False):
+                s.mass_flow = float(cons)
+            if not getattr(s, "temperature_locked", False):
+                # intake = entra al bloque (dst==b); venteo = sale (src==b)
+                is_intake = (s.dst == b.id)
+                s.temperature = float(T_ambient if is_intake
+                                       else T_ambient + _DT_AIR_C)
+        msgs.append(f"  {b.name}: aire ṁ={cons:,.0f} tm/año "
+                    f"(de duty {duty:+.0f} kW, ΔT={_DT_AIR_C:.0f}°C)".replace(",", " "))
     return msgs
 
 
@@ -4579,6 +4657,84 @@ def solve(fs, max_iter=MAX_ITER):
         for scc in recycle_sccs for bid in scc
     )
     n_outer_iter = 30 if reactor_in_scc else 1
+
+    # Mensajes de los unit ops (4cb).  Declarados ACÁ porque
+    # _run_unit_ops_loop (definida más abajo) los escribe vía nonlocal y
+    # puede invocarse desde DENTRO del loop de reactores cuando el recycle
+    # del reactor pasa por un separador/columna.
+    flash_msgs = []
+    col_msgs = []
+    split_msgs = []
+    sep_msgs = []
+    dry_msgs = []
+    cry_msgs = []
+    evp_msgs = []
+    cyc_msgs = []
+
+    def _run_unit_ops_loop():
+        """Una corrida completa del loop de unit ops (splitters, flashes,
+        separadores, columnas).  Extraída como función para poder llamarla
+        TAMBIÉN dentro del loop de reactores (4c): cuando un reactor está en
+        un recycle loop cuyo tear pasa por un flash/columna (p.ej. el
+        recycle de metanol de industrial_complete vuelve por V-201/V-203),
+        los separadores deben correr ENTRE iteraciones del reactor para
+        propagar la composición del recycle de vuelta al inlet.  Sin esto el
+        reactor veía un inlet sin recycle y el solve no era idempotente
+        (1er solve ≠ 2do)."""
+        nonlocal split_msgs, flash_msgs, sep_msgs, cyc_msgs
+        nonlocal dry_msgs, cry_msgs, evp_msgs, col_msgs
+        for _outer in range(5):
+            prev_count = sum(1 for s in fs.streams.values() if s.composition)
+            # También rastrear masa resuelta: en un segundo solve (p.ej. tras
+            # instanciar auxiliares) las composiciones PERSISTEN de la corrida
+            # anterior, así que cortar solo por 'composición estable' puede
+            # terminar el loop ANTES de que un splitter/flash reciba su feed ya
+            # propagado en esta pasada (su salida quedaría en 0).  Seguir
+            # iterando mientras se resuelva masa nueva evita ese corte temprano.
+            prev_mass = sum(1 for s in fs.streams.values() if s.mass_flow > 0)
+            # Splitters: distribuyen mass, propagan composición igual
+            split_msgs = solve_splitters(fs)
+            for _ in range(3):
+                if not _solve_mass_iteration(fs):
+                    break
+            # Flash drums (separación VLE)
+            flash_msgs = solve_flashes(fs)
+            for _ in range(3):
+                if not _solve_mass_iteration(fs):
+                    break
+            # Separadores mecánicos UNIFICADOS (filtro/centrífuga/ciclón/
+            # decanter) — un solo solver que honra los flags legacy y el
+            # modelo nuevo mech_sep_active.  Luego secadores, cristalizadores,
+            # evaporadores.
+            sep_msgs = solve_mechanical_separators(fs)
+            cyc_msgs = []
+            for _ in range(3):
+                if not _solve_mass_iteration(fs):
+                    break
+            dry_msgs = solve_dryers(fs)
+            for _ in range(3):
+                if not _solve_mass_iteration(fs):
+                    break
+            cry_msgs = solve_crystallizers(fs)
+            for _ in range(3):
+                if not _solve_mass_iteration(fs):
+                    break
+            evp_msgs = solve_evaporators(fs)
+            for _ in range(3):
+                if not _solve_mass_iteration(fs):
+                    break
+            auto_propagate_compositions(fs)
+            # Columnas (separación FUG)
+            col_msgs = solve_columns(fs)
+            for _ in range(3):
+                if not _solve_mass_iteration(fs):
+                    break
+            auto_propagate_compositions(fs)
+            new_count = sum(1 for s in fs.streams.values() if s.composition)
+            new_mass = sum(1 for s in fs.streams.values() if s.mass_flow > 0)
+            if new_count == prev_count and new_mass == prev_mass:
+                break
+
     rxn_msgs = []
     for outer in range(n_outer_iter):
         # Snapshot de composiciones actuales
@@ -4601,6 +4757,15 @@ def solve(fs, max_iter=MAX_ITER):
                 scc_streams = _streams_in_scc(scc, fs)
                 if not all(s.mass_flow > 0 for s in scc_streams):
                     _solve_recycle_wegstein(fs, scc, max_iter=10)
+            # Correr los separadores/columnas AHORA para propagar la
+            # composición del recycle de vuelta al inlet del reactor antes
+            # de la próxima iteración.  Sin esto, si el tear del recycle
+            # pasa por un flash/columna (industrial_complete: el metanol
+            # vuelve por V-201/V-203), el reactor veía un inlet sin recycle
+            # y el solve no era idempotente.  _run_unit_ops_loop se define
+            # más abajo pero ya está ligada en este scope al ejecutarse.
+            _run_unit_ops_loop()
+            auto_propagate_compositions(fs)
         # Check convergencia: compare composiciones
         if outer > 0:
             max_diff = 0.0
@@ -4617,60 +4782,11 @@ def solve(fs, max_iter=MAX_ITER):
         if m.startswith("✗") or m.startswith("⚠"):
             result.energy_balance_errors.append(m)
 
-    # 4cb. Unit ops automáticos (splitters, flashes, columnas) — loop
-    #      topológico para que cada unit op tenga su feed resuelto
-    #      cuando se ejecuta.  Repetimos hasta no haber cambios.
-    flash_msgs = []
-    col_msgs = []
-    split_msgs = []
-    sep_msgs = []
-    dry_msgs = []
-    cry_msgs = []
-    evp_msgs = []
-    cyc_msgs = []
-    for outer in range(5):
-        prev_count = sum(1 for s in fs.streams.values() if s.composition)
-        # Splitters: distribuyen mass, propagan composición igual
-        split_msgs = solve_splitters(fs)
-        for _ in range(3):
-            if not _solve_mass_iteration(fs):
-                break
-        # Flash drums (separación VLE)
-        flash_msgs = solve_flashes(fs)
-        for _ in range(3):
-            if not _solve_mass_iteration(fs):
-                break
-        # Separadores mecánicos UNIFICADOS (filtro/centrífuga/ciclón/
-        # decanter) — un solo solver que honra los flags legacy y el
-        # modelo nuevo mech_sep_active.  Luego secadores, cristalizadores,
-        # evaporadores.
-        sep_msgs = solve_mechanical_separators(fs)
-        cyc_msgs = []
-        for _ in range(3):
-            if not _solve_mass_iteration(fs):
-                break
-        dry_msgs = solve_dryers(fs)
-        for _ in range(3):
-            if not _solve_mass_iteration(fs):
-                break
-        cry_msgs = solve_crystallizers(fs)
-        for _ in range(3):
-            if not _solve_mass_iteration(fs):
-                break
-        evp_msgs = solve_evaporators(fs)
-        for _ in range(3):
-            if not _solve_mass_iteration(fs):
-                break
-        auto_propagate_compositions(fs)
-        # Columnas (separación FUG)
-        col_msgs = solve_columns(fs)
-        for _ in range(3):
-            if not _solve_mass_iteration(fs):
-                break
-        auto_propagate_compositions(fs)
-        new_count = sum(1 for s in fs.streams.values() if s.composition)
-        if new_count == prev_count:
-            break
+    # 4cb. Unit ops automáticos (splitters, flashes, columnas).  La función
+    #      _run_unit_ops_loop ya corrió DENTRO del loop de reactores cuando
+    #      había reactor en SCC; acá se asegura una pasada final (idempotente)
+    #      para flowsheets sin reactor en recycle.
+    _run_unit_ops_loop()
 
     for m in (split_msgs + flash_msgs + col_msgs
               + cyc_msgs + sep_msgs + dry_msgs + cry_msgs + evp_msgs):
@@ -4783,6 +4899,26 @@ def solve(fs, max_iter=MAX_ITER):
     # como sin resolver por tener mass_flow=0 al momento del chequeo).
     try:
         size_utility_streams(fs)
+    except Exception:
+        pass
+
+    # Lado-aire de los air-coolers (role='ambient'): dimensionar desde el
+    # duty.  size_utility_streams sólo cubre role='utility', así que el aire
+    # quedaba en mass_flow=0 → marcado unresolved y, peor, bloqueaba la
+    # deducción de la corriente de PROCESO de salida del air-cooler (con el
+    # intake/venteo sin resolver el balance Σin=Σout tenía >1 incógnita).
+    try:
+        size_air_cooler_streams(fs)
+    except Exception:
+        pass
+
+    # Re-cerrar el balance de masa ahora que las auxiliares (utility + aire)
+    # tienen flujo: corrientes de proceso que dependían de ellas (p.ej. el
+    # condensado de un condensador air-cooled) ya pueden deducirse.
+    try:
+        for _ in range(MAX_ITER):
+            if not _solve_mass_iteration(fs):
+                break
     except Exception:
         pass
 

@@ -895,3 +895,599 @@ def flash_figure(block, fs):
         return fig, f
     except Exception:
         return None, None
+
+
+# ═════════════════════════════════════════════════════════════════════
+#  *_metrics() — versión estructurada (dict) de las *_text().
+#  Misma fuente, misma física, mismo formato numérico → el valor de cada
+#  metric aparece textualmente en la *_text() correspondiente (Gate 1).
+#  Qt-free.  None si no aplica (mismos guards que la *_text()).
+# ═════════════════════════════════════════════════════════════════════
+
+def reactor_metrics(block) -> Optional[dict]:
+    """Estructurado de reactor_text(). Misma fuente (atributos del block)."""
+    try:
+        rxs = list(getattr(block, "reactions", None) or [])
+        cust = list(getattr(block, "custom_reactions", None) or [])
+        mode = getattr(block, "reactor_mode", "") or ""
+        if not (rxs or cust or mode in ("pfr", "cstr", "batch", "stoich")):
+            return None
+        metrics = []
+        status = []
+        if mode:
+            status.append({"text": f"Modo {mode}", "kind": "accent"})
+        if (mode == "stoich"
+                and getattr(block, "reactor_conversion", None) is not None):
+            metrics.append({"key": "conv", "label": "Conversión",
+                            "value": f"{block.reactor_conversion * 100:.1f}",
+                            "unit": "%", "state": "spec"})
+        if getattr(block, "T_op_K", 0) and block.T_op_K > 0:
+            metrics.append({"key": "T_op", "label": "T_op",
+                            "value": f"{block.T_op_K - 273.15:.1f}",
+                            "unit": "°C", "state": "alert"})
+        if getattr(block, "P_op_bar", 0) and block.P_op_bar > 0:
+            metrics.append({"key": "P_op", "label": "P_op",
+                            "value": f"{block.P_op_bar:.2f}",
+                            "unit": "bar", "state": "info"})
+        if mode in ("pfr", "cstr", "batch") and \
+                getattr(block, "reactor_volume_L", 0) > 0:
+            metrics.append({"key": "V", "label": "Volumen",
+                            "value": f"{block.reactor_volume_L:.1f}",
+                            "unit": "L", "state": "auto"})
+        if mode == "batch" and getattr(block, "batch_time_s", 0) > 0:
+            metrics.append({"key": "t_batch", "label": "t_batch",
+                            "value": f"{block.batch_time_s:.0f}",
+                            "unit": "s", "state": "auto"})
+        hor = getattr(block, "heat_of_reaction", None)
+        if hor is not None and abs(hor) > 1e-9:
+            sign = "exotérmica" if hor < 0 else "endotérmica"
+            metrics.append({"key": "hor", "label": "Calor rx",
+                            "value": f"{hor:+.2f}", "unit": "kJ/kg",
+                            "state": "orange" if hor < 0 else "info",
+                            "sub": sign})
+        if not metrics and not status:
+            return None
+        gauges = []
+        if (mode == "stoich"
+                and getattr(block, "reactor_conversion", None) is not None):
+            gauges.append({"key": "conv", "label": "Conversión",
+                           "value": float(block.reactor_conversion),
+                           "suffix": "%",
+                           "text": f"{block.reactor_conversion * 100:.0f}"})
+        return {"status": status, "metrics": metrics, "gauges": gauges,
+                "figure": "reactor", "warnings": []}
+    except Exception:
+        return None
+
+
+def hx_metrics(block) -> Optional[dict]:
+    """Estructurado de hx_text(). Misma fuente (_hx_diagnostics)."""
+    try:
+        hxd = getattr(block, "_hx_diagnostics", None)
+        if not (hxd and isinstance(hxd, dict)):
+            eq = (block.eq_type or "").lower()
+            if "fired" in eq and abs(block.duty) > 1e-9:
+                return {"status": [], "metrics": [
+                    {"key": "duty", "label": "Duty",
+                     "value": f"{block.duty:+.1f}", "unit": "kW",
+                     "state": "orange", "sub": "calor al proceso"}],
+                    "figure": None, "warnings": []}
+            return None
+        metrics = []
+        Th_i = hxd.get("T_h_in"); Th_o = hxd.get("T_h_out")
+        Tc_i = hxd.get("T_c_in"); Tc_o = hxd.get("T_c_out")
+        if Th_i is not None and Th_o is not None:
+            metrics.append({"key": "T_h", "label": "Caliente",
+                            "value": f"{Th_i:.1f} → {Th_o:.1f}",
+                            "unit": "°C", "state": "alert"})
+        if Tc_i is not None and Tc_o is not None:
+            metrics.append({"key": "T_c", "label": "Frío",
+                            "value": f"{Tc_i:.1f} → {Tc_o:.1f}",
+                            "unit": "°C", "state": "info"})
+        if hxd.get("dTlm") is not None:
+            metrics.append({"key": "dTlm", "label": "ΔT LMTD",
+                            "value": f"{hxd['dTlm']:.1f}", "unit": "°C",
+                            "state": "auto"})
+        appr = hxd.get("approach")
+        if appr is not None:
+            metrics.append({"key": "appr", "label": "Approach",
+                            "value": f"{appr:.1f}", "unit": "°C",
+                            "state": "ok" if appr >= hxd.get("dT_min", 0)
+                            else "danger"})
+        if hxd.get("U_used"):
+            metrics.append({"key": "U", "label": "U usado",
+                            "value": f"{hxd['U_used']:.0f}",
+                            "unit": "W/m²·K", "state": "auto"})
+        if hxd.get("F") is not None:
+            metrics.append({"key": "F", "label": "F correc.",
+                            "value": f"{hxd['F']:.2f}", "state": "auto"})
+        status = []
+        if appr is not None and appr < 0:
+            status.append({"text": "Approach cruzado", "kind": "danger"})
+        if not metrics:
+            return None
+        return {"status": status, "metrics": metrics, "figure": "hx_tq",
+                "warnings": list((hxd.get("warnings") or [])[:3])}
+    except Exception:
+        return None
+
+
+def flash_metrics(block) -> Optional[dict]:
+    """Estructurado de flash_text(). Misma fuente (flash_* del block)."""
+    try:
+        if not getattr(block, "flash_active", False):
+            return None
+        metrics = []
+        if block.flash_T_K > 0:
+            metrics.append({"key": "T_op", "label": "T_op",
+                            "value": f"{block.flash_T_K - 273.15:.1f}",
+                            "unit": "°C", "state": "alert"})
+        if block.flash_P_bar > 0:
+            metrics.append({"key": "P_op", "label": "P_op",
+                            "value": f"{block.flash_P_bar:.2f}",
+                            "unit": "bar", "state": "info"})
+        return {"status": [], "metrics": metrics, "figure": "flash",
+                "warnings": []}
+    except Exception:
+        return None
+
+
+def mech_sep_metrics(block) -> Optional[dict]:
+    """Estructurado de mech_sep_text(). Misma fuente (mech_sep_* del block)."""
+    try:
+        if not getattr(block, "mech_sep_active", False):
+            return None
+        eq_lower = (block.eq_type or "").lower()
+        is_decanter = "decanter" in eq_lower
+        if is_decanter:
+            tipo = "Decanter L-L por densidad"
+        elif "cyclone" in eq_lower:
+            tipo = "Ciclón"
+        elif "centrifuge" in eq_lower:
+            tipo = "Centrífuga"
+        else:
+            tipo = "Filtro / knockout genérico"
+        status = [{"text": tipo, "kind": "accent"}]
+        metrics = []
+        if not is_decanter:
+            tgt = getattr(block, "mech_sep_target_phase", "solid") or "solid"
+            metrics.append({"key": "tgt", "label": "Fase obj.",
+                            "value": f"{tgt}", "state": "info"})
+        eff = getattr(block, "mech_sep_efficiency", None)
+        gauges = []
+        if eff is not None:
+            metrics.append({"key": "eff", "label": "η recup.",
+                            "value": f"{eff * 100:.1f}", "unit": "%",
+                            "state": "ok"})
+            gauges.append({"key": "eff", "label": "η recup.",
+                           "value": float(eff), "suffix": "%",
+                           "text": f"{eff * 100:.0f}"})
+        if block.T_op_K > 0:
+            metrics.append({"key": "T_op", "label": "T_op",
+                            "value": f"{block.T_op_K - 273.15:.1f}",
+                            "unit": "°C", "state": "alert"})
+        if block.P_op_bar > 0:
+            metrics.append({"key": "P_op", "label": "P_op",
+                            "value": f"{block.P_op_bar:.2f}",
+                            "unit": "bar", "state": "info"})
+        return {"status": status, "metrics": metrics, "gauges": gauges,
+                "figure": None, "warnings": []}
+    except Exception:
+        return None
+
+
+def splitter_metrics(block) -> Optional[dict]:
+    """Estructurado de splitter_text(). Misma fuente (splitter_fractions)."""
+    try:
+        if not getattr(block, "splitter_active", False):
+            return None
+        fracs = list(getattr(block, "splitter_fractions", []) or [])
+        if not fracs:
+            return None
+        bars = []
+        metrics = []
+        for i, f in enumerate(fracs):
+            metrics.append({"key": f"out{i+1}", "label": f"Salida {i+1}",
+                            "value": f"{f * 100:.1f}", "unit": "%",
+                            "state": "info"})
+            bars.append({"label": f"Salida {i+1}", "frac": float(f),
+                         "value": f"{f * 100:.1f}", "kind": "out"})
+        s = sum(fracs)
+        status = []
+        if abs(s - 1.0) > 1e-3:
+            status.append({"text": f"fracciones suman {s:.3f}",
+                           "kind": "danger"})
+        return {"status": status, "metrics": metrics, "bars": bars,
+                "figure": None, "warnings": []}
+    except Exception:
+        return None
+
+
+def tank_metrics(block, fs) -> Optional[dict]:
+    """Estructurado de tank_text(). Misma fuente (block.S + flujos fs)."""
+    try:
+        eq = (block.eq_type or "").lower()
+        if not ("tank" in eq or "storage" in eq):
+            return None
+        if block.S <= 0:
+            return None
+        metrics = [{"key": "cap", "label": "Capacidad",
+                    "value": f"{block.S:.1f}", "unit": "m³", "state": "info"}]
+        if fs is not None:
+            ins = [s for s in fs.streams.values()
+                   if s.dst == block.id and s.mass_flow > 0]
+            outs = [s for s in fs.streams.values()
+                    if s.src == block.id and s.mass_flow > 0]
+            flow = max([s.mass_flow for s in (ins or outs)], default=0)
+            if flow > 0:
+                m3_h = (flow * 1000.0 / 1000.0) / 8760.0
+                if m3_h > 0:
+                    tau_h = block.S / m3_h
+                    if tau_h >= 48:
+                        metrics.append({"key": "tau", "label": "Residencia",
+                                        "value": f"{tau_h/24:.1f}",
+                                        "unit": "días", "state": "warn",
+                                        "sub": "sobredim. p/ flujo actual"})
+                    else:
+                        metrics.append({"key": "tau", "label": "Residencia",
+                                        "value": f"{tau_h:.1f}", "unit": "h",
+                                        "state": "auto",
+                                        "sub": "estim. ρ=1000"})
+        return {"status": [], "metrics": metrics, "figure": None,
+                "warnings": []}
+    except Exception:
+        return None
+
+
+def mccabe_metrics(block, fs) -> Optional[dict]:
+    """Estructurado de mccabe_text(). Misma fuente (mccabe_thiele.design)."""
+    try:
+        if not getattr(block, "column_active", False):
+            return None
+        import mccabe_thiele as _mt
+        d = _mt.design_from_block(block, fs)
+        if d is None:
+            return None
+        if not d.get("feasible", True):
+            return {"status": [{"text": "Specs no escalonables",
+                                "kind": "danger"}],
+                    "metrics": [], "figure": None,
+                    "warnings": [d.get("message") or "Specs no escalonables."]}
+        metrics = [
+            {"key": "N", "label": f"N teór. ({d['LK']}/{d['HK']})",
+             "value": f"{d['N_stages']}", "state": "spec",
+             "sub": f"feed en {d['feed_stage']}"},
+            {"key": "R", "label": "R", "value": f"{d['R']:.2f}",
+             "state": "info",
+             "sub": (f"R_min {d['R_min']:.2f}" if d.get("R_min") else None)},
+            {"key": "xD", "label": "x_D", "value": f"{d['x_D']:.2f}",
+             "state": "ok"},
+            {"key": "xB", "label": "x_B", "value": f"{d['x_B']:.2f}",
+             "state": "info"},
+        ]
+        sz = d.get("sizing") or {}
+        if sz.get("N_real"):
+            metrics.append({"key": "Nreal", "label": "Etapas reales",
+                            "value": f"{sz['N_real']}", "state": "auto",
+                            "sub": f"E_o={sz['E_o']:.2f}, α={sz['alpha_avg']:.2f}"})
+        if sz.get("diameter_m"):
+            metrics.append({"key": "diam", "label": "Ø columna",
+                            "value": f"{sz['diameter_m']:.2f}", "unit": "m",
+                            "state": "auto", "sub": "Souders-Brown 70%"})
+        pk = d.get("packing") or {}
+        if pk.get("Z_packed_m"):
+            metrics.append({"key": "Zpack", "label": "Altura relleno",
+                            "value": f"{pk['Z_packed_m']:.1f}", "unit": "m",
+                            "state": "auto",
+                            "sub": f"NTU≈{pk['NTU']:.1f}, HETP={pk['HETP_m']:.2f}"})
+        return {"status": [{"text": "Columna diseñada", "kind": "ok"}],
+                "metrics": metrics, "figure": "mccabe", "warnings": []}
+    except Exception:
+        return None
+
+
+def profile_metrics(block, fs) -> Optional[dict]:
+    """Estructurado de profile_text(). Misma fuente (tray_profile)."""
+    try:
+        if not getattr(block, "column_active", False):
+            return None
+        import tray_profile as _tp
+        p = _tp.build_stage_profile(block, fs)
+        if p is None:
+            return None
+        stages = p["stages"]
+        if not stages:
+            return {"status": [{"text": "perfil truncado", "kind": "warn"}],
+                    "metrics": [], "figure": None,
+                    "warnings": [p.get("message") or "perfil truncado"]}
+        top = stages[0]
+        bot = stages[-1]
+        n_feed = int(p.get("n_feed") or 0)
+        fs_stage = stages[n_feed - 1] if 1 <= n_feed <= len(stages) else None
+        metrics = [
+            {"key": "N", "label": f"N ({p['LK']}/{p['HK']})",
+             "value": f"{p['n_stages']}", "state": "spec",
+             "sub": f"feed {p['n_feed']}"},
+            {"key": "top", "label": f"Tope x_{p['LK']}",
+             "value": f"{top['x_LK']:.3f}", "state": "ok",
+             "sub": f"T={top['T_C']:.1f}°C"},
+            {"key": "bot", "label": f"Fondo x_{p['LK']}",
+             "value": f"{bot['x_LK']:.3f}", "state": "info",
+             "sub": f"T={bot['T_C']:.1f}°C"},
+        ]
+        if fs_stage:
+            metrics.append({"key": "feed", "label": f"Feed x_{p['LK']}",
+                            "value": f"{fs_stage['x_LK']:.3f}",
+                            "state": "auto",
+                            "sub": f"T={fs_stage['T_C']:.1f}°C"})
+        return {"status": [{"text": p["badge"], "kind": "accent"}],
+                "metrics": metrics, "figure": "profile", "warnings": []}
+    except Exception:
+        return None
+
+
+def pump_metrics(block, fs) -> Optional[dict]:
+    """Estructurado de pump_text(). Misma fuente (equipment_design.pump)."""
+    try:
+        eq = (block.eq_type or "").lower()
+        if not ("pump" in eq or "bomba" in eq):
+            return None
+        import equipment_design as _ed
+        ps = _ed.design_pump_for_block(block, fs)
+        if ps is None:
+            return None
+        metrics = [
+            {"key": "Q", "label": "Q", "value": f"{ps['Q_m3_h']:.2f}",
+             "unit": "m³/h", "state": "info"},
+            {"key": "head", "label": "Head", "value": f"{ps['head_m']:.1f}",
+             "unit": "m", "state": "info"},
+            {"key": "Whyd", "label": "W_hyd", "value": f"{ps['W_hyd_kW']:.2f}",
+             "unit": "kW", "state": "auto"},
+            {"key": "Wshaft", "label": "W_shaft",
+             "value": f"{ps['W_shaft_kW']:.2f}", "unit": "kW", "state": "auto",
+             "sub": f"η_h={block.efficiency:.2f}"},
+            {"key": "Welec", "label": "W_elec",
+             "value": f"{ps['W_elec_kW']:.2f}", "unit": "kW", "state": "orange"},
+            {"key": "NPSHa", "label": "NPSHa", "value": f"{ps['NPSHa_m']:.2f}",
+             "unit": "m", "state": "info"},
+            {"key": "NPSHr", "label": "NPSHr est.",
+             "value": f"{ps['NPSHr_m_est']:.2f}", "unit": "m", "state": "auto"},
+        ]
+        status = []
+        gauges = []
+        margin = ps.get("cavitation_margin_m")
+        if margin is not None:
+            metrics.append({"key": "margin", "label": "Margen cav.",
+                            "value": f"{margin:.2f}", "unit": "m",
+                            "state": "danger" if margin < 1.0 else "ok"})
+            if margin < 1.0:
+                status.append({"text": "Riesgo cavitación", "kind": "danger"})
+        return {"status": status, "metrics": metrics, "gauges": gauges,
+                "figure": None, "warnings": []}
+    except Exception:
+        return None
+
+
+def compressor_metrics(block, fs) -> Optional[dict]:
+    """Estructurado de compressor_text(). Misma fuente (equipment_design)."""
+    try:
+        eq = (block.eq_type or "").lower()
+        if not ("compressor" in eq or "fan" in eq):
+            return None
+        import equipment_design as _ed
+        cs = _ed.design_compressor_for_block(block, fs)
+        if cs is None:
+            return None
+        metrics = [
+            {"key": "ratio", "label": "Ratio P_out/P_in",
+             "value": f"{cs['ratio']:.2f}", "state": "info"},
+            {"key": "stages", "label": "Etapas rec.",
+             "value": f"{cs['n_stages_rec']}", "state": "spec"},
+            {"key": "Qin", "label": "Q_in succión",
+             "value": f"{cs['Q_in_m3_h']:.1f}", "unit": "m³/h", "state": "info"},
+            {"key": "head", "label": "Head espec.",
+             "value": f"{cs['head_kJ_kg']:.1f}", "unit": "kJ/kg",
+             "state": "auto"},
+            {"key": "Tout", "label": "T descarga",
+             "value": f"{cs['T_out_C']:.1f}", "unit": "°C",
+             "state": "danger" if cs['T_out_C'] > 200 else "alert"},
+            {"key": "Wisen", "label": "W_isen",
+             "value": f"{cs['W_isen_kW']:.1f}", "unit": "kW", "state": "auto"},
+            {"key": "Wact", "label": "W_actual",
+             "value": f"{cs['W_act_kW']:.1f}", "unit": "kW", "state": "orange",
+             "sub": f"η={cs['eta_total']:.2f}"},
+        ]
+        status = []
+        if cs['n_stages_rec'] > 1:
+            status.append({"text": f"Multietapa ×{cs['n_stages_rec']}",
+                           "kind": "warn"})
+        if cs['T_out_C'] > 200:
+            status.append({"text": "T descarga >200°C", "kind": "danger"})
+        return {"status": status, "metrics": metrics, "figure": None,
+                "warnings": []}
+    except Exception:
+        return None
+
+
+def hydraulic_breakdown_metrics(block, fs) -> Optional[dict]:
+    """Estructurado de hydraulic_breakdown_text(). Misma fuente
+    (_trace_downstream_itemized) → DeltaBars por elemento."""
+    try:
+        eq = (block.eq_type or "").lower()
+        if not ("pump" in eq or "compressor" in eq or "fan" in eq
+                or "bomba" in eq):
+            return None
+        import flowsheet_solver as _fsv
+        bd = _fsv._trace_downstream_itemized(fs, block.id)
+        if bd is None or not bd.get("items"):
+            return None
+        total = bd["total_dp_bar"]
+        metrics = [{"key": "dptot", "label": "ΔP total",
+                    "value": f"{total:.3f}", "unit": "bar", "state": "spec"}]
+        bars = []
+        for it in sorted(bd["items"], key=lambda x: -x["dp_bar"]):
+            frac = (it["dp_bar"] / total) if total > 0 else 0.0
+            bars.append({"label": it["detail"][:36], "frac": float(frac),
+                         "value": f"{it['dp_bar']:.3f}", "kind": "out"})
+        return {"status": [{"text": "ΔP cierra", "kind": "ok"}],
+                "metrics": metrics, "bars": bars, "figure": None,
+                "warnings": []}
+    except Exception:
+        return None
+
+
+def mass_balance_metrics(block, fs) -> Optional[dict]:
+    """Estructurado de mass_balance_text(). Misma fuente (streams fs).
+    Mismos formatos numéricos (:.1f / :+.2f) → substring del texto."""
+    try:
+        if fs is None:
+            return None
+        ins  = [s for s in fs.streams.values()
+                if s.dst == block.id and s.mass_flow > 0 and _is_proc(s)]
+        outs = [s for s in fs.streams.values()
+                if s.src == block.id and s.mass_flow > 0 and _is_proc(s)]
+        if not ins and not outs:
+            return None
+        m_in = sum(s.mass_flow for s in ins)
+        m_out = sum(s.mass_flow for s in outs)
+        metrics = [
+            {"key": "in", "label": "Σ IN", "value": f"{m_in:.1f}",
+             "unit": "tm/año", "state": "info"},
+            {"key": "out", "label": "Σ OUT", "value": f"{m_out:.1f}",
+             "unit": "tm/año", "state": "info"},
+        ]
+        bars = []
+        tot = max(m_in, m_out, 1e-9)
+        bars.append({"label": "IN", "frac": float(m_in / tot),
+                     "value": f"{m_in:.1f}", "kind": "in"})
+        bars.append({"label": "OUT", "frac": float(m_out / tot),
+                     "value": f"{m_out:.1f}", "kind": "out"})
+        status = []
+        if m_in > 0:
+            err = (m_out - m_in) / m_in * 100.0
+            metrics.append({"key": "dm", "label": "ΔM",
+                            "value": f"{m_out - m_in:+.1f}", "unit": "tm/año",
+                            "state": "ok" if abs(err) < 0.5 else "danger"})
+            if abs(err) < 0.5:
+                status.append({"text": "cierra", "kind": "ok"})
+            else:
+                status.append({"text": f"err {err:+.2f}%", "kind": "danger"})
+        return {"status": status, "metrics": metrics, "bars": bars,
+                "figure": None, "warnings": []}
+    except Exception:
+        return None
+
+
+def energy_balance_metrics(block, fs) -> Optional[dict]:
+    """Estructurado de energy_balance_text(). Misma fuente (_stream_enthalpy_kW).
+    Mismos formatos (:.2f / :+.2f) → substring del texto."""
+    try:
+        if fs is None:
+            return None
+        import flowsheet_solver as _fsv
+        ins  = [s for s in fs.streams.values()
+                if s.dst == block.id and s.mass_flow > 0 and _is_proc(s)]
+        outs = [s for s in fs.streams.values()
+                if s.src == block.id and s.mass_flow > 0 and _is_proc(s)]
+        if not ins and not outs:
+            return None
+        H_in = 0.0; H_in_n = 0
+        H_out = 0.0; H_out_n = 0
+        for s in ins:
+            h = _fsv._stream_enthalpy_kW(s)
+            if h is not None:
+                H_in += h; H_in_n += 1
+        for s in outs:
+            h = _fsv._stream_enthalpy_kW(s)
+            if h is not None:
+                H_out += h; H_out_n += 1
+        if H_in_n == 0 and H_out_n == 0:
+            return None
+        Q = float(getattr(block, "duty", 0.0) or 0.0)
+        W = 0.0
+        eq = (block.eq_type or "").lower()
+        if "pump" in eq or "compressor" in eq or "fan" in eq or "bomba" in eq:
+            try:
+                import equipment_design as _ed
+                if "pump" in eq or "bomba" in eq:
+                    ps = _ed.design_pump_for_block(block, fs)
+                    W = float(ps["W_shaft_kW"]) if ps else 0.0
+                else:
+                    cs = _ed.design_compressor_for_block(block, fs)
+                    W = float(cs["W_act_kW"]) if cs else 0.0
+            except Exception:
+                pass
+        lhs = H_out - H_in
+        err = lhs - (Q + W)
+        scale = max(abs(H_in), abs(H_out), abs(Q), 1.0)
+        err_pct = err / scale * 100.0
+        metrics = [
+            {"key": "Hin", "label": "H_in", "value": f"{H_in:.2f}",
+             "unit": "kW", "state": "info"},
+            {"key": "Hout", "label": "H_out", "value": f"{H_out:.2f}",
+             "unit": "kW", "state": "info"},
+            {"key": "dH", "label": "ΔH", "value": f"{lhs:+.2f}",
+             "unit": "kW", "state": "auto"},
+            {"key": "Q", "label": "Q duty", "value": f"{Q:+.2f}",
+             "unit": "kW", "state": "orange"},
+        ]
+        if abs(W) > 1e-6:
+            metrics.append({"key": "W", "label": "W_shaft",
+                            "value": f"{W:+.2f}", "unit": "kW",
+                            "state": "orange"})
+        status = [{"text": "cierra", "kind": "ok"} if abs(err_pct) < 5.0
+                  else {"text": f"err {err_pct:+.1f}%", "kind": "danger"}]
+        return {"status": status, "metrics": metrics, "figure": None,
+                "warnings": []}
+    except Exception:
+        return None
+
+
+def utility_aux_metrics(block, fs) -> Optional[dict]:
+    """Estructurado de utility_aux_text(). Misma fuente (streams auto_aux).
+    Conservador: servicio + ṁ (mismos formatos :,.0f / :,.1f)."""
+    try:
+        if fs is None:
+            return None
+        import equipment_costs as _ec
+        if (_ec.EQUIPMENT_DATA.get(block.eq_type, {}).get("categoria")
+                != "Heat exchangers"):
+            return None
+        aux = [s for s in fs.streams.values()
+               if getattr(s, "auto_aux", False)
+               and (s.role or "") == "utility"
+               and (s.src == block.id or s.dst == block.id)]
+        if not aux:
+            return None
+        m_tm = max([float(s.mass_flow or 0.0) for s in aux] + [0.0])
+        if m_tm <= 0:
+            return None
+        Tin  = next((s.temperature for s in aux if s.dst == block.id), None)
+        Tout = next((s.temperature for s in aux if s.src == block.id), None)
+        import equipment_ports as _ep
+        proc_T = [s.temperature for s in fs.streams.values()
+                  if (s.src == block.id or s.dst == block.id)
+                  and not getattr(s, "auto_aux", False)
+                  and (s.role or "") not in ("utility", "ambient")]
+        T_avg = sum(proc_T)/len(proc_T) if proc_T else 25.0
+        util_key = ""
+        try:
+            util_key = _ep.resolve_heat_source(block, T_avg) or ""
+        except Exception:
+            pass
+        util = _ep.UTILITIES.get(util_key, {})
+        util_name = util.get("name", util_key or "utility")
+        m_kg_h = (m_tm * 1000.0) / 8760.0
+        metrics = [
+            {"key": "mdot", "label": "ṁ aux", "value": f"{m_kg_h:,.0f}",
+             "unit": "kg/h", "state": "info",
+             "sub": f"{m_tm:,.1f} tm/año"},
+        ]
+        if Tin is not None and Tout is not None:
+            metrics.append({"key": "dT", "label": "T sup/ret",
+                            "value": f"{Tin:.1f} → {Tout:.1f}", "unit": "°C",
+                            "state": "alert"})
+        return {"status": [{"text": util_name, "kind": "accent"}],
+                "metrics": metrics, "figure": None, "warnings": []}
+    except Exception:
+        return None

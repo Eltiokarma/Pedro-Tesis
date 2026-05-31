@@ -1,0 +1,416 @@
+{
+ "version": 1,
+ "_comment": "Generado por gen_manifest.py desde EXAMPLE_CATEGORIES + builder_map de flowsheet_qt.py. Orden = orden del menú. NO editar a mano: regenerar.",
+ "examples": [
+  {
+   "clave": "hda",
+   "label": "HDA — Hidrodealquilación de tolueno",
+   "categoria": "Introductorios",
+   "nombre": "HDA — Hidrodealquilación de tolueno",
+   "capa": "100 — Reacción / Sep.",
+   "codigo_pfd": "PFD-HDA-001",
+   "builder": "_example_hda",
+   "archivo": "hda.json"
+  },
+  {
+   "clave": "methanol",
+   "label": "Síntesis de metanol",
+   "categoria": "Introductorios",
+   "nombre": "Síntesis de metanol",
+   "capa": "100 — Reacción / Sep.",
+   "codigo_pfd": "PFD-MeOH-001",
+   "builder": "_example_methanol",
+   "archivo": "methanol.json"
+  },
+  {
+   "clave": "distillation",
+   "label": "Destilación binaria benceno/tolueno",
+   "categoria": "Introductorios",
+   "nombre": "Destilación binaria benceno/tolueno",
+   "capa": "200 — Separación",
+   "codigo_pfd": "PFD-BTX-001",
+   "builder": "_example_distillation",
+   "archivo": "distillation.json"
+  },
+  {
+   "clave": "ammonia",
+   "label": "Síntesis de amoníaco (Haber-Bosch)",
+   "categoria": "Introductorios",
+   "nombre": "Síntesis de amoníaco (Haber-Bosch)",
+   "capa": "100 — Reacción",
+   "codigo_pfd": "PFD-NH3-001",
+   "builder": "_example_ammonia",
+   "archivo": "ammonia.json"
+  },
+  {
+   "clave": "ethanol",
+   "label": "Producción de etanol",
+   "categoria": "Introductorios",
+   "nombre": "Producción de etanol (fermentación + destilación)",
+   "capa": "200 — Fermentación / Sep.",
+   "codigo_pfd": "PFD-EtOH-001",
+   "builder": "_example_ethanol",
+   "archivo": "ethanol.json"
+  },
+  {
+   "clave": "biodiesel",
+   "label": "Producción de biodiesel",
+   "categoria": "Introductorios",
+   "nombre": "Producción de biodiesel (transesterificación)",
+   "capa": "100 — Reacción / Sep.",
+   "codigo_pfd": "PFD-BD-001",
+   "builder": "_example_biodiesel",
+   "archivo": "biodiesel.json"
+  },
+  {
+   "clave": "cdu",
+   "label": "Refinería atmosférica simplificada",
+   "categoria": "Introductorios",
+   "nombre": "Refinería atmosférica simplificada (CDU)",
+   "capa": "100 — Destilación primaria",
+   "codigo_pfd": "PFD-CDU-001",
+   "builder": "_example_crude_distillation",
+   "archivo": "cdu.json"
+  },
+  {
+   "clave": "smr_eq",
+   "label": "Reformado SMR + WGS (reactor de equilibrio)",
+   "categoria": "Reactores y solver avanzado (Capas 4-6)",
+   "nombre": "Reformado SMR + WGS — reactor de equilibrio (Capa 4)",
+   "capa": "100 — Reacción",
+   "codigo_pfd": "PFD-SMR-EQ-001",
+   "builder": "_example_smr_equilibrium",
+   "archivo": "smr_eq.json"
+  },
+  {
+   "clave": "ethane_pfr",
+   "label": "Cracking de etano (reactor PFR cinético)",
+   "categoria": "Reactores y solver avanzado (Capas 4-6)",
+   "nombre": "Cracking de etano — reactor PFR cinético (Capa 5)",
+   "capa": "100 — Pirólisis",
+   "codigo_pfd": "PFD-ETH-PFR-001",
+   "builder": "_example_ethane_cracker_pfr",
+   "archivo": "ethane_pfr.json"
+  },
+  {
+   "clave": "haber_rec",
+   "label": "Haber-Bosch con recycle (loop reactivo)",
+   "categoria": "Reactores y solver avanzado (Capas 4-6)",
+   "nombre": "Haber-Bosch con recycle — NH3 con loop reactivo",
+   "capa": "100 — Síntesis NH3",
+   "codigo_pfd": "PFD-NH3-REC-001",
+   "builder": "_example_haber_recycle",
+   "archivo": "haber_rec.json"
+  },
+  {
+   "clave": "dist_eth_az",
+   "label": "Destilación azeotrópica etanol-agua (NRTL)",
+   "categoria": "Reactores y solver avanzado (Capas 4-6)",
+   "nombre": "Destilación azeotrópica etanol-agua (NRTL Capa 6)",
+   "capa": "200 — Separación",
+   "codigo_pfd": "PFD-ETH-AZ-001",
+   "builder": "_example_distillation_ethanol_water",
+   "archivo": "dist_eth_az.json"
+  },
+  {
+   "clave": "rxn_flash_col",
+   "label": "Reactor + flash + columna AUTOMÁTICOS",
+   "categoria": "Reactores y solver avanzado (Capas 4-6)",
+   "nombre": "Tren reactor + flash + columna AUTOMÁTICOS",
+   "capa": "100 — Demo solver",
+   "codigo_pfd": "PFD-AUTO-001",
+   "builder": "_example_reactor_flash_column",
+   "archivo": "rxn_flash_col.json"
+  },
+  {
+   "clave": "hydraulic",
+   "label": "Planta hidráulica con auto-sizing de bomba",
+   "categoria": "Reactores y solver avanzado (Capas 4-6)",
+   "nombre": "Planta hidráulica — bomba auto-sized",
+   "capa": "200 — Hidráulica",
+   "codigo_pfd": "PFD-HYD-001",
+   "builder": "_example_hydraulic_plant",
+   "archivo": "hydraulic.json"
+  },
+  {
+   "clave": "hda_full",
+   "label": "HDA completo (Douglas, escala industrial)",
+   "categoria": "Plantas industriales completas",
+   "nombre": "HDA completo (Douglas) — escala industrial",
+   "capa": "100 — Reacción / Separación",
+   "codigo_pfd": "PFD-HDA-FULL",
+   "builder": "_example_hda_full",
+   "archivo": "hda_full.json"
+  },
+  {
+   "clave": "gas_sweet",
+   "label": "Endulzamiento de gas natural (MDEA)",
+   "categoria": "Plantas industriales completas",
+   "nombre": "Endulzamiento de gas natural (MDEA)",
+   "capa": "200 — Tratamiento de gas",
+   "codigo_pfd": "PFD-GAS-001",
+   "builder": "_example_gas_sweetening",
+   "archivo": "gas_sweet.json"
+  },
+  {
+   "clave": "sugar",
+   "label": "Planta de azúcar (caña)",
+   "categoria": "Plantas industriales completas",
+   "nombre": "Planta de azúcar (caña → cristalización)",
+   "capa": "100 — Cristalización",
+   "codigo_pfd": "PFD-SUGAR-001",
+   "builder": "_example_sugar_mill",
+   "archivo": "sugar.json"
+  },
+  {
+   "clave": "industrial",
+   "label": "⭐ PLANTA INDUSTRIAL COMPLETA (MeOH + servicios + BOP)",
+   "categoria": "Plantas industriales completas",
+   "nombre": "PLANTA INDUSTRIAL COMPLETA — MeOH + servicios + BOP",
+   "capa": "100/200/300 — Plant Integration",
+   "codigo_pfd": "PFD-INDUSTRIAL-001",
+   "builder": "_example_industrial_complete",
+   "archivo": "industrial.json"
+  },
+  {
+   "clave": "quimpac",
+   "label": "QUIMPAC — cloro-álcali (membrana)",
+   "categoria": "Plantas industriales completas",
+   "nombre": "QUIMPAC — Cloro-álcali (celda de membrana)",
+   "capa": "100/200/300 — Chlor-Alkali Plant",
+   "codigo_pfd": "PFD-QUIMPAC-001",
+   "builder": "_example_quimpac_chloralkali",
+   "archivo": "quimpac.json"
+  },
+  {
+   "clave": "hno3",
+   "label": "HNO3 Ostwald (dual-presión)",
+   "categoria": "Plantas industriales completas",
+   "nombre": "HNO3 Ostwald — DuPont dual-presión",
+   "capa": "100/200/300/400/500 — Ostwald Plant",
+   "codigo_pfd": "PFD-OSTWALD-001",
+   "builder": "_example_hno3_ostwald",
+   "archivo": "hno3.json"
+  },
+  {
+   "clave": "talara",
+   "label": "REFINERÍA TALARA — PMRT",
+   "categoria": "Plantas industriales completas",
+   "nombre": "REFINERÍA TALARA — PMRT Petroperú",
+   "capa": "100-900 — Conversión Profunda",
+   "codigo_pfd": "PFD-TALARA-001",
+   "builder": "_example_talara_refinery",
+   "archivo": "talara.json"
+  },
+  {
+   "clave": "pasteurizer",
+   "label": "Pasteurizador HTST de jugo",
+   "categoria": "Alimentaria y bioproceso",
+   "nombre": "Pasteurizador HTST de jugo",
+   "capa": "100 — Alimentaria",
+   "codigo_pfd": "PFD-PAST-001",
+   "builder": "_example_pasteurizer",
+   "archivo": "pasteurizer.json"
+  },
+  {
+   "clave": "pineapple",
+   "label": "Jugo de piña concentrado (evaporación)",
+   "categoria": "Alimentaria y bioproceso",
+   "nombre": "Jugo de piña concentrado (evaporación)",
+   "capa": "100 — Alimentaria",
+   "codigo_pfd": "PFD-PINE-001",
+   "builder": "_example_pineapple_juice",
+   "archivo": "pineapple.json"
+  },
+  {
+   "clave": "potato_chips",
+   "label": "Papas fritas (freído industrial)",
+   "categoria": "Alimentaria y bioproceso",
+   "nombre": "Papas fritas (freído industrial)",
+   "capa": "100 — Alimentaria",
+   "codigo_pfd": "PFD-CHIP-001",
+   "builder": "_example_potato_chips",
+   "archivo": "potato_chips.json"
+  },
+  {
+   "clave": "bread",
+   "label": "Panificación industrial",
+   "categoria": "Alimentaria y bioproceso",
+   "nombre": "Panificación industrial (batch→continuo)",
+   "capa": "100 — Alimentaria",
+   "codigo_pfd": "PFD-BREAD-001",
+   "builder": "_example_bread_baking",
+   "archivo": "bread.json"
+  },
+  {
+   "clave": "beer",
+   "label": "Cervecería — fermentación",
+   "categoria": "Alimentaria y bioproceso",
+   "nombre": "Cervecería — fermentación batch→continuo",
+   "capa": "100 — Bioproceso",
+   "codigo_pfd": "PFD-BEER-001",
+   "builder": "_example_beer_brewing",
+   "archivo": "beer.json"
+  },
+  {
+   "clave": "penicillin",
+   "label": "Penicilina por fermentación",
+   "categoria": "Alimentaria y bioproceso",
+   "nombre": "Penicilina por fermentación (batch→continuo)",
+   "capa": "100 — Farmacéutica",
+   "codigo_pfd": "PFD-PEN-001",
+   "builder": "_example_penicillin",
+   "archivo": "penicillin.json"
+  },
+  {
+   "clave": "leche_gloria",
+   "label": "LECHE GLORIA — planta láctea integrada",
+   "categoria": "Alimentaria y bioproceso",
+   "nombre": "LECHE GLORIA — Planta láctea integrada",
+   "capa": "100 — Alimentaria (caso integrado)",
+   "codigo_pfd": "PFD-GLORIA-001",
+   "builder": "_example_leche_gloria",
+   "archivo": "leche_gloria.json"
+  },
+  {
+   "clave": "sulfuric",
+   "label": "Ácido sulfúrico (contacto, V₂O₅)",
+   "categoria": "Química",
+   "nombre": "Ácido sulfúrico (contacto, V₂O₅)",
+   "capa": "100 — Inorgánica pesada",
+   "codigo_pfd": "PFD-H2SO4-001",
+   "builder": "_example_sulfuric_acid",
+   "archivo": "sulfuric.json"
+  },
+  {
+   "clave": "acetic",
+   "label": "Ácido acético (carbonilación Cativa)",
+   "categoria": "Química",
+   "nombre": "Ácido acético (carbonilación Cativa)",
+   "capa": "100 — Química fina",
+   "codigo_pfd": "PFD-AcOH-001",
+   "builder": "_example_acetic_acid",
+   "archivo": "acetic.json"
+  },
+  {
+   "clave": "ldpe",
+   "label": "Polietileno LDPE (autoclave HP)",
+   "categoria": "Química",
+   "nombre": "Polietileno LDPE (autoclave HP)",
+   "capa": "100 — Polímeros",
+   "codigo_pfd": "PFD-LDPE-001",
+   "builder": "_example_polyethylene",
+   "archivo": "ldpe.json"
+  },
+  {
+   "clave": "chloralkali_hcl",
+   "label": "Cloro-álcali compacto + HCl",
+   "categoria": "Química",
+   "nombre": "Cloro-álcali compacto + HCl",
+   "capa": "100 — Inorgánica pesada",
+   "codigo_pfd": "PFD-CAHCL-001",
+   "builder": "_example_chloralkali_hcl",
+   "archivo": "chloralkali_hcl.json"
+  },
+  {
+   "clave": "urea",
+   "label": "Urea (Bosch-Meiser, fertilizante)",
+   "categoria": "Química",
+   "nombre": "Urea (Bosch-Meiser, fertilizante)",
+   "capa": "100 — Fertilizantes",
+   "codigo_pfd": "PFD-UREA-001",
+   "builder": "_example_urea",
+   "archivo": "urea.json"
+  },
+  {
+   "clave": "soap",
+   "label": "Jabón por saponificación",
+   "categoria": "Química",
+   "nombre": "Jabón por saponificación",
+   "capa": "100 — Consumo / química",
+   "codigo_pfd": "PFD-SOAP-001",
+   "builder": "_example_soap",
+   "archivo": "soap.json"
+  },
+  {
+   "clave": "ethylene_crk",
+   "label": "Etileno por cracking de etano",
+   "categoria": "Química",
+   "nombre": "Etileno por cracking de etano (R011 Modo A)",
+   "capa": "100 — Petroquímica",
+   "codigo_pfd": "PFD-ETH-001",
+   "builder": "_example_ethylene_cracking",
+   "archivo": "ethylene_crk.json"
+  },
+  {
+   "clave": "cement",
+   "label": "Cemento Portland (horno rotatorio)",
+   "categoria": "Materiales y energía",
+   "nombre": "Cemento Portland (horno rotatorio)",
+   "capa": "100 — Materiales",
+   "codigo_pfd": "PFD-CEM-001",
+   "builder": "_example_cement",
+   "archivo": "cement.json"
+  },
+  {
+   "clave": "glass",
+   "label": "Vidrio sodocálcico (horno de fusión)",
+   "categoria": "Materiales y energía",
+   "nombre": "Vidrio sodocálcico (horno de fusión)",
+   "capa": "100 — Materiales",
+   "codigo_pfd": "PFD-GLASS-001",
+   "builder": "_example_glass",
+   "archivo": "glass.json"
+  },
+  {
+   "clave": "air_sep",
+   "label": "Separación criogénica de aire O₂/N₂",
+   "categoria": "Materiales y energía",
+   "nombre": "Separación criogénica de aire O₂/N₂",
+   "capa": "100 — Gases industriales",
+   "codigo_pfd": "PFD-AIRSEP-001",
+   "builder": "_example_air_separation",
+   "archivo": "air_sep.json"
+  },
+  {
+   "clave": "water_treat",
+   "label": "Tratamiento de agua potable",
+   "categoria": "Materiales y energía",
+   "nombre": "Tratamiento de agua potable",
+   "capa": "200 — Servicios / ambiental",
+   "codigo_pfd": "PFD-WATER-001",
+   "builder": "_example_water_treatment",
+   "archivo": "water_treat.json"
+  },
+  {
+   "clave": "rankine",
+   "label": "Central térmica — ciclo Rankine",
+   "categoria": "Materiales y energía",
+   "nombre": "Central térmica — ciclo Rankine (Tier 2)",
+   "capa": "200 — Energía (ilustrativo)",
+   "codigo_pfd": "PFD-RANK-001",
+   "builder": "_example_rankine_cycle",
+   "archivo": "rankine.json"
+  },
+  {
+   "clave": "nuclear",
+   "label": "Isla nuclear — circuito 2°",
+   "categoria": "Materiales y energía",
+   "nombre": "Isla nuclear — circuito 2° (Tier 2)",
+   "capa": "200 — Energía (ilustrativo)",
+   "codigo_pfd": "PFD-NUC-001",
+   "builder": "_example_nuclear_steam",
+   "archivo": "nuclear.json"
+  },
+  {
+   "clave": "desal",
+   "label": "Desalinización MED multi-efecto",
+   "categoria": "Materiales y energía",
+   "nombre": "Desalinización MED multi-efecto (Tier 2)",
+   "capa": "200 — Agua (ilustrativo)",
+   "codigo_pfd": "PFD-DESAL-001",
+   "builder": "_example_desalination",
+   "archivo": "desal.json"
+  }
+ ]
+}

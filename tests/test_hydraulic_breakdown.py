@@ -10,25 +10,18 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 import flowsheet_model as fm
 import flowsheet_solver as fsv
-import examples_library as el
+import examples_registry as reg
 import hydraulic_defaults as hd
 
 
-def _build(example_name):
-    class _FE:
-        def __init__(self):
-            self.fs = fm.Flowsheet()
-            self.labor_workers = 0
-        _add_example_block  = el.ExampleBuilder._add_example_block
-        _add_example_stream = el.ExampleBuilder._add_example_stream
-        _add_example_extra  = el.ExampleBuilder._add_example_extra
-        _set_example_labor  = el.ExampleBuilder._set_example_labor
-        _set_block_duty     = el.ExampleBuilder._set_block_duty
-    fake = _FE()
-    getattr(el.ExampleBuilder, example_name)(fake)
-    hd.apply_example_hydraulics(fake.fs, example_name)
-    fsv.solve(fake.fs)
-    return fake.fs
+def _build(clave):
+    """Carga un ejemplo desde su JSON canónico (registry), aplica los presets
+    hidráulicos (indexados por el nombre del builder, conservado en el
+    manifest) y lo resuelve — igual que el camino real de la UI."""
+    fs = reg.load_example(clave)
+    hd.apply_example_hydraulics(fs, reg.builder_name(clave))
+    fsv.solve(fs)
+    return fs
 
 
 def _rotative(fs):
@@ -39,7 +32,7 @@ def test_itemized_trace_hydraulic_plant():
     """En hydraulic_plant: el desglose de P-101 debe incluir las caídas de
     los bloques E-101 (HX) y T-101 (columna) más el destination_delta, y
     cerrar contra el ΔP de la bomba."""
-    fs = _build('_example_hydraulic_plant')
+    fs = _build('hydraulic')
     p101 = next(b for b in fs.blocks.values() if b.name == "P-101")
     bd = fsv._trace_downstream_itemized(fs, p101.id)
     assert bd is not None, "P-101 sin desglose (no encontró anchor)"
@@ -54,7 +47,7 @@ def test_itemized_trace_hydraulic_plant():
 def test_itemized_trace_ammonia():
     """En ammonia: el anchor es el reactor (P_op=200 bar, seedeado). El
     destination_delta debe dominar (~199 bar)."""
-    fs = _build('_example_ammonia')
+    fs = _build('ammonia')
     k101 = next(b for b in fs.blocks.values() if b.name == "K-101")
     bd = fsv._trace_downstream_itemized(fs, k101.id)
     assert bd is not None
@@ -69,9 +62,9 @@ def test_itemized_trace_ammonia():
 def test_itemized_sum_matches_pump_dp():
     """Para toda bomba/compresor auto-dimensionada con anchor, la suma de los
     items debe ≈ block.delta_p_bar (±0.05 bar)."""
-    examples = ['_example_hydraulic_plant', '_example_ammonia', '_example_hda',
-                '_example_distillation', '_example_ethanol',
-                '_example_ethylene_cracking', '_example_acetic_acid']
+    examples = ['hydraulic', 'ammonia', 'hda',
+                'distillation', 'ethanol',
+                'ethylene_crk', 'acetic']
     checked = 0
     for name in examples:
         fs = _build(name)
@@ -93,7 +86,7 @@ def test_itemized_sum_matches_pump_dp():
 def test_no_anchor_returns_none():
     """Un compresor de entrada sin succión (methanol K-101) o una bomba sin
     anchor downstream devuelve None — no rompe."""
-    fs = _build('_example_methanol')
+    fs = _build('methanol')
     k101 = next((b for b in fs.blocks.values() if b.name == "K-101"), None)
     if k101 is not None:
         bd = fsv._trace_downstream_itemized(fs, k101.id)
