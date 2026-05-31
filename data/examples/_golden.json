@@ -198,13 +198,13 @@
   "sum_duty": 9.360386
  },
  "industrial": {
-  "ISBL": 22026405.31,
+  "ISBL": 26594685.65,
   "energy_errors": 0,
   "mass_errors": 0,
   "n_blocks": 28,
   "n_streams": 30,
   "overall_status": "warning",
-  "sum_duty": -5168.303581
+  "sum_duty": -5153.271315
  },
  "ldpe": {
   "ISBL": 2447864.43,
@@ -216,13 +216,13 @@
   "sum_duty": 70.579141
  },
  "leche_gloria": {
-  "ISBL": 12072696.92,
+  "ISBL": 12139882.92,
   "energy_errors": 0,
   "mass_errors": 0,
   "n_blocks": 20,
   "n_streams": 21,
   "overall_status": "ok",
-  "sum_duty": 414.061462
+  "sum_duty": 415.055559
  },
  "methanol": {
   "ISBL": 3902733.2,
@@ -234,13 +234,13 @@
   "sum_duty": -300.268263
  },
  "nuclear": {
-  "ISBL": 1563415.42,
+  "ISBL": 1688932.86,
   "energy_errors": 0,
   "mass_errors": 0,
   "n_blocks": 6,
   "n_streams": 5,
   "overall_status": "ok",
-  "sum_duty": 0.132372
+  "sum_duty": 0.165649
  },
  "pasteurizer": {
   "ISBL": 642814.97,
@@ -288,13 +288,13 @@
   "sum_duty": 1583.757543
  },
  "rankine": {
-  "ISBL": 271826049.8,
+  "ISBL": 271860377.93,
   "energy_errors": 0,
   "mass_errors": 0,
   "n_blocks": 6,
   "n_streams": 5,
   "overall_status": "ok",
-  "sum_duty": 0.132372
+  "sum_duty": 0.160825
  },
  "rxn_flash_col": {
   "ISBL": 3641892.79,
