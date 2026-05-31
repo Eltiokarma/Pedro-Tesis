@@ -119,5 +119,74 @@ class TestEstimadoRecuperableYConsumible(_OverlayTestBase):
         self.assertEqual(td.get("ammonia").origin, "experimental")
 
 
+class TestSeamEquilibrioOverlay(_OverlayTestBase):
+    """Dirección (b) sobre el seam de EQUILIBRIO
+    (solve_equilibrium_reactor_from_composition), el más ejercido por los
+    reactores del flowsheet.
+
+    HALLAZGO (codificado como invariante, no como argumento): el seam de
+    equilibrio solo resuelve reacciones con van't Hoff (A,B), y NINGUNA de
+    ellas tiene una especie ausente de thermo_db.  Por eso el caso "producto
+    estimado consumido por el seam de equilibrio" NO es disparable con el
+    catálogo actual sin inventar una reacción artificial (≠ Capa 4 curada).
+    Se cubre, en cambio, con:
+      · un INVARIANTE enforced — si alguien agrega una reacción-con-Keq cuyo
+        producto falta en thermo_db, este test falla y obliga a estimarlo al
+        overlay (cierra el loop sobre el seam de equilibrio en ese momento);
+      · una prueba POSITIVA de que el overlay poblado NO perturba el seam de
+        equilibrio y el sourceado sigue ganando a través de él.
+    """
+
+    def test_invariante_eq_seam_usa_solo_sourceados(self):
+        """Todas las especies de reacciones con van't Hoff están sourceadas
+        (mw>0).  Convierte el argumento "el seam de equilibrio usa los mismos
+        get().mw" en un invariante verificado."""
+        faltantes = []
+        for rid in rdb.list_ids():
+            r = rdb.get(rid)
+            if r.vant_hoff_A is None or r.vant_hoff_B is None:
+                continue                      # no resuelve por equilibrio
+            for s in r.stoich:
+                if s.thermo_name is None:
+                    continue
+                c = td.get(s.thermo_name)
+                if c is None or c.mw <= 0:
+                    faltantes.append((rid, s.thermo_name))
+        self.assertEqual(
+            faltantes, [],
+            "Reacción(es) con van't Hoff tienen especies ausentes de "
+            "thermo_db. Estimalas al overlay (estimated_overlay) para que el "
+            f"seam de equilibrio las consuma: {faltantes}")
+
+    def test_eq_seam_no_perturbado_por_overlay(self):
+        """El overlay poblado no altera el resultado del seam de equilibrio
+        ni sombrea sourceados (R004: N2 + 3H2 ⇌ 2NH3, van't Hoff)."""
+        feed = {"nitrogen": 0.25, "hydrogen": 0.75}
+        # overlay vacío (setUp lo dejó así)
+        r0 = rdb.solve_equilibrium_reactor_from_composition(
+            ["R004"], feed, 1.0, 700.0, 200.0)
+        self.assertIsNotNone(r0)
+        nh3_0 = r0["outlet_composition"]["ammonia"]
+
+        # poblar overlay con un estimado (sin deps: upsert directo)
+        ov.upsert("urea", mw=60.06, smiles="NC(N)=O",
+                  dh_f_gas_kJ_mol=-109.0,
+                  cp_gas_coefs=[71928.0, 0.0, 0.0, 0.0, 0.0],
+                  estimation_uncertainty={"dh_f": 5.0})
+        self.assertEqual(td.get("urea").origin, "estimated")     # overlay sirve la nueva
+
+        r1 = rdb.solve_equilibrium_reactor_from_composition(
+            ["R004"], feed, 1.0, 700.0, 200.0)
+        self.assertIsNotNone(r1)
+        # idéntico: el overlay no perturba el camino de equilibrio
+        self.assertAlmostEqual(r1["outlet_composition"]["ammonia"], nh3_0,
+                               delta=1e-12)
+        # sourceado gana a través del seam; urea (no participa en R004) ausente
+        self.assertEqual(td.get("ammonia").origin, "experimental")
+        self.assertNotIn("urea", r1["outlet_composition"])
+        self.assertAlmostEqual(sum(r1["outlet_composition"].values()), 1.0,
+                               delta=1e-6)
+
+
 if __name__ == "__main__":
     unittest.main()
