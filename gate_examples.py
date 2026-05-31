@@ -1,19 +1,27 @@
 """
-gate_examples.py — GATE de equivalencia builder ↔ JSON (Fase 1).
+gate_examples.py — GATE de REGRESIÓN de los 41 ejemplos.
 
-Para cada ejemplo migrado:
-  1. Carga data/examples/<clave>.json con Flowsheet.from_dict().
+Los 41 JSON de data/examples/ son la ÚNICA fuente de verdad (los builders
+imperativos fueron retirados; ver examples_library.py).  Este gate ya NO
+compara "builder ↔ JSON": valida que cargar cada JSON y resolverlo reproduce
+EXACTAMENTE el golden congelado.
+
+Para cada ejemplo:
+  1. Carga data/examples/<clave>.json (from_dict directo, o vía el registry
+     con --registry: el mismo camino que usa la UI).
   2. Corre solve().
   3. Recomputa los golden values (misma función golden() del exporter).
-  4. Exige IGUALDAD EXACTA contra data/examples/_golden.json (el golden del
-     builder original).  sum_duty con tolerancia float < 1e-6.
+  4. Exige IGUALDAD contra data/examples/_golden.json (patrón CONGELADO de
+     Fase 1).  sum_duty con tolerancia absoluta < 1e-6; ISBL relativa < 1e-6.
 
 Si algún ejemplo difiere, lo reporta campo por campo y sale con código != 0.
-Dado que el solver quedó idempotente en Fase 0, se espera 41/41 verde; un
-fallo acá es una REGRESIÓN — investigar, no parchear el golden.
+El solver es idempotente (Fase 0) y el export es pre-solve (estado declarativo
+limpio), así que se espera 41/41 verde; un fallo acá es una REGRESIÓN —
+investigar, NO parchear el golden.
 
 USO (comando único, CI-able):
-    python gate_examples.py
+    python gate_examples.py              # carga from_dict directo
+    python gate_examples.py --registry   # carga vía examples_registry (UI path)
     echo $?      # 0 = 41/41 verde, 1 = hay diferencias
 
 RESTRICCIÓN: consume from_dict() tal cual.  Cero cambios a la serialización.
@@ -21,6 +29,7 @@ RESTRICCIÓN: consume from_dict() tal cual.  Cero cambios a la serialización.
 import os
 import sys
 import json
+import argparse
 
 from export_examples import (DATA_DIR, GOLDEN_PATH, golden,
                              _headless_mocks)
@@ -75,9 +84,26 @@ def _diff_golden(expected, got):
     return diffs
 
 
-def run_gate():
-    _headless_mocks()
+def _load_direct(key):
+    """Cargador directo: lee el JSON y hace from_dict (gate de Fase 1)."""
     import flowsheet_model as fm
+    path = os.path.join(DATA_DIR, f"{key}.json")
+    if not os.path.isfile(path):
+        raise FileNotFoundError(path)
+    with open(path, encoding="utf-8") as f:
+        d = json.load(f)
+    return fm.Flowsheet.from_dict(d)
+
+
+def _load_via_registry(key):
+    """Cargador vía examples_registry.load_example (gate de Fase 2).
+    Verifica que el camino de carga real de la UI da los mismos golden."""
+    import examples_registry as reg
+    return reg.load_example(key)
+
+
+def run_gate(via_registry=False):
+    _headless_mocks()
     import flowsheet_solver as fsv
 
     if not os.path.isdir(DATA_DIR):
@@ -88,22 +114,22 @@ def run_gate():
         return 1
 
     baseline = _load_golden_baseline()
+    load = _load_via_registry if via_registry else _load_direct
+    modo = "vía registry" if via_registry else "from_dict directo"
 
     print("=" * 78)
-    print("GATE builder ↔ JSON — re-solve de cada JSON vs golden del builder")
+    print(f"GATE de regresión ({modo}) — JSON → solve vs golden congelado (Fase 1)")
     print("=" * 78)
 
     n_ok = 0
     fails = []
     for key in sorted(baseline):
-        path = os.path.join(DATA_DIR, f"{key}.json")
-        if not os.path.isfile(path):
-            fails.append((key, [("archivo", path, "<no existe>")]))
-            print(f"  ✗ {key:18s} JSON faltante")
+        try:
+            fs = load(key)
+        except Exception as e:
+            fails.append((key, [("carga", "<ok>", f"{type(e).__name__}: {e}")]))
+            print(f"  ✗ {key:18s} error de carga: {e}")
             continue
-        with open(path, encoding="utf-8") as f:
-            d = json.load(f)
-        fs = fm.Flowsheet.from_dict(d)
         res = fsv.solve(fs)
         got = golden(fs, res)
         diffs = _diff_golden(baseline[key], got)
@@ -130,4 +156,9 @@ def run_gate():
 
 
 if __name__ == "__main__":
-    sys.exit(run_gate())
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--registry", action="store_true",
+                        help="Cargar vía examples_registry (gate Fase 2) "
+                             "en vez de from_dict directo.")
+    args = parser.parse_args()
+    sys.exit(run_gate(via_registry=args.registry))

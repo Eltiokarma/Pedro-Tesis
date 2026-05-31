@@ -112,25 +112,60 @@ def golden(fs, res):
 
 
 def run_one(builder_name):
-    """Construye, resuelve y devuelve (to_dict, golden) de un builder."""
+    """Construye y devuelve (to_dict PRE-solve, golden POST-solve).
+
+    El JSON se captura ANTES de solve() — estado DECLARATIVO puro: solo las
+    specs que el builder declaró (composiciones, T/P/flujos lockeados,
+    duties manuales, flags de reactor/columna/flash).  NO incluye valores
+    DERIVADOS por el solver (presiones propagadas, duties auto-inferidos,
+    composiciones de columna/flash).  Esto elimina de raíz la asimetría
+    builder↔JSON: cargar el JSON y resolver reproduce el mismo flowsheet que
+    construir con el builder y resolver, porque ambos parten del mismo
+    estado declarativo y aplican el MISMO solver encima.
+
+    El golden se computa POST-solve (necesita el flowsheet resuelto)."""
     import flowsheet_solver as fsv
     fs = build_flowsheet(builder_name)
-    res = fsv.solve(fs)
-    return fs.to_dict(), golden(fs, res)
+    data = fs.to_dict()            # ← snapshot declarativo, antes de resolver
+    res = fsv.solve(fs)            # solve in-place (muta fs, no el dict)
+    return data, golden(fs, res)
+
+
+def _builder_key_pairs():
+    """[(builder_name, clave_menú), ...] para los 41 ejemplos.
+
+    Prioridad:
+      1) data/examples/manifest.json (fuente de verdad tras Fase 2, cuando
+         flowsheet_qt.py ya no expone los literales builder_map/
+         EXAMPLE_CATEGORIES para extracción AST).
+      2) Bootstrap desde flowsheet_qt.py vía AST (sólo en la generación
+         inicial, antes de que exista el manifest)."""
+    manifest = os.path.join(DATA_DIR, "manifest.json")
+    if os.path.isfile(manifest):
+        with open(manifest, encoding="utf-8") as f:
+            data = json.load(f)
+        return [(e["builder"], e["clave"]) for e in data.get("examples", [])]
+    # bootstrap
+    from tools_extract_menu_map import extract_menu_map
+    menu_map = extract_menu_map()      # builder -> (clave, nombre, area, pfd)
+    return [(b, k) for b, (k, *_rest) in menu_map.items()]
 
 
 def export_all(write=True):
     """Exporta los 41 ejemplos.  Devuelve (n_exportados, golden_dict)."""
     _headless_mocks()
-    from tools_extract_menu_map import extract_menu_map
-    menu_map = extract_menu_map()      # builder -> (clave, nombre, cat, pfd)
+    # Mapeo builder -> clave.  Fuente: el manifest si ya existe (post-Fase 2,
+    # cuando flowsheet_qt.py ya es data-driven y los extractores AST de
+    # EXAMPLE_CATEGORIES/builder_map ya no aplican); si no, bootstrap desde
+    # flowsheet_qt.py vía AST (generación inicial).
+    pairs = _builder_key_pairs()      # [(builder_name, key), ...]
 
     if write:
         os.makedirs(DATA_DIR, exist_ok=True)
 
     golden_all = {}
     n = 0
-    for builder_name, (key, nombre, cat, pfd) in sorted(menu_map.items()):
+    for builder_name, key in sorted(pairs):
         data, g = run_one(builder_name)
         golden_all[key] = g
         if write:

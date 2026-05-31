@@ -32,64 +32,16 @@ def headless_mocks():
 
 
 def run_all_examples():
-    """Carga todos los ejemplos y reporta status + warnings clave."""
+    """Carga todos los ejemplos y reporta status + warnings clave.
+
+    Fase 2: itera el manifest del registry (data/examples) y carga vía
+    registry.load_example(clave) — mismo camino que la UI — en vez del array
+    hardcodeado de claves + builders imperativos."""
     headless_mocks()
-    import flowsheet_model as fm
     import flowsheet_solver as fsv
-    import examples_library as el
+    import examples_registry as reg
 
-    class _FakeEditor:
-        def __init__(self):
-            self.fs = fm.Flowsheet()
-            self.labor_workers = 0
-        _add_example_block  = el.ExampleBuilder._add_example_block
-        _add_example_stream = el.ExampleBuilder._add_example_stream
-        _add_example_extra  = el.ExampleBuilder._add_example_extra
-        _set_example_labor  = el.ExampleBuilder._set_example_labor
-        _set_block_duty     = el.ExampleBuilder._set_block_duty
-
-    examples = [
-        '_example_hda', '_example_methanol', '_example_distillation',
-        '_example_ammonia', '_example_ethanol', '_example_biodiesel',
-        '_example_crude_distillation', '_example_hda_full',
-        '_example_gas_sweetening', '_example_sugar_mill',
-        '_example_smr_equilibrium', '_example_ethane_cracker_pfr',
-        '_example_haber_recycle', '_example_distillation_ethanol_water',
-        '_example_reactor_flash_column', '_example_hydraulic_plant',
-        '_example_industrial_complete',
-        '_example_quimpac_chloralkali',
-        '_example_hno3_ostwald',
-        '_example_talara_refinery',
-        # ── Catálogo educativo Lote 1 (alimentaria simple) ──
-        '_example_pasteurizer',
-        '_example_pineapple_juice',
-        '_example_potato_chips',
-        # ── Catálogo educativo Lote 2 (bioproceso + química gratis) ──
-        '_example_beer_brewing',
-        '_example_sulfuric_acid',
-        # ── Catálogo educativo Lote 3 (química fina + polímeros) ──
-        '_example_acetic_acid',
-        '_example_polyethylene',
-        # ── Catálogo educativo Lote 4a (inorgánica + materiales) ──
-        '_example_chloralkali_hcl',
-        '_example_cement',
-        '_example_glass',
-        # ── Catálogo educativo Lote 4b (saponificación + urea) ──
-        '_example_soap',
-        '_example_urea',
-        # ── Catálogo educativo Lote 4c (planta láctea integrada) ──
-        '_example_leche_gloria',
-        # ── Catálogo educativo Lote 5 (industrias adicionales) ──
-        '_example_ethylene_cracking',
-        '_example_air_separation',
-        '_example_water_treatment',
-        '_example_bread_baking',
-        '_example_penicillin',
-        # ── Catálogo educativo Lote 6 (Tier 2 ilustrativos) ──
-        '_example_rankine_cycle',
-        '_example_nuclear_steam',
-        '_example_desalination',
-    ]
+    examples = [e["clave"] for e in reg.list_examples()]
     print(f"\n{'='*92}")
     print("VALIDACIÓN HEADLESS — todos los ejemplos del flowsheet")
     print(f"{'='*92}")
@@ -100,19 +52,14 @@ def run_all_examples():
     all_ok = True
     total_blocks = total_streams = 0
     for name in examples:
-        fake = _FakeEditor()
         try:
-            getattr(el.ExampleBuilder, name)(fake)
-        except AttributeError as e:
-            print(f"  ✗ {name:40s} ATRIBUTO FALTANTE: {e}")
-            all_ok = False
-            continue
+            fs = reg.load_example(name)
         except Exception as e:
-            print(f"  ✗ {name:40s} ERROR EN BUILDER: {type(e).__name__}: {e}")
+            print(f"  ✗ {name:40s} ERROR DE CARGA: {type(e).__name__}: {e}")
             all_ok = False
             continue
         try:
-            res = fsv.solve(fake.fs)
+            res = fsv.solve(fs)
         except Exception as e:
             print(f"  ✗ {name:40s} CRASH EN SOLVER: {type(e).__name__}: {e}")
             all_ok = False
@@ -122,10 +69,10 @@ def run_all_examples():
         ok = mass_ok and eng_ok
         all_ok = all_ok and ok
         mark = "✓" if ok else "✗"
-        total_blocks += len(fake.fs.blocks)
-        total_streams += len(fake.fs.streams)
+        total_blocks += len(fs.blocks)
+        total_streams += len(fs.streams)
         print(f"  {mark} {name:38s} {res.overall_status:>9} "
-              f"{len(fake.fs.blocks):>4} {len(fake.fs.streams):>5} "
+              f"{len(fs.blocks):>4} {len(fs.streams):>5} "
               f"{len(res.mass_balance_errors):>4} "
               f"{len(res.energy_balance_errors):>3} "
               f"{len(res.energy_warnings):>4} "
@@ -162,17 +109,11 @@ def test_all_examples_hydraulics():
     except ImportError:
         ed = None
 
-    class _FE:
-        def __init__(self): self.fs = fm.Flowsheet(); self.labor_workers = 0
-        _add_example_block = el.ExampleBuilder._add_example_block
-        _add_example_stream = el.ExampleBuilder._add_example_stream
-        _add_example_extra = el.ExampleBuilder._add_example_extra
-        _set_example_labor = el.ExampleBuilder._set_example_labor
-        _set_block_duty    = el.ExampleBuilder._set_block_duty
-
-    methods = [n for n, _ in inspect.getmembers(el.ExampleBuilder,
-                                                predicate=inspect.isfunction)
-               if n.startswith('_example_')]
+    import examples_registry as reg
+    # Fase 2: (clave, builder) del manifest.  La hidráulica se indexa por el
+    # nombre del builder (clave de EXAMPLE_PRESETS); el flowsheet se carga
+    # vía registry.
+    methods = [(e["clave"], e["builder"]) for e in reg.list_examples()]
 
     print(f"\n{'='*92}")
     print("VALIDACIÓN HIDRÁULICA — bombas/compresores auto-dimensionados")
@@ -182,34 +123,33 @@ def test_all_examples_hydraulics():
     print('-' * 92)
 
     all_ok = True
-    for name in methods:
-        fake = _FE()
+    for clave, builder in methods:
         try:
-            getattr(el.ExampleBuilder, name)(fake)
-            hd.apply_example_hydraulics(fake.fs, name)
-            res = fsv.solve(fake.fs)
+            fs = reg.load_example(clave)
+            hd.apply_example_hydraulics(fs, builder)
+            res = fsv.solve(fs)
         except Exception as e:
-            print(f"  ✗ {name:26s} CRASH: {type(e).__name__}: {e}")
+            print(f"  ✗ {clave:26s} CRASH: {type(e).__name__}: {e}")
             all_ok = False
             continue
         # P negativa en rama viva → hard fail
-        neg = [s.name for s in fake.fs.streams.values()
+        neg = [s.name for s in fs.streams.values()
                if s.mass_flow > 0 and s.pressure_bar < 0]
         if neg:
-            print(f"  ✗ {name:26s} P<0 en {neg[:3]}")
+            print(f"  ✗ {clave:26s} P<0 en {neg[:3]}")
             all_ok = False
-        rot = [b for b in fake.fs.blocks.values()
+        rot = [b for b in fs.blocks.values()
                if hd._is_rotative(b.eq_type)]
         for b in rot:
-            ins = [s for s in fake.fs.streams.values() if s.dst == b.id]
-            outs = [s for s in fake.fs.streams.values() if s.src == b.id]
+            ins = [s for s in fs.streams.values() if s.dst == b.id]
+            outs = [s for s in fs.streams.values() if s.src == b.id]
             has_suction = bool(ins)
             note = ""
             if abs(b.delta_p_bar) < 1e-6:
                 note = "no-suction" if not has_suction else "no-anchor"
                 # bomba con succión pero sin ΔP y con target downstream → fallo
                 if has_suction:
-                    tgt, _acc = fsv._find_downstream_target(fake.fs, b.id, None) \
+                    tgt, _acc = fsv._find_downstream_target(fs, b.id, None) \
                         if hasattr(fsv, "_find_downstream_target") else (None, 0)
             npsha = None
             if ed is not None and "pump" in b.eq_type.lower() and ins:
@@ -223,7 +163,7 @@ def test_all_examples_hydraulics():
                     npsha = r.get("NPSHa_m") if r else None
                 except Exception:
                     npsha = None
-            print(f"  {'·':1s} {name.replace('_example_',''):26s} {b.name:8s} "
+            print(f"  {'·':1s} {clave:26s} {b.name:8s} "
                   f"{b.delta_p_bar:8.2f} {b.duty:10.3f} "
                   f"{(npsha if npsha is not None else float('nan')):9.2f} "
                   f"{note:>6}")
@@ -238,51 +178,39 @@ def test_breakdown_renders_for_all_pumps():
     debe producir un desglose con items >= 1 y total_dp_bar ≈ delta_p_bar."""
     headless_mocks()
     import inspect
-    import flowsheet_model as fm
     import flowsheet_solver as fsv
-    import examples_library as el
     import hydraulic_defaults as hd
+    import examples_registry as reg
 
-    class _FE:
-        def __init__(self): self.fs = fm.Flowsheet(); self.labor_workers = 0
-        _add_example_block = el.ExampleBuilder._add_example_block
-        _add_example_stream = el.ExampleBuilder._add_example_stream
-        _add_example_extra = el.ExampleBuilder._add_example_extra
-        _set_example_labor = el.ExampleBuilder._set_example_labor
-        _set_block_duty    = el.ExampleBuilder._set_block_duty
-
-    methods = [n for n, _ in inspect.getmembers(el.ExampleBuilder,
-                                                predicate=inspect.isfunction)
-               if n.startswith('_example_')]
+    methods = [(e["clave"], e["builder"]) for e in reg.list_examples()]
     print(f"\n{'='*70}")
     print("VALIDACIÓN — desglose ΔP por bomba/compresor")
     print(f"{'='*70}")
 
     all_ok = True
     checked = 0
-    for name in methods:
-        fake = _FE()
+    for clave, builder in methods:
         try:
-            getattr(el.ExampleBuilder, name)(fake)
-            hd.apply_example_hydraulics(fake.fs, name)
-            fsv.solve(fake.fs)
+            fs = reg.load_example(clave)
+            hd.apply_example_hydraulics(fs, builder)
+            fsv.solve(fs)
         except Exception as e:
-            print(f"  ✗ {name}: CRASH {type(e).__name__}: {e}")
+            print(f"  ✗ {clave}: CRASH {type(e).__name__}: {e}")
             all_ok = False
             continue
-        for b in fake.fs.blocks.values():
+        for b in fs.blocks.values():
             if not hd._is_rotative(b.eq_type) or b.delta_p_bar <= 0.01:
                 continue
-            bd = fsv._trace_downstream_itemized(fake.fs, b.id)
+            bd = fsv._trace_downstream_itemized(fs, b.id)
             if bd is None:
                 continue                   # sin anchor → caso conocido
             if len(bd["items"]) < 1:
-                print(f"  ✗ {name}/{b.name}: 0 items")
+                print(f"  ✗ {clave}/{b.name}: 0 items")
                 all_ok = False
                 continue
             err = abs(bd["total_dp_bar"] - b.delta_p_bar)
             if err >= 0.05:
-                print(f"  ✗ {name}/{b.name}: items suman "
+                print(f"  ✗ {clave}/{b.name}: items suman "
                       f"{bd['total_dp_bar']:.3f}, bomba dice "
                       f"{b.delta_p_bar:.3f} (err={err:.3f})")
                 all_ok = False
@@ -306,20 +234,16 @@ def check_features():
 
     issues = []
 
+    import examples_registry as reg
+    import hydraulic_defaults as _hd
+
     # Feature 1: Hidráulica auto-sizing
     print("\n1. Hidráulica auto-sizing:")
-    class _FE:
-        def __init__(self): self.fs = fm.Flowsheet(); self.labor_workers = 0
-        _add_example_block = el.ExampleBuilder._add_example_block
-        _add_example_stream = el.ExampleBuilder._add_example_stream
-        _add_example_extra = el.ExampleBuilder._add_example_extra
-        _set_example_labor = el.ExampleBuilder._set_example_labor
-        _set_block_duty    = el.ExampleBuilder._set_block_duty
-    fake = _FE()
-    el.ExampleBuilder._example_hydraulic_plant(fake)
-    res = fsv.solve(fake.fs)
-    p101 = next(b for b in fake.fs.blocks.values() if b.name == "P-101")
-    prod = next(s for s in fake.fs.streams.values() if s.name == "S-product")
+    fs = reg.load_example("hydraulic")
+    _hd.apply_example_hydraulics(fs, reg.builder_name("hydraulic"))
+    res = fsv.solve(fs)
+    p101 = next(b for b in fs.blocks.values() if b.name == "P-101")
+    prod = next(s for s in fs.streams.values() if s.name == "S-product")
     print(f"   P-101 auto-sized:  ΔP = {p101.delta_p_bar:.3f} bar")
     print(f"   P-101 W_elec:      {p101.duty:.4f} kW")
     print(f"   producto P:        {prod.pressure_bar:.3f} bar (target=4.0)")
@@ -330,11 +254,11 @@ def check_features():
 
     # Feature 2: Columna FUG automática
     print("\n2. Columna FUG/NRTL automática:")
-    fake = _FE()
-    el.ExampleBuilder._example_reactor_flash_column(fake)
-    res = fsv.solve(fake.fs)
-    t101 = next(b for b in fake.fs.blocks.values() if b.name == "T-101")
-    dist = next(s for s in fake.fs.streams.values() if s.name == "S-etanol")
+    fs = reg.load_example("rxn_flash_col")
+    _hd.apply_example_hydraulics(fs, reg.builder_name("rxn_flash_col"))
+    res = fsv.solve(fs)
+    t101 = next(b for b in fs.blocks.values() if b.name == "T-101")
+    dist = next(s for s in fs.streams.values() if s.name == "S-etanol")
     if dist.composition:
         eth_pct = dist.composition.get("ethanol", 0) * 100
         print(f"   T-101 N etapas: {getattr(t101, '_column_N', 0):.1f}")
@@ -423,72 +347,66 @@ def check_features():
         issues.append(f"Splitter: mass main = {main.mass_flow:.0f} ≠ 700")
 
     print("\n8. Coherencia P_op_bar vs presión propagada:")
-    import examples_library as _el
-    _B = _el.ExampleBuilder
-    coherence_tests = {
-        "smr_eq":      ("_example_smr_equilibrium",    "R-101", 25.0),
-        "hda":         ("_example_hda",                "R-101", 25.0),
-        "haber_rec":   ("_example_haber_recycle",      "R-101", 200.0),
-        "industrial":  ("_example_industrial_complete","R-101", 80.0),
-        "methanol":    ("_example_methanol",           "R-101", 80.0),
-        "ammonia":     ("_example_ammonia",            "R-101", 200.0),
-        "hno3_R201":   ("_example_hno3_ostwald",       "R-201", 4.5),
-        "hno3_T401":   ("_example_hno3_ostwald",       "T-401", 11.0),
-        "polyethylene":("_example_polyethylene",       "R-101", 2000.0),
-        "urea":        ("_example_urea",               "R-101", 150.0),
-        "talara_RCA":  ("_example_talara_refinery",    "R-RCA", 10.0),
-        "talara_HTD":  ("_example_talara_refinery",    "R-HTD", 80.0),
-    }
-    for key, (builder, block_name, p_exp) in coherence_tests.items():
-        fs = fm.Flowsheet()
-        getattr(_B(fs), builder)()
+    # (clave_menú, block_name, P_esperada).  Carga vía registry.
+    coherence_tests = [
+        ("smr_eq",   "R-101",  25.0),
+        ("hda",      "R-101",  25.0),
+        ("haber_rec","R-101", 200.0),
+        ("industrial","R-101", 80.0),
+        ("methanol", "R-101",  80.0),
+        ("ammonia",  "R-101", 200.0),
+        ("hno3",     "R-201",   4.5),
+        ("hno3",     "T-401",  11.0),
+        ("ldpe",     "R-101", 2000.0),
+        ("urea",     "R-101", 150.0),
+        ("talara",   "R-RCA",  10.0),
+        ("talara",   "R-HTD",  80.0),
+    ]
+    for clave, block_name, p_exp in coherence_tests:
+        fs = reg.load_example(clave)
         fsv.solve(fs)
         b = next((bl for bl in fs.blocks.values() if bl.name == block_name), None)
         if b is None:
-            issues.append(f"{key}: block {block_name} no existe")
+            issues.append(f"{clave}: block {block_name} no existe")
             continue
         ins = [s for s in fs.streams.values() if s.dst == b.id]
         if not ins:
-            issues.append(f"{key}/{block_name}: sin inputs")
+            issues.append(f"{clave}/{block_name}: sin inputs")
             continue
         P_in = max(s.pressure_bar for s in ins)
         tol = max(2.0, p_exp * 0.02)
         ok = abs(P_in - p_exp) <= tol
         if not ok:
-            issues.append(f"{key}/{block_name}: P_in={P_in:.1f} ≠ "
+            issues.append(f"{clave}/{block_name}: P_in={P_in:.1f} ≠ "
                           f"esperado={p_exp:.1f}")
-        print(f"   {key}/{block_name}: P_in={P_in:.1f}, "
+        print(f"   {clave}/{block_name}: P_in={P_in:.1f}, "
               f"target={p_exp:.1f}  {'✓' if ok else '✗'}")
 
     print("\n9. Coherencia T compresor (isentrópica vs declarada, los 41):")
     import audit_temperatures as _at
-    import inspect as _insp
-    _builders = [n for n, _ in _insp.getmembers(_B, predicate=_insp.isfunction)
-                  if n.startswith("_example_")]
+    _claves = [e["clave"] for e in reg.list_examples()]
     n_comp = 0
-    for _nm in sorted(_builders):
-        fs = fm.Flowsheet()
-        getattr(_B(fs), _nm)()
+    for _clave in sorted(_claves):
+        fs = reg.load_example(_clave)
         fsv.solve(fs)
         for it in _at.audit_compressor_temperatures(fs, tol_C=30.0):
             n_comp += 1
             issues.append(
-                f"{_nm}/{it['block']}: T declarada={it['T_declared']:.0f}°C "
+                f"{_clave}/{it['block']}: T declarada={it['T_declared']:.0f}°C "
                 f"vs isen={it['T_isen']:.0f}°C")
-            print(f"   ✗ {_nm}/{it['block']}: decl={it['T_declared']:.0f}°C "
+            print(f"   ✗ {_clave}/{it['block']}: decl={it['T_declared']:.0f}°C "
                   f"isen={it['T_isen']:.0f}°C")
     print(f"   compresores incoherentes: {n_comp}  "
           f"{'✓' if n_comp == 0 else '✗'}")
 
     print("\n10. Reactor-como-horno (gap T_op vs T_feed sin fuente, advisory):")
     n_furn = 0
-    for _nm in sorted(_builders):
-        fs = fm.Flowsheet()
-        getattr(_B(fs), _nm)()
+    for _clave in sorted(_claves):
+        fs = reg.load_example(_clave)
         fsv.solve(fs)
         for it in _at.audit_reactor_feed_temperatures(fs, gap_C=50.0):
             n_furn += 1
-            print(f"   ⚠ {_nm}/{it['block']}: T_op={it['T_op']:.0f}°C, "
+            print(f"   ⚠ {_clave}/{it['block']}: T_op={it['T_op']:.0f}°C, "
                   f"T_feed={it['T_feed']:.0f}°C, gap={it['gap']:.0f}°C")
     # ADVISORY: no bloquea la suite (son simplificaciones de modelado
     # conocidas — reactor autotérmico con hor sin declarar, o feed que
