@@ -5561,6 +5561,8 @@ class FlowsheetMainWindow(QMainWindow):
                               None, "act-money"))
         m_sim.addAction(_ac("Análisis económico →", self.action_launch_analysis,
                               None, "an-case-study"))
+        m_sim.addAction(_ac("Exportar a Excel…", self.action_export_xlsx,
+                              None, "act-money"))
 
     def _set_legacy_toolbars_visible(self, visible: bool):
         """Muestra/oculta las QToolBars legacy.  Usado en __init__ para
@@ -5988,6 +5990,7 @@ class FlowsheetMainWindow(QMainWindow):
         add_btn("Calcular",        self.action_compute,           "sim-refresh")
         add_btn("Perfil econ.…",         self.action_econ_profile,    "act-money")
         add_btn("Análisis económico →", self.action_launch_analysis, "an-case-study")
+        add_btn("Exportar a Excel…", self.action_export_xlsx, "act-money")
         tb.addSeparator()
 
         # menú Exportar
@@ -6821,8 +6824,57 @@ class FlowsheetMainWindow(QMainWindow):
                 6000)
 
     def action_launch_analysis(self):
-        """Genera xlsx temporal y lanza ANA.py como subprocess.
-        El diagrama queda intacto en esta ventana."""
+        """Abre el panel económico IN-PROCESS: corre simulate() sobre el
+        flowsheet actual y muestra NPV/IRR/Payback/ROI/COM ahí mismo, sin
+        xlsx temporal ni subproceso.  El diagrama queda intacto.
+
+        Reemplaza el bridge legacy (xlsx + ana_qt subprocess), preservado
+        en _action_launch_analysis_xlsx_legacy pero ya NO invocado (su
+        retiro es un commit posterior)."""
+        if not self.fs.blocks:
+            ans = QMessageBox.question(
+                self, "Sin proceso modelado",
+                "El diagrama está vacío. ¿Abrir el análisis económico igual?",
+            )
+            if ans != QMessageBox.Yes:
+                return
+        try:
+            from economics_panel import EconomicsPanel
+            EconomicsPanel(self.fs, self).exec()
+        except Exception as e:
+            QMessageBox.critical(self, "Falló el panel económico",
+                                  f"{type(e).__name__}: {e}")
+
+    def action_export_xlsx(self):
+        """Exporta el proyecto a .xlsx vía el write_project_xlsx existente
+        (Save explícito, desacoplado del panel económico)."""
+        if not self.fs.blocks:
+            QMessageBox.information(self, "Exportar a Excel",
+                                    "El diagrama está vacío.")
+            return
+        path, _ = QFileDialog.getSaveFileName(
+            self, "Exportar proyecto a Excel", "", "Excel (*.xlsx)")
+        if not path:
+            return
+        if not path.lower().endswith(".xlsx"):
+            path += ".xlsx"
+        try:
+            feeds    = [s for s in self.fs.streams.values() if s.role == "feed"]
+            products = [s for s in self.fs.streams.values() if s.role == "product"]
+            import capex as _capex
+            isbl = _capex.compute_fci(self.fs).get("sum_cbm")
+            isbl_musd = (isbl / 1e6) if isbl else None
+            fexp.write_project_xlsx(path, self.fs, isbl_musd, feeds, products)
+        except Exception as e:
+            QMessageBox.critical(self, "Falló la exportación",
+                                  f"{type(e).__name__}: {e}")
+            return
+        self.status.showMessage(f"Exportado: {path}", 6000)
+
+    def _action_launch_analysis_xlsx_legacy(self):
+        """[LEGACY — ya NO invocado desde el botón] Genera xlsx temporal y
+        lanza ana_qt.py como subprocess.  Preservado para retiro en commit
+        posterior; el panel in-process lo reemplaza."""
         if not self.fs.blocks:
             ans = QMessageBox.question(
                 self, "Sin proceso modelado",
