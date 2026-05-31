@@ -10,25 +10,16 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 import flowsheet_model as fm
 import flowsheet_solver as fsv
-import examples_library as el
+import examples_registry as reg
 import mccabe_thiele as mt
 import tray_profile as tp
 
 
-def _build(example_name):
-    class _FE:
-        def __init__(self):
-            self.fs = fm.Flowsheet()
-            self.labor_workers = 0
-        _add_example_block  = el.ExampleBuilder._add_example_block
-        _add_example_stream = el.ExampleBuilder._add_example_stream
-        _add_example_extra  = el.ExampleBuilder._add_example_extra
-        _set_example_labor  = el.ExampleBuilder._set_example_labor
-        _set_block_duty     = el.ExampleBuilder._set_block_duty
-    fake = _FE()
-    getattr(el.ExampleBuilder, example_name)(fake)
-    fsv.solve(fake.fs)
-    return fake.fs
+def _build(clave):
+    """Carga un ejemplo desde su JSON canónico (registry) y lo resuelve."""
+    fs = reg.load_example(clave)
+    fsv.solve(fs)
+    return fs
 
 
 def _column(fs):
@@ -39,7 +30,7 @@ def _column(fs):
 def test_mccabe_path_top_to_bottom_monotonic():
     """En distillation (B/T) el perfil va top→bot: x_LK decrece y T crece
     de forma monótona (binario casi ideal)."""
-    fs = _build('_example_distillation')
+    fs = _build('distillation')
     p = tp.build_stage_profile(_column(fs), fs)
     assert p is not None
     assert p["source"] == "mccabe"
@@ -59,7 +50,7 @@ def test_mccabe_path_top_to_bottom_monotonic():
 
 
 def test_n_feed_in_range_and_LK_HK_propagated():
-    fs = _build('_example_distillation')
+    fs = _build('distillation')
     b = _column(fs)
     p = tp.build_stage_profile(b, fs)
     assert 1 <= p["n_feed"] <= p["n_stages"]
@@ -70,7 +61,7 @@ def test_n_feed_in_range_and_LK_HK_propagated():
 def test_n_matches_mccabe_design_golden():
     """Golden: el N del perfil debe coincidir EXACTO con N_stages que
     devuelve mccabe_thiele.design (no se inventa etapas extra)."""
-    fs = _build('_example_distillation')
+    fs = _build('distillation')
     b = _column(fs)
     d = mt.design_from_block(b, fs)
     p = tp.build_stage_profile(b, fs)
@@ -81,7 +72,7 @@ def test_n_matches_mccabe_design_golden():
 def test_wanghenke_path_with_mock():
     """Inyectando _wh_result en el bloque, build_stage_profile lo prefiere
     sobre McCabe y reporta source='wanghenke'."""
-    fs = _build('_example_distillation')
+    fs = _build('distillation')
     b = _column(fs)
     # Mock realista: 4 etapas, comps = [benzene, toluene], LK = benzene
     b._wh_result = {
@@ -107,7 +98,7 @@ def test_wanghenke_path_with_mock():
 
 def test_wanghenke_multicomp_other_traces():
     """En WH multicomp, los componentes no-LK quedan en other_traces."""
-    fs = _build('_example_distillation')
+    fs = _build('distillation')
     b = _column(fs)
     b._wh_result = {
         "converged": True,
@@ -128,7 +119,7 @@ def test_wanghenke_multicomp_other_traces():
 def test_azeotrope_truncated_no_crash():
     """Forzar x_D arriba del azeótropo (eth/water): build_stage_profile NO
     lanza, devuelve truncated=True con mensaje explicativo."""
-    fs = _build('_example_ethanol')
+    fs = _build('ethanol')
     b = _column(fs)
     b.column_x_D_LK = 0.97   # > azeótropo etanol/agua (NRTL ~0.915)
     p = tp.build_stage_profile(b, fs)
@@ -142,7 +133,7 @@ def test_azeotrope_truncated_no_crash():
 def test_non_column_block_returns_none():
     """build_stage_profile devuelve None si el bloque no es columna activa
     o no tiene LK/HK declarados — el panel se oculta sin crash."""
-    fs = _build('_example_distillation')
+    fs = _build('distillation')
     pump = next(b for b in fs.blocks.values()
                 if "pump" in (b.eq_type or "").lower())
     assert tp.build_stage_profile(pump, fs) is None

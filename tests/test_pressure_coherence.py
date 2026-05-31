@@ -16,12 +16,12 @@ if _PARENT not in sys.path:
 
 import flowsheet_model as fm
 import flowsheet_solver as fsv
-from examples_library import ExampleBuilder
+import examples_registry as reg
 
 
-def _solve(nm):
-    fs = fm.Flowsheet()
-    getattr(ExampleBuilder(fs), nm)()
+def _solve(clave):
+    """Carga un ejemplo desde su JSON canónico (registry) y lo resuelve."""
+    fs = reg.load_example(clave)
     fsv.solve(fs)
     return fs
 
@@ -38,13 +38,13 @@ def _max_pin(fs, b):
 class TestCoherence(unittest.TestCase):
     # (ejemplo, bloque, P_op esperada) — los que declaran P_op>2
     CASES = [
-        ("_example_smr_equilibrium",    "R-101", 25.0),
-        ("_example_haber_recycle",      "R-101", 200.0),
-        ("_example_industrial_complete","R-101", 80.0),
-        ("_example_acetic_acid",        "R-101", 35.0),
-        ("_example_urea",               "R-101", 150.0),
-        ("_example_polyethylene",       "R-101", 2000.0),
-        ("_example_hno3_ostwald",       "R-301", 11.0),
+        ("smr_eq",      "R-101", 25.0),
+        ("haber_rec",   "R-101", 200.0),
+        ("industrial",  "R-101", 80.0),
+        ("acetic",      "R-101", 35.0),
+        ("urea",        "R-101", 150.0),
+        ("ldpe",        "R-101", 2000.0),
+        ("hno3",        "R-301", 11.0),
     ]
 
     def test_pin_pressure_matches_pop(self):
@@ -60,7 +60,7 @@ class TestCoherence(unittest.TestCase):
     def test_adjacent_inherits_section_pressure(self):
         # En haber, el mixer/heater upstream del reactor (200 bar) hereda la
         # presión de la sección para el costing (antes quedaba en atmósfera).
-        fs = _solve("_example_haber_recycle")
+        fs = _solve("haber_rec")
         f101 = _block(fs, "F-101")
         self.assertIsNotNone(f101)
         self.assertGreater(fsv.effective_pressure(fs, f101), 150.0)
@@ -68,8 +68,8 @@ class TestCoherence(unittest.TestCase):
     def test_atmospheric_examples_untouched(self):
         # Los ejemplos atmosféricos (sin P_op>1) no activan el solver de
         # presión: sus corrientes siguen en ~1.013.
-        for nm in ("_example_distillation", "_example_ethanol",
-                   "_example_biodiesel"):
+        for nm in ("distillation", "ethanol",
+                   "biodiesel"):
             fs = _solve(nm)
             for s in fs.streams.values():
                 self.assertLess(s.pressure_bar, 2.0,

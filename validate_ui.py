@@ -102,7 +102,6 @@ def test_all_examples_hydraulics():
     import inspect
     import flowsheet_model as fm
     import flowsheet_solver as fsv
-    import examples_library as el
     import hydraulic_defaults as hd
     try:
         import equipment_design as ed
@@ -226,7 +225,6 @@ def check_features():
     headless_mocks()
     import flowsheet_model as fm
     import flowsheet_solver as fsv
-    import examples_library as el
 
     print(f"\n{'='*70}")
     print("VALIDACIÓN DE FEATURES")

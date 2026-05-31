@@ -25,7 +25,7 @@ import PySide6.QtWidgets  # noqa: F401
 
 import flowsheet_model as fm
 import flowsheet_solver as fsv
-from examples_library import ExampleBuilder
+import examples_registry as reg
 
 
 class TestJ_PanelColumna(unittest.TestCase):
@@ -34,10 +34,9 @@ class TestJ_PanelColumna(unittest.TestCase):
         app = QApplication.instance() or QApplication([])
         import flowsheet_qt as fq
         win = fq.FlowsheetMainWindow()
-        fs = fm.Flowsheet()
         # industrial_complete: columna T-201 multicomponente (separación
         # factible con las keys auto-detectadas → FUG produce N).
-        ExampleBuilder(fs)._example_industrial_complete()
+        fs = reg.load_example('industrial')
         col = next(b for b in fs.blocks.values()
                    if getattr(b, "column_active", False))
         col.column_method = method

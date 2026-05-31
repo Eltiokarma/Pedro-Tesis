@@ -14,63 +14,50 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 import flowsheet_model as fm
 import flowsheet_solver as fsv
-import examples_library as el
+import examples_registry as reg
 
 # Ejemplos limpios (0 hallazgos warning/error/redundant) tras el Frente C:
 # reescritos solver-driven, curación de pseudo-componentes y afinado del
-# auditor (locks load-bearing no se marcan como redundantes).
+# auditor (locks load-bearing no se marcan como redundantes).  Claves del
+# registry (data/examples/<clave>.json).
 CLEAN_EXAMPLES = [
     # solver-driven / rewrites
-    '_example_distillation',
-    '_example_ethanol',
-    '_example_reactor_flash_column',
-    '_example_ethane_cracker_pfr',
-    '_example_ethylene_cracking',
-    '_example_biodiesel',
-    '_example_ammonia',
-    '_example_methanol',
-    '_example_pasteurizer',
+    'distillation',
+    'ethanol',
+    'rxn_flash_col',
+    'ethane_pfr',
+    'ethylene_crk',
+    'biodiesel',
+    'ammonia',
+    'methanol',
+    'pasteurizer',
     # evaporadores al vacío / vapor saturado (corrección de P + tolerancia)
-    '_example_desalination',
-    '_example_leche_gloria',
-    '_example_acetic_acid',
-    '_example_nuclear_steam',
+    'desal',
+    'leche_gloria',
+    'acetic',
+    'nuclear',
     # limpios por curación de pseudo-componentes (alimentario/material)
-    '_example_pineapple_juice',
-    '_example_beer_brewing',
-    '_example_bread_baking',
-    '_example_penicillin',
+    'pineapple',
+    'beer',
+    'bread',
+    'penicillin',
     # limpios por afinado del detector redundant_lock (química inorgánica)
-    '_example_chloralkali_hcl',
-    '_example_quimpac_chloralkali',
-    '_example_hno3_ostwald',
-    '_example_cement',
-    '_example_glass',
-    '_example_polyethylene',
-    '_example_sulfuric_acid',
-    '_example_urea',
-    '_example_water_treatment',
+    'chloralkali_hcl',
+    'quimpac',
+    'hno3',
+    'cement',
+    'glass',
+    'ldpe',
+    'sulfuric',
+    'urea',
+    'water_treat',
 ]
-
-
-def _build_fake():
-    class _FE:
-        def __init__(self):
-            self.fs = fm.Flowsheet()
-            self.labor_workers = 0
-        _add_example_block  = el.ExampleBuilder._add_example_block
-        _add_example_stream = el.ExampleBuilder._add_example_stream
-        _add_example_extra  = el.ExampleBuilder._add_example_extra
-        _set_example_labor  = el.ExampleBuilder._set_example_labor
-        _set_block_duty     = el.ExampleBuilder._set_block_duty
-    return _FE()
 
 
 def test_clean_examples():
     for name in CLEAN_EXAMPLES:
-        fake = _build_fake()
-        getattr(el.ExampleBuilder, name)(fake)
-        res = fsv.solve(fake.fs)
+        fs = reg.load_example(name)
+        res = fsv.solve(fs)
         report = res.audit_report
         assert report is not None, f"{name}: audit_report ausente"
 

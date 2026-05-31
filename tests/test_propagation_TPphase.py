@@ -11,29 +11,45 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 import flowsheet_model as fm
 import flowsheet_solver as fsv
-import examples_library as el
+import examples_registry as reg
 
 
-class _FE:
-    """Editor falso headless: presta los 5 helpers de ExampleBuilder."""
-    def __init__(self):
-        self.fs = fm.Flowsheet()
-        self.labor_workers = 0
-    _add_example_block  = el.ExampleBuilder._add_example_block
-    _add_example_stream = el.ExampleBuilder._add_example_stream
-    _add_example_extra  = el.ExampleBuilder._add_example_extra
-    _set_example_labor  = el.ExampleBuilder._set_example_labor
-    _set_block_duty     = el.ExampleBuilder._set_block_duty
+def _blk(fs, name, eq_type, S, x=0, y=0):
+    """Crea un Block directamente (API de flowsheet_model).  S_locked sigue
+    la convención de los ejemplos: el área declarada es spec, no se
+    auto-dimensiona."""
+    bid = fs.new_id()
+    b = fm.Block(id=bid, name=name, eq_type=eq_type, S=S, n=1, x=x, y=y)
+    b.S_locked = (S > 0)
+    fs.blocks[bid] = b
+    return bid
+
+
+def _strm(fs, src, dst, name, mass_flow=0.0, role="internal",
+          src_port="", dst_port="", T=25.0, composition=None, phase=""):
+    """Crea un Stream directamente (API de flowsheet_model).  Los locks
+    siguen la misma heurística declarativa que from_dict (mass>0, T≠25,
+    comp/phase presentes ⇒ locked); feeds quedan lockeados, intermedios no."""
+    sid = fs.new_id()
+    s = fm.Stream(id=sid, name=name, src=src, dst=dst, mass_flow=mass_flow,
+                  role=role, src_port=src_port, dst_port=dst_port,
+                  temperature=T, phase=phase,
+                  composition=dict(composition) if composition else {})
+    s.mass_flow_locked   = (mass_flow > 0)
+    s.temperature_locked = abs(T - 25.0) > 0.01
+    s.composition_locked = bool(composition)
+    s.phase_locked       = bool(phase)
+    fs.streams[sid] = s
+    return sid
 
 
 def test_column_propagates_T():
     """T, P y phase deben quedar coherentes tras solve_columns."""
-    fake = _FE()
-    el.ExampleBuilder._example_reactor_flash_column(fake)
-    fsv.solve(fake.fs)
+    fs = reg.load_example('rxn_flash_col')
+    fsv.solve(fs)
 
-    dist = next(s for s in fake.fs.streams.values() if s.name == "S-etanol")
-    bot  = next(s for s in fake.fs.streams.values() if s.name == "S-agua")
+    dist = next(s for s in fs.streams.values() if s.name == "S-etanol")
+    bot  = next(s for s in fs.streams.values() if s.name == "S-agua")
 
     # T del distillate (azeo eth-water, ~78°C) y del bottom (~100°C).
     # Ambas están declaradas (locked) en el builder → deben mantenerse.
@@ -54,27 +70,24 @@ def test_column_propagates_T():
 
 def test_flash_reports_single_phase():
     """Un flash subenfriado (todo líquido) debe reportar single-phase."""
-    fake = _FE()
-    tk   = fake._add_example_block("TK", "Storage tank — cone roof", 100.0, 0, 0)
-    v    = fake._add_example_block("V-101", "Vessel — vertical", 10.0, 200, 0)
-    tk_v = fake._add_example_block("TK-V", "Storage tank — cone roof", 10.0, 400, -100)
-    tk_l = fake._add_example_block("TK-L", "Storage tank — cone roof", 10.0, 400, 100)
+    fs = fm.Flowsheet()
+    tk   = _blk(fs, "TK", "Storage tank — cone roof", 100.0, 0, 0)
+    v    = _blk(fs, "V-101", "Vessel — vertical", 10.0, 200, 0)
+    tk_v = _blk(fs, "TK-V", "Storage tank — cone roof", 10.0, 400, -100)
+    tk_l = _blk(fs, "TK-L", "Storage tank — cone roof", 10.0, 400, 100)
     # Flash a 60°C, 1 atm: por debajo del bubble point de la mezcla
     # agua/etanol → single-phase liquid.
-    fake.fs.blocks[v].flash_active = True
-    fake.fs.blocks[v].flash_T_K = 333.15   # 60°C
-    fake.fs.blocks[v].flash_P_bar = 1.013
+    fs.blocks[v].flash_active = True
+    fs.blocks[v].flash_T_K = 333.15   # 60°C
+    fs.blocks[v].flash_P_bar = 1.013
 
-    fake._add_example_stream(tk, v, "S-feed", 1000, role="feed", T=55,
-                             src_port="salida", dst_port="alimentacion",
-                             composition={"water": 0.9, "ethanol": 0.1},
-                             phase="liquid")
-    fake._add_example_stream(v, tk_v, "S-vap", src_port="vapor",
-                             dst_port="entrada")
-    fake._add_example_stream(v, tk_l, "S-liq", src_port="liquido",
-                             dst_port="entrada")
+    _strm(fs, tk, v, "S-feed", 1000, role="feed", T=55,
+          src_port="salida", dst_port="alimentacion",
+          composition={"water": 0.9, "ethanol": 0.1}, phase="liquid")
+    _strm(fs, v, tk_v, "S-vap", src_port="vapor", dst_port="entrada")
+    _strm(fs, v, tk_l, "S-liq", src_port="liquido", dst_port="entrada")
 
-    res = fsv.solve(fake.fs)
+    res = fsv.solve(fs)
     has_warn = any("single-phase" in w
                    for w in res.energy_warnings + res.energy_balance_errors)
     assert has_warn, \
@@ -84,12 +97,11 @@ def test_flash_reports_single_phase():
 
 def test_reactor_propagates_P():
     """Reactor con reactions debe propagar P_op_bar a sus outputs."""
-    fake = _FE()
-    el.ExampleBuilder._example_smr_equilibrium(fake)
-    fsv.solve(fake.fs)
+    fs = reg.load_example('smr_eq')
+    fsv.solve(fs)
 
-    r101 = next(b for b in fake.fs.blocks.values() if b.name == "R-101")
-    out = next(s for s in fake.fs.streams.values()
+    r101 = next(b for b in fs.blocks.values() if b.name == "R-101")
+    out = next(s for s in fs.streams.values()
                if s.src == r101.id and s.dst > 0)
     assert abs(out.pressure_bar - r101.P_op_bar) < 0.01, \
         f"P no propagada: stream={out.pressure_bar}, reactor={r101.P_op_bar}"

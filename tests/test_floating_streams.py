@@ -273,26 +273,9 @@ class TestExamplesNotAffected(unittest.TestCase):
     def test_validate_ui_sin_streams_energy(self):
         # Los 41 ejemplos no usan stream_kind='energy' → apply_energy_streams
         # debe devolver lista vacía al iterarlos
-        try:
-            from validate_ui import headless_mocks
-            headless_mocks()
-        except Exception:
-            pass
-        import examples_library as el
-
-        class _F:
-            def __init__(self):
-                self.fs = fm.Flowsheet()
-                self.labor_workers = 0
-            _add_example_block  = el.ExampleBuilder._add_example_block
-            _add_example_stream = el.ExampleBuilder._add_example_stream
-            _add_example_extra  = el.ExampleBuilder._add_example_extra
-            _set_example_labor  = el.ExampleBuilder._set_example_labor
-            _set_block_duty     = el.ExampleBuilder._set_block_duty
-
-        fake = _F()
-        el.ExampleBuilder._example_hda(fake)
-        msgs = fsv.apply_energy_streams(fake.fs)
+        import examples_registry as reg
+        fs = reg.load_example('hda')
+        msgs = fsv.apply_energy_streams(fs)
         self.assertEqual(msgs, [],
             "Ejemplos legacy no deben tener streams kind='energy'")
 
