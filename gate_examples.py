@@ -25,8 +25,21 @@ import json
 from export_examples import (DATA_DIR, GOLDEN_PATH, golden,
                              _headless_mocks)
 
-# Tolerancia para sum_duty / ISBL (ruido float documentado).
-_FLOAT_TOL = 1e-6
+# Tolerancia de sum_duty (canario de idempotencia): ABSOLUTA y estricta.
+# Las duties son O(1e4) kW y, con el solver idempotente (Fase 0), salen
+# bit-idénticas entre builder y round-trip; 1e-6 absoluto las clava sin
+# margen para una regresión real.
+_SUMDUTY_TOL_ABS = 1e-6
+
+# Tolerancia de ISBL: RELATIVA.  ISBL (Σ CBM, capex.compute_fci) es una
+# cifra en millones de USD; su factor de presión depende de la propagación
+# hidráulica iterativa, que tiene ruido float de bajo orden cuando re-
+# resuelve desde presiones ya convergidas (path JSON) vs desde presiones
+# iniciales (path builder).  Comprobado en rxn_flash_col: 0.26 USD sobre
+# 3.64 M = 7e-8 relativo, con sum_duty bit-idéntico (NO es regresión de
+# idempotencia, es ruido float legítimo del costing).  1e-6 relativo lo
+# absorbe sin enmascarar un cambio real de costo (que sería >> 1e-6).
+_ISBL_TOL_REL = 1e-6
 
 
 def _load_golden_baseline():
@@ -36,16 +49,24 @@ def _load_golden_baseline():
 
 def _diff_golden(expected, got):
     """Devuelve lista de (campo, esperado, obtenido) que difieren.
-    Campos float (sum_duty, ISBL) con tolerancia _FLOAT_TOL; el resto
+    sum_duty: tolerancia absoluta estricta (idempotencia).  ISBL:
+    tolerancia relativa (ruido float del costing hidráulico).  El resto:
     igualdad exacta."""
     diffs = []
     keys = set(expected) | set(got)
     for k in sorted(keys):
         e = expected.get(k, "<ausente>")
         g = got.get(k, "<ausente>")
-        if k in ("sum_duty", "ISBL"):
+        if k == "sum_duty":
             try:
-                if abs(float(e) - float(g)) <= _FLOAT_TOL:
+                if abs(float(e) - float(g)) <= _SUMDUTY_TOL_ABS:
+                    continue
+            except (TypeError, ValueError):
+                pass
+        elif k == "ISBL":
+            try:
+                ref = max(abs(float(e)), abs(float(g)), 1.0)
+                if abs(float(e) - float(g)) / ref <= _ISBL_TOL_REL:
                     continue
             except (TypeError, ValueError):
                 pass
