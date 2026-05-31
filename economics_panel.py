@@ -190,6 +190,11 @@ class EconomicsPanel(QDialog):
         self.btn_calc.clicked.connect(self._run)
         root.addWidget(self.btn_calc)
 
+        # Botón Monte Carlo (panel hermano, in-process sobre simulate())
+        self.btn_mc = QPushButton("Monte Carlo…")
+        self.btn_mc.clicked.connect(self._open_montecarlo)
+        root.addWidget(self.btn_mc)
+
         # Resultados
         res_box = QGroupBox("Resultados")
         res_layout = QVBoxLayout(res_box)
@@ -229,6 +234,17 @@ class EconomicsPanel(QDialog):
         else:
             inputs["dep_years"] = int(self.spin_dep_years.value())
         return inputs
+
+    def _open_montecarlo(self):
+        """Abre el panel Monte Carlo in-process sobre el flowsheet actual,
+        usando los mismos econ_inputs que este panel."""
+        try:
+            MonteCarloPanel(self.fs.to_dict(), self.collect_econ_inputs(),
+                            self).exec()
+        except Exception as e:                       # pragma: no cover
+            self.lbl_status.setText(
+                f"<b style='color:#c0392b'>Monte Carlo falló:</b> "
+                f"{type(e).__name__}: {e}")
 
     # ── ejecución ────────────────────────────────────────────────────
     def _run(self):
@@ -314,3 +330,182 @@ class EconomicsPanel(QDialog):
         lines.append(f"  COL (labor)         {_fmt_usd(opex.get('col'))} /año")
         lines.append(f"  Cash flow           {_fmt_usd(econ.get('cash_flow_usd_yr'))} /año")
         self.txt_results.setPlainText("\n".join(lines))
+
+
+class MonteCarloPanel(QDialog):
+    """Panel Monte Carlo IN-PROCESS sobre montecarlo_headless (→ simulate()).
+
+    Selecciona variables inciertas (precios de productos / materias primas /
+    ISBL), distribución y rango ±% por variable, n_runs, seed y correlación
+    opcional.  Muestra stats (P10/P50/P90, P(NPV<0)) + tornado.
+
+    NO importa ana_qt / montecarlo / flujoflujoclass (solo montecarlo_headless,
+    lazy).  Visual feo-pero-correcto; embellecimiento = fase Design posterior.
+    """
+
+    def __init__(self, flowsheet_dict, econ_inputs, parent=None):
+        super().__init__(parent)
+        self.flowsheet_dict = flowsheet_dict
+        self.econ_inputs = dict(econ_inputs or {})
+        self.last_result = None
+        self.last_tornado = None
+        self.setWindowTitle("Monte Carlo (in-process)")
+        self.resize(620, 760)
+        self._rows = []          # [(target_dict, kind, chk, combo, spin_pct)]
+        self._build_ui()
+
+    def _build_ui(self):
+        import montecarlo_headless as mh
+        root = QVBoxLayout(self)
+        root.addWidget(QLabel(
+            "Variables inciertas: marcá las que querés samplear y su rango ±%.\n"
+            "El motor es simulate() repetido (no el ANA viejo)."))
+
+        try:
+            targets = mh.list_uncertain_targets(self.flowsheet_dict)
+        except Exception as e:                       # pragma: no cover
+            root.addWidget(QLabel(f"No se pudieron leer targets: {e}"))
+            targets = {"products": [], "raw_materials": [], "isbl": {}}
+
+        box = QGroupBox("Variables")
+        form = QFormLayout(box)
+
+        def _add_row(kind, idx, name, base, unit):
+            chk = QCheckBox(f"{name}  (base {base:.4g} {unit})")
+            combo = QComboBox()
+            combo.addItem("Triangular", mh.DIST_TRIANGULAR)
+            combo.addItem("Normal", mh.DIST_NORMAL)
+            combo.addItem("Uniforme", mh.DIST_UNIFORM)
+            spin = QDoubleSpinBox()
+            spin.setRange(1.0, 90.0); spin.setValue(20.0); spin.setSuffix(" %")
+            row_w = QHBoxLayout()
+            row_w.addWidget(combo); row_w.addWidget(spin)
+            cont = QLabel()
+            form.addRow(chk, _wrap(row_w))
+            self._rows.append({"kind": kind, "indice": idx, "nombre": name,
+                               "base": base, "chk": chk, "combo": combo,
+                               "spin": spin})
+
+        for p in targets.get("products", []):
+            _add_row(mh.KIND_PRODUCT_PRICE, p["index"], p["name"],
+                     p["base_price_usd_per_tm"], "usd/tm")
+        for r in targets.get("raw_materials", []):
+            _add_row(mh.KIND_RAW_MATERIAL_PRICE, r["index"], r["name"],
+                     r["base_price_usd_per_tm"], "usd/tm")
+        isbl_base = (targets.get("isbl") or {}).get("base_usd")
+        if isbl_base:
+            _add_row(mh.KIND_ISBL, 0, "ISBL", isbl_base, "usd")
+
+        root.addWidget(box)
+
+        # Parámetros de corrida
+        pbox = QGroupBox("Corrida")
+        pform = QFormLayout(pbox)
+        self.spin_runs = QSpinBox(); self.spin_runs.setRange(10, 100000)
+        self.spin_runs.setValue(2000)
+        pform.addRow("n_runs:", self.spin_runs)
+        self.spin_seed = QSpinBox(); self.spin_seed.setRange(0, 2_000_000_000)
+        self.spin_seed.setValue(42)
+        pform.addRow("seed:", self.spin_seed)
+        self.chk_corr = QCheckBox("Correlacionar variables (ρ común)")
+        self.spin_rho = QDoubleSpinBox()
+        self.spin_rho.setRange(-0.95, 0.95); self.spin_rho.setSingleStep(0.05)
+        self.spin_rho.setValue(0.0); self.spin_rho.setEnabled(False)
+        self.chk_corr.toggled.connect(self.spin_rho.setEnabled)
+        rho_w = QHBoxLayout(); rho_w.addWidget(self.chk_corr)
+        rho_w.addWidget(self.spin_rho)
+        pform.addRow(_wrap(rho_w))
+        root.addWidget(pbox)
+
+        self.btn_run = QPushButton("Correr Monte Carlo")
+        self.btn_run.clicked.connect(self._run_mc)
+        root.addWidget(self.btn_run)
+
+        self.lbl = QLabel("Configurá y corré.")
+        self.lbl.setWordWrap(True)
+        root.addWidget(self.lbl)
+        self.txt = QTextEdit(); self.txt.setReadOnly(True)
+        self.txt.setFont(QFont("Consolas", 10))
+        root.addWidget(self.txt, stretch=1)
+
+        btns = QDialogButtonBox(QDialogButtonBox.Close)
+        btns.rejected.connect(self.reject)
+        root.addWidget(btns)
+
+    def _build_variables(self):
+        import montecarlo_headless as mh
+        variables = []
+        for r in self._rows:
+            if not r["chk"].isChecked():
+                continue
+            base = r["base"]; pct = r["spin"].value() / 100.0
+            variables.append(mh.VariableIncierta(
+                kind=r["kind"], indice=r["indice"], nombre=r["nombre"],
+                valor_min=base * (1 - pct), valor_mode=base,
+                valor_max=base * (1 + pct),
+                dist=r["combo"].currentData()))
+        return variables
+
+    def _run_mc(self):
+        import montecarlo_headless as mh
+        variables = self._build_variables()
+        if not variables:
+            self.lbl.setText("Marcá al menos una variable.")
+            return
+        # correlación común opcional (off-diagonal ρ entre todas las vars)
+        correlacion = None
+        if self.chk_corr.isChecked() and len(variables) > 1:
+            rho = self.spin_rho.value()
+            correlacion = {(i, j): rho
+                           for i in range(len(variables))
+                           for j in range(i + 1, len(variables))}
+        try:
+            res = mh.run_monte_carlo(
+                self.flowsheet_dict, variables, self.econ_inputs,
+                n_runs=int(self.spin_runs.value()),
+                seed=int(self.spin_seed.value()), correlacion=correlacion)
+            tor = mh.run_tornado(self.flowsheet_dict, variables, self.econ_inputs)
+        except Exception as e:
+            self.lbl.setText(
+                f"<b style='color:#c0392b'>Monte Carlo falló:</b> "
+                f"{type(e).__name__}: {e}")
+            return
+        self.last_result = res
+        self.last_tornado = tor
+        self._render(res, tor)
+
+    def _render(self, res, tor):
+        s = res["stats"]
+
+        def f(x):
+            return "—" if x is None else f"{x:,.2f}"
+
+        self.lbl.setText(
+            f"<b>n={s['n']}</b>  ·  NPV medio {f(s['npv_mean'])} MUSD  ·  "
+            f"P(NPV&lt;0) = {s['p_npv_neg']*100:.1f} %")
+        lines = ["DISTRIBUCIÓN DE NPV (MUSD)", "─" * 46,
+                 f"  P10   {f(s['npv_p10'])}",
+                 f"  P50   {f(s['npv_p50'])}",
+                 f"  P90   {f(s['npv_p90'])}",
+                 f"  min   {f(s['npv_min'])}",
+                 f"  max   {f(s['npv_max'])}",
+                 f"  mean  {f(s['npv_mean'])}   std {f(s['npv_std'])}",
+                 f"  P(NPV<0)  {s['p_npv_neg']*100:.1f} %",
+                 "",
+                 "IRR (fracción)", "─" * 46,
+                 f"  P10/P50/P90  {f(s['irr_p10'])} / {f(s['irr_p50'])} / "
+                 f"{f(s['irr_p90'])}   (válidas: {s['irr_n_valid']})",
+                 "",
+                 "TORNADO (swing |ΔNPV| MUSD, desc)", "─" * 46]
+        for t in tor:
+            lines.append(
+                f"  {t['nombre'][:24]:26} swing={t['swing']:8.2f}  "
+                f"low={t['npv_low']:8.2f}  high={t['npv_high']:8.2f}")
+        self.txt.setPlainText("\n".join(lines))
+
+
+def _wrap(layout):
+    """Envuelve un layout en un QWidget (para QFormLayout.addRow)."""
+    from PySide6.QtWidgets import QWidget
+    w = QWidget(); w.setLayout(layout)
+    return w
