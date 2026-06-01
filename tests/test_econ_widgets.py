@@ -69,9 +69,13 @@ def test_configpanel_collapse_expand():
     assert cfg.is_open() is False
     cfg.toggle()
     assert cfg.is_open() is True
-    assert cfg._form.isVisible() is True
+    # isVisibleTo (no isVisible) porque el panel no se hace show() en headless;
+    # refleja el estado de visibilidad relativo al padre tras el toggle.
+    assert cfg._form.isVisibleTo(cfg) is True
+    assert cfg._summary.isVisibleTo(cfg) is False
     cfg.toggle()
     assert cfg.is_open() is False
+    assert cfg._form.isVisibleTo(cfg) is False
     assert not _render(cfg, (320, 160)).isNull()
 
 
