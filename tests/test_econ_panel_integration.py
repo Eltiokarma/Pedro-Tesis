@@ -41,6 +41,26 @@ def test_rich_view_populates():
     assert len(p._pane_acc_host.findChildren(FinancialTable)) >= 1
 
 
+def test_panel_scrolls_and_fits_small_screen():
+    """El panel cabe en laptops chicas: minimum bajo + todo el contenido en un
+    QScrollArea (no desborda fuera de pantalla). Regresión del bug 'no veo los
+    tabs / el botón Calcular queda abajo del borde'."""
+    from PySide6.QtWidgets import QScrollArea, QDialogButtonBox
+    from PySide6.QtGui import QPixmap
+    p = EconomicsPanel(reg.load_example("hda_full"))
+    # mínimo apto para laptop (alto <= 400)
+    assert p.minimumSize().height() <= 400
+    # hay un scroll externo envolviendo el contenido (+ los 2 panes internos)
+    assert len(p.findChildren(QScrollArea)) >= 3
+    # botón Cerrar siempre presente (fijo fuera del scroll)
+    assert len(p.findChildren(QDialogButtonBox)) >= 1
+    # renderiza a altura de laptop sin crashear
+    p.resize(560, 480)
+    px = QPixmap(p.size())
+    p.render(px)
+    assert not px.isNull()
+
+
 def test_tabs_switch_panes():
     p = _panel()
     p._tabs._buttons[2].click()

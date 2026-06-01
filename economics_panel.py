@@ -90,12 +90,24 @@ class EconomicsPanel(QDialog):
         self.fs = fs
         self.last_result = None        # último dict de simulate() (para tests)
         self.setWindowTitle("Análisis económico (in-process)")
-        self.resize(560, 720)
+        # Alto inicial modesto + mínimo bajo: en laptops chicas el contenido
+        # hace SCROLL en vez de desbordar fuera de pantalla.
+        self.resize(580, 640)
+        self.setMinimumSize(420, 360)
         self._build_ui()
 
     # ── construcción de UI ───────────────────────────────────────────
     def _build_ui(self):
-        root = QVBoxLayout(self)
+        # Layout externo del diálogo: [ scroll con todo el contenido ] + [ Cerrar fijo ]
+        outer = QVBoxLayout(self)
+        outer.setContentsMargins(0, 0, 0, 0)
+        scroll = QScrollArea()
+        scroll.setWidgetResizable(True)
+        scroll.setFrameShape(QScrollArea.NoFrame)
+        content = QWidget()
+        scroll.setWidget(content)
+        outer.addWidget(scroll, stretch=1)
+        root = QVBoxLayout(content)
 
         # Perfil activo (read-only — se edita en "Perfil económico…")
         prof = QGroupBox("Perfil económico activo (read-only)")
@@ -246,6 +258,7 @@ class EconomicsPanel(QDialog):
             from econ_widgets import EconTabs
             self._tabs = EconTabs(("Resultados", "Monte Carlo", "Contabilidad"))
             self._stack = QStackedWidget()
+            self._stack.setMinimumHeight(280)   # área de tabs usable dentro del scroll
             # pane 0: Resultados (host rico, poblado en _render_econ)
             self._pane_res = QScrollArea(); self._pane_res.setWidgetResizable(True)
             self._pane_res_host = QWidget()
@@ -284,11 +297,12 @@ class EconomicsPanel(QDialog):
         res_layout.addWidget(self.txt_results)
         root.addWidget(res_box, stretch=1)
 
-        # Cerrar
+        # Cerrar — FUERA del scroll (barra fija abajo, siempre visible).
         btns = QDialogButtonBox(QDialogButtonBox.Close)
         btns.rejected.connect(self.reject)
         btns.accepted.connect(self.accept)
-        root.addWidget(btns)
+        btns.setContentsMargins(8, 6, 8, 8)
+        outer.addWidget(btns)
 
     # ── recolección de inputs ────────────────────────────────────────
     def collect_econ_inputs(self):
