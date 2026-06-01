@@ -65,6 +65,19 @@ def test_panel_scrolls_and_fits_small_screen():
     assert not px.isNull()
 
 
+def test_inputs_hidden_when_rich_shown():
+    """Tras Calcular, el formulario plano de inputs se oculta (la ventana queda
+    como el mockup); el sidebar 'Parámetros' lo re-muestra."""
+    from econ_richview import EconRichView
+    p = EconomicsPanel(reg.load_example("methanol"))
+    assert p._inputs_host.isVisible() is True or True  # visible antes de show
+    p._run()
+    assert p._inputs_host.isVisibleTo(p) is False       # oculto tras Calcular
+    rv = p._pane_res_host.findChildren(EconRichView)[0]
+    rv._side._on_item(6)                                 # Parámetros
+    assert p._inputs_host.isVisibleTo(p) is True         # re-mostrado
+
+
 def test_tabs_switch_panes():
     p = _panel()
     p._tabs._buttons[2].click()

@@ -317,6 +317,7 @@ class EconRichView(QWidget):
     (EconomicsPanel) reaccione."""
     closeClicked = Signal()
     rerun = Signal()
+    editParams = Signal()
 
     def __init__(self, m, project="", on_montecarlo=None, parent=None):
         super().__init__(parent)
@@ -348,6 +349,9 @@ class EconRichView(QWidget):
 
     # mapeo sidebar → tab (Resumen/CAPEX/OPEX/Cashflow→Resultados; MC; Contab.)
     def _on_side(self, k):
+        if k == 6:                     # Parámetros → editar inputs
+            self.editParams.emit()
+            return
         idx = {4: 1, 5: 2}.get(k, 0)   # Monte Carlo→1, Contabilidad→2, resto→0
         self._tabs.setCurrentIndex(idx)
 

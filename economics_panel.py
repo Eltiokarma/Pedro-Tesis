@@ -109,6 +109,16 @@ class EconomicsPanel(QDialog):
         outer.addWidget(scroll, stretch=1)
         root = QVBoxLayout(content)
 
+        # Todos los inputs (perfil + financieros + depreciación + cashflow +
+        # botón Calcular) van en un contenedor único que se OCULTA cuando
+        # aparece la vista rica → la ventana queda como el mockup. El sidebar
+        # "Parámetros" del rich view lo re-muestra.
+        self._inputs_host = QWidget()
+        root.addWidget(self._inputs_host)
+        _inp_root = root            # guardamos el root real
+        root = QVBoxLayout(self._inputs_host)
+        root.setContentsMargins(0, 0, 0, 0)
+
         # Perfil activo (read-only — se edita en "Perfil económico…")
         prof = QGroupBox("Perfil económico activo (read-only)")
         pf = QFormLayout(prof)
@@ -244,8 +254,13 @@ class EconomicsPanel(QDialog):
         self.btn_mc.clicked.connect(self._open_montecarlo)
         root.addWidget(self.btn_mc)
 
-        # Resultados
+        # ── fin de inputs_host: el resto va al root REAL del content ──────
+        root = _inp_root
+
+        # Resultados (host de la vista rica; fuera del inputs_host)
         res_box = QGroupBox("Resultados")
+        res_box.setFlat(True)
+        self._res_box = res_box
         res_layout = QVBoxLayout(res_box)
         self.lbl_status = QLabel("Presioná «Calcular».")
         self.lbl_status.setWordWrap(True)
@@ -437,6 +452,16 @@ class EconomicsPanel(QDialog):
             except Exception:
                 pass
 
+    def _show_inputs(self):
+        """Sidebar 'Parámetros' → vuelve a mostrar el formulario de inputs
+        (oculta la vista rica para editar y re-calcular)."""
+        if hasattr(self, "_inputs_host"):
+            self._inputs_host.setVisible(True)
+        self.lbl_status.setVisible(True)
+        # limpiar la vista rica del pane para que no quede flotando
+        if hasattr(self, "_pane_res_lay"):
+            self._clear_layout(self._pane_res_lay)
+
     @staticmethod
     def _clear_layout(lay):
         while lay.count():
@@ -455,8 +480,14 @@ class EconomicsPanel(QDialog):
         m = econ_metrics(econ)
         if not m:
             return
-        # El EconRichView trae sus propias tabs internas → ocultamos las tabs
-        # externas y el txt plano; el rich view ocupa el área de resultados.
+        # El EconRichView trae header/hero/sidebar/tabs/footer propios →
+        # ocultamos TODO el chrome plano (inputs + tabs externas + texto):
+        # la ventana queda como el mockup. El sidebar "Parámetros" del rich
+        # view re-muestra el formulario de inputs.
+        if hasattr(self, "_inputs_host"):
+            self._inputs_host.setVisible(False)
+        if hasattr(self, "_res_box"):
+            self._res_box.setTitle("")
         if hasattr(self, "_tabs"):
             self._tabs.setVisible(False)
         self.txt_results.setVisible(False)
@@ -469,6 +500,7 @@ class EconomicsPanel(QDialog):
                           on_montecarlo=self._open_montecarlo)
         rv.rerun.connect(self._run)
         rv.closeClicked.connect(self.reject)
+        rv.editParams.connect(self._show_inputs)
         self._pane_res_lay.addWidget(rv)
         # asegurar que el stack externo muestre el pane Resultados (rich view)
         if hasattr(self, "_stack"):
