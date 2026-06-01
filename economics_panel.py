@@ -17,7 +17,7 @@ prioriza correcto y funcional, con widgets nombrados y estructura limpia.
 from PySide6.QtWidgets import (
     QDialog, QVBoxLayout, QHBoxLayout, QFormLayout, QGroupBox, QLabel,
     QDoubleSpinBox, QSpinBox, QCheckBox, QComboBox, QPushButton, QTextEdit,
-    QDialogButtonBox, QLineEdit,
+    QDialogButtonBox, QLineEdit, QStackedWidget, QScrollArea, QWidget,
 )
 from PySide6.QtGui import QFont
 from PySide6.QtCore import Qt
@@ -238,6 +238,45 @@ class EconomicsPanel(QDialog):
         self.lbl_status = QLabel("Presioná «Calcular».")
         self.lbl_status.setWordWrap(True)
         res_layout.addWidget(self.lbl_status)
+
+        # Vista rica (Fase 4): tabs Resultados | Monte Carlo | Contabilidad.
+        # Aditiva — si falla, _render cae al texto plano (txt_results abajo).
+        self._has_rich = False
+        try:
+            from econ_widgets import EconTabs
+            self._tabs = EconTabs(("Resultados", "Monte Carlo", "Contabilidad"))
+            self._stack = QStackedWidget()
+            # pane 0: Resultados (host rico, poblado en _render_econ)
+            self._pane_res = QScrollArea(); self._pane_res.setWidgetResizable(True)
+            self._pane_res_host = QWidget()
+            self._pane_res_lay = QVBoxLayout(self._pane_res_host)
+            self._pane_res_lay.setContentsMargins(0, 0, 0, 0)
+            self._pane_res.setWidget(self._pane_res_host)
+            # pane 1: Monte Carlo (reusa el MonteCarloPanel vivo)
+            self._pane_mc = QWidget()
+            mcl = QVBoxLayout(self._pane_mc)
+            mc_lbl = QLabel("Análisis de incertidumbre (distribución de NPV + "
+                            "tornado de sensibilidad).")
+            mc_lbl.setWordWrap(True)
+            mcl.addWidget(mc_lbl)
+            btn_mc2 = QPushButton("Abrir Monte Carlo…")
+            btn_mc2.clicked.connect(self._open_montecarlo)
+            mcl.addWidget(btn_mc2)
+            mcl.addStretch(1)
+            # pane 2: Contabilidad (host de tablas, poblado en _render_econ)
+            self._pane_acc = QScrollArea(); self._pane_acc.setWidgetResizable(True)
+            self._pane_acc_host = QWidget()
+            self._pane_acc_lay = QVBoxLayout(self._pane_acc_host)
+            self._pane_acc_lay.setContentsMargins(0, 0, 0, 0)
+            self._pane_acc.setWidget(self._pane_acc_host)
+            for pane in (self._pane_res, self._pane_mc, self._pane_acc):
+                self._stack.addWidget(pane)
+            self._tabs.changed.connect(self._stack.setCurrentIndex)
+            res_layout.addWidget(self._tabs)
+            res_layout.addWidget(self._stack, stretch=1)
+            self._has_rich = True
+        except Exception:
+            self._has_rich = False
 
         self.txt_results = QTextEdit()
         self.txt_results.setReadOnly(True)
