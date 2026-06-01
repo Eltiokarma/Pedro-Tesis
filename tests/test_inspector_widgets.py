@@ -104,6 +104,29 @@ def test_repaint_on_prefs_signal():
         bi.apply_preferences(**saved)
 
 
+def test_degenerate_sizes_no_negative_rect():
+    """Regresión Windows GDI: a anchos chicos (columna angosta, transitorio de
+    layout, hi-DPI) los paintEvent NO deben generar QRectF de ancho negativo
+    (causa 'failed to create dibsection'). Render a tamaños degenerados sin
+    crashear ni warnings de rect inválido."""
+    from PySide6.QtGui import QPixmap
+    sizes = [(0, 0), (1, 1), (5, 5), (8, 60), (12, 62), (18, 62), (40, 62)]
+    makers = [
+        lambda: iw.MetricCard(label="LABEL LARGO", value="1234.5", unit="kW",
+                              state="ok", sub="detalle", flag="≈"),
+        lambda: iw.GaugePill(label="η", value=0.8, marker=0.5),
+        lambda: iw.StatusBadge("texto de badge largo", "ok"),
+        lambda: iw.DeltaBar(label="IN agua enfriamiento", frac=0.7,
+                            value="1234.5", kind="in"),
+    ]
+    for sz in sizes:
+        for mk in makers:
+            w = mk()
+            w.resize(*sz)
+            px = QPixmap(max(sz[0], 1), max(sz[1], 1))
+            w.render(px)   # no debe lanzar
+
+
 def test_gauge_clamps_and_no_marker():
     # value fuera de [0,1] se clampa; marker None no crashea
     for v in (-0.5, 0.0, 0.5, 1.0, 1.7):

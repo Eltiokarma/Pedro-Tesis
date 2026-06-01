@@ -231,9 +231,52 @@ def _audit_phase(fs, findings):
 # DETECTOR 2 — BALANCE POR COMPONENTE (integra el viejo _check_component_balance)
 # ======================================================================
 
+def _block_transforms_composition(b) -> bool:
+    """True si el bloque legítimamente cambia la composición entre in/out, por
+    lo que un balance por-componente NO debe aplicarse (reactor, columna,
+    separador de fases/sólidos).  El balance global de MASA sí debe cerrar —
+    eso lo cubre _check_mass_balance del solver, no este detector.
+
+    Detección robusta (no sólo b.reactions, que puede estar vacío en reactores
+    de modo 'equilibrium' cuya química viene por otra vía):
+      · reactor por eq_type / reactor_mode / heat_of_reaction != 0
+      · columna activa (column_active)
+      · separador que reparte componentes entre salidas (flash, mech_sep,
+        splitter) o cambia de fase (crystallizer, dryer, evaporator)
+    """
+    if getattr(b, "reactions", None):
+        return True
+    if getattr(b, "column_active", False):
+        return True
+    if getattr(b, "flash_active", False):
+        return True
+    if getattr(b, "mech_sep_active", False):
+        return True
+    if getattr(b, "splitter_active", False):
+        return True
+    # heat_of_reaction != 0 → hay química real (independiente del eq_type).
+    if abs(float(getattr(b, "heat_of_reaction", 0.0) or 0.0)) > 1e-9:
+        return True
+    et = (getattr(b, "eq_type", "") or "").lower()
+    is_reactor_type = "reactor" in et
+    # modo de reactor explícito (pfr/cstr/batch/stoich), NO 'equilibrium' que
+    # es el DEFAULT de TODOS los bloques (incluidos HX) y no implica reacción.
+    mode = (getattr(b, "reactor_mode", "") or "").lower()
+    if mode in ("pfr", "cstr", "batch", "stoich"):
+        return True
+    if is_reactor_type and mode == "equilibrium":
+        return True   # reactor de equilibrio (química por rxn_ids o auto)
+    # equipos que reparten/transforman composición por su naturaleza.
+    for kw in ("reactor", "crystall", "dryer", "evaporator", "tower",
+               "column", "absorber", "stripper"):
+        if kw in et:
+            return True
+    return False
+
+
 def _audit_component_balance(fs, findings, tol_rel=0.02):
     rxn_blocks = {b.id for b in fs.blocks.values()
-                  if getattr(b, "reactions", None)}
+                  if _block_transforms_composition(b)}
     # Bloques downstream transitivo de un reactor: heredan composición.
     downstream_of_rxn: set = set()
     frontier = set(rxn_blocks)

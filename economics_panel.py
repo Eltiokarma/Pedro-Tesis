@@ -17,7 +17,7 @@ prioriza correcto y funcional, con widgets nombrados y estructura limpia.
 from PySide6.QtWidgets import (
     QDialog, QVBoxLayout, QHBoxLayout, QFormLayout, QGroupBox, QLabel,
     QDoubleSpinBox, QSpinBox, QCheckBox, QComboBox, QPushButton, QTextEdit,
-    QDialogButtonBox, QLineEdit,
+    QDialogButtonBox, QLineEdit, QStackedWidget, QScrollArea, QWidget,
 )
 from PySide6.QtGui import QFont
 from PySide6.QtCore import Qt
@@ -239,6 +239,45 @@ class EconomicsPanel(QDialog):
         self.lbl_status.setWordWrap(True)
         res_layout.addWidget(self.lbl_status)
 
+        # Vista rica (Fase 4): tabs Resultados | Monte Carlo | Contabilidad.
+        # Aditiva — si falla, _render cae al texto plano (txt_results abajo).
+        self._has_rich = False
+        try:
+            from econ_widgets import EconTabs
+            self._tabs = EconTabs(("Resultados", "Monte Carlo", "Contabilidad"))
+            self._stack = QStackedWidget()
+            # pane 0: Resultados (host rico, poblado en _render_econ)
+            self._pane_res = QScrollArea(); self._pane_res.setWidgetResizable(True)
+            self._pane_res_host = QWidget()
+            self._pane_res_lay = QVBoxLayout(self._pane_res_host)
+            self._pane_res_lay.setContentsMargins(0, 0, 0, 0)
+            self._pane_res.setWidget(self._pane_res_host)
+            # pane 1: Monte Carlo (reusa el MonteCarloPanel vivo)
+            self._pane_mc = QWidget()
+            mcl = QVBoxLayout(self._pane_mc)
+            mc_lbl = QLabel("Análisis de incertidumbre (distribución de NPV + "
+                            "tornado de sensibilidad).")
+            mc_lbl.setWordWrap(True)
+            mcl.addWidget(mc_lbl)
+            btn_mc2 = QPushButton("Abrir Monte Carlo…")
+            btn_mc2.clicked.connect(self._open_montecarlo)
+            mcl.addWidget(btn_mc2)
+            mcl.addStretch(1)
+            # pane 2: Contabilidad (host de tablas, poblado en _render_econ)
+            self._pane_acc = QScrollArea(); self._pane_acc.setWidgetResizable(True)
+            self._pane_acc_host = QWidget()
+            self._pane_acc_lay = QVBoxLayout(self._pane_acc_host)
+            self._pane_acc_lay.setContentsMargins(0, 0, 0, 0)
+            self._pane_acc.setWidget(self._pane_acc_host)
+            for pane in (self._pane_res, self._pane_mc, self._pane_acc):
+                self._stack.addWidget(pane)
+            self._tabs.changed.connect(self._stack.setCurrentIndex)
+            res_layout.addWidget(self._tabs)
+            res_layout.addWidget(self._stack, stretch=1)
+            self._has_rich = True
+        except Exception:
+            self._has_rich = False
+
         self.txt_results = QTextEdit()
         self.txt_results.setReadOnly(True)
         self.txt_results.setFont(QFont("Consolas", 10))
@@ -377,6 +416,112 @@ class EconomicsPanel(QDialog):
         lines.append(f"  COL (labor)         {_fmt_usd(opex.get('col'))} /año")
         lines.append(f"  Cash flow           {_fmt_usd(econ.get('cash_flow_usd_yr'))} /año")
         self.txt_results.setPlainText("\n".join(lines))
+        # Vista rica (Fase 4) — aditiva; si falla, queda el texto de arriba.
+        if getattr(self, "_has_rich", False):
+            try:
+                self._render_econ(econ)
+            except Exception:
+                pass
+
+    @staticmethod
+    def _clear_layout(lay):
+        while lay.count():
+            it = lay.takeAt(0)
+            w = it.widget()
+            if w is not None:
+                w.setParent(None)
+
+    def _render_econ(self, econ):
+        """Monta la vista rica (handoff §6) en los panes Resultados y
+        Contabilidad. Reusa econ_metrics + econ_widgets + econ_figures.
+        Headless-safe: figura None → no se agrega el canvas."""
+        from econ_evidence import econ_metrics
+        from econ_widgets import NpvHero, FinancialTable
+        from inspector_widgets import MetricCard, MetricGrid, StatusBadge, GaugePill
+        m = econ_metrics(econ)
+        if not m:
+            return
+
+        # ── pane Resultados ────────────────────────────────────────────
+        self._clear_layout(self._pane_res_lay)
+        v = m["verdict"]
+        self._pane_res_lay.addWidget(StatusBadge(v["text"], v["kind"], lg=True))
+        npv = m["heroes"]["npv"]
+        self._pane_res_lay.addWidget(
+            NpvHero(value=npv["value"], sub=f"Veredicto: {v['text']}"))
+        irr = m["heroes"]["irr"]
+        if irr["value"] is not None:
+            scale = 50.0
+            self._pane_res_lay.addWidget(GaugePill(
+                key="irr", label="TIR",
+                value=max(0.0, min(1.0, irr["value"] / scale)),
+                text=f"{irr['value']:.1f}", suffix="%",
+                marker=(irr["hurdle"] / scale if irr["hurdle"] else None),
+                color="green"))
+        grid = MetricGrid()
+        cap = m["capex"]
+        for key, lab, val in (
+                ("isbl", "ISBL", cap.get("isbl")),
+                ("fci", "FCI grass-roots", cap.get("fci_grass_roots")),
+                ("wc", "Working capital", cap.get("working_capital")),
+                ("capex", "CAPEX total", cap.get("capex_total"))):
+            if val is not None:
+                grid.add(MetricCard(key=key, label=lab,
+                                    value=f"{val/1e6:,.2f}", unit="M USD",
+                                    state="spec"))
+        h = m["heroes"]
+        if h.get("payback") is not None:
+            grid.add(MetricCard(key="pb", label="Payback",
+                                value=f"{h['payback']:.1f}", unit="años",
+                                state="auto"))
+        if h.get("roi") is not None:
+            grid.add(MetricCard(key="roi", label="ROI",
+                                value=f"{h['roi']:.1f}", unit="%",
+                                state="ok" if h["roi"] > 0 else "danger"))
+        self._pane_res_lay.addWidget(grid)
+        try:
+            from econ_figures import cashflow_figure
+            fig, _meta = cashflow_figure(m["cashflow"], m["payback_year"])
+            if fig is not None:
+                from matplotlib.backends.backend_qtagg import FigureCanvas
+                canvas = FigureCanvas(fig)
+                canvas.setMinimumHeight(220)
+                self._pane_res_lay.addWidget(canvas)
+        except Exception:
+            pass
+        self._pane_res_lay.addStretch(1)
+
+        # ── pane Contabilidad ──────────────────────────────────────────
+        self._clear_layout(self._pane_acc_lay)
+        inc = m.get("income_statement")
+        if inc:
+            def mm(x):
+                return f"{x/1e6:,.2f}" if x is not None else "—"
+            rows = [
+                {"cells": ["Revenue", mm(inc["revenue"])]},
+                {"cells": ["− COM_d", mm(-(inc["com_d"] or 0))], "pos_neg": True},
+                {"cells": ["EBT", mm(inc["ebt"])], "kind": "total",
+                 "pos_neg": True},
+                {"cells": [f"− Tax ({(inc['tax_rate'] or 0)*100:.0f}%)",
+                           mm(-(inc["tax"] or 0))], "pos_neg": True},
+                {"cells": ["Net profit", mm(inc["net"])], "kind": "total",
+                 "pos_neg": True},
+                {"cells": ["+ Depreciación", mm(inc["depreciation"])]},
+                {"cells": ["Flujo operativo", mm(inc["operating_cash_flow"])],
+                 "kind": "total", "pos_neg": True},
+            ]
+            self._pane_acc_lay.addWidget(QLabel("Estado de Resultados (M USD)"))
+            self._pane_acc_lay.addWidget(
+                FinancialTable(headers=["Concepto", "M USD"], rows=rows))
+        cf = m.get("cashflow") or []
+        if cf:
+            cf_rows = [{"cells": [f"Año {r['year']} ({r['phase']})",
+                                  f"{r['cf']/1e6:,.2f}"], "pos_neg": True}
+                       for r in cf]
+            self._pane_acc_lay.addWidget(QLabel("Cash flow año-por-año (nominal)"))
+            self._pane_acc_lay.addWidget(
+                FinancialTable(headers=["Año", "M USD"], rows=cf_rows))
+        self._pane_acc_lay.addStretch(1)
 
 
 class MonteCarloPanel(QDialog):

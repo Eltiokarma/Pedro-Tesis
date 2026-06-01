@@ -47,6 +47,53 @@ def test_component_balance_detected():
     print(f"  ✓ Balance: {len(balance_findings)} hallazgos detectados")
 
 
+def test_component_balance_excludes_real_reactors():
+    """Regresión: un reactor con reactions=[] pero heat_of_reaction!=0 (modo
+    equilibrium) transforma composición y NO debe disparar component_balance.
+    Antes el auditor sólo miraba b.reactions y lo marcaba como falso positivo.
+    """
+    import examples_registry as reg
+    import flowsheet_solver as fsv
+    from flowsheet_consistency_audit import _block_transforms_composition
+    fs = reg.load_example("hda"); fsv.solve(fs)
+    r101 = next(b for b in fs.blocks.values() if b.name == "R-101")
+    assert _block_transforms_composition(r101), \
+        "reactor (heat_of_reaction!=0) debe contar como transformador"
+    report = audit_flowsheet(fs)
+    errs = [f for f in report.by_category('component_balance')
+            if f.severity == 'error' and f.target_name == "R-101"]
+    assert not errs, f"falso positivo en reactor R-101: {[e.message for e in errs]}"
+
+
+def test_component_balance_does_not_silence_hx():
+    """Regresión inversa: un HX (reactor_mode='equilibrium' por DEFAULT, pero
+    NO reactor) sí conserva composición → un desbalance debe seguir cazándose.
+    Protege contra que la exclusión sea demasiado amplia.
+    """
+    from flowsheet_consistency_audit import _block_transforms_composition
+    from flowsheet_model import Block, Stream
+    fs = fm.Flowsheet()
+    hx  = Block(id=1, name="HX", eq_type="Heat exch. — floating head",
+                S=10, n=1, x=0, y=0)
+    tin = Block(id=2, name="TIN", eq_type="Storage tank — cone roof",
+                S=10, n=1, x=-100, y=0)
+    tout = Block(id=3, name="TOUT", eq_type="Storage tank — cone roof",
+                 S=10, n=1, x=100, y=0)
+    fs.blocks = {1: hx, 2: tin, 3: tout}
+    assert not _block_transforms_composition(hx), \
+        "un HX (equilibrium por default) NO debe contar como transformador"
+    s_in = Stream(id=10, name="S-in", src=2, dst=1, mass_flow=100,
+                  composition={"water": 1.0}, main_component="water",
+                  temperature=25)
+    s_out = Stream(id=11, name="S-out", src=1, dst=3, mass_flow=100,
+                   composition={"ethanol": 1.0}, main_component="ethanol",
+                   temperature=25)
+    fs.streams = {10: s_in, 11: s_out}
+    report = audit_flowsheet(fs)
+    assert report.by_category('component_balance'), \
+        "el auditor debe seguir cazando un desbalance real en un HX"
+
+
 def test_pseudo_components_detected():
     """Un stream con pseudo-componentes industriales (crude_oil, naphtha)
     debe generar warnings de pseudo."""

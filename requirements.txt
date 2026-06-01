@@ -17,6 +17,11 @@ numpy        >= 1.24
 # Editor Qt (opcional durante la migración)
 PySide6      >= 6.5
 
+# Figuras de diagnóstico y panel económico (waterfall, densidad NPV, tornado,
+# McCabe, T-Q, etc.) — OPCIONAL. Sin matplotlib las figuras degradan a
+# placeholder (headless-safe); el simulador base no lo requiere.
+matplotlib   >= 3.5
+
 # Predictor de reacciones (Capa 4b) — OPCIONAL.  Solo necesario para el
 # predictor (chemfx.predictor) y el estimador Joback del overlay
 # (estimated_overlay.estimate_and_add).  El simulador base NO los requiere.
