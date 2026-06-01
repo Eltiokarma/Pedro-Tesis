@@ -448,7 +448,7 @@ class EconomicsPanel(QDialog):
         # Vista rica (Fase 4) — aditiva; si falla, queda el texto de arriba.
         if getattr(self, "_has_rich", False):
             try:
-                self._render_econ(econ)
+                self._render_econ(econ, out.get("costing"))
             except Exception:
                 pass
 
@@ -470,14 +470,14 @@ class EconomicsPanel(QDialog):
             if w is not None:
                 w.setParent(None)
 
-    def _render_econ(self, econ):
+    def _render_econ(self, econ, costing=None):
         """Monta la vista rica fiel al mockup (EconRichView: header + hero
         strip + sidebar + tabs + footer) en el pane Resultados. Reusa
         econ_metrics. Headless-safe: si falla, queda el texto plano de arriba.
         """
         from econ_evidence import econ_metrics
         from econ_richview import EconRichView
-        m = econ_metrics(econ)
+        m = econ_metrics(econ, costing)
         if not m:
             return
         # El EconRichView trae header/hero/sidebar/tabs/footer propios →

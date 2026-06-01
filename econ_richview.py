@@ -481,6 +481,66 @@ class EconRichView(QWidget):
                                   _musd(r["cf"])], "pos_neg": True} for r in cf]
             tbl2 = FinancialTable(headers=["Año", "M USD"], rows=cf_rows)
             v.addWidget(_evidence_card("Cash flow año-por-año (nominal)", [], tbl2))
+        # ── CAPEX Grass-Roots (datos reales de costing) ──────────────────
+        cb = m.get("capex_breakdown")
+        if cb:
+            rows = []
+            for lab, key in (("ISBL · ΣCBM", "isbl"),
+                             ("(+) Contingencia", "contingency"),
+                             ("(+) Servicios aux. (OSBL)", "aux_facilities"),
+                             ("FCI · Grass-Roots", "fci_grass_roots"),
+                             ("(+) Working capital", "working_capital"),
+                             ("CAPEX total (año 0)", "capex_total")):
+                val = cb.get(key)
+                if val is not None:
+                    kind = "total" if key in ("fci_grass_roots", "capex_total") else "normal"
+                    rows.append({"cells": [lab, _musd(val)], "kind": kind})
+            if rows:
+                v.addWidget(_evidence_card(
+                    "CAPEX · Grass-Roots Capital (Turton 7.10)",
+                    [("CBM Turton", "info")],
+                    FinancialTable(headers=["Concepto", "M USD"], rows=rows)))
+        # ── ISBL por categoría de equipo (bare module) ───────────────────
+        ic = m.get("isbl_by_category")
+        if ic and ic.get("rows"):
+            rows = []
+            for r in ic["rows"]:
+                rows.append({"cells": [
+                    r["category"], str(r.get("n") or "—"),
+                    r.get("material") or "—", _musd(r["cbm"]),
+                    f"{r['pct']:.1f}%" if r.get("pct") is not None else "—"]})
+            rows.append({"cells": ["ISBL · ΣCBM", str(sum(
+                (rr.get("n") or 0) for rr in ic["rows"])), "mix",
+                _musd(ic["isbl_total"]), "100%"], "kind": "total"})
+            v.addWidget(_evidence_card(
+                "ISBL · bare module por categoría",
+                [("FP·FM auto", "info")],
+                FinancialTable(
+                    headers=["Categoría", "n", "Material", "CBM", "% ISBL"],
+                    rows=rows)))
+        # ── OPEX · COM_d (solo desglose real del motor) ──────────────────
+        ob = m.get("opex_breakdown")
+        if ob:
+            rows = [{"cells": ["Costos directos de manufactura", ""],
+                     "kind": "grp"}]
+            for lab, val in ob["directos"]:
+                if val is not None:
+                    rows.append({"cells": [lab, _musd(val)]})
+            rows.append({"cells": ["Costos fijos (FCI-pegged)", ""], "kind": "grp"})
+            for lab, val in ob["fijos"]:
+                if val is not None:
+                    rows.append({"cells": [lab, _musd(val)]})
+            rows.append({"cells": ["COM_d (total, Turton 8.2)",
+                                   _musd(ob["com_d"])], "kind": "total"})
+            card = _evidence_card(
+                "OPEX · costo de manufactura (COM_d)",
+                [("Turton 8.2", "info")],
+                FinancialTable(headers=["Concepto", "M USD"], rows=rows))
+            v.addWidget(card)
+            n = QLabel(ob["note"]); n.setWordWrap(True)
+            n.setFont(QFont(pfd_fonts.SANS, 8))
+            n.setStyleSheet(f"color:{_tok('ink_mute')}; font-style:italic;")
+            v.addWidget(n)
         v.addStretch(1)
         return host
 
