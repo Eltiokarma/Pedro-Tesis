@@ -159,6 +159,13 @@ class EconTabs(QWidget):
         self._restyle()
         self.changed.emit(idx)
 
+    def set_index(self, idx):
+        """Mueve el botón activo SIN emitir changed (sincronización externa,
+        evita loops cuando otro control —sidebar— ya cambió el tab)."""
+        if 0 <= idx < len(self._buttons) and not self._buttons[idx].isChecked():
+            self._buttons[idx].setChecked(True)
+            self._restyle()
+
     def current_index(self):
         return self._group.checkedId()
 

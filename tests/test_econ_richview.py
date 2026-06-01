@@ -95,3 +95,44 @@ def test_negative_npv_renders():
     # ejemplo con NPV negativo (hda_full default) → hero/footer en danger
     rv = EconRichView(_metrics("hda_full"))
     assert not _render(rv).isNull()
+
+
+def test_tab_sync_segmented_sidebar_stack():
+    """Regresión: los 3 controles (segmented EconTabs + Sidebar + stack) se
+    sincronizan. Antes, click en sidebar movía el stack pero dejaba el segmento
+    marcando el tab viejo (y viceversa)."""
+    rv = EconRichView(_metrics())
+
+    def state():
+        return (rv._tabs.currentIndex(), rv._econtabs.current_index())
+
+    # segmento → Contabilidad: los tres en 2
+    rv._econtabs._buttons[2].click()
+    assert state() == (2, 2)
+    assert rv._side._active == 5            # Contabilidad en sidebar
+    # sidebar → Monte Carlo: el segmento DEBE seguir a 1 (era el bug)
+    rv._side._on_item(4)
+    assert state() == (1, 1)
+    assert rv._side._active == 4
+    # sidebar → Resumen: vuelve a 0 en los tres
+    rv._side._on_item(0)
+    assert state() == (0, 0)
+    # sidebar → CAPEX (mismo tab 0) resalta el item clickeado, segmento en 0
+    rv._side._on_item(1)
+    assert state() == (0, 0)
+    assert rv._side._active == 1
+    # segmento → Monte Carlo: sidebar resalta MC(4)
+    rv._econtabs._buttons[1].click()
+    assert state() == (1, 1)
+    assert rv._side._active == 4
+
+
+def test_sidebar_parametros_emits_editparams():
+    """El item Parámetros (6) NO es un tab: emite editParams, no mueve el stack."""
+    rv = EconRichView(_metrics())
+    fired = []
+    rv.editParams.connect(lambda: fired.append(1))
+    before = rv._tabs.currentIndex()
+    rv._side._on_item(6)
+    assert fired == [1]
+    assert rv._tabs.currentIndex() == before   # no cambió el stack

@@ -347,13 +347,35 @@ class EconRichView(QWidget):
         root.addWidget(ft)
         _PrefsBus.signal().connect(self._restyle); self._restyle()
 
-    # mapeo sidebar → tab (Resumen/CAPEX/OPEX/Cashflow→Resultados; MC; Contab.)
+    # ── sincronización de tabs: ÚNICA fuente de verdad ────────────────
+    # tab 0=Resultados, 1=Monte Carlo, 2=Contabilidad.
+    # sidebar items: 0 Resumen / 1 CAPEX / 2 OPEX / 3 Cash flow → tab 0;
+    #                4 Monte Carlo → tab 1; 5 Contabilidad → tab 2;
+    #                6 Parámetros → editParams (no es tab).
+    _SIDE_TO_TAB = {0: 0, 1: 0, 2: 0, 3: 0, 4: 1, 5: 2}
+    _TAB_TO_SIDE = {0: 0, 1: 4, 2: 5}    # tab → item de sidebar a resaltar
+
     def _on_side(self, k):
-        if k == 6:                     # Parámetros → editar inputs
+        if k == 6:                     # Parámetros → editar inputs (no tab)
             self.editParams.emit()
             return
-        idx = {4: 1, 5: 2}.get(k, 0)   # Monte Carlo→1, Contabilidad→2, resto→0
+        self._set_tab(self._SIDE_TO_TAB.get(k, 0), from_side=k)
+
+    def _on_segmented(self, idx):
+        self._set_tab(idx, from_segment=True)
+
+    def _set_tab(self, idx, from_side=None, from_segment=False):
+        """Mueve stack + segmented + sidebar de forma sincronizada. Cada
+        control llama acá; los setters no re-emiten señal (sin loops)."""
+        if not (0 <= idx <= 2):
+            return
         self._tabs.setCurrentIndex(idx)
+        self._econtabs.set_index(idx)              # no emite changed
+        # resaltar el item de sidebar: si el click vino del propio sidebar,
+        # respetar ese item (p.ej. CAPEX vs Resumen, ambos tab 0); si vino del
+        # segmento, usar el item canónico del tab.
+        self._side.set_active(from_side if from_side is not None
+                              else self._TAB_TO_SIDE.get(idx, 0))
 
     def _build_main(self, m):
         main = QWidget()
@@ -362,7 +384,7 @@ class EconRichView(QWidget):
         from econ_widgets import EconTabs
         self._econtabs = EconTabs(("Resultados", "Monte Carlo", "Contabilidad"))
         self._tabs = QStackedWidget()
-        self._econtabs.changed.connect(self._tabs.setCurrentIndex)
+        self._econtabs.changed.connect(self._on_segmented)
         self._tabs.setMinimumHeight(300)
         v.addWidget(self._econtabs)
         v.addWidget(self._tabs, stretch=1)
