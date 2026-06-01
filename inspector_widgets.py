@@ -221,22 +221,38 @@ class MetricGrid(QWidget):
 class StatusBadge(QFrame):
     """Pill: dot Ø7 + texto. Fondo {kind}_bg, ink {kind}."""
 
-    def __init__(self, text="", kind="neutral", parent=None):
+    def __init__(self, text="", kind="neutral", parent=None, lg=False):
         super().__init__(parent)
         self._text = str(text)
         self._kind = kind if kind in _KIND_TOKENS else "neutral"
-        self.setFixedHeight(20)
+        self._lg = bool(lg)              # variante grande (veredicto de héroe)
+        self.setFixedHeight(28 if self._lg else 20)
         self.setSizePolicy(QSizePolicy.Fixed, QSizePolicy.Fixed)
         _PrefsBus.signal().connect(self.update)
 
+    # geometría dependiente de tamaño (lg vs normal)
+    @property
+    def _fs(self):
+        return 11 if self._lg else 9        # font size
+    @property
+    def _dot(self):
+        return 9.0 if self._lg else 7.0     # diámetro del dot
+    @property
+    def _padl(self):
+        return 26 if self._lg else 20       # x del texto
+    @property
+    def _padr(self):
+        return 30 if self._lg else 24       # margen total dot+paddings
+
     def _metrics_w(self) -> int:
-        f = QFont(pfd_fonts.SANS, 9, QFont.DemiBold)
+        f = QFont(pfd_fonts.SANS, self._fs, QFont.DemiBold)
         from PySide6.QtGui import QFontMetrics
         return QFontMetrics(f).horizontalAdvance(self._text)
 
     def sizeHint(self):
         from PySide6.QtCore import QSize
-        return QSize(self._metrics_w() + 28, 20)
+        return QSize(self._metrics_w() + self._padr + 8,
+                     28 if self._lg else 20)
 
     def minimumSizeHint(self):
         return self.sizeHint()
@@ -250,14 +266,15 @@ class StatusBadge(QFrame):
         ink_t, bg_t = _KIND_TOKENS[self._kind]
         p.setBrush(QBrush(QColor(_tok(bg_t)))); p.setPen(Qt.NoPen)
         p.drawRoundedRect(QRectF(0, 0, w, h), 6, 6)
-        txt_w = max(0, w - 24)
+        txt_w = max(0, w - self._padr)
         # dot
+        d = self._dot
         p.setBrush(QBrush(QColor(_tok(ink_t))))
-        p.drawEllipse(QRectF(8, h / 2 - 3.5, 7, 7))
+        p.drawEllipse(QRectF(8, h / 2 - d / 2, d, d))
         # texto
         p.setPen(QColor(_tok(ink_t)))
-        p.setFont(QFont(pfd_fonts.SANS, 9, QFont.DemiBold))
-        p.drawText(QRectF(20, 0, txt_w, h),
+        p.setFont(QFont(pfd_fonts.SANS, self._fs, QFont.DemiBold))
+        p.drawText(QRectF(self._padl, 0, txt_w, h),
                    Qt.AlignLeft | Qt.AlignVCenter, self._text)
 
 
