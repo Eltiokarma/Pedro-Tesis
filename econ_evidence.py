@@ -50,7 +50,7 @@ def _phase_for_year(op_index, n_constr, n_ramp):
     return "op"
 
 
-def econ_metrics(econ: dict) -> Optional[dict]:
+def econ_metrics(econ: dict, costing: dict = None) -> Optional[dict]:
     """Reempaqueta economics de simulate(run_economics=True). None si econ
     es None/empty.  No recalcula: cada valor sale del dict crudo."""
     if not econ:
@@ -99,6 +99,59 @@ def econ_metrics(econ: dict) -> Optional[dict]:
             "depreciation": dep, "operating_cash_flow": op_cf,
         }
 
+    # ── tablas de CAPEX (datos REALES de costing; None si no se pasó) ──
+    cost = costing or {}
+    capex_breakdown = None
+    isbl_by_category = None
+    if cost:
+        isbl = cost.get("isbl_usd")
+        capex_breakdown = {
+            "isbl": isbl,
+            "contingency": cost.get("contingency_usd"),
+            "aux_facilities": cost.get("aux_facilities_usd"),
+            "fci_grass_roots": cost.get("fci_grass_roots_usd"),
+            "working_capital": cost.get("working_capital_usd"),
+            "capex_total": cost.get("capex_total_usd"),
+        }
+        bycat = cost.get("by_category") or {}
+        if bycat:
+            isbl_by_category = {
+                "isbl_total": isbl,
+                "rows": [
+                    {"category": cat,
+                     "n": v.get("n_equipos"),
+                     "material": v.get("material"),
+                     "cbm": v.get("cbm_usd"),
+                     "pct": ((v.get("cbm_usd") or 0) / isbl * 100.0)
+                            if isbl else None}
+                    for cat, v in bycat.items()
+                ],
+            }
+
+    # ── tabla de OPEX (solo el desglose REAL del motor; las sub-líneas
+    #    finas de Turton —supervisión/admin/ventas— NO se exponen → no se
+    #    inventan).  COM_d = directos cash + M+T+I + depreciación.
+    opex_breakdown = None
+    if opex.get("revenue") is not None and com.get("COM_d_usd_yr") is not None:
+        opex_breakdown = {
+            "com_d": com.get("COM_d_usd_yr"),
+            "directos": [
+                ("Materias primas (CRM)", opex.get("crm")),
+                ("Utilities (CUT)", opex.get("cut")),
+                ("Tratamiento de residuos (CWT)", opex.get("cwt")),
+                ("Mano de obra (COL)", opex.get("col")),
+            ],
+            "fijos": [
+                ("Mant. + impuestos + seguros",
+                 com.get("maintenance_tax_insurance_usd_yr")),
+                ("Depreciación (SL)", com.get("depreciation_SL_usd_yr")),
+            ],
+            "note": ("Desglose con los términos que el motor expone "
+                     "(Turton 8.2). Las sub-líneas finas —supervisión, "
+                     "overhead de planta, admin/ventas/I+D— se aplican como "
+                     "coeficientes y no se reportan línea por línea."),
+        }
+
     return {
         "verdict": _verdict(npv, irr, hurdle_pct, payback, life),
         "heroes": {
@@ -144,4 +197,8 @@ def econ_metrics(econ: dict) -> Optional[dict]:
             "royalties_pct": inp.get("royalties_pct"),
             "isbl_override_usd": inp.get("isbl_override_usd"),
         },
+        # tablas de CAPEX/OPEX (None si no se pasó `costing`)
+        "capex_breakdown": capex_breakdown,
+        "isbl_by_category": isbl_by_category,
+        "opex_breakdown": opex_breakdown,
     }

@@ -108,3 +108,31 @@ def test_params_from_inputs():
 def test_none_econ_returns_none():
     assert econ_metrics(None) is None
     assert econ_metrics({}) is None
+
+
+def test_capex_tables_from_real_costing():
+    """Las 3 tablas (capex_breakdown, isbl_by_category, opex_breakdown) se
+    pueblan con datos REALES de costing — None si no se pasa costing."""
+    out = se.simulate(reg.load_example("methanol").to_dict(),
+                      run_economics=True)
+    econ, costing = out["economics"], out["costing"]
+    # sin costing → tablas None (no inventa)
+    m0 = econ_metrics(econ)
+    assert m0["capex_breakdown"] is None
+    assert m0["isbl_by_category"] is None
+    # con costing → tablas pobladas y trazables a la fuente
+    m = econ_metrics(econ, costing)
+    assert m["capex_breakdown"]["isbl"] == costing["isbl_usd"]
+    assert m["capex_breakdown"]["fci_grass_roots"] == costing["fci_grass_roots_usd"]
+    assert m["capex_breakdown"]["capex_total"] == costing["capex_total_usd"]
+    # ISBL por categoría: cada CBM == el de costing.by_category
+    rows = m["isbl_by_category"]["rows"]
+    assert len(rows) == len(costing["by_category"])
+    for r in rows:
+        assert r["cbm"] == costing["by_category"][r["category"]]["cbm_usd"]
+        assert r["n"] == costing["by_category"][r["category"]]["n_equipos"]
+    # opex_breakdown: directos trazables al opex crudo
+    ob = m["opex_breakdown"]
+    assert ob["com_d"] == econ["com"]["COM_d_usd_yr"]
+    crm_line = next(v for lab, v in ob["directos"] if "CRM" in lab)
+    assert crm_line == econ["opex_usd_yr"]["crm"]

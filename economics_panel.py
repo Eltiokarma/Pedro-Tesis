@@ -109,6 +109,16 @@ class EconomicsPanel(QDialog):
         outer.addWidget(scroll, stretch=1)
         root = QVBoxLayout(content)
 
+        # Todos los inputs (perfil + financieros + depreciación + cashflow +
+        # botón Calcular) van en un contenedor único que se OCULTA cuando
+        # aparece la vista rica → la ventana queda como el mockup. El sidebar
+        # "Parámetros" del rich view lo re-muestra.
+        self._inputs_host = QWidget()
+        root.addWidget(self._inputs_host)
+        _inp_root = root            # guardamos el root real
+        root = QVBoxLayout(self._inputs_host)
+        root.setContentsMargins(0, 0, 0, 0)
+
         # Perfil activo (read-only — se edita en "Perfil económico…")
         prof = QGroupBox("Perfil económico activo (read-only)")
         pf = QFormLayout(prof)
@@ -244,8 +254,13 @@ class EconomicsPanel(QDialog):
         self.btn_mc.clicked.connect(self._open_montecarlo)
         root.addWidget(self.btn_mc)
 
-        # Resultados
+        # ── fin de inputs_host: el resto va al root REAL del content ──────
+        root = _inp_root
+
+        # Resultados (host de la vista rica; fuera del inputs_host)
         res_box = QGroupBox("Resultados")
+        res_box.setFlat(True)
+        self._res_box = res_box
         res_layout = QVBoxLayout(res_box)
         self.lbl_status = QLabel("Presioná «Calcular».")
         self.lbl_status.setWordWrap(True)
@@ -433,9 +448,19 @@ class EconomicsPanel(QDialog):
         # Vista rica (Fase 4) — aditiva; si falla, queda el texto de arriba.
         if getattr(self, "_has_rich", False):
             try:
-                self._render_econ(econ)
+                self._render_econ(econ, out.get("costing"))
             except Exception:
                 pass
+
+    def _show_inputs(self):
+        """Sidebar 'Parámetros' → vuelve a mostrar el formulario de inputs
+        (oculta la vista rica para editar y re-calcular)."""
+        if hasattr(self, "_inputs_host"):
+            self._inputs_host.setVisible(True)
+        self.lbl_status.setVisible(True)
+        # limpiar la vista rica del pane para que no quede flotando
+        if hasattr(self, "_pane_res_lay"):
+            self._clear_layout(self._pane_res_lay)
 
     @staticmethod
     def _clear_layout(lay):
@@ -445,10 +470,45 @@ class EconomicsPanel(QDialog):
             if w is not None:
                 w.setParent(None)
 
-    def _render_econ(self, econ):
-        """Monta la vista rica (handoff §6) en los panes Resultados y
-        Contabilidad. Reusa econ_metrics + econ_widgets + econ_figures.
-        Headless-safe: figura None → no se agrega el canvas."""
+    def _render_econ(self, econ, costing=None):
+        """Monta la vista rica fiel al mockup (EconRichView: header + hero
+        strip + sidebar + tabs + footer) en el pane Resultados. Reusa
+        econ_metrics. Headless-safe: si falla, queda el texto plano de arriba.
+        """
+        from econ_evidence import econ_metrics
+        from econ_richview import EconRichView
+        m = econ_metrics(econ, costing)
+        if not m:
+            return
+        # El EconRichView trae header/hero/sidebar/tabs/footer propios →
+        # ocultamos TODO el chrome plano (inputs + tabs externas + texto):
+        # la ventana queda como el mockup. El sidebar "Parámetros" del rich
+        # view re-muestra el formulario de inputs.
+        if hasattr(self, "_inputs_host"):
+            self._inputs_host.setVisible(False)
+        if hasattr(self, "_res_box"):
+            self._res_box.setTitle("")
+        if hasattr(self, "_tabs"):
+            self._tabs.setVisible(False)
+        self.txt_results.setVisible(False)
+        self.lbl_status.setVisible(False)
+        # Montar el rich view como contenido único del pane Resultados.
+        self._clear_layout(self._pane_res_lay)
+        proj = getattr(self.fs, "name", "") or ""
+        rv = EconRichView(m, project=f"{proj} · run_economics=True"
+                          if proj else "run_economics=True",
+                          on_montecarlo=self._open_montecarlo)
+        rv.rerun.connect(self._run)
+        rv.closeClicked.connect(self.reject)
+        rv.editParams.connect(self._show_inputs)
+        self._pane_res_lay.addWidget(rv)
+        # asegurar que el stack externo muestre el pane Resultados (rich view)
+        if hasattr(self, "_stack"):
+            self._stack.setCurrentIndex(0)
+        return
+
+    def _render_econ_legacy(self, econ):
+        """[fallback de cards sueltas — preservado por si EconRichView falla]"""
         from econ_evidence import econ_metrics
         from econ_widgets import NpvHero, FinancialTable
         from inspector_widgets import MetricCard, MetricGrid, StatusBadge, GaugePill
