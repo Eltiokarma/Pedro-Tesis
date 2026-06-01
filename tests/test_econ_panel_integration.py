@@ -33,12 +33,16 @@ def test_rich_view_populates():
     p = _panel()
     assert p._has_rich is True
     assert p.last_result is not None
-    # pane Resultados poblado
-    assert len(p._pane_res_host.findChildren(NpvHero)) == 1
-    assert len(p._pane_res_host.findChildren(MetricCard)) >= 4
-    assert len(p._pane_res_host.findChildren(StatusBadge)) >= 1
-    # pane Contabilidad: P&L + cash flow
-    assert len(p._pane_acc_host.findChildren(FinancialTable)) >= 1
+    # el pane Resultados monta el EconRichView (layout fiel al mockup)
+    from econ_richview import EconRichView
+    rvs = p._pane_res_host.findChildren(EconRichView)
+    assert len(rvs) == 1
+    rv = rvs[0]
+    # dentro del rich view: MetricCards (CAPEX/OPEX) + tablas (Contabilidad)
+    assert len(rv.findChildren(MetricCard)) >= 4
+    assert len(rv.findChildren(FinancialTable)) >= 1
+    # tabs externas ocultas (el rich view trae las suyas)
+    assert not p._tabs.isVisible()
 
 
 def test_panel_scrolls_and_fits_small_screen():
@@ -105,7 +109,8 @@ def test_default_oliva_renders():
         px = QPixmap(p.size())
         p.render(px)
         assert not px.isNull()
-        assert len(p._pane_res_host.findChildren(NpvHero)) == 1
+        from econ_richview import EconRichView
+        assert len(p._pane_res_host.findChildren(EconRichView)) == 1
     finally:
         bi.apply_preferences(**saved)
 

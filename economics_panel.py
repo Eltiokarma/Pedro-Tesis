@@ -446,9 +446,37 @@ class EconomicsPanel(QDialog):
                 w.setParent(None)
 
     def _render_econ(self, econ):
-        """Monta la vista rica (handoff §6) en los panes Resultados y
-        Contabilidad. Reusa econ_metrics + econ_widgets + econ_figures.
-        Headless-safe: figura None → no se agrega el canvas."""
+        """Monta la vista rica fiel al mockup (EconRichView: header + hero
+        strip + sidebar + tabs + footer) en el pane Resultados. Reusa
+        econ_metrics. Headless-safe: si falla, queda el texto plano de arriba.
+        """
+        from econ_evidence import econ_metrics
+        from econ_richview import EconRichView
+        m = econ_metrics(econ)
+        if not m:
+            return
+        # El EconRichView trae sus propias tabs internas → ocultamos las tabs
+        # externas y el txt plano; el rich view ocupa el área de resultados.
+        if hasattr(self, "_tabs"):
+            self._tabs.setVisible(False)
+        self.txt_results.setVisible(False)
+        self.lbl_status.setVisible(False)
+        # Montar el rich view como contenido único del pane Resultados.
+        self._clear_layout(self._pane_res_lay)
+        proj = getattr(self.fs, "name", "") or ""
+        rv = EconRichView(m, project=f"{proj} · run_economics=True"
+                          if proj else "run_economics=True",
+                          on_montecarlo=self._open_montecarlo)
+        rv.rerun.connect(self._run)
+        rv.closeClicked.connect(self.reject)
+        self._pane_res_lay.addWidget(rv)
+        # asegurar que el stack externo muestre el pane Resultados (rich view)
+        if hasattr(self, "_stack"):
+            self._stack.setCurrentIndex(0)
+        return
+
+    def _render_econ_legacy(self, econ):
+        """[fallback de cards sueltas — preservado por si EconRichView falla]"""
         from econ_evidence import econ_metrics
         from econ_widgets import NpvHero, FinancialTable
         from inspector_widgets import MetricCard, MetricGrid, StatusBadge, GaugePill
