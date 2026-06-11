@@ -2513,7 +2513,9 @@ def _segments_too_close(x1, y1, x2, y2,  ax, ay, bx, by,
 
 def _apply_lane_offset(pts, other_paths, my_id: int,
                         lane_step: float = 10.0,
-                        min_dist: float = 8.0) -> list:
+                        min_dist: float = 8.0,
+                        obstacles=None,
+                        padding: float = 12.0) -> list:
     """Aplica un offset perpendicular a los segmentos del path actual
     que estén SUPERPUESTOS con otros streams paralelos.
 
@@ -2523,6 +2525,11 @@ def _apply_lane_offset(pts, other_paths, my_id: int,
     lane_step: cuánto desplazar cada lane (default 10px).
     min_dist: distancia mínima entre paralelos antes de aplicar
               offset (default 8px).
+    obstacles: rects (x, y, w, h) opcionales — el offset se descarta
+               (probando primero el sentido contrario) si metería el
+               segmento dentro de un obstáculo padded.  Sin esto, el
+               lane offset deshacía el trabajo de _avoid_obstacles y
+               los streams quedaban cruzando bloques.
 
     Devuelve nueva lista de pts.  Si no hay overlap, retorna pts sin
     cambios.
@@ -2555,12 +2562,41 @@ def _apply_lane_offset(pts, other_paths, my_id: int,
             continue
         # Aplicar offset perpendicular según lane.  Para horizontal:
         # desplazamiento en y.  Para vertical: en x.  Lane 1, 2, 3...
-        # con steps de lane_step.
-        offset = lane_step * lanes_occupied
-        if abs(y1 - y2) < 2:    # horizontal
+        # con steps de lane_step.  Si el destino pisa un obstáculo,
+        # probar el sentido contrario; si ambos pisan, no offsetear
+        # (solapar dos líneas es menos grave que atravesar un bloque).
+        horizontal = abs(y1 - y2) < 2
+        vertical = abs(x1 - x2) < 2
+        if not horizontal and not vertical:
+            continue
+
+        def _clear(off):
+            if not obstacles:
+                return True
+            sx1 = x1 if horizontal else x1 + off
+            sy1 = y1 + off if horizontal else y1
+            sx2 = x2 if horizontal else x2 + off
+            sy2 = y2 + off if horizontal else y2
+            for (ox, oy, ow, oh) in obstacles:
+                if _segment_intersects_rect(
+                        sx1, sy1, sx2, sy2,
+                        ox - padding, oy - padding,
+                        ow + 2 * padding, oh + 2 * padding):
+                    return False
+            return True
+
+        offset = None
+        for cand in (lane_step * lanes_occupied,
+                     -lane_step * lanes_occupied):
+            if _clear(cand):
+                offset = cand
+                break
+        if offset is None:
+            continue
+        if horizontal:
             new_pts[2*i+1]   = y1 + offset
             new_pts[2*i+3]   = y2 + offset
-        elif abs(x1 - x2) < 2:  # vertical
+        else:
             new_pts[2*i]     = x1 + offset
             new_pts[2*i+2]   = x2 + offset
     return new_pts
@@ -2624,13 +2660,38 @@ def _detour_around_rect(x1, y1, x2, y2, rx, ry, rw, rh):
     return options[0][0]
 
 
-def _avoid_obstacles(pts, obstacles, padding=12, max_iter=8):
-    """Modifica pts (polyline) para que no atraviese ningún rect en
-    obstacles.  obstacles: list of (x, y, w, h).
+def _dedupe_pts(pts, eps=0.25):
+    """Colapsa puntos consecutivos (casi) idénticos de una polyline
+    plana [x0,y0,x1,y1,...].  Los detours degenerados insertaban el
+    mismo punto decenas de veces y agotaban max_iter sin sanear."""
+    if len(pts) < 4:
+        return pts
+    out = [pts[0], pts[1]]
+    for i in range(2, len(pts), 2):
+        if abs(pts[i] - out[-2]) > eps or abs(pts[i + 1] - out[-1]) > eps:
+            out.extend((pts[i], pts[i + 1]))
+    if len(out) < 4:        # todo colapsó: conservar extremo final
+        out.extend((pts[-2], pts[-1]))
+    return out
 
-    Algoritmo: iterativo.  En cada pasada busca el primer segmento
-    que cruza un obstáculo, inserta un detour ortogonal alrededor del
-    bloque, y reintenta.  max_iter cap por seguridad.
+
+def _avoid_obstacles(pts, obstacles, padding=12, max_iter=24):
+    """Modifica pts (polyline ortogonal) para que no atraviese ningún
+    rect en obstacles.  obstacles: list of (x, y, w, h).
+
+    Iterativo: en cada pasada sanea el primer segmento en conflicto y
+    reintenta.  Dos estrategias según el segmento:
+
+      · SHIFT PERPENDICULAR del segmento completo, cuando sus dos
+        extremos son vértices interiores de la polyline.  Es el único
+        saneo posible cuando un CODO cayó dentro del rect (un detour
+        alrededor no elimina el vértice interior — era la causa de
+        los streams auxiliares atravesando bloques: el detour se
+        re-insertaba degenerado hasta agotar max_iter).  Los vecinos
+        ortogonales se alargan/acortan, la ortogonalidad se preserva.
+
+      · DETOUR ortogonal alrededor del rect, cuando el segmento toca
+        un extremo de la polyline (los puertos no se mueven).
 
     El padding se aplica al rect del obstáculo (le agrega margen).
     Default 12 px ≈ 3× grosor de stream típico — suficiente para que
@@ -2638,37 +2699,95 @@ def _avoid_obstacles(pts, obstacles, padding=12, max_iter=8):
     """
     if not obstacles or len(pts) < 4:
         return pts
+    pts = list(pts)
     for _ in range(max_iter):
+        pts = _dedupe_pts(pts)
         modified = False
-        new_pts: List[float] = []
-        i = 0
-        while i < len(pts):
-            new_pts.append(pts[i])
-            new_pts.append(pts[i + 1])
-            if i + 2 >= len(pts):
-                i += 2
-                continue
-            x1, y1 = pts[i], pts[i + 1]
-            x2, y2 = pts[i + 2], pts[i + 3]
-            # Chequear contra cada obstáculo
-            detour_added = False
+        n_seg = (len(pts) - 2) // 2
+        for i in range(n_seg):
+            x1, y1 = pts[2 * i], pts[2 * i + 1]
+            x2, y2 = pts[2 * i + 2], pts[2 * i + 3]
             for (bx, by, bw, bh) in obstacles:
-                rx = bx - padding
-                ry = by - padding
-                rw = bw + 2 * padding
-                rh = bh + 2 * padding
-                if _segment_intersects_rect(x1, y1, x2, y2, rx, ry, rw, rh):
+                rx, ry = bx - padding, by - padding
+                rw, rh = bw + 2 * padding, bh + 2 * padding
+                if not _segment_intersects_rect(x1, y1, x2, y2,
+                                                  rx, ry, rw, rh):
+                    continue
+                interior = 0 < i < n_seg - 1
+                horizontal = abs(y1 - y2) < 1e-6
+                vertical = abs(x1 - x2) < 1e-6
+                p1_in = (rx + 1 < x1 < rx + rw - 1
+                         and ry + 1 < y1 < ry + rh - 1)
+                p2_in = (rx + 1 < x2 < rx + rw - 1
+                         and ry + 1 < y2 < ry + rh - 1)
+                if interior and (horizontal or vertical):
+                    # shift perpendicular: saca el segmento (y sus dos
+                    # vértices) de la banda del rect en el eje movido.
+                    # El destino se elige entre los bordes lo/hi de
+                    # TODOS los obstáculos (no solo el actual): dos
+                    # rects padded adyacentes sin corredor entre sí
+                    # producían ping-pong (cada uno re-empujaba el
+                    # segmento adentro del otro hasta agotar max_iter).
+                    # Se toma el candidato más cercano cuyo segmento
+                    # resultante quede libre de todos los rects.
+                    cands = []
+                    for (ox, oy, ow, oh) in obstacles:
+                        if horizontal:
+                            cands.extend((oy - padding - 1.0,
+                                          oy + oh + padding + 1.0))
+                        else:
+                            cands.extend((ox - padding - 1.0,
+                                          ox + ow + padding + 1.0))
+                    cur = y1 if horizontal else x1
+                    new_c = None
+                    for c in sorted(set(cands), key=lambda v: abs(cur - v)):
+                        clear = True
+                        for (ox, oy, ow, oh) in obstacles:
+                            sx1, sy1 = (x1, c) if horizontal else (c, y1)
+                            sx2, sy2 = (x2, c) if horizontal else (c, y2)
+                            if _segment_intersects_rect(
+                                    sx1, sy1, sx2, sy2,
+                                    ox - padding, oy - padding,
+                                    ow + 2 * padding, oh + 2 * padding):
+                                clear = False
+                                break
+                        if clear:
+                            new_c = c
+                            break
+                    if new_c is None:
+                        # sin posición totalmente libre: salir al menos
+                        # del rect actual por el lado más cercano
+                        if horizontal:
+                            lo, hi = ry - 1.0, ry + rh + 1.0
+                        else:
+                            lo, hi = rx - 1.0, rx + rw + 1.0
+                        new_c = lo if abs(cur - lo) <= abs(cur - hi) else hi
+                    if horizontal:
+                        pts[2 * i + 1] = pts[2 * i + 3] = new_c
+                    else:
+                        pts[2 * i] = pts[2 * i + 2] = new_c
+                elif not p1_in and not p2_in:
                     detour = _detour_around_rect(x1, y1, x2, y2,
                                                    rx, ry, rw, rh)
-                    new_pts.extend(detour)
-                    detour_added = True
-                    modified = True
-                    break
-            i += 2
-        pts = new_pts
+                    pts = pts[:2 * i + 2] + detour + pts[2 * i + 2:]
+                else:
+                    # Endpoint DENTRO del rect padded en un segmento
+                    # extremo: el puerto no se puede mover y un detour
+                    # no saca un punto de adentro (era la fuente del
+                    # thrashing que agotaba max_iter sin sanear los
+                    # cruces reales).  Se tolera — típicamente es el
+                    # puerto a <padding px de un bloque vecino; si el
+                    # vértice interior está adentro, lo sacará el
+                    # shift del segmento interior contiguo en otra
+                    # pasada.
+                    continue
+                modified = True
+                break
+            if modified:
+                break
         if not modified:
             break
-    return pts
+    return _dedupe_pts(pts)
 
 
 def _simplify_orthogonal(pts, eps=0.5):
@@ -4221,7 +4340,13 @@ class StreamItem(QGraphicsPathItem):
                     if bid == s.src or bid == s.dst:
                         continue
                     bm = item.model
-                    w, h = pfd.block_dims(bm.eq_type)
+                    # dims VISUALES del BlockItem (ISA glyph escalado),
+                    # no las del catálogo pfd: el bloque se dibuja y
+                    # ancla puertos con item.W×item.H — usar otras
+                    # dimensiones dejaba rutas "limpias" en el espacio
+                    # del modelo que atravesaban el bloque dibujado.
+                    w = float(getattr(item, "W", 0)) or                         pfd.block_dims(bm.eq_type)[0]
+                    h = float(getattr(item, "H", 0)) or                         pfd.block_dims(bm.eq_type)[1]
                     obstacles.append((bm.x, bm.y, w, h))
                 if obstacles:
                     pts = _avoid_obstacles(pts, obstacles, padding=12)
@@ -4238,7 +4363,8 @@ class StreamItem(QGraphicsPathItem):
                         other_paths.append((other_item.model.id, other_pts))
                 if other_paths:
                     pts = _apply_lane_offset(pts, other_paths, s.id,
-                                               lane_step=10.0, min_dist=8.0)
+                                               lane_step=10.0, min_dist=8.0,
+                                               obstacles=obstacles)
         else:
             # Sin waypoints y al menos un endpoint flotante: línea recta
             pts = [x1, y1, x2, y2]

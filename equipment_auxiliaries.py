@@ -187,6 +187,31 @@ def _aux_block_eq(sink_kind):
             else _UTIL_BLOCK_EQ)
 
 
+def _visual_block_dims(eq_type):
+    """Dims con las que el editor DIBUJA el bloque (silueta ISA
+    escalada ×1.6 — mismo cálculo que BlockItem en flowsheet_qt), con
+    fallback a pfd.block_dims en entornos headless sin PySide6.
+
+    Posicionar los bloques aux con las dims del catálogo pfd dejaba
+    footprints incorrectos en el lienzo (p.ej. 'Utility header' es
+    86×24 en pfd pero se dibuja 83×96): el anti-overlap daba por
+    libre una posición donde el bloque dibujado quedaba pegado o
+    encima de un vecino, y la corriente nacía atravesándolo."""
+    try:
+        from editor_chrome import isa_type_for_eq, BLOCK_DIMS
+        isa = isa_type_for_eq(eq_type)
+        if isa in BLOCK_DIMS:
+            nw, nh = BLOCK_DIMS[isa]
+            return nw * 1.6, nh * 1.6
+    except Exception:
+        pass
+    try:
+        import pfd_symbols as _pfd
+        return _pfd.block_dims(eq_type)
+    except Exception:
+        return 80.0, 80.0
+
+
 def _port_xy(block, w, h, side, frac):
     if side == "right":
         return block.x + w, block.y + h * frac
@@ -226,19 +251,11 @@ def _resolve_aux_position(fs, sx, sy, w, h, dx, dy, exclude_id=None,
       3. Si tras `max_tries` intentos sigue chocando, prueba con offset
          perpendicular (para "rodear" el bloque que estorba).
     """
-    try:
-        import pfd_symbols as pfd
-    except ImportError:
-        pfd = None
-
     def _free_at(x, y):
         for b in fs.blocks.values():
             if exclude_id is not None and b.id == exclude_id:
                 continue
-            try:
-                bw, bh = (pfd.block_dims(b.eq_type) if pfd else (80.0, 80.0))
-            except Exception:
-                bw, bh = 80.0, 80.0
+            bw, bh = _visual_block_dims(b.eq_type)
             if _bbox_overlap(x, y, w, h, b.x, b.y, bw, bh):
                 return False
         return True
@@ -290,10 +307,7 @@ def instantiate_auxiliaries(fs, block):
     import pfd_symbols as pfd
     import equipment_ports as ep
     from flowsheet_model import Block, Stream
-    try:
-        w, h = pfd.block_dims(block.eq_type)
-    except Exception:
-        w, h = 80.0, 80.0
+    w, h = _visual_block_dims(block.eq_type)
     ports = ep.get_ports(block.eq_type)
 
     # Partition: specs con cycle_id (lazo cerrado, comparten header) vs sin.
@@ -326,10 +340,7 @@ def instantiate_auxiliaries(fs, block):
         hx_y = py + dy * _AUX_OFFSET - 15.0
         # Anti-overlap: si la posición candidata pisa otro bloque, empuja
         # más afuera en la dirección del puerto.
-        try:
-            hdr_w, hdr_h = pfd.block_dims(_HEADER_BLOCK_EQ)
-        except Exception:
-            hdr_w, hdr_h = 80.0, 30.0
+        hdr_w, hdr_h = _visual_block_dims(_HEADER_BLOCK_EQ)
         hx_x, hx_y = _resolve_aux_position(fs, hx_x, hx_y, hdr_w, hdr_h,
                                             dx, dy, exclude_id=None)
 
@@ -348,10 +359,7 @@ def instantiate_auxiliaries(fs, block):
         pump_x = hx_x - dx * _PUMP_INSET if side in ("right", "left") \
             else hx_x + 25.0
         pump_y = hx_y + 20.0 if side in ("right", "left") else hx_y - dy * _PUMP_INSET
-        try:
-            pump_w, pump_h = pfd.block_dims(_PUMP_BLOCK_EQ)
-        except Exception:
-            pump_w, pump_h = 60.0, 60.0
+        pump_w, pump_h = _visual_block_dims(_PUMP_BLOCK_EQ)
         pump_x, pump_y = _resolve_aux_position(
             fs, pump_x, pump_y, pump_w, pump_h, dx, dy, exclude_id=None)
         pid = fs.new_id()
@@ -443,10 +451,7 @@ def instantiate_auxiliaries(fs, block):
         sy = py + dy * _AUX_OFFSET - 30.0
         # Anti-overlap: empuja en la dirección del puerto si pisa otro bloque.
         aux_eq_t = _aux_block_eq(sp.sink_kind)
-        try:
-            aux_w, aux_h = pfd.block_dims(aux_eq_t)
-        except Exception:
-            aux_w, aux_h = 60.0, 60.0
+        aux_w, aux_h = _visual_block_dims(aux_eq_t)
         sx, sy = _resolve_aux_position(fs, sx, sy, aux_w, aux_h, dx, dy,
                                          exclude_id=None)
 
