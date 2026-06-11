@@ -26,6 +26,7 @@ mantener una sola fuente de verdad entre Inspector y Editor.
 
 from __future__ import annotations
 
+import math
 from typing import Callable, Dict, List, Optional, Tuple
 
 from PySide6.QtCore import (
@@ -59,6 +60,28 @@ BLOCK_DIMS: Dict[str, Tuple[int, int]] = {
     "bomba":      (56, 50),
     "tanque":     (52, 60),
     "ambient":    (52, 40),
+    # Siluetas específicas (antes colapsaban en las 8 de arriba y los
+    # equipos se dibujaban con un símbolo genérico o incorrecto).
+    "valvula":    (56, 44),
+    "compresor":  (64, 48),
+    "ventilador": (56, 52),
+    "horno":      (56, 68),
+    "caldera":    (64, 56),
+    "ciclon":     (48, 68),
+    "torre_enf":  (56, 64),
+    "platos":     (48, 64),
+    "tambor":     (76, 44),
+    "centrifuga": (60, 50),
+    "filtro":     (52, 60),
+    "secador":    (80, 44),
+    # Variantes de HX con geometría propia + cristalizador.  Aspect
+    # ratio ≈ content_bbox del símbolo pfd_symbols equivalente
+    # (hx-kettle 160×90, hx-air-cooled 140×100, hx-plate 100×90,
+    # crystallizer 80×120).
+    "hx_kettle":     (84, 52),
+    "hx_aircooler":  (70, 52),
+    "hx_placa":      (56, 50),
+    "cristalizador": (52, 76),
 }
 
 # Mapeo del tipo del mockup → eq_type canónico del catálogo
@@ -81,6 +104,22 @@ PALETTE_LABELS: Dict[str, str] = {
     "hx":        "Intercambiador",
     "bomba":     "Bomba",
     "tanque":    "Tanque",
+}
+
+# Siluetas ISA que cuelgan de cada botón de la paleta.  Los tipos que
+# no tienen botón propio (válvula, compresor, ciclón, …) se agrupan
+# bajo el botón temáticamente más cercano para que TODO el catálogo
+# siga siendo alcanzable desde los menús de variantes (long-press).
+PALETTE_GROUPS: Dict[str, Tuple[str, ...]] = {
+    "reactor":   ("reactor",),
+    "mezclador": ("mezclador", "valvula"),
+    "separador": ("separador", "tambor", "ciclon", "centrifuga",
+                  "filtro", "secador", "cristalizador"),
+    "columna":   ("columna", "platos", "torre_enf"),
+    "hx":        ("hx", "hx_kettle", "hx_aircooler", "hx_placa",
+                  "horno", "caldera"),
+    "bomba":     ("bomba", "compresor", "ventilador"),
+    "tanque":    ("tanque", "ambient"),
 }
 
 
@@ -281,6 +320,323 @@ class BlockGlyph:
         cloud.addEllipse(QPointF(cx + r * 0.6, cy - r * 0.5), r * 0.95, r * 0.95)
         cloud.addRect(QRectF(cx - r * 1.7, cy - r * 0.15, r * 3.4, r * 1.15))
         p.drawPath(cloud.simplified())
+
+    @staticmethod
+    def _draw_valvula(p, w, h, stroke, fill_brush, sw):
+        # bowtie ISA + actuador de diafragma (vástago + domo)
+        cy = h / 2 + 6
+        p.drawPolygon(QPolygonF([
+            QPointF(6, cy - 11), QPointF(6, cy + 11), QPointF(w/2, cy)]))
+        p.drawPolygon(QPolygonF([
+            QPointF(w-6, cy - 11), QPointF(w-6, cy + 11), QPointF(w/2, cy)]))
+        thin = QPen(stroke, 1.2); thin.setCapStyle(Qt.RoundCap)
+        p.setPen(thin); p.setBrush(Qt.NoBrush)
+        p.drawLine(QPointF(w/2, cy), QPointF(w/2, 12))
+        p.drawArc(QRectF(w/2 - 9, 4, 18, 16), 0, 180 * 16)
+        p.drawLine(QPointF(w/2 - 9, 12), QPointF(w/2 + 9, 12))
+
+    @staticmethod
+    def _draw_compresor(p, w, h, stroke, fill_brush, sw):
+        # trapecio ISO (sección que se estrecha hacia la descarga)
+        p.drawPolygon(QPolygonF([
+            QPointF(8, 8), QPointF(w-8, 16),
+            QPointF(w-8, h-16), QPointF(8, h-8)]))
+        # flecha de flujo (light)
+        ghost = QColor(stroke); ghost.setAlphaF(0.5)
+        p.setPen(QPen(ghost, 1.2)); p.setBrush(Qt.NoBrush)
+        p.drawLine(QPointF(15, h/2), QPointF(w-17, h/2))
+        p.drawLine(QPointF(w-22, h/2 - 4), QPointF(w-17, h/2))
+        p.drawLine(QPointF(w-22, h/2 + 4), QPointF(w-17, h/2))
+        # base
+        p.setPen(QPen(stroke, 1.2))
+        p.drawLine(QPointF(w/2 - 12, h-3), QPointF(w/2 + 12, h-3))
+
+    @staticmethod
+    def _draw_ventilador(p, w, h, stroke, fill_brush, sw):
+        # carcasa circular + 3 aspas curvas + hub
+        r = min(w, h)/2 - 7
+        cx, cy = w/2, h/2
+        p.drawEllipse(QPointF(cx, cy), r, r)
+        ghost = QColor(stroke); ghost.setAlphaF(0.6)
+        p.setPen(QPen(ghost, 1.3)); p.setBrush(Qt.NoBrush)
+        for ang in (90, 210, 330):
+            a = math.radians(ang)
+            tip = QPointF(cx + (r - 3) * math.cos(a),
+                          cy - (r - 3) * math.sin(a))
+            ctrl = QPointF(cx + r * 0.55 * math.cos(a + 0.65),
+                           cy - r * 0.55 * math.sin(a + 0.65))
+            blade = QPainterPath(QPointF(cx, cy))
+            blade.quadTo(ctrl, tip)
+            p.drawPath(blade)
+        p.setBrush(stroke); p.setPen(Qt.NoPen)
+        p.drawEllipse(QPointF(cx, cy), 2.2, 2.2)
+
+    @staticmethod
+    def _draw_horno(p, w, h, stroke, fill_brush, sw):
+        # caja radiante + techo convergente + chimenea (fired heater)
+        p.drawRect(QRectF(8, 24, w-16, h-30))
+        p.drawPolygon(QPolygonF([
+            QPointF(8, 24), QPointF(w/2 - 5, 10),
+            QPointF(w/2 + 5, 10), QPointF(w-8, 24)]))
+        p.drawRect(QRectF(w/2 - 5, 3, 10, 7))
+        # serpentín de proceso (light)
+        ghost = QColor(stroke); ghost.setAlphaF(0.5)
+        p.setPen(QPen(ghost, 1.0)); p.setBrush(Qt.NoBrush)
+        p.drawLine(QPointF(12, 34), QPointF(w-12, 34))
+        p.drawLine(QPointF(12, 40), QPointF(w-12, 40))
+        # llama (light)
+        flame = QPainterPath()
+        flame.moveTo(w/2 - 8, h-9)
+        flame.lineTo(w/2 - 4, h-17)
+        flame.lineTo(w/2, h-11)
+        flame.lineTo(w/2 + 4, h-19)
+        flame.lineTo(w/2 + 8, h-9)
+        p.setPen(QPen(ghost, 1.2))
+        p.drawPath(flame)
+
+    @staticmethod
+    def _draw_caldera(p, w, h, stroke, fill_brush, sw):
+        # cuerpo con domo superior + llama en hogar + vapor saliendo
+        p.drawRoundedRect(QRectF(10, 12, w-20, h-18), 10, 10)
+        ghost = QColor(stroke); ghost.setAlphaF(0.5)
+        # nivel de agua dashed
+        dpen = QPen(ghost, 1.0); dpen.setStyle(Qt.DashLine)
+        p.setPen(dpen); p.setBrush(Qt.NoBrush)
+        p.drawLine(QPointF(14, h/2 + 2), QPointF(w-14, h/2 + 2))
+        # llama del hogar (light)
+        p.setPen(QPen(ghost, 1.2))
+        flame = QPainterPath()
+        flame.moveTo(w/2 - 8, h-10)
+        flame.lineTo(w/2 - 4, h-18)
+        flame.lineTo(w/2, h-12)
+        flame.lineTo(w/2 + 4, h-20)
+        flame.lineTo(w/2 + 8, h-10)
+        p.drawPath(flame)
+        # vapor (squiggle saliendo por arriba)
+        steam = QPainterPath()
+        steam.moveTo(w/2, 12)
+        steam.cubicTo(w/2 - 5, 8, w/2 + 5, 6, w/2, 2)
+        p.drawPath(steam)
+
+    @staticmethod
+    def _draw_ciclon(p, w, h, stroke, fill_brush, sw):
+        # cilindro superior + cono inferior + buscador de vórtice
+        body = QPainterPath()
+        body.moveTo(10, 12)
+        body.lineTo(w-10, 12)
+        body.lineTo(w-10, 30)
+        body.lineTo(w/2 + 3, h-10)
+        body.lineTo(w/2 - 3, h-10)
+        body.lineTo(10, 30)
+        body.closeSubpath()
+        p.drawPath(body)
+        thin = QPen(stroke, 1.2)
+        p.setPen(thin); p.setBrush(Qt.NoBrush)
+        # buscador de vórtice (salida gas, arriba)
+        p.drawLine(QPointF(w/2 - 4, 4), QPointF(w/2 - 4, 18))
+        p.drawLine(QPointF(w/2 + 4, 4), QPointF(w/2 + 4, 18))
+        # entrada tangencial
+        p.drawLine(QPointF(2, 16), QPointF(10, 16))
+        # vórtice interior (light)
+        ghost = QColor(stroke); ghost.setAlphaF(0.45)
+        p.setPen(QPen(ghost, 1.0))
+        spiral = QPainterPath()
+        spiral.moveTo(w/2 + 10, 24)
+        spiral.quadTo(w/2 - 12, 32, w/2 + 7, 40)
+        spiral.quadTo(w/2 - 8, 48, w/2 + 3, 54)
+        p.drawPath(spiral)
+
+    @staticmethod
+    def _draw_torre_enf(p, w, h, stroke, fill_brush, sw):
+        # perfil hiperbólico (tiro natural / inducido)
+        cx = w / 2
+        body = QPainterPath()
+        body.moveTo(cx - 12, 8)
+        body.quadTo(cx - 17, h * 0.55, cx - 20, h - 8)
+        body.lineTo(cx + 20, h - 8)
+        body.quadTo(cx + 17, h * 0.55, cx + 12, 8)
+        body.closeSubpath()
+        p.drawPath(body)
+        ghost = QColor(stroke); ghost.setAlphaF(0.5)
+        p.setPen(QPen(ghost, 1.0)); p.setBrush(Qt.NoBrush)
+        # relleno (hash) y agua en la base
+        p.drawLine(QPointF(cx - 16, h - 16), QPointF(cx + 16, h - 16))
+        p.drawLine(QPointF(cx - 17, h - 13), QPointF(cx + 17, h - 13))
+        # pluma de vapor (light)
+        plume = QPainterPath()
+        plume.moveTo(cx, 8)
+        plume.cubicTo(cx - 6, 4, cx + 6, 4, cx, 1)
+        p.drawPath(plume)
+
+    @staticmethod
+    def _draw_platos(p, w, h, stroke, fill_brush, sw):
+        # sección de columna con internos (platos / empaque)
+        p.drawRoundedRect(QRectF(w/2 - 14, 6, 28, h - 12), 2, 2)
+        # platos con vertederos alternados
+        thin = QPen(stroke, 1.1)
+        p.setPen(thin); p.setBrush(Qt.NoBrush)
+        n = 4
+        for i in range(n):
+            y = 16 + i * ((h - 30) / (n - 1))
+            if i % 2 == 0:
+                p.drawLine(QPointF(w/2 - 14, y), QPointF(w/2 + 9, y))
+                p.drawLine(QPointF(w/2 + 9, y), QPointF(w/2 + 9, y + 5))
+            else:
+                p.drawLine(QPointF(w/2 - 9, y), QPointF(w/2 + 14, y))
+                p.drawLine(QPointF(w/2 - 9, y), QPointF(w/2 - 9, y + 5))
+        # burbujeo (light)
+        ghost = QColor(stroke); ghost.setAlphaF(0.4)
+        p.setBrush(ghost); p.setPen(Qt.NoPen)
+        p.drawEllipse(QPointF(w/2 - 4, h/2 + 2), 1.2, 1.2)
+        p.drawEllipse(QPointF(w/2 + 5, h/2 - 6), 1.2, 1.2)
+
+    @staticmethod
+    def _draw_tambor(p, w, h, stroke, fill_brush, sw):
+        # recipiente horizontal (cápsula) + nivel + sillas de apoyo
+        r = (h - 18) / 2
+        p.drawRoundedRect(QRectF(6, 8, w - 12, h - 18), r, r)
+        ghost = QColor(stroke); ghost.setAlphaF(0.4)
+        dpen = QPen(ghost, 1.0); dpen.setStyle(Qt.DashLine)
+        p.setPen(dpen); p.setBrush(Qt.NoBrush)
+        p.drawLine(QPointF(12, h/2 + 2), QPointF(w - 12, h/2 + 2))
+        # sillas
+        p.setPen(QPen(stroke, 1.2))
+        p.drawLine(QPointF(w * 0.27, h - 10), QPointF(w * 0.27, h - 3))
+        p.drawLine(QPointF(w * 0.73, h - 10), QPointF(w * 0.73, h - 3))
+
+    @staticmethod
+    def _draw_centrifuga(p, w, h, stroke, fill_brush, sw):
+        # bowl troncocónico + canasta interior + eje motriz
+        p.drawPolygon(QPolygonF([
+            QPointF(12, 16), QPointF(w - 12, 16),
+            QPointF(w - 18, h - 8), QPointF(18, h - 8)]))
+        # eje + motor
+        thin = QPen(stroke, 1.2)
+        p.setPen(thin); p.setBrush(Qt.NoBrush)
+        p.drawLine(QPointF(w/2, 16), QPointF(w/2, 9))
+        p.drawRect(QRectF(w/2 - 6, 3, 12, 6))
+        # canasta interior (light)
+        ghost = QColor(stroke); ghost.setAlphaF(0.5)
+        p.setPen(QPen(ghost, 1.0))
+        p.drawPolygon(QPolygonF([
+            QPointF(19, 21), QPointF(w - 19, 21),
+            QPointF(w - 23, h - 13), QPointF(23, h - 13)]))
+
+    @staticmethod
+    def _draw_filtro(p, w, h, stroke, fill_brush, sw):
+        # carcasa + medio filtrante (hash diagonal) + flujo in/out
+        p.drawRoundedRect(QRectF(8, 8, w - 16, h - 16), 4, 4)
+        ghost = QColor(stroke); ghost.setAlphaF(0.55)
+        p.setPen(QPen(ghost, 1.0)); p.setBrush(Qt.NoBrush)
+        band_y1, band_y2 = h/2 - 6, h/2 + 6
+        p.drawLine(QPointF(8, band_y1), QPointF(w - 8, band_y1))
+        p.drawLine(QPointF(8, band_y2), QPointF(w - 8, band_y2))
+        for x in range(14, int(w) - 9, 7):
+            p.drawLine(QPointF(x, band_y2), QPointF(x + 5, band_y1))
+        # flecha de flujo descendente (light)
+        ghost2 = QColor(stroke); ghost2.setAlphaF(0.4)
+        p.setPen(QPen(ghost2, 1.2))
+        p.drawLine(QPointF(w/2, 13), QPointF(w/2, h/2 - 9))
+        p.drawLine(QPointF(w/2 - 3, h/2 - 13), QPointF(w/2, h/2 - 9))
+        p.drawLine(QPointF(w/2 + 3, h/2 - 13), QPointF(w/2, h/2 - 9))
+
+    @staticmethod
+    def _draw_secador(p, w, h, stroke, fill_brush, sw):
+        # tambor rotatorio horizontal + rodillos de apoyo + lifters
+        r = (h - 22) / 2
+        p.drawRoundedRect(QRectF(6, 8, w - 12, h - 22), r, r)
+        # lifters interiores (light)
+        ghost = QColor(stroke); ghost.setAlphaF(0.5)
+        p.setPen(QPen(ghost, 1.0)); p.setBrush(Qt.NoBrush)
+        for x in (w * 0.3, w * 0.5, w * 0.7):
+            p.drawLine(QPointF(x - 4, h - 18), QPointF(x + 4, 12))
+        # rodillos de apoyo
+        p.setPen(QPen(stroke, 1.2)); p.setBrush(Qt.NoBrush)
+        p.drawEllipse(QPointF(w * 0.28, h - 8), 3.5, 3.5)
+        p.drawEllipse(QPointF(w * 0.72, h - 8), 3.5, 3.5)
+
+    @staticmethod
+    def _draw_hx_kettle(p, w, h, stroke, fill_brush, sw):
+        # marmita TEMA K: shell horizontal + domo de vapor superior
+        p.drawRoundedRect(QRectF(6, 16, w - 12, h - 22), 10, 10)
+        dome = QPainterPath()
+        dome.moveTo(w/2 - 9, 16)
+        dome.arcTo(QRectF(w/2 - 9, 7, 18, 18), 180, -180)
+        p.drawPath(dome)
+        # haz en U (light)
+        ghost = QColor(stroke); ghost.setAlphaF(0.6)
+        p.setPen(QPen(ghost, 1.0)); p.setBrush(Qt.NoBrush)
+        bundle = QPainterPath()
+        bundle.moveTo(12, h/2 + 1)
+        bundle.lineTo(w - 20, h/2 + 1)
+        bundle.arcTo(QRectF(w - 24, h/2 + 1, 8, 7), 90, -180)
+        bundle.lineTo(12, h/2 + 8)
+        p.drawPath(bundle)
+        # nivel de líquido dashed (light)
+        ghost2 = QColor(stroke); ghost2.setAlphaF(0.4)
+        dpen = QPen(ghost2, 1.0); dpen.setStyle(Qt.DashLine)
+        p.setPen(dpen)
+        p.drawLine(QPointF(12, h - 12), QPointF(w - 12, h - 12))
+
+    @staticmethod
+    def _draw_hx_aircooler(p, w, h, stroke, fill_brush, sw):
+        # aerorrefrigerante API 661: caja de tubos + ventilador arriba
+        p.drawRect(QRectF(8, 22, w - 16, h - 28))
+        # ventilador circular montado sobre la caja
+        p.drawEllipse(QPointF(w/2, 22), 10.0, 10.0)
+        # tubos (light)
+        ghost = QColor(stroke); ghost.setAlphaF(0.6)
+        p.setPen(QPen(ghost, 1.0)); p.setBrush(Qt.NoBrush)
+        for i in range(3):
+            y = 29 + i * ((h - 38) / 2)
+            p.drawLine(QPointF(13, y), QPointF(w - 13, y))
+        # aspas (light)
+        for ang in (90, 210, 330):
+            a = math.radians(ang)
+            tip = QPointF(w/2 + 8 * math.cos(a), 22 - 8 * math.sin(a))
+            ctrl = QPointF(w/2 + 5 * math.cos(a + 0.7),
+                           22 - 5 * math.sin(a + 0.7))
+            blade = QPainterPath(QPointF(w/2, 22))
+            blade.quadTo(ctrl, tip)
+            p.drawPath(blade)
+        p.setBrush(stroke); p.setPen(Qt.NoPen)
+        p.drawEllipse(QPointF(w/2, 22), 1.8, 1.8)
+
+    @staticmethod
+    def _draw_hx_placa(p, w, h, stroke, fill_brush, sw):
+        # intercambiador de placas: marco + pila de placas paralelas
+        p.drawRect(QRectF(8, 8, w - 16, h - 16))
+        ghost = QColor(stroke); ghost.setAlphaF(0.6)
+        p.setPen(QPen(ghost, 1.1)); p.setBrush(Qt.NoBrush)
+        n = 5
+        for i in range(1, n + 1):
+            x = 8 + i * ((w - 16) / (n + 1))
+            p.drawLine(QPointF(x, 12), QPointF(x, h - 12))
+
+    @staticmethod
+    def _draw_cristalizador(p, w, h, stroke, fill_brush, sw):
+        # vessel cónico (fondo a punta) + agitador + cristales
+        body = QPainterPath()
+        body.moveTo(6, 18)
+        body.arcTo(QRectF(6, 8, w - 12, 20), 180, -180)
+        body.lineTo(w - 6, h - 24)
+        body.lineTo(w/2, h - 4)
+        body.lineTo(6, h - 24)
+        body.closeSubpath()
+        p.drawPath(body)
+        # agitador
+        thin = QPen(stroke, 1.2); thin.setCapStyle(Qt.RoundCap)
+        p.setPen(thin); p.setBrush(Qt.NoBrush)
+        p.drawLine(QPointF(w/2, 4), QPointF(w/2, h - 22))
+        p.drawLine(QPointF(w/2 - 7, h - 24), QPointF(w/2 + 7, h - 24))
+        # cristales (rombos light)
+        ghost = QColor(stroke); ghost.setAlphaF(0.5)
+        p.setPen(QPen(ghost, 0.9))
+        for cx, cy in ((w/2 - 9, h/2 + 2), (w/2 + 8, h/2 + 8),
+                       (w/2 - 2, h/2 + 14)):
+            p.drawPolygon(QPolygonF([
+                QPointF(cx, cy - 3.5), QPointF(cx + 3.5, cy),
+                QPointF(cx, cy + 3.5), QPointF(cx - 3.5, cy)]))
 # ════════════════════════════════════════════════════════
 
 class EditorTopbar(QFrame):
@@ -824,18 +1180,18 @@ class EditorPalette(QFrame):
 
     # ── Popups de variantes / catálogo completo ──
     def _eq_types_for_palette(self, palette_id: str) -> List[str]:
-        """Devuelve todos los eq_types del catálogo cuya categoría
-        mapea a este palette_id, con overrides por nombre para casos
-        donde la categoría no determina la silueta (e.g. Tower está
-        en 'Vessels' pero pertenece a la columna)."""
+        """Devuelve todos los eq_types del catálogo cuya silueta ISA
+        cuelga de este botón de paleta (PALETTE_GROUPS), p.ej. el
+        botón 'bomba' agrupa bombas + compresores + ventiladores."""
         try:
             import equipment_costs as _ec
         except Exception:
             return []
+        group = PALETTE_GROUPS.get(palette_id, (palette_id,))
         out = []
         for eq_name, spec in _ec.EQUIPMENT_DATA.items():
             mapped = isa_type_for_eq(eq_name)
-            if mapped == palette_id:
+            if mapped in group:
                 out.append(eq_name)
         return sorted(out)
 
@@ -1086,16 +1442,101 @@ class _Overlay(QWidget):
 #  EQ_TYPE → ISA PALETTE TYPE MAPPING
 # ════════════════════════════════════════════════════════
 
-def isa_type_for_eq(eq_type: str) -> str:
-    """Mapea un eq_type canónico del catálogo (e.g. 'Reactor — CSTR
-    (agitado)', 'Heat exch. — flat plate') al tipo de paleta ISA
-    (uno de reactor/mezclador/separador/columna/hx/bomba/tanque).
+# Mapeo explícito eq_type canónico → silueta ISA.  Snapshot 1:1 del
+# routing heurístico sobre el catálogo completo (equipment_costs.
+# EQUIPMENT_DATA).  La heurística _isa_heuristic() queda solo como
+# fallback para eq_types fuera de este dict (p.ej. equipos futuros:
+# steam trap, strainer, deaerator).
+EQ_TYPE_TO_ISA: Dict[str, str] = {
+    "Boiler — fire tube": "caldera",
+    "Boiler — water tube": "caldera",
+    "Centrifuge — decanter": "centrifuga",
+    "Centrifuge — disc stack": "centrifuga",
+    "Compressor — axial": "compresor",
+    "Compressor — centrifugal": "compresor",
+    "Compressor — reciprocating": "compresor",
+    "Compressor — rotary": "compresor",
+    "Cooling tower — induced draft": "torre_enf",
+    "Cooling tower — natural draft": "torre_enf",
+    "Crystallizer": "cristalizador",
+    "Cyclone — gas/solid": "ciclon",
+    "Decanter — gravity": "tambor",
+    "Dryer — drum": "secador",
+    "Evaporator — vertical": "separador",
+    "Fan — axial": "ventilador",
+    "Fan — centrifugal radial": "ventilador",
+    "Filter — belt": "filtro",
+    "Fired heater — non-reformer": "horno",
+    "Fired heater — reformer": "horno",
+    "Heat exch. — U-tube": "hx",
+    "Heat exch. — WHB field erected": "hx_kettle",
+    "Heat exch. — WHB packaged": "hx_kettle",
+    "Heat exch. — air cooler": "hx_aircooler",
+    "Heat exch. — condenser air-cooled": "hx_aircooler",
+    "Heat exch. — condenser shell-tube": "hx",
+    "Heat exch. — double pipe": "hx",
+    "Heat exch. — fixed tube": "hx",
+    "Heat exch. — flat plate": "hx_placa",
+    "Heat exch. — floating head": "hx",
+    "Heat exch. — kettle reboiler": "hx_kettle",
+    "Heat exch. — multiple pipe": "hx",
+    "Heat exch. — spiral plate": "hx_placa",
+    "Mixer — inline": "mezclador",
+    "Mixer — static": "mezclador",
+    "Packing — random": "platos",
+    "Packing — structured": "platos",
+    "Pump — centrifugal": "bomba",
+    "Pump — positive displacement": "bomba",
+    "Pump — reciprocating": "bomba",
+    "Reactor — CSTR (agitado)": "reactor",
+    "Reactor — PFR (tubular)": "reactor",
+    "Reactor — autoclave": "reactor",
+    "Reactor — jacketed agitated": "reactor",
+    "Reactor — jacketed non-agit.": "reactor",
+    "Splitter — flow divider": "mezclador",
+    "Storage tank — cone roof": "tanque",
+    "Storage tank — floating roof": "tanque",
+    "Tower (column shell)": "columna",
+    "Tray — sieve": "platos",
+    "Tray — valve": "platos",
+    "Valve — 3-way": "valvula",
+    "Valve — control globe": "valvula",
+    "Valve — relief": "valvula",
+    "Vessel — horizontal": "tambor",
+    "Vessel — vertical": "separador",
+}
 
-    Usa la categoría de equipment_costs si está disponible, con
-    fallback por substring matching del nombre.
+
+def isa_type_for_eq(eq_type: str) -> Optional[str]:
+    """Mapea un eq_type canónico del catálogo (e.g. 'Reactor — CSTR
+    (agitado)', 'Heat exch. — flat plate') a una silueta ISA de
+    BLOCK_DIMS (reactor/mezclador/separador/columna/hx/bomba/tanque
+    más las específicas: valvula/compresor/ventilador/horno/caldera/
+    ciclon/torre_enf/platos/tambor/centrifuga/filtro/secador y las
+    variantes hx_kettle/hx_aircooler/hx_placa/cristalizador).
+
+    Resuelve primero por el dict explícito EQ_TYPE_TO_ISA (cubre el
+    catálogo completo); para eq_types fuera del dict cae a la
+    heurística por categoría/substring de _isa_heuristic().
+
+    Devuelve None si no hay match confiable — el caller decide el
+    fallback honesto (IsaGlyphItem renderiza el SVG de pfd_symbols,
+    o un rect neutro si tampoco hay símbolo).  NUNCA inventa una
+    silueta de tanque para un equipo desconocido.
     """
     if not eq_type:
-        return "tanque"
+        return None
+    mapped = EQ_TYPE_TO_ISA.get(eq_type)
+    if mapped:
+        return mapped
+    return _isa_heuristic(eq_type)
+
+
+def _isa_heuristic(eq_type: str) -> Optional[str]:
+    """Routing heurístico por categoría de equipment_costs y substring
+    del nombre — fallback para eq_types no presentes en EQ_TYPE_TO_ISA.
+    Devuelve None si ningún patrón matchea con confianza.
+    """
     if "ambient" in eq_type.lower() or "atmósfera" in eq_type.lower():
         return "ambient"
     try:
@@ -1108,29 +1549,50 @@ def isa_type_for_eq(eq_type: str) -> str:
     # por categoría primero (más confiable)
     if "reactor" in cat_l:           return "reactor"
     if "heat exchang" in cat_l:      return "hx"
-    if "compress" in cat_l:          return "bomba"
+    if "compress" in cat_l:          return "compresor"
     if "pump" in cat_l:              return "bomba"
+    if "fan" in cat_l or "blower" in cat_l:     return "ventilador"
+    if "valve" in cat_l:             return "valvula"
     if "mixer" in cat_l or "splitter" in cat_l: return "mezclador"
     if "storage" in cat_l:           return "tanque"
-    if "fired heater" in cat_l:      return "hx"   # representamos como HX horizontal
+    if "fired heater" in cat_l:      return "horno"
+    if "tray" in cat_l or "packing" in cat_l:   return "platos"
+    if "utilit" in cat_l:
+        if "cooling tower" in t:     return "torre_enf"
+        if "boiler" in t:            return "caldera"
     if "vessel" in cat_l:
         if "tower" in t or "column" in t:
             return "columna"
+        if "horizontal" in t or "decanter" in t:
+            return "tambor"
         return "separador"
     if "solids" in cat_l or "dryer" in t or "evapor" in t or "cycl" in t \
        or "crystal" in t:
+        if "cycl" in t:                        return "ciclon"
+        if "centrif" in t:                     return "centrifuga"
+        if "filter" in t or "filtro" in t:     return "filtro"
+        if "dryer" in t or "secador" in t:     return "secador"
         return "separador"
     # fallback por substring del eq_type
     if "reactor" in t:               return "reactor"
+    if "cooling tower" in t:         return "torre_enf"
     if "tower" in t or "column" in t or "destil" in t: return "columna"
+    if "boiler" in t or "caldera" in t:                return "caldera"
+    if "furnace" in t or "fired" in t or "horno" in t: return "horno"
     if "exchang" in t or "cooler" in t or "heater" in t \
        or "condenser" in t or "reboiler" in t:        return "hx"
-    if "pump" in t or "bomba" in t or "compress" in t or "compresor" in t:
-        return "bomba"
+    if "compress" in t or "compresor" in t:            return "compresor"
+    if "fan" in t or "blower" in t or "ventilador" in t: return "ventilador"
+    if "pump" in t or "bomba" in t:  return "bomba"
+    if "valve" in t or "válvula" in t or "valvula" in t: return "valvula"
+    if "tray" in t or "packing" in t or "plato" in t:    return "platos"
+    if "centrif" in t:               return "centrifuga"
+    if "filter" in t or "filtro" in t:                   return "filtro"
     if "mixer" in t or "mezclador" in t or "splitter" in t: return "mezclador"
     if "tank" in t or "tanque" in t or "storage" in t:      return "tanque"
+    if "decanter" in t:              return "tambor"
     if "vessel" in t or "flash" in t or "separator" in t:   return "separador"
-    return "tanque"  # default conservador
+    return None  # sin match confiable — el caller resuelve el fallback
 
 
 # ════════════════════════════════════════════════════════
@@ -1203,8 +1665,26 @@ class IsaGlyphItem(QGraphicsItem):
         self._h = float(h)
         self.update()
 
-    def isa_type(self) -> str:
+    def isa_type(self) -> Optional[str]:
         return self._isa
+
+    def _pfd_pixmap(self):
+        """Pixmap del símbolo pfd_symbols para eq_types sin silueta
+        nativa.  Reusa el cache `_get_svg_pixmap` de flowsheet_qt
+        (import lazy — flowsheet_qt ya está cargado en runtime y a su
+        vez importa este módulo, no se puede importar top-level)."""
+        try:
+            import pfd_symbols as pfd
+            svg = pfd.wrap_svg(
+                pfd.EQ_TYPE_TO_SYMBOL.get(self._eq_type, ""),
+                w=self._w, h=self._h)
+            if not svg:
+                return None
+            from flowsheet_qt import _get_svg_pixmap
+            return _get_svg_pixmap(self._eq_type, int(self._w),
+                                   int(self._h), svg_str=svg)
+        except Exception:
+            return None
 
     # ── QGraphicsItem ─────────────────────────────────
     def boundingRect(self) -> QRectF:
@@ -1238,24 +1718,40 @@ class IsaGlyphItem(QGraphicsItem):
             r = max(self._w, self._h) / 2 + 8
             p.drawEllipse(QPointF(self._w/2, self._h/2), r, r)
 
-        # Glyph ISA — escalar UNIFORMEMENTE (preservando proporciones)
-        # desde sus dims nativas (BLOCK_DIMS) a las dims reales del
-        # bloque.  Si las proporciones no calzan exactas, el glyph
-        # queda centrado dentro del recuadro y los puertos quedan en
-        # el border del recuadro como antes.  Esto evita el efecto
-        # "achatado" que ocurría con scale(sx, sy) no-uniforme.
-        native_w, native_h = BLOCK_DIMS.get(self._isa, (60, 60))
-        scale = min(self._w / native_w, self._h / native_h)
-        # offset para centrar el glyph dentro de la caja real
-        ox = (self._w - native_w * scale) / 2.0
-        oy = (self._h - native_h * scale) / 2.0
-        p.save()
-        p.translate(ox, oy)
-        p.scale(scale, scale)
-        BlockGlyph.draw(p, self._isa, native_w, native_h, stroke,
-                        fill=QColor(TOK["bg_elev"]),
-                        stroke_width=stroke_w / max(scale, 0.1))
-        p.restore()
+        if self._isa is not None:
+            # Glyph ISA — escalar UNIFORMEMENTE (preservando
+            # proporciones) desde sus dims nativas (BLOCK_DIMS) a las
+            # dims reales del bloque.  Si las proporciones no calzan
+            # exactas, el glyph queda centrado dentro del recuadro y
+            # los puertos quedan en el border del recuadro como antes.
+            # Esto evita el efecto "achatado" que ocurría con
+            # scale(sx, sy) no-uniforme.
+            native_w, native_h = BLOCK_DIMS.get(self._isa, (60, 60))
+            scale = min(self._w / native_w, self._h / native_h)
+            # offset para centrar el glyph dentro de la caja real
+            ox = (self._w - native_w * scale) / 2.0
+            oy = (self._h - native_h * scale) / 2.0
+            p.save()
+            p.translate(ox, oy)
+            p.scale(scale, scale)
+            BlockGlyph.draw(p, self._isa, native_w, native_h, stroke,
+                            fill=QColor(TOK["bg_elev"]),
+                            stroke_width=stroke_w / max(scale, 0.1))
+            p.restore()
+        else:
+            # Fallback honesto para eq_types sin silueta nativa:
+            # 1º el símbolo SVG de pfd_symbols; si tampoco existe,
+            # rect redondeado NEUTRO (nunca una silueta de tanque
+            # que el usuario pueda confundir con un equipo real).
+            pm = self._pfd_pixmap()
+            if pm is not None and not pm.isNull():
+                p.drawPixmap(
+                    QRectF(0, 0, self._w, self._h).toRect(), pm)
+            else:
+                p.setPen(QPen(stroke, stroke_w))
+                p.setBrush(QBrush(QColor(TOK["bg_elev"])))
+                p.drawRoundedRect(
+                    QRectF(2, 2, self._w - 4, self._h - 4), 6, 6)
 
         # Selection dashed ring (offset 6px)
         if self._state == "selected":
