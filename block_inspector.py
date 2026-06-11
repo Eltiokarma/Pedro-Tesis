@@ -1673,6 +1673,20 @@ class BlockInspectorPanel(QWidget):
             l.addWidget(self._row("Calor de reacción", sf_hor,
                                   info="Por kg de input. >0 endo · <0 exo · auto = del catálogo"))
 
+        # Compresores / ventiladores: diagrama de compresión T-r
+        # (lazy al abrir Termodinámica — junto a delta_p/η).
+        eqs_low = (eq_type or "").lower()
+        if "compressor" in eqs_low or "fan" in eqs_low:
+            try:
+                import inspector_evidence as _ev
+                l.addWidget(self._figure_card(
+                    "Diagrama de compresión",
+                    _ev.compressor_figure(b, self.fs)))
+            except Exception as exc:
+                l.addWidget(self._diag_placeholder_card(
+                    "Diagrama de compresión",
+                    f"inspector_evidence no disponible: {exc}"))
+
         # HX riguroso: diseño térmico (cards) + riguroso + avisos
         if _is_hx(eq_type):
             self._append_hx_termo(l, b)
@@ -2559,6 +2573,9 @@ class BlockInspectorPanel(QWidget):
                 items.append("Equilibrio X_eq vs T → Reactividad")
         if _is_hx(eq_type):
             items.append("Diagrama T-Q → Termodinámica")
+        low = (eq_type or "").lower()
+        if "compressor" in low or "fan" in low:
+            items.append("Diagrama de compresión → Termodinámica")
         return "\n".join(f"· {it}" for it in items)
 
     def _figure_card(self, title: str, fig_result) -> QWidget:

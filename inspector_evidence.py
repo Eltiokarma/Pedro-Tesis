@@ -950,6 +950,118 @@ def hx_tq_figure(block, fs):
         return _no_fig(f"error construyendo el T-Q: {exc}")
 
 
+def compressor_figure(block, fs):
+    """Diagrama de compresión: camino isentrópico vs real en ejes
+    T - razón de presión (r = P/P_in).
+
+    DECISIÓN DE EJES: T-r y no T-s — el repo no modela entropía
+    (thermo_db expone cp/MW; fabricar s sin modelo violaría la
+    trazabilidad).  Las curvas se derivan de los ENDPOINTS que ya
+    calcula equipment_design.design_compressor_for_block:
+      · isentrópica:  T = T_in · r^m_s, con m_s = ln(T_s/T_in)/ln(ratio)
+        y T_s = T_in + (T_real − T_in)·η  (definición de η isentrópica,
+        Smith, Van Ness & Abbott cap. 7)
+      · real: politrópica equivalente T = T_in · r^m, con
+        m = ln(T_real/T_in)/ln(ratio)
+    W_isen / W_actual / η anotados desde el mismo design dict.
+
+    Devuelve (Figure, dict) o (None, {"reason": str}).
+    """
+    try:
+        import matplotlib
+        matplotlib.use("Agg")
+        from matplotlib.figure import Figure
+    except Exception:
+        return _no_fig(_MPL_REASON)
+    try:
+        import math as _math
+        eqs = (block.eq_type or "").lower()
+        if not ("compressor" in eqs or "fan" in eqs):
+            return _no_fig("el bloque no es un compresor/ventilador")
+        ins = [s for s in fs.streams.values() if s.dst == block.id]
+        outs = [s for s in fs.streams.values() if s.src == block.id]
+        if not ins or not outs:
+            return _no_fig("conectá las corrientes de succión y descarga "
+                           "del compresor")
+        feed = ins[0]
+        if (feed.mass_flow or 0.0) <= 0:
+            return _no_fig("la corriente de succión no tiene flujo — "
+                           "ejecutá el solver primero")
+        comp = feed.composition or (
+            {feed.main_component: 1.0} if feed.main_component else {})
+        if not comp:
+            return _no_fig("la corriente de succión no tiene composición "
+                           "— declarala para conocer MW y k del gas")
+        P_in = feed.pressure_bar if (feed.pressure_bar or 0) > 0 else 1.013
+        dp = float(getattr(block, "delta_p_bar", 0.0) or 0.0)
+        P_out_s = float(getattr(outs[0], "pressure_bar", 0.0) or 0.0)
+        if dp <= 0 and P_out_s <= P_in:
+            return _no_fig("sin razón de compresión: declará delta_p_bar "
+                           "en el bloque (sección Termodinámica) o fijá "
+                           "la presión de la corriente de descarga "
+                           "(P_out > P_in)")
+        import equipment_design as _ed
+        cs = _ed.design_compressor_for_block(block, fs)
+        if cs is None:
+            return _no_fig("el dimensionado del compresor no es "
+                           "computable (MW desconocido para los "
+                           "componentes del feed — revisá thermo_db)")
+        ratio = float(cs["ratio"])
+        if ratio <= 1.0:
+            return _no_fig(f"razón de compresión {ratio:.2f} ≤ 1 — nada "
+                           f"que comprimir")
+        T_in_K = float(feed.temperature or 25.0) + 273.15
+        T_real_K = float(cs["T_out_C"]) + 273.15
+        eta = float(cs["eta_total"] or 0.75)
+        # endpoints → exponentes (sin re-derivar el k heurístico)
+        T_isen_K = T_in_K + (T_real_K - T_in_K) * eta
+        if T_isen_K <= T_in_K or T_real_K <= T_in_K:
+            return _no_fig("T de descarga ≤ T de succión en el design — "
+                           "datos del bloque inconsistentes")
+        m_s = _math.log(T_isen_K / T_in_K) / _math.log(ratio)
+        m_r = _math.log(T_real_K / T_in_K) / _math.log(ratio)
+        rs = [1.0 + (ratio - 1.0) * i / 39 for i in range(40)]
+        fig = Figure(figsize=(3.6, 3.2), dpi=90)
+        ax = fig.add_subplot(111)
+        ax.plot(rs, [T_in_K * r ** m_s - 273.15 for r in rs],
+                color="#1f6feb", lw=1.4,
+                label=f"isentrópico (W={cs['W_isen_kW']:.1f} kW)")
+        ax.plot(rs, [T_in_K * r ** m_r - 273.15 for r in rs],
+                color="#d4691e", lw=1.4,
+                label=f"real η={eta:.2f} (W={cs['W_act_kW']:.1f} kW)")
+        ax.plot([ratio], [T_isen_K - 273.15], "o", color="#1f6feb", ms=5)
+        ax.plot([ratio], [T_real_K - 273.15], "o", color="#d4691e", ms=5)
+        ax.annotate(f"ΔT pérdidas = "
+                    f"{T_real_K - T_isen_K:.1f} °C",
+                    xy=(ratio, (T_real_K + T_isen_K) / 2 - 273.15),
+                    fontsize=6.5, ha="right", color="#555")
+        ax.set_xlabel("r = P / P_in", fontsize=8)
+        ax.set_ylabel("T (°C)", fontsize=8)
+        ax.tick_params(labelsize=7)
+        ax.grid(True, alpha=0.3, linestyle="--")
+        ax.legend(fontsize=6.5, loc="best")
+        ax.set_title(f"Compresión — {block.name}  "
+                     f"(r={ratio:.2f}, {cs['n_stages_rec']} etapa(s))",
+                     fontsize=9, fontweight="bold")
+        for sp in ("top", "right"):
+            ax.spines[sp].set_visible(False)
+        fig.text(0.02, 0.005,
+                 "T = T_in·r^((k−1)/k) isentrópica y politrópica "
+                 "equivalente con η_s (Smith-Van Ness-Abbott cap. 7); "
+                 "k/η de equipment_design (k heurístico por composición, "
+                 "η = block.efficiency).  Ejes T-r: el repo no modela "
+                 "entropía — no se fabrica un T-s.",
+                 fontsize=5.0, color="#555", wrap=True)
+        fig.tight_layout(rect=(0, 0.07, 1, 1))
+        data = dict(cs)
+        data.update({"T_isen_C": T_isen_K - 273.15,
+                     "T_in_C": T_in_K - 273.15})
+        return fig, data
+    except Exception as exc:
+        return _no_fig(f"error construyendo el diagrama de compresión: "
+                       f"{exc}")
+
+
 def equilibrium_figure(block, fs):
     """X_eq vs T para reactores de equilibrio/Gibbs — figura de libro
     de texto (Smith-Van Ness cap. 13; Fogler cap. 8).
