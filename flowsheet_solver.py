@@ -153,6 +153,11 @@ class SolverResult:
     hx_diagnostics:     Dict[int, dict]     = field(default_factory=dict)
     cycles_detected:    List[List[str]]     = field(default_factory=list)
     recycle_solutions:  List[RecycleSolution] = field(default_factory=list)
+    # Lazos de circulación de servicio (bomba→header→HX, 100% aristas
+    # auto_aux) exentos del tearing Wegstein: su caudal es analítico
+    # (m = Q/(cp·ΔT) desde el duty, via size_utility_streams).  Líneas
+    # informativas ya formateadas para summary()/UI.
+    service_loops:      List[str]           = field(default_factory=list)
 
     # Estados por bloque y por stream para colorización en la UI.
     # Llave: id del bloque/stream.  Valor: 'ok' | 'warning' | 'error' |
@@ -194,6 +199,11 @@ class SolverResult:
             lines.append(f"\nReciclos detectados ({len(self.cycles_detected)}):")
             for cyc in self.cycles_detected:
                 lines.append(f"  · {' → '.join(cyc)} → (back)")
+
+        if self.service_loops:
+            lines.append("")
+            for sl in self.service_loops:
+                lines.append(sl)
 
         if self.recycle_solutions:
             lines.append("")
@@ -4933,6 +4943,21 @@ def solve(fs, max_iter=MAX_ITER):
         size_utility_streams(fs)
     except Exception:
         pass
+
+    # Reporte informativo de los lazos de servicio exentos de Wegstein
+    # (paso 3).  Se emite ACÁ, después de size_utility_streams, para
+    # poder mostrar el caudal de circulación ya fijado analíticamente.
+    for scc in service_loop_sccs:
+        try:
+            names = [fs.blocks[bid].name for bid in scc]
+            flows = [s.mass_flow for s in _streams_in_scc(scc, fs)
+                     if s.mass_flow > 0]
+            m_txt = f"m = {max(flows):.4g} tm/año" if flows                 else "m pendiente (HX sin duty)"
+            result.service_loops.append(
+                f"ℹ Lazo de servicio detectado ({' → '.join(names)}): "
+                f"circulación fija analítica, {m_txt}")
+        except Exception:
+            pass
 
     # Lado-aire de los air-coolers (role='ambient'): dimensionar desde el
     # duty.  size_utility_streams sólo cubre role='utility', así que el aire
