@@ -1350,6 +1350,71 @@ class _Overlay(QWidget):
 #  EQ_TYPE → ISA PALETTE TYPE MAPPING
 # ════════════════════════════════════════════════════════
 
+# Mapeo explícito eq_type canónico → silueta ISA.  Snapshot 1:1 del
+# routing heurístico sobre el catálogo completo (equipment_costs.
+# EQUIPMENT_DATA).  La heurística _isa_heuristic() queda solo como
+# fallback para eq_types fuera de este dict (p.ej. equipos futuros:
+# steam trap, strainer, deaerator).
+EQ_TYPE_TO_ISA: Dict[str, str] = {
+    "Boiler — fire tube": "caldera",
+    "Boiler — water tube": "caldera",
+    "Centrifuge — decanter": "centrifuga",
+    "Centrifuge — disc stack": "centrifuga",
+    "Compressor — axial": "compresor",
+    "Compressor — centrifugal": "compresor",
+    "Compressor — reciprocating": "compresor",
+    "Compressor — rotary": "compresor",
+    "Cooling tower — induced draft": "torre_enf",
+    "Cooling tower — natural draft": "torre_enf",
+    "Crystallizer": "separador",
+    "Cyclone — gas/solid": "ciclon",
+    "Decanter — gravity": "tambor",
+    "Dryer — drum": "secador",
+    "Evaporator — vertical": "separador",
+    "Fan — axial": "ventilador",
+    "Fan — centrifugal radial": "ventilador",
+    "Filter — belt": "filtro",
+    "Fired heater — non-reformer": "horno",
+    "Fired heater — reformer": "horno",
+    "Heat exch. — U-tube": "hx",
+    "Heat exch. — WHB field erected": "hx",
+    "Heat exch. — WHB packaged": "hx",
+    "Heat exch. — air cooler": "hx",
+    "Heat exch. — condenser air-cooled": "hx",
+    "Heat exch. — condenser shell-tube": "hx",
+    "Heat exch. — double pipe": "hx",
+    "Heat exch. — fixed tube": "hx",
+    "Heat exch. — flat plate": "hx",
+    "Heat exch. — floating head": "hx",
+    "Heat exch. — kettle reboiler": "hx",
+    "Heat exch. — multiple pipe": "hx",
+    "Heat exch. — spiral plate": "hx",
+    "Mixer — inline": "mezclador",
+    "Mixer — static": "mezclador",
+    "Packing — random": "platos",
+    "Packing — structured": "platos",
+    "Pump — centrifugal": "bomba",
+    "Pump — positive displacement": "bomba",
+    "Pump — reciprocating": "bomba",
+    "Reactor — CSTR (agitado)": "reactor",
+    "Reactor — PFR (tubular)": "reactor",
+    "Reactor — autoclave": "reactor",
+    "Reactor — jacketed agitated": "reactor",
+    "Reactor — jacketed non-agit.": "reactor",
+    "Splitter — flow divider": "mezclador",
+    "Storage tank — cone roof": "tanque",
+    "Storage tank — floating roof": "tanque",
+    "Tower (column shell)": "columna",
+    "Tray — sieve": "platos",
+    "Tray — valve": "platos",
+    "Valve — 3-way": "valvula",
+    "Valve — control globe": "valvula",
+    "Valve — relief": "valvula",
+    "Vessel — horizontal": "tambor",
+    "Vessel — vertical": "separador",
+}
+
+
 def isa_type_for_eq(eq_type: str) -> str:
     """Mapea un eq_type canónico del catálogo (e.g. 'Reactor — CSTR
     (agitado)', 'Heat exch. — flat plate') a una silueta ISA de
@@ -1357,11 +1422,22 @@ def isa_type_for_eq(eq_type: str) -> str:
     más las específicas: valvula/compresor/ventilador/horno/caldera/
     ciclon/torre_enf/platos/tambor/centrifuga/filtro/secador).
 
-    Usa la categoría de equipment_costs si está disponible, con
-    fallback por substring matching del nombre.
+    Resuelve primero por el dict explícito EQ_TYPE_TO_ISA (cubre el
+    catálogo completo); para eq_types fuera del dict cae a la
+    heurística por categoría/substring de _isa_heuristic().
     """
     if not eq_type:
         return "tanque"
+    mapped = EQ_TYPE_TO_ISA.get(eq_type)
+    if mapped:
+        return mapped
+    return _isa_heuristic(eq_type)
+
+
+def _isa_heuristic(eq_type: str) -> str:
+    """Routing heurístico por categoría de equipment_costs y substring
+    del nombre — fallback para eq_types no presentes en EQ_TYPE_TO_ISA.
+    """
     if "ambient" in eq_type.lower() or "atmósfera" in eq_type.lower():
         return "ambient"
     try:
