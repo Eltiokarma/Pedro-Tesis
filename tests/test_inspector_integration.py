@@ -105,8 +105,12 @@ def test_report_figure_render_vs_degraded(capsys):
         # con matplotlib, al menos intentó construir canvases (>=0, sin crash)
         assert isinstance(figs, list)
     else:
-        # sin matplotlib, degrada a lista vacía SIN crashear (headless-safe)
-        assert figs == [], "sin matplotlib _diag_figures debe degradar a []"
+        # sin matplotlib, degrada a placeholders honestos (tarjetas con
+        # la razón 'matplotlib no disponible') SIN crashear — contrato
+        # nuevo: nunca silencio, siempre una explicación accionable.
+        assert isinstance(figs, list)
+        assert all(w.__class__.__name__ != "FigureCanvasQTAgg"
+                   for w in figs)
 
 
 def test_figures_headless_safe_no_crash():
