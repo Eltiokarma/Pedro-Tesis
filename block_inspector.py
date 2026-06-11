@@ -1676,6 +1676,18 @@ class BlockInspectorPanel(QWidget):
         # HX riguroso: diseño térmico (cards) + riguroso + avisos
         if _is_hx(eq_type):
             self._append_hx_termo(l, b)
+            # Diagrama T-Q — la figura del HX vive aquí, junto al
+            # diseño térmico (lazy al abrir Termodinámica).  Corre
+            # aunque el viewmodel de hx_inspector no exista: figura o
+            # placeholder-con-razón, nunca silencio.
+            try:
+                import inspector_evidence as _ev
+                l.addWidget(self._figure_card(
+                    "Diagrama T-Q", _ev.hx_tq_figure(b, self.fs)))
+            except Exception as exc:
+                l.addWidget(self._diag_placeholder_card(
+                    "Diagrama T-Q",
+                    f"inspector_evidence no disponible: {exc}"))
 
         return sect
 
@@ -1793,6 +1805,16 @@ class BlockInspectorPanel(QWidget):
         )
         add_btn.clicked.connect(self._on_add_custom_rxn)
         l.addWidget(add_btn)
+
+        # Evidencia gráfica del reactor — lazy al abrir esta sección.
+        try:
+            import inspector_evidence as _ev
+            mode = (getattr(b, "reactor_mode", "") or "").upper() or "REACTOR"
+            l.addWidget(self._figure_card(
+                f"Reactor {mode}", _ev.reactor_figure(b, self.fs)))
+        except Exception as exc:
+            l.addWidget(self._diag_placeholder_card(
+                "Reactor", f"inspector_evidence no disponible: {exc}"))
 
         return sect
 
@@ -1964,6 +1986,20 @@ class BlockInspectorPanel(QWidget):
         self._extras["column_method"] = m_cb
         l.addWidget(self._combo_row("Método", m_cb))
 
+        # Evidencia gráfica de la columna — lazy: se construye recién
+        # al abrir ESTA sección (no al abrir el inspector).  Figura o
+        # placeholder-con-razón, nunca silencio.
+        try:
+            import inspector_evidence as _ev
+            l.addWidget(self._figure_card(
+                "McCabe-Thiele", _ev.mccabe_figure(b, self.fs)))
+            l.addWidget(self._figure_card(
+                "Perfil tray-by-tray", _ev.profile_figure(b, self.fs)))
+        except Exception as exc:
+            l.addWidget(self._diag_placeholder_card(
+                "Figuras de columna",
+                f"inspector_evidence no disponible: {exc}"))
+
         return sect
 
     def _section_flash(self, b, eq_type) -> QFrame:
@@ -1993,6 +2029,16 @@ class BlockInspectorPanel(QWidget):
         sf_P = self._spec_field("flash_P_bar", value=f"{P_bar:.3f}",
                                 unit="bar", state="spec")
         l.addWidget(self._row("P_flash", sf_P))
+
+        # Evidencia gráfica del flash — lazy al abrir esta sección.
+        try:
+            import inspector_evidence as _ev
+            l.addWidget(self._figure_card(
+                "Flash VLE binario", _ev.flash_figure(b, self.fs)))
+        except Exception as exc:
+            l.addWidget(self._diag_placeholder_card(
+                "Flash VLE binario",
+                f"inspector_evidence no disponible: {exc}"))
 
         return sect
 
@@ -2389,10 +2435,13 @@ class BlockInspectorPanel(QWidget):
                 l.addWidget(self._diag_text_card(title, txt))
                 any_added = True
 
-        # 2) Figuras matplotlib (si el backend Qt está disponible) ----
-        canvas_widgets = self._diag_figures(b, fs)
-        for w in canvas_widgets:
-            l.addWidget(w)
+        # 2) Figuras — viven en sus secciones temáticas (lazy al abrir
+        #    cada sección).  Acá solo el ÍNDICE de qué hay y dónde, para
+        #    que el estudiante las descubra sin duplicar canvases.
+        idx_txt = self._figures_index(b, eq_type)
+        if idx_txt:
+            l.addWidget(self._diag_text_card(
+                "Figuras disponibles (ver su sección)", idx_txt))
             any_added = True
 
         if not any_added:
@@ -2487,6 +2536,22 @@ class BlockInspectorPanel(QWidget):
         )
         return card
 
+    def _figures_index(self, b, eq_type) -> str:
+        """Línea-índice de las figuras que aplican a este bloque y en
+        qué sección del sidebar viven (descubribilidad sin duplicar
+        canvases en Diagnóstico)."""
+        items = []
+        if _is_tower(eq_type):
+            items.append("McCabe-Thiele → Columna")
+            items.append("Perfil tray-by-tray → Columna")
+        if _is_flash_vessel(eq_type):
+            items.append("Flash VLE binario → Flash")
+        if _is_reactor(eq_type):
+            items.append("Perfil del reactor → Reactividad")
+        if _is_hx(eq_type):
+            items.append("Diagrama T-Q → Termodinámica")
+        return "\n".join(f"· {it}" for it in items)
+
     def _figure_card(self, title: str, fig_result) -> QWidget:
         """Tarjeta para un resultado de inspector_evidence.*_figure:
         canvas matplotlib si hay figura, o placeholder con la RAZÓN
@@ -2494,6 +2559,10 @@ class BlockInspectorPanel(QWidget):
         Nunca un placeholder genérico ni una figura que desaparece en
         silencio."""
         fig, data = fig_result
+        # badge de procedencia (p.ej. Wang-Henke vs McCabe fallback) en
+        # el título — el mismo patrón de honestidad para toda figura
+        if fig is not None and isinstance(data, dict) and data.get("badge"):
+            title = f"{title}  ·  {data['badge']}"
         if fig is not None:
             try:
                 import matplotlib
