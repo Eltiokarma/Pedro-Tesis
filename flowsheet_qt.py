@@ -3261,6 +3261,8 @@ class BlockItem(QGraphicsItemGroup):
         self.duty_badge.setFont(QFont(mono, 8, QFont.Bold))
         self.duty_badge.setPos(self.W + 6, self.H / 2 - 7)
         self.duty_badge.setZValue(3)
+        # decorativo — no extiende el área clickeable del bloque
+        self.duty_badge.setAcceptedMouseButtons(Qt.NoButton)
         self._update_duty_badge()
 
         # ---- Badge HYSYS icon (esquina inferior izquierda) ----
@@ -3572,6 +3574,21 @@ class BlockItem(QGraphicsItemGroup):
             else:
                 self._isa_item.set_state(self._isa_state_for_status(self._status))
 
+    # ── Geometría del grupo ─────────────────────────────
+    # QGraphicsItemGroup calcula su boundingRect SOLO con los hijos
+    # agregados via addToGroup().  Aquí los hijos se crean con
+    # parent=self, así que el rect propio del grupo quedaba VACÍO
+    # (0×0) y la selección por área (rubber band) nunca lo
+    # intersectaba — los clicks directos funcionaban únicamente por
+    # handlesChildEvents.  Definimos explícitamente el rect W×H.
+    def boundingRect(self):
+        return QRectF(0, 0, self.W, self.H)
+
+    def shape(self):
+        path = QPainterPath()
+        path.addRect(0, 0, self.W, self.H)
+        return path
+
     def itemChange(self, change, value):
         """Sync posición al modelo + refresh streams conectados.
 
@@ -3588,6 +3605,26 @@ class BlockItem(QGraphicsItemGroup):
         elif change == QGraphicsItem.ItemPositionHasChanged and self.scene():
             self.model.x = self.pos().x()
             self.model.y = self.pos().y()
+            # Group-drag: si este bloque es el que el mouse agarra y
+            # hay StreamItems seleccionados, trasladar sus waypoints /
+            # endpoints flotantes con el mismo delta (los bloques
+            # seleccionados ya los mueve Qt nativo).  El guard del
+            # grabber evita aplicar el delta N veces — cada bloque
+            # seleccionado dispara su propio itemChange.
+            # El ancla _group_drag_prev solo existe en el bloque que
+            # recibió el mousePressEvent (los demás seleccionados se
+            # mueven por el mecanismo nativo de Qt sin ancla), así que
+            # actúa de singleton: el delta se aplica una sola vez.
+            # No usamos mouseGrabberItem(): con handlesChildEvents el
+            # grabber reportado puede ser un hijo del grupo.
+            prev = getattr(self, "_group_drag_prev", None)
+            if prev is not None:
+                dx, dy = self.pos().x() - prev.x(), self.pos().y() - prev.y()
+                if dx or dy:
+                    for it in self.scene().selectedItems():
+                        if isinstance(it, StreamItem):
+                            it.translate_by(dx, dy)
+                self._group_drag_prev = QPointF(self.pos())
             if self.editor is not None:
                 self.editor.refresh_streams_of(self.model.id)
         elif change == QGraphicsItem.ItemSelectedHasChanged:
@@ -3626,6 +3663,9 @@ class BlockItem(QGraphicsItemGroup):
         if (event.button() == Qt.LeftButton and self.editor is not None
             and self.editor._drag_before_snapshot is None):
             self.editor._drag_before_snapshot = self.editor.begin_action()
+        # ancla para el group-drag de streams seleccionados (itemChange)
+        if event.button() == Qt.LeftButton:
+            self._group_drag_prev = QPointF(self.pos())
         super().mousePressEvent(event)
 
     def hoverEnterEvent(self, event):
@@ -3643,6 +3683,7 @@ class BlockItem(QGraphicsItemGroup):
 
     def mouseReleaseEvent(self, event):
         super().mouseReleaseEvent(event)
+        self._group_drag_prev = None
         # IMÁN BIDIRECCIONAL: al soltar el bloque tras un drag, si algún
         # endpoint flotante quedó cerca de un puerto de ESTE bloque, snap.
         # No durante el drag (sería intrusivo), solo al release.
@@ -3781,6 +3822,8 @@ class StreamItem(QGraphicsPathItem):
         self.arrow_head = QGraphicsPolygonItem()
         self.arrow_head.setPen(QPen(Qt.NoPen))
         self.arrow_head.setZValue(5.5)
+        # decorativa — el hit es del path del stream, no de la punta
+        self.arrow_head.setAcceptedMouseButtons(Qt.NoButton)
 
         # handles draggables (uno por waypoint).  Se crean/muestran
         # solo cuando el stream está seleccionado.
@@ -3810,16 +3853,19 @@ class StreamItem(QGraphicsPathItem):
         self.label_bg.setBrush(QBrush(QColor("#ffffff")))
         self.label_bg.setPen(QPen(Qt.NoPen))    # se setea en update_path con el color
         self.label_bg.setZValue(6)
+        self.label_bg.setAcceptedMouseButtons(Qt.NoButton)
 
         mono = pfd_fonts.MONO if pfd_fonts.available() else "Consolas"
         self.label_name = QGraphicsSimpleTextItem()
         self.label_name.setFont(QFont(mono, 7, QFont.Medium))
         self.label_name.setZValue(7)
+        self.label_name.setAcceptedMouseButtons(Qt.NoButton)
 
         self.label_flow = QGraphicsSimpleTextItem()
         self.label_flow.setFont(QFont(mono, 7))
         self.label_flow.setBrush(QBrush(QColor("#6b7280")))   # gris suave
         self.label_flow.setZValue(7)
+        self.label_flow.setAcceptedMouseButtons(Qt.NoButton)
 
         self.update_path()
 
@@ -3935,6 +3981,8 @@ class StreamItem(QGraphicsPathItem):
                     arr.setBrush(QBrush(color))
                     arr.setPen(QPen(Qt.NoPen))
                     arr.setZValue(5.3)
+                    # decorativo — no participa del hit-testing
+                    arr.setAcceptedMouseButtons(Qt.NoButton)
                     scene.addItem(arr)
                     self.direction_arrows.append(arr)
                     break
@@ -4747,6 +4795,8 @@ class _PaperFrame(QGraphicsItemGroup):
                  drawing_no="PFD-100-001", rev="A", date=None):
         super().__init__()
         self.setZValue(-100)
+        # decorativo puro: no participa del hit-testing (rubber band)
+        self.setAcceptedMouseButtons(Qt.NoButton)
         self._project_title = project_title
         self._area          = area
         self._drawing_no    = drawing_no
@@ -4770,11 +4820,13 @@ class _PaperFrame(QGraphicsItemGroup):
         item = QGraphicsRectItem(x, y, w, h, parent or self)
         item.setPen(QPen(self._BLACK, stroke_w))
         item.setBrush(QBrush(fill) if fill else QBrush(Qt.NoBrush))
+        item.setAcceptedMouseButtons(Qt.NoButton)
         return item
 
     def _add_line(self, x1, y1, x2, y2, stroke_w=0.8, color=None, parent=None):
         item = QGraphicsLineItem(x1, y1, x2, y2, parent or self)
         item.setPen(QPen(color or self._BLACK, stroke_w))
+        item.setAcceptedMouseButtons(Qt.NoButton)
         return item
 
     def _add_text(self, x, y, text, font, color=None, parent=None):
@@ -4782,6 +4834,7 @@ class _PaperFrame(QGraphicsItemGroup):
         t.setFont(font)
         t.setBrush(QBrush(color or self._BLACK))
         t.setPos(x, y)
+        t.setAcceptedMouseButtons(Qt.NoButton)
         return t
 
     # ---------- partes ----------
@@ -4927,11 +4980,15 @@ class FlowsheetScene(QGraphicsScene):
             line = QGraphicsLineItem(x, y0, x, y1)
             line.setPen(pen)
             line.setZValue(-100)
+            # decorativa: nunca participa del hit-testing (el press en
+            # zona vacía debe iniciar el rubber band, no morir aquí)
+            line.setAcceptedMouseButtons(Qt.NoButton)
             self.addItem(line)
         for y in range(y0, y1 + step, step):
             line = QGraphicsLineItem(x0, y, x1, y)
             line.setPen(pen)
             line.setZValue(-100)
+            line.setAcceptedMouseButtons(Qt.NoButton)
             self.addItem(line)
 
     def clear_flowsheet(self):
