@@ -4369,6 +4369,28 @@ def _is_recycle_scc(scc_block_ids, fs):
     return False
 
 
+def _is_pure_service_scc(scc_block_ids, fs):
+    """True si el SCC existe SOLO vía corrientes auto_aux: es un lazo
+    de CIRCULACIÓN DE SERVICIO (bomba→header→HX de cooling water /
+    steam, creado por equipment_auxiliaries), no un reciclo de proceso.
+
+    Un lazo así NO se resuelve por tear+Wegstein: no tiene feed externo
+    (el balance en sus bloques da 0 con las auto_aux excluidas de la
+    propagación) y su caudal es ANALÍTICO — m = Q/(cp·ΔT) desde el duty
+    del HX, fijado por size_utility_streams.  Correr Wegstein producía
+    el warning espurio "NO convergió (1 iter)" con el guess inicial.
+
+    Criterio CONSERVADOR: todas las aristas internas del SCC deben ser
+    auto_aux y debe haber al menos una.  Un SCC mixto (cualquier
+    corriente de proceso en el ciclo) no se exime — va a Wegstein como
+    siempre.  Nótese que los BLOQUES del lazo incluyen al HX de proceso
+    (no es auto_aux): por eso el criterio es sobre las corrientes, no
+    sobre los bloques."""
+    streams = _streams_in_scc(scc_block_ids, fs)
+    return bool(streams) and all(getattr(s, "auto_aux", False)
+                                 for s in streams)
+
+
 def _streams_in_scc(scc_block_ids, fs):
     """Streams cuyos src y dst están ambos en el SCC."""
     bids = set(scc_block_ids)
@@ -4618,11 +4640,19 @@ def solve(fs, max_iter=MAX_ITER):
             break
     result.iterations = it + 1
 
-    # 3. Wegstein por reciclo no resuelto
+    # 3. Wegstein por reciclo no resuelto.  Los lazos PUROS de
+    #    servicio (todas las aristas auto_aux) quedan exentos: su
+    #    caudal lo fija analíticamente size_utility_streams desde el
+    #    duty del HX — el tearing ahí solo producía un "NO convergió"
+    #    espurio (sin feed externo, _balance_at_block da 0).
+    service_loop_sccs = []
     for scc in recycle_sccs:
         scc_streams = _streams_in_scc(scc, fs)
         if all(s.mass_flow > 0 for s in scc_streams):
             continue  # ya está resuelto por closure
+        if _is_pure_service_scc(scc, fs):
+            service_loop_sccs.append(scc)
+            continue
         rs = _solve_recycle_wegstein(fs, scc)
         result.recycle_solutions.append(rs)
 
@@ -4754,6 +4784,8 @@ def solve(fs, max_iter=MAX_ITER):
         # alteró el flujo del reactor → tear cambia)
         if reactor_in_scc:
             for scc in recycle_sccs:
+                if _is_pure_service_scc(scc, fs):
+                    continue   # lazo de servicio: caudal analítico
                 scc_streams = _streams_in_scc(scc, fs)
                 if not all(s.mass_flow > 0 for s in scc_streams):
                     _solve_recycle_wegstein(fs, scc, max_iter=10)
