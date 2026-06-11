@@ -2487,70 +2487,87 @@ class BlockInspectorPanel(QWidget):
         )
         return card
 
+    def _figure_card(self, title: str, fig_result) -> QWidget:
+        """Tarjeta para un resultado de inspector_evidence.*_figure:
+        canvas matplotlib si hay figura, o placeholder con la RAZÓN
+        específica si no (contrato (fig, data|{'reason': str})).
+        Nunca un placeholder genérico ni una figura que desaparece en
+        silencio."""
+        fig, data = fig_result
+        if fig is not None:
+            try:
+                import matplotlib
+                matplotlib.use("QtAgg")
+                from matplotlib.backends.backend_qtagg import (
+                    FigureCanvas as _MplCanvas
+                )
+                return self._diag_canvas_card(title, _MplCanvas(fig))
+            except Exception as exc:
+                return self._diag_placeholder_card(
+                    title, f"backend Qt de matplotlib no disponible "
+                           f"({exc}) — la figura existe pero no puede "
+                           f"embeberse")
+        reason = (data or {}).get("reason") if isinstance(data, dict)             else None
+        return self._diag_placeholder_card(
+            title, reason or "figura no disponible (sin razón reportada "
+                             "— bug del builder, reportalo)")
+
+    def _diag_placeholder_card(self, title: str, reason: str) -> QFrame:
+        """Tarjeta placeholder honesta: dice por qué no hay figura y qué
+        hacer para obtenerla."""
+        card = QFrame(); card.setObjectName("diagCard")
+        cl = QVBoxLayout(card)
+        cl.setContentsMargins(10, 8, 10, 8); cl.setSpacing(4)
+        t = QLabel(title)
+        t.setFont(QFont(pfd_fonts.SANS, 9, QFont.Bold))
+        t.setStyleSheet(f"color:{TOK['ink_soft']};")
+        cl.addWidget(t)
+        body = QLabel(f"◌ {reason}")
+        body.setFont(QFont(pfd_fonts.SANS, 9))
+        body.setStyleSheet(f"color:{TOK['ink_soft']}; font-style:italic;")
+        body.setWordWrap(True)
+        body.setTextInteractionFlags(Qt.TextSelectableByMouse)
+        cl.addWidget(body)
+        card.setStyleSheet(
+            f"#diagCard {{ background: {TOK['bg_mute']}; "
+            f"border: 1px dashed {TOK['line_strong']}; "
+            f"border-radius: 6px; }}"
+        )
+        return card
+
     def _diag_figures(self, b, fs) -> List[QWidget]:
-        """Crea canvases QtAgg para las figuras disponibles.  Devuelve [] si
-        matplotlib-Qt no está, o si ninguna figura aplica."""
+        """Crea las tarjetas de figura (canvas o placeholder-con-razón)
+        que aplican a este bloque."""
         out: List[QWidget] = []
         try:
-            import matplotlib
-            matplotlib.use("QtAgg")
-            from matplotlib.backends.backend_qtagg import (
-                FigureCanvas as _MplCanvas
-            )
-        except Exception:
-            return out
-        try:
             import inspector_evidence as _ev
-        except Exception:
+        except Exception as exc:
+            out.append(self._diag_placeholder_card(
+                "Figuras", f"inspector_evidence no disponible: {exc}"))
             return out
 
         # McCabe + Profile para columnas
         if getattr(b, "column_active", False):
-            try:
-                fig, _d = _ev.mccabe_figure(b, fs)
-                if fig is not None:
-                    out.append(self._diag_canvas_card(
-                        "McCabe-Thiele", _MplCanvas(fig)))
-            except Exception:
-                pass
-            try:
-                fig, _p = _ev.profile_figure(b, fs)
-                if fig is not None:
-                    out.append(self._diag_canvas_card(
-                        "Perfil tray-by-tray", _MplCanvas(fig)))
-            except Exception:
-                pass
+            out.append(self._figure_card(
+                "McCabe-Thiele", _ev.mccabe_figure(b, fs)))
+            out.append(self._figure_card(
+                "Perfil tray-by-tray", _ev.profile_figure(b, fs)))
 
         # Flash binario para Vessels con flash_active
         if getattr(b, "flash_active", False):
-            try:
-                fig, _f = _ev.flash_figure(b, fs)
-                if fig is not None:
-                    out.append(self._diag_canvas_card(
-                        "Flash VLE binario", _MplCanvas(fig)))
-            except Exception:
-                pass
+            out.append(self._figure_card(
+                "Flash VLE binario", _ev.flash_figure(b, fs)))
 
         # Reactores: perfil PFR, curva batch o barras CSTR/stoich
         if _is_reactor(b.eq_type):
-            try:
-                fig, _r = _ev.reactor_figure(b, fs)
-                if fig is not None:
-                    mode = (getattr(b, "reactor_mode", "") or "").upper() or "REACTOR"
-                    out.append(self._diag_canvas_card(
-                        f"Reactor {mode}", _MplCanvas(fig)))
-            except Exception:
-                pass
+            mode = (getattr(b, "reactor_mode", "") or "").upper() or "REACTOR"
+            out.append(self._figure_card(
+                f"Reactor {mode}", _ev.reactor_figure(b, fs)))
 
         # Heat exchangers: diagrama T vs Q
         if _is_hx(b.eq_type):
-            try:
-                fig, _h = _ev.hx_tq_figure(b, fs)
-                if fig is not None:
-                    out.append(self._diag_canvas_card(
-                        "Diagrama T-Q", _MplCanvas(fig)))
-            except Exception:
-                pass
+            out.append(self._figure_card(
+                "Diagrama T-Q", _ev.hx_tq_figure(b, fs)))
 
         return out
 

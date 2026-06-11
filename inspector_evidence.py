@@ -599,18 +599,60 @@ def utility_aux_text(block, fs) -> Optional[str]:
 
 # ─────────────────────────────────────────────────────────────────────
 #  FIGURAS MATPLOTLIB (devuelven Figure embebible — caller decide si la usa)
+#
+#  CONTRATO (aditivo): cada *_figure devuelve (Figure, data_dict) o
+#  (None, {"reason": str}).  El "reason" explica POR QUÉ no hay figura
+#  y qué hacer para obtenerla (honestidad pedagógica: nunca desaparecer
+#  en silencio).  Callers legacy que solo chequean `fig is not None`
+#  siguen funcionando sin cambios.
 # ─────────────────────────────────────────────────────────────────────
 
+_MPL_REASON = ("matplotlib no disponible en este entorno — instalalo "
+               "(pip install matplotlib) para ver esta figura")
+
+
+def _no_fig(reason: str):
+    """(None, {'reason': ...}) — rama sin-figura del contrato."""
+    return None, {"reason": reason}
+
+
+def _column_feed(block, fs):
+    """Feed con composición de una columna/flash (o None)."""
+    ins = [s for s in fs.streams.values()
+           if s.dst == block.id and (s.composition or {})]
+    return next((s for s in ins if s.mass_flow > 0),
+                ins[0] if ins else None)
+
+
 def mccabe_figure(block, fs):
-    """Devuelve (Figure, design_dict) o (None, None)."""
+    """Devuelve (Figure, design_dict) o (None, {"reason": str})."""
     try:
         import matplotlib
         matplotlib.use("Agg")          # idempotente; el caller hace QtAgg si quiere
         from matplotlib.figure import Figure
+    except Exception:
+        return _no_fig(_MPL_REASON)
+    try:
         import mccabe_thiele as _mt
+        LK = getattr(block, "column_LK", "") or ""
+        HK = getattr(block, "column_HK", "") or ""
+        if not LK or not HK:
+            return _no_fig("se requiere el par binario LK/HK — declaralo "
+                           "en la sección Columna")
         d = _mt.design_from_block(block, fs)
         if d is None:
-            return None, None
+            feed = _column_feed(block, fs)
+            if feed is None:
+                return _no_fig("el feed de la columna no tiene composición/"
+                               "flujo — ejecutá el solver primero")
+            comp = feed.composition or {}
+            if comp.get(LK, 0) <= 0 and comp.get(HK, 0) <= 0:
+                return _no_fig(f"el feed no contiene el par LK/HK declarado "
+                               f"({LK}/{HK}) — revisá la composición o las "
+                               f"keys de la columna")
+            return _no_fig(f"sin curva de equilibrio para {LK}/{HK} — "
+                           f"faltan datos Antoine/NRTL en thermo_db para "
+                           f"ese par")
         fig = Figure(figsize=(3.4, 3.2), dpi=90)
         ax = fig.add_subplot(111)
         xs, ys = d["equilibrium"]
@@ -644,20 +686,31 @@ def mccabe_figure(block, fs):
         ax.set_aspect("equal", adjustable="box")
         fig.tight_layout()
         return fig, d
-    except Exception:
-        return None, None
+    except Exception as exc:
+        return _no_fig(f"error construyendo el McCabe-Thiele: {exc}")
 
 
 def profile_figure(block, fs):
-    """Devuelve (Figure, profile_dict) o (None, None)."""
+    """Devuelve (Figure, profile_dict) o (None, {"reason": str})."""
     try:
         import matplotlib
         matplotlib.use("Agg")
         from matplotlib.figure import Figure
+    except Exception:
+        return _no_fig(_MPL_REASON)
+    try:
         import tray_profile as _tp
+        if not getattr(block, "column_active", False):
+            return _no_fig("la columna no tiene el diseño automático "
+                           "activado — activalo en la sección Columna y "
+                           "ejecutá el solver")
+        if not getattr(block, "column_LK", "")                 or not getattr(block, "column_HK", ""):
+            return _no_fig("se requiere el par binario LK/HK — declaralo "
+                           "en la sección Columna")
         p = _tp.build_stage_profile(block, fs)
         if p is None:
-            return None, None
+            return _no_fig("columna sin resultados del solver — ejecutá "
+                           "el solver primero")
         fig = Figure(figsize=(3.4, 2.8), dpi=90)
         ax = fig.add_subplot(111)
         stages = p["stages"]
@@ -689,8 +742,8 @@ def profile_figure(block, fs):
             ax.axvline(n_feed, color="#888", ls="--", lw=0.7)
         fig.tight_layout()
         return fig, p
-    except Exception:
-        return None, None
+    except Exception as exc:
+        return _no_fig(f"error construyendo el perfil: {exc}")
 
 
 def reactor_figure(block, fs):
@@ -698,17 +751,24 @@ def reactor_figure(block, fs):
        · pfr   → perfil espacial (conversión o flujo molar vs L/V)
        · batch → curva especies vs tiempo
        · cstr  → barras entrada/salida (CSTR no tiene perfil temporal)
-       · stoich/equilibrium/... sin perfil persistido → None
+       · stoich/equilibrium/... sin perfil → barras in/out (con fs)
+
+    Devuelve (Figure, dict) o (None, {"reason": str}).
     """
     try:
         import matplotlib
         matplotlib.use("Agg")
         from matplotlib.figure import Figure
+    except Exception:
+        return _no_fig(_MPL_REASON)
+    try:
         mode = getattr(block, "reactor_mode", "") or ""
         if mode == "pfr":
             prof = getattr(block, "_pfr_profile", None)
             if not prof or not prof.get("points"):
-                return None, None
+                return _no_fig("el PFR no tiene perfil persistido — "
+                               "ejecutá el solver (con reacciones activas) "
+                               "para generarlo")
             pts = prof["points"]
             fig = Figure(figsize=(3.4, 2.8), dpi=90)
             ax = fig.add_subplot(111)
@@ -722,7 +782,9 @@ def reactor_figure(block, fs):
                 ax.plot(xs, ys, lw=1.2, label=sp)
                 any_curve = True
             if not any_curve:
-                return None, None
+                return _no_fig("el perfil PFR no registró conversión de "
+                               "ninguna especie — revisá las reacciones "
+                               "activas del bloque")
             ax.set_xlabel("L / L_total", fontsize=8)
             ax.set_ylabel("Conversión (%)", fontsize=8)
             ax.set_title(f"Perfil PFR — {block.name}", fontsize=9, fontweight="bold")
@@ -735,7 +797,9 @@ def reactor_figure(block, fs):
         if mode == "batch":
             prof = getattr(block, "_batch_profile", None)
             if not prof or not prof.get("points"):
-                return None, None
+                return _no_fig("el reactor batch no tiene curva temporal "
+                               "persistida — ejecutá el solver (con "
+                               "reacciones y t_batch declarados)")
             pts = prof["points"]
             fig = Figure(figsize=(3.4, 2.8), dpi=90)
             ax = fig.add_subplot(111)
@@ -749,7 +813,9 @@ def reactor_figure(block, fs):
                 ax.plot(xs, ys, lw=1.2, label=sp)
                 any_curve = True
             if not any_curve:
-                return None, None
+                return _no_fig("la curva batch no registró conversión de "
+                               "ninguna especie — revisá las reacciones "
+                               "activas del bloque")
             ax.set_xlabel("Tiempo (s)", fontsize=8)
             ax.set_ylabel("Conversión (%)", fontsize=8)
             t_tot = prof.get("t_total_s", xs[-1] if xs else 0)
@@ -765,7 +831,8 @@ def reactor_figure(block, fs):
             # CSTR (o cualquier reactor steady-state con stoich/equilibrium):
             # barras de % másico entrada vs salida — evidencia del balance.
             if fs is None:
-                return None, None
+                return _no_fig("sin flowsheet asociado — no se pueden leer "
+                               "las corrientes del reactor")
             ins = [s for s in fs.streams.values() if s.dst == block.id]
             outs = [s for s in fs.streams.values() if s.src == block.id]
             def _agg(streams):
@@ -777,10 +844,13 @@ def reactor_figure(block, fs):
                 return {k: v/m for k, v in tot.items()} if m > 0 else {}
             cin, cout = _agg(ins), _agg(outs)
             if not cin and not cout:
-                return None, None
+                return _no_fig("las corrientes del reactor no tienen "
+                               "composición/flujo — ejecutá el solver "
+                               "primero")
             species = sorted(set(cin) | set(cout))
             if not species:
-                return None, None
+                return _no_fig("las corrientes del reactor no declaran "
+                               "especies — agregá composición al feed")
             fig = Figure(figsize=(3.4, 2.8), dpi=90)
             ax = fig.add_subplot(111)
             x = list(range(len(species))); w = 0.38
@@ -801,33 +871,47 @@ def reactor_figure(block, fs):
             for s in ("top", "right"): ax.spines[s].set_visible(False)
             fig.tight_layout()
             return fig, {"composition_in": cin, "composition_out": cout}
-        return None, None
-    except Exception:
-        return None, None
+        return _no_fig(f"el modo de reactor '{mode or '—'}' no tiene "
+                       f"figura asociada")
+    except Exception as exc:
+        return _no_fig(f"error construyendo la figura del reactor: {exc}")
 
 
 def hx_tq_figure(block, fs):
     """Diagrama T vs Q (cumulative duty) para un HX: dos líneas — caliente
     y frío — desde T_in hasta T_out, con el approach mínimo marcado.
-    Evidencia visual del primer principio del intercambiador."""
+    Evidencia visual del primer principio del intercambiador.
+
+    Devuelve (Figure, hx_diag_dict) o (None, {"reason": str})."""
     try:
         import matplotlib
         matplotlib.use("Agg")
         from matplotlib.figure import Figure
+    except Exception:
+        return _no_fig(_MPL_REASON)
+    try:
         import equipment_costs as _ec
         if (_ec.EQUIPMENT_DATA.get(block.eq_type, {}).get("categoria")
                 != "Heat exchangers"):
-            return None, None
+            return _no_fig("el bloque no es un intercambiador de calor")
         hxd = getattr(block, "_hx_diagnostics", None)
         if not (hxd and isinstance(hxd, dict)):
-            return None, None
+            return _no_fig("el HX no tiene diagnóstico térmico — ejecutá "
+                           "el solver primero")
         Thi, Tho = hxd.get("T_h_in"), hxd.get("T_h_out")
         Tci, Tco = hxd.get("T_c_in"), hxd.get("T_c_out")
         if None in (Thi, Tho, Tci, Tco):
-            return None, None
+            faltan = [n for n, v in (("T_h_in", Thi), ("T_h_out", Tho),
+                                     ("T_c_in", Tci), ("T_c_out", Tco))
+                      if v is None]
+            return _no_fig(f"faltan temperaturas de un lado del HX "
+                           f"({', '.join(faltan)}) — declarar la utility "
+                           f"o materializar las corrientes auxiliares "
+                           f"(Ctrl+U) completa el lado de servicio")
         duty = abs(float(getattr(block, "duty", 0.0) or 0.0))
         if duty <= 0:
-            return None, None
+            return _no_fig("el HX tiene duty = 0 — sin calor transferido "
+                           "no hay diagrama T-Q (revisá las T de proceso)")
         fig = Figure(figsize=(3.4, 2.8), dpi=90)
         ax = fig.add_subplot(111)
         # caliente: cede duty Q (cae de Thi a Tho mientras Q acumula)
@@ -862,21 +946,35 @@ def hx_tq_figure(block, fs):
         for s in ("top", "right"): ax.spines[s].set_visible(False)
         fig.tight_layout()
         return fig, hxd
-    except Exception:
-        return None, None
+    except Exception as exc:
+        return _no_fig(f"error construyendo el T-Q: {exc}")
 
 
 def flash_figure(block, fs):
-    """Devuelve (Figure, flash_dict) o (None, None) — para Vessels con
-    flash_active genuinamente bifásicos en proyección binaria."""
+    """Devuelve (Figure, flash_dict) o (None, {"reason": str}) — para
+    Vessels con flash_active genuinamente bifásicos en proyección
+    binaria."""
     try:
         import matplotlib
         matplotlib.use("Agg")
         from matplotlib.figure import Figure
+    except Exception:
+        return _no_fig(_MPL_REASON)
+    try:
         import distillation_simple as _ds
+        if not getattr(block, "flash_active", False):
+            return _no_fig("el flash automático no está activado — "
+                           "activalo en la sección Flash y ejecutá el "
+                           "solver")
         f = _ds.flash_from_block(block, fs)
         if f is None:
-            return None, None
+            feed = _column_feed(block, fs)
+            if feed is None:
+                return _no_fig("el feed del flash no tiene composición/"
+                               "flujo — ejecutá el solver primero")
+            return _no_fig("sin datos Antoine para los componentes del "
+                           "feed — el flash binario no puede proyectarse "
+                           "(revisá thermo_db)")
         fig = Figure(figsize=(3.4, 3.2), dpi=90)
         ax = fig.add_subplot(111)
         xs, ys = f["equilibrium"]
@@ -893,8 +991,8 @@ def flash_figure(block, fs):
         ax.set_aspect("equal", adjustable="box")
         fig.tight_layout()
         return fig, f
-    except Exception:
-        return None, None
+    except Exception as exc:
+        return _no_fig(f"error construyendo el flash VLE: {exc}")
 
 
 # ═════════════════════════════════════════════════════════════════════
