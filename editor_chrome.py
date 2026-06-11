@@ -1507,28 +1507,35 @@ EQ_TYPE_TO_ISA: Dict[str, str] = {
 }
 
 
-def isa_type_for_eq(eq_type: str) -> str:
+def isa_type_for_eq(eq_type: str) -> Optional[str]:
     """Mapea un eq_type canónico del catálogo (e.g. 'Reactor — CSTR
     (agitado)', 'Heat exch. — flat plate') a una silueta ISA de
     BLOCK_DIMS (reactor/mezclador/separador/columna/hx/bomba/tanque
     más las específicas: valvula/compresor/ventilador/horno/caldera/
-    ciclon/torre_enf/platos/tambor/centrifuga/filtro/secador).
+    ciclon/torre_enf/platos/tambor/centrifuga/filtro/secador y las
+    variantes hx_kettle/hx_aircooler/hx_placa/cristalizador).
 
     Resuelve primero por el dict explícito EQ_TYPE_TO_ISA (cubre el
     catálogo completo); para eq_types fuera del dict cae a la
     heurística por categoría/substring de _isa_heuristic().
+
+    Devuelve None si no hay match confiable — el caller decide el
+    fallback honesto (IsaGlyphItem renderiza el SVG de pfd_symbols,
+    o un rect neutro si tampoco hay símbolo).  NUNCA inventa una
+    silueta de tanque para un equipo desconocido.
     """
     if not eq_type:
-        return "tanque"
+        return None
     mapped = EQ_TYPE_TO_ISA.get(eq_type)
     if mapped:
         return mapped
     return _isa_heuristic(eq_type)
 
 
-def _isa_heuristic(eq_type: str) -> str:
+def _isa_heuristic(eq_type: str) -> Optional[str]:
     """Routing heurístico por categoría de equipment_costs y substring
     del nombre — fallback para eq_types no presentes en EQ_TYPE_TO_ISA.
+    Devuelve None si ningún patrón matchea con confianza.
     """
     if "ambient" in eq_type.lower() or "atmósfera" in eq_type.lower():
         return "ambient"
@@ -1585,7 +1592,7 @@ def _isa_heuristic(eq_type: str) -> str:
     if "tank" in t or "tanque" in t or "storage" in t:      return "tanque"
     if "decanter" in t:              return "tambor"
     if "vessel" in t or "flash" in t or "separator" in t:   return "separador"
-    return "tanque"  # default conservador
+    return None  # sin match confiable — el caller resuelve el fallback
 
 
 # ════════════════════════════════════════════════════════
@@ -1658,8 +1665,26 @@ class IsaGlyphItem(QGraphicsItem):
         self._h = float(h)
         self.update()
 
-    def isa_type(self) -> str:
+    def isa_type(self) -> Optional[str]:
         return self._isa
+
+    def _pfd_pixmap(self):
+        """Pixmap del símbolo pfd_symbols para eq_types sin silueta
+        nativa.  Reusa el cache `_get_svg_pixmap` de flowsheet_qt
+        (import lazy — flowsheet_qt ya está cargado en runtime y a su
+        vez importa este módulo, no se puede importar top-level)."""
+        try:
+            import pfd_symbols as pfd
+            svg = pfd.wrap_svg(
+                pfd.EQ_TYPE_TO_SYMBOL.get(self._eq_type, ""),
+                w=self._w, h=self._h)
+            if not svg:
+                return None
+            from flowsheet_qt import _get_svg_pixmap
+            return _get_svg_pixmap(self._eq_type, int(self._w),
+                                   int(self._h), svg_str=svg)
+        except Exception:
+            return None
 
     # ── QGraphicsItem ─────────────────────────────────
     def boundingRect(self) -> QRectF:
@@ -1693,24 +1718,40 @@ class IsaGlyphItem(QGraphicsItem):
             r = max(self._w, self._h) / 2 + 8
             p.drawEllipse(QPointF(self._w/2, self._h/2), r, r)
 
-        # Glyph ISA — escalar UNIFORMEMENTE (preservando proporciones)
-        # desde sus dims nativas (BLOCK_DIMS) a las dims reales del
-        # bloque.  Si las proporciones no calzan exactas, el glyph
-        # queda centrado dentro del recuadro y los puertos quedan en
-        # el border del recuadro como antes.  Esto evita el efecto
-        # "achatado" que ocurría con scale(sx, sy) no-uniforme.
-        native_w, native_h = BLOCK_DIMS.get(self._isa, (60, 60))
-        scale = min(self._w / native_w, self._h / native_h)
-        # offset para centrar el glyph dentro de la caja real
-        ox = (self._w - native_w * scale) / 2.0
-        oy = (self._h - native_h * scale) / 2.0
-        p.save()
-        p.translate(ox, oy)
-        p.scale(scale, scale)
-        BlockGlyph.draw(p, self._isa, native_w, native_h, stroke,
-                        fill=QColor(TOK["bg_elev"]),
-                        stroke_width=stroke_w / max(scale, 0.1))
-        p.restore()
+        if self._isa is not None:
+            # Glyph ISA — escalar UNIFORMEMENTE (preservando
+            # proporciones) desde sus dims nativas (BLOCK_DIMS) a las
+            # dims reales del bloque.  Si las proporciones no calzan
+            # exactas, el glyph queda centrado dentro del recuadro y
+            # los puertos quedan en el border del recuadro como antes.
+            # Esto evita el efecto "achatado" que ocurría con
+            # scale(sx, sy) no-uniforme.
+            native_w, native_h = BLOCK_DIMS.get(self._isa, (60, 60))
+            scale = min(self._w / native_w, self._h / native_h)
+            # offset para centrar el glyph dentro de la caja real
+            ox = (self._w - native_w * scale) / 2.0
+            oy = (self._h - native_h * scale) / 2.0
+            p.save()
+            p.translate(ox, oy)
+            p.scale(scale, scale)
+            BlockGlyph.draw(p, self._isa, native_w, native_h, stroke,
+                            fill=QColor(TOK["bg_elev"]),
+                            stroke_width=stroke_w / max(scale, 0.1))
+            p.restore()
+        else:
+            # Fallback honesto para eq_types sin silueta nativa:
+            # 1º el símbolo SVG de pfd_symbols; si tampoco existe,
+            # rect redondeado NEUTRO (nunca una silueta de tanque
+            # que el usuario pueda confundir con un equipo real).
+            pm = self._pfd_pixmap()
+            if pm is not None and not pm.isNull():
+                p.drawPixmap(
+                    QRectF(0, 0, self._w, self._h).toRect(), pm)
+            else:
+                p.setPen(QPen(stroke, stroke_w))
+                p.setBrush(QBrush(QColor(TOK["bg_elev"])))
+                p.drawRoundedRect(
+                    QRectF(2, 2, self._w - 4, self._h - 4), 6, 6)
 
         # Selection dashed ring (offset 6px)
         if self._state == "selected":
