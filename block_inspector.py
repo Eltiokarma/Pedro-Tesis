@@ -1809,9 +1809,15 @@ class BlockInspectorPanel(QWidget):
         # Evidencia gráfica del reactor — lazy al abrir esta sección.
         try:
             import inspector_evidence as _ev
-            mode = (getattr(b, "reactor_mode", "") or "").upper() or "REACTOR"
+            mode_raw = (getattr(b, "reactor_mode", "") or "").lower()
+            mode = mode_raw.upper() or "REACTOR"
             l.addWidget(self._figure_card(
                 f"Reactor {mode}", _ev.reactor_figure(b, self.fs)))
+            # X_eq vs T — figura de libro para equilibrio/Gibbs
+            if mode_raw in ("equilibrium", "gibbs"):
+                l.addWidget(self._figure_card(
+                    "Equilibrio X_eq vs T",
+                    _ev.equilibrium_figure(b, self.fs)))
         except Exception as exc:
             l.addWidget(self._diag_placeholder_card(
                 "Reactor", f"inspector_evidence no disponible: {exc}"))
@@ -2548,6 +2554,9 @@ class BlockInspectorPanel(QWidget):
             items.append("Flash VLE binario → Flash")
         if _is_reactor(eq_type):
             items.append("Perfil del reactor → Reactividad")
+            if (getattr(b, "reactor_mode", "") or "").lower() in (
+                    "equilibrium", "gibbs"):
+                items.append("Equilibrio X_eq vs T → Reactividad")
         if _is_hx(eq_type):
             items.append("Diagrama T-Q → Termodinámica")
         return "\n".join(f"· {it}" for it in items)

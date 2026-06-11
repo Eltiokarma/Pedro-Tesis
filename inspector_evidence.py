@@ -950,6 +950,195 @@ def hx_tq_figure(block, fs):
         return _no_fig(f"error construyendo el T-Q: {exc}")
 
 
+def equilibrium_figure(block, fs):
+    """X_eq vs T para reactores de equilibrio/Gibbs — figura de libro
+    de texto (Smith-Van Ness cap. 13; Fogler cap. 8).
+
+    · Curva X_eq(T): re-resuelve el equilibrio multi-reacción con el
+      inlet REAL del bloque sobre una grilla de T, usando
+      reactions_db.solve_equilibrium_reactor_from_composition (van't
+      Hoff ln K = A + B/T del catálogo — sin constantes inventadas).
+    · Punto de operación: (T_op del bloque, X alcanzada por el solver,
+      leída de las corrientes de salida).
+    · Línea adiabática: SOLO si el bloque opera adiabático y el solver
+      persistió _adiabatic_T_final_K — se traza entre (T_in, X=0) y el
+      estado final del solver (dos hechos persistidos; no se estima cp).
+    · Caption con procedencia: id y nombre de cada reacción, van't Hoff
+      A/B y ΔH°298 del catálogo reactions_db.
+
+    Conversión X = del reactante LIMITANTE (la especie del inlet cuya
+    fracción másica más cae en el equilibrio a T_op).
+
+    Devuelve (Figure, dict) o (None, {"reason": str}).
+    """
+    try:
+        import matplotlib
+        matplotlib.use("Agg")
+        from matplotlib.figure import Figure
+    except Exception:
+        return _no_fig(_MPL_REASON)
+    try:
+        import reactions_db as _rdb
+        mode = (getattr(block, "reactor_mode", "") or "").lower()
+        if mode not in ("equilibrium", "gibbs"):
+            return _no_fig(f"la curva X_eq(T) aplica a reactores de "
+                           f"equilibrio/Gibbs — este bloque opera en "
+                           f"modo '{mode or '—'}'")
+        rxn_ids = list(getattr(block, "active_reactions", None)
+                       or getattr(block, "reactions", None) or [])
+        if not rxn_ids:
+            return _no_fig("el reactor no tiene reacciones del catálogo "
+                           "activas — agregalas en la sección "
+                           "Reactividad")
+        sin_kt = []
+        rxns = []
+        for rid in rxn_ids:
+            r = _rdb.get(rid)
+            if r is None:
+                sin_kt.append(f"{rid} (no está en el catálogo)")
+            elif r.vant_hoff_A is None or r.vant_hoff_B is None:
+                sin_kt.append(f"{rid} (sin van't Hoff A/B)")
+            else:
+                rxns.append(r)
+        if not rxns:
+            return _no_fig("ninguna reacción activa tiene datos K(T) "
+                           "en reactions_db — falta van't Hoff para: "
+                           + ", ".join(sin_kt))
+        # inlet real del bloque (solo corrientes de proceso)
+        ins = [s for s in fs.streams.values()
+               if s.dst == block.id and (s.role or "") != "utility"
+               and not getattr(s, "auto_aux", False)]
+        m_tot = sum(s.mass_flow or 0.0 for s in ins)
+        if not ins or m_tot <= 0:
+            return _no_fig("el inlet del reactor no tiene flujo — "
+                           "ejecutá el solver primero")
+        inlet = {}
+        T_in_C = 0.0
+        for s in ins:
+            mf = (s.mass_flow or 0.0) / m_tot
+            T_in_C += mf * float(s.temperature or 25.0)
+            for c, w in (s.composition or {}).items():
+                inlet[c] = inlet.get(c, 0.0) + w * mf
+        if not inlet:
+            return _no_fig("el inlet del reactor no tiene composición — "
+                           "declarala en el feed y ejecutá el solver")
+        from flowsheet_model import SEC_PER_YEAR, TM_TO_KG
+        m_kg_s = m_tot * TM_TO_KG / SEC_PER_YEAR
+        P_bar = float(getattr(block, "P_op_bar", 0.0) or 1.013)
+        # T de operación: isotérmica declarada, o la adiabática final
+        # que persistió el solver, o T_in
+        T_op_K = float(getattr(block, "T_op_K", 0.0) or 0.0)
+        adiabatic = T_op_K < 100.0
+        if adiabatic:
+            T_op_K = float(getattr(block, "_adiabatic_T_final_K", 0.0)
+                           or 0.0) or (T_in_C + 273.15)
+        rid_list = [r.id for r in rxns]
+
+        def _x_eq(T_K):
+            """(limitante, X) en el equilibrio a T_K, o (None, None)."""
+            res = _rdb.solve_equilibrium_reactor_from_composition(
+                rid_list, inlet, m_kg_s, T_K=T_K, P_bar=P_bar)
+            if not res:
+                return None, None
+            out = res.get("outlet_composition") or {}
+            best, best_x = None, 0.0
+            for c, w_in in inlet.items():
+                if w_in <= 1e-9:
+                    continue
+                x = 1.0 - (out.get(c, 0.0) / w_in)
+                if x > best_x:
+                    best, best_x = c, x
+            return best, best_x
+
+        limitante, _ = _x_eq(T_op_K)
+        if limitante is None:
+            return _no_fig("el equilibrio no es resoluble con este "
+                           "inlet (componentes sin mapeo a fórmula en "
+                           "thermo_db, o ningún reactante presente)")
+        # grilla de T alrededor del punto de operación
+        T_lo = max(280.0, T_op_K - 200.0)
+        T_hi = T_op_K + 200.0
+        n_pts = 25
+        Ts, Xs = [], []
+        for i in range(n_pts):
+            T = T_lo + (T_hi - T_lo) * i / (n_pts - 1)
+            res = _rdb.solve_equilibrium_reactor_from_composition(
+                rid_list, inlet, m_kg_s, T_K=T, P_bar=P_bar)
+            if not res:
+                continue
+            out = res.get("outlet_composition") or {}
+            w_in = inlet.get(limitante, 0.0)
+            if w_in <= 0:
+                continue
+            Ts.append(T - 273.15)
+            Xs.append(max(0.0, 1.0 - out.get(limitante, 0.0) / w_in))
+        if len(Ts) < 3:
+            return _no_fig("el solver de equilibrio no convergió en la "
+                           "grilla de T — no hay curva X_eq(T) "
+                           "confiable que mostrar")
+        # X alcanzada por el solver (corrientes de salida reales)
+        outs = [s for s in fs.streams.values()
+                if s.src == block.id and (s.role or "") != "utility"
+                and not getattr(s, "auto_aux", False)]
+        m_out = sum(s.mass_flow or 0.0 for s in outs)
+        X_ach = None
+        if m_out > 0:
+            w_out = sum((s.composition or {}).get(limitante, 0.0)
+                        * (s.mass_flow or 0.0) for s in outs) / m_out
+            w_in0 = inlet.get(limitante, 0.0)
+            if w_in0 > 0:
+                X_ach = max(0.0, 1.0 - w_out / w_in0)
+
+        fig = Figure(figsize=(3.6, 3.4), dpi=90)
+        ax = fig.add_subplot(111)
+        ax.plot(Ts, Xs, color="#1f6feb", lw=1.5,
+                label=f"X_eq({limitante})")
+        if X_ach is not None:
+            ax.plot([T_op_K - 273.15], [X_ach], "o", color="#d4691e",
+                    ms=7, label=f"operación ({T_op_K - 273.15:.0f} °C, "
+                                f"X={X_ach:.2f})")
+        adiab_note = ""
+        T_fin_K = float(getattr(block, "_adiabatic_T_final_K", 0.0) or 0.0)
+        if adiabatic and T_fin_K > 0 and X_ach is not None:
+            # dos hechos del solver: (T_in, 0) → (T_final, X_alcanzada)
+            ax.plot([T_in_C, T_fin_K - 273.15], [0.0, X_ach],
+                    color="#2a9d4a", lw=1.1, ls="--",
+                    label="línea adiabática (solver)")
+        elif adiabatic:
+            adiab_note = ("  ·  línea adiabática omitida (el solver no "
+                          "persistió T final)")
+        ax.set_xlabel("T (°C)", fontsize=8)
+        ax.set_ylabel(f"X ({limitante})", fontsize=8)
+        ax.set_ylim(-0.02, 1.02)
+        ax.tick_params(labelsize=7)
+        ax.grid(True, alpha=0.3, linestyle="--")
+        ax.legend(fontsize=6, loc="best")
+        ax.set_title(f"X_eq vs T — {block.name}", fontsize=9,
+                     fontweight="bold")
+        srcs = "; ".join(
+            f"{r.id} {r.name[:28]}: ln K = {r.vant_hoff_A:.3g} "
+            f"{'+' if r.vant_hoff_B >= 0 else '−'} "
+            f"{abs(r.vant_hoff_B):.4g}/T, "
+            f"ΔH°298={r.dh_rxn_298_kJ_mol:.4g} kJ/mol"
+            if r.dh_rxn_298_kJ_mol is not None else
+            f"{r.id} {r.name[:28]}: ln K = {r.vant_hoff_A:.3g} "
+            f"{'+' if r.vant_hoff_B >= 0 else '−'} "
+            f"{abs(r.vant_hoff_B):.4g}/T"
+            for r in rxns)
+        caption = f"K(T) van't Hoff — reactions_db: {srcs}{adiab_note}"
+        if sin_kt:
+            caption += f"  ·  sin K(T): {', '.join(sin_kt)}"
+        fig.text(0.02, 0.005, caption, fontsize=5.2, color="#555",
+                 wrap=True)
+        fig.tight_layout(rect=(0, 0.06, 1, 1))
+        data = {"T_C": Ts, "X_eq": Xs, "limitante": limitante,
+                "T_op_C": T_op_K - 273.15, "X_achieved": X_ach,
+                "sources": [r.id for r in rxns]}
+        return fig, data
+    except Exception as exc:
+        return _no_fig(f"error construyendo X_eq vs T: {exc}")
+
+
 def flash_figure(block, fs):
     """Devuelve (Figure, flash_dict) o (None, {"reason": str}) — para
     Vessels con flash_active genuinamente bifásicos en proyección
