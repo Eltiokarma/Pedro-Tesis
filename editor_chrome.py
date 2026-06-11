@@ -74,6 +74,14 @@ BLOCK_DIMS: Dict[str, Tuple[int, int]] = {
     "centrifuga": (60, 50),
     "filtro":     (52, 60),
     "secador":    (80, 44),
+    # Variantes de HX con geometría propia + cristalizador.  Aspect
+    # ratio ≈ content_bbox del símbolo pfd_symbols equivalente
+    # (hx-kettle 160×90, hx-air-cooled 140×100, hx-plate 100×90,
+    # crystallizer 80×120).
+    "hx_kettle":     (84, 52),
+    "hx_aircooler":  (70, 52),
+    "hx_placa":      (56, 50),
+    "cristalizador": (52, 76),
 }
 
 # Mapeo del tipo del mockup → eq_type canónico del catálogo
@@ -106,9 +114,10 @@ PALETTE_GROUPS: Dict[str, Tuple[str, ...]] = {
     "reactor":   ("reactor",),
     "mezclador": ("mezclador", "valvula"),
     "separador": ("separador", "tambor", "ciclon", "centrifuga",
-                  "filtro", "secador"),
+                  "filtro", "secador", "cristalizador"),
     "columna":   ("columna", "platos", "torre_enf"),
-    "hx":        ("hx", "horno", "caldera"),
+    "hx":        ("hx", "hx_kettle", "hx_aircooler", "hx_placa",
+                  "horno", "caldera"),
     "bomba":     ("bomba", "compresor", "ventilador"),
     "tanque":    ("tanque", "ambient"),
 }
@@ -545,6 +554,89 @@ class BlockGlyph:
         p.setPen(QPen(stroke, 1.2)); p.setBrush(Qt.NoBrush)
         p.drawEllipse(QPointF(w * 0.28, h - 8), 3.5, 3.5)
         p.drawEllipse(QPointF(w * 0.72, h - 8), 3.5, 3.5)
+
+    @staticmethod
+    def _draw_hx_kettle(p, w, h, stroke, fill_brush, sw):
+        # marmita TEMA K: shell horizontal + domo de vapor superior
+        p.drawRoundedRect(QRectF(6, 16, w - 12, h - 22), 10, 10)
+        dome = QPainterPath()
+        dome.moveTo(w/2 - 9, 16)
+        dome.arcTo(QRectF(w/2 - 9, 7, 18, 18), 180, -180)
+        p.drawPath(dome)
+        # haz en U (light)
+        ghost = QColor(stroke); ghost.setAlphaF(0.6)
+        p.setPen(QPen(ghost, 1.0)); p.setBrush(Qt.NoBrush)
+        bundle = QPainterPath()
+        bundle.moveTo(12, h/2 + 1)
+        bundle.lineTo(w - 20, h/2 + 1)
+        bundle.arcTo(QRectF(w - 24, h/2 + 1, 8, 7), 90, -180)
+        bundle.lineTo(12, h/2 + 8)
+        p.drawPath(bundle)
+        # nivel de líquido dashed (light)
+        ghost2 = QColor(stroke); ghost2.setAlphaF(0.4)
+        dpen = QPen(ghost2, 1.0); dpen.setStyle(Qt.DashLine)
+        p.setPen(dpen)
+        p.drawLine(QPointF(12, h - 12), QPointF(w - 12, h - 12))
+
+    @staticmethod
+    def _draw_hx_aircooler(p, w, h, stroke, fill_brush, sw):
+        # aerorrefrigerante API 661: caja de tubos + ventilador arriba
+        p.drawRect(QRectF(8, 22, w - 16, h - 28))
+        # ventilador circular montado sobre la caja
+        p.drawEllipse(QPointF(w/2, 22), 10.0, 10.0)
+        # tubos (light)
+        ghost = QColor(stroke); ghost.setAlphaF(0.6)
+        p.setPen(QPen(ghost, 1.0)); p.setBrush(Qt.NoBrush)
+        for i in range(3):
+            y = 29 + i * ((h - 38) / 2)
+            p.drawLine(QPointF(13, y), QPointF(w - 13, y))
+        # aspas (light)
+        for ang in (90, 210, 330):
+            a = math.radians(ang)
+            tip = QPointF(w/2 + 8 * math.cos(a), 22 - 8 * math.sin(a))
+            ctrl = QPointF(w/2 + 5 * math.cos(a + 0.7),
+                           22 - 5 * math.sin(a + 0.7))
+            blade = QPainterPath(QPointF(w/2, 22))
+            blade.quadTo(ctrl, tip)
+            p.drawPath(blade)
+        p.setBrush(stroke); p.setPen(Qt.NoPen)
+        p.drawEllipse(QPointF(w/2, 22), 1.8, 1.8)
+
+    @staticmethod
+    def _draw_hx_placa(p, w, h, stroke, fill_brush, sw):
+        # intercambiador de placas: marco + pila de placas paralelas
+        p.drawRect(QRectF(8, 8, w - 16, h - 16))
+        ghost = QColor(stroke); ghost.setAlphaF(0.6)
+        p.setPen(QPen(ghost, 1.1)); p.setBrush(Qt.NoBrush)
+        n = 5
+        for i in range(1, n + 1):
+            x = 8 + i * ((w - 16) / (n + 1))
+            p.drawLine(QPointF(x, 12), QPointF(x, h - 12))
+
+    @staticmethod
+    def _draw_cristalizador(p, w, h, stroke, fill_brush, sw):
+        # vessel cónico (fondo a punta) + agitador + cristales
+        body = QPainterPath()
+        body.moveTo(6, 18)
+        body.arcTo(QRectF(6, 8, w - 12, 20), 180, -180)
+        body.lineTo(w - 6, h - 24)
+        body.lineTo(w/2, h - 4)
+        body.lineTo(6, h - 24)
+        body.closeSubpath()
+        p.drawPath(body)
+        # agitador
+        thin = QPen(stroke, 1.2); thin.setCapStyle(Qt.RoundCap)
+        p.setPen(thin); p.setBrush(Qt.NoBrush)
+        p.drawLine(QPointF(w/2, 4), QPointF(w/2, h - 22))
+        p.drawLine(QPointF(w/2 - 7, h - 24), QPointF(w/2 + 7, h - 24))
+        # cristales (rombos light)
+        ghost = QColor(stroke); ghost.setAlphaF(0.5)
+        p.setPen(QPen(ghost, 0.9))
+        for cx, cy in ((w/2 - 9, h/2 + 2), (w/2 + 8, h/2 + 8),
+                       (w/2 - 2, h/2 + 14)):
+            p.drawPolygon(QPolygonF([
+                QPointF(cx, cy - 3.5), QPointF(cx + 3.5, cy),
+                QPointF(cx, cy + 3.5), QPointF(cx - 3.5, cy)]))
 # ════════════════════════════════════════════════════════
 
 class EditorTopbar(QFrame):
@@ -1366,7 +1458,7 @@ EQ_TYPE_TO_ISA: Dict[str, str] = {
     "Compressor — rotary": "compresor",
     "Cooling tower — induced draft": "torre_enf",
     "Cooling tower — natural draft": "torre_enf",
-    "Crystallizer": "separador",
+    "Crystallizer": "cristalizador",
     "Cyclone — gas/solid": "ciclon",
     "Decanter — gravity": "tambor",
     "Dryer — drum": "secador",
@@ -1377,18 +1469,18 @@ EQ_TYPE_TO_ISA: Dict[str, str] = {
     "Fired heater — non-reformer": "horno",
     "Fired heater — reformer": "horno",
     "Heat exch. — U-tube": "hx",
-    "Heat exch. — WHB field erected": "hx",
-    "Heat exch. — WHB packaged": "hx",
-    "Heat exch. — air cooler": "hx",
-    "Heat exch. — condenser air-cooled": "hx",
+    "Heat exch. — WHB field erected": "hx_kettle",
+    "Heat exch. — WHB packaged": "hx_kettle",
+    "Heat exch. — air cooler": "hx_aircooler",
+    "Heat exch. — condenser air-cooled": "hx_aircooler",
     "Heat exch. — condenser shell-tube": "hx",
     "Heat exch. — double pipe": "hx",
     "Heat exch. — fixed tube": "hx",
-    "Heat exch. — flat plate": "hx",
+    "Heat exch. — flat plate": "hx_placa",
     "Heat exch. — floating head": "hx",
-    "Heat exch. — kettle reboiler": "hx",
+    "Heat exch. — kettle reboiler": "hx_kettle",
     "Heat exch. — multiple pipe": "hx",
-    "Heat exch. — spiral plate": "hx",
+    "Heat exch. — spiral plate": "hx_placa",
     "Mixer — inline": "mezclador",
     "Mixer — static": "mezclador",
     "Packing — random": "platos",
