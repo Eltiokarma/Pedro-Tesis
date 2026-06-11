@@ -3922,10 +3922,151 @@ class StreamItem(QGraphicsPathItem):
         self.update_path(rebuild_handles=False)
         super().hoverEnterEvent(event)
 
+    def hoverMoveEvent(self, event):
+        """Cursor según el segmento ortogonal bajo el mouse (estilo
+        Visio): SizeVer sobre un segmento horizontal (se moverá en Y),
+        SizeHor sobre uno vertical.  Solo streams full-conectados —
+        los flotantes conservan el drag-translate de toda la flecha."""
+        s = self.model
+        if s.src != -1 and s.dst != -1:
+            pts = getattr(self, "_last_pts", None) or []
+            nodes = [(pts[i], pts[i+1]) for i in range(0, len(pts), 2)]
+            _, orient = self._segment_at(nodes, event.scenePos())
+            if orient == "h":
+                self.setCursor(Qt.SizeVerCursor)
+            elif orient == "v":
+                self.setCursor(Qt.SizeHorCursor)
+            else:
+                self.unsetCursor()
+        super().hoverMoveEvent(event)
+
     def hoverLeaveEvent(self, event):
         self._hovered = False
+        self.unsetCursor()
         self.update_path(rebuild_handles=False)
         super().hoverLeaveEvent(event)
+
+    # ── Drag de segmento ortogonal (estilo Visio/Word) ──────────
+
+    SEG_HIT_TOL = 7.0     # px: media banda del stroker de shape() (12px)
+
+    @staticmethod
+    def _segment_at(nodes, scene_pos, tol=None):
+        """(idx, orient) del segmento ortogonal de `nodes` más cercano
+        a scene_pos dentro de `tol` px, o (None, None).
+
+        nodes: [(x, y), ...] — polyline.  idx refiere al segmento
+        nodes[idx] → nodes[idx+1].  orient: 'h' | 'v'.  Los segmentos
+        no ortogonales (diagonales) se ignoran."""
+        if tol is None:
+            tol = StreamItem.SEG_HIT_TOL
+        px, py = scene_pos.x(), scene_pos.y()
+        best, best_orient, best_d = None, None, tol
+        for i in range(len(nodes) - 1):
+            x1, y1 = nodes[i]
+            x2, y2 = nodes[i + 1]
+            if abs(y1 - y2) < 1e-6 and abs(x2 - x1) > 1e-6:      # horizontal
+                if min(x1, x2) - 2.0 <= px <= max(x1, x2) + 2.0:
+                    d = abs(py - y1)
+                    if d < best_d:
+                        best, best_orient, best_d = i, "h", d
+            elif abs(x1 - x2) < 1e-6 and abs(y2 - y1) > 1e-6:    # vertical
+                if min(y1, y2) - 2.0 <= py <= max(y1, y2) + 2.0:
+                    d = abs(px - x1)
+                    if d < best_d:
+                        best, best_orient, best_d = i, "v", d
+        return best, best_orient
+
+    def _node_list(self):
+        """Polyline del MODELO: [puerto src] + waypoints + [puerto dst]
+        en coords de escena (sin el gap visual de la flecha)."""
+        s = self.model
+        b_src = self.fs.blocks.get(s.src)
+        b_dst = self.fs.blocks.get(s.dst)
+        if b_src is not None:
+            _, x1, y1 = self._resolve_port(b_src, s.src_port, "right")
+        elif s.start_xy and len(s.start_xy) >= 2:
+            x1, y1 = float(s.start_xy[0]), float(s.start_xy[1])
+        else:
+            return []
+        if b_dst is not None:
+            _, x2, y2 = self._resolve_port(b_dst, s.dst_port, "left")
+        elif s.end_xy and len(s.end_xy) >= 2:
+            x2, y2 = float(s.end_xy[0]), float(s.end_xy[1])
+        else:
+            return []
+        return [(x1, y1)]             + [(float(w[0]), float(w[1])) for w in (s.waypoints or [])]             + [(x2, y2)]
+
+    def _begin_segment_drag(self, scene_pos) -> bool:
+        """Detecta el segmento dibujado bajo scene_pos y arma el estado
+        del drag.  NO muta el modelo todavía: el bake de waypoints se
+        difiere al primer mouseMove real (_move_segment_to), para que
+        un simple click de selección no congele el autoroute del
+        stream.  Devuelve False si no hay segmento ortogonal cerca."""
+        pts = getattr(self, "_last_pts", None)
+        if not pts or len(pts) < 4:
+            return False
+        nodes = [(pts[i], pts[i + 1]) for i in range(0, len(pts), 2)]
+        idx, orient = self._segment_at(nodes, scene_pos)
+        if idx is None:
+            return False
+        self._seg_drag = {"idx": idx, "orient": orient, "baked": False}
+        return True
+
+    def _bake_segment_drag(self):
+        """Primer move del drag: materializa la ruta DIBUJADA como
+        waypoints, desacoplando ambos extremos con un waypoint-ancla
+        ortogonalizador (ver comentario ANCLAS abajo).  Los puertos
+        nunca se mueven; el primer/último tramo se ajusta vía su
+        ancla, perpendicular — jamás inclinado.
+
+        Los bends de _last_pts ya están simplificados (alternan H/V),
+        así que los vecinos del segmento arrastrado son
+        perpendiculares por construcción y solo se alargan/acortan."""
+        sd = self._seg_drag
+        pts = self._last_pts
+        nodes_model = self._node_list()
+        p0 = nodes_model[0]            # puerto/extremo real de origen
+        p1 = nodes_model[-1]           # puerto/extremo real de destino
+        wps = [[pts[i], pts[i + 1]] for i in range(2, len(pts) - 2, 2)]
+        # ANCLAS: la ruta dibujada no arranca exactamente en el puerto
+        # (gap visual de flecha + lane-offset la corren algunos px) —
+        # bakear el interior a secas dejaría un enlace DIAGONAL
+        # puerto→primer bend.  El ancla es la proyección del puerto
+        # sobre la línea del primer/último segmento dibujado: el
+        # enlace puerto→ancla queda perpendicular (o colineal) al
+        # segmento.  Además funciona de stub: al arrastrar el primer/
+        # último segmento, el puerto NO se mueve — el ancla absorbe
+        # el desplazamiento.
+        first_h = abs(pts[3] - pts[1]) < 1e-6
+        anchor0 = [p0[0], pts[1]] if first_h else [pts[0], p0[1]]
+        last_h = abs(pts[-1] - pts[-3]) < 1e-6
+        anchor1 = [p1[0], pts[-1]] if last_h else [pts[-2], p1[1]]
+        self.model.waypoints = [anchor0] + wps + [anchor1]
+        # el ancla prependida corre todos los segmentos dibujados +1
+        sd["idx"] = sd["idx"] + 1
+        sd["baked"] = True
+
+    def _move_segment_to(self, scene_pos):
+        """Mueve el segmento en drag PERPENDICULAR a su dirección con
+        snap a grilla, ajustando los dos waypoints que lo delimitan.
+        Segmento horizontal solo se mueve en Y; vertical solo en X."""
+        sd = self._seg_drag
+        if not sd["baked"]:
+            self._bake_segment_drag()
+        wps = self.model.waypoints
+        i = sd["idx"]                  # nodes[i] == wps[i-1]
+        if not (1 <= i < len(wps)):    # se necesitan wps[i-1] y wps[i]
+            return
+        if sd["orient"] == "h":
+            val = round(scene_pos.y() / GRID_STEP) * GRID_STEP
+            wps[i - 1][1] = val
+            wps[i][1] = val
+        else:
+            val = round(scene_pos.x() / GRID_STEP) * GRID_STEP
+            wps[i - 1][0] = val
+            wps[i][0] = val
+        self.update_path(rebuild_handles=False)
 
     def _draw_direction_arrows(self, pts: list):
         """Dibuja pequeños chevrons '>' a lo largo del path indicando
@@ -4543,21 +4684,23 @@ class StreamItem(QGraphicsPathItem):
         """Inicia drag-translate de toda la flecha al hacer click sobre
         ella (no sobre un handle).
 
-        EXCEPCIÓN: si el stream está fully-connected (src y dst en bloques)
-        Y no tiene waypoints, NO hay nada que mover (los endpoints siguen
-        a los bloques, no hay bend points editables). En ese caso NO
-        interceptamos el click: dejamos que Qt haga la selección normal,
-        para que rubber-band + drag de un bloque vecino mueva el conjunto
-        sin que esta flecha 'absorba' el click y bloquee el group-drag."""
+        Full-conectado (src y dst en bloques): drag de SEGMENTO estilo
+        Visio — el segmento bajo el cursor se mueve perpendicular a su
+        dirección preservando ortogonalidad (ver _begin_segment_drag).
+        Si no hay segmento ortogonal bajo el cursor, selección normal
+        via super() para no bloquear el rubber band / group-drag."""
         if event.button() == Qt.LeftButton:
             s = self.model
             has_floating = (s.src == -1 or s.dst == -1)
-            has_waypoints = bool(s.waypoints)
-            if not has_floating and not has_waypoints:
-                # Fully-connected, sin waypoints — nada que arrastrar.
-                # Selección por defecto via super(), no consumimos el evento.
+            if not has_floating:
+                if self._begin_segment_drag(event.scenePos()):
+                    self.setSelected(True)
+                    event.accept()
+                    return
                 super().mousePressEvent(event)
                 return
+            # Flotante: drag-translate de toda la flecha (comportamiento
+            # original — el endpoint libre no tiene segmentos anclados).
             self.setSelected(True)
             self._drag_origin = event.scenePos()
             self._drag_snap = self._translation_snapshot()
@@ -4566,6 +4709,10 @@ class StreamItem(QGraphicsPathItem):
         super().mousePressEvent(event)
 
     def mouseMoveEvent(self, event):
+        if getattr(self, "_seg_drag", None) is not None:
+            self._move_segment_to(event.scenePos())
+            event.accept()
+            return
         if getattr(self, "_drag_origin", None) is not None:
             delta = event.scenePos() - self._drag_origin
             dx = round(delta.x() / GRID_STEP) * GRID_STEP
@@ -4576,6 +4723,17 @@ class StreamItem(QGraphicsPathItem):
         super().mouseMoveEvent(event)
 
     def mouseReleaseEvent(self, event):
+        if getattr(self, "_seg_drag", None) is not None:
+            baked = self._seg_drag.get("baked", False)
+            self._seg_drag = None
+            if baked:
+                # hubo drag real: re-render con handles sobre la ruta
+                # editada (los stubs colineales los limpia el
+                # _simplify_orthogonal del render; el modelo conserva
+                # la ruta del usuario).
+                self.update_path(rebuild_handles=True)
+            event.accept()
+            return
         if getattr(self, "_drag_origin", None) is not None:
             self._drag_origin = None
             self._drag_snap = None
