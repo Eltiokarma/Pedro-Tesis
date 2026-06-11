@@ -4129,7 +4129,8 @@ class StreamItem(QGraphicsPathItem):
         idx, orient = self._segment_at(nodes, scene_pos)
         if idx is None:
             return False
-        self._seg_drag = {"idx": idx, "orient": orient, "baked": False}
+        self._seg_drag = {"idx": idx, "orient": orient, "baked": False,
+                          "press": (scene_pos.x(), scene_pos.y())}
         return True
 
     def _bake_segment_drag(self):
@@ -4172,6 +4173,12 @@ class StreamItem(QGraphicsPathItem):
         Segmento horizontal solo se mueve en Y; vertical solo en X."""
         sd = self._seg_drag
         if not sd["baked"]:
+            # umbral de drag: ignorar jitter (<3px perpendiculares) —
+            # un click sin arrastre real no debe bakear el autoroute
+            px, py = sd["press"]
+            perp = abs(scene_pos.y() - py) if sd["orient"] == "h"                 else abs(scene_pos.x() - px)
+            if perp < 3.0:
+                return
             self._bake_segment_drag()
         wps = self.model.waypoints
         i = sd["idx"]                  # nodes[i] == wps[i-1]
