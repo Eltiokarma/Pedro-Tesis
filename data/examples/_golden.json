@@ -328,9 +328,9 @@
   "energy_errors": 0,
   "mass_errors": 0,
   "n_blocks": 14,
-  "n_streams": 17,
+  "n_streams": 18,
   "overall_status": "ok",
-  "sum_duty": 38911.08384
+  "sum_duty": 42311.503963
  },
  "sulfuric": {
   "ISBL": 1081290.32,
