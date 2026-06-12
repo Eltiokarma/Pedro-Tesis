@@ -3270,6 +3270,31 @@ class _EndpointHandle(QGraphicsEllipseItem):
             editor._mark_dirty()
 
 
+# ── PRINCIPIO "TODO LO AUTO SE VE" (FASE 4) ────────────────────────────
+# Badge único gris-azulado para marcar cualquier valor que el solver derivó
+# sin intervención del user (P propagada, ΔP auto-dimensionado, duty auto,
+# T/fase inferidas).  Spec del user → estilo normal; calculado → este badge.
+def _auto_badge(text="AUTO"):
+    return ("<span style='background:#5b6f8f; color:#eef; "
+            "border-radius:3px; padding:0 3px; font-size:7pt;'>"
+            f"{text}</span>")
+
+
+def _spec_tag():
+    return "<span style='color:#888; font-size:7pt;'>[spec]</span>"
+
+
+def _pressure_origin_is_auto(s):
+    """True si la presión de la corriente es derivada (auto), False si es spec
+    del user.  Regla: pressure_lock_origin=='user' → spec; cualquier otro
+    origen (solver/heuristic) o no-locked → auto.  Si el campo no existe:
+    locked→spec, no→auto (compat JSONs viejos)."""
+    porg = getattr(s, "pressure_lock_origin", None)
+    if porg is None:
+        return not getattr(s, "pressure_locked", False)
+    return porg != "user"
+
+
 class BlockItem(QGraphicsItemGroup):
     """Bloque del flowsheet renderizado en el canvas.
 
@@ -3627,7 +3652,22 @@ class BlockItem(QGraphicsItemGroup):
         if b.n > 1:
             lines.append(f"N° unidades: {b.n}")
         if b.duty:
-            lines.append(f"Duty: {b.duty:+g} kW")
+            # FASE 4: duty con badge AUTO si el solver lo derivó (no duty_locked
+            # o marcado auto-hidráulico); spec del user en estilo normal.
+            d_auto = (getattr(b, "duty_origin", "") == "auto-hidraulico"
+                      or not getattr(b, "duty_locked", False))
+            d_tag = " " + _auto_badge() if d_auto else " " + _spec_tag()
+            lines.append(f"Duty: {b.duty:+g} kW{d_tag}")
+        # FASE 4: ΔP de rotativos (bomba/compresor) — el dispositivo que crea P.
+        eqlow = (b.eq_type or "").lower()
+        is_rot = any(x in eqlow for x in ("pump", "compressor", "fan",
+                                          "bomba", "blower", "soplador"))
+        if is_rot and abs(float(getattr(b, "delta_p_bar", 0.0) or 0.0)) > 1e-6:
+            dp_auto = (getattr(b, "duty_origin", "") == "auto-hidraulico")
+            dp_tag = " " + _auto_badge() if dp_auto else ""
+            lines.append(f"ΔP = {b.delta_p_bar:+.2f} bar{dp_tag}")
+        if float(getattr(b, "P_op_bar", 0.0) or 0.0) > 1.013:
+            lines.append(f"P_op = {b.P_op_bar:g} bar")
         if b.heat_source:
             lines.append(f"Utility: {b.heat_source}")
         lines.append(f"<span style='color:#888; font-size:8pt;'>"
@@ -4299,12 +4339,41 @@ class StreamItem(QGraphicsPathItem):
                       if b_src else "(sin conectar)")
         dst_label = (f"{b_dst.name} ({s.dst_port or 'auto'})"
                       if b_dst else "(sin conectar)")
+        # ── Fase con marca del verificador (FASE 2) + badge AUTO (FASE 4) ──
+        phase_txt = s.phase or "—"
+        if s.phase:
+            if not getattr(s, "phase_locked", False):
+                # fase inferida por el solver (no declarada) → AUTO
+                phase_txt = f"{s.phase} {_auto_badge()}"
+            else:
+                try:
+                    from flowsheet_consistency_audit import check_stream_phase
+                    f = check_stream_phase(s)
+                except Exception:
+                    f = None
+                if f is not None:
+                    d = f.data or {}
+                    if "expected" in d:
+                        phase_txt = (f"{s.phase} ⚠ <span style='color:#b8860b;'>"
+                                     f"(flash da {d['expected']}, "
+                                     f"V={d.get('V_frac', 0):.2f})</span>")
+                    elif d.get("reason") == "melt":
+                        phase_txt = (f"{s.phase} <span style='color:#888;'>"
+                                     f"(fundido, fuera de VLE)</span>")
+        # ── T con badge AUTO si fue inferida (no locked) ──
+        t_txt = f"{s.temperature:g} °C"
+        if not getattr(s, "temperature_locked", False):
+            t_txt = f"{t_txt} {_auto_badge()}"
+        # ── P con sufijo spec/AUTO (FASE 2 + FASE 4) ──
+        p_bar = float(getattr(s, "pressure_bar", 0.0) or 0.0)
+        p_tag = _auto_badge() if _pressure_origin_is_auto(s) else _spec_tag()
         lines = [
             f"<b>{s.name}</b>",
             f"<span style='color:#666;'>{src_label} → {dst_label}</span>",
-            f"Rol: {s.role}  ·  Fase: {s.phase or '—'}",
+            f"Rol: {s.role}  ·  Fase: {phase_txt}",
             f"Flujo: <b>{s.mass_flow:g}</b> tm/año",
-            f"T = {s.temperature:g} °C",
+            f"T = {t_txt}",
+            f"P = {p_bar:.2f} bar {p_tag}",
         ]
         # Composición — pieza nueva, antes faltaba.  Muestra cada
         # componente con su fracción másica > 0.1%.
@@ -7025,6 +7094,10 @@ class FlowsheetMainWindow(QMainWindow):
             self._bubble_manager.refresh_all()
         if self._hx_bubble_manager is not None:
             self._hx_bubble_manager.refresh_all()
+        # FASE 3.5: refrescar la sección de propiedades calculadas del inspector
+        # (si está abierta y activa) con los valores recién resueltos.
+        if getattr(self, "_stream_inspector_dock", None) is not None:
+            self._stream_inspector_dock.refresh_calc()
         # auditar conexiones semánticas
         sem_issues = fval.validate_all_streams(self.fs)
         # mostrar resumen en el diálogo visual de resultado

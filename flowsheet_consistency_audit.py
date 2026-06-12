@@ -185,96 +185,108 @@ def _audit_phase(fs, findings):
     except Exception:
         return
     for s in fs.streams.values():
-        if s.mass_flow <= 0:
-            continue
-        comp = s.composition or {}
-        if not comp:
-            continue                       # sin composición → nada que comparar
-        if not (s.phase or ""):
-            continue                       # phase no declarada → el solver puede setearla
-        # Solo auditamos phases DECLARADAS (locked) por el builder/user — el
-        # objetivo es cazar hardcodes inconsistentes.  Las phases que el
-        # solver calculó (column/flash/reactor) son consistentes con SU termo
-        # por construcción; re-chequearlas con otro método da falsos positivos.
-        if not getattr(s, "phase_locked", False):
-            continue
-        decl0 = (s.phase or "").lower()
-        # FASE 4.10b: phase='solid' → sin presión de vapor, Antoine/VLE no
-        # aplica.  No se verifica contra la termo de fluidos.
-        if decl0 == "solid":
-            continue
-        T_C = s.temperature
-        P = float(getattr(s, "pressure_bar", 0.0) or 0.0)
-        if T_C <= -273.0 or P <= 0:
-            continue
-        # FASE 4.10c: fundido/melt — líquido a T >> Tb de todos los componentes
-        # (clinker ~1450°C, vidrio ~1500°C): proxy fuera del modelo VLE.  Aviso
-        # específico, no el genérico de inconsistencia de fase.
-        if decl0 == "liquid" and _is_melt(comp, T_C):
-            findings.append(AuditFinding(
-                category='phase', severity='info', target_kind='stream',
-                target_name=s.name,
-                message=(f"{s.name}: phase='liquid' a T={T_C:.0f}°C — FUNDIDO "
-                         f"(componente proxy fuera del modelo VLE: mineral/óxido/"
-                         f"vidrio fundido). La verificación Antoine no aplica."),
-                data={'T_C': T_C, 'reason': 'melt'}))
-            continue
-        # FASE 4.10a: T > Tc del componente principal → gas/supercrítico
-        # confirmado.  Declarar gas/vapor es correcto (no emitir "no confiable").
-        # El "principal" es main_component o, si está vacío, el dominante de la
-        # composición (mayor fracción).
-        dom = s.main_component or (max(comp, key=comp.get) if comp else "")
-        tc = _tc_c(dom)
-        if (tc is not None and T_C > tc + 1e-6
-                and decl0 in ("gas", "vapor")):
-            continue
-        T_K = T_C + 273.15
-        inferred, vfrac = _infer_phase_from_TP(comp, T_K, P)
-        if not inferred:
-            continue                       # termo no pudo resolver → sin hallazgo
-        decl = (s.phase or "").lower()
-        decl_cmp = "vapor" if decl == "gas" else decl
-        if decl_cmp == inferred:
-            continue                       # consistente
-        # Saturación: una corriente EN su frontera (V_frac≈0 = líquido
-        # saturado en el punto de burbuja; V_frac≈1 = vapor saturado en
-        # el punto de rocío) declarada liquid/vapor es consistente — la
-        # termo la marca 'two_phase' por estar exactamente en el borde.
-        if inferred == "two_phase":
-            if vfrac <= 0.02 and decl_cmp == "liquid":
-                continue
-            if vfrac >= 0.98 and decl_cmp == "vapor":
-                continue
-            # Componente ~puro en su punto de ebullición (vapor o líquido
-            # saturado): la termo lo marca 'two_phase' por estar en el borde,
-            # pero declarar liquid o vapor es físicamente válido (vapor de un
-            # evaporador, vapor saturado de una caldera, etc.).
-            if comp and max(comp.values()) > 0.95 and decl_cmp in ("liquid", "vapor"):
-                continue
-        # Excepción: T fuera del rango Antoine → la inferencia extrapola.
-        if _t_out_of_antoine_range(s.main_component, T_C):
-            findings.append(AuditFinding(
-                category='phase', severity='info', target_kind='stream',
-                target_name=s.name,
-                message=(f"{s.name}: phase='{s.phase}' a T={T_C:.1f}°C, "
-                         f"P={P:.2f}bar; verificación de fase no confiable "
-                         f"(T fuera del rango Antoine del componente "
-                         f"principal '{s.main_component}')."),
-                data={'T_C': T_C, 'P_bar': P, 'expected': inferred,
-                      'declared': s.phase, 'V_frac': vfrac,
-                      'reason': 'antoine_range'}))
-            continue
-        sev = 'warning' if decl in VALID_PHASES else 'error'
-        findings.append(AuditFinding(
-            category='phase', severity=sev, target_kind='stream',
+        f = check_stream_phase(s)
+        if f is not None:
+            findings.append(f)
+
+
+def check_stream_phase(s):
+    """Chequeo de fase de UNA corriente.  Devuelve un AuditFinding (mismo que
+    _audit_phase) o None si es consistente / no auditable.  Reutilizable por
+    la UI (tooltip/burbuja) para marcar la fase con el hallazgo del verificador
+    sin re-correr toda la auditoría."""
+    try:
+        from flowsheet_solver import _infer_phase_from_TP
+    except Exception:
+        return None
+    if s.mass_flow <= 0:
+        return None
+    comp = s.composition or {}
+    if not comp:
+        return None                        # sin composición → nada que comparar
+    if not (s.phase or ""):
+        return None                        # phase no declarada → el solver puede setearla
+    # Solo auditamos phases DECLARADAS (locked) por el builder/user — el
+    # objetivo es cazar hardcodes inconsistentes.  Las phases que el
+    # solver calculó (column/flash/reactor) son consistentes con SU termo
+    # por construcción; re-chequearlas con otro método da falsos positivos.
+    if not getattr(s, "phase_locked", False):
+        return None
+    decl0 = (s.phase or "").lower()
+    # FASE 4.10b: phase='solid' → sin presión de vapor, Antoine/VLE no
+    # aplica.  No se verifica contra la termo de fluidos.
+    if decl0 == "solid":
+        return None
+    T_C = s.temperature
+    P = float(getattr(s, "pressure_bar", 0.0) or 0.0)
+    if T_C <= -273.0 or P <= 0:
+        return None
+    # FASE 4.10c: fundido/melt — líquido a T >> Tb de todos los componentes
+    # (clinker ~1450°C, vidrio ~1500°C): proxy fuera del modelo VLE.  Aviso
+    # específico, no el genérico de inconsistencia de fase.
+    if decl0 == "liquid" and _is_melt(comp, T_C):
+        return AuditFinding(
+            category='phase', severity='info', target_kind='stream',
             target_name=s.name,
-            message=(f"{s.name}: declarado phase='{s.phase}' a T={T_C:.1f}°C, "
-                     f"P={P:.2f}bar, pero la composición está en "
-                     f"phase='{inferred}' (V_frac={vfrac:.3f}). Posibles "
-                     f"causas: (a) phase hardcoded en ejemplo, (b) T/P "
-                     f"incorrectas, (c) cambio de fase no modelado."),
+            message=(f"{s.name}: phase='liquid' a T={T_C:.0f}°C — FUNDIDO "
+                     f"(componente proxy fuera del modelo VLE: mineral/óxido/"
+                     f"vidrio fundido). La verificación Antoine no aplica."),
+            data={'T_C': T_C, 'reason': 'melt'})
+    # FASE 4.10a: T > Tc del componente principal → gas/supercrítico
+    # confirmado.  Declarar gas/vapor es correcto (no emitir "no confiable").
+    # El "principal" es main_component o, si está vacío, el dominante de la
+    # composición (mayor fracción).
+    dom = s.main_component or (max(comp, key=comp.get) if comp else "")
+    tc = _tc_c(dom)
+    if (tc is not None and T_C > tc + 1e-6
+            and decl0 in ("gas", "vapor")):
+        return None
+    T_K = T_C + 273.15
+    inferred, vfrac = _infer_phase_from_TP(comp, T_K, P)
+    if not inferred:
+        return None                        # termo no pudo resolver → sin hallazgo
+    decl = (s.phase or "").lower()
+    decl_cmp = "vapor" if decl == "gas" else decl
+    if decl_cmp == inferred:
+        return None                        # consistente
+    # Saturación: una corriente EN su frontera (V_frac≈0 = líquido
+    # saturado en el punto de burbuja; V_frac≈1 = vapor saturado en
+    # el punto de rocío) declarada liquid/vapor es consistente — la
+    # termo la marca 'two_phase' por estar exactamente en el borde.
+    if inferred == "two_phase":
+        if vfrac <= 0.02 and decl_cmp == "liquid":
+            return None
+        if vfrac >= 0.98 and decl_cmp == "vapor":
+            return None
+        # Componente ~puro en su punto de ebullición (vapor o líquido
+        # saturado): la termo lo marca 'two_phase' por estar en el borde,
+        # pero declarar liquid o vapor es físicamente válido (vapor de un
+        # evaporador, vapor saturado de una caldera, etc.).
+        if comp and max(comp.values()) > 0.95 and decl_cmp in ("liquid", "vapor"):
+            return None
+    # Excepción: T fuera del rango Antoine → la inferencia extrapola.
+    if _t_out_of_antoine_range(s.main_component, T_C):
+        return AuditFinding(
+            category='phase', severity='info', target_kind='stream',
+            target_name=s.name,
+            message=(f"{s.name}: phase='{s.phase}' a T={T_C:.1f}°C, "
+                     f"P={P:.2f}bar; verificación de fase no confiable "
+                     f"(T fuera del rango Antoine del componente "
+                     f"principal '{s.main_component}')."),
             data={'T_C': T_C, 'P_bar': P, 'expected': inferred,
-                  'declared': s.phase, 'V_frac': vfrac}))
+                  'declared': s.phase, 'V_frac': vfrac,
+                  'reason': 'antoine_range'})
+    sev = 'warning' if decl in VALID_PHASES else 'error'
+    return AuditFinding(
+        category='phase', severity=sev, target_kind='stream',
+        target_name=s.name,
+        message=(f"{s.name}: declarado phase='{s.phase}' a T={T_C:.1f}°C, "
+                 f"P={P:.2f}bar, pero la composición está en "
+                 f"phase='{inferred}' (V_frac={vfrac:.3f}). Posibles "
+                 f"causas: (a) phase hardcoded en ejemplo, (b) T/P "
+                 f"incorrectas, (c) cambio de fase no modelado."),
+        data={'T_C': T_C, 'P_bar': P, 'expected': inferred,
+              'declared': s.phase, 'V_frac': vfrac})
 
 
 # ======================================================================
