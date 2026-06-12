@@ -98,7 +98,8 @@ class AuditReport:
             return "Auditoría de consistencia: sin hallazgos."
         lines = [f"Auditoría de consistencia ({self.n_errors} errores, "
                  f"{self.n_warnings} warnings, {self.n_infos} infos):"]
-        for cat in ('phase', 'component_balance', 'pseudo', 'redundant_lock'):
+        for cat in ('phase', 'component_balance', 'component_balance_strict',
+                    'pseudo', 'redundant_lock'):
             cat_f = self.by_category(cat)
             if not cat_f:
                 continue
@@ -342,6 +343,34 @@ def _audit_component_balance(fs, findings, tol_rel=0.02):
 
 
 # ======================================================================
+# DETECTOR 2b — BALANCE POR COMPONENTE ESTRICTO (harness permanente)
+# ======================================================================
+
+def _audit_component_balance_strict(fs, findings):
+    """Integra audit_examples_components (tol 1% relativa, severidad por
+    fracción del flujo del bloque, soporte de inline_reaction y pseudo_cut)
+    como WARNINGS (nunca error → no altera overall_status ni los goldens).
+
+    Categoría propia 'component_balance_strict' para no solaparse con el
+    Detector 2 (tol 2%, exclusión transitiva downstream).  Es la fuente del
+    ratchet gate_component_balance.py."""
+    try:
+        import audit_examples_components as aec
+    except Exception:
+        return
+    try:
+        rep = aec.audit_flowsheet_components(fs)
+    except Exception:
+        return
+    for f in rep.get("findings", []):
+        findings.append(AuditFinding(
+            category='component_balance_strict', severity='warning',
+            target_kind='block', target_name=f.get("block", "?"),
+            message=f.get("message", ""),
+            data={k: v for k, v in f.items() if k != "message"}))
+
+
+# ======================================================================
 # DETECTOR 3 — PSEUDO-COMPONENTES
 # ======================================================================
 
@@ -492,6 +521,7 @@ def audit_flowsheet(fs) -> AuditReport:
     findings: List[AuditFinding] = []
     _audit_phase(fs, findings)
     _audit_component_balance(fs, findings)
+    _audit_component_balance_strict(fs, findings)
     _audit_pseudo(fs, findings)
     _audit_redundant_locks(fs, findings)
     report = AuditReport(findings=findings)

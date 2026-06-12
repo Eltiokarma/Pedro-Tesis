@@ -318,6 +318,28 @@ class Block:
     # Default [] → compat con flowsheets viejos.
     custom_reactions: List[dict] = field(default_factory=list)
 
+    # ---- AUDITORÍA DE BALANCE POR COMPONENTE (aditivo, Parte 1) ----
+    # Declaraciones que informan a audit_examples_components.py cómo
+    # interpretar el bloque al chequear el balance de masa por componente.
+    # Ambas con default vacío → el chequeo es conservación estricta por
+    # componente (comportamiento por defecto) y el solver las IGNORA por
+    # completo (son puramente declarativas para el auditor).
+    #
+    # inline_reaction: IDs de reactions_db que ocurren in-line en el bloque
+    #   (absorbedores con reacción química, oxidación in-line, etc.).  Cuando
+    #   está poblado, el auditor verifica ESTEQUIOMETRÍA (Σ νᵢ·ξ) en lugar de
+    #   conservación por componente.  NO dispara el solver de reactores de
+    #   equilibrio/cinética (eso es el campo `reactions`); sólo describe qué
+    #   transformación química explica el cambio de composición observado.
+    inline_reaction: List[str] = field(default_factory=list)
+    # pseudo_cut: mapa {componente_entrada: [componentes_salida]} para
+    #   columnas de crudo / fraccionadoras atmosféricas, donde un
+    #   pseudo-componente de entrada (p.ej. "crude") se reparte en cortes de
+    #   salida (nafta, kerosene, diesel, residuo).  El auditor verifica que la
+    #   masa TOTAL del grupo (entrada → suma de salidas) cierre, sin exigir
+    #   identidad componente a componente dentro del grupo.
+    pseudo_cut: Dict[str, List[str]] = field(default_factory=dict)
+
     # ---- OVERRIDES de transferencia de calor (HX sizing) ----
     # Solo aplican a bloques con categoria='Heat exchangers'.  Cuando
     # están seteados (>0), size_heat_exchanger los usa en lugar de las
