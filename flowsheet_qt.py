@@ -3736,16 +3736,27 @@ class BlockItem(QGraphicsItemGroup):
             # actúa de singleton: el delta se aplica una sola vez.
             # No usamos mouseGrabberItem(): con handlesChildEvents el
             # grabber reportado puede ser un hijo del grupo.
-            prev = getattr(self, "_group_drag_prev", None)
-            if prev is not None:
-                dx, dy = self.pos().x() - prev.x(), self.pos().y() - prev.y()
-                if dx or dy:
-                    for it in self.scene().selectedItems():
-                        if isinstance(it, StreamItem):
-                            it.translate_by(dx, dy)
-                self._group_drag_prev = QPointF(self.pos())
-            if self.editor is not None:
-                self.editor.refresh_streams_of(self.model.id)
+            # HOTFIX P0: guard de re-entrancia explícito en el ancla.  La
+            # traslación de streams + refresh dispara update_path; si algún
+            # paso reposicionara este bloque, Qt re-entraría en itemChange y
+            # se aplicaría el delta otra vez (doble movimiento / recursión).
+            # El flag asegura que el bloque del group-drag procese su delta
+            # una sola vez por evento.
+            if not getattr(self, "_in_group_drag", False):
+                self._in_group_drag = True
+                try:
+                    prev = getattr(self, "_group_drag_prev", None)
+                    if prev is not None:
+                        dx, dy = self.pos().x() - prev.x(), self.pos().y() - prev.y()
+                        if dx or dy:
+                            for it in self.scene().selectedItems():
+                                if isinstance(it, StreamItem):
+                                    it.translate_by(dx, dy)
+                        self._group_drag_prev = QPointF(self.pos())
+                    if self.editor is not None:
+                        self.editor.refresh_streams_of(self.model.id)
+                finally:
+                    self._in_group_drag = False
         elif change == QGraphicsItem.ItemSelectedHasChanged:
             # sync visual del IsaGlyphItem con selección Qt
             if getattr(self, "_isa_item", None) is not None:
@@ -3785,6 +3796,11 @@ class BlockItem(QGraphicsItemGroup):
         # ancla para el group-drag de streams seleccionados (itemChange)
         if event.button() == Qt.LeftButton:
             self._group_drag_prev = QPointF(self.pos())
+            # HOTFIX P0: activar modo de traslación rígida — las corrientes
+            # se mueven sin avoidance/lane/jumpers durante el arrastre; el
+            # re-route completo ocurre al soltar.
+            if self.editor is not None:
+                self.editor._rigid_drag_active = True
         super().mousePressEvent(event)
 
     def hoverEnterEvent(self, event):
@@ -3803,11 +3819,21 @@ class BlockItem(QGraphicsItemGroup):
     def mouseReleaseEvent(self, event):
         super().mouseReleaseEvent(event)
         self._group_drag_prev = None
+        # HOTFIX P0: cerrar el modo de traslación rígida y ejecutar UN solo
+        # pase de re-routing completo (avoidance + lane + jumpers) sobre TODOS
+        # los streams.  Así el estado final es idéntico al del comportamiento
+        # previo, sin pagar el costo O(n²) por píxel durante el arrastre.
+        did_rigid = False
+        if event.button() == Qt.LeftButton and self.editor is not None:
+            did_rigid = bool(getattr(self.editor, "_rigid_drag_active", False))
+            self.editor._rigid_drag_active = False
         # IMÁN BIDIRECCIONAL: al soltar el bloque tras un drag, si algún
         # endpoint flotante quedó cerca de un puerto de ESTE bloque, snap.
         # No durante el drag (sería intrusivo), solo al release.
         if event.button() == Qt.LeftButton and self.editor is not None:
             self._snap_nearby_floating_endpoints()
+        if did_rigid:
+            self.editor._refresh_all_stream_paths()
         # push undo si hubo un drag
         if (event.button() == Qt.LeftButton and self.editor is not None
             and self.editor._drag_before_snapshot is not None):
@@ -4309,6 +4335,9 @@ class StreamItem(QGraphicsPathItem):
 
     def update_path(self, rebuild_handles=True):
         s = self.model
+        # HOTFIX P0: traslación rígida durante un block/group-drag.
+        # Fuera del drag _rigid_drag_active es False → ruta completa de siempre.
+        _rigid = bool(getattr(self.editor, "_rigid_drag_active", False))
         b_src = self.fs.blocks.get(s.src)
         b_dst = self.fs.blocks.get(s.dst)
         # Endpoint START: si block_src existe, lo tomamos del puerto;
@@ -4337,11 +4366,15 @@ class StreamItem(QGraphicsPathItem):
             pts.append(y2)
         elif b_src is not None and b_dst is not None:
             pts = self._compute_polyline(b_src, b_dst, s)
+            # HOTFIX P0: durante un group/block-drag (_rigid) se omite el
+            # routing obstacle-aware — traslación rígida barata.  El re-route
+            # completo ocurre al soltar.  Fuera del drag se ejecuta la lógica
+            # de avoidance/lane de siempre.
             # PADDING-AWARE ROUTING — modificar pts para que NO atraviese
             # los SVGs de los bloques ajenos (no src ni dst).  Las
             # tuberías rodean por arriba/abajo/izq/der según menor
             # costo Manhattan.  Padding 12px ≈ 3× ancho de stream.
-            if self.editor is not None:
+            if self.editor is not None and not _rigid:
                 obstacles = []
                 for bid, item in self.editor.block_items_iter():
                     if bid == s.src or bid == s.dst:
@@ -4417,7 +4450,7 @@ class StreamItem(QGraphicsPathItem):
         #      con id MAYOR dibuja el hop — así cada cruce tiene
         #      solo una curvita, no dos superpuestas.
         hops = []
-        if self.scene() is not None and self.editor is not None:
+        if self.scene() is not None and self.editor is not None and not _rigid:
             try:
                 for other_sid, other_item in self.editor.stream_items_iter():
                     if other_item is self:
@@ -5580,6 +5613,13 @@ class FlowsheetMainWindow(QMainWindow):
         self._suppress_snapshot = False
         # snapshot 'antes' del drag de bloques (se pushea al release)
         self._drag_before_snapshot = None
+        # HOTFIX P0 group-drag: durante el arrastre de un bloque (o de una
+        # selección múltiple) las corrientes se trasladan de forma RÍGIDA —
+        # sin _avoid_obstacles / lane offset / jumpers — para evitar el costo
+        # O(n²) por píxel que colgaba la app con selección densa.  Un único
+        # re-routing completo se ejecuta al soltar (BlockItem.mouseRelease).
+        # False fuera de un drag → comportamiento idéntico al previo.
+        self._rigid_drag_active = False
 
         # Docks se construyen ANTES del toolbar para que éste pueda
         # tomar sus toggleViewAction() y mostrarlos como botones.
@@ -7816,6 +7856,11 @@ class FlowsheetMainWindow(QMainWindow):
                 item = self.scene.stream_items.get(s.id)
                 if item is not None:
                     item.update_path(rebuild_handles=False)
+        # HOTFIX P0: durante un block/group-drag se OMITE el Pass-2 global
+        # (O(n²) por píxel que colgaba la app).  El re-route completo con
+        # jumpers se hace UNA vez al soltar (BlockItem.mouseReleaseEvent).
+        if getattr(self, "_rigid_drag_active", False):
+            return
         # Pass 2: refresh global de paths para que jumpers se recalculen
         self._refresh_all_stream_paths()
 
