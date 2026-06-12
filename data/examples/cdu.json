@@ -1207,7 +1207,7 @@
    "mass_flow": 22000,
    "mass_flow_locked": true,
    "name": "S-nafta-v",
-   "phase": "vapor",
+   "phase": "two_phase",
    "phase_locked": true,
    "pipe_K_local": 0.0,
    "pipe_diameter_m": 0.0,
@@ -1228,7 +1228,7 @@
    "target_temperature": -999.0,
    "temperature": 130,
    "temperature_locked": true,
-   "vapor_fraction": 0.0,
+   "vapor_fraction": 0.706,
    "waypoints": []
   },
   "19": {
@@ -1312,7 +1312,7 @@
    "mass_flow": 18000,
    "mass_flow_locked": true,
    "name": "S-kero-h",
-   "phase": "liquid",
+   "phase": "two_phase",
    "phase_locked": true,
    "pipe_K_local": 0.0,
    "pipe_diameter_m": 0.0,
@@ -1333,7 +1333,7 @@
    "target_temperature": -999.0,
    "temperature": 215,
    "temperature_locked": true,
-   "vapor_fraction": 0.0,
+   "vapor_fraction": 0.735,
    "waypoints": []
   },
   "21": {

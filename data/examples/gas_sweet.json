@@ -1285,7 +1285,7 @@
    "mass_flow": 0.0,
    "mass_flow_locked": false,
    "name": "S-rich-hot",
-   "phase": "liquid",
+   "phase": "two_phase",
    "phase_locked": true,
    "pipe_K_local": 0.0,
    "pipe_diameter_m": 0.0,
@@ -1306,7 +1306,7 @@
    "target_temperature": -999.0,
    "temperature": 95,
    "temperature_locked": true,
-   "vapor_fraction": 0.0,
+   "vapor_fraction": 0.042,
    "waypoints": []
   },
   "20": {
@@ -1391,7 +1391,7 @@
    "mass_flow": 0.0,
    "mass_flow_locked": false,
    "name": "S-acid-cond",
-   "phase": "liquid",
+   "phase": "two_phase",
    "phase_locked": true,
    "pipe_K_local": 0.0,
    "pipe_diameter_m": 0.0,
@@ -1412,7 +1412,7 @@
    "target_temperature": -999.0,
    "temperature": 45,
    "temperature_locked": true,
-   "vapor_fraction": 0.0,
+   "vapor_fraction": 0.506,
    "waypoints": []
   },
   "22": {
