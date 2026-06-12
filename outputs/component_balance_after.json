@@ -1,0 +1,769 @@
+{
+  "crit_frac": 0.05,
+  "examples": {
+    "acetic": {
+      "example": "acetic",
+      "findings": [],
+      "n_critico": 0,
+      "n_mayor": 0
+    },
+    "air_sep": {
+      "example": "air_sep",
+      "findings": [],
+      "n_critico": 0,
+      "n_mayor": 0
+    },
+    "ammonia": {
+      "example": "ammonia",
+      "findings": [],
+      "n_critico": 0,
+      "n_mayor": 0
+    },
+    "beer": {
+      "example": "beer",
+      "findings": [],
+      "n_critico": 0,
+      "n_mayor": 0
+    },
+    "biodiesel": {
+      "example": "biodiesel",
+      "findings": [],
+      "n_critico": 0,
+      "n_mayor": 0
+    },
+    "bread": {
+      "example": "bread",
+      "findings": [],
+      "n_critico": 0,
+      "n_mayor": 0
+    },
+    "cdu": {
+      "example": "cdu",
+      "findings": [],
+      "n_critico": 0,
+      "n_mayor": 0
+    },
+    "cement": {
+      "example": "cement",
+      "findings": [],
+      "n_critico": 0,
+      "n_mayor": 0
+    },
+    "chloralkali_hcl": {
+      "example": "chloralkali_hcl",
+      "findings": [],
+      "n_critico": 0,
+      "n_mayor": 0
+    },
+    "desal": {
+      "example": "desal",
+      "findings": [],
+      "n_critico": 0,
+      "n_mayor": 0
+    },
+    "dist_eth_az": {
+      "example": "dist_eth_az",
+      "findings": [],
+      "n_critico": 0,
+      "n_mayor": 0
+    },
+    "distillation": {
+      "example": "distillation",
+      "findings": [],
+      "n_critico": 0,
+      "n_mayor": 0
+    },
+    "ethane_pfr": {
+      "example": "ethane_pfr",
+      "findings": [],
+      "n_critico": 0,
+      "n_mayor": 0
+    },
+    "ethanol": {
+      "example": "ethanol",
+      "findings": [],
+      "n_critico": 0,
+      "n_mayor": 0
+    },
+    "ethylene_crk": {
+      "example": "ethylene_crk",
+      "findings": [],
+      "n_critico": 0,
+      "n_mayor": 0
+    },
+    "gas_sweet": {
+      "example": "gas_sweet",
+      "findings": [],
+      "n_critico": 0,
+      "n_mayor": 0
+    },
+    "glass": {
+      "example": "glass",
+      "findings": [],
+      "n_critico": 0,
+      "n_mayor": 0
+    },
+    "haber_rec": {
+      "example": "haber_rec",
+      "findings": [],
+      "n_critico": 0,
+      "n_mayor": 0
+    },
+    "hda": {
+      "example": "hda",
+      "findings": [
+        {
+          "block": "E-102",
+          "block_flow_pct": 23.0,
+          "block_id": 4,
+          "component": "benzene",
+          "delta": 2530.0,
+          "in": 8470.0,
+          "message": "E-102: componente 'benzene' no cierra — in=8470.0 out=11000.0 (Δ=2530.0 tm/a, 23.0% del componente, 23.0% del flujo)",
+          "mode": "component",
+          "out": 11000.0,
+          "rel_pct": 23.0,
+          "severity": "CRITICO"
+        },
+        {
+          "block": "E-102",
+          "block_flow_pct": 1.0,
+          "block_id": 4,
+          "component": "hydrogen",
+          "delta": 110.0,
+          "in": 110.0,
+          "message": "E-102: componente 'hydrogen' no cierra — in=110.0 out=0.0 (Δ=110.0 tm/a, 100.0% del componente, 1.0% del flujo)",
+          "mode": "component",
+          "out": 0.0,
+          "rel_pct": 100.0,
+          "severity": "MAYOR"
+        },
+        {
+          "block": "E-102",
+          "block_flow_pct": 4.0,
+          "block_id": 4,
+          "component": "methane",
+          "delta": 440.0,
+          "in": 440.0,
+          "message": "E-102: componente 'methane' no cierra — in=440.0 out=0.0 (Δ=440.0 tm/a, 100.0% del componente, 4.0% del flujo)",
+          "mode": "component",
+          "out": 0.0,
+          "rel_pct": 100.0,
+          "severity": "MAYOR"
+        },
+        {
+          "block": "E-102",
+          "block_flow_pct": 18.0,
+          "block_id": 4,
+          "component": "toluene",
+          "delta": 1980.0,
+          "in": 1980.0,
+          "message": "E-102: componente 'toluene' no cierra — in=1980.0 out=0.0 (Δ=1980.0 tm/a, 100.0% del componente, 18.0% del flujo)",
+          "mode": "component",
+          "out": 0.0,
+          "rel_pct": 100.0,
+          "severity": "CRITICO"
+        },
+        {
+          "block": "V-101",
+          "block_flow_pct": 23.51,
+          "block_id": 5,
+          "component": "benzene",
+          "delta": 2586.5,
+          "in": 11000.0,
+          "message": "V-101: componente 'benzene' no cierra — in=11000.0 out=8413.5 (Δ=2586.5 tm/a, 23.5% del componente, 23.5% del flujo)",
+          "mode": "component",
+          "out": 8413.5,
+          "rel_pct": 23.51,
+          "severity": "CRITICO"
+        },
+        {
+          "block": "V-101",
+          "block_flow_pct": 1.27,
+          "block_id": 5,
+          "component": "hydrogen",
+          "delta": 140.0,
+          "in": 0.0,
+          "message": "V-101: componente 'hydrogen' no cierra — in=0.0 out=140.0 (Δ=140.0 tm/a, 100.0% del componente, 1.3% del flujo)",
+          "mode": "component",
+          "out": 140.0,
+          "rel_pct": 100.0,
+          "severity": "MAYOR"
+        },
+        {
+          "block": "V-101",
+          "block_flow_pct": 1.91,
+          "block_id": 5,
+          "component": "methane",
+          "delta": 210.0,
+          "in": 0.0,
+          "message": "V-101: componente 'methane' no cierra — in=0.0 out=210.0 (Δ=210.0 tm/a, 100.0% del componente, 1.9% del flujo)",
+          "mode": "component",
+          "out": 210.0,
+          "rel_pct": 100.0,
+          "severity": "MAYOR"
+        },
+        {
+          "block": "V-101",
+          "block_flow_pct": 20.33,
+          "block_id": 5,
+          "component": "toluene",
+          "delta": 2236.5,
+          "in": 0.0,
+          "message": "V-101: componente 'toluene' no cierra — in=0.0 out=2236.5 (Δ=2236.5 tm/a, 100.0% del componente, 20.3% del flujo)",
+          "mode": "component",
+          "out": 2236.5,
+          "rel_pct": 100.0,
+          "severity": "CRITICO"
+        },
+        {
+          "block": "T-101",
+          "block_flow_pct": 0.81,
+          "block_id": 6,
+          "component": "benzene",
+          "delta": 86.5,
+          "in": 8413.5,
+          "message": "T-101: componente 'benzene' no cierra — in=8413.5 out=8500.0 (Δ=86.5 tm/a, 1.0% del componente, 0.8% del flujo)",
+          "mode": "component",
+          "out": 8500.0,
+          "rel_pct": 1.02,
+          "severity": "MAYOR"
+        },
+        {
+          "block": "T-101",
+          "block_flow_pct": 0.81,
+          "block_id": 6,
+          "component": "toluene",
+          "delta": 86.5,
+          "in": 2236.5,
+          "message": "T-101: componente 'toluene' no cierra — in=2236.5 out=2150.0 (Δ=86.5 tm/a, 3.9% del componente, 0.8% del flujo)",
+          "mode": "component",
+          "out": 2150.0,
+          "rel_pct": 3.87,
+          "severity": "MAYOR"
+        }
+      ],
+      "n_critico": 4,
+      "n_mayor": 6
+    },
+    "hda_full": {
+      "example": "hda_full",
+      "findings": [
+        {
+          "block": "T-101",
+          "block_flow_pct": 0.26,
+          "block_id": 11,
+          "component": "hydrogen",
+          "delta": 208.0,
+          "in": 792.0,
+          "message": "T-101: componente 'hydrogen' no cierra — in=792.0 out=1000.0 (Δ=208.0 tm/a, 20.8% del componente, 0.3% del flujo)",
+          "mode": "component",
+          "out": 1000.0,
+          "rel_pct": 20.8,
+          "severity": "MAYOR"
+        },
+        {
+          "block": "T-101",
+          "block_flow_pct": 0.58,
+          "block_id": 11,
+          "component": "methane",
+          "delta": 460.0,
+          "in": 3960.0,
+          "message": "T-101: componente 'methane' no cierra — in=3960.0 out=3500.0 (Δ=460.0 tm/a, 11.6% del componente, 0.6% del flujo)",
+          "mode": "component",
+          "out": 3500.0,
+          "rel_pct": 11.62,
+          "severity": "MAYOR"
+        },
+        {
+          "block": "T-102",
+          "block_flow_pct": 14.69,
+          "block_id": 15,
+          "component": "benzene",
+          "delta": 10903.6,
+          "in": 63812.0,
+          "message": "T-102: componente 'benzene' no cierra — in=63812.0 out=52908.4 (Δ=10903.6 tm/a, 17.1% del componente, 14.7% del flujo)",
+          "mode": "component",
+          "out": 52908.4,
+          "rel_pct": 17.09,
+          "severity": "CRITICO"
+        },
+        {
+          "block": "T-102",
+          "block_flow_pct": 14.69,
+          "block_id": 15,
+          "component": "toluene",
+          "delta": 10903.6,
+          "in": 10388.0,
+          "message": "T-102: componente 'toluene' no cierra — in=10388.0 out=21291.6 (Δ=10903.6 tm/a, 51.2% del componente, 14.7% del flujo)",
+          "mode": "component",
+          "out": 21291.6,
+          "rel_pct": 51.21,
+          "severity": "CRITICO"
+        },
+        {
+          "block": "V-101",
+          "block_flow_pct": 4.6,
+          "block_id": 7,
+          "component": "benzene",
+          "delta": 4048.0,
+          "in": 68640.0,
+          "message": "V-101: componente 'benzene' no cierra — in=68640.0 out=64592.0 (Δ=4048.0 tm/a, 5.9% del componente, 4.6% del flujo)",
+          "mode": "component",
+          "out": 64592.0,
+          "rel_pct": 5.9,
+          "severity": "MAYOR"
+        },
+        {
+          "block": "V-101",
+          "block_flow_pct": 2.4,
+          "block_id": 7,
+          "component": "hydrogen",
+          "delta": 2112.0,
+          "in": 2640.0,
+          "message": "V-101: componente 'hydrogen' no cierra — in=2640.0 out=4752.0 (Δ=2112.0 tm/a, 44.4% del componente, 2.4% del flujo)",
+          "mode": "component",
+          "out": 4752.0,
+          "rel_pct": 44.44,
+          "severity": "MAYOR"
+        },
+        {
+          "block": "V-101",
+          "block_flow_pct": 3.5,
+          "block_id": 7,
+          "component": "methane",
+          "delta": 3080.0,
+          "in": 5280.0,
+          "message": "V-101: componente 'methane' no cierra — in=5280.0 out=8360.0 (Δ=3080.0 tm/a, 36.8% del componente, 3.5% del flujo)",
+          "mode": "component",
+          "out": 8360.0,
+          "rel_pct": 36.84,
+          "severity": "MAYOR"
+        },
+        {
+          "block": "V-101",
+          "block_flow_pct": 1.3,
+          "block_id": 7,
+          "component": "toluene",
+          "delta": 1144.0,
+          "in": 11440.0,
+          "message": "V-101: componente 'toluene' no cierra — in=11440.0 out=10296.0 (Δ=1144.0 tm/a, 10.0% del componente, 1.3% del flujo)",
+          "mode": "component",
+          "out": 10296.0,
+          "rel_pct": 10.0,
+          "severity": "MAYOR"
+        }
+      ],
+      "n_critico": 2,
+      "n_mayor": 6
+    },
+    "hno3": {
+      "example": "hno3",
+      "findings": [],
+      "n_critico": 0,
+      "n_mayor": 0
+    },
+    "hydraulic": {
+      "example": "hydraulic",
+      "findings": [],
+      "n_critico": 0,
+      "n_mayor": 0
+    },
+    "industrial": {
+      "example": "industrial",
+      "findings": [
+        {
+          "block": "V-202",
+          "block_flow_pct": 0.27,
+          "block_id": 14,
+          "component": "co",
+          "delta": 64.024,
+          "in": 469.465,
+          "message": "V-202: componente 'co' no cierra — in=469.5 out=533.5 (Δ=64.0 tm/a, 12.0% del componente, 0.3% del flujo)",
+          "mode": "component",
+          "out": 533.489,
+          "rel_pct": 12.0,
+          "severity": "MAYOR"
+        },
+        {
+          "block": "V-202",
+          "block_flow_pct": 41.1,
+          "block_id": 14,
+          "component": "hydrogen",
+          "delta": 9744.242,
+          "in": 11700.367,
+          "message": "V-202: componente 'hydrogen' no cierra — in=11700.4 out=1956.1 (Δ=9744.2 tm/a, 83.3% del componente, 41.1% del flujo)",
+          "mode": "component",
+          "out": 1956.126,
+          "rel_pct": 83.28,
+          "severity": "CRITICO"
+        },
+        {
+          "block": "V-202",
+          "block_flow_pct": 2.27,
+          "block_id": 14,
+          "component": "methane",
+          "delta": 538.714,
+          "in": 1250.032,
+          "message": "V-202: componente 'methane' no cierra — in=1250.0 out=711.3 (Δ=538.7 tm/a, 43.1% del componente, 2.3% del flujo)",
+          "mode": "component",
+          "out": 711.318,
+          "rel_pct": 43.1,
+          "severity": "MAYOR"
+        },
+        {
+          "block": "V-202",
+          "block_flow_pct": 41.54,
+          "block_id": 14,
+          "component": "methanol",
+          "delta": 9849.694,
+          "in": 10256.906,
+          "message": "V-202: componente 'methanol' no cierra — in=10256.9 out=20106.6 (Δ=9849.7 tm/a, 49.0% del componente, 41.5% del flujo)",
+          "mode": "component",
+          "out": 20106.6,
+          "rel_pct": 48.99,
+          "severity": "CRITICO"
+        },
+        {
+          "block": "V-202",
+          "block_flow_pct": 1.56,
+          "block_id": 14,
+          "component": "water",
+          "delta": 369.238,
+          "in": 33.842,
+          "message": "V-202: componente 'water' no cierra — in=33.8 out=403.1 (Δ=369.2 tm/a, 91.6% del componente, 1.6% del flujo)",
+          "mode": "component",
+          "out": 403.08,
+          "rel_pct": 91.6,
+          "severity": "MAYOR"
+        }
+      ],
+      "n_critico": 2,
+      "n_mayor": 3
+    },
+    "ldpe": {
+      "example": "ldpe",
+      "findings": [],
+      "n_critico": 0,
+      "n_mayor": 0
+    },
+    "leche_gloria": {
+      "example": "leche_gloria",
+      "findings": [
+        {
+          "block": "M-101",
+          "block_flow_pct": 0.04,
+          "block_id": 6,
+          "component": "milk_protein",
+          "delta": 0.474,
+          "in": 36.926,
+          "message": "M-101: componente 'milk_protein' no cierra — in=36.9 out=37.4 (Δ=0.5 tm/a, 1.3% del componente, 0.0% del flujo)",
+          "mode": "component",
+          "out": 37.4,
+          "rel_pct": 1.27,
+          "severity": "MAYOR"
+        }
+      ],
+      "n_critico": 0,
+      "n_mayor": 1
+    },
+    "methanol": {
+      "example": "methanol",
+      "findings": [],
+      "n_critico": 0,
+      "n_mayor": 0
+    },
+    "nuclear": {
+      "example": "nuclear",
+      "findings": [],
+      "n_critico": 0,
+      "n_mayor": 0
+    },
+    "pasteurizer": {
+      "example": "pasteurizer",
+      "findings": [],
+      "n_critico": 0,
+      "n_mayor": 0
+    },
+    "penicillin": {
+      "example": "penicillin",
+      "findings": [
+        {
+          "block": "F-101",
+          "block_flow_pct": 0.05,
+          "block_id": 7,
+          "component": "glucose",
+          "delta": 0.47,
+          "in": 35.029,
+          "message": "F-101: componente 'glucose' no cierra — in=35.0 out=34.6 (Δ=0.5 tm/a, 1.3% del componente, 0.0% del flujo)",
+          "mode": "component",
+          "out": 34.56,
+          "rel_pct": 1.34,
+          "severity": "MAYOR"
+        }
+      ],
+      "n_critico": 0,
+      "n_mayor": 1
+    },
+    "pineapple": {
+      "example": "pineapple",
+      "findings": [],
+      "n_critico": 0,
+      "n_mayor": 0
+    },
+    "potato_chips": {
+      "example": "potato_chips",
+      "findings": [],
+      "n_critico": 0,
+      "n_mayor": 0
+    },
+    "quimpac": {
+      "example": "quimpac",
+      "findings": [
+        {
+          "block": "M-101",
+          "block_flow_pct": 1.11,
+          "block_id": 4,
+          "component": "sodium chloride",
+          "delta": 100.0,
+          "in": 1900.0,
+          "message": "M-101: componente 'sodium chloride' no cierra — in=1900.0 out=1800.0 (Δ=100.0 tm/a, 5.3% del componente, 1.1% del flujo)",
+          "mode": "component",
+          "out": 1800.0,
+          "rel_pct": 5.26,
+          "severity": "MAYOR"
+        },
+        {
+          "block": "M-101",
+          "block_flow_pct": 1.11,
+          "block_id": 4,
+          "component": "water",
+          "delta": 100.0,
+          "in": 7100.0,
+          "message": "M-101: componente 'water' no cierra — in=7100.0 out=7200.0 (Δ=100.0 tm/a, 1.4% del componente, 1.1% del flujo)",
+          "mode": "component",
+          "out": 7200.0,
+          "rel_pct": 1.39,
+          "severity": "MAYOR"
+        },
+        {
+          "block": "T-301",
+          "block_flow_pct": 0.13,
+          "block_id": 14,
+          "component": "sulfuric acid",
+          "delta": 0.85,
+          "in": 24.5,
+          "message": "T-301: componente 'sulfuric acid' no cierra — in=24.5 out=23.7 (Δ=0.8 tm/a, 3.5% del componente, 0.1% del flujo)",
+          "mode": "component",
+          "out": 23.65,
+          "rel_pct": 3.47,
+          "severity": "MAYOR"
+        },
+        {
+          "block": "T-301",
+          "block_flow_pct": 0.13,
+          "block_id": 14,
+          "component": "water",
+          "delta": 0.852,
+          "in": 19.1,
+          "message": "T-301: componente 'water' no cierra — in=19.1 out=20.0 (Δ=0.9 tm/a, 4.3% del componente, 0.1% del flujo)",
+          "mode": "component",
+          "out": 19.952,
+          "rel_pct": 4.27,
+          "severity": "MAYOR"
+        }
+      ],
+      "n_critico": 0,
+      "n_mayor": 4
+    },
+    "rankine": {
+      "example": "rankine",
+      "findings": [],
+      "n_critico": 0,
+      "n_mayor": 0
+    },
+    "rxn_flash_col": {
+      "example": "rxn_flash_col",
+      "findings": [],
+      "n_critico": 0,
+      "n_mayor": 0
+    },
+    "smr_eq": {
+      "example": "smr_eq",
+      "findings": [
+        {
+          "block": "E-101",
+          "block_flow_pct": 10.88,
+          "block_id": 6,
+          "component": "co",
+          "delta": 475.347,
+          "in": 475.347,
+          "message": "E-101: componente 'co' no cierra — in=475.3 out=0.0 (Δ=475.3 tm/a, 100.0% del componente, 10.9% del flujo)",
+          "mode": "component",
+          "out": 0.0,
+          "rel_pct": 100.0,
+          "severity": "CRITICO"
+        },
+        {
+          "block": "E-101",
+          "block_flow_pct": 13.47,
+          "block_id": 6,
+          "component": "co2",
+          "delta": 588.49,
+          "in": 588.49,
+          "message": "E-101: componente 'co2' no cierra — in=588.5 out=0.0 (Δ=588.5 tm/a, 100.0% del componente, 13.5% del flujo)",
+          "mode": "component",
+          "out": 0.0,
+          "rel_pct": 100.0,
+          "severity": "CRITICO"
+        },
+        {
+          "block": "E-101",
+          "block_flow_pct": 4.82,
+          "block_id": 6,
+          "component": "hydrogen",
+          "delta": 210.468,
+          "in": 210.468,
+          "message": "E-101: componente 'hydrogen' no cierra — in=210.5 out=0.0 (Δ=210.5 tm/a, 100.0% del componente, 4.8% del flujo)",
+          "mode": "component",
+          "out": 0.0,
+          "rel_pct": 100.0,
+          "severity": "MAYOR"
+        },
+        {
+          "block": "E-101",
+          "block_flow_pct": 11.75,
+          "block_id": 6,
+          "component": "methane",
+          "delta": 513.578,
+          "in": 513.578,
+          "message": "E-101: componente 'methane' no cierra — in=513.6 out=0.0 (Δ=513.6 tm/a, 100.0% del componente, 11.8% del flujo)",
+          "mode": "component",
+          "out": 0.0,
+          "rel_pct": 100.0,
+          "severity": "CRITICO"
+        },
+        {
+          "block": "E-101",
+          "block_flow_pct": 40.91,
+          "block_id": 6,
+          "component": "water",
+          "delta": 1787.883,
+          "in": 2582.117,
+          "message": "E-101: componente 'water' no cierra — in=2582.1 out=4370.0 (Δ=1787.9 tm/a, 40.9% del componente, 40.9% del flujo)",
+          "mode": "component",
+          "out": 4370.0,
+          "rel_pct": 40.91,
+          "severity": "CRITICO"
+        },
+        {
+          "block": "V-101",
+          "block_flow_pct": 10.84,
+          "block_id": 7,
+          "component": "co",
+          "delta": 474.278,
+          "in": 0.0,
+          "message": "V-101: componente 'co' no cierra — in=0.0 out=474.3 (Δ=474.3 tm/a, 100.0% del componente, 10.8% del flujo)",
+          "mode": "component",
+          "out": 474.278,
+          "rel_pct": 100.0,
+          "severity": "CRITICO"
+        },
+        {
+          "block": "V-101",
+          "block_flow_pct": 13.45,
+          "block_id": 7,
+          "component": "co2",
+          "delta": 588.39,
+          "in": 0.0,
+          "message": "V-101: componente 'co2' no cierra — in=0.0 out=588.4 (Δ=588.4 tm/a, 100.0% del componente, 13.5% del flujo)",
+          "mode": "component",
+          "out": 588.39,
+          "rel_pct": 100.0,
+          "severity": "CRITICO"
+        },
+        {
+          "block": "V-101",
+          "block_flow_pct": 4.81,
+          "block_id": 7,
+          "component": "hydrogen",
+          "delta": 210.394,
+          "in": 0.0,
+          "message": "V-101: componente 'hydrogen' no cierra — in=0.0 out=210.4 (Δ=210.4 tm/a, 100.0% del componente, 4.8% del flujo)",
+          "mode": "component",
+          "out": 210.394,
+          "rel_pct": 100.0,
+          "severity": "MAYOR"
+        },
+        {
+          "block": "V-101",
+          "block_flow_pct": 11.74,
+          "block_id": 7,
+          "component": "methane",
+          "delta": 513.504,
+          "in": 0.0,
+          "message": "V-101: componente 'methane' no cierra — in=0.0 out=513.5 (Δ=513.5 tm/a, 100.0% del componente, 11.7% del flujo)",
+          "mode": "component",
+          "out": 513.504,
+          "rel_pct": 100.0,
+          "severity": "CRITICO"
+        },
+        {
+          "block": "V-101",
+          "block_flow_pct": 40.77,
+          "block_id": 7,
+          "component": "water",
+          "delta": 1783.0,
+          "in": 4370.0,
+          "message": "V-101: componente 'water' no cierra — in=4370.0 out=2587.0 (Δ=1783.0 tm/a, 40.8% del componente, 40.8% del flujo)",
+          "mode": "component",
+          "out": 2587.0,
+          "rel_pct": 40.8,
+          "severity": "CRITICO"
+        }
+      ],
+      "n_critico": 8,
+      "n_mayor": 2
+    },
+    "soap": {
+      "example": "soap",
+      "findings": [],
+      "n_critico": 0,
+      "n_mayor": 0
+    },
+    "sugar": {
+      "example": "sugar",
+      "findings": [],
+      "n_critico": 0,
+      "n_mayor": 0
+    },
+    "sulfuric": {
+      "example": "sulfuric",
+      "findings": [],
+      "n_critico": 0,
+      "n_mayor": 0
+    },
+    "talara": {
+      "example": "talara",
+      "findings": [],
+      "n_critico": 0,
+      "n_mayor": 0
+    },
+    "urea": {
+      "example": "urea",
+      "findings": [],
+      "n_critico": 0,
+      "n_mayor": 0
+    },
+    "water_treat": {
+      "example": "water_treat",
+      "findings": [],
+      "n_critico": 0,
+      "n_mayor": 0
+    }
+  },
+  "n_examples": 41,
+  "tol_rel": 0.01,
+  "total_critico": 16,
+  "total_mayor": 23
+}
