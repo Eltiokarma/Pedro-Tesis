@@ -126,7 +126,7 @@
   "sum_duty": 1624.02741
  },
  "ethylene_crk": {
-  "ISBL": 6897010.16,
+  "ISBL": 6897010.32,
   "energy_errors": 0,
   "mass_errors": 0,
   "n_blocks": 10,
@@ -342,13 +342,13 @@
   "sum_duty": -54.937067
  },
  "talara": {
-  "ISBL": 66034527.89,
+  "ISBL": 66184441.86,
   "energy_errors": 0,
   "mass_errors": 0,
-  "n_blocks": 39,
-  "n_streams": 42,
+  "n_blocks": 43,
+  "n_streams": 46,
   "overall_status": "ok",
-  "sum_duty": 8795.081043
+  "sum_duty": 10261.151997
  },
  "urea": {
   "ISBL": 5083702.08,

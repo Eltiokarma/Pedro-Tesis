@@ -4,6 +4,7 @@
     "ethane_pfr",
     "ethylene_crk",
     "methanol",
-    "smr_eq"
+    "smr_eq",
+    "talara"
   ]
 }
