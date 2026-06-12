@@ -116,3 +116,19 @@ Cada ítem indica dónde está el código y por qué quedó fuera de alcance.
     correcto (fuera del scope "recomputar composiciones"): corregir S27 a la
     producción real de benceno y re-dimensionar reciclo + agregar makeup de H2.
     Por eso hda_full NO entra a la whitelist del ratchet todavía.
+
+15. **industrial — V-201 mal modelado como splitter (no separador)**: el flash
+    V-201 reparte el efluente del reactor en "crudo" (25.000 t/a) y "vapor de
+    reciclo" (275.000 t/a) con la MISMA composición (41% metanol cada uno) — es
+    un splitter de flujo, no una separación. El metanol (no-volátil relativo)
+    debería condensar al líquido (crudo grande), pero la masa del crudo está
+    lockeada en 25.000, demasiado chica para los ~124.000 t/a de metanol. Como
+    consecuencia el producto final (V-202) recibe sólo ~10.257 t/a de metanol
+    (el resto recircula sin converger a steady state, igual que hda_full).
+    Un balance correcto de V-202 (que NO cree metanol) reduce el producto de
+    20.154 a ~10.086 t/a → el ejemplo se vuelve no rentable (NPV << 0) y rompe
+    gate_economics_panel (que lo usa como caso rentable). Fix correcto (fuera del
+    scope "recomputar composiciones por bloque"): re-derivar V-201 como
+    separador real (crudo ≈ metanol+agua condensados, vapor = gases ligeros) y
+    converger el reciclo. Por eso industrial NO entra a la whitelist todavía.
+    El chequeo de balance lo sigue reportando en el baseline (2 CRÍTICO en V-202).
