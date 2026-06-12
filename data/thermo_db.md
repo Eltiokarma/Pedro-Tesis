@@ -9812,6 +9812,26 @@ dH_f_liq_298K = N/A
 
 ---
 
+## Sulfuric acid (H2O4S)
+
+### IDs
+- CAS: 7664-93-9
+- Formula: H2O4S
+- MW: 98.079 g/mol
+- Tb (1 atm): 337.0 °C
+- Tc: 651.9 °C, Pc: 64.0 bar
+- omega: 0.000
+
+### Capa 3 — Formación
+dH_f_gas_298K = N/A
+dH_f_liq_298K = -813.99 kJ/mol
+
+<!-- Sólo IDs/MW + ΔHf(liq): habilita el balance de masa por estequiometría
+     del absorbedor de SO3 (R032).  Sin Antoine/Cp completos (líquido no
+     volátil a T de proceso) → pseudo para VLE, real para balance de masa. -->
+
+---
+
 ## Tetradecane (C14H30)
 
 ### IDs

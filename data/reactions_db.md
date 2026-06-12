@@ -1732,6 +1732,46 @@ urea NO está en Capa 3 (pseudo). Proceso Bosch-Meiser: dos pasos vía carbamato
 ---
 
 
+## R032 — Absorción de SO3 en agua (formación de ácido sulfúrico)
+
+**Categoría:** inorgánica / ácido sulfúrico    ⚠ **NO DERIVADA DE CAPA 3**
+
+### Estequiometría
+
+```
+1 SO3(g) + 1 H2O(l)  →  1 H2SO4(l)
+```
+
+| Especie | Fase | ν |
+|---|---|---:|
+| SO3 | g | -1 |
+| H2O | l | -1 |
+| H2SO4 | l | +1 |
+
+**Δν =** -2  **Fase global:** gas→líquido  **Rango T válido:** 320–420 K
+
+### Termodinámica @ 298.15 K (literatura empírica, NO derivable)
+
+- ΔH_rxn = -132.00 kJ/mol  *(de ΔHf: H2SO4(l) -814.0, SO3(g) -395.7, H2O(l) -285.8 → -132.5; fuertemente exotérmica)*
+
+### Comentarios técnicos
+
+Paso final del proceso de contacto: el SO3 del convertidor se absorbe en ácido
+sulfúrico concentrado (no en agua pura — la absorción directa en agua forma
+niebla de H2SO4). En la torre de absorción la reacción es prácticamente
+completa e irreversible. Se modela como inline_reaction para el balance de
+masa: 1 mol SO3 + 1 mol H2O → 1 mol H2SO4 (conserva S, O, H). H2SO4 es pseudo
+para VLE (líquido no volátil), pero su MW (98.079) y ΔHf habilitan el balance
+de masa y energía.
+
+### Referencias
+
+- Perry's Chemical Engineers' Handbook, "Sulfuric Acid"
+- Ullmann's Encyclopedia "Sulfuric Acid and Sulfur Trioxide"
+
+---
+
+
 ## Roadmap futuro (v1.1+)
 
 1. **Capa 5 (Equilibrio físico):** EOS cúbica (SRK/PR) para fugacidades; NRTL/UNIQUAC para actividad en líquido. Resuelve limitaciones #1 y #4.
