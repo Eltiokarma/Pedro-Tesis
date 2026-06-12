@@ -1,6 +1,7 @@
 {
   "_comment": "Ratchet del balance por componente. Cada ejemplo aquí ya fue corregido y DEBE auditar limpio (cero hallazgos a tolerancia 1%). gate_component_balance.py falla si alguno reaparece con desbalance. La lista empieza vacía y crece con cada fix (Partes 2-4). NO hardcodear en el gate: esta es la fuente de verdad versionada.",
   "corrected": [
+    "cdu",
     "ethanol",
     "gas_sweet",
     "haber_rec",
@@ -8,6 +9,7 @@
     "industrial",
     "rxn_flash_col",
     "sugar",
-    "sulfuric"
+    "sulfuric",
+    "talara"
   ]
 }
