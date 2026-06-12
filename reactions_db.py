@@ -56,6 +56,10 @@ FORMULA_TO_THERMO = {
     'SO3':       'sulfur_trioxide', # Perry 8th ed (Cmpd 327)
     'H2S':       'h2s',
     'MDEA':      'mdea',
+    # Óxidos de nitrógeno / HNO3 (E14 ácido nítrico) — alinear con thermo_db
+    'NO':        'nitric_oxide',
+    'NO2':       'nitrogen_dioxide',
+    'N2O':       'nitrous_oxide',
     # Orgánicos
     'CH3OH':           'methanol',
     'C2H5OH':          'ethanol',

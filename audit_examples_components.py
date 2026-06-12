@@ -180,12 +180,17 @@ def _check_stoichiometry(b, comp_in, comp_out, block_flow) -> List[dict]:
                                  mode="inline_reaction")
 
     # Matriz estequiométrica A[comp, rxn] = ν (mol) mapeando por thermo_name.
+    # Normalizamos nombres (minúsculas, espacios/guiones→'_') para tolerar
+    # variantes: el stream usa 'nitrogen dioxide' y la reacción 'nitrogen_dioxide'.
+    def _canon(name):
+        return (name or "").strip().lower().replace(" ", "_").replace("-", "_")
+    canon_idx = {_canon(c): i for i, c in enumerate(comps)}
     A = np.zeros((len(comps), len(reactions)))
     for j, r in enumerate(reactions):
         for sp in r.stoich:
-            tname = sp.thermo_name
-            if tname in comps:
-                A[comps.index(tname), j] += sp.nu
+            i = canon_idx.get(_canon(sp.thermo_name))
+            if i is not None:
+                A[i, j] += sp.nu
     dn = np.array(dn_obs)
     # ξ por mínimos cuadrados (no forzamos ≥0 aquí; sólo medimos residual).
     try:

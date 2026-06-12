@@ -472,11 +472,13 @@ def _audit_redundant_locks(fs, findings):
                   or getattr(src, "splitter_active", False))
         if rxn_recalcs or active:
             # ¿El unit op realmente PUEDE recalcular esta composición? Un
-            # flash/column necesita thermo (Antoine) de cada componente; si
-            # alguno no está en thermo_db (NOx, cortes de petróleo, sales,
-            # sólidos), el unit op se saltea y la composición queda
-            # hardcodeada → load-bearing, no redundante.
-            computable = all(_thermo(c) is not None
+            # flash/column necesita ANTOINE de cada componente; si alguno no es
+            # VLE-modelable (NOx, cortes de petróleo, sales, sólidos, especies
+            # con sólo MW como H2SO4/HNO3/NO2), el unit op se saltea y la
+            # composición queda hardcodeada → load-bearing, no redundante.
+            # (Chequear existencia en thermo NO basta: una especie con MW pero
+            # sin Antoine igual no se puede flashear.)
+            computable = all(_has_antoine(_thermo(c))
                              for c in _stream_components(s))
             if active and not rxn_recalcs and not computable:
                 continue

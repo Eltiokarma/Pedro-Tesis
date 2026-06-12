@@ -9832,6 +9832,44 @@ dH_f_liq_298K = -813.99 kJ/mol
 
 ---
 
+## Nitrogen dioxide (NO2)
+
+### IDs
+- CAS: 10102-44-0
+- Formula: NO2
+- MW: 46.006 g/mol
+- Tb (1 atm): 21.2 °C
+- Tc: 158.2 °C, Pc: 101.0 bar
+- omega: 0.834
+
+### Capa 3 — Formación
+dH_f_gas_298K = 33.18 kJ/mol
+dH_f_liq_298K = N/A
+
+<!-- IDs/MW + ΔHf(gas): habilita el balance de masa por estequiometría de la
+     oxidación de NO (R033) y la absorción de NOx (R034) en E14 ácido nítrico. -->
+
+---
+
+## Nitric acid (HNO3)
+
+### IDs
+- CAS: 7697-37-2
+- Formula: HNO3
+- MW: 63.012 g/mol
+- Tb (1 atm): 83.0 °C
+- Tc: 247.0 °C, Pc: 68.9 bar
+- omega: 0.714
+
+### Capa 3 — Formación
+dH_f_gas_298K = N/A
+dH_f_liq_298K = -174.10 kJ/mol
+
+<!-- IDs/MW + ΔHf(liq): habilita el balance de masa por estequiometría de la
+     absorción de NOx a HNO3 (R034). -->
+
+---
+
 ## Tetradecane (C14H30)
 
 ### IDs

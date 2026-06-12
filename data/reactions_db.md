@@ -1772,6 +1772,80 @@ de masa y energía.
 ---
 
 
+## R033 — Oxidación de NO a NO2 (proceso Ostwald)
+
+**Categoría:** inorgánica / ácido nítrico    ⚠ **NO DERIVADA DE CAPA 3**
+
+### Estequiometría
+
+```
+2 NO(g) + 1 O2(g)  →  2 NO2(g)
+```
+
+| Especie | Fase | ν |
+|---|---|---:|
+| NO | g | -2 |
+| O2 | g | -1 |
+| NO2 | g | +2 |
+
+**Δν =** -1  **Fase global:** gas  **Rango T válido:** 290–400 K
+
+### Termodinámica @ 298.15 K (literatura empírica, NO derivable)
+
+- ΔH_rxn = -114.00 kJ/mol  *(de ΔHf: 2·NO2(33.18) − 2·NO(90.25) = -114.1; exotérmica)*
+
+### Comentarios técnicos
+
+Oxidación en fase gas del NO del quemador a NO2 (proceso Ostwald). LENTA y
+favorecida a baja T; se realiza enfriando el gas. CLAVE para el balance de
+masa: el NO2 producido pesa MÁS que el NO consumido porque gana un átomo de O
+del O2 (MW NO 30.01 → NO2 46.01). 16 kmol NO consumido → 16 kmol NO2 = 736 t/a
+(no 480, que sería la masa del NO); los 256 t/a extra vienen de 8 kmol O2.
+
+### Referencias
+
+- Ullmann's Encyclopedia "Nitric Acid, Nitrous Acid, and Nitrogen Oxides"
+
+---
+
+
+## R034 — Absorción de NOx en agua a HNO3
+
+**Categoría:** inorgánica / ácido nítrico    ⚠ **NO DERIVADA DE CAPA 3**
+
+### Estequiometría
+
+```
+3 NO2(g) + 1 H2O(l)  →  2 HNO3(l) + 1 NO(g)
+```
+
+| Especie | Fase | ν |
+|---|---|---:|
+| NO2 | g | -3 |
+| H2O | l | -1 |
+| HNO3 | l | +2 |
+| NO | g | +1 |
+
+**Δν =** -1  **Fase global:** gas→líquido  **Rango T válido:** 290–340 K
+
+### Termodinámica @ 298.15 K (literatura empírica, NO derivable)
+
+- ΔH_rxn = -73.00 kJ/mol  *(exotérmica; absorción en torre)*
+
+### Comentarios técnicos
+
+Absorción del NO2 en agua en la torre de absorción: 3 NO2 + H2O → 2 HNO3 + NO.
+Reacción de desproporción: 1 de cada 3 NO2 se reduce a NO (que se re-oxida vía
+R033 y recircula), los otros 2 forman HNO3. Conserva N/O/H. Es la base del
+balance de masa del condensado ácido débil y del gas NOx de reciclo.
+
+### Referencias
+
+- Ullmann's Encyclopedia "Nitric Acid, Nitrous Acid, and Nitrogen Oxides"
+
+---
+
+
 ## Roadmap futuro (v1.1+)
 
 1. **Capa 5 (Equilibrio físico):** EOS cúbica (SRK/PR) para fugacidades; NRTL/UNIQUAC para actividad en líquido. Resuelve limitaciones #1 y #4.
