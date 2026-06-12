@@ -279,13 +279,13 @@
   "sum_duty": 76.0
  },
  "quimpac": {
-  "ISBL": 51087300.91,
+  "ISBL": 51103256.13,
   "energy_errors": 0,
   "mass_errors": 0,
-  "n_blocks": 23,
-  "n_streams": 23,
+  "n_blocks": 24,
+  "n_streams": 24,
   "overall_status": "ok",
-  "sum_duty": 1583.757543
+  "sum_duty": 1583.779975
  },
  "rankine": {
   "ISBL": 271860377.93,
