@@ -102,6 +102,11 @@ class Block:
     # debe inferir el solver desde el balance de energía.  Cargado
     # desde JSON / examples mediante heurística (duty != 0 → locked).
     duty_locked: bool = False
+    # Procedencia del duty (aditivo, default ""):
+    #   "auto-hidraulico" — recalculado politrópicamente por solve_pressure_
+    #                       hydraulic al auto-dimensionar el ΔP de un rotativo.
+    #   ""                — spec del user o inferido por balance de energía.
+    duty_origin: str = ""
 
     # True si el user fijó el área/tamaño S a mano (specification).  False
     # si el solver lo puede auto-dimensionar desde duty + T (size_heat_
@@ -438,6 +443,14 @@ class Stream:
     #   tuberías RESTAN ΔP calculado por pressure_drop (Darcy-Weisbach)
     pressure_bar: float = 1.013      # default 1 atm
     pressure_locked: bool = False    # spec: True si el user la fijó
+    # Procedencia del lock de presión (aditivo):
+    #   "user"      — el user/builder fijó la P deliberadamente (spec del problema)
+    #   "heuristic" — inferido por la heurística de carga (P≠1atm → locked)
+    #   "solver"    — fijado por el solver (p.ej. _seed_reactor_pressures)
+    #   ""          — sin lock
+    # Default "" en código; en from_dict los JSONs viejos (sin la clave) con
+    # pressure_locked=True se marcan "heuristic" → comportamiento intacto.
+    pressure_lock_origin: str = ""
 
     # ---- Composición y fase (para Cp(T) riguroso y cambio de fase) ----
     # phase: "liquid" | "vapor" | "gas" | "two_phase" | ""
@@ -678,6 +691,11 @@ class Flowsheet:
             if "pressure_locked" not in sdict:
                 s.pressure_locked = (abs(s.pressure_bar - 1.013) > 1e-6
                                      and s.pressure_bar > 0)
+            # Procedencia del lock: JSONs viejos sin la clave → "heuristic"
+            # para los locked (comportamiento intacto; el user puede marcar
+            # "user" explícitamente para suprimir el aviso de pressure_source).
+            if "pressure_lock_origin" not in sdict:
+                s.pressure_lock_origin = "heuristic" if s.pressure_locked else ""
             fs.streams[int(sid)] = s
         fs._next_id        = d.get("_next_id", 1)
         fs.opex_extras     = list(d.get("opex_extras", []))

@@ -99,7 +99,7 @@ class AuditReport:
         lines = [f"Auditoría de consistencia ({self.n_errors} errores, "
                  f"{self.n_warnings} warnings, {self.n_infos} infos):"]
         for cat in ('phase', 'component_balance', 'component_balance_strict',
-                    'pseudo', 'redundant_lock'):
+                    'pressure_source', 'pseudo', 'redundant_lock'):
             cat_f = self.by_category(cat)
             if not cat_f:
                 continue
@@ -371,6 +371,93 @@ def _audit_component_balance_strict(fs, findings):
 
 
 # ======================================================================
+# DETECTOR 2c — FUENTE DE PRESIÓN (atribución por dispositivo)
+# ======================================================================
+
+_P_TOL = 0.05   # bar — tolerancia para "P creada"
+
+
+def _is_rotative(eq):
+    e = (eq or "").lower()
+    return ("pump" in e or "compressor" in e or "fan" in e or "bomba" in e
+            or "blower" in e or "soplador" in e)
+
+
+def _is_column_like(eq):
+    e = (eq or "").lower()
+    return any(kw in e for kw in ("tower", "column", "columna"))
+
+
+def _audit_pressure_source(fs, findings):
+    """FASE 2.3 — la presión sólo la crea un dispositivo (rotativo o columna).
+
+    (a) Bloque NO rotativo ni columna con P_out > P_in (+tol) → "presión
+        creada sin dispositivo" (un horno/HX/mixer/vessel no eleva P).
+    (b) Rotativo cuyo outlet sube de P pero sin delta_p_bar ni P_op_bar
+        declarados ni auto-dimensionados → "rotativo sin spec".
+    (c) Corriente con pressure_locked cuyo lock viene de la heurística de
+        carga (no de spec explícita) → recordatorio para declarar el origen.
+    """
+    for b in fs.blocks.values():
+        ins  = [s for s in fs.streams.values() if s.dst == b.id and s.src != -1]
+        outs = [s for s in fs.streams.values() if s.src == b.id and s.dst != -1]
+        if not ins or not outs:
+            continue
+        pin  = max((s.pressure_bar for s in ins if s.pressure_bar > 0),
+                   default=0.0)
+        pout = max((s.pressure_bar for s in outs if s.pressure_bar > 0),
+                   default=0.0)
+        if pin <= 0 or pout <= pin + _P_TOL:
+            continue
+        rise = pout - pin
+        if not _is_rotative(b.eq_type):
+            if _is_column_like(b.eq_type):
+                continue   # columnas tienen gradiente de P propio
+            findings.append(AuditFinding(
+                category='pressure_source', severity='warning',
+                target_kind='block', target_name=b.name,
+                message=(f"{b.name} ({b.eq_type}): P sube {pin:.2f}→{pout:.2f} "
+                         f"bar (+{rise:.2f}) sin ser rotativo ni columna — "
+                         f"presión CREADA sin dispositivo. Mover el salto a la "
+                         f"bomba/compresor/soplador del tren (P_op_bar o "
+                         f"delta_p_bar) y deslockear las corrientes intermedias."),
+                data={'P_in': pin, 'P_out': pout, 'rise_bar': rise}))
+            continue
+        # rotativo que sube P: ¿tiene spec o fue auto-dimensionado?
+        dp = abs(float(getattr(b, "delta_p_bar", 0.0) or 0.0))
+        pop = float(getattr(b, "P_op_bar", 0.0) or 0.0)
+        auto = (getattr(b, "duty_origin", "") == "auto-hidraulico")
+        if dp < _P_TOL and pop <= 1.013 + _P_TOL and not auto:
+            findings.append(AuditFinding(
+                category='pressure_source', severity='warning',
+                target_kind='block', target_name=b.name,
+                message=(f"{b.name} ({b.eq_type}): eleva P {pin:.2f}→{pout:.2f} "
+                         f"bar sólo por el lock de una corriente, sin "
+                         f"delta_p_bar ni P_op_bar declarados ni "
+                         f"auto-dimensionados — rotativo sin spec. Declarar "
+                         f"P_op_bar/delta_p_bar para costing y duty correctos."),
+                data={'P_in': pin, 'P_out': pout, 'rise_bar': rise}))
+
+    # (c) locks de presión de origen heurístico
+    for s in fs.streams.values():
+        if not getattr(s, "pressure_locked", False):
+            continue
+        if abs(s.pressure_bar - 1.013) <= _P_TOL:
+            continue   # ≈1 atm: no es un lock "fuerte" que atribuir
+        origin = getattr(s, "pressure_lock_origin", "") or "heuristic"
+        if origin == "heuristic":
+            findings.append(AuditFinding(
+                category='pressure_source', severity='warning',
+                target_kind='stream', target_name=s.name,
+                message=(f"{s.name}: pressure_locked={s.pressure_bar:.2f} bar de "
+                         f"origen HEURÍSTICO (no spec explícita del user). "
+                         f"Verificar que el dispositivo que la entrega esté "
+                         f"declarado; marcar pressure_lock_origin='user' si es "
+                         f"una especificación deliberada."),
+                data={'P_bar': s.pressure_bar, 'origin': origin}))
+
+
+# ======================================================================
 # DETECTOR 3 — PSEUDO-COMPONENTES
 # ======================================================================
 
@@ -524,6 +611,7 @@ def audit_flowsheet(fs) -> AuditReport:
     _audit_phase(fs, findings)
     _audit_component_balance(fs, findings)
     _audit_component_balance_strict(fs, findings)
+    _audit_pressure_source(fs, findings)
     _audit_pseudo(fs, findings)
     _audit_redundant_locks(fs, findings)
     report = AuditReport(findings=findings)

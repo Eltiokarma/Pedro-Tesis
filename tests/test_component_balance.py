@@ -52,8 +52,10 @@ def test_roundtrip_con_campos_nuevos_preservados():
 
 def test_roundtrip_ejemplo_real_solo_agrega_claves_nuevas():
     """Cargar un ejemplo on-disk (sin los campos nuevos) y re-serializar
-    sólo AGREGA inline_reaction:[] y pseudo_cut:{}; ningún valor original
-    se pierde ni cambia."""
+    sólo AGREGA campos aditivos nuevos; ningún valor original se pierde ni
+    cambia."""
+    BLOCK_NEW = {"inline_reaction", "pseudo_cut", "duty_origin"}
+    STREAM_NEW = {"pressure_lock_origin"}
     path = os.path.join(aec.DATA_DIR, "gas_sweet.json")
     with open(path, encoding="utf-8") as f:
         d = json.load(f)
@@ -61,10 +63,17 @@ def test_roundtrip_ejemplo_real_solo_agrega_claves_nuevas():
     for bid_str, b_in in d["blocks"].items():
         b_out = d2["blocks"][int(bid_str)]
         new_keys = set(b_out) - set(b_in)
-        assert new_keys == {"inline_reaction", "pseudo_cut"}, \
-            f"claves inesperadas agregadas: {new_keys}"
+        assert new_keys <= BLOCK_NEW, \
+            f"claves de bloque inesperadas agregadas: {new_keys - BLOCK_NEW}"
         for k in b_in:                       # nada original se modifica
             assert b_in[k] == b_out[k], f"clave '{k}' cambió en round-trip"
+    for sid_str, s_in in d["streams"].items():
+        s_out = d2["streams"][int(sid_str)]
+        new_keys = set(s_out) - set(s_in)
+        assert new_keys <= STREAM_NEW, \
+            f"claves de stream inesperadas agregadas: {new_keys - STREAM_NEW}"
+        for k in s_in:
+            assert s_in[k] == s_out[k], f"clave '{k}' cambió en round-trip"
 
 
 # ======================================================================

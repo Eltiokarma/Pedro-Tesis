@@ -3023,6 +3023,11 @@ def _seed_reactor_pressures(fs):
                 if attached and _proc(b, s):
                     s.pressure_bar = pop
                     s.pressure_locked = True
+                    # lock de origen SOLVER (no es spec del user ni heurística
+                    # de carga): el seed lo deriva de P_op_bar del bloque.
+                    if not getattr(s, "pressure_lock_origin", "") or \
+                            s.pressure_lock_origin == "heuristic":
+                        s.pressure_lock_origin = "solver"
                     n += 1
     return n
 
@@ -3136,6 +3141,15 @@ def solve_pressure_hydraulic(fs, max_iter=8):
                 b.delta_p_bar = new_dp
                 sized_pumps.add(b.id)
                 any_sized = True
+                # FASE 2.4: recomputar el duty politrópico del rotativo con
+                # el ΔP recién dimensionado (sólo compresor/fan; las bombas
+                # ya tienen su propia ruta).  Sólo si NO está duty_locked.
+                if (("compressor" in eq_lower or "fan" in eq_lower)
+                        and not getattr(b, "duty_locked", False)):
+                    w = _auto_hydraulic_compressor_duty(b, fs)
+                    if w is not None:
+                        b.duty = w
+                        b.duty_origin = "auto-hidraulico"
                 in_recycle = b.id in blocks_in_recycle
                 rec_tag = " (en recycle)" if in_recycle else ""
                 msgs.append(
@@ -3155,6 +3169,42 @@ def solve_pressure_hydraulic(fs, max_iter=8):
     # falló por datos insuficientes (duty no actualizado).
     msgs.extend(_compressor_polytropic_warnings(fs))
     return msgs
+
+
+def _auto_hydraulic_compressor_duty(b, fs):
+    """FASE 2.4 — duty politrópico de un compresor/fan auto-dimensionado.
+
+    Usa el MISMO modelo isentrópico que el paso de energía
+    (compressor_sizing + _compressible_props), tomando la M de la mezcla
+    desde la composición MÁSICA del feed.  Devuelve W_elec_kW (>0) o None.
+    Se computa con el ΔP recién auto-dimensionado; el paso de energía lo
+    refina luego con la T propagada (valor final idéntico al previo →
+    golden-safe), pero deja la marca duty_origin='auto-hidraulico'."""
+    try:
+        from equipment_design import compressor_sizing
+        from flowsheet_model import SEC_PER_YEAR, TM_TO_KG
+    except Exception:
+        return None
+    ins = [s for s in fs.streams.values() if s.dst == b.id and s.mass_flow > 0]
+    if not ins:
+        return None
+    feed = ins[0]
+    comp = feed.composition or ({feed.main_component: 1.0}
+                                if feed.main_component else {})
+    if not comp:
+        return None
+    P_in = feed.pressure_bar if feed.pressure_bar > 0 else 1.013
+    P_out = P_in + float(getattr(b, "delta_p_bar", 0.0) or 0.0)
+    if P_out <= P_in:
+        return None
+    m_kg_s = feed.mass_flow * TM_TO_KG / SEC_PER_YEAR
+    mw_avg, k = _compressible_props(comp, feed.temperature + 273.15)
+    res = compressor_sizing(m_kg_s=m_kg_s, P_in_bar=P_in, P_out_bar=P_out,
+                            T_in_K=feed.temperature + 273.15, mw_avg=mw_avg,
+                            k=k, eta_isen=(b.efficiency or 0.75))
+    if not res or res.get("W_act_kW", 0) <= 0:
+        return None
+    return res["W_act_kW"]
 
 
 def _find_downstream_target(fs, start_block_id, _pd):
