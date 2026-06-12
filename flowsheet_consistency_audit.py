@@ -156,6 +156,29 @@ def _stream_components(s):
 # DETECTOR 1 — PHASE vs (T, P, composición)
 # ======================================================================
 
+def _tc_c(name):
+    """Tc (°C) del componente, o None si no está en thermo_db."""
+    comp = _thermo(name)
+    tc = getattr(comp, "tc_c", None) if comp is not None else None
+    return tc if (tc is not None and tc > -273.0) else None
+
+
+def _is_melt(comp, T_C):
+    """Fundido (melt): líquido a T MUY por encima del Tb de sus componentes,
+    o componentes-proxy sin Tb (clinker, vidrio, escoria) a T alta — fuera
+    del modelo VLE."""
+    import thermo_db as _td
+    tbs = []
+    for c in comp:
+        co = _td.get(c)
+        tb = getattr(co, "tb_c", 0.0) if co is not None else 0.0
+        if tb and tb > 0:
+            tbs.append(tb)
+    if not tbs:
+        return T_C > 600.0          # sin Tb conocido + T alta → proxy fundido
+    return T_C > max(tbs) + 300.0   # líquido muy por encima de todos los Tb
+
+
 def _audit_phase(fs, findings):
     try:
         from flowsheet_solver import _infer_phase_from_TP
@@ -175,9 +198,35 @@ def _audit_phase(fs, findings):
         # por construcción; re-chequearlas con otro método da falsos positivos.
         if not getattr(s, "phase_locked", False):
             continue
+        decl0 = (s.phase or "").lower()
+        # FASE 4.10b: phase='solid' → sin presión de vapor, Antoine/VLE no
+        # aplica.  No se verifica contra la termo de fluidos.
+        if decl0 == "solid":
+            continue
         T_C = s.temperature
         P = float(getattr(s, "pressure_bar", 0.0) or 0.0)
         if T_C <= -273.0 or P <= 0:
+            continue
+        # FASE 4.10c: fundido/melt — líquido a T >> Tb de todos los componentes
+        # (clinker ~1450°C, vidrio ~1500°C): proxy fuera del modelo VLE.  Aviso
+        # específico, no el genérico de inconsistencia de fase.
+        if decl0 == "liquid" and _is_melt(comp, T_C):
+            findings.append(AuditFinding(
+                category='phase', severity='info', target_kind='stream',
+                target_name=s.name,
+                message=(f"{s.name}: phase='liquid' a T={T_C:.0f}°C — FUNDIDO "
+                         f"(componente proxy fuera del modelo VLE: mineral/óxido/"
+                         f"vidrio fundido). La verificación Antoine no aplica."),
+                data={'T_C': T_C, 'reason': 'melt'}))
+            continue
+        # FASE 4.10a: T > Tc del componente principal → gas/supercrítico
+        # confirmado.  Declarar gas/vapor es correcto (no emitir "no confiable").
+        # El "principal" es main_component o, si está vacío, el dominante de la
+        # composición (mayor fracción).
+        dom = s.main_component or (max(comp, key=comp.get) if comp else "")
+        tc = _tc_c(dom)
+        if (tc is not None and T_C > tc + 1e-6
+                and decl0 in ("gas", "vapor")):
             continue
         T_K = T_C + 273.15
         inferred, vfrac = _infer_phase_from_TP(comp, T_K, P)
