@@ -2786,14 +2786,44 @@ def solve_flashes(fs):
                        if s.mass_flow > 0 and (s.composition or {})), None)
         if feed is None:
             continue
-        names = list(feed.composition.keys())
-        if len(names) < 2:
+        all_names = list(feed.composition.keys())
+        if len(all_names) < 2:
             continue
-        z = [feed.composition[c] for c in names]
+        # Separar VOLÁTILES (con Antoine) de NO-VOLÁTILES (azúcares, sólidos
+        # sin presión de vapor: glucosa, sacarosa…).  El NRTL sólo modela los
+        # volátiles; un no-volátil metido en el Rachford-Rice con un Psat≈0
+        # distorsiona la conversión mol→masa y "concentra" mal el componente
+        # (p.ej. glucosa subía 9×).  Los no-volátiles van ENTEROS al líquido.
+        try:
+            import thermo_db as _td
+        except ImportError:
+            _td = None
+
+        def _mw(c):
+            comp = _td.get(c) if _td is not None else None
+            return comp.mw if (comp and comp.mw > 0) else 1.0
+
+        def _is_volatile(c):
+            comp = _td.get(c) if _td is not None else None
+            return (comp is not None and comp.antoine_A is not None
+                    and comp.antoine_B is not None and comp.antoine_C is not None)
+
+        vol_names = [c for c in all_names if _is_volatile(c)]
+        nonvol_names = [c for c in all_names if c not in vol_names]
+        if len(vol_names) < 2:
+            continue   # sin suficientes volátiles no hay flash que resolver
+        mws = [_mw(c) for c in vol_names]
+        # feed.composition son fracciones MÁSICAS; flash_TP espera fracciones
+        # MOLARES.  Convertir (zᵢ_mol ∝ wᵢ/MWᵢ) — antes se pasaban másicas como
+        # molares, inflando CO2/etanol en el Rachford-Rice.
+        z_moles = [feed.composition[vol_names[i]] / mws[i]
+                   for i in range(len(vol_names))]
+        zt = sum(z_moles) or 1.0
+        z = [zm / zt for zm in z_moles]
         T_K = b.flash_T_K or (feed.temperature + 273.15)
         P_bar = b.flash_P_bar or 1.013
         try:
-            res = _nrtl.flash_TP(names, z, T_K, P_bar)
+            res = _nrtl.flash_TP(vol_names, z, T_K, P_bar)
         except Exception as e:
             msgs.append(f"✗ Flash {b.name}: {type(e).__name__}: {e}")
             continue
@@ -2809,43 +2839,50 @@ def solve_flashes(fs):
         liq_out = next((s for s in outs if s is not vap_out), None)
         if vap_out is None:
             vap_out, liq_out = outs[0], outs[1]
-        # Convertir mass fractions → mass_flow
         V_frac = res["V_frac"]
-        # Para masa: necesitamos MW para convertir mol→mass
-        try:
-            import thermo_db as _td
-            mws = []
-            for c in names:
-                comp = _td.get(c)
-                mws.append(comp.mw if comp and comp.mw > 0 else 1.0)
-        except ImportError:
-            mws = [1.0] * len(names)
-        # Masas en cada fase (relativas a F mol totales = 1)
-        L_mass = sum((1 - V_frac) * res["x"][i] * mws[i] for i in range(len(names)))
-        V_mass = sum(V_frac * res["y"][i] * mws[i] for i in range(len(names)))
+        # Masas de los VOLÁTILES en cada fase (base: 1 mol de volátiles),
+        # reescaladas a la masa volátil real del feed.
+        L_mass_v = sum((1 - V_frac) * res["x"][i] * mws[i] for i in range(len(vol_names)))
+        V_mass_v = sum(V_frac * res["y"][i] * mws[i] for i in range(len(vol_names)))
+        tot_v = L_mass_v + V_mass_v
+        if tot_v <= 0:
+            continue
+        vol_feed_mass = sum(feed.composition[c] for c in vol_names) * feed.mass_flow
+        scale = vol_feed_mass / tot_v
+        liq_masses = {vol_names[i]: (1 - V_frac) * res["x"][i] * mws[i] * scale
+                      for i in range(len(vol_names))}
+        vap_masses = {vol_names[i]: V_frac * res["y"][i] * mws[i] * scale
+                      for i in range(len(vol_names))}
+        # No-volátiles: masa completa del feed → líquido.
+        for c in nonvol_names:
+            liq_masses[c] = liq_masses.get(c, 0.0) + feed.composition[c] * feed.mass_flow
+        L_mass = sum(liq_masses.values())
+        V_mass = sum(vap_masses.values())
         total_mass = L_mass + V_mass
         if total_mass <= 0:
             continue
         L_frac_mass = L_mass / total_mass
         V_frac_mass = V_mass / total_mass
+        x_mass = {c: liq_masses[c] / L_mass for c in liq_masses} if L_mass > 0 else {}
+        y_mass = {c: vap_masses[c] / V_mass for c in vap_masses} if V_mass > 0 else {}
 
-        # Composiciones de salida en mass fractions
-        x_mass = {names[i]: ((1 - V_frac) * res["x"][i] * mws[i] / L_mass)
-                   for i in range(len(names))} if L_mass > 0 else {}
-        y_mass = {names[i]: (V_frac * res["y"][i] * mws[i] / V_mass)
-                   for i in range(len(names))} if V_mass > 0 else {}
-
+        # composition_locked en una salida = especificación del usuario (p.ej.
+        # composiciones recomputadas por balance para componentes que el NRTL
+        # no modela, como azúcares no volátiles).  Se RESPETA: el flash no la
+        # sobreescribe (antes la pisaba siempre → "creaba" glucosa/etanol).
         if vap_out is not None:
-            vap_out.composition = y_mass
-            vap_out.main_component = max(y_mass, key=y_mass.get) if y_mass else ""
+            if not getattr(vap_out, "composition_locked", False):
+                vap_out.composition = y_mass
+                vap_out.main_component = max(y_mass, key=y_mass.get) if y_mass else ""
             vap_out.phase = "vapor"
             if not _is_mass_locked(vap_out):
                 vap_out.mass_flow = feed.mass_flow * V_frac_mass
             if not _is_temp_locked(vap_out):
                 vap_out.temperature = T_K - 273.15
         if liq_out is not None:
-            liq_out.composition = x_mass
-            liq_out.main_component = max(x_mass, key=x_mass.get) if x_mass else ""
+            if not getattr(liq_out, "composition_locked", False):
+                liq_out.composition = x_mass
+                liq_out.main_component = max(x_mass, key=x_mass.get) if x_mass else ""
             liq_out.phase = "liquid"
             if not _is_mass_locked(liq_out):
                 liq_out.mass_flow = feed.mass_flow * L_frac_mass

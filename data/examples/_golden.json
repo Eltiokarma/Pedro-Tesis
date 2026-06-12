@@ -123,7 +123,7 @@
   "n_blocks": 11,
   "n_streams": 10,
   "overall_status": "warning",
-  "sum_duty": 1376.689335
+  "sum_duty": 1624.02741
  },
  "ethylene_crk": {
   "ISBL": 6897010.16,
@@ -303,7 +303,7 @@
   "n_blocks": 8,
   "n_streams": 7,
   "overall_status": "ok",
-  "sum_duty": 430.751476
+  "sum_duty": 481.791578
  },
  "smr_eq": {
   "ISBL": 10297711.46,
