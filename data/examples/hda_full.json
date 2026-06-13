@@ -1265,7 +1265,7 @@
    "P_op_bar": 25.0,
    "S": 120.0,
    "S_locked": true,
-   "T_op_K": 0.0,
+   "T_op_K": 900.0,
    "U_override": null,
    "active_reactions": [],
    "allow_reactions": false,
@@ -1316,9 +1316,11 @@
    "name": "R-101",
    "packing_type": "",
    "reaction_warnings": [],
-   "reactions": [],
-   "reactor_conversion": 0.95,
-   "reactor_mode": "equilibrium",
+   "reactions": [
+    "R035"
+   ],
+   "reactor_conversion": 0.85,
+   "reactor_mode": "stoich",
    "reactor_volume_L": 0.0,
    "separator_active": false,
    "solid_components": [],
@@ -1860,10 +1862,10 @@
    "bubble_show_enthalpy": false,
    "bubble_visible": false,
    "composition": {
-    "benzene": 0.78,
-    "hydrogen": 0.03,
-    "methane": 0.06,
-    "toluene": 0.13
+    "benzene": 0.659644,
+    "hydrogen": 0.024003,
+    "methane": 0.179982,
+    "toluene": 0.13637
    },
    "composition_locked": true,
    "cp": 0.0,
@@ -1914,10 +1916,10 @@
    "bubble_show_enthalpy": false,
    "bubble_visible": false,
    "composition": {
-    "benzene": 0.78,
-    "hydrogen": 0.03,
-    "methane": 0.06,
-    "toluene": 0.13
+    "benzene": 0.659644,
+    "hydrogen": 0.024003,
+    "methane": 0.179982,
+    "toluene": 0.13637
    },
    "composition_locked": true,
    "cp": 0.0,
@@ -1968,10 +1970,10 @@
    "bubble_show_enthalpy": false,
    "bubble_visible": false,
    "composition": {
-    "benzene": 0.78,
-    "hydrogen": 0.03,
-    "methane": 0.06,
-    "toluene": 0.13
+    "benzene": 0.659644,
+    "hydrogen": 0.024003,
+    "methane": 0.179982,
+    "toluene": 0.13637
    },
    "composition_locked": true,
    "cp": 0.0,
