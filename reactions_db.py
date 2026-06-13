@@ -73,6 +73,7 @@ FORMULA_TO_THERMO = {
     'C2H4O':           'acetaldehyde',
     'CH3COOC2H5':      'ethyl_acetate',
     'C6H6':            'benzene',
+    'C7H8':            'toluene',        # R035 HDA (hidrodealquilación)
     'C8H10':           'ethylbenzene',
     'C2H5_C6H5':       'ethylbenzene',  # alias usado en R016 styrene
     'Triolein':        'triolein',      # R021 biodiesel (C57H104O6)

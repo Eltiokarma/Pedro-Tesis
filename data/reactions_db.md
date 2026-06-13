@@ -1846,6 +1846,70 @@ balance de masa del condensado ácido débil y del gas NOx de reciclo.
 ---
 
 
+## R035 — Hidrodealquilación de tolueno (HDA)
+
+**Categoría:** petroquímica
+
+### Estequiometría
+
+```
+1 C7H8(g) + 1 H2(g)  →  1 C6H6(g) + 1 CH4(g)
+```
+
+| Especie | Fase | ν |
+|---|---|---:|
+| C7H8 | g | -1 |
+| H2 | g | -1 |
+| C6H6 | g | +1 |
+| CH4 | g | +1 |
+
+**Δν =** 0  **Fase global:** gas  **Rango T válido:** 800–950 K
+
+### Termodinámica @ 298.15 K
+
+Valores **derivados de Capa 3 por Hess** (ΔHf_gas de thermo_db, single source of truth):
+
+| Cantidad | Valor (Capa 3) | Lit reportado | Δ |
+|---|---:|---:|---:|
+| ΔH_rxn [kJ/mol] | -42.11 | -42.0 | -0.11 |
+
+Cálculo (Hess, ΔHf_gas en kJ/mol de thermo_db):
+`ΔH = (ΔHf[C6H6] + ΔHf[CH4]) − (ΔHf[C7H8] + ΔHf[H2])`
+`   = (+82.93 + (−74.87)) − (+50.17 + 0.0) = −42.11 kJ/mol` → exotérmica.
+Coincide con literatura HDA (~−42 kJ/mol). [trazable, derivado de ΔHf experimentales]
+
+**Marcado irreversible:** la HDA térmica a 800–950 K es esencialmente
+irreversible (conversión gobernada por cinética, no por equilibrio). No se
+declara Van't Hoff ni Keq — el reactor se modela por conversión por paso.
+
+### Comentarios técnicos
+
+Hidrodealquilación de tolueno a benceno: C7H8 + H2 → C6H6 + CH4. Δν=0,
+exotérmica (−42.11 kJ/mol). Dos variantes industriales: **térmica** (HDA, sin
+catalizador, ~870–920 K, 30–50 bar) y **catalítica** (Detol/Pyrotol, Cr2O3 o
+Pt sobre alúmina, ~810–870 K, temperatura algo menor). [típico — proceso HDA]
+
+Se opera con **exceso de H2**, ratio molar H2/tolueno típico ~5:1, para
+desplazar conversión y suprimir reacciones secundarias (formación de difenilo
+por 2 C6H6 ⇌ difenilo + H2, no modelada acá). Conversión de tolueno por paso
+~40–60 %; el tolueno no convertido se recircula. Selectividad a benceno
+>95 %. [típico — Turton/Douglas usan HDA como caso de estudio canónico]
+
+NOTA cinética: no se declara k0/Ea/rate_law (kinetics_available=False) — no se
+citó fuente cinética verificada. El reactor debe usarse en modo conversión
+declarada (stoichiometric), no cinético. La metalurgia y condiciones de arriba
+son [típico] con referencia a la literatura de proceso, no valores de una
+planta específica.
+
+### Referencias
+
+- Turton et al., "Analysis, Synthesis and Design of Chemical Processes" (HDA, caso de estudio canónico)
+- Douglas, "Conceptual Design of Chemical Processes" (proceso HDA)
+- ΔHf_gas: thermo_db (Capa 3), confirmado contra NIST WebBook
+
+---
+
+
 ## Roadmap futuro (v1.1+)
 
 1. **Capa 5 (Equilibrio físico):** EOS cúbica (SRK/PR) para fugacidades; NRTL/UNIQUAC para actividad en líquido. Resuelve limitaciones #1 y #4.
