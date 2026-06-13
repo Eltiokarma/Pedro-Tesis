@@ -132,7 +132,10 @@ def test_reciclo_de_proceso_sigue_en_wegstein():
         "el reciclo de proceso no fue a Wegstein"
     rs = res.recycle_solutions[0]
     assert rs.converged, f"Wegstein no convergió: {rs}"
-    assert rs.tear_stream == "S-a"
+    # PR-G1: el tear reaction-aware elige el BACK-EDGE que cierra el ciclo
+    # (S-rec: SPL→MIX, donde MIX recibe el feed externo), no el primer
+    # stream con flujo 0 (S-a) que elegía el heurístico viejo.
+    assert rs.tear_stream == "S-rec"
     assert rs.final_value > 0
     assert res.service_loops == []
 
