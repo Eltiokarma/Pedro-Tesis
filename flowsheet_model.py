@@ -102,6 +102,11 @@ class Block:
     # debe inferir el solver desde el balance de energía.  Cargado
     # desde JSON / examples mediante heurística (duty != 0 → locked).
     duty_locked: bool = False
+    # Procedencia del duty (aditivo, default ""):
+    #   "auto-hidraulico" — recalculado politrópicamente por solve_pressure_
+    #                       hydraulic al auto-dimensionar el ΔP de un rotativo.
+    #   ""                — spec del user o inferido por balance de energía.
+    duty_origin: str = ""
 
     # True si el user fijó el área/tamaño S a mano (specification).  False
     # si el solver lo puede auto-dimensionar desde duty + T (size_heat_
@@ -318,6 +323,28 @@ class Block:
     # Default [] → compat con flowsheets viejos.
     custom_reactions: List[dict] = field(default_factory=list)
 
+    # ---- AUDITORÍA DE BALANCE POR COMPONENTE (aditivo, Parte 1) ----
+    # Declaraciones que informan a audit_examples_components.py cómo
+    # interpretar el bloque al chequear el balance de masa por componente.
+    # Ambas con default vacío → el chequeo es conservación estricta por
+    # componente (comportamiento por defecto) y el solver las IGNORA por
+    # completo (son puramente declarativas para el auditor).
+    #
+    # inline_reaction: IDs de reactions_db que ocurren in-line en el bloque
+    #   (absorbedores con reacción química, oxidación in-line, etc.).  Cuando
+    #   está poblado, el auditor verifica ESTEQUIOMETRÍA (Σ νᵢ·ξ) en lugar de
+    #   conservación por componente.  NO dispara el solver de reactores de
+    #   equilibrio/cinética (eso es el campo `reactions`); sólo describe qué
+    #   transformación química explica el cambio de composición observado.
+    inline_reaction: List[str] = field(default_factory=list)
+    # pseudo_cut: mapa {componente_entrada: [componentes_salida]} para
+    #   columnas de crudo / fraccionadoras atmosféricas, donde un
+    #   pseudo-componente de entrada (p.ej. "crude") se reparte en cortes de
+    #   salida (nafta, kerosene, diesel, residuo).  El auditor verifica que la
+    #   masa TOTAL del grupo (entrada → suma de salidas) cierre, sin exigir
+    #   identidad componente a componente dentro del grupo.
+    pseudo_cut: Dict[str, List[str]] = field(default_factory=dict)
+
     # ---- OVERRIDES de transferencia de calor (HX sizing) ----
     # Solo aplican a bloques con categoria='Heat exchangers'.  Cuando
     # están seteados (>0), size_heat_exchanger los usa en lugar de las
@@ -416,6 +443,14 @@ class Stream:
     #   tuberías RESTAN ΔP calculado por pressure_drop (Darcy-Weisbach)
     pressure_bar: float = 1.013      # default 1 atm
     pressure_locked: bool = False    # spec: True si el user la fijó
+    # Procedencia del lock de presión (aditivo):
+    #   "user"      — el user/builder fijó la P deliberadamente (spec del problema)
+    #   "heuristic" — inferido por la heurística de carga (P≠1atm → locked)
+    #   "solver"    — fijado por el solver (p.ej. _seed_reactor_pressures)
+    #   ""          — sin lock
+    # Default "" en código; en from_dict los JSONs viejos (sin la clave) con
+    # pressure_locked=True se marcan "heuristic" → comportamiento intacto.
+    pressure_lock_origin: str = ""
 
     # ---- Composición y fase (para Cp(T) riguroso y cambio de fase) ----
     # phase: "liquid" | "vapor" | "gas" | "two_phase" | ""
@@ -656,6 +691,11 @@ class Flowsheet:
             if "pressure_locked" not in sdict:
                 s.pressure_locked = (abs(s.pressure_bar - 1.013) > 1e-6
                                      and s.pressure_bar > 0)
+            # Procedencia del lock: JSONs viejos sin la clave → "heuristic"
+            # para los locked (comportamiento intacto; el user puede marcar
+            # "user" explícitamente para suprimir el aviso de pressure_source).
+            if "pressure_lock_origin" not in sdict:
+                s.pressure_lock_origin = "heuristic" if s.pressure_locked else ""
             fs.streams[int(sid)] = s
         fs._next_id        = d.get("_next_id", 1)
         fs.opex_extras     = list(d.get("opex_extras", []))

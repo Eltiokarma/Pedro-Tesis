@@ -180,3 +180,81 @@ def test_aux_no_atraviesan_bloques_metanol():
                     crossings.append((sid, i, bm.name))
     assert crossings == [], \
         f"streams atraviesan bloques ajenos: {crossings}"
+
+
+# ── 5) HOTFIX P0: group-drag de selección densa NO se cuelga ───────────
+def test_group_drag_denso_no_cuelga():
+    """Regresión del crash P0 (merge 6c70f3a): rubber band selecciona
+    varios bloques + streams y al arrastrar el conjunto la app se colgaba
+    por el routing obstacle-aware (avoidance + lane + jumpers) recomputado
+    en CADA píxel de cada mouse-move → O(n²) por píxel.
+
+    El test sintético previo aplicaba UN delta; éste simula una ráfaga
+    REAL de ≥60 mouse-moves de 2px sobre una escena densa (hda_full:
+    22 bloques / 24 streams) con ≥5 bloques + ≥8 streams seleccionados.
+    Debe completar en <2s (watchdog duro a 10s) y dejar la ortogonalidad
+    y los puertos intactos tras el release (un solo re-route completo)."""
+    import time, faulthandler
+
+    win = fq.FlowsheetMainWindow()
+    win.resize(1400, 900)
+    win.show()
+    win.action_load_example("hda_full")
+    _app.processEvents()
+    scene, view = win.scene, win.view
+
+    blocks = list(scene.block_items.values())
+    streams = list(scene.stream_items.values())
+    assert len(blocks) >= 5 and len(streams) >= 8, "escena no es densa"
+
+    scene.clearSelection()
+    sel_blocks = blocks[:5]
+    sel_streams = streams[:8]
+    for it in sel_blocks + sel_streams:
+        it.setSelected(True)
+    _app.processEvents()
+
+    # endpoints/puertos de los streams conectados ANTES del drag (los que
+    # quedan anclados a bloques NO movidos no deben desplazarse de su puerto)
+    anchor = sel_blocks[0]
+    b = anchor.model
+    c0 = QPointF(b.x + anchor.W / 2, b.y + anchor.H / 2)
+    vp = view.viewport()
+
+    # watchdog duro: si algo se cuelga >10s, dump del traceback y abort
+    faulthandler.dump_traceback_later(10, exit=True)
+    try:
+        t0 = time.perf_counter()
+        _send(vp, QEvent.MouseButtonPress, view.mapFromScene(c0),
+              Qt.LeftButton, Qt.LeftButton)
+        cur = QPointF(c0)
+        for _ in range(60):                # ráfaga real de mouse-moves
+            cur = QPointF(cur.x() + 2, cur.y() + 2)
+            _send(vp, QEvent.MouseMove, view.mapFromScene(cur),
+                  Qt.NoButton, Qt.LeftButton)
+        _send(vp, QEvent.MouseButtonRelease, view.mapFromScene(cur),
+              Qt.LeftButton, Qt.NoButton)
+        elapsed = time.perf_counter() - t0
+    finally:
+        faulthandler.cancel_dump_traceback_later()
+
+    assert elapsed < 2.0, f"group-drag denso tardó {elapsed:.2f}s (>2s): regresión P0"
+
+    # el modo rígido se cerró al soltar
+    assert win._rigid_drag_active is False, "rigid_drag_active no se reseteó"
+
+    # IDEMPOTENCIA: tras el release corrió UN re-route completo, así que la
+    # geometría debe ser estable — un re-route adicional no la cambia.  Esto
+    # prueba que la fase rígida NO dejó paths obsoletos y que el routing
+    # obstacle-aware (avoidance + lane + jumpers) sí se aplicó al final.
+    after_release = {sid: list(item._last_pts or [])
+                     for sid, item in scene.stream_items.items()}
+    win._refresh_all_stream_paths()
+    for sid, item in scene.stream_items.items():
+        pts2 = list(item._last_pts or [])
+        assert pts2 == after_release[sid], \
+            f"stream {sid}: geometría no estable tras release (re-route pendiente)"
+
+    # los bloques seleccionados se movieron juntos (mismo delta)
+    deltas = {(round(it.model.x), round(it.model.y)) for it in sel_blocks}
+    assert len(sel_blocks) == 5 and len(deltas) == 5, "selección incompleta"

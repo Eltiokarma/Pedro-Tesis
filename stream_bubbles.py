@@ -75,6 +75,7 @@ class StreamBubble(QFrame):
         self._phase = ""
         self._T_K = 0.0
         self._P_bar = 0.0
+        self._p_auto = False        # FASE 2/4: P derivada (auto) vs spec del user
         self._mdot_kg_s = 0.0
         self._h_kJ_kg: Optional[float] = None
         self._composition: List[Tuple[str, float]] = []   # (name, mol_frac)
@@ -120,14 +121,17 @@ class StreamBubble(QFrame):
                       T_K: float = 0.0, P_bar: float = 0.0,
                       mdot_kg_s: float = 0.0,
                       h_kJ_kg: Optional[float] = None,
-                      composition: Optional[List[Tuple[str, float]]] = None):
+                      composition: Optional[List[Tuple[str, float]]] = None,
+                      p_auto: bool = False):
         """Refresca los valores numéricos.  Se llama cuando:
           · El stream se editó manualmente
-          · El solver terminó y publicó nuevos valores"""
+          · El solver terminó y publicó nuevos valores
+        p_auto: True si la presión la derivó el solver (no es spec del user)."""
         self._name = name or "?"
         self._phase = (phase or "").lower()
         self._T_K = float(T_K or 0.0)
         self._P_bar = float(P_bar or 0.0)
+        self._p_auto = bool(p_auto)
         self._mdot_kg_s = float(mdot_kg_s or 0.0)
         self._h_kJ_kg = h_kJ_kg
         self._composition = composition or []
@@ -349,7 +353,8 @@ class StreamBubble(QFrame):
         P_txt = f"{self._P_bar:.2f}" if self._P_bar else "—"
         m_txt = f"{self._mdot_kg_s:.2f}" if self._mdot_kg_s else "—"
         yield ("T",  T_txt, "K")
-        yield ("P",  P_txt, "bar")
+        # P con marca de origen (FASE 2/4): 'auto' si la derivó el solver.
+        yield ("P",  P_txt, "bar auto" if (self._P_bar and self._p_auto) else "bar")
         yield ("ṁ",  m_txt, "kg/s")
 
     def _add_row(self, lay, row, label, value, unit):
@@ -739,12 +744,19 @@ class BubbleManager:
             )
         except Exception:
             h_val = None
+        # P auto vs spec: pressure_lock_origin=='user' → spec; otro/None → auto.
+        _porg = getattr(stream, "pressure_lock_origin", None)
+        if _porg is None:
+            _p_auto = not getattr(stream, "pressure_locked", False)
+        else:
+            _p_auto = _porg != "user"
         bub.update_values(
             name=getattr(stream, "name", "?"),
             phase=phase,
             T_K=T_K, P_bar=P_bar, mdot_kg_s=mdot,
             h_kJ_kg=h_val,
             composition=comp,
+            p_auto=_p_auto,
         )
 
     def _refresh_leaders(self):

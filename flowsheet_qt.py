@@ -3270,6 +3270,31 @@ class _EndpointHandle(QGraphicsEllipseItem):
             editor._mark_dirty()
 
 
+# ── PRINCIPIO "TODO LO AUTO SE VE" (FASE 4) ────────────────────────────
+# Badge único gris-azulado para marcar cualquier valor que el solver derivó
+# sin intervención del user (P propagada, ΔP auto-dimensionado, duty auto,
+# T/fase inferidas).  Spec del user → estilo normal; calculado → este badge.
+def _auto_badge(text="AUTO"):
+    return ("<span style='background:#5b6f8f; color:#eef; "
+            "border-radius:3px; padding:0 3px; font-size:7pt;'>"
+            f"{text}</span>")
+
+
+def _spec_tag():
+    return "<span style='color:#888; font-size:7pt;'>[spec]</span>"
+
+
+def _pressure_origin_is_auto(s):
+    """True si la presión de la corriente es derivada (auto), False si es spec
+    del user.  Regla: pressure_lock_origin=='user' → spec; cualquier otro
+    origen (solver/heuristic) o no-locked → auto.  Si el campo no existe:
+    locked→spec, no→auto (compat JSONs viejos)."""
+    porg = getattr(s, "pressure_lock_origin", None)
+    if porg is None:
+        return not getattr(s, "pressure_locked", False)
+    return porg != "user"
+
+
 class BlockItem(QGraphicsItemGroup):
     """Bloque del flowsheet renderizado en el canvas.
 
@@ -3627,7 +3652,22 @@ class BlockItem(QGraphicsItemGroup):
         if b.n > 1:
             lines.append(f"N° unidades: {b.n}")
         if b.duty:
-            lines.append(f"Duty: {b.duty:+g} kW")
+            # FASE 4: duty con badge AUTO si el solver lo derivó (no duty_locked
+            # o marcado auto-hidráulico); spec del user en estilo normal.
+            d_auto = (getattr(b, "duty_origin", "") == "auto-hidraulico"
+                      or not getattr(b, "duty_locked", False))
+            d_tag = " " + _auto_badge() if d_auto else " " + _spec_tag()
+            lines.append(f"Duty: {b.duty:+g} kW{d_tag}")
+        # FASE 4: ΔP de rotativos (bomba/compresor) — el dispositivo que crea P.
+        eqlow = (b.eq_type or "").lower()
+        is_rot = any(x in eqlow for x in ("pump", "compressor", "fan",
+                                          "bomba", "blower", "soplador"))
+        if is_rot and abs(float(getattr(b, "delta_p_bar", 0.0) or 0.0)) > 1e-6:
+            dp_auto = (getattr(b, "duty_origin", "") == "auto-hidraulico")
+            dp_tag = " " + _auto_badge() if dp_auto else ""
+            lines.append(f"ΔP = {b.delta_p_bar:+.2f} bar{dp_tag}")
+        if float(getattr(b, "P_op_bar", 0.0) or 0.0) > 1.013:
+            lines.append(f"P_op = {b.P_op_bar:g} bar")
         if b.heat_source:
             lines.append(f"Utility: {b.heat_source}")
         lines.append(f"<span style='color:#888; font-size:8pt;'>"
@@ -3736,16 +3776,27 @@ class BlockItem(QGraphicsItemGroup):
             # actúa de singleton: el delta se aplica una sola vez.
             # No usamos mouseGrabberItem(): con handlesChildEvents el
             # grabber reportado puede ser un hijo del grupo.
-            prev = getattr(self, "_group_drag_prev", None)
-            if prev is not None:
-                dx, dy = self.pos().x() - prev.x(), self.pos().y() - prev.y()
-                if dx or dy:
-                    for it in self.scene().selectedItems():
-                        if isinstance(it, StreamItem):
-                            it.translate_by(dx, dy)
-                self._group_drag_prev = QPointF(self.pos())
-            if self.editor is not None:
-                self.editor.refresh_streams_of(self.model.id)
+            # HOTFIX P0: guard de re-entrancia explícito en el ancla.  La
+            # traslación de streams + refresh dispara update_path; si algún
+            # paso reposicionara este bloque, Qt re-entraría en itemChange y
+            # se aplicaría el delta otra vez (doble movimiento / recursión).
+            # El flag asegura que el bloque del group-drag procese su delta
+            # una sola vez por evento.
+            if not getattr(self, "_in_group_drag", False):
+                self._in_group_drag = True
+                try:
+                    prev = getattr(self, "_group_drag_prev", None)
+                    if prev is not None:
+                        dx, dy = self.pos().x() - prev.x(), self.pos().y() - prev.y()
+                        if dx or dy:
+                            for it in self.scene().selectedItems():
+                                if isinstance(it, StreamItem):
+                                    it.translate_by(dx, dy)
+                        self._group_drag_prev = QPointF(self.pos())
+                    if self.editor is not None:
+                        self.editor.refresh_streams_of(self.model.id)
+                finally:
+                    self._in_group_drag = False
         elif change == QGraphicsItem.ItemSelectedHasChanged:
             # sync visual del IsaGlyphItem con selección Qt
             if getattr(self, "_isa_item", None) is not None:
@@ -3785,6 +3836,11 @@ class BlockItem(QGraphicsItemGroup):
         # ancla para el group-drag de streams seleccionados (itemChange)
         if event.button() == Qt.LeftButton:
             self._group_drag_prev = QPointF(self.pos())
+            # HOTFIX P0: activar modo de traslación rígida — las corrientes
+            # se mueven sin avoidance/lane/jumpers durante el arrastre; el
+            # re-route completo ocurre al soltar.
+            if self.editor is not None:
+                self.editor._rigid_drag_active = True
         super().mousePressEvent(event)
 
     def hoverEnterEvent(self, event):
@@ -3803,11 +3859,21 @@ class BlockItem(QGraphicsItemGroup):
     def mouseReleaseEvent(self, event):
         super().mouseReleaseEvent(event)
         self._group_drag_prev = None
+        # HOTFIX P0: cerrar el modo de traslación rígida y ejecutar UN solo
+        # pase de re-routing completo (avoidance + lane + jumpers) sobre TODOS
+        # los streams.  Así el estado final es idéntico al del comportamiento
+        # previo, sin pagar el costo O(n²) por píxel durante el arrastre.
+        did_rigid = False
+        if event.button() == Qt.LeftButton and self.editor is not None:
+            did_rigid = bool(getattr(self.editor, "_rigid_drag_active", False))
+            self.editor._rigid_drag_active = False
         # IMÁN BIDIRECCIONAL: al soltar el bloque tras un drag, si algún
         # endpoint flotante quedó cerca de un puerto de ESTE bloque, snap.
         # No durante el drag (sería intrusivo), solo al release.
         if event.button() == Qt.LeftButton and self.editor is not None:
             self._snap_nearby_floating_endpoints()
+        if did_rigid:
+            self.editor._refresh_all_stream_paths()
         # push undo si hubo un drag
         if (event.button() == Qt.LeftButton and self.editor is not None
             and self.editor._drag_before_snapshot is not None):
@@ -4273,12 +4339,41 @@ class StreamItem(QGraphicsPathItem):
                       if b_src else "(sin conectar)")
         dst_label = (f"{b_dst.name} ({s.dst_port or 'auto'})"
                       if b_dst else "(sin conectar)")
+        # ── Fase con marca del verificador (FASE 2) + badge AUTO (FASE 4) ──
+        phase_txt = s.phase or "—"
+        if s.phase:
+            if not getattr(s, "phase_locked", False):
+                # fase inferida por el solver (no declarada) → AUTO
+                phase_txt = f"{s.phase} {_auto_badge()}"
+            else:
+                try:
+                    from flowsheet_consistency_audit import check_stream_phase
+                    f = check_stream_phase(s)
+                except Exception:
+                    f = None
+                if f is not None:
+                    d = f.data or {}
+                    if "expected" in d:
+                        phase_txt = (f"{s.phase} ⚠ <span style='color:#b8860b;'>"
+                                     f"(flash da {d['expected']}, "
+                                     f"V={d.get('V_frac', 0):.2f})</span>")
+                    elif d.get("reason") == "melt":
+                        phase_txt = (f"{s.phase} <span style='color:#888;'>"
+                                     f"(fundido, fuera de VLE)</span>")
+        # ── T con badge AUTO si fue inferida (no locked) ──
+        t_txt = f"{s.temperature:g} °C"
+        if not getattr(s, "temperature_locked", False):
+            t_txt = f"{t_txt} {_auto_badge()}"
+        # ── P con sufijo spec/AUTO (FASE 2 + FASE 4) ──
+        p_bar = float(getattr(s, "pressure_bar", 0.0) or 0.0)
+        p_tag = _auto_badge() if _pressure_origin_is_auto(s) else _spec_tag()
         lines = [
             f"<b>{s.name}</b>",
             f"<span style='color:#666;'>{src_label} → {dst_label}</span>",
-            f"Rol: {s.role}  ·  Fase: {s.phase or '—'}",
+            f"Rol: {s.role}  ·  Fase: {phase_txt}",
             f"Flujo: <b>{s.mass_flow:g}</b> tm/año",
-            f"T = {s.temperature:g} °C",
+            f"T = {t_txt}",
+            f"P = {p_bar:.2f} bar {p_tag}",
         ]
         # Composición — pieza nueva, antes faltaba.  Muestra cada
         # componente con su fracción másica > 0.1%.
@@ -4309,6 +4404,9 @@ class StreamItem(QGraphicsPathItem):
 
     def update_path(self, rebuild_handles=True):
         s = self.model
+        # HOTFIX P0: traslación rígida durante un block/group-drag.
+        # Fuera del drag _rigid_drag_active es False → ruta completa de siempre.
+        _rigid = bool(getattr(self.editor, "_rigid_drag_active", False))
         b_src = self.fs.blocks.get(s.src)
         b_dst = self.fs.blocks.get(s.dst)
         # Endpoint START: si block_src existe, lo tomamos del puerto;
@@ -4337,11 +4435,15 @@ class StreamItem(QGraphicsPathItem):
             pts.append(y2)
         elif b_src is not None and b_dst is not None:
             pts = self._compute_polyline(b_src, b_dst, s)
+            # HOTFIX P0: durante un group/block-drag (_rigid) se omite el
+            # routing obstacle-aware — traslación rígida barata.  El re-route
+            # completo ocurre al soltar.  Fuera del drag se ejecuta la lógica
+            # de avoidance/lane de siempre.
             # PADDING-AWARE ROUTING — modificar pts para que NO atraviese
             # los SVGs de los bloques ajenos (no src ni dst).  Las
             # tuberías rodean por arriba/abajo/izq/der según menor
             # costo Manhattan.  Padding 12px ≈ 3× ancho de stream.
-            if self.editor is not None:
+            if self.editor is not None and not _rigid:
                 obstacles = []
                 for bid, item in self.editor.block_items_iter():
                     if bid == s.src or bid == s.dst:
@@ -4417,7 +4519,7 @@ class StreamItem(QGraphicsPathItem):
         #      con id MAYOR dibuja el hop — así cada cruce tiene
         #      solo una curvita, no dos superpuestas.
         hops = []
-        if self.scene() is not None and self.editor is not None:
+        if self.scene() is not None and self.editor is not None and not _rigid:
             try:
                 for other_sid, other_item in self.editor.stream_items_iter():
                     if other_item is self:
@@ -5580,6 +5682,13 @@ class FlowsheetMainWindow(QMainWindow):
         self._suppress_snapshot = False
         # snapshot 'antes' del drag de bloques (se pushea al release)
         self._drag_before_snapshot = None
+        # HOTFIX P0 group-drag: durante el arrastre de un bloque (o de una
+        # selección múltiple) las corrientes se trasladan de forma RÍGIDA —
+        # sin _avoid_obstacles / lane offset / jumpers — para evitar el costo
+        # O(n²) por píxel que colgaba la app con selección densa.  Un único
+        # re-routing completo se ejecuta al soltar (BlockItem.mouseRelease).
+        # False fuera de un drag → comportamiento idéntico al previo.
+        self._rigid_drag_active = False
 
         # Docks se construyen ANTES del toolbar para que éste pueda
         # tomar sus toggleViewAction() y mostrarlos como botones.
@@ -6985,6 +7094,10 @@ class FlowsheetMainWindow(QMainWindow):
             self._bubble_manager.refresh_all()
         if self._hx_bubble_manager is not None:
             self._hx_bubble_manager.refresh_all()
+        # FASE 3.5: refrescar la sección de propiedades calculadas del inspector
+        # (si está abierta y activa) con los valores recién resueltos.
+        if getattr(self, "_stream_inspector_dock", None) is not None:
+            self._stream_inspector_dock.refresh_calc()
         # auditar conexiones semánticas
         sem_issues = fval.validate_all_streams(self.fs)
         # mostrar resumen en el diálogo visual de resultado
@@ -7816,6 +7929,11 @@ class FlowsheetMainWindow(QMainWindow):
                 item = self.scene.stream_items.get(s.id)
                 if item is not None:
                     item.update_path(rebuild_handles=False)
+        # HOTFIX P0: durante un block/group-drag se OMITE el Pass-2 global
+        # (O(n²) por píxel que colgaba la app).  El re-route completo con
+        # jumpers se hace UNA vez al soltar (BlockItem.mouseReleaseEvent).
+        if getattr(self, "_rigid_drag_active", False):
+            return
         # Pass 2: refresh global de paths para que jumpers se recalculen
         self._refresh_all_stream_paths()
 
