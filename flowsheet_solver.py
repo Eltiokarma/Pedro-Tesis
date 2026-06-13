@@ -566,6 +566,16 @@ def _reset_propagated_values(fs):
                 s._t_declared = s.temperature
             except Exception:
                 pass
+        # [W-COMP-OVERRIDE] (T30) — captura runtime de la composición que el
+        # stream traía del JSON ANTES de propagar.  Análogo a _t_declared: se
+        # guarda una sola vez sobre el fs recién cargado.  La consume
+        # _compute_awareness_warnings para detectar overrides (composición
+        # declarada que difiere del inlet en un equipo pass-through).
+        if not hasattr(s, "_comp_declared"):
+            try:
+                s._comp_declared = dict(s.composition) if s.composition else {}
+            except Exception:
+                s._comp_declared = {}
         if not _is_mass_locked(s):
             s.mass_flow = 0.0
         if not _is_temp_locked(s):
@@ -4191,6 +4201,98 @@ def solve_mechanical_separators(fs):
     return msgs
 
 
+# ── T30 — propagación de composición por equipos pass-through ──────────
+# Un equipo pass-through (HX, bomba, compresor, fired heater, válvula,
+# turbina) es 1-in-1-out y NO transforma composición: solo cambia T/P.  Su
+# composición de salida = la de entrada.  Antes de T30 esto se escribía a
+# mano en el JSON (y se lockeaba), forzando hardcode en cada PR de química.
+_PASSTHROUGH_EQ_KW = ("heat exch", "air cooler", "pump", "compressor",
+                      "fired heat", "valve", "turbine")
+
+
+def _is_passthrough_block(b):
+    """True si b es un equipo pass-through por TIPO (HX/bomba/compresor/
+    fired heater/válvula/turbina) y NO tiene transformación declarada.
+
+    EXCLUYE explícitamente lo que calcula/combina composición: reactores
+    (reactions), splitters, flashes, columnas y separadores mecánicos.  La
+    cardinalidad 1-in-1-out y la conservación de masa las chequea
+    _passthrough_io (un Vessel/horno con 2da salida de masa NO es
+    pass-through aunque el tipo matchee)."""
+    et = (b.eq_type or "").lower()
+    if not any(k in et for k in _PASSTHROUGH_EQ_KW):
+        return False
+    if getattr(b, "reactions", None):
+        return False
+    for fl in ("splitter_active", "flash_active", "column_active",
+               "separator_active", "mech_sep_active", "dryer_active",
+               "crystallizer_active", "evaporator_active", "cyclone_active"):
+        if getattr(b, fl, False):
+            return False
+    return True
+
+
+def _passthrough_io(b, fs):
+    """Si b es pass-through con EXACTAMENTE 1 corriente de proceso de entrada
+    y 1 de salida —excluyendo SOLO las auto_aux de servicio (cooling water,
+    aire del air-cooler)— y la masa se conserva en la línea de proceso,
+    devuelve (inlet, outlet).  Si no, None.
+
+    Conservador con equipos multi-salida: una 2da salida de masa (p.ej. el
+    vapor evaporado de un horno de pan, tagueada utility pero NO auto_aux,
+    que ES masa de proceso) hace que NO sea pass-through — ahí hay una
+    separación/evaporación, no una simple transferencia de calor."""
+    if not _is_passthrough_block(b):
+        return None
+    ins = [s for s in fs.streams.values()
+           if s.dst == b.id and not getattr(s, "auto_aux", False)]
+    outs = [s for s in fs.streams.values()
+            if s.src == b.id and not getattr(s, "auto_aux", False)]
+    if len(ins) != 1 or len(outs) != 1:
+        return None
+    sin, sout = ins[0], outs[0]
+    if sin.mass_flow > 0 and abs(sout.mass_flow - sin.mass_flow) > max(
+            1.0, 0.01 * sin.mass_flow):
+        return None          # masa no conserva en la línea → no es pass-through
+    return sin, sout
+
+
+def _propagate_passthrough_compositions(fs):
+    """T30 — copia la composición inlet→outlet en equipos pass-through cuyo
+    outlet AÚN no tiene composición resuelta.
+
+    Llena el hueco que deja auto_propagate_compositions: ésta omite los
+    outlets composition_locked (skip por _is_comp_locked), así que un
+    pass-through con outlet lockeado-pero-vacío quedaba SIN composición.  T30
+    propaga desde el inlet (normalizado), respetando el orden topológico (el
+    inlet ya está resuelto cuando le toca al outlet, porque corre dentro del
+    lazo de propagación).
+
+    NO toca outlets que YA tienen composición: si difiere del inlet es un
+    override manual (química hardcodeada, p.ej. la oxidación NO→NO2 de
+    hno3/E-203) — se conserva y _compute_awareness_warnings lo marca con
+    [W-COMP-OVERRIDE].  Si coincide, ya está bien (los 120 pass-through con
+    comp == inlet quedan byte-idénticos)."""
+    changed = 0
+    for b in fs.blocks.values():
+        io = _passthrough_io(b, fs)
+        if io is None:
+            continue
+        sin, sout = io
+        if sout.composition:
+            continue                       # outlet ya resuelto (override o ==)
+        ci = sin.composition or {}
+        tot = sum(ci.values())
+        if tot <= 0:
+            continue                       # inlet todavía sin resolver → esperar
+        sout.composition = {k: v / tot for k, v in ci.items()}
+        if not sout.main_component:
+            sout.main_component = max(sout.composition,
+                                      key=sout.composition.get)
+        changed += 1
+    return changed
+
+
 def auto_propagate_compositions(fs):
     """Para cada bloque NO reactivo, calcula la composición de las
     salidas como promedio ponderado por mass_flow de las entradas.
@@ -4299,6 +4401,10 @@ def auto_propagate_compositions(fs):
                         s_out.main_component = max(agg_util,
                                                      key=agg_util.get)
                     changed += 1
+    # T30 — pass-through 1-in-1-out con outlet lockeado-pero-vacío: el bucle
+    # de arriba los omite (skip por composition_locked), así que se propagan
+    # acá desde el inlet.  Corre al final para que el inlet ya esté agregado.
+    changed += _propagate_passthrough_compositions(fs)
     return changed
 
 
@@ -5502,6 +5608,38 @@ def _compute_awareness_warnings(fs):
                 f"[W-T-OVERRIDE] {s.name}: T declarada {td:.0f}°C fue "
                 f"recalculada a {s.temperature:.0f}°C (intención de diseño "
                 f"perdida — lockear si {td:.0f}°C es correcta).")
+
+    # ── 1.3b [W-COMP-OVERRIDE] (T30) composición declarada != inlet en un
+    #    equipo pass-through.  La composición de un HX/bomba/compresor debería
+    #    salir del inlet; si el JSON la declara distinta, hay una
+    #    transformación química hardcodeada (override manual).  Se conserva el
+    #    valor declarado (no se pisa) y se avisa para que se modele con una
+    #    reacción o se deje propagar.  Advisory: NO altera overall_status.
+    def _norm_comp(c):
+        t = sum(c.values())
+        return {k: v / t for k, v in c.items()} if t > 0 else {}
+
+    for b in fs.blocks.values():
+        io = _passthrough_io(b, fs)
+        if io is None:
+            continue
+        sin, sout = io
+        decl = getattr(sout, "_comp_declared", None)
+        if not decl:
+            continue               # sin comp declarada → fue propagada, no override
+        ci = sin.composition or {}
+        if not ci:
+            continue               # inlet sin resolver → no comparable
+        dn, cn = _norm_comp(decl), _norm_comp(ci)
+        keys = set(dn) | set(cn)
+        maxd = max((abs(dn.get(k, 0.0) - cn.get(k, 0.0)) for k in keys),
+                   default=0.0)
+        if maxd > 0.005:
+            warns.append(
+                f"[W-COMP-OVERRIDE] {sout.name}: composición declarada difiere "
+                f"del inlet en un equipo pass-through ({b.name}) — override "
+                f"manual conservado. Si hay transformación química, declarar "
+                f"una reacción; si no, considerar dejar que el motor propague.")
 
     return warns
 

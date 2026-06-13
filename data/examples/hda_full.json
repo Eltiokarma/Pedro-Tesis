@@ -1969,13 +1969,8 @@
    "bubble_show_composition": false,
    "bubble_show_enthalpy": false,
    "bubble_visible": false,
-   "composition": {
-    "benzene": 0.659644,
-    "hydrogen": 0.024003,
-    "methane": 0.179982,
-    "toluene": 0.13637
-   },
-   "composition_locked": true,
+   "composition": {},
+   "composition_locked": false,
    "cp": 0.0,
    "delta_h_vap_override": 0.0,
    "display_number": 0,
