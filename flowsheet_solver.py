@@ -5416,14 +5416,33 @@ def _compute_awareness_warnings(fs):
         # lockeada TERMINAL (sale del loop = purga) Y una salida hermana
         # que RECIRCULA (vuelve al loop).  Las purgas TERMINALES (bloque
         # fuera de todo loop) son specs de diseño legítimas → no avisar.
+        #
+        # PR-A2.1 — filtro por FUNCIÓN, no solo topología:
+        #  · role product/waste/utility: specs de diseño que abandonan el
+        #    loop por definición — su caudal NO es un grado de libertad del
+        #    reciclo, así que avisar "subdeterminado" sería factualmente
+        #    falso.  Solo una salida INTERNA (role internal/feed reinyectado)
+        #    que sale del SCC mientras una hermana recircula constituye la
+        #    purga-absoluta que subdetermina el caudal (caso haber_rec V-102
+        #    pre-G1).
+        #  · columnas (Tower): sus salidas internas son CORTES de separación
+        #    (LK/HK), no purgas que repartan el gas de reciclo — la
+        #    subdeterminación la introduce un separador de fase / splitter
+        #    (Vessel), no una columna.  Se excluyen.
+        eqt_low = eqt.lower()
+        is_column = ("tower" in eqt_low or "column" in eqt_low
+                     or "destil" in eqt_low)
         sccset = scc_of.get(b.id)
         if (sccset is not None
                 and b.id not in determined_bids
                 and not getattr(b, "splitter_active", False)
+                and not is_column
                 and len(outs) >= 2):
             locked_terminal = [s for s in outs
                                if getattr(s, "mass_flow_locked", False)
-                               and s.dst not in sccset]
+                               and s.dst not in sccset
+                               and (getattr(s, "role", "") or "")
+                               not in ("product", "waste", "utility")]
             has_recirc = any(s.dst in sccset for s in outs)
             if locked_terminal and has_recirc:
                 purga = locked_terminal[0]
