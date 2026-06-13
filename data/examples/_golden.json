@@ -153,7 +153,7 @@
   "sum_duty": 207.557078
  },
  "haber_rec": {
-  "ISBL": 25103084.27,
+  "ISBL": 13896733.26,
   "energy_errors": 0,
   "mass_errors": 0,
   "n_blocks": 10,
@@ -342,7 +342,7 @@
   "sum_duty": -54.937067
  },
  "talara": {
-  "ISBL": 66389143.61,
+  "ISBL": 40372047.96,
   "energy_errors": 0,
   "mass_errors": 0,
   "n_blocks": 42,
