@@ -51,7 +51,7 @@ def _block_material(fs, block_id, default="CS"):
         if s.src == block_id or s.dst == block_id:
             if s.composition:
                 comps.append(s.composition)
-    return eq.suggested_material(comps, p_op_bar=p_op)
+    return eq.suggested_material(comps, p_op_bar=p_op, eq_type=b.eq_type)
 
 
 def compute_fci(fs,

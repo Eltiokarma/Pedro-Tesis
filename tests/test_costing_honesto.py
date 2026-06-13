@@ -66,18 +66,25 @@ def test_columna_material_origen_presente_y_al_final():
     fs, rows = _rows()
     assert "Material (origen)" in rows[0]
     assert list(rows[0])[-1] == "Material (origen)"
-    # F-HTD: heurística por H2S; F-101: default CS
     by = {r["Tag"]: r for r in rows}
-    assert "hydrogen sulfide" in by["F-HTD"]["Material (origen)"]
+    # PR-B2: los hornos se costean como CS aunque su servicio sea corrosivo.
+    assert by["F-HTD"]["Material (origen)"] == "default (CS)"
     assert "default" in by["F-101"]["Material (origen)"].lower()
+    # …pero la heurística SÍ sigue aplicando a recipientes (la pared corroe):
+    # R-HTD, mismo servicio H2S que F-HTD, conserva SS316.
+    assert "hydrogen sulfide" in by["R-HTD"]["Material (origen)"]
 
 
-def test_cbm_no_cambia_es_solo_visibilidad():
-    """FASE 1 es presentación: el costing ya usaba la presión efectiva, así
-    que los CBM de la tabla deben seguir > 0 y coherentes (sanity)."""
+def test_fired_heaters_siempre_cs():
+    """PR-B2: ningún fired heater recibe aleación por composición/presión —
+    la corrosión la sufren solo los tubos, no la estructura.  Los hornos HT
+    de talara (servicio H2S a alta P) pasaron de SS316 (FBM 13-15) a CS."""
     fs, rows = _rows()
     by = {r["Tag"]: r for r in rows}
-    # los 3 hornos HT en SS316 sigue siendo el grueso; F-101/F-RCA en CS baratos
-    assert by["F-HTD"]["Material"] == "SS316"
-    assert by["F-101"]["Material"] == "CS"
+    for tag in ("F-HTD", "F-HTF", "F-HTN", "F-101", "F-RCA"):
+        assert by[tag]["Material"] == "CS", f"{tag} debería ser CS"
+    # FBM de los HT cae a CS+FP (≈4-6 por la presión), no 13-15 de aleación
+    for tag in ("F-HTD", "F-HTF", "F-HTN"):
+        assert by[tag]["FBM"] < 7.0, f"{tag} FBM={by[tag]['FBM']} (aún aleado?)"
+    # F-HTD (alta P + más grande) sigue costando más que F-101 (atm)
     assert by["F-HTD"]["CBM USD (2024)"] > by["F-101"]["CBM USD (2024)"]
