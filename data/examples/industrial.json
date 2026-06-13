@@ -1702,8 +1702,11 @@
       "solid_components": [],
       "solids_recovery": 0.95,
       "solute_component": "",
-      "splitter_active": false,
-      "splitter_fractions": [],
+      "splitter_active": true,
+      "splitter_fractions": [
+        0.01875,
+        0.98125
+      ],
       "task_ref": "",
       "tray_efficiency": null,
       "tray_spacing_m": null,
@@ -3199,7 +3202,7 @@
       "is_pipe": false,
       "main_component": "",
       "mass_flow": 1500,
-      "mass_flow_locked": true,
+      "mass_flow_locked": false,
       "name": "S-blowdown",
       "phase": "liquid",
       "phase_locked": true,
