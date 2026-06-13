@@ -68,6 +68,10 @@ _EXPLAIN = {
                  "solver respeta tu T declarada.",
     "component": "Las composiciones declaradas no cierran un balance riguroso "
                  "por componente; el balance de masa total sí cierra.",
+    "awareness": "Inconsistencias físicas latentes detectadas por el solver "
+                 "(cierre de energía, T de descarga, duty espurio, reactor "
+                 "estructural, etc.). Son advertencias de diseño: no frenan el "
+                 "cálculo ni cambian el estado, pero conviene revisarlas.",
     "semantic":  "Conexiones que parecen inconsistentes (puerto o rol). No "
                  "frenan el cálculo, pero conviene revisarlas.",
     "mass_prop": "Flujos que el solver dedujo del balance (no estaban fijos).",
@@ -164,6 +168,13 @@ def build_report(result, sem_issues=None):
                          "explain": _EXPLAIN["component"],
                          "rows": list(result.component_warnings),
                          "collapsible": False})
+
+    if getattr(result, "awareness_warnings", None):
+        sections.append({"kind": "warn",
+                         "title": "Conciencia física del solver",
+                         "explain": _EXPLAIN["awareness"],
+                         "rows": list(result.awareness_warnings),
+                         "collapsible": True})
 
     sem_warn = [f"{name}: {msg.split(chr(10))[0] if msg else ''}"
                 for name, sev, msg in sem_issues if sev == "warn"]

@@ -146,6 +146,17 @@ class SolverResult:
     # mínimo violado, F<0.75, cross-exchange que no cierra energía).
     # No degradan success — son advisory de diseño.
     hx_warnings:         List[str]          = field(default_factory=list)
+    # Conciencia física del solver (PR-A): warnings advisory tagged
+    # [W-...] que EXPONEN inconsistencias físicas latentes sin corregir
+    # ningún balance — cierre de energía por bloque, T de descarga de
+    # compresor, T declarada pisada, duty espurio en equipo pasivo,
+    # reactor estructural placeholder, flujo lockeado vs fracción de
+    # splitter, duty>S, signo de duty.  Canal SEPARADO de energy_warnings
+    # a propósito: NO alteran overall_status (un warning no debe cambiar
+    # el estado golden — invariante de regresión), pero SÍ se renderizan
+    # en solver_report para que el usuario los vea.  Cada línea lleva un
+    # tag estable para grepear en tests.
+    awareness_warnings:  List[str]          = field(default_factory=list)
     # Diagnósticos de diseño térmico por HX (block_id → dict con U_used,
     # dTlm, F, cross_check, warnings).  Lo puebla solve() corriendo
     # size_heat_exchanger sobre cada HX (respeta S_locked: computa los
@@ -244,6 +255,12 @@ class SolverResult:
             lines.append(f"\nWarnings de intercambiadores "
                           f"({len(self.hx_warnings)}):")
             for w in self.hx_warnings:
+                lines.append(f"  · {w}")
+
+        if self.awareness_warnings:
+            lines.append(f"\nConciencia física del solver "
+                          f"({len(self.awareness_warnings)}):")
+            for w in self.awareness_warnings:
                 lines.append(f"  · {w}")
 
         if self.audit_report:
@@ -539,6 +556,16 @@ def _reset_propagated_values(fs):
     """
     from flowsheet_model import T_REF_C
     for s in fs.streams.values():
+        # [W-T-OVERRIDE] captura runtime (NO persistida) de la T que el
+        # stream traía del JSON ANTES de que el solver la pise.  Se guarda
+        # una sola vez (la primera corrida sobre el fs recién cargado), de
+        # modo que re-solves idempotentes no la sobreescriban con la T ya
+        # propagada.  La consume _compute_awareness_warnings.
+        if not hasattr(s, "_t_declared"):
+            try:
+                s._t_declared = s.temperature
+            except Exception:
+                pass
         if not _is_mass_locked(s):
             s.mass_flow = 0.0
         if not _is_temp_locked(s):
@@ -5112,6 +5139,16 @@ def solve(fs, max_iter=MAX_ITER):
     _size_heat_exchangers(fs, result)
     # auditoría térmica de HX (advisory, no rompe success)
     result.hx_warnings            = _check_heat_exchangers(fs)
+    # Conciencia física del solver (PR-A): barrido advisory de cierre de
+    # energía por bloque + checks de equipo (T descarga, duty espurio,
+    # placeholder, split-lock, duty>S, signo).  Canal separado que NO
+    # altera overall_status (preserva el invariante golden byte-idéntico).
+    try:
+        result.awareness_warnings = _compute_awareness_warnings(fs)
+    except Exception as e:
+        result.awareness_warnings = [
+            f"[W-AWARE-ERR] auditoría de conciencia falló: "
+            f"{type(e).__name__}: {e}"]
     # energy balance errors quedan deshabilitados (no comparables al Cp
     # simple — comentado en _check_energy_balance del editor)
 
@@ -5123,6 +5160,235 @@ def solve(fs, max_iter=MAX_ITER):
     # 5. Calcular estados visuales (color UI: verde/azul/amarillo/rojo)
     _compute_status_per_item(fs, result)
     return result
+
+
+def _eq_categoria(b):
+    """Categoría de costeo del bloque (equipment_costs.EQUIPMENT_DATA)."""
+    try:
+        import equipment_costs as _ec
+        return (_ec.EQUIPMENT_DATA.get(b.eq_type, {}) or {}).get("categoria", "")
+    except Exception:
+        return ""
+
+
+def _block_reaction_status(b):
+    """Clasifica las reactions declaradas del bloque.
+
+    Devuelve (has_rxn_tags, any_resolves, placeholder_bonus):
+      has_rxn_tags    — el bloque declara al menos una reacción.
+      any_resolves    — alguna existe curada en reactions_db (reacción REAL).
+      placeholder_bonus — lista de (rid_placeholder, rid_base) donde el id
+                        tiene forma RNNN_PLACEHOLDER y RNNN SÍ existe en la DB
+                        (p.ej. ldpe usa R027_PLACEHOLDER y R027 está curada).
+    """
+    rids = list(getattr(b, "reactions", None) or [])
+    if not rids:
+        return (False, False, [])
+    try:
+        import reactions_db as _rdb
+    except Exception:
+        return (True, True, [])        # sin catálogo → asumir reacción real
+    any_resolves = False
+    bonus = []
+    suf = "_PLACEHOLDER"
+    for rid in rids:
+        resolved = False
+        try:
+            resolved = _rdb.get(rid) is not None
+        except Exception:
+            resolved = False
+        if resolved:
+            any_resolves = True
+            continue
+        if rid.endswith(suf):
+            base = rid[:-len(suf)]
+            try:
+                if base and _rdb.get(base) is not None:
+                    bonus.append((rid, base))
+            except Exception:
+                pass
+    return (True, any_resolves, bonus)
+
+
+def _compute_awareness_warnings(fs):
+    """PR-A — Conciencia física del solver.
+
+    Barrido advisory que EXPONE inconsistencias físicas latentes SIN
+    corregir ningún balance (no toca duties, Ts, composición ni masa) y
+    SIN alterar overall_status.  Cada línea lleva un tag estable [W-...]
+    para poder grepearla en tests.  Devuelve list[str].
+
+    Checks:
+      [W-ENERGY-BLOCK] cierre global de energía por bloque
+      [W-COMP-T]       T de descarga de compresor > 250 °C
+      [W-T-OVERRIDE]   T declarada pisada por el solver
+      [W-MIXER-DUTY]/[W-TANK-DUTY] duty espurio en equipo pasivo
+      [W-PLACEHOLDER]  reactor estructural (química via outputs locked)
+      [W-SPLIT-LOCK]   flujo lockeado vs fracción de splitter
+      [W-DUTY-S]       |duty| > S (costeo subestimado)
+      [W-SIGN]         signo de duty inconsistente con el tipo de equipo
+    """
+    from flowsheet_model import T_REF_C
+    try:
+        import equipment_ports as _ep
+    except Exception:
+        _ep = None
+    warns = []
+
+    def _ins(b):
+        return [s for s in fs.streams.values()
+                if s.dst == b.id and not getattr(s, "auto_aux", False)]
+    def _outs(b):
+        return [s for s in fs.streams.values()
+                if s.src == b.id and not getattr(s, "auto_aux", False)]
+
+    for b in fs.blocks.values():
+        if getattr(b, "auto_aux", False):
+            continue
+        cat        = _eq_categoria(b)
+        eqt        = b.eq_type or ""
+        duty       = float(getattr(b, "duty", 0.0) or 0.0)
+        has_rxn, rxn_resolves, ph_bonus = _block_reaction_status(b)
+        is_placeholder = has_rxn and not rxn_resolves
+        is_electrical  = bool(_ep and _ep.is_electrical_equipment(eqt))
+        ins  = _ins(b)
+        outs = _outs(b)
+
+        # ── 1.5 [W-PLACEHOLDER] reactor estructural ──────────────────
+        if is_placeholder:
+            msg = (f"[W-PLACEHOLDER] {b.name}: reactor estructural "
+                   f"(chemistry via outputs locked): exento de balance "
+                   f"elemental y de energía.")
+            for rid, base in ph_bonus:
+                msg += (f" La reacción {base} existe curada en reactions_db "
+                        f"— considerar usarla (hoy declarada como {rid}).")
+            warns.append(msg)
+
+        # ── 1.1 [W-ENERGY-BLOCK] cierre global de energía por bloque ──
+        # Los reactores placeholder están EXENTOS (química hardcodeada via
+        # outputs locked; su balance de energía no es evaluable) — los
+        # cubre [W-PLACEHOLDER].  El resto de bloques con ins Y outs se
+        # barre con _stream_enthalpy_kW.
+        if ins and outs and not is_placeholder:
+            h_in = h_out = 0.0
+            ok = True
+            for s in ins:
+                h = _stream_enthalpy_kW(s)
+                if h is None:
+                    ok = False; break
+                h_in += h
+            if ok:
+                for s in outs:
+                    h = _stream_enthalpy_kW(s)
+                    if h is None:
+                        ok = False; break
+                    h_out += h
+            if ok:
+                q_rxn = 0.0
+                hor = float(getattr(b, "heat_of_reaction", 0.0) or 0.0)
+                if hor != 0:
+                    m_in = sum(s.mass_flow * TM_TO_KG / SEC_PER_YEAR
+                               for s in ins)
+                    q_rxn = -m_in * hor
+                resid = h_out - h_in - duty - q_rxn
+                scale = max(abs(h_in), abs(h_out), abs(duty), 10.0)
+                if abs(resid) > 10.0 and abs(resid) / scale > 0.10:
+                    if has_rxn and rxn_resolves:
+                        cause = ("reactor con reacción real → posible signo "
+                                 "de Q_rxn o Ts de producto inconsistentes")
+                    elif is_electrical:
+                        cause = (f"duty declarado ({duty:.0f} kW) ≠ ΔH de "
+                                 f"corrientes ({h_out - h_in:.0f} kW)")
+                    else:
+                        cause = "Ts de corrientes no cierran el balance"
+                    warns.append(
+                        f"[W-ENERGY-BLOCK] {b.name}: cierre de energía "
+                        f"resid={resid:+.0f} kW (escala {scale:.0f}, "
+                        f"{resid / scale * 100:+.0f}%) — {cause}")
+
+        # ── 1.2 [W-COMP-T] T de descarga de compresor/turbina ────────
+        if cat == "Compressors":
+            hot = None
+            for s in outs:
+                if hot is None or s.temperature > hot.temperature:
+                    hot = s
+            if hot is not None and hot.temperature > 250.0:
+                warns.append(
+                    f"[W-COMP-T] {b.name}/{hot.name}: descarga isentrópica "
+                    f"de 1 etapa = {hot.temperature:.0f} °C (>250 °C, límite "
+                    f"mecánico API 618). Planta real usa compresión "
+                    f"multietapa con intercooling. Considerar dividir en N "
+                    f"etapas o declarar T_descarga con lock.")
+
+        # ── 1.4 [W-MIXER-DUTY]/[W-TANK-DUTY] duty en equipo pasivo ───
+        if abs(duty) > 5.0:
+            if eqt.startswith("Mixer"):
+                warns.append(
+                    f"[W-MIXER-DUTY] {b.name}: equipo pasivo (mixer "
+                    f"estático) con duty espurio {duty:.0f} kW — revisar Ts "
+                    f"de entrada/salida.")
+            elif cat == "Storage" or "tank" in eqt.lower():
+                warns.append(
+                    f"[W-TANK-DUTY] {b.name}: equipo pasivo (tanque de "
+                    f"almacenamiento) con duty espurio {duty:.0f} kW — "
+                    f"revisar Ts de entrada/salida.")
+
+        # ── 1.6 [W-SPLIT-LOCK] fracción vs flujo lockeado ────────────
+        if getattr(b, "splitter_active", False):
+            fr = list(getattr(b, "splitter_fractions", []) or [])
+            sum_in = sum(s.mass_flow for s in ins)
+            if sum_in > 0:
+                for k, s in enumerate(outs):
+                    if k >= len(fr):
+                        break
+                    if not getattr(s, "mass_flow_locked", False):
+                        continue
+                    expected = sum_in * fr[k]
+                    rel = abs(s.mass_flow - expected) / max(abs(expected), 1.0)
+                    if rel > 0.02:
+                        warns.append(
+                            f"[W-SPLIT-LOCK] {b.name}/{s.name}: flujo lockeado "
+                            f"({s.mass_flow:.0f} t/a) contradice la fracción "
+                            f"splitter {fr[k]:.3f} (esperado {expected:.0f} "
+                            f"t/a) — posible error de orden fracción↔stream.")
+
+        # ── 1.7 [W-DUTY-S] duty > S ──────────────────────────────────
+        if cat in ("Fired heaters", "Compressors"):
+            S = float(getattr(b, "S", 0.0) or 0.0)
+            if S > 0 and abs(duty) > S * 1.02:
+                warns.append(
+                    f"[W-DUTY-S] {b.name}: S declarado ({S:.0f} kW) menor que "
+                    f"|duty| calculado ({abs(duty):.0f} kW) — costeo "
+                    f"subestimado.")
+
+        # ── 1.8 [W-SIGN] signo de duty inconsistente ─────────────────
+        if cat == "Fired heaters" and duty < -1.0:
+            warns.append(
+                f"[W-SIGN] {b.name}: duty {duty:+.0f} kW (fired heater debería "
+                f"APORTAR calor, duty>0) — signo inconsistente con el tipo de "
+                f"equipo ({eqt}).")
+        elif "air cooler" in eqt and duty > 1.0:
+            warns.append(
+                f"[W-SIGN] {b.name}: duty {duty:+.0f} kW (air cooler debería "
+                f"EXTRAER calor, duty<0) — signo inconsistente con el tipo de "
+                f"equipo ({eqt}).")
+
+    # ── 1.3 [W-T-OVERRIDE] T declarada pisada por el solver ──────────
+    for s in fs.streams.values():
+        td = getattr(s, "_t_declared", None)
+        if td is None:
+            continue
+        if abs(td - T_REF_C) < 0.01:
+            continue                       # T declarada == 25 → sin intención
+        if getattr(s, "temperature_locked", False):
+            continue                       # locked → el solver la respeta
+        if abs(s.temperature - td) > 10.0:
+            warns.append(
+                f"[W-T-OVERRIDE] {s.name}: T declarada {td:.0f}°C fue "
+                f"recalculada a {s.temperature:.0f}°C (intención de diseño "
+                f"perdida — lockear si {td:.0f}°C es correcta).")
+
+    return warns
 
 
 def _compute_status_per_item(fs, result):
