@@ -5229,6 +5229,7 @@ def _compute_awareness_warnings(fs):
       [W-SPLIT-LOCK]   flujo lockeado vs fracción de splitter
       [W-DUTY-S]       |duty| > S (costeo subestimado)
       [W-SIGN]         signo de duty inconsistente con el tipo de equipo
+      [W-PURGE-ABS]    purga absoluta lockeada dentro de un loop de reciclo
     """
     from flowsheet_model import T_REF_C
     try:
@@ -5243,6 +5244,35 @@ def _compute_awareness_warnings(fs):
     def _outs(b):
         return [s for s in fs.streams.values()
                 if s.src == b.id and not getattr(s, "auto_aux", False)]
+
+    # ── Mapa de loops de reciclo (REUSA la detección de SCC del solver,
+    #    NO un DFS paralelo) para [W-PURGE-ABS].  Para cada bloque guarda:
+    #      scc_of[bid]      → set de bids de su SCC de reciclo (o None)
+    #      determined_bids  → loops YA controlados por un splitter
+    #                          recirculante (no subdeterminados → no avisar)
+    #    Los lazos de servicio puro (cooling water, etc.) se excluyen: su
+    #    caudal es analítico, no hay subdeterminación de proceso.
+    scc_of: Dict[int, set] = {}
+    determined_bids: set = set()
+    try:
+        for scc in _strongly_connected_components(fs):
+            if not _is_recycle_scc(scc, fs):
+                continue
+            if _is_pure_service_scc(scc, fs):
+                continue
+            sccset = set(scc)
+            determined = any(
+                getattr(fs.blocks[bid], "splitter_active", False)
+                and any(s.src == bid and s.dst in sccset
+                        for s in fs.streams.values())
+                for bid in scc)
+            for bid in scc:
+                scc_of[bid] = sccset
+                if determined:
+                    determined_bids.add(bid)
+    except Exception:
+        scc_of = {}
+        determined_bids = set()
 
     for b in fs.blocks.values():
         if getattr(b, "auto_aux", False):
@@ -5374,6 +5404,36 @@ def _compute_awareness_warnings(fs):
                 f"[W-SIGN] {b.name}: duty {duty:+.0f} kW (air cooler debería "
                 f"EXTRAER calor, duty<0) — signo inconsistente con el tipo de "
                 f"equipo ({eqt}).")
+
+        # ── [W-PURGE-ABS] purga absoluta dentro de un loop (PR-A2) ────
+        # Convención PR-G1: una purga que reparte el gas de un loop de
+        # reciclo debe modelarse como FRACCIÓN (splitter_active), no como
+        # stream de flujo absoluto lockeado — con purga absoluta el caudal
+        # de recirculación queda SUBDETERMINADO (cualquier valor cierra el
+        # balance, sin punto fijo único → Wegstein no converge).  Patrón
+        # detectado: bloque NO-splitter en un SCC de reciclo de proceso aún
+        # NO determinado por un splitter recirculante, con una salida
+        # lockeada TERMINAL (sale del loop = purga) Y una salida hermana
+        # que RECIRCULA (vuelve al loop).  Las purgas TERMINALES (bloque
+        # fuera de todo loop) son specs de diseño legítimas → no avisar.
+        sccset = scc_of.get(b.id)
+        if (sccset is not None
+                and b.id not in determined_bids
+                and not getattr(b, "splitter_active", False)
+                and len(outs) >= 2):
+            locked_terminal = [s for s in outs
+                               if getattr(s, "mass_flow_locked", False)
+                               and s.dst not in sccset]
+            has_recirc = any(s.dst in sccset for s in outs)
+            if locked_terminal and has_recirc:
+                purga = locked_terminal[0]
+                warns.append(
+                    f"[W-PURGE-ABS] {b.name}: purga/reparto con flujo absoluto "
+                    f"lockeado ({purga.name} = {purga.mass_flow:.0f} t/a) "
+                    f"dentro de un loop de reciclo. El caudal de recirculación "
+                    f"queda subdeterminado — modelar como fracción de split "
+                    f"(splitter_active) para que el balance tenga punto fijo "
+                    f"único (ver convención PR-G1).")
 
     # ── 1.3 [W-T-OVERRIDE] T declarada pisada por el solver ──────────
     for s in fs.streams.values():
