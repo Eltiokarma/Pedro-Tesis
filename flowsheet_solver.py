@@ -1081,136 +1081,23 @@ def _size_heat_exchangers(fs, result):
 # SOLVER DE ENERGÍA — propagación de T por closure
 # ======================================================
 
-def _resolve_cp(s, T_eval=None):
-    """Devuelve el Cp (kJ/kg·K) de un stream a la temperatura T_eval
-    (default = s.temperature).
-
-    Prioridad:
-      1. THERMO_DB (DIPPR-100 polinomio cuártico, mucho más preciso a
-         alta T) — si el componente está cubierto.
-      2. components.py legacy (Cp lineal) — fallback para componentes
-         no en thermo_db (genéricos, etc.).
-      3. s.cp > 0 (override manual) — constante.
-      4. None.
-    """
-    if T_eval is None:
-        T_eval = s.temperature
-    phase = s.phase or "liquid"
-
-    # --- Prioridad 1: thermo_db (DIPPR) ---
-    try:
-        import thermo_db as _td
-    except ImportError:
-        _td = None
-    if _td is not None:
-        if s.composition:
-            cp = _td.cp_mix_kJ_kg_K(s.composition, T_eval, phase)
-            if cp > 0:
-                return cp
-        if s.main_component:
-            cp = _td.cp_kJ_kg_K(s.main_component, T_eval, phase)
-            if cp is not None and cp > 0:
-                return cp
-
-    # --- Prioridad 2: components.py legacy (Cp lineal) ---
-    try:
-        import components as comp_mod
-    except ImportError:
-        comp_mod = None
-    if comp_mod is not None:
-        if s.composition:
-            cp = comp_mod.cp_mix_kJ_kg_K(s.composition, T_eval, phase)
-            if cp > 0:
-                return cp
-        if s.main_component:
-            c = comp_mod.get(s.main_component)
-            if c is not None:
-                return c.cp(T_eval, phase)
-
-    if s.cp > 0:
-        return s.cp
-    return None
-
-
-def _resolve_dh_vap(s):
-    """ΔH_vap de un stream (kJ/kg).  None si no se puede calcular.
-
-    Prioridad:
-      1. s.delta_h_vap_override (manual del user).
-      2. THERMO_DB (Clausius-Clapeyron derivado de Antoine — varía con T).
-      3. components.py legacy (constante en Tb).
-    """
-    if s.delta_h_vap_override > 0:
-        return s.delta_h_vap_override
-
-    T_eval = s.temperature
-
-    # --- Prioridad 1: thermo_db (Clausius-Clapeyron) ---
-    try:
-        import thermo_db as _td
-    except ImportError:
-        _td = None
-    if _td is not None:
-        if s.composition:
-            dh = _td.delta_h_vap_mix_kJ_kg(s.composition, T_eval)
-            if dh > 0:
-                return dh
-        if s.main_component:
-            dh = _td.delta_h_vap_kJ_kg(s.main_component, T_eval)
-            if dh is not None and dh > 0:
-                return dh
-
-    # --- Prioridad 2: components.py legacy ---
-    try:
-        import components as comp_mod
-    except ImportError:
-        return None
-    if s.composition:
-        dh = comp_mod.delta_h_vap_mix(s.composition)
-        if dh > 0:
-            return dh
-    if s.main_component:
-        c = comp_mod.get(s.main_component)
-        if c is not None:
-            return c.dh_vap
-    return None
-
-
-def _stream_enthalpy_kW(s):
-    """Entalpía total de una corriente referida a T_REF_C, kW.
-    Incluye:
-      · sensible heat: m·Cp·(T - T_REF)
-      · latente: si phase = 'vapor', sumar ΔH_vap completo
-                 si phase = 'two_phase', sumar vapor_fraction × ΔH_vap
-
-    Cp se evalúa a la temperatura promedio entre T_REF y T (mejor
-    aproximación que evaluar en T sola, para Cp(T) variable).
-    """
-    if s.mass_flow <= 0:
-        return None
-
-    # Cp a T promedio (mejora vs evaluar solo en T)
-    T_avg = (s.temperature + T_REF_C) / 2.0
-    cp = _resolve_cp(s, T_eval=T_avg)
-    if cp is None or cp <= 0:
-        return None
-
-    m_kg_s = (s.mass_flow * TM_TO_KG) / SEC_PER_YEAR
-    h_sensible = m_kg_s * cp * (s.temperature - T_REF_C)
-
-    # contribución latente si hay cambio de fase respecto al estado
-    # de referencia (líquido a T_REF).
-    h_latent = 0.0
-    if s.phase in ("vapor", "gas"):
-        dh = _resolve_dh_vap(s)
-        if dh is not None:
-            h_latent = m_kg_s * dh
-    elif s.phase == "two_phase":
-        dh = _resolve_dh_vap(s)
-        if dh is not None:
-            h_latent = m_kg_s * s.vapor_fraction * dh
-
-    return h_sensible + h_latent
+# ──────────────────────────────────────────────────────────────────────
+# Entalpía de corriente — FUENTE ÚNICA en stream_enthalpy.py (PR-C).
+#
+# _resolve_cp / _resolve_dh_vap / _stream_enthalpy_kW eran la versión
+# CANÓNICA (resolvía cp a T promedio, latente por fase, two_phase con
+# vapor_fraction y fallbacks main_component / components.py / overrides).
+# Se movieron tal cual a stream_enthalpy.py para que la UI (bubbles,
+# inspector, flowsheet_qt) consuma EXACTAMENTE los mismos números que el
+# solver — antes la copia de la UI caía a 0 silencioso en ~8/12 streams.
+# Acá sólo se re-exportan con los nombres internos que usa el resto del
+# solver; el cuerpo es idéntico al anterior (goldens byte-idénticos).
+# ──────────────────────────────────────────────────────────────────────
+from stream_enthalpy import (                                  # noqa: E402
+    _resolve_cp,
+    _resolve_dh_vap,
+    stream_enthalpy_kW as _stream_enthalpy_kW,
+)
 
 
 def _compressible_props(comp: dict, T_K: float):

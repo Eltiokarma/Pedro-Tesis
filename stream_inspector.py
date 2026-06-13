@@ -1319,7 +1319,7 @@ class StreamInspectorPanel(QWidget):
         try:
             import stream_enthalpy as _se
             h = _se.specific_enthalpy_kJ_kg(comp, T_C, phase, vfrac)
-            _row("h específica", f"{h:.1f}", "kJ/kg")
+            _row("h específica", f"{h:.1f}" if h is not None else None, "kJ/kg")
         except Exception:
             _row("h específica", None)
 

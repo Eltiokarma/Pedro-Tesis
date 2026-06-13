@@ -322,9 +322,12 @@ class StreamBubble(QFrame):
             self._add_row(lay, row, label, value, unit)
             row += 1
 
-        # Entalpía opcional
-        if self._show_enthalpy and self._h_kJ_kg is not None:
-            self._add_row(lay, row, "h", f"{self._h_kJ_kg:.0f}", "kJ/kg")
+        # Entalpía opcional.  None → "n/d" (nunca un 0 engañoso): la
+        # entalpía no se pudo resolver (cp/Δh_vap fuera de catálogo).
+        if self._show_enthalpy:
+            hval = ("n/d" if self._h_kJ_kg is None
+                    else f"{self._h_kJ_kg:.0f}")
+            self._add_row(lay, row, "h", hval, "kJ/kg")
             row += 1
 
         # Composición (sub-grupo)
@@ -736,8 +739,14 @@ class BubbleManager:
         h_val = None
         try:
             import stream_enthalpy as _se
+            # Fallback a main_component si no hay composición explícita, para
+            # que la burbuja resuelva los mismos casos que el solver (que usa
+            # la corriente completa, no sólo el dict de composición).
+            _comp = getattr(stream, "composition", {}) or {}
+            if not _comp and getattr(stream, "main_component", ""):
+                _comp = {stream.main_component: 1.0}
             h_val = _se.specific_enthalpy_kJ_kg(
-                getattr(stream, "composition", {}) or {},
+                _comp,
                 float(getattr(stream, "temperature", 25.0) or 25.0),
                 phase,
                 getattr(stream, "vapor_fraction", 0.0) or 0.0,

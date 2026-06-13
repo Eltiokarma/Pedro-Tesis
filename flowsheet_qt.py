@@ -8036,8 +8036,11 @@ class FlowsheetMainWindow(QMainWindow):
                 try:
                     import stream_enthalpy as _se
                     dH = _se.block_delta_h_kW(ins, outs)
-                    txt += (f"\nΔH (in→out) {('+' if dH > 0 else '')}"
-                            f"{funits.fmt_energy(dH)}  (térmico)")
+                    if dH is None:
+                        txt += "\nΔH (in→out) n/d  (térmico)"
+                    else:
+                        txt += (f"\nΔH (in→out) {('+' if dH > 0 else '')}"
+                                f"{funits.fmt_energy(dH)}  (térmico)")
                 except Exception:
                     pass
             # ---- Diseño FUG automático para columnas ----
