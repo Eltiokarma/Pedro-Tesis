@@ -123,10 +123,10 @@
   "n_blocks": 11,
   "n_streams": 10,
   "overall_status": "warning",
-  "sum_duty": 1376.689335
+  "sum_duty": 1624.02741
  },
  "ethylene_crk": {
-  "ISBL": 6897010.16,
+  "ISBL": 6897010.32,
   "energy_errors": 0,
   "mass_errors": 0,
   "n_blocks": 10,
@@ -141,7 +141,7 @@
   "n_blocks": 13,
   "n_streams": 16,
   "overall_status": "ok",
-  "sum_duty": 4227.051582
+  "sum_duty": 3994.425186
  },
  "glass": {
   "ISBL": 1146665.34,
@@ -159,7 +159,7 @@
   "n_blocks": 10,
   "n_streams": 10,
   "overall_status": "ok",
-  "sum_duty": -71.023002
+  "sum_duty": -118.363432
  },
  "hda": {
   "ISBL": 9414377.2,
@@ -177,16 +177,16 @@
   "n_blocks": 22,
   "n_streams": 24,
   "overall_status": "ok",
-  "sum_duty": -731.364826
+  "sum_duty": -729.188915
  },
  "hno3": {
-  "ISBL": 10890477.56,
+  "ISBL": 10911433.67,
   "energy_errors": 0,
   "mass_errors": 0,
-  "n_blocks": 21,
-  "n_streams": 21,
+  "n_blocks": 22,
+  "n_streams": 22,
   "overall_status": "warning",
-  "sum_duty": -795.5875
+  "sum_duty": -778.431711
  },
  "hydraulic": {
   "ISBL": 974463.65,
@@ -198,13 +198,13 @@
   "sum_duty": 9.360386
  },
  "industrial": {
-  "ISBL": 22026405.31,
+  "ISBL": 26594685.65,
   "energy_errors": 0,
   "mass_errors": 0,
   "n_blocks": 28,
   "n_streams": 30,
   "overall_status": "warning",
-  "sum_duty": -5168.303581
+  "sum_duty": -5153.271315
  },
  "ldpe": {
   "ISBL": 2447864.43,
@@ -216,31 +216,31 @@
   "sum_duty": 70.579141
  },
  "leche_gloria": {
-  "ISBL": 12072696.92,
+  "ISBL": 12139882.92,
   "energy_errors": 0,
   "mass_errors": 0,
   "n_blocks": 20,
   "n_streams": 21,
   "overall_status": "ok",
-  "sum_duty": 414.061462
+  "sum_duty": 415.055559
  },
  "methanol": {
-  "ISBL": 3902733.2,
+  "ISBL": 5826391.97,
   "energy_errors": 0,
   "mass_errors": 0,
   "n_blocks": 8,
   "n_streams": 7,
-  "overall_status": "warning",
+  "overall_status": "ok",
   "sum_duty": -300.268263
  },
  "nuclear": {
-  "ISBL": 1563415.42,
+  "ISBL": 1688932.86,
   "energy_errors": 0,
   "mass_errors": 0,
   "n_blocks": 6,
   "n_streams": 5,
   "overall_status": "ok",
-  "sum_duty": 0.132372
+  "sum_duty": 0.165649
  },
  "pasteurizer": {
   "ISBL": 642814.97,
@@ -279,22 +279,22 @@
   "sum_duty": 76.0
  },
  "quimpac": {
-  "ISBL": 51087300.91,
+  "ISBL": 51103256.13,
   "energy_errors": 0,
   "mass_errors": 0,
-  "n_blocks": 23,
-  "n_streams": 23,
+  "n_blocks": 24,
+  "n_streams": 24,
   "overall_status": "ok",
-  "sum_duty": 1583.757543
+  "sum_duty": 1583.779975
  },
  "rankine": {
-  "ISBL": 271826049.8,
+  "ISBL": 271860377.93,
   "energy_errors": 0,
   "mass_errors": 0,
   "n_blocks": 6,
   "n_streams": 5,
   "overall_status": "ok",
-  "sum_duty": 0.132372
+  "sum_duty": 0.160825
  },
  "rxn_flash_col": {
   "ISBL": 3641892.79,
@@ -303,7 +303,7 @@
   "n_blocks": 8,
   "n_streams": 7,
   "overall_status": "ok",
-  "sum_duty": 430.751476
+  "sum_duty": 481.791578
  },
  "smr_eq": {
   "ISBL": 10297711.46,
@@ -328,9 +328,9 @@
   "energy_errors": 0,
   "mass_errors": 0,
   "n_blocks": 14,
-  "n_streams": 17,
+  "n_streams": 18,
   "overall_status": "ok",
-  "sum_duty": 38911.08384
+  "sum_duty": 42311.503963
  },
  "sulfuric": {
   "ISBL": 1081290.32,
@@ -342,13 +342,13 @@
   "sum_duty": -54.937067
  },
  "talara": {
-  "ISBL": 66034527.89,
+  "ISBL": 66389143.61,
   "energy_errors": 0,
   "mass_errors": 0,
-  "n_blocks": 39,
-  "n_streams": 42,
+  "n_blocks": 42,
+  "n_streams": 45,
   "overall_status": "ok",
-  "sum_duty": 8795.081043
+  "sum_duty": 8887.784697
  },
  "urea": {
   "ISBL": 5083702.08,

@@ -75,6 +75,7 @@ class StreamBubble(QFrame):
         self._phase = ""
         self._T_K = 0.0
         self._P_bar = 0.0
+        self._p_auto = False        # FASE 2/4: P derivada (auto) vs spec del user
         self._mdot_kg_s = 0.0
         self._h_kJ_kg: Optional[float] = None
         self._composition: List[Tuple[str, float]] = []   # (name, mol_frac)
@@ -120,14 +121,17 @@ class StreamBubble(QFrame):
                       T_K: float = 0.0, P_bar: float = 0.0,
                       mdot_kg_s: float = 0.0,
                       h_kJ_kg: Optional[float] = None,
-                      composition: Optional[List[Tuple[str, float]]] = None):
+                      composition: Optional[List[Tuple[str, float]]] = None,
+                      p_auto: bool = False):
         """Refresca los valores numéricos.  Se llama cuando:
           · El stream se editó manualmente
-          · El solver terminó y publicó nuevos valores"""
+          · El solver terminó y publicó nuevos valores
+        p_auto: True si la presión la derivó el solver (no es spec del user)."""
         self._name = name or "?"
         self._phase = (phase or "").lower()
         self._T_K = float(T_K or 0.0)
         self._P_bar = float(P_bar or 0.0)
+        self._p_auto = bool(p_auto)
         self._mdot_kg_s = float(mdot_kg_s or 0.0)
         self._h_kJ_kg = h_kJ_kg
         self._composition = composition or []
@@ -318,9 +322,12 @@ class StreamBubble(QFrame):
             self._add_row(lay, row, label, value, unit)
             row += 1
 
-        # Entalpía opcional
-        if self._show_enthalpy and self._h_kJ_kg is not None:
-            self._add_row(lay, row, "h", f"{self._h_kJ_kg:.0f}", "kJ/kg")
+        # Entalpía opcional.  None → "n/d" (nunca un 0 engañoso): la
+        # entalpía no se pudo resolver (cp/Δh_vap fuera de catálogo).
+        if self._show_enthalpy:
+            hval = ("n/d" if self._h_kJ_kg is None
+                    else f"{self._h_kJ_kg:.0f}")
+            self._add_row(lay, row, "h", hval, "kJ/kg")
             row += 1
 
         # Composición (sub-grupo)
@@ -349,7 +356,8 @@ class StreamBubble(QFrame):
         P_txt = f"{self._P_bar:.2f}" if self._P_bar else "—"
         m_txt = f"{self._mdot_kg_s:.2f}" if self._mdot_kg_s else "—"
         yield ("T",  T_txt, "K")
-        yield ("P",  P_txt, "bar")
+        # P con marca de origen (FASE 2/4): 'auto' si la derivó el solver.
+        yield ("P",  P_txt, "bar auto" if (self._P_bar and self._p_auto) else "bar")
         yield ("ṁ",  m_txt, "kg/s")
 
     def _add_row(self, lay, row, label, value, unit):
@@ -731,20 +739,33 @@ class BubbleManager:
         h_val = None
         try:
             import stream_enthalpy as _se
+            # Fallback a main_component si no hay composición explícita, para
+            # que la burbuja resuelva los mismos casos que el solver (que usa
+            # la corriente completa, no sólo el dict de composición).
+            _comp = getattr(stream, "composition", {}) or {}
+            if not _comp and getattr(stream, "main_component", ""):
+                _comp = {stream.main_component: 1.0}
             h_val = _se.specific_enthalpy_kJ_kg(
-                getattr(stream, "composition", {}) or {},
+                _comp,
                 float(getattr(stream, "temperature", 25.0) or 25.0),
                 phase,
                 getattr(stream, "vapor_fraction", 0.0) or 0.0,
             )
         except Exception:
             h_val = None
+        # P auto vs spec: pressure_lock_origin=='user' → spec; otro/None → auto.
+        _porg = getattr(stream, "pressure_lock_origin", None)
+        if _porg is None:
+            _p_auto = not getattr(stream, "pressure_locked", False)
+        else:
+            _p_auto = _porg != "user"
         bub.update_values(
             name=getattr(stream, "name", "?"),
             phase=phase,
             T_K=T_K, P_bar=P_bar, mdot_kg_s=mdot,
             h_kJ_kg=h_val,
             composition=comp,
+            p_auto=_p_auto,
         )
 
     def _refresh_leaders(self):

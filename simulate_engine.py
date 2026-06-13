@@ -162,6 +162,8 @@ def _costing(fs):
     out = {
         "isbl_usd": _num(cd.get("sum_cbm")),
         "sum_cp_usd": _num(cd.get("sum_cp")),
+        "contingency_usd": _num(cd.get("contingency")),
+        "aux_facilities_usd": _num(cd.get("aux_facilities")),
         "fci_grass_roots_usd": _num(cd.get("FCI_grass_roots")),
         "working_capital_usd": _num(cd.get("working_capital")),
         "capex_total_usd": _num(cd.get("CAPEX_total")),
@@ -170,7 +172,10 @@ def _costing(fs):
         "by_category": {
             cat: {"cbm_usd": _num(v[0]) if isinstance(v, (list, tuple)) else _num(v),
                   "n_equipos": (int(v[1]) if isinstance(v, (list, tuple))
-                                and len(v) > 1 else None)}
+                                and len(v) > 1 else None),
+                  "material": ("/".join(sorted(v[2]))
+                               if isinstance(v, (list, tuple)) and len(v) > 2
+                               and isinstance(v[2], (set, list)) else None)}
             for cat, v in (cd.get("by_category") or {}).items()
         },
     }

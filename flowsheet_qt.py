@@ -2513,7 +2513,9 @@ def _segments_too_close(x1, y1, x2, y2,  ax, ay, bx, by,
 
 def _apply_lane_offset(pts, other_paths, my_id: int,
                         lane_step: float = 10.0,
-                        min_dist: float = 8.0) -> list:
+                        min_dist: float = 8.0,
+                        obstacles=None,
+                        padding: float = 12.0) -> list:
     """Aplica un offset perpendicular a los segmentos del path actual
     que estén SUPERPUESTOS con otros streams paralelos.
 
@@ -2523,6 +2525,11 @@ def _apply_lane_offset(pts, other_paths, my_id: int,
     lane_step: cuánto desplazar cada lane (default 10px).
     min_dist: distancia mínima entre paralelos antes de aplicar
               offset (default 8px).
+    obstacles: rects (x, y, w, h) opcionales — el offset se descarta
+               (probando primero el sentido contrario) si metería el
+               segmento dentro de un obstáculo padded.  Sin esto, el
+               lane offset deshacía el trabajo de _avoid_obstacles y
+               los streams quedaban cruzando bloques.
 
     Devuelve nueva lista de pts.  Si no hay overlap, retorna pts sin
     cambios.
@@ -2555,12 +2562,41 @@ def _apply_lane_offset(pts, other_paths, my_id: int,
             continue
         # Aplicar offset perpendicular según lane.  Para horizontal:
         # desplazamiento en y.  Para vertical: en x.  Lane 1, 2, 3...
-        # con steps de lane_step.
-        offset = lane_step * lanes_occupied
-        if abs(y1 - y2) < 2:    # horizontal
+        # con steps de lane_step.  Si el destino pisa un obstáculo,
+        # probar el sentido contrario; si ambos pisan, no offsetear
+        # (solapar dos líneas es menos grave que atravesar un bloque).
+        horizontal = abs(y1 - y2) < 2
+        vertical = abs(x1 - x2) < 2
+        if not horizontal and not vertical:
+            continue
+
+        def _clear(off):
+            if not obstacles:
+                return True
+            sx1 = x1 if horizontal else x1 + off
+            sy1 = y1 + off if horizontal else y1
+            sx2 = x2 if horizontal else x2 + off
+            sy2 = y2 + off if horizontal else y2
+            for (ox, oy, ow, oh) in obstacles:
+                if _segment_intersects_rect(
+                        sx1, sy1, sx2, sy2,
+                        ox - padding, oy - padding,
+                        ow + 2 * padding, oh + 2 * padding):
+                    return False
+            return True
+
+        offset = None
+        for cand in (lane_step * lanes_occupied,
+                     -lane_step * lanes_occupied):
+            if _clear(cand):
+                offset = cand
+                break
+        if offset is None:
+            continue
+        if horizontal:
             new_pts[2*i+1]   = y1 + offset
             new_pts[2*i+3]   = y2 + offset
-        elif abs(x1 - x2) < 2:  # vertical
+        else:
             new_pts[2*i]     = x1 + offset
             new_pts[2*i+2]   = x2 + offset
     return new_pts
@@ -2624,13 +2660,38 @@ def _detour_around_rect(x1, y1, x2, y2, rx, ry, rw, rh):
     return options[0][0]
 
 
-def _avoid_obstacles(pts, obstacles, padding=12, max_iter=8):
-    """Modifica pts (polyline) para que no atraviese ningún rect en
-    obstacles.  obstacles: list of (x, y, w, h).
+def _dedupe_pts(pts, eps=0.25):
+    """Colapsa puntos consecutivos (casi) idénticos de una polyline
+    plana [x0,y0,x1,y1,...].  Los detours degenerados insertaban el
+    mismo punto decenas de veces y agotaban max_iter sin sanear."""
+    if len(pts) < 4:
+        return pts
+    out = [pts[0], pts[1]]
+    for i in range(2, len(pts), 2):
+        if abs(pts[i] - out[-2]) > eps or abs(pts[i + 1] - out[-1]) > eps:
+            out.extend((pts[i], pts[i + 1]))
+    if len(out) < 4:        # todo colapsó: conservar extremo final
+        out.extend((pts[-2], pts[-1]))
+    return out
 
-    Algoritmo: iterativo.  En cada pasada busca el primer segmento
-    que cruza un obstáculo, inserta un detour ortogonal alrededor del
-    bloque, y reintenta.  max_iter cap por seguridad.
+
+def _avoid_obstacles(pts, obstacles, padding=12, max_iter=24):
+    """Modifica pts (polyline ortogonal) para que no atraviese ningún
+    rect en obstacles.  obstacles: list of (x, y, w, h).
+
+    Iterativo: en cada pasada sanea el primer segmento en conflicto y
+    reintenta.  Dos estrategias según el segmento:
+
+      · SHIFT PERPENDICULAR del segmento completo, cuando sus dos
+        extremos son vértices interiores de la polyline.  Es el único
+        saneo posible cuando un CODO cayó dentro del rect (un detour
+        alrededor no elimina el vértice interior — era la causa de
+        los streams auxiliares atravesando bloques: el detour se
+        re-insertaba degenerado hasta agotar max_iter).  Los vecinos
+        ortogonales se alargan/acortan, la ortogonalidad se preserva.
+
+      · DETOUR ortogonal alrededor del rect, cuando el segmento toca
+        un extremo de la polyline (los puertos no se mueven).
 
     El padding se aplica al rect del obstáculo (le agrega margen).
     Default 12 px ≈ 3× grosor de stream típico — suficiente para que
@@ -2638,37 +2699,95 @@ def _avoid_obstacles(pts, obstacles, padding=12, max_iter=8):
     """
     if not obstacles or len(pts) < 4:
         return pts
+    pts = list(pts)
     for _ in range(max_iter):
+        pts = _dedupe_pts(pts)
         modified = False
-        new_pts: List[float] = []
-        i = 0
-        while i < len(pts):
-            new_pts.append(pts[i])
-            new_pts.append(pts[i + 1])
-            if i + 2 >= len(pts):
-                i += 2
-                continue
-            x1, y1 = pts[i], pts[i + 1]
-            x2, y2 = pts[i + 2], pts[i + 3]
-            # Chequear contra cada obstáculo
-            detour_added = False
+        n_seg = (len(pts) - 2) // 2
+        for i in range(n_seg):
+            x1, y1 = pts[2 * i], pts[2 * i + 1]
+            x2, y2 = pts[2 * i + 2], pts[2 * i + 3]
             for (bx, by, bw, bh) in obstacles:
-                rx = bx - padding
-                ry = by - padding
-                rw = bw + 2 * padding
-                rh = bh + 2 * padding
-                if _segment_intersects_rect(x1, y1, x2, y2, rx, ry, rw, rh):
+                rx, ry = bx - padding, by - padding
+                rw, rh = bw + 2 * padding, bh + 2 * padding
+                if not _segment_intersects_rect(x1, y1, x2, y2,
+                                                  rx, ry, rw, rh):
+                    continue
+                interior = 0 < i < n_seg - 1
+                horizontal = abs(y1 - y2) < 1e-6
+                vertical = abs(x1 - x2) < 1e-6
+                p1_in = (rx + 1 < x1 < rx + rw - 1
+                         and ry + 1 < y1 < ry + rh - 1)
+                p2_in = (rx + 1 < x2 < rx + rw - 1
+                         and ry + 1 < y2 < ry + rh - 1)
+                if interior and (horizontal or vertical):
+                    # shift perpendicular: saca el segmento (y sus dos
+                    # vértices) de la banda del rect en el eje movido.
+                    # El destino se elige entre los bordes lo/hi de
+                    # TODOS los obstáculos (no solo el actual): dos
+                    # rects padded adyacentes sin corredor entre sí
+                    # producían ping-pong (cada uno re-empujaba el
+                    # segmento adentro del otro hasta agotar max_iter).
+                    # Se toma el candidato más cercano cuyo segmento
+                    # resultante quede libre de todos los rects.
+                    cands = []
+                    for (ox, oy, ow, oh) in obstacles:
+                        if horizontal:
+                            cands.extend((oy - padding - 1.0,
+                                          oy + oh + padding + 1.0))
+                        else:
+                            cands.extend((ox - padding - 1.0,
+                                          ox + ow + padding + 1.0))
+                    cur = y1 if horizontal else x1
+                    new_c = None
+                    for c in sorted(set(cands), key=lambda v: abs(cur - v)):
+                        clear = True
+                        for (ox, oy, ow, oh) in obstacles:
+                            sx1, sy1 = (x1, c) if horizontal else (c, y1)
+                            sx2, sy2 = (x2, c) if horizontal else (c, y2)
+                            if _segment_intersects_rect(
+                                    sx1, sy1, sx2, sy2,
+                                    ox - padding, oy - padding,
+                                    ow + 2 * padding, oh + 2 * padding):
+                                clear = False
+                                break
+                        if clear:
+                            new_c = c
+                            break
+                    if new_c is None:
+                        # sin posición totalmente libre: salir al menos
+                        # del rect actual por el lado más cercano
+                        if horizontal:
+                            lo, hi = ry - 1.0, ry + rh + 1.0
+                        else:
+                            lo, hi = rx - 1.0, rx + rw + 1.0
+                        new_c = lo if abs(cur - lo) <= abs(cur - hi) else hi
+                    if horizontal:
+                        pts[2 * i + 1] = pts[2 * i + 3] = new_c
+                    else:
+                        pts[2 * i] = pts[2 * i + 2] = new_c
+                elif not p1_in and not p2_in:
                     detour = _detour_around_rect(x1, y1, x2, y2,
                                                    rx, ry, rw, rh)
-                    new_pts.extend(detour)
-                    detour_added = True
-                    modified = True
-                    break
-            i += 2
-        pts = new_pts
+                    pts = pts[:2 * i + 2] + detour + pts[2 * i + 2:]
+                else:
+                    # Endpoint DENTRO del rect padded en un segmento
+                    # extremo: el puerto no se puede mover y un detour
+                    # no saca un punto de adentro (era la fuente del
+                    # thrashing que agotaba max_iter sin sanear los
+                    # cruces reales).  Se tolera — típicamente es el
+                    # puerto a <padding px de un bloque vecino; si el
+                    # vértice interior está adentro, lo sacará el
+                    # shift del segmento interior contiguo en otra
+                    # pasada.
+                    continue
+                modified = True
+                break
+            if modified:
+                break
         if not modified:
             break
-    return pts
+    return _dedupe_pts(pts)
 
 
 def _simplify_orthogonal(pts, eps=0.5):
@@ -3151,6 +3270,31 @@ class _EndpointHandle(QGraphicsEllipseItem):
             editor._mark_dirty()
 
 
+# ── PRINCIPIO "TODO LO AUTO SE VE" (FASE 4) ────────────────────────────
+# Badge único gris-azulado para marcar cualquier valor que el solver derivó
+# sin intervención del user (P propagada, ΔP auto-dimensionado, duty auto,
+# T/fase inferidas).  Spec del user → estilo normal; calculado → este badge.
+def _auto_badge(text="AUTO"):
+    return ("<span style='background:#5b6f8f; color:#eef; "
+            "border-radius:3px; padding:0 3px; font-size:7pt;'>"
+            f"{text}</span>")
+
+
+def _spec_tag():
+    return "<span style='color:#888; font-size:7pt;'>[spec]</span>"
+
+
+def _pressure_origin_is_auto(s):
+    """True si la presión de la corriente es derivada (auto), False si es spec
+    del user.  Regla: pressure_lock_origin=='user' → spec; cualquier otro
+    origen (solver/heuristic) o no-locked → auto.  Si el campo no existe:
+    locked→spec, no→auto (compat JSONs viejos)."""
+    porg = getattr(s, "pressure_lock_origin", None)
+    if porg is None:
+        return not getattr(s, "pressure_locked", False)
+    return porg != "user"
+
+
 class BlockItem(QGraphicsItemGroup):
     """Bloque del flowsheet renderizado en el canvas.
 
@@ -3261,6 +3405,8 @@ class BlockItem(QGraphicsItemGroup):
         self.duty_badge.setFont(QFont(mono, 8, QFont.Bold))
         self.duty_badge.setPos(self.W + 6, self.H / 2 - 7)
         self.duty_badge.setZValue(3)
+        # decorativo — no extiende el área clickeable del bloque
+        self.duty_badge.setAcceptedMouseButtons(Qt.NoButton)
         self._update_duty_badge()
 
         # ---- Badge HYSYS icon (esquina inferior izquierda) ----
@@ -3506,7 +3652,22 @@ class BlockItem(QGraphicsItemGroup):
         if b.n > 1:
             lines.append(f"N° unidades: {b.n}")
         if b.duty:
-            lines.append(f"Duty: {b.duty:+g} kW")
+            # FASE 4: duty con badge AUTO si el solver lo derivó (no duty_locked
+            # o marcado auto-hidráulico); spec del user en estilo normal.
+            d_auto = (getattr(b, "duty_origin", "") == "auto-hidraulico"
+                      or not getattr(b, "duty_locked", False))
+            d_tag = " " + _auto_badge() if d_auto else " " + _spec_tag()
+            lines.append(f"Duty: {b.duty:+g} kW{d_tag}")
+        # FASE 4: ΔP de rotativos (bomba/compresor) — el dispositivo que crea P.
+        eqlow = (b.eq_type or "").lower()
+        is_rot = any(x in eqlow for x in ("pump", "compressor", "fan",
+                                          "bomba", "blower", "soplador"))
+        if is_rot and abs(float(getattr(b, "delta_p_bar", 0.0) or 0.0)) > 1e-6:
+            dp_auto = (getattr(b, "duty_origin", "") == "auto-hidraulico")
+            dp_tag = " " + _auto_badge() if dp_auto else ""
+            lines.append(f"ΔP = {b.delta_p_bar:+.2f} bar{dp_tag}")
+        if float(getattr(b, "P_op_bar", 0.0) or 0.0) > 1.013:
+            lines.append(f"P_op = {b.P_op_bar:g} bar")
         if b.heat_source:
             lines.append(f"Utility: {b.heat_source}")
         lines.append(f"<span style='color:#888; font-size:8pt;'>"
@@ -3572,6 +3733,21 @@ class BlockItem(QGraphicsItemGroup):
             else:
                 self._isa_item.set_state(self._isa_state_for_status(self._status))
 
+    # ── Geometría del grupo ─────────────────────────────
+    # QGraphicsItemGroup calcula su boundingRect SOLO con los hijos
+    # agregados via addToGroup().  Aquí los hijos se crean con
+    # parent=self, así que el rect propio del grupo quedaba VACÍO
+    # (0×0) y la selección por área (rubber band) nunca lo
+    # intersectaba — los clicks directos funcionaban únicamente por
+    # handlesChildEvents.  Definimos explícitamente el rect W×H.
+    def boundingRect(self):
+        return QRectF(0, 0, self.W, self.H)
+
+    def shape(self):
+        path = QPainterPath()
+        path.addRect(0, 0, self.W, self.H)
+        return path
+
     def itemChange(self, change, value):
         """Sync posición al modelo + refresh streams conectados.
 
@@ -3588,8 +3764,39 @@ class BlockItem(QGraphicsItemGroup):
         elif change == QGraphicsItem.ItemPositionHasChanged and self.scene():
             self.model.x = self.pos().x()
             self.model.y = self.pos().y()
-            if self.editor is not None:
-                self.editor.refresh_streams_of(self.model.id)
+            # Group-drag: si este bloque es el que el mouse agarra y
+            # hay StreamItems seleccionados, trasladar sus waypoints /
+            # endpoints flotantes con el mismo delta (los bloques
+            # seleccionados ya los mueve Qt nativo).  El guard del
+            # grabber evita aplicar el delta N veces — cada bloque
+            # seleccionado dispara su propio itemChange.
+            # El ancla _group_drag_prev solo existe en el bloque que
+            # recibió el mousePressEvent (los demás seleccionados se
+            # mueven por el mecanismo nativo de Qt sin ancla), así que
+            # actúa de singleton: el delta se aplica una sola vez.
+            # No usamos mouseGrabberItem(): con handlesChildEvents el
+            # grabber reportado puede ser un hijo del grupo.
+            # HOTFIX P0: guard de re-entrancia explícito en el ancla.  La
+            # traslación de streams + refresh dispara update_path; si algún
+            # paso reposicionara este bloque, Qt re-entraría en itemChange y
+            # se aplicaría el delta otra vez (doble movimiento / recursión).
+            # El flag asegura que el bloque del group-drag procese su delta
+            # una sola vez por evento.
+            if not getattr(self, "_in_group_drag", False):
+                self._in_group_drag = True
+                try:
+                    prev = getattr(self, "_group_drag_prev", None)
+                    if prev is not None:
+                        dx, dy = self.pos().x() - prev.x(), self.pos().y() - prev.y()
+                        if dx or dy:
+                            for it in self.scene().selectedItems():
+                                if isinstance(it, StreamItem):
+                                    it.translate_by(dx, dy)
+                        self._group_drag_prev = QPointF(self.pos())
+                    if self.editor is not None:
+                        self.editor.refresh_streams_of(self.model.id)
+                finally:
+                    self._in_group_drag = False
         elif change == QGraphicsItem.ItemSelectedHasChanged:
             # sync visual del IsaGlyphItem con selección Qt
             if getattr(self, "_isa_item", None) is not None:
@@ -3626,6 +3833,14 @@ class BlockItem(QGraphicsItemGroup):
         if (event.button() == Qt.LeftButton and self.editor is not None
             and self.editor._drag_before_snapshot is None):
             self.editor._drag_before_snapshot = self.editor.begin_action()
+        # ancla para el group-drag de streams seleccionados (itemChange)
+        if event.button() == Qt.LeftButton:
+            self._group_drag_prev = QPointF(self.pos())
+            # HOTFIX P0: activar modo de traslación rígida — las corrientes
+            # se mueven sin avoidance/lane/jumpers durante el arrastre; el
+            # re-route completo ocurre al soltar.
+            if self.editor is not None:
+                self.editor._rigid_drag_active = True
         super().mousePressEvent(event)
 
     def hoverEnterEvent(self, event):
@@ -3643,11 +3858,22 @@ class BlockItem(QGraphicsItemGroup):
 
     def mouseReleaseEvent(self, event):
         super().mouseReleaseEvent(event)
+        self._group_drag_prev = None
+        # HOTFIX P0: cerrar el modo de traslación rígida y ejecutar UN solo
+        # pase de re-routing completo (avoidance + lane + jumpers) sobre TODOS
+        # los streams.  Así el estado final es idéntico al del comportamiento
+        # previo, sin pagar el costo O(n²) por píxel durante el arrastre.
+        did_rigid = False
+        if event.button() == Qt.LeftButton and self.editor is not None:
+            did_rigid = bool(getattr(self.editor, "_rigid_drag_active", False))
+            self.editor._rigid_drag_active = False
         # IMÁN BIDIRECCIONAL: al soltar el bloque tras un drag, si algún
         # endpoint flotante quedó cerca de un puerto de ESTE bloque, snap.
         # No durante el drag (sería intrusivo), solo al release.
         if event.button() == Qt.LeftButton and self.editor is not None:
             self._snap_nearby_floating_endpoints()
+        if did_rigid:
+            self.editor._refresh_all_stream_paths()
         # push undo si hubo un drag
         if (event.button() == Qt.LeftButton and self.editor is not None
             and self.editor._drag_before_snapshot is not None):
@@ -3781,6 +4007,8 @@ class StreamItem(QGraphicsPathItem):
         self.arrow_head = QGraphicsPolygonItem()
         self.arrow_head.setPen(QPen(Qt.NoPen))
         self.arrow_head.setZValue(5.5)
+        # decorativa — el hit es del path del stream, no de la punta
+        self.arrow_head.setAcceptedMouseButtons(Qt.NoButton)
 
         # handles draggables (uno por waypoint).  Se crean/muestran
         # solo cuando el stream está seleccionado.
@@ -3810,16 +4038,19 @@ class StreamItem(QGraphicsPathItem):
         self.label_bg.setBrush(QBrush(QColor("#ffffff")))
         self.label_bg.setPen(QPen(Qt.NoPen))    # se setea en update_path con el color
         self.label_bg.setZValue(6)
+        self.label_bg.setAcceptedMouseButtons(Qt.NoButton)
 
         mono = pfd_fonts.MONO if pfd_fonts.available() else "Consolas"
         self.label_name = QGraphicsSimpleTextItem()
         self.label_name.setFont(QFont(mono, 7, QFont.Medium))
         self.label_name.setZValue(7)
+        self.label_name.setAcceptedMouseButtons(Qt.NoButton)
 
         self.label_flow = QGraphicsSimpleTextItem()
         self.label_flow.setFont(QFont(mono, 7))
         self.label_flow.setBrush(QBrush(QColor("#6b7280")))   # gris suave
         self.label_flow.setZValue(7)
+        self.label_flow.setAcceptedMouseButtons(Qt.NoButton)
 
         self.update_path()
 
@@ -3876,10 +4107,158 @@ class StreamItem(QGraphicsPathItem):
         self.update_path(rebuild_handles=False)
         super().hoverEnterEvent(event)
 
+    def hoverMoveEvent(self, event):
+        """Cursor según el segmento ortogonal bajo el mouse (estilo
+        Visio): SizeVer sobre un segmento horizontal (se moverá en Y),
+        SizeHor sobre uno vertical.  Solo streams full-conectados —
+        los flotantes conservan el drag-translate de toda la flecha."""
+        s = self.model
+        if s.src != -1 and s.dst != -1:
+            pts = getattr(self, "_last_pts", None) or []
+            nodes = [(pts[i], pts[i+1]) for i in range(0, len(pts), 2)]
+            _, orient = self._segment_at(nodes, event.scenePos())
+            if orient == "h":
+                self.setCursor(Qt.SizeVerCursor)
+            elif orient == "v":
+                self.setCursor(Qt.SizeHorCursor)
+            else:
+                self.unsetCursor()
+        super().hoverMoveEvent(event)
+
     def hoverLeaveEvent(self, event):
         self._hovered = False
+        self.unsetCursor()
         self.update_path(rebuild_handles=False)
         super().hoverLeaveEvent(event)
+
+    # ── Drag de segmento ortogonal (estilo Visio/Word) ──────────
+
+    SEG_HIT_TOL = 7.0     # px: media banda del stroker de shape() (12px)
+
+    @staticmethod
+    def _segment_at(nodes, scene_pos, tol=None):
+        """(idx, orient) del segmento ortogonal de `nodes` más cercano
+        a scene_pos dentro de `tol` px, o (None, None).
+
+        nodes: [(x, y), ...] — polyline.  idx refiere al segmento
+        nodes[idx] → nodes[idx+1].  orient: 'h' | 'v'.  Los segmentos
+        no ortogonales (diagonales) se ignoran."""
+        if tol is None:
+            tol = StreamItem.SEG_HIT_TOL
+        px, py = scene_pos.x(), scene_pos.y()
+        best, best_orient, best_d = None, None, tol
+        for i in range(len(nodes) - 1):
+            x1, y1 = nodes[i]
+            x2, y2 = nodes[i + 1]
+            if abs(y1 - y2) < 1e-6 and abs(x2 - x1) > 1e-6:      # horizontal
+                if min(x1, x2) - 2.0 <= px <= max(x1, x2) + 2.0:
+                    d = abs(py - y1)
+                    if d < best_d:
+                        best, best_orient, best_d = i, "h", d
+            elif abs(x1 - x2) < 1e-6 and abs(y2 - y1) > 1e-6:    # vertical
+                if min(y1, y2) - 2.0 <= py <= max(y1, y2) + 2.0:
+                    d = abs(px - x1)
+                    if d < best_d:
+                        best, best_orient, best_d = i, "v", d
+        return best, best_orient
+
+    def _node_list(self):
+        """Polyline del MODELO: [puerto src] + waypoints + [puerto dst]
+        en coords de escena (sin el gap visual de la flecha)."""
+        s = self.model
+        b_src = self.fs.blocks.get(s.src)
+        b_dst = self.fs.blocks.get(s.dst)
+        if b_src is not None:
+            _, x1, y1 = self._resolve_port(b_src, s.src_port, "right")
+        elif s.start_xy and len(s.start_xy) >= 2:
+            x1, y1 = float(s.start_xy[0]), float(s.start_xy[1])
+        else:
+            return []
+        if b_dst is not None:
+            _, x2, y2 = self._resolve_port(b_dst, s.dst_port, "left")
+        elif s.end_xy and len(s.end_xy) >= 2:
+            x2, y2 = float(s.end_xy[0]), float(s.end_xy[1])
+        else:
+            return []
+        return [(x1, y1)]             + [(float(w[0]), float(w[1])) for w in (s.waypoints or [])]             + [(x2, y2)]
+
+    def _begin_segment_drag(self, scene_pos) -> bool:
+        """Detecta el segmento dibujado bajo scene_pos y arma el estado
+        del drag.  NO muta el modelo todavía: el bake de waypoints se
+        difiere al primer mouseMove real (_move_segment_to), para que
+        un simple click de selección no congele el autoroute del
+        stream.  Devuelve False si no hay segmento ortogonal cerca."""
+        pts = getattr(self, "_last_pts", None)
+        if not pts or len(pts) < 4:
+            return False
+        nodes = [(pts[i], pts[i + 1]) for i in range(0, len(pts), 2)]
+        idx, orient = self._segment_at(nodes, scene_pos)
+        if idx is None:
+            return False
+        self._seg_drag = {"idx": idx, "orient": orient, "baked": False,
+                          "press": (scene_pos.x(), scene_pos.y())}
+        return True
+
+    def _bake_segment_drag(self):
+        """Primer move del drag: materializa la ruta DIBUJADA como
+        waypoints, desacoplando ambos extremos con un waypoint-ancla
+        ortogonalizador (ver comentario ANCLAS abajo).  Los puertos
+        nunca se mueven; el primer/último tramo se ajusta vía su
+        ancla, perpendicular — jamás inclinado.
+
+        Los bends de _last_pts ya están simplificados (alternan H/V),
+        así que los vecinos del segmento arrastrado son
+        perpendiculares por construcción y solo se alargan/acortan."""
+        sd = self._seg_drag
+        pts = self._last_pts
+        nodes_model = self._node_list()
+        p0 = nodes_model[0]            # puerto/extremo real de origen
+        p1 = nodes_model[-1]           # puerto/extremo real de destino
+        wps = [[pts[i], pts[i + 1]] for i in range(2, len(pts) - 2, 2)]
+        # ANCLAS: la ruta dibujada no arranca exactamente en el puerto
+        # (gap visual de flecha + lane-offset la corren algunos px) —
+        # bakear el interior a secas dejaría un enlace DIAGONAL
+        # puerto→primer bend.  El ancla es la proyección del puerto
+        # sobre la línea del primer/último segmento dibujado: el
+        # enlace puerto→ancla queda perpendicular (o colineal) al
+        # segmento.  Además funciona de stub: al arrastrar el primer/
+        # último segmento, el puerto NO se mueve — el ancla absorbe
+        # el desplazamiento.
+        first_h = abs(pts[3] - pts[1]) < 1e-6
+        anchor0 = [p0[0], pts[1]] if first_h else [pts[0], p0[1]]
+        last_h = abs(pts[-1] - pts[-3]) < 1e-6
+        anchor1 = [p1[0], pts[-1]] if last_h else [pts[-2], p1[1]]
+        self.model.waypoints = [anchor0] + wps + [anchor1]
+        # el ancla prependida corre todos los segmentos dibujados +1
+        sd["idx"] = sd["idx"] + 1
+        sd["baked"] = True
+
+    def _move_segment_to(self, scene_pos):
+        """Mueve el segmento en drag PERPENDICULAR a su dirección con
+        snap a grilla, ajustando los dos waypoints que lo delimitan.
+        Segmento horizontal solo se mueve en Y; vertical solo en X."""
+        sd = self._seg_drag
+        if not sd["baked"]:
+            # umbral de drag: ignorar jitter (<3px perpendiculares) —
+            # un click sin arrastre real no debe bakear el autoroute
+            px, py = sd["press"]
+            perp = abs(scene_pos.y() - py) if sd["orient"] == "h"                 else abs(scene_pos.x() - px)
+            if perp < 3.0:
+                return
+            self._bake_segment_drag()
+        wps = self.model.waypoints
+        i = sd["idx"]                  # nodes[i] == wps[i-1]
+        if not (1 <= i < len(wps)):    # se necesitan wps[i-1] y wps[i]
+            return
+        if sd["orient"] == "h":
+            val = round(scene_pos.y() / GRID_STEP) * GRID_STEP
+            wps[i - 1][1] = val
+            wps[i][1] = val
+        else:
+            val = round(scene_pos.x() / GRID_STEP) * GRID_STEP
+            wps[i - 1][0] = val
+            wps[i][0] = val
+        self.update_path(rebuild_handles=False)
 
     def _draw_direction_arrows(self, pts: list):
         """Dibuja pequeños chevrons '>' a lo largo del path indicando
@@ -3935,6 +4314,8 @@ class StreamItem(QGraphicsPathItem):
                     arr.setBrush(QBrush(color))
                     arr.setPen(QPen(Qt.NoPen))
                     arr.setZValue(5.3)
+                    # decorativo — no participa del hit-testing
+                    arr.setAcceptedMouseButtons(Qt.NoButton)
                     scene.addItem(arr)
                     self.direction_arrows.append(arr)
                     break
@@ -3958,12 +4339,41 @@ class StreamItem(QGraphicsPathItem):
                       if b_src else "(sin conectar)")
         dst_label = (f"{b_dst.name} ({s.dst_port or 'auto'})"
                       if b_dst else "(sin conectar)")
+        # ── Fase con marca del verificador (FASE 2) + badge AUTO (FASE 4) ──
+        phase_txt = s.phase or "—"
+        if s.phase:
+            if not getattr(s, "phase_locked", False):
+                # fase inferida por el solver (no declarada) → AUTO
+                phase_txt = f"{s.phase} {_auto_badge()}"
+            else:
+                try:
+                    from flowsheet_consistency_audit import check_stream_phase
+                    f = check_stream_phase(s)
+                except Exception:
+                    f = None
+                if f is not None:
+                    d = f.data or {}
+                    if "expected" in d:
+                        phase_txt = (f"{s.phase} ⚠ <span style='color:#b8860b;'>"
+                                     f"(flash da {d['expected']}, "
+                                     f"V={d.get('V_frac', 0):.2f})</span>")
+                    elif d.get("reason") == "melt":
+                        phase_txt = (f"{s.phase} <span style='color:#888;'>"
+                                     f"(fundido, fuera de VLE)</span>")
+        # ── T con badge AUTO si fue inferida (no locked) ──
+        t_txt = f"{s.temperature:g} °C"
+        if not getattr(s, "temperature_locked", False):
+            t_txt = f"{t_txt} {_auto_badge()}"
+        # ── P con sufijo spec/AUTO (FASE 2 + FASE 4) ──
+        p_bar = float(getattr(s, "pressure_bar", 0.0) or 0.0)
+        p_tag = _auto_badge() if _pressure_origin_is_auto(s) else _spec_tag()
         lines = [
             f"<b>{s.name}</b>",
             f"<span style='color:#666;'>{src_label} → {dst_label}</span>",
-            f"Rol: {s.role}  ·  Fase: {s.phase or '—'}",
+            f"Rol: {s.role}  ·  Fase: {phase_txt}",
             f"Flujo: <b>{s.mass_flow:g}</b> tm/año",
-            f"T = {s.temperature:g} °C",
+            f"T = {t_txt}",
+            f"P = {p_bar:.2f} bar {p_tag}",
         ]
         # Composición — pieza nueva, antes faltaba.  Muestra cada
         # componente con su fracción másica > 0.1%.
@@ -3994,6 +4404,9 @@ class StreamItem(QGraphicsPathItem):
 
     def update_path(self, rebuild_handles=True):
         s = self.model
+        # HOTFIX P0: traslación rígida durante un block/group-drag.
+        # Fuera del drag _rigid_drag_active es False → ruta completa de siempre.
+        _rigid = bool(getattr(self.editor, "_rigid_drag_active", False))
         b_src = self.fs.blocks.get(s.src)
         b_dst = self.fs.blocks.get(s.dst)
         # Endpoint START: si block_src existe, lo tomamos del puerto;
@@ -4022,17 +4435,27 @@ class StreamItem(QGraphicsPathItem):
             pts.append(y2)
         elif b_src is not None and b_dst is not None:
             pts = self._compute_polyline(b_src, b_dst, s)
+            # HOTFIX P0: durante un group/block-drag (_rigid) se omite el
+            # routing obstacle-aware — traslación rígida barata.  El re-route
+            # completo ocurre al soltar.  Fuera del drag se ejecuta la lógica
+            # de avoidance/lane de siempre.
             # PADDING-AWARE ROUTING — modificar pts para que NO atraviese
             # los SVGs de los bloques ajenos (no src ni dst).  Las
             # tuberías rodean por arriba/abajo/izq/der según menor
             # costo Manhattan.  Padding 12px ≈ 3× ancho de stream.
-            if self.editor is not None:
+            if self.editor is not None and not _rigid:
                 obstacles = []
                 for bid, item in self.editor.block_items_iter():
                     if bid == s.src or bid == s.dst:
                         continue
                     bm = item.model
-                    w, h = pfd.block_dims(bm.eq_type)
+                    # dims VISUALES del BlockItem (ISA glyph escalado),
+                    # no las del catálogo pfd: el bloque se dibuja y
+                    # ancla puertos con item.W×item.H — usar otras
+                    # dimensiones dejaba rutas "limpias" en el espacio
+                    # del modelo que atravesaban el bloque dibujado.
+                    w = float(getattr(item, "W", 0)) or                         pfd.block_dims(bm.eq_type)[0]
+                    h = float(getattr(item, "H", 0)) or                         pfd.block_dims(bm.eq_type)[1]
                     obstacles.append((bm.x, bm.y, w, h))
                 if obstacles:
                     pts = _avoid_obstacles(pts, obstacles, padding=12)
@@ -4049,7 +4472,8 @@ class StreamItem(QGraphicsPathItem):
                         other_paths.append((other_item.model.id, other_pts))
                 if other_paths:
                     pts = _apply_lane_offset(pts, other_paths, s.id,
-                                               lane_step=10.0, min_dist=8.0)
+                                               lane_step=10.0, min_dist=8.0,
+                                               obstacles=obstacles)
         else:
             # Sin waypoints y al menos un endpoint flotante: línea recta
             pts = [x1, y1, x2, y2]
@@ -4095,7 +4519,7 @@ class StreamItem(QGraphicsPathItem):
         #      con id MAYOR dibuja el hop — así cada cruce tiene
         #      solo una curvita, no dos superpuestas.
         hops = []
-        if self.scene() is not None and self.editor is not None:
+        if self.scene() is not None and self.editor is not None and not _rigid:
             try:
                 for other_sid, other_item in self.editor.stream_items_iter():
                     if other_item is self:
@@ -4495,21 +4919,23 @@ class StreamItem(QGraphicsPathItem):
         """Inicia drag-translate de toda la flecha al hacer click sobre
         ella (no sobre un handle).
 
-        EXCEPCIÓN: si el stream está fully-connected (src y dst en bloques)
-        Y no tiene waypoints, NO hay nada que mover (los endpoints siguen
-        a los bloques, no hay bend points editables). En ese caso NO
-        interceptamos el click: dejamos que Qt haga la selección normal,
-        para que rubber-band + drag de un bloque vecino mueva el conjunto
-        sin que esta flecha 'absorba' el click y bloquee el group-drag."""
+        Full-conectado (src y dst en bloques): drag de SEGMENTO estilo
+        Visio — el segmento bajo el cursor se mueve perpendicular a su
+        dirección preservando ortogonalidad (ver _begin_segment_drag).
+        Si no hay segmento ortogonal bajo el cursor, selección normal
+        via super() para no bloquear el rubber band / group-drag."""
         if event.button() == Qt.LeftButton:
             s = self.model
             has_floating = (s.src == -1 or s.dst == -1)
-            has_waypoints = bool(s.waypoints)
-            if not has_floating and not has_waypoints:
-                # Fully-connected, sin waypoints — nada que arrastrar.
-                # Selección por defecto via super(), no consumimos el evento.
+            if not has_floating:
+                if self._begin_segment_drag(event.scenePos()):
+                    self.setSelected(True)
+                    event.accept()
+                    return
                 super().mousePressEvent(event)
                 return
+            # Flotante: drag-translate de toda la flecha (comportamiento
+            # original — el endpoint libre no tiene segmentos anclados).
             self.setSelected(True)
             self._drag_origin = event.scenePos()
             self._drag_snap = self._translation_snapshot()
@@ -4518,6 +4944,10 @@ class StreamItem(QGraphicsPathItem):
         super().mousePressEvent(event)
 
     def mouseMoveEvent(self, event):
+        if getattr(self, "_seg_drag", None) is not None:
+            self._move_segment_to(event.scenePos())
+            event.accept()
+            return
         if getattr(self, "_drag_origin", None) is not None:
             delta = event.scenePos() - self._drag_origin
             dx = round(delta.x() / GRID_STEP) * GRID_STEP
@@ -4528,6 +4958,17 @@ class StreamItem(QGraphicsPathItem):
         super().mouseMoveEvent(event)
 
     def mouseReleaseEvent(self, event):
+        if getattr(self, "_seg_drag", None) is not None:
+            baked = self._seg_drag.get("baked", False)
+            self._seg_drag = None
+            if baked:
+                # hubo drag real: re-render con handles sobre la ruta
+                # editada (los stubs colineales los limpia el
+                # _simplify_orthogonal del render; el modelo conserva
+                # la ruta del usuario).
+                self.update_path(rebuild_handles=True)
+            event.accept()
+            return
         if getattr(self, "_drag_origin", None) is not None:
             self._drag_origin = None
             self._drag_snap = None
@@ -4747,6 +5188,8 @@ class _PaperFrame(QGraphicsItemGroup):
                  drawing_no="PFD-100-001", rev="A", date=None):
         super().__init__()
         self.setZValue(-100)
+        # decorativo puro: no participa del hit-testing (rubber band)
+        self.setAcceptedMouseButtons(Qt.NoButton)
         self._project_title = project_title
         self._area          = area
         self._drawing_no    = drawing_no
@@ -4770,11 +5213,13 @@ class _PaperFrame(QGraphicsItemGroup):
         item = QGraphicsRectItem(x, y, w, h, parent or self)
         item.setPen(QPen(self._BLACK, stroke_w))
         item.setBrush(QBrush(fill) if fill else QBrush(Qt.NoBrush))
+        item.setAcceptedMouseButtons(Qt.NoButton)
         return item
 
     def _add_line(self, x1, y1, x2, y2, stroke_w=0.8, color=None, parent=None):
         item = QGraphicsLineItem(x1, y1, x2, y2, parent or self)
         item.setPen(QPen(color or self._BLACK, stroke_w))
+        item.setAcceptedMouseButtons(Qt.NoButton)
         return item
 
     def _add_text(self, x, y, text, font, color=None, parent=None):
@@ -4782,6 +5227,7 @@ class _PaperFrame(QGraphicsItemGroup):
         t.setFont(font)
         t.setBrush(QBrush(color or self._BLACK))
         t.setPos(x, y)
+        t.setAcceptedMouseButtons(Qt.NoButton)
         return t
 
     # ---------- partes ----------
@@ -4927,11 +5373,15 @@ class FlowsheetScene(QGraphicsScene):
             line = QGraphicsLineItem(x, y0, x, y1)
             line.setPen(pen)
             line.setZValue(-100)
+            # decorativa: nunca participa del hit-testing (el press en
+            # zona vacía debe iniciar el rubber band, no morir aquí)
+            line.setAcceptedMouseButtons(Qt.NoButton)
             self.addItem(line)
         for y in range(y0, y1 + step, step):
             line = QGraphicsLineItem(x0, y, x1, y)
             line.setPen(pen)
             line.setZValue(-100)
+            line.setAcceptedMouseButtons(Qt.NoButton)
             self.addItem(line)
 
     def clear_flowsheet(self):
@@ -5232,6 +5682,13 @@ class FlowsheetMainWindow(QMainWindow):
         self._suppress_snapshot = False
         # snapshot 'antes' del drag de bloques (se pushea al release)
         self._drag_before_snapshot = None
+        # HOTFIX P0 group-drag: durante el arrastre de un bloque (o de una
+        # selección múltiple) las corrientes se trasladan de forma RÍGIDA —
+        # sin _avoid_obstacles / lane offset / jumpers — para evitar el costo
+        # O(n²) por píxel que colgaba la app con selección densa.  Un único
+        # re-routing completo se ejecuta al soltar (BlockItem.mouseRelease).
+        # False fuera de un drag → comportamiento idéntico al previo.
+        self._rigid_drag_active = False
 
         # Docks se construyen ANTES del toolbar para que éste pueda
         # tomar sus toggleViewAction() y mostrarlos como botones.
@@ -6637,6 +7094,10 @@ class FlowsheetMainWindow(QMainWindow):
             self._bubble_manager.refresh_all()
         if self._hx_bubble_manager is not None:
             self._hx_bubble_manager.refresh_all()
+        # FASE 3.5: refrescar la sección de propiedades calculadas del inspector
+        # (si está abierta y activa) con los valores recién resueltos.
+        if getattr(self, "_stream_inspector_dock", None) is not None:
+            self._stream_inspector_dock.refresh_calc()
         # auditar conexiones semánticas
         sem_issues = fval.validate_all_streams(self.fs)
         # mostrar resumen en el diálogo visual de resultado
@@ -7468,6 +7929,11 @@ class FlowsheetMainWindow(QMainWindow):
                 item = self.scene.stream_items.get(s.id)
                 if item is not None:
                     item.update_path(rebuild_handles=False)
+        # HOTFIX P0: durante un block/group-drag se OMITE el Pass-2 global
+        # (O(n²) por píxel que colgaba la app).  El re-route completo con
+        # jumpers se hace UNA vez al soltar (BlockItem.mouseReleaseEvent).
+        if getattr(self, "_rigid_drag_active", False):
+            return
         # Pass 2: refresh global de paths para que jumpers se recalculen
         self._refresh_all_stream_paths()
 
@@ -7570,8 +8036,11 @@ class FlowsheetMainWindow(QMainWindow):
                 try:
                     import stream_enthalpy as _se
                     dH = _se.block_delta_h_kW(ins, outs)
-                    txt += (f"\nΔH (in→out) {('+' if dH > 0 else '')}"
-                            f"{funits.fmt_energy(dH)}  (térmico)")
+                    if dH is None:
+                        txt += "\nΔH (in→out) n/d  (térmico)"
+                    else:
+                        txt += (f"\nΔH (in→out) {('+' if dH > 0 else '')}"
+                                f"{funits.fmt_energy(dH)}  (térmico)")
                 except Exception:
                     pass
             # ---- Diseño FUG automático para columnas ----

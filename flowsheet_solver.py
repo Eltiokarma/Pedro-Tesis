@@ -146,6 +146,17 @@ class SolverResult:
     # mínimo violado, F<0.75, cross-exchange que no cierra energía).
     # No degradan success — son advisory de diseño.
     hx_warnings:         List[str]          = field(default_factory=list)
+    # Conciencia física del solver (PR-A): warnings advisory tagged
+    # [W-...] que EXPONEN inconsistencias físicas latentes sin corregir
+    # ningún balance — cierre de energía por bloque, T de descarga de
+    # compresor, T declarada pisada, duty espurio en equipo pasivo,
+    # reactor estructural placeholder, flujo lockeado vs fracción de
+    # splitter, duty>S, signo de duty.  Canal SEPARADO de energy_warnings
+    # a propósito: NO alteran overall_status (un warning no debe cambiar
+    # el estado golden — invariante de regresión), pero SÍ se renderizan
+    # en solver_report para que el usuario los vea.  Cada línea lleva un
+    # tag estable para grepear en tests.
+    awareness_warnings:  List[str]          = field(default_factory=list)
     # Diagnósticos de diseño térmico por HX (block_id → dict con U_used,
     # dTlm, F, cross_check, warnings).  Lo puebla solve() corriendo
     # size_heat_exchanger sobre cada HX (respeta S_locked: computa los
@@ -153,6 +164,11 @@ class SolverResult:
     hx_diagnostics:     Dict[int, dict]     = field(default_factory=dict)
     cycles_detected:    List[List[str]]     = field(default_factory=list)
     recycle_solutions:  List[RecycleSolution] = field(default_factory=list)
+    # Lazos de circulación de servicio (bomba→header→HX, 100% aristas
+    # auto_aux) exentos del tearing Wegstein: su caudal es analítico
+    # (m = Q/(cp·ΔT) desde el duty, via size_utility_streams).  Líneas
+    # informativas ya formateadas para summary()/UI.
+    service_loops:      List[str]           = field(default_factory=list)
 
     # Estados por bloque y por stream para colorización en la UI.
     # Llave: id del bloque/stream.  Valor: 'ok' | 'warning' | 'error' |
@@ -195,6 +211,11 @@ class SolverResult:
             for cyc in self.cycles_detected:
                 lines.append(f"  · {' → '.join(cyc)} → (back)")
 
+        if self.service_loops:
+            lines.append("")
+            for sl in self.service_loops:
+                lines.append(sl)
+
         if self.recycle_solutions:
             lines.append("")
             for rs in self.recycle_solutions:
@@ -234,6 +255,12 @@ class SolverResult:
             lines.append(f"\nWarnings de intercambiadores "
                           f"({len(self.hx_warnings)}):")
             for w in self.hx_warnings:
+                lines.append(f"  · {w}")
+
+        if self.awareness_warnings:
+            lines.append(f"\nConciencia física del solver "
+                          f"({len(self.awareness_warnings)}):")
+            for w in self.awareness_warnings:
                 lines.append(f"  · {w}")
 
         if self.audit_report:
@@ -529,6 +556,16 @@ def _reset_propagated_values(fs):
     """
     from flowsheet_model import T_REF_C
     for s in fs.streams.values():
+        # [W-T-OVERRIDE] captura runtime (NO persistida) de la T que el
+        # stream traía del JSON ANTES de que el solver la pise.  Se guarda
+        # una sola vez (la primera corrida sobre el fs recién cargado), de
+        # modo que re-solves idempotentes no la sobreescriban con la T ya
+        # propagada.  La consume _compute_awareness_warnings.
+        if not hasattr(s, "_t_declared"):
+            try:
+                s._t_declared = s.temperature
+            except Exception:
+                pass
         if not _is_mass_locked(s):
             s.mass_flow = 0.0
         if not _is_temp_locked(s):
@@ -1044,136 +1081,23 @@ def _size_heat_exchangers(fs, result):
 # SOLVER DE ENERGÍA — propagación de T por closure
 # ======================================================
 
-def _resolve_cp(s, T_eval=None):
-    """Devuelve el Cp (kJ/kg·K) de un stream a la temperatura T_eval
-    (default = s.temperature).
-
-    Prioridad:
-      1. THERMO_DB (DIPPR-100 polinomio cuártico, mucho más preciso a
-         alta T) — si el componente está cubierto.
-      2. components.py legacy (Cp lineal) — fallback para componentes
-         no en thermo_db (genéricos, etc.).
-      3. s.cp > 0 (override manual) — constante.
-      4. None.
-    """
-    if T_eval is None:
-        T_eval = s.temperature
-    phase = s.phase or "liquid"
-
-    # --- Prioridad 1: thermo_db (DIPPR) ---
-    try:
-        import thermo_db as _td
-    except ImportError:
-        _td = None
-    if _td is not None:
-        if s.composition:
-            cp = _td.cp_mix_kJ_kg_K(s.composition, T_eval, phase)
-            if cp > 0:
-                return cp
-        if s.main_component:
-            cp = _td.cp_kJ_kg_K(s.main_component, T_eval, phase)
-            if cp is not None and cp > 0:
-                return cp
-
-    # --- Prioridad 2: components.py legacy (Cp lineal) ---
-    try:
-        import components as comp_mod
-    except ImportError:
-        comp_mod = None
-    if comp_mod is not None:
-        if s.composition:
-            cp = comp_mod.cp_mix_kJ_kg_K(s.composition, T_eval, phase)
-            if cp > 0:
-                return cp
-        if s.main_component:
-            c = comp_mod.get(s.main_component)
-            if c is not None:
-                return c.cp(T_eval, phase)
-
-    if s.cp > 0:
-        return s.cp
-    return None
-
-
-def _resolve_dh_vap(s):
-    """ΔH_vap de un stream (kJ/kg).  None si no se puede calcular.
-
-    Prioridad:
-      1. s.delta_h_vap_override (manual del user).
-      2. THERMO_DB (Clausius-Clapeyron derivado de Antoine — varía con T).
-      3. components.py legacy (constante en Tb).
-    """
-    if s.delta_h_vap_override > 0:
-        return s.delta_h_vap_override
-
-    T_eval = s.temperature
-
-    # --- Prioridad 1: thermo_db (Clausius-Clapeyron) ---
-    try:
-        import thermo_db as _td
-    except ImportError:
-        _td = None
-    if _td is not None:
-        if s.composition:
-            dh = _td.delta_h_vap_mix_kJ_kg(s.composition, T_eval)
-            if dh > 0:
-                return dh
-        if s.main_component:
-            dh = _td.delta_h_vap_kJ_kg(s.main_component, T_eval)
-            if dh is not None and dh > 0:
-                return dh
-
-    # --- Prioridad 2: components.py legacy ---
-    try:
-        import components as comp_mod
-    except ImportError:
-        return None
-    if s.composition:
-        dh = comp_mod.delta_h_vap_mix(s.composition)
-        if dh > 0:
-            return dh
-    if s.main_component:
-        c = comp_mod.get(s.main_component)
-        if c is not None:
-            return c.dh_vap
-    return None
-
-
-def _stream_enthalpy_kW(s):
-    """Entalpía total de una corriente referida a T_REF_C, kW.
-    Incluye:
-      · sensible heat: m·Cp·(T - T_REF)
-      · latente: si phase = 'vapor', sumar ΔH_vap completo
-                 si phase = 'two_phase', sumar vapor_fraction × ΔH_vap
-
-    Cp se evalúa a la temperatura promedio entre T_REF y T (mejor
-    aproximación que evaluar en T sola, para Cp(T) variable).
-    """
-    if s.mass_flow <= 0:
-        return None
-
-    # Cp a T promedio (mejora vs evaluar solo en T)
-    T_avg = (s.temperature + T_REF_C) / 2.0
-    cp = _resolve_cp(s, T_eval=T_avg)
-    if cp is None or cp <= 0:
-        return None
-
-    m_kg_s = (s.mass_flow * TM_TO_KG) / SEC_PER_YEAR
-    h_sensible = m_kg_s * cp * (s.temperature - T_REF_C)
-
-    # contribución latente si hay cambio de fase respecto al estado
-    # de referencia (líquido a T_REF).
-    h_latent = 0.0
-    if s.phase in ("vapor", "gas"):
-        dh = _resolve_dh_vap(s)
-        if dh is not None:
-            h_latent = m_kg_s * dh
-    elif s.phase == "two_phase":
-        dh = _resolve_dh_vap(s)
-        if dh is not None:
-            h_latent = m_kg_s * s.vapor_fraction * dh
-
-    return h_sensible + h_latent
+# ──────────────────────────────────────────────────────────────────────
+# Entalpía de corriente — FUENTE ÚNICA en stream_enthalpy.py (PR-C).
+#
+# _resolve_cp / _resolve_dh_vap / _stream_enthalpy_kW eran la versión
+# CANÓNICA (resolvía cp a T promedio, latente por fase, two_phase con
+# vapor_fraction y fallbacks main_component / components.py / overrides).
+# Se movieron tal cual a stream_enthalpy.py para que la UI (bubbles,
+# inspector, flowsheet_qt) consuma EXACTAMENTE los mismos números que el
+# solver — antes la copia de la UI caía a 0 silencioso en ~8/12 streams.
+# Acá sólo se re-exportan con los nombres internos que usa el resto del
+# solver; el cuerpo es idéntico al anterior (goldens byte-idénticos).
+# ──────────────────────────────────────────────────────────────────────
+from stream_enthalpy import (                                  # noqa: E402
+    _resolve_cp,
+    _resolve_dh_vap,
+    stream_enthalpy_kW as _stream_enthalpy_kW,
+)
 
 
 def _compressible_props(comp: dict, T_K: float):
@@ -2776,14 +2700,44 @@ def solve_flashes(fs):
                        if s.mass_flow > 0 and (s.composition or {})), None)
         if feed is None:
             continue
-        names = list(feed.composition.keys())
-        if len(names) < 2:
+        all_names = list(feed.composition.keys())
+        if len(all_names) < 2:
             continue
-        z = [feed.composition[c] for c in names]
+        # Separar VOLÁTILES (con Antoine) de NO-VOLÁTILES (azúcares, sólidos
+        # sin presión de vapor: glucosa, sacarosa…).  El NRTL sólo modela los
+        # volátiles; un no-volátil metido en el Rachford-Rice con un Psat≈0
+        # distorsiona la conversión mol→masa y "concentra" mal el componente
+        # (p.ej. glucosa subía 9×).  Los no-volátiles van ENTEROS al líquido.
+        try:
+            import thermo_db as _td
+        except ImportError:
+            _td = None
+
+        def _mw(c):
+            comp = _td.get(c) if _td is not None else None
+            return comp.mw if (comp and comp.mw > 0) else 1.0
+
+        def _is_volatile(c):
+            comp = _td.get(c) if _td is not None else None
+            return (comp is not None and comp.antoine_A is not None
+                    and comp.antoine_B is not None and comp.antoine_C is not None)
+
+        vol_names = [c for c in all_names if _is_volatile(c)]
+        nonvol_names = [c for c in all_names if c not in vol_names]
+        if len(vol_names) < 2:
+            continue   # sin suficientes volátiles no hay flash que resolver
+        mws = [_mw(c) for c in vol_names]
+        # feed.composition son fracciones MÁSICAS; flash_TP espera fracciones
+        # MOLARES.  Convertir (zᵢ_mol ∝ wᵢ/MWᵢ) — antes se pasaban másicas como
+        # molares, inflando CO2/etanol en el Rachford-Rice.
+        z_moles = [feed.composition[vol_names[i]] / mws[i]
+                   for i in range(len(vol_names))]
+        zt = sum(z_moles) or 1.0
+        z = [zm / zt for zm in z_moles]
         T_K = b.flash_T_K or (feed.temperature + 273.15)
         P_bar = b.flash_P_bar or 1.013
         try:
-            res = _nrtl.flash_TP(names, z, T_K, P_bar)
+            res = _nrtl.flash_TP(vol_names, z, T_K, P_bar)
         except Exception as e:
             msgs.append(f"✗ Flash {b.name}: {type(e).__name__}: {e}")
             continue
@@ -2799,43 +2753,50 @@ def solve_flashes(fs):
         liq_out = next((s for s in outs if s is not vap_out), None)
         if vap_out is None:
             vap_out, liq_out = outs[0], outs[1]
-        # Convertir mass fractions → mass_flow
         V_frac = res["V_frac"]
-        # Para masa: necesitamos MW para convertir mol→mass
-        try:
-            import thermo_db as _td
-            mws = []
-            for c in names:
-                comp = _td.get(c)
-                mws.append(comp.mw if comp and comp.mw > 0 else 1.0)
-        except ImportError:
-            mws = [1.0] * len(names)
-        # Masas en cada fase (relativas a F mol totales = 1)
-        L_mass = sum((1 - V_frac) * res["x"][i] * mws[i] for i in range(len(names)))
-        V_mass = sum(V_frac * res["y"][i] * mws[i] for i in range(len(names)))
+        # Masas de los VOLÁTILES en cada fase (base: 1 mol de volátiles),
+        # reescaladas a la masa volátil real del feed.
+        L_mass_v = sum((1 - V_frac) * res["x"][i] * mws[i] for i in range(len(vol_names)))
+        V_mass_v = sum(V_frac * res["y"][i] * mws[i] for i in range(len(vol_names)))
+        tot_v = L_mass_v + V_mass_v
+        if tot_v <= 0:
+            continue
+        vol_feed_mass = sum(feed.composition[c] for c in vol_names) * feed.mass_flow
+        scale = vol_feed_mass / tot_v
+        liq_masses = {vol_names[i]: (1 - V_frac) * res["x"][i] * mws[i] * scale
+                      for i in range(len(vol_names))}
+        vap_masses = {vol_names[i]: V_frac * res["y"][i] * mws[i] * scale
+                      for i in range(len(vol_names))}
+        # No-volátiles: masa completa del feed → líquido.
+        for c in nonvol_names:
+            liq_masses[c] = liq_masses.get(c, 0.0) + feed.composition[c] * feed.mass_flow
+        L_mass = sum(liq_masses.values())
+        V_mass = sum(vap_masses.values())
         total_mass = L_mass + V_mass
         if total_mass <= 0:
             continue
         L_frac_mass = L_mass / total_mass
         V_frac_mass = V_mass / total_mass
+        x_mass = {c: liq_masses[c] / L_mass for c in liq_masses} if L_mass > 0 else {}
+        y_mass = {c: vap_masses[c] / V_mass for c in vap_masses} if V_mass > 0 else {}
 
-        # Composiciones de salida en mass fractions
-        x_mass = {names[i]: ((1 - V_frac) * res["x"][i] * mws[i] / L_mass)
-                   for i in range(len(names))} if L_mass > 0 else {}
-        y_mass = {names[i]: (V_frac * res["y"][i] * mws[i] / V_mass)
-                   for i in range(len(names))} if V_mass > 0 else {}
-
+        # composition_locked en una salida = especificación del usuario (p.ej.
+        # composiciones recomputadas por balance para componentes que el NRTL
+        # no modela, como azúcares no volátiles).  Se RESPETA: el flash no la
+        # sobreescribe (antes la pisaba siempre → "creaba" glucosa/etanol).
         if vap_out is not None:
-            vap_out.composition = y_mass
-            vap_out.main_component = max(y_mass, key=y_mass.get) if y_mass else ""
+            if not getattr(vap_out, "composition_locked", False):
+                vap_out.composition = y_mass
+                vap_out.main_component = max(y_mass, key=y_mass.get) if y_mass else ""
             vap_out.phase = "vapor"
             if not _is_mass_locked(vap_out):
                 vap_out.mass_flow = feed.mass_flow * V_frac_mass
             if not _is_temp_locked(vap_out):
                 vap_out.temperature = T_K - 273.15
         if liq_out is not None:
-            liq_out.composition = x_mass
-            liq_out.main_component = max(x_mass, key=x_mass.get) if x_mass else ""
+            if not getattr(liq_out, "composition_locked", False):
+                liq_out.composition = x_mass
+                liq_out.main_component = max(x_mass, key=x_mass.get) if x_mass else ""
             liq_out.phase = "liquid"
             if not _is_mass_locked(liq_out):
                 liq_out.mass_flow = feed.mass_flow * L_frac_mass
@@ -2976,6 +2937,11 @@ def _seed_reactor_pressures(fs):
                 if attached and _proc(b, s):
                     s.pressure_bar = pop
                     s.pressure_locked = True
+                    # lock de origen SOLVER (no es spec del user ni heurística
+                    # de carga): el seed lo deriva de P_op_bar del bloque.
+                    if not getattr(s, "pressure_lock_origin", "") or \
+                            s.pressure_lock_origin == "heuristic":
+                        s.pressure_lock_origin = "solver"
                     n += 1
     return n
 
@@ -3089,6 +3055,15 @@ def solve_pressure_hydraulic(fs, max_iter=8):
                 b.delta_p_bar = new_dp
                 sized_pumps.add(b.id)
                 any_sized = True
+                # FASE 2.4: recomputar el duty politrópico del rotativo con
+                # el ΔP recién dimensionado (sólo compresor/fan; las bombas
+                # ya tienen su propia ruta).  Sólo si NO está duty_locked.
+                if (("compressor" in eq_lower or "fan" in eq_lower)
+                        and not getattr(b, "duty_locked", False)):
+                    w = _auto_hydraulic_compressor_duty(b, fs)
+                    if w is not None:
+                        b.duty = w
+                        b.duty_origin = "auto-hidraulico"
                 in_recycle = b.id in blocks_in_recycle
                 rec_tag = " (en recycle)" if in_recycle else ""
                 msgs.append(
@@ -3108,6 +3083,42 @@ def solve_pressure_hydraulic(fs, max_iter=8):
     # falló por datos insuficientes (duty no actualizado).
     msgs.extend(_compressor_polytropic_warnings(fs))
     return msgs
+
+
+def _auto_hydraulic_compressor_duty(b, fs):
+    """FASE 2.4 — duty politrópico de un compresor/fan auto-dimensionado.
+
+    Usa el MISMO modelo isentrópico que el paso de energía
+    (compressor_sizing + _compressible_props), tomando la M de la mezcla
+    desde la composición MÁSICA del feed.  Devuelve W_elec_kW (>0) o None.
+    Se computa con el ΔP recién auto-dimensionado; el paso de energía lo
+    refina luego con la T propagada (valor final idéntico al previo →
+    golden-safe), pero deja la marca duty_origin='auto-hidraulico'."""
+    try:
+        from equipment_design import compressor_sizing
+        from flowsheet_model import SEC_PER_YEAR, TM_TO_KG
+    except Exception:
+        return None
+    ins = [s for s in fs.streams.values() if s.dst == b.id and s.mass_flow > 0]
+    if not ins:
+        return None
+    feed = ins[0]
+    comp = feed.composition or ({feed.main_component: 1.0}
+                                if feed.main_component else {})
+    if not comp:
+        return None
+    P_in = feed.pressure_bar if feed.pressure_bar > 0 else 1.013
+    P_out = P_in + float(getattr(b, "delta_p_bar", 0.0) or 0.0)
+    if P_out <= P_in:
+        return None
+    m_kg_s = feed.mass_flow * TM_TO_KG / SEC_PER_YEAR
+    mw_avg, k = _compressible_props(comp, feed.temperature + 273.15)
+    res = compressor_sizing(m_kg_s=m_kg_s, P_in_bar=P_in, P_out_bar=P_out,
+                            T_in_K=feed.temperature + 273.15, mw_avg=mw_avg,
+                            k=k, eta_isen=(b.efficiency or 0.75))
+    if not res or res.get("W_act_kW", 0) <= 0:
+        return None
+    return res["W_act_kW"]
 
 
 def _find_downstream_target(fs, start_block_id, _pd):
@@ -4369,6 +4380,28 @@ def _is_recycle_scc(scc_block_ids, fs):
     return False
 
 
+def _is_pure_service_scc(scc_block_ids, fs):
+    """True si el SCC existe SOLO vía corrientes auto_aux: es un lazo
+    de CIRCULACIÓN DE SERVICIO (bomba→header→HX de cooling water /
+    steam, creado por equipment_auxiliaries), no un reciclo de proceso.
+
+    Un lazo así NO se resuelve por tear+Wegstein: no tiene feed externo
+    (el balance en sus bloques da 0 con las auto_aux excluidas de la
+    propagación) y su caudal es ANALÍTICO — m = Q/(cp·ΔT) desde el duty
+    del HX, fijado por size_utility_streams.  Correr Wegstein producía
+    el warning espurio "NO convergió (1 iter)" con el guess inicial.
+
+    Criterio CONSERVADOR: todas las aristas internas del SCC deben ser
+    auto_aux y debe haber al menos una.  Un SCC mixto (cualquier
+    corriente de proceso en el ciclo) no se exime — va a Wegstein como
+    siempre.  Nótese que los BLOQUES del lazo incluyen al HX de proceso
+    (no es auto_aux): por eso el criterio es sobre las corrientes, no
+    sobre los bloques."""
+    streams = _streams_in_scc(scc_block_ids, fs)
+    return bool(streams) and all(getattr(s, "auto_aux", False)
+                                 for s in streams)
+
+
 def _streams_in_scc(scc_block_ids, fs):
     """Streams cuyos src y dst están ambos en el SCC."""
     bids = set(scc_block_ids)
@@ -4376,13 +4409,73 @@ def _streams_in_scc(scc_block_ids, fs):
             if s.src in bids and s.dst in bids]
 
 
-def _choose_tear(scc_streams):
-    """Heurística: primer stream sin mass_flow declarado.
-    Si todos declarados, devuelve None (no hace falta tear)."""
+def _choose_tear(scc_streams, fs=None, scc_block_ids=None):
+    """Elige el stream a tearear en un reciclo.
+
+    Criterio reaction-aware (PR-G1): preferir el BACK-EDGE que cierra el
+    ciclo — el stream del SCC cuyo bloque destino TAMBIÉN recibe un input
+    externo al SCC (el mixer donde el recycle se reincorpora al feed
+    fresco).  Ese es el recycle de diseño (p.ej. S-recycle→M-101 en
+    haber_rec), NO el primer stream con flujo 0 (que el heurístico viejo
+    elegía — típicamente S-mix, rompiendo el balance del loop).  Entre
+    varios candidatos, se prefiere el marcado con role recycle/internal.
+
+    Fallback (compat): primer stream sin mass_flow declarado.
+    """
+    if fs is not None and scc_block_ids is not None:
+        bids = set(scc_block_ids)
+
+        def _has_external_input(bid):
+            return any(s.src not in bids and s.dst == bid and s.mass_flow > 0
+                       for s in fs.streams.values())
+
+        back_edges = [s for s in scc_streams if _has_external_input(s.dst)]
+        if back_edges:
+            def _rank(s):
+                role = (getattr(s, "role", "") or "").lower()
+                return (role in ("recycle",), role in ("recycle", "internal"))
+            back_edges.sort(key=_rank, reverse=True)
+            return back_edges[0]
+
     unknowns = [s for s in scc_streams if s.mass_flow <= 0]
     if unknowns:
         return unknowns[0]
     return None
+
+
+def _nearest_external_feed(fs, scc_block_ids):
+    """El feed externo de mayor caudal que entra al SCC (para el guess
+    inicial de composición y T del tear)."""
+    bids = set(scc_block_ids)
+    cands = [s for s in fs.streams.values()
+             if s.src not in bids and s.dst in bids and s.mass_flow > 0]
+    if not cands:
+        return None
+    return max(cands, key=lambda s: s.mass_flow)
+
+
+def _wegstein_scalar(x_n, f_new, x_prev, f_prev, lo=-5.0, hi=0.9995):
+    """Paso Wegstein sobre un escalar.  Devuelve el próximo guess.
+
+    q = s/(s−1) con s = (f_new−f_prev)/(x_n−x_prev).  Si s ∉ (lo, hi) o
+    no hay historial, cae a sustitución directa (x_next = f_new).
+
+    Nota PR-G1: hi=0.9995 (no 0.99) — los reciclos CON REACCIÓN son
+    contracciones de factor cercano a 1 (p.ej. el lazo de amoníaco tiene
+    pendiente ≈0.99 por la purga pequeña); con el clamp viejo en 0.99 esos
+    casos caían a sustitución pura y NO convergían en 50 iter.  El método
+    Wegstein es exacto para mapas afines, así que acelerar pendientes
+    cercanas a 1 es seguro y es justo donde más se necesita."""
+    if x_prev is None:
+        return f_new
+    denom = x_n - x_prev
+    if abs(denom) < 1e-12:
+        return f_new
+    s = (f_new - f_prev) / denom
+    if lo < s < hi:
+        q = s / (s - 1.0)
+        return (1.0 - q) * f_new + q * x_n
+    return f_new
 
 
 def _initial_guess(fs, scc_block_ids, tear_stream):
@@ -4425,14 +4518,47 @@ def _balance_at_block(fs, block_id, exclude_stream_id=None):
     return sum_in - sum_out_otros
 
 
-def _solve_recycle_wegstein(fs, scc_block_ids,
-                            max_iter=25, tol=0.001):
-    """Resuelve un reciclo via tear + Wegstein.
+def _propagate_loop_with_chemistry(fs, max_inner=15):
+    """Propaga el flowsheet COMPLETO incluyendo la química, para una
+    iteración del tear: mixer (mass + composición mass-weighted), reactor
+    (reactions_db/equilibrio → cambia composición; mass conservada) y la
+    propagación de composición.  NO corre los splitters/separadores acá —
+    esos se usan DESPUÉS para recalcular el tear (ver _recompute_tear)."""
+    for _ in range(max_inner):
+        changed = bool(_solve_mass_iteration(fs))
+        auto_propagate_compositions(fs)
+        solve_equilibrium_reactors(fs)
+        auto_propagate_compositions(fs)
+        if not changed:
+            break
 
-    Returns RecycleSolution con history del tear, convergencia, etc.
+
+def _solve_recycle_wegstein(fs, scc_block_ids,
+                            max_iter=50, tol=0.001):
+    """Resuelve un reciclo via tear + Wegstein VECTORIAL (PR-G1).
+
+    A diferencia del Wegstein escalar viejo (que tearaba sólo mass_flow con
+    un balance Σin−Σout ciego a la reacción y elegía mal el tear), acá:
+
+      1. _choose_tear elige el BACK-EDGE de diseño (reaction-aware).
+      2. El estado del tear es un VECTOR {mass, composición, T}.
+      3. Cada iteración propaga el loop ENTERO con la química (mixer +
+         reactor de equilibrio/conversión) y RECALCULA el tear resolviendo
+         su bloque fuente (splitter/separador), NO con un balance ingenuo.
+      4. Convergencia por norma = max(|Δmass|/escala, max_i|Δx_i|, |ΔT|/esc).
+      5. Wegstein sobre el ESCALAR masa total (mapa afín limpio — converge
+         en pocos pasos); composición y T por sustitución directa (el lazo
+         con reacción fija la composición en ~1 paso).
+
+    Sólo se ejercita cuando el tear NO está lockeado (loops de diseño con
+    el recycle deslockeado).  Los 40 ejemplos con tear lockeado resuelven
+    por closure y nunca llegan acá (guard en solve()).
+
+    Returns RecycleSolution con la trayectoria de masa del tear.
     """
+    bids = set(scc_block_ids)
     scc_streams = _streams_in_scc(scc_block_ids, fs)
-    tear = _choose_tear(scc_streams)
+    tear = _choose_tear(scc_streams, fs, scc_block_ids)
     rs = RecycleSolution(
         cycle_blocks=[fs.blocks[bid].name for bid in scc_block_ids],
     )
@@ -4443,76 +4569,98 @@ def _solve_recycle_wegstein(fs, scc_block_ids,
 
     rs.tear_stream = tear.name
 
-    # guess inicial
-    guess = _initial_guess(fs, scc_block_ids, tear)
-    tear.mass_flow = guess
-    rs.history.append(guess)
+    # --- guess inicial del vector ---
+    feed = _nearest_external_feed(fs, scc_block_ids)
+    x_mass = _initial_guess(fs, scc_block_ids, tear)
+    if tear.composition:
+        x_comp = dict(tear.composition)
+    elif feed and feed.composition:
+        x_comp = dict(feed.composition)
+    else:
+        x_comp = {}
+    x_T = tear.temperature if tear.temperature else (
+        feed.temperature if feed else T_REF_C)
+    rs.history.append(x_mass)
 
-    # buffers para Wegstein
-    x_prev:     float = guess
-    f_prev:     float = guess
+    # buffers Wegstein (sólo masa)
+    xm_prev = None
+    fm_prev = None
 
     for it in range(max_iter):
-        # 1. Propagar el resto del flowsheet con el tear actual
-        _propagate_until_stable(fs)
+        # (a) limpiar los streams internos NO lockeados del SCC para que se
+        #     recomputen desde el tear inyectado (si no, _solve_mass_iteration
+        #     los ve "ya resueltos" y no los actualiza entre iteraciones).
+        for s in scc_streams:
+            if s.id != tear.id and not getattr(s, "mass_flow_locked", False):
+                s.mass_flow = 0.0
 
-        # 2. Calcular nuevo valor del tear: balance del bloque
-        #    cuya OUTPUT es el tear stream.
-        #
-        #    El tear pertenece al output del bloque tear.src:
-        #      sum(in tear.src) = tear.mass_flow + sum(otros out tear.src)
-        #      → tear_new = sum(in) - sum(otros out)
-        f_new = _balance_at_block(fs, tear.src, exclude_stream_id=tear.id)
+        # (b) inyectar el guess y CONGELAR el tear (lock temporal) para que
+        #     la propagación forward no lo pise antes de leer S-gases.
+        x_mass = max(x_mass, 1e-6)
+        tear.mass_flow = x_mass
+        if x_comp:
+            tear.composition = dict(x_comp)
+        tear.temperature = x_T
+        _was_locked = getattr(tear, "mass_flow_locked", False)
+        tear.mass_flow_locked = True
 
-        if f_new <= 0:
-            # algo está mal — break con no-converged
+        # (c) propagar el loop con química (mixer + reactor)
+        _propagate_loop_with_chemistry(fs)
+
+        # (d) recalcular el tear: desbloquear y dejar que su bloque fuente
+        #     (splitter/separador) lo produzca desde el estado POST-reacción.
+        tear.mass_flow_locked = _was_locked
+        tear.mass_flow = 0.0
+        solve_splitters(fs)
+        solve_flashes(fs)
+        solve_mechanical_separators(fs)
+        solve_columns(fs)
+        for _ in range(3):
+            if not _solve_mass_iteration(fs):
+                break
+        auto_propagate_compositions(fs)
+
+        f_mass = tear.mass_flow
+        f_comp = dict(tear.composition or {})
+        f_T = tear.temperature
+
+        # bloque fuente sin caudal recomputable → no se puede tearear
+        if f_mass <= 0:
             rs.converged = False
             rs.iterations = it + 1
-            rs.final_value = tear.mass_flow
+            rs.final_value = x_mass
             return rs
 
-        x_n = tear.mass_flow
+        # (e) norma de convergencia sobre el vector completo
+        scale = max(abs(x_mass), abs(f_mass), 1e-9)
+        d_mass = abs(f_mass - x_mass) / scale
+        keys = set(f_comp) | set(x_comp)
+        d_x = max((abs(f_comp.get(k, 0.0) - x_comp.get(k, 0.0))
+                   for k in keys), default=0.0)
+        d_T = abs(f_T - x_T) / max(abs(f_T), 1.0)
+        rs.history.append(f_mass)
 
-        # 3. Test de convergencia
-        diff = abs(f_new - x_n)
-        scale = max(abs(f_new), abs(x_n), 1e-9)
-        if diff / scale < tol:
-            tear.mass_flow = f_new
-            rs.history.append(f_new)
-            # propagar una vez más para que el resto del flowsheet
-            # use el valor final del tear
-            _propagate_until_stable(fs)
+        if max(d_mass, d_x, d_T) < tol:
+            x_mass, x_comp, x_T = f_mass, f_comp, f_T
             rs.converged = True
             rs.iterations = it + 1
-            rs.final_value = f_new
+            rs.final_value = f_mass
+            # propagación final con el tear convergido
+            tear.mass_flow = f_mass
+            tear.composition = dict(f_comp)
+            tear.temperature = f_T
             return rs
 
-        # 4. Wegstein update
-        if it == 0:
-            # primera iter: substitution directa
-            x_next = f_new
-        else:
-            denom = (x_n - x_prev)
-            if abs(denom) < 1e-12:
-                x_next = f_new
-            else:
-                s = (f_new - f_prev) / denom
-                # estabilizar: si s ∉ (−5, 1), usar substitution
-                if -5.0 < s < 0.99:
-                    q = s / (s - 1.0)
-                    x_next = (1.0 - q) * f_new + q * x_n
-                else:
-                    x_next = f_new
+        # (f) Wegstein sobre la masa total; composición/T por sustitución.
+        x_next = _wegstein_scalar(x_mass, f_mass, xm_prev, fm_prev)
+        xm_prev, fm_prev = x_mass, f_mass
+        x_mass = x_next
+        x_comp = f_comp
+        x_T = f_T
 
-        # actualizar buffers
-        x_prev, f_prev = x_n, f_new
-        tear.mass_flow = x_next
-        rs.history.append(x_next)
-
-    # no convergió
     rs.converged = False
     rs.iterations = max_iter
-    rs.final_value = tear.mass_flow
+    rs.final_value = x_mass
     return rs
 
 
@@ -4618,11 +4766,19 @@ def solve(fs, max_iter=MAX_ITER):
             break
     result.iterations = it + 1
 
-    # 3. Wegstein por reciclo no resuelto
+    # 3. Wegstein por reciclo no resuelto.  Los lazos PUROS de
+    #    servicio (todas las aristas auto_aux) quedan exentos: su
+    #    caudal lo fija analíticamente size_utility_streams desde el
+    #    duty del HX — el tearing ahí solo producía un "NO convergió"
+    #    espurio (sin feed externo, _balance_at_block da 0).
+    service_loop_sccs = []
     for scc in recycle_sccs:
         scc_streams = _streams_in_scc(scc, fs)
         if all(s.mass_flow > 0 for s in scc_streams):
             continue  # ya está resuelto por closure
+        if _is_pure_service_scc(scc, fs):
+            service_loop_sccs.append(scc)
+            continue
         rs = _solve_recycle_wegstein(fs, scc)
         result.recycle_solutions.append(rs)
 
@@ -4754,6 +4910,8 @@ def solve(fs, max_iter=MAX_ITER):
         # alteró el flujo del reactor → tear cambia)
         if reactor_in_scc:
             for scc in recycle_sccs:
+                if _is_pure_service_scc(scc, fs):
+                    continue   # lazo de servicio: caudal analítico
                 scc_streams = _streams_in_scc(scc, fs)
                 if not all(s.mass_flow > 0 for s in scc_streams):
                     _solve_recycle_wegstein(fs, scc, max_iter=10)
@@ -4902,6 +5060,21 @@ def solve(fs, max_iter=MAX_ITER):
     except Exception:
         pass
 
+    # Reporte informativo de los lazos de servicio exentos de Wegstein
+    # (paso 3).  Se emite ACÁ, después de size_utility_streams, para
+    # poder mostrar el caudal de circulación ya fijado analíticamente.
+    for scc in service_loop_sccs:
+        try:
+            names = [fs.blocks[bid].name for bid in scc]
+            flows = [s.mass_flow for s in _streams_in_scc(scc, fs)
+                     if s.mass_flow > 0]
+            m_txt = f"m = {max(flows):.4g} tm/año" if flows                 else "m pendiente (HX sin duty)"
+            result.service_loops.append(
+                f"ℹ Lazo de servicio detectado ({' → '.join(names)}): "
+                f"circulación fija analítica, {m_txt}")
+        except Exception:
+            pass
+
     # Lado-aire de los air-coolers (role='ambient'): dimensionar desde el
     # duty.  size_utility_streams sólo cubre role='utility', así que el aire
     # quedaba en mass_flow=0 → marcado unresolved y, peor, bloqueaba la
@@ -4968,6 +5141,16 @@ def solve(fs, max_iter=MAX_ITER):
     _size_heat_exchangers(fs, result)
     # auditoría térmica de HX (advisory, no rompe success)
     result.hx_warnings            = _check_heat_exchangers(fs)
+    # Conciencia física del solver (PR-A): barrido advisory de cierre de
+    # energía por bloque + checks de equipo (T descarga, duty espurio,
+    # placeholder, split-lock, duty>S, signo).  Canal separado que NO
+    # altera overall_status (preserva el invariante golden byte-idéntico).
+    try:
+        result.awareness_warnings = _compute_awareness_warnings(fs)
+    except Exception as e:
+        result.awareness_warnings = [
+            f"[W-AWARE-ERR] auditoría de conciencia falló: "
+            f"{type(e).__name__}: {e}"]
     # energy balance errors quedan deshabilitados (no comparables al Cp
     # simple — comentado en _check_energy_balance del editor)
 
@@ -4979,6 +5162,235 @@ def solve(fs, max_iter=MAX_ITER):
     # 5. Calcular estados visuales (color UI: verde/azul/amarillo/rojo)
     _compute_status_per_item(fs, result)
     return result
+
+
+def _eq_categoria(b):
+    """Categoría de costeo del bloque (equipment_costs.EQUIPMENT_DATA)."""
+    try:
+        import equipment_costs as _ec
+        return (_ec.EQUIPMENT_DATA.get(b.eq_type, {}) or {}).get("categoria", "")
+    except Exception:
+        return ""
+
+
+def _block_reaction_status(b):
+    """Clasifica las reactions declaradas del bloque.
+
+    Devuelve (has_rxn_tags, any_resolves, placeholder_bonus):
+      has_rxn_tags    — el bloque declara al menos una reacción.
+      any_resolves    — alguna existe curada en reactions_db (reacción REAL).
+      placeholder_bonus — lista de (rid_placeholder, rid_base) donde el id
+                        tiene forma RNNN_PLACEHOLDER y RNNN SÍ existe en la DB
+                        (p.ej. ldpe usa R027_PLACEHOLDER y R027 está curada).
+    """
+    rids = list(getattr(b, "reactions", None) or [])
+    if not rids:
+        return (False, False, [])
+    try:
+        import reactions_db as _rdb
+    except Exception:
+        return (True, True, [])        # sin catálogo → asumir reacción real
+    any_resolves = False
+    bonus = []
+    suf = "_PLACEHOLDER"
+    for rid in rids:
+        resolved = False
+        try:
+            resolved = _rdb.get(rid) is not None
+        except Exception:
+            resolved = False
+        if resolved:
+            any_resolves = True
+            continue
+        if rid.endswith(suf):
+            base = rid[:-len(suf)]
+            try:
+                if base and _rdb.get(base) is not None:
+                    bonus.append((rid, base))
+            except Exception:
+                pass
+    return (True, any_resolves, bonus)
+
+
+def _compute_awareness_warnings(fs):
+    """PR-A — Conciencia física del solver.
+
+    Barrido advisory que EXPONE inconsistencias físicas latentes SIN
+    corregir ningún balance (no toca duties, Ts, composición ni masa) y
+    SIN alterar overall_status.  Cada línea lleva un tag estable [W-...]
+    para poder grepearla en tests.  Devuelve list[str].
+
+    Checks:
+      [W-ENERGY-BLOCK] cierre global de energía por bloque
+      [W-COMP-T]       T de descarga de compresor > 250 °C
+      [W-T-OVERRIDE]   T declarada pisada por el solver
+      [W-MIXER-DUTY]/[W-TANK-DUTY] duty espurio en equipo pasivo
+      [W-PLACEHOLDER]  reactor estructural (química via outputs locked)
+      [W-SPLIT-LOCK]   flujo lockeado vs fracción de splitter
+      [W-DUTY-S]       |duty| > S (costeo subestimado)
+      [W-SIGN]         signo de duty inconsistente con el tipo de equipo
+    """
+    from flowsheet_model import T_REF_C
+    try:
+        import equipment_ports as _ep
+    except Exception:
+        _ep = None
+    warns = []
+
+    def _ins(b):
+        return [s for s in fs.streams.values()
+                if s.dst == b.id and not getattr(s, "auto_aux", False)]
+    def _outs(b):
+        return [s for s in fs.streams.values()
+                if s.src == b.id and not getattr(s, "auto_aux", False)]
+
+    for b in fs.blocks.values():
+        if getattr(b, "auto_aux", False):
+            continue
+        cat        = _eq_categoria(b)
+        eqt        = b.eq_type or ""
+        duty       = float(getattr(b, "duty", 0.0) or 0.0)
+        has_rxn, rxn_resolves, ph_bonus = _block_reaction_status(b)
+        is_placeholder = has_rxn and not rxn_resolves
+        is_electrical  = bool(_ep and _ep.is_electrical_equipment(eqt))
+        ins  = _ins(b)
+        outs = _outs(b)
+
+        # ── 1.5 [W-PLACEHOLDER] reactor estructural ──────────────────
+        if is_placeholder:
+            msg = (f"[W-PLACEHOLDER] {b.name}: reactor estructural "
+                   f"(chemistry via outputs locked): exento de balance "
+                   f"elemental y de energía.")
+            for rid, base in ph_bonus:
+                msg += (f" La reacción {base} existe curada en reactions_db "
+                        f"— considerar usarla (hoy declarada como {rid}).")
+            warns.append(msg)
+
+        # ── 1.1 [W-ENERGY-BLOCK] cierre global de energía por bloque ──
+        # Los reactores placeholder están EXENTOS (química hardcodeada via
+        # outputs locked; su balance de energía no es evaluable) — los
+        # cubre [W-PLACEHOLDER].  El resto de bloques con ins Y outs se
+        # barre con _stream_enthalpy_kW.
+        if ins and outs and not is_placeholder:
+            h_in = h_out = 0.0
+            ok = True
+            for s in ins:
+                h = _stream_enthalpy_kW(s)
+                if h is None:
+                    ok = False; break
+                h_in += h
+            if ok:
+                for s in outs:
+                    h = _stream_enthalpy_kW(s)
+                    if h is None:
+                        ok = False; break
+                    h_out += h
+            if ok:
+                q_rxn = 0.0
+                hor = float(getattr(b, "heat_of_reaction", 0.0) or 0.0)
+                if hor != 0:
+                    m_in = sum(s.mass_flow * TM_TO_KG / SEC_PER_YEAR
+                               for s in ins)
+                    q_rxn = -m_in * hor
+                resid = h_out - h_in - duty - q_rxn
+                scale = max(abs(h_in), abs(h_out), abs(duty), 10.0)
+                if abs(resid) > 10.0 and abs(resid) / scale > 0.10:
+                    if has_rxn and rxn_resolves:
+                        cause = ("reactor con reacción real → posible signo "
+                                 "de Q_rxn o Ts de producto inconsistentes")
+                    elif is_electrical:
+                        cause = (f"duty declarado ({duty:.0f} kW) ≠ ΔH de "
+                                 f"corrientes ({h_out - h_in:.0f} kW)")
+                    else:
+                        cause = "Ts de corrientes no cierran el balance"
+                    warns.append(
+                        f"[W-ENERGY-BLOCK] {b.name}: cierre de energía "
+                        f"resid={resid:+.0f} kW (escala {scale:.0f}, "
+                        f"{resid / scale * 100:+.0f}%) — {cause}")
+
+        # ── 1.2 [W-COMP-T] T de descarga de compresor/turbina ────────
+        if cat == "Compressors":
+            hot = None
+            for s in outs:
+                if hot is None or s.temperature > hot.temperature:
+                    hot = s
+            if hot is not None and hot.temperature > 250.0:
+                warns.append(
+                    f"[W-COMP-T] {b.name}/{hot.name}: descarga isentrópica "
+                    f"de 1 etapa = {hot.temperature:.0f} °C (>250 °C, límite "
+                    f"mecánico API 618). Planta real usa compresión "
+                    f"multietapa con intercooling. Considerar dividir en N "
+                    f"etapas o declarar T_descarga con lock.")
+
+        # ── 1.4 [W-MIXER-DUTY]/[W-TANK-DUTY] duty en equipo pasivo ───
+        if abs(duty) > 5.0:
+            if eqt.startswith("Mixer"):
+                warns.append(
+                    f"[W-MIXER-DUTY] {b.name}: equipo pasivo (mixer "
+                    f"estático) con duty espurio {duty:.0f} kW — revisar Ts "
+                    f"de entrada/salida.")
+            elif cat == "Storage" or "tank" in eqt.lower():
+                warns.append(
+                    f"[W-TANK-DUTY] {b.name}: equipo pasivo (tanque de "
+                    f"almacenamiento) con duty espurio {duty:.0f} kW — "
+                    f"revisar Ts de entrada/salida.")
+
+        # ── 1.6 [W-SPLIT-LOCK] fracción vs flujo lockeado ────────────
+        if getattr(b, "splitter_active", False):
+            fr = list(getattr(b, "splitter_fractions", []) or [])
+            sum_in = sum(s.mass_flow for s in ins)
+            if sum_in > 0:
+                for k, s in enumerate(outs):
+                    if k >= len(fr):
+                        break
+                    if not getattr(s, "mass_flow_locked", False):
+                        continue
+                    expected = sum_in * fr[k]
+                    rel = abs(s.mass_flow - expected) / max(abs(expected), 1.0)
+                    if rel > 0.02:
+                        warns.append(
+                            f"[W-SPLIT-LOCK] {b.name}/{s.name}: flujo lockeado "
+                            f"({s.mass_flow:.0f} t/a) contradice la fracción "
+                            f"splitter {fr[k]:.3f} (esperado {expected:.0f} "
+                            f"t/a) — posible error de orden fracción↔stream.")
+
+        # ── 1.7 [W-DUTY-S] duty > S ──────────────────────────────────
+        if cat in ("Fired heaters", "Compressors"):
+            S = float(getattr(b, "S", 0.0) or 0.0)
+            if S > 0 and abs(duty) > S * 1.02:
+                warns.append(
+                    f"[W-DUTY-S] {b.name}: S declarado ({S:.0f} kW) menor que "
+                    f"|duty| calculado ({abs(duty):.0f} kW) — costeo "
+                    f"subestimado.")
+
+        # ── 1.8 [W-SIGN] signo de duty inconsistente ─────────────────
+        if cat == "Fired heaters" and duty < -1.0:
+            warns.append(
+                f"[W-SIGN] {b.name}: duty {duty:+.0f} kW (fired heater debería "
+                f"APORTAR calor, duty>0) — signo inconsistente con el tipo de "
+                f"equipo ({eqt}).")
+        elif "air cooler" in eqt and duty > 1.0:
+            warns.append(
+                f"[W-SIGN] {b.name}: duty {duty:+.0f} kW (air cooler debería "
+                f"EXTRAER calor, duty<0) — signo inconsistente con el tipo de "
+                f"equipo ({eqt}).")
+
+    # ── 1.3 [W-T-OVERRIDE] T declarada pisada por el solver ──────────
+    for s in fs.streams.values():
+        td = getattr(s, "_t_declared", None)
+        if td is None:
+            continue
+        if abs(td - T_REF_C) < 0.01:
+            continue                       # T declarada == 25 → sin intención
+        if getattr(s, "temperature_locked", False):
+            continue                       # locked → el solver la respeta
+        if abs(s.temperature - td) > 10.0:
+            warns.append(
+                f"[W-T-OVERRIDE] {s.name}: T declarada {td:.0f}°C fue "
+                f"recalculada a {s.temperature:.0f}°C (intención de diseño "
+                f"perdida — lockear si {td:.0f}°C es correcta).")
+
+    return warns
 
 
 def _compute_status_per_item(fs, result):

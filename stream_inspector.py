@@ -316,6 +316,7 @@ class _StreamSidebar(QFrame):
         ("termo",       "θ", "Termodinámica"),
         ("composicion", "Σ", "Composición"),
         ("hidraulica",  "Δ", "Hidráulica"),
+        ("propiedades", "≈", "Propiedades"),
         ("geometria",   "↗", "Geometría"),
     ]
 
@@ -693,6 +694,7 @@ class StreamInspectorPanel(QWidget):
             "termo":       self._sec_termo,
             "composicion": self._sec_composicion,
             "hidraulica":  self._sec_hidraulica,
+            "propiedades": self._sec_propiedades_calc,
             "geometria":   self._sec_geometria,
         }
         fn = builders.get(key)
@@ -1208,6 +1210,122 @@ class StreamInspectorPanel(QWidget):
         return sect
 
     # ── Sección Geometría ────────────────────────────
+    def _sec_propiedades_calc(self) -> QFrame:
+        """FASE 3 — sección de SÓLO LECTURA con las propiedades calculadas de
+        la mezcla (densidad, viscosidad, flujo molar, Cp, entalpía…).  Nada se
+        inventa: si falta dato de Capa 2 para un componente, se muestra
+        'n/d [sin datos en Capa 2]'."""
+        s = self.stream
+        sect = QFrame(); l = QVBoxLayout(sect)
+        l.setContentsMargins(0, 0, 0, 0); l.setSpacing(8)
+        l.addLayout(_section_header(
+            "Propiedades de la mezcla [calculado]",
+            sub="solo lectura · derivado de la composición + T/P",
+            help_text="Valores que el solver/termo derivan de la composición "
+                      "másica, T y P. No editables."))
+
+        from flowsheet_model import SEC_PER_YEAR, TM_TO_KG
+        comp = dict(s.composition or {})
+        if not comp and getattr(s, "main_component", ""):
+            comp = {s.main_component: 1.0}
+        T_C = float(getattr(s, "temperature", 25.0) or 25.0)
+        T_K = T_C + 273.15
+        P_bar = float(getattr(s, "pressure_bar", 1.013) or 1.013)
+        phase = (getattr(s, "phase", "") or "liquid").lower()
+        vfrac = float(getattr(s, "vapor_fraction", 0.0) or 0.0)
+        mdot_kg_s = float(s.mass_flow or 0.0) * TM_TO_KG / SEC_PER_YEAR
+
+        ND = ("n/d", "[sin datos en Capa 2]")
+
+        def _row(label, value, unit="", nd_note=""):
+            r = QFrame(); rl = QHBoxLayout(r)
+            rl.setContentsMargins(0, ROW_PAD // 2, 0, ROW_PAD // 2)
+            rl.setSpacing(12)
+            k = QLabel(label); k.setFont(QFont(pfd_fonts.SANS, 9))
+            k.setStyleSheet(f"color:{TOK['ink_mute']};"); k.setMinimumWidth(150)
+            rl.addWidget(k)
+            if value is None:
+                v = QLabel("n/d")
+                v.setStyleSheet(f"color:{TOK['ink_soft']}; font-style:italic;")
+                v.setToolTip(nd_note or ND[1])
+            else:
+                v = QLabel(f"{value}{(' ' + unit) if unit else ''}")
+                v.setFont(QFont(pfd_fonts.MONO, 9))
+                v.setStyleSheet(f"color:{TOK['ink']};")
+            rl.addWidget(v, 1)
+            r.setStyleSheet(f"QFrame {{ border-bottom:1px solid {TOK['line_soft']}; }}")
+            l.addWidget(r)
+
+        # ── MW de la mezcla (base composición MÁSICA): M = 1/Σ(wᵢ/MWᵢ) ──
+        mw_mix = None
+        missing = []
+        try:
+            import thermo_db as _td
+            inv = 0.0; wtot = 0.0
+            for c, w in comp.items():
+                co = _td.get(c)
+                if co is None or not getattr(co, "mw", 0) or co.mw <= 0:
+                    missing.append(c); continue
+                inv += w / co.mw; wtot += w
+            if inv > 0 and wtot > 0:
+                mw_mix = wtot / inv          # g/mol
+        except Exception:
+            mw_mix = None
+
+        # Flujo másico
+        _row("Flujo másico", f"{s.mass_flow:,.0f}", "t/a")
+        _row("", f"{mdot_kg_s:.4f}", "kg/s")
+        # Flujo molar + M de mezcla
+        if mw_mix and mdot_kg_s > 0:
+            nmol_kmol_h = mdot_kg_s * 3600.0 / mw_mix   # kmol/h
+            _row("Flujo molar", f"{nmol_kmol_h:,.2f}", "kmol/h")
+            _row("M de la mezcla", f"{mw_mix:.2f}", "g/mol")
+        else:
+            _row("Flujo molar", None, nd_note=f"sin MW para: {', '.join(missing) or '—'}")
+            _row("M de la mezcla", None, nd_note=f"sin MW para: {', '.join(missing) or '—'}")
+
+        # Densidad, viscosidad, caudal volumétrico.
+        # GAS: ρ = P·M/(R·T) con la M REAL de la mezcla (mw_mix), coherente con
+        #   el flujo molar de arriba.  (No usamos _density_kg_m3 para gas: usa
+        #   una M ponderada por masa que sobreestima ρ en mezclas ricas en H2;
+        #   no lo tocamos — es función del solver hidráulico.)
+        # LÍQUIDO: _density_kg_m3 (método volume-additive, correcto).
+        rho = visc = None
+        try:
+            import pressure_drop as _pd
+            if phase in ("gas", "vapor") and mw_mix:
+                rho = P_bar * 1e5 * (mw_mix * 1e-3) / (8.314 * T_K)
+            else:
+                rho = _pd._density_kg_m3(comp, T_K, phase, P_bar * 1e5)
+            visc = _pd._viscosity_Pa_s(comp, T_K, phase)
+        except Exception:
+            rho = visc = None
+        _row("Densidad ρ", f"{rho:.3f}" if rho else None, "kg/m³")
+        _row("Viscosidad μ", f"{visc:.3e}" if visc else None, "Pa·s")
+        if rho and rho > 0 and mdot_kg_s > 0:
+            q_m3_h = mdot_kg_s / rho * 3600.0
+            _row("Caudal volumétrico", f"{q_m3_h:,.2f}", "m³/h")
+        else:
+            _row("Caudal volumétrico", None)
+
+        # Cp y entalpía específica
+        cp = None
+        try:
+            import thermo_db as _td
+            cp = _td.cp_mix_kJ_kg_K(comp, T_C, phase)
+        except Exception:
+            cp = None
+        _row("Cp de la mezcla", f"{cp:.3f}" if cp else None, "kJ/kg·K")
+        try:
+            import stream_enthalpy as _se
+            h = _se.specific_enthalpy_kJ_kg(comp, T_C, phase, vfrac)
+            _row("h específica", f"{h:.1f}" if h is not None else None, "kJ/kg")
+        except Exception:
+            _row("h específica", None)
+
+        l.addStretch(1)
+        return sect
+
     def _sec_geometria(self) -> QFrame:
         sect = QFrame(); l = QVBoxLayout(sect)
         l.setContentsMargins(0,0,0,0); l.setSpacing(8)
@@ -1544,3 +1662,16 @@ class StreamInspectorDock(QDockWidget):
                                on_save=on_save, on_cancel=on_cancel)
         self.show()
         self.raise_()
+
+    def refresh_calc(self):
+        """FASE 3.5 — refresca la sección 'Propiedades [calculado]' tras un
+        recalc del solver (el stream ya está mutado in-place).  Sólo si esa
+        sección está activa: es read-only, así que rebuild no clobbea edits del
+        user en las secciones editables."""
+        try:
+            p = self.panel
+            if (self.isVisible() and getattr(p, "stream", None) is not None
+                    and p._sidebar.active() == "propiedades"):
+                p._build_section_content("propiedades")
+        except Exception:
+            pass

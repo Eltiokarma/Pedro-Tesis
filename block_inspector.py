@@ -1673,9 +1673,35 @@ class BlockInspectorPanel(QWidget):
             l.addWidget(self._row("Calor de reacción", sf_hor,
                                   info="Por kg de input. >0 endo · <0 exo · auto = del catálogo"))
 
+        # Compresores / ventiladores: diagrama de compresión T-r
+        # (lazy al abrir Termodinámica — junto a delta_p/η).
+        eqs_low = (eq_type or "").lower()
+        if "compressor" in eqs_low or "fan" in eqs_low:
+            try:
+                import inspector_evidence as _ev
+                l.addWidget(self._figure_card(
+                    "Diagrama de compresión",
+                    _ev.compressor_figure(b, self.fs)))
+            except Exception as exc:
+                l.addWidget(self._diag_placeholder_card(
+                    "Diagrama de compresión",
+                    f"inspector_evidence no disponible: {exc}"))
+
         # HX riguroso: diseño térmico (cards) + riguroso + avisos
         if _is_hx(eq_type):
             self._append_hx_termo(l, b)
+            # Diagrama T-Q — la figura del HX vive aquí, junto al
+            # diseño térmico (lazy al abrir Termodinámica).  Corre
+            # aunque el viewmodel de hx_inspector no exista: figura o
+            # placeholder-con-razón, nunca silencio.
+            try:
+                import inspector_evidence as _ev
+                l.addWidget(self._figure_card(
+                    "Diagrama T-Q", _ev.hx_tq_figure(b, self.fs)))
+            except Exception as exc:
+                l.addWidget(self._diag_placeholder_card(
+                    "Diagrama T-Q",
+                    f"inspector_evidence no disponible: {exc}"))
 
         return sect
 
@@ -1793,6 +1819,22 @@ class BlockInspectorPanel(QWidget):
         )
         add_btn.clicked.connect(self._on_add_custom_rxn)
         l.addWidget(add_btn)
+
+        # Evidencia gráfica del reactor — lazy al abrir esta sección.
+        try:
+            import inspector_evidence as _ev
+            mode_raw = (getattr(b, "reactor_mode", "") or "").lower()
+            mode = mode_raw.upper() or "REACTOR"
+            l.addWidget(self._figure_card(
+                f"Reactor {mode}", _ev.reactor_figure(b, self.fs)))
+            # X_eq vs T — figura de libro para equilibrio/Gibbs
+            if mode_raw in ("equilibrium", "gibbs"):
+                l.addWidget(self._figure_card(
+                    "Equilibrio X_eq vs T",
+                    _ev.equilibrium_figure(b, self.fs)))
+        except Exception as exc:
+            l.addWidget(self._diag_placeholder_card(
+                "Reactor", f"inspector_evidence no disponible: {exc}"))
 
         return sect
 
@@ -1964,6 +2006,20 @@ class BlockInspectorPanel(QWidget):
         self._extras["column_method"] = m_cb
         l.addWidget(self._combo_row("Método", m_cb))
 
+        # Evidencia gráfica de la columna — lazy: se construye recién
+        # al abrir ESTA sección (no al abrir el inspector).  Figura o
+        # placeholder-con-razón, nunca silencio.
+        try:
+            import inspector_evidence as _ev
+            l.addWidget(self._figure_card(
+                "McCabe-Thiele", _ev.mccabe_figure(b, self.fs)))
+            l.addWidget(self._figure_card(
+                "Perfil tray-by-tray", _ev.profile_figure(b, self.fs)))
+        except Exception as exc:
+            l.addWidget(self._diag_placeholder_card(
+                "Figuras de columna",
+                f"inspector_evidence no disponible: {exc}"))
+
         return sect
 
     def _section_flash(self, b, eq_type) -> QFrame:
@@ -1993,6 +2049,16 @@ class BlockInspectorPanel(QWidget):
         sf_P = self._spec_field("flash_P_bar", value=f"{P_bar:.3f}",
                                 unit="bar", state="spec")
         l.addWidget(self._row("P_flash", sf_P))
+
+        # Evidencia gráfica del flash — lazy al abrir esta sección.
+        try:
+            import inspector_evidence as _ev
+            l.addWidget(self._figure_card(
+                "Flash VLE binario", _ev.flash_figure(b, self.fs)))
+        except Exception as exc:
+            l.addWidget(self._diag_placeholder_card(
+                "Flash VLE binario",
+                f"inspector_evidence no disponible: {exc}"))
 
         return sect
 
@@ -2334,33 +2400,68 @@ class BlockInspectorPanel(QWidget):
         fs = self.fs
         any_added = False
 
-        # 1) Bloques de texto por tipo de equipo --------------------
-        text_blocks: List[Tuple[str, Optional[str]]] = [
-            ("Reactor",                _ev.reactor_text(b)),
-            ("Intercambiador (HX)",    _ev.hx_text(b)),
-            ("HX — Utility / lazo cerrado", _ev.utility_aux_text(b, fs)),
-            ("Flash",                  _ev.flash_text(b)),
-            ("Separador mecánico",     _ev.mech_sep_text(b)),
-            ("Splitter",               _ev.splitter_text(b)),
-            ("Tanque",                 _ev.tank_text(b, fs)),
-            ("Columna — McCabe",       _ev.mccabe_text(b, fs)),
-            ("Columna — Perfil",       _ev.profile_text(b, fs)),
-            ("Bomba",                  _ev.pump_text(b, fs)),
-            ("Compresor",              _ev.compressor_text(b, fs)),
-            ("Hidráulica (ΔP)",        _ev.hydraulic_breakdown_text(b, fs)),
-            ("Balance de masa",        _ev.mass_balance_text(b, fs)),
-            ("Balance de energía",     _ev.energy_balance_text(b, fs)),
+        # 1) Bloques de evidencia por tipo de equipo ----------------
+        # Por cada familia: si *_metrics() devuelve dict → tarjeta rica
+        # (_render_evidence); si None → fallback al *_text() actual.
+        # (title, metrics_fn, text_fn) — ambas leen la MISMA fuente.
+        evidence_specs = [
+            ("Reactor",                lambda: _ev.reactor_metrics(b),
+                                       lambda: _ev.reactor_text(b)),
+            ("Intercambiador (HX)",    lambda: _ev.hx_metrics(b),
+                                       lambda: _ev.hx_text(b)),
+            ("HX — Utility / lazo cerrado", lambda: _ev.utility_aux_metrics(b, fs),
+                                       lambda: _ev.utility_aux_text(b, fs)),
+            ("Flash",                  lambda: _ev.flash_metrics(b),
+                                       lambda: _ev.flash_text(b)),
+            ("Separador mecánico",     lambda: _ev.mech_sep_metrics(b),
+                                       lambda: _ev.mech_sep_text(b)),
+            ("Splitter",               lambda: _ev.splitter_metrics(b),
+                                       lambda: _ev.splitter_text(b)),
+            ("Tanque",                 lambda: _ev.tank_metrics(b, fs),
+                                       lambda: _ev.tank_text(b, fs)),
+            ("Columna — McCabe",       lambda: _ev.mccabe_metrics(b, fs),
+                                       lambda: _ev.mccabe_text(b, fs)),
+            ("Columna — Perfil",       lambda: _ev.profile_metrics(b, fs),
+                                       lambda: _ev.profile_text(b, fs)),
+            ("Bomba",                  lambda: _ev.pump_metrics(b, fs),
+                                       lambda: _ev.pump_text(b, fs)),
+            ("Compresor",              lambda: _ev.compressor_metrics(b, fs),
+                                       lambda: _ev.compressor_text(b, fs)),
+            ("Hidráulica (ΔP)",        lambda: _ev.hydraulic_breakdown_metrics(b, fs),
+                                       lambda: _ev.hydraulic_breakdown_text(b, fs)),
+            ("Balance de masa",        lambda: _ev.mass_balance_metrics(b, fs),
+                                       lambda: _ev.mass_balance_text(b, fs)),
+            ("Balance de energía",     lambda: _ev.energy_balance_metrics(b, fs),
+                                       lambda: _ev.energy_balance_text(b, fs)),
         ]
-        for title, txt in text_blocks:
-            if not txt:
-                continue
-            l.addWidget(self._diag_text_card(title, txt))
-            any_added = True
+        for title, metrics_fn, text_fn in evidence_specs:
+            m = None
+            try:
+                m = metrics_fn()
+            except Exception:
+                m = None
+            if m and (m.get("metrics") or m.get("status") or m.get("bars")):
+                try:
+                    l.addWidget(self._render_evidence(title, m))
+                    any_added = True
+                    continue
+                except Exception:
+                    pass   # cae al fallback de texto
+            try:
+                txt = text_fn()
+            except Exception:
+                txt = None
+            if txt:
+                l.addWidget(self._diag_text_card(title, txt))
+                any_added = True
 
-        # 2) Figuras matplotlib (si el backend Qt está disponible) ----
-        canvas_widgets = self._diag_figures(b, fs)
-        for w in canvas_widgets:
-            l.addWidget(w)
+        # 2) Figuras — viven en sus secciones temáticas (lazy al abrir
+        #    cada sección).  Acá solo el ÍNDICE de qué hay y dónde, para
+        #    que el estudiante las descubra sin duplicar canvases.
+        idx_txt = self._figures_index(b, eq_type)
+        if idx_txt:
+            l.addWidget(self._diag_text_card(
+                "Figuras disponibles (ver su sección)", idx_txt))
             any_added = True
 
         if not any_added:
@@ -2394,70 +2495,174 @@ class BlockInspectorPanel(QWidget):
         )
         return card
 
+    def _render_evidence(self, title: str, metrics: dict) -> QFrame:
+        """Tarjeta rica de evidencia (handoff §5): StatusBadges + MetricGrid
+        (cards + gauges) + DeltaBars.  Reusa el contenedor #diagCard.
+
+        Headless-safe: importa inspector_widgets lazy; si falla, el caller
+        cae al _diag_text_card.  La figura NO se embebe acá — sigue saliendo
+        de _diag_figures (intacto) para no duplicarla.
+        """
+        from inspector_widgets import (MetricCard, MetricGrid, StatusBadge,
+                                       GaugePill, DeltaBar)
+        card = QFrame(); card.setObjectName("diagCard")
+        cl = QVBoxLayout(card)
+        cl.setContentsMargins(10, 8, 10, 8); cl.setSpacing(6)
+        # título
+        t = QLabel(title)
+        t.setFont(QFont(pfd_fonts.SANS, 9, QFont.Bold))
+        t.setStyleSheet(f"color:{TOK['ink']};")
+        cl.addWidget(t)
+        # status badges (header)
+        badges = metrics.get("status") or []
+        if badges:
+            hb = QHBoxLayout(); hb.setSpacing(6); hb.setContentsMargins(0, 0, 0, 0)
+            for s in badges:
+                hb.addWidget(StatusBadge(s.get("text", ""), s.get("kind", "neutral")))
+            hb.addStretch(1)
+            hwrap = QFrame(); hwrap.setLayout(hb)
+            cl.addWidget(hwrap)
+        # grid de cards + gauges
+        grid = MetricGrid()
+        any_grid = False
+        for m in metrics.get("metrics") or []:
+            grid.add(MetricCard(**{k: v for k, v in m.items()
+                                   if k in ("key", "label", "value", "unit",
+                                            "state", "sub", "flag", "span")}))
+            any_grid = True
+        for g in metrics.get("gauges") or []:
+            kw = {k: v for k, v in g.items()
+                  if k in ("key", "label", "value", "text", "suffix",
+                           "marker", "color", "span")}
+            kw.setdefault("span", 2)
+            grid.add(GaugePill(**kw))
+            any_grid = True
+        if any_grid:
+            cl.addWidget(grid)
+        # delta bars
+        for b in metrics.get("bars") or []:
+            cl.addWidget(DeltaBar(**{k: v for k, v in b.items()
+                                     if k in ("label", "frac", "value", "kind")}))
+        # warnings (texto, como el _diag_text_card)
+        for w in metrics.get("warnings") or []:
+            wl = QLabel(f"⚠ {w}")
+            wl.setWordWrap(True)
+            wl.setFont(QFont(pfd_fonts.SANS, 8))
+            wl.setStyleSheet(f"color:{TOK['amber']};")
+            cl.addWidget(wl)
+        card.setStyleSheet(
+            f"#diagCard {{ background: {TOK['bg_mute']}; "
+            f"border: 1px solid {TOK['line']}; border-radius: 6px; }}"
+        )
+        return card
+
+    def _figures_index(self, b, eq_type) -> str:
+        """Línea-índice de las figuras que aplican a este bloque y en
+        qué sección del sidebar viven (descubribilidad sin duplicar
+        canvases en Diagnóstico)."""
+        items = []
+        if _is_tower(eq_type):
+            items.append("McCabe-Thiele → Columna")
+            items.append("Perfil tray-by-tray → Columna")
+        if _is_flash_vessel(eq_type):
+            items.append("Flash VLE binario → Flash")
+        if _is_reactor(eq_type):
+            items.append("Perfil del reactor → Reactividad")
+            if (getattr(b, "reactor_mode", "") or "").lower() in (
+                    "equilibrium", "gibbs"):
+                items.append("Equilibrio X_eq vs T → Reactividad")
+        if _is_hx(eq_type):
+            items.append("Diagrama T-Q → Termodinámica")
+        low = (eq_type or "").lower()
+        if "compressor" in low or "fan" in low:
+            items.append("Diagrama de compresión → Termodinámica")
+        return "\n".join(f"· {it}" for it in items)
+
+    def _figure_card(self, title: str, fig_result) -> QWidget:
+        """Tarjeta para un resultado de inspector_evidence.*_figure:
+        canvas matplotlib si hay figura, o placeholder con la RAZÓN
+        específica si no (contrato (fig, data|{'reason': str})).
+        Nunca un placeholder genérico ni una figura que desaparece en
+        silencio."""
+        fig, data = fig_result
+        # badge de procedencia (p.ej. Wang-Henke vs McCabe fallback) en
+        # el título — el mismo patrón de honestidad para toda figura
+        if fig is not None and isinstance(data, dict) and data.get("badge"):
+            title = f"{title}  ·  {data['badge']}"
+        if fig is not None:
+            try:
+                import matplotlib
+                matplotlib.use("QtAgg")
+                from matplotlib.backends.backend_qtagg import (
+                    FigureCanvas as _MplCanvas
+                )
+                return self._diag_canvas_card(title, _MplCanvas(fig))
+            except Exception as exc:
+                return self._diag_placeholder_card(
+                    title, f"backend Qt de matplotlib no disponible "
+                           f"({exc}) — la figura existe pero no puede "
+                           f"embeberse")
+        reason = (data or {}).get("reason") if isinstance(data, dict)             else None
+        return self._diag_placeholder_card(
+            title, reason or "figura no disponible (sin razón reportada "
+                             "— bug del builder, reportalo)")
+
+    def _diag_placeholder_card(self, title: str, reason: str) -> QFrame:
+        """Tarjeta placeholder honesta: dice por qué no hay figura y qué
+        hacer para obtenerla."""
+        card = QFrame(); card.setObjectName("diagCard")
+        cl = QVBoxLayout(card)
+        cl.setContentsMargins(10, 8, 10, 8); cl.setSpacing(4)
+        t = QLabel(title)
+        t.setFont(QFont(pfd_fonts.SANS, 9, QFont.Bold))
+        t.setStyleSheet(f"color:{TOK['ink_soft']};")
+        cl.addWidget(t)
+        body = QLabel(f"◌ {reason}")
+        body.setFont(QFont(pfd_fonts.SANS, 9))
+        body.setStyleSheet(f"color:{TOK['ink_soft']}; font-style:italic;")
+        body.setWordWrap(True)
+        body.setTextInteractionFlags(Qt.TextSelectableByMouse)
+        cl.addWidget(body)
+        card.setStyleSheet(
+            f"#diagCard {{ background: {TOK['bg_mute']}; "
+            f"border: 1px dashed {TOK['line_strong']}; "
+            f"border-radius: 6px; }}"
+        )
+        return card
+
     def _diag_figures(self, b, fs) -> List[QWidget]:
-        """Crea canvases QtAgg para las figuras disponibles.  Devuelve [] si
-        matplotlib-Qt no está, o si ninguna figura aplica."""
+        """Crea las tarjetas de figura (canvas o placeholder-con-razón)
+        que aplican a este bloque."""
         out: List[QWidget] = []
         try:
-            import matplotlib
-            matplotlib.use("QtAgg")
-            from matplotlib.backends.backend_qtagg import (
-                FigureCanvas as _MplCanvas
-            )
-        except Exception:
-            return out
-        try:
             import inspector_evidence as _ev
-        except Exception:
+        except Exception as exc:
+            out.append(self._diag_placeholder_card(
+                "Figuras", f"inspector_evidence no disponible: {exc}"))
             return out
 
         # McCabe + Profile para columnas
         if getattr(b, "column_active", False):
-            try:
-                fig, _d = _ev.mccabe_figure(b, fs)
-                if fig is not None:
-                    out.append(self._diag_canvas_card(
-                        "McCabe-Thiele", _MplCanvas(fig)))
-            except Exception:
-                pass
-            try:
-                fig, _p = _ev.profile_figure(b, fs)
-                if fig is not None:
-                    out.append(self._diag_canvas_card(
-                        "Perfil tray-by-tray", _MplCanvas(fig)))
-            except Exception:
-                pass
+            out.append(self._figure_card(
+                "McCabe-Thiele", _ev.mccabe_figure(b, fs)))
+            out.append(self._figure_card(
+                "Perfil tray-by-tray", _ev.profile_figure(b, fs)))
 
         # Flash binario para Vessels con flash_active
         if getattr(b, "flash_active", False):
-            try:
-                fig, _f = _ev.flash_figure(b, fs)
-                if fig is not None:
-                    out.append(self._diag_canvas_card(
-                        "Flash VLE binario", _MplCanvas(fig)))
-            except Exception:
-                pass
+            out.append(self._figure_card(
+                "Flash VLE binario", _ev.flash_figure(b, fs)))
 
         # Reactores: perfil PFR, curva batch o barras CSTR/stoich
         if _is_reactor(b.eq_type):
-            try:
-                fig, _r = _ev.reactor_figure(b, fs)
-                if fig is not None:
-                    mode = (getattr(b, "reactor_mode", "") or "").upper() or "REACTOR"
-                    out.append(self._diag_canvas_card(
-                        f"Reactor {mode}", _MplCanvas(fig)))
-            except Exception:
-                pass
+            mode = (getattr(b, "reactor_mode", "") or "").upper() or "REACTOR"
+            out.append(self._figure_card(
+                f"Reactor {mode}", _ev.reactor_figure(b, fs)))
 
         # Heat exchangers: diagrama T vs Q
         if _is_hx(b.eq_type):
-            try:
-                fig, _h = _ev.hx_tq_figure(b, fs)
-                if fig is not None:
-                    out.append(self._diag_canvas_card(
-                        "Diagrama T-Q", _MplCanvas(fig)))
-            except Exception:
-                pass
+            out.append(self._figure_card(
+                "Diagrama T-Q", _ev.hx_tq_figure(b, fs)))
 
         return out
 

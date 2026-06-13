@@ -1,0 +1,12 @@
+{
+  "_comment": "Ratchet de atribución de presión (FASE 5). Cada ejemplo aquí ya fue corregido y DEBE auditar limpio (cero hallazgos pressure_source: ni 'presión creada sin dispositivo', ni 'rotativo sin spec', ni locks heurísticos). gate_pressure_source.py falla si alguno reaparece. Empieza vacía y crece con cada fix de FASE 3. NO hardcodear en el gate.",
+  "corrected": [
+    "ethane_pfr",
+    "ethylene_crk",
+    "hno3",
+    "methanol",
+    "quimpac",
+    "smr_eq",
+    "talara"
+  ]
+}
