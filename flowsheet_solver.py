@@ -5212,6 +5212,21 @@ def _block_reaction_status(b):
     return (True, any_resolves, bonus)
 
 
+def _comp_approx_equal(c1, c2, tol=0.02):
+    """True si dos composiciones (dict componente→fracción másica) son
+    aproximadamente iguales: ambas no vacías, MISMO conjunto de componentes
+    y |Δx_i| < tol para todos.  Se usa en [W-PURGE-ABS] (PR-A2.2) para
+    distinguir un SPLIT FÍSICO (purga: misma comp en ambas ramas) de un
+    SEPARADOR (comp distinta).  Conservador: comp vacía/None → False."""
+    c1 = c1 or {}
+    c2 = c2 or {}
+    if not c1 or not c2:
+        return False
+    if set(c1) != set(c2):
+        return False
+    return all(abs(c1[k] - c2.get(k, 0.0)) < tol for k in c1)
+
+
 def _compute_awareness_warnings(fs):
     """PR-A — Conciencia física del solver.
 
@@ -5416,6 +5431,18 @@ def _compute_awareness_warnings(fs):
         # lockeada TERMINAL (sale del loop = purga) Y una salida hermana
         # que RECIRCULA (vuelve al loop).  Las purgas TERMINALES (bloque
         # fuera de todo loop) son specs de diseño legítimas → no avisar.
+        #
+        # PR-A2.2 — discriminador por COMPOSICIÓN (no por rol): una PURGA
+        # es un SPLIT FÍSICO — la salida que purga y la que recircula
+        # llevan la MISMA composición (mismo gas dividido).  Un SEPARADOR
+        # reparte composiciones DISTINTAS a cada salida (cada una es una
+        # fase/producto/corte).  Solo el split físico subdetermina el
+        # caudal del reciclo, así que [W-PURGE-ABS] solo dispara cuando la
+        # composición POST-solve de la purga ≈ la de una hermana
+        # recirculante (|Δx_i|<tol, mismo set de componentes).  El rol
+        # (product/waste/...) NO discrimina: la purga canónica de haber_rec
+        # es role=waste.  Si alguna comp está sin resolver → conservador,
+        # no dispara.
         sccset = scc_of.get(b.id)
         if (sccset is not None
                 and b.id not in determined_bids
@@ -5424,9 +5451,13 @@ def _compute_awareness_warnings(fs):
             locked_terminal = [s for s in outs
                                if getattr(s, "mass_flow_locked", False)
                                and s.dst not in sccset]
-            has_recirc = any(s.dst in sccset for s in outs)
-            if locked_terminal and has_recirc:
-                purga = locked_terminal[0]
+            recirc = [s for s in outs if s.dst in sccset]
+            purga = next(
+                (s for s in locked_terminal
+                 if any(_comp_approx_equal(s.composition, r.composition)
+                        for r in recirc)),
+                None)
+            if purga is not None:
                 warns.append(
                     f"[W-PURGE-ABS] {b.name}: purga/reparto con flujo absoluto "
                     f"lockeado ({purga.name} = {purga.mass_flow:.0f} t/a) "
