@@ -4409,13 +4409,73 @@ def _streams_in_scc(scc_block_ids, fs):
             if s.src in bids and s.dst in bids]
 
 
-def _choose_tear(scc_streams):
-    """Heurística: primer stream sin mass_flow declarado.
-    Si todos declarados, devuelve None (no hace falta tear)."""
+def _choose_tear(scc_streams, fs=None, scc_block_ids=None):
+    """Elige el stream a tearear en un reciclo.
+
+    Criterio reaction-aware (PR-G1): preferir el BACK-EDGE que cierra el
+    ciclo — el stream del SCC cuyo bloque destino TAMBIÉN recibe un input
+    externo al SCC (el mixer donde el recycle se reincorpora al feed
+    fresco).  Ese es el recycle de diseño (p.ej. S-recycle→M-101 en
+    haber_rec), NO el primer stream con flujo 0 (que el heurístico viejo
+    elegía — típicamente S-mix, rompiendo el balance del loop).  Entre
+    varios candidatos, se prefiere el marcado con role recycle/internal.
+
+    Fallback (compat): primer stream sin mass_flow declarado.
+    """
+    if fs is not None and scc_block_ids is not None:
+        bids = set(scc_block_ids)
+
+        def _has_external_input(bid):
+            return any(s.src not in bids and s.dst == bid and s.mass_flow > 0
+                       for s in fs.streams.values())
+
+        back_edges = [s for s in scc_streams if _has_external_input(s.dst)]
+        if back_edges:
+            def _rank(s):
+                role = (getattr(s, "role", "") or "").lower()
+                return (role in ("recycle",), role in ("recycle", "internal"))
+            back_edges.sort(key=_rank, reverse=True)
+            return back_edges[0]
+
     unknowns = [s for s in scc_streams if s.mass_flow <= 0]
     if unknowns:
         return unknowns[0]
     return None
+
+
+def _nearest_external_feed(fs, scc_block_ids):
+    """El feed externo de mayor caudal que entra al SCC (para el guess
+    inicial de composición y T del tear)."""
+    bids = set(scc_block_ids)
+    cands = [s for s in fs.streams.values()
+             if s.src not in bids and s.dst in bids and s.mass_flow > 0]
+    if not cands:
+        return None
+    return max(cands, key=lambda s: s.mass_flow)
+
+
+def _wegstein_scalar(x_n, f_new, x_prev, f_prev, lo=-5.0, hi=0.9995):
+    """Paso Wegstein sobre un escalar.  Devuelve el próximo guess.
+
+    q = s/(s−1) con s = (f_new−f_prev)/(x_n−x_prev).  Si s ∉ (lo, hi) o
+    no hay historial, cae a sustitución directa (x_next = f_new).
+
+    Nota PR-G1: hi=0.9995 (no 0.99) — los reciclos CON REACCIÓN son
+    contracciones de factor cercano a 1 (p.ej. el lazo de amoníaco tiene
+    pendiente ≈0.99 por la purga pequeña); con el clamp viejo en 0.99 esos
+    casos caían a sustitución pura y NO convergían en 50 iter.  El método
+    Wegstein es exacto para mapas afines, así que acelerar pendientes
+    cercanas a 1 es seguro y es justo donde más se necesita."""
+    if x_prev is None:
+        return f_new
+    denom = x_n - x_prev
+    if abs(denom) < 1e-12:
+        return f_new
+    s = (f_new - f_prev) / denom
+    if lo < s < hi:
+        q = s / (s - 1.0)
+        return (1.0 - q) * f_new + q * x_n
+    return f_new
 
 
 def _initial_guess(fs, scc_block_ids, tear_stream):
@@ -4458,14 +4518,47 @@ def _balance_at_block(fs, block_id, exclude_stream_id=None):
     return sum_in - sum_out_otros
 
 
-def _solve_recycle_wegstein(fs, scc_block_ids,
-                            max_iter=25, tol=0.001):
-    """Resuelve un reciclo via tear + Wegstein.
+def _propagate_loop_with_chemistry(fs, max_inner=15):
+    """Propaga el flowsheet COMPLETO incluyendo la química, para una
+    iteración del tear: mixer (mass + composición mass-weighted), reactor
+    (reactions_db/equilibrio → cambia composición; mass conservada) y la
+    propagación de composición.  NO corre los splitters/separadores acá —
+    esos se usan DESPUÉS para recalcular el tear (ver _recompute_tear)."""
+    for _ in range(max_inner):
+        changed = bool(_solve_mass_iteration(fs))
+        auto_propagate_compositions(fs)
+        solve_equilibrium_reactors(fs)
+        auto_propagate_compositions(fs)
+        if not changed:
+            break
 
-    Returns RecycleSolution con history del tear, convergencia, etc.
+
+def _solve_recycle_wegstein(fs, scc_block_ids,
+                            max_iter=50, tol=0.001):
+    """Resuelve un reciclo via tear + Wegstein VECTORIAL (PR-G1).
+
+    A diferencia del Wegstein escalar viejo (que tearaba sólo mass_flow con
+    un balance Σin−Σout ciego a la reacción y elegía mal el tear), acá:
+
+      1. _choose_tear elige el BACK-EDGE de diseño (reaction-aware).
+      2. El estado del tear es un VECTOR {mass, composición, T}.
+      3. Cada iteración propaga el loop ENTERO con la química (mixer +
+         reactor de equilibrio/conversión) y RECALCULA el tear resolviendo
+         su bloque fuente (splitter/separador), NO con un balance ingenuo.
+      4. Convergencia por norma = max(|Δmass|/escala, max_i|Δx_i|, |ΔT|/esc).
+      5. Wegstein sobre el ESCALAR masa total (mapa afín limpio — converge
+         en pocos pasos); composición y T por sustitución directa (el lazo
+         con reacción fija la composición en ~1 paso).
+
+    Sólo se ejercita cuando el tear NO está lockeado (loops de diseño con
+    el recycle deslockeado).  Los 40 ejemplos con tear lockeado resuelven
+    por closure y nunca llegan acá (guard en solve()).
+
+    Returns RecycleSolution con la trayectoria de masa del tear.
     """
+    bids = set(scc_block_ids)
     scc_streams = _streams_in_scc(scc_block_ids, fs)
-    tear = _choose_tear(scc_streams)
+    tear = _choose_tear(scc_streams, fs, scc_block_ids)
     rs = RecycleSolution(
         cycle_blocks=[fs.blocks[bid].name for bid in scc_block_ids],
     )
@@ -4476,76 +4569,98 @@ def _solve_recycle_wegstein(fs, scc_block_ids,
 
     rs.tear_stream = tear.name
 
-    # guess inicial
-    guess = _initial_guess(fs, scc_block_ids, tear)
-    tear.mass_flow = guess
-    rs.history.append(guess)
+    # --- guess inicial del vector ---
+    feed = _nearest_external_feed(fs, scc_block_ids)
+    x_mass = _initial_guess(fs, scc_block_ids, tear)
+    if tear.composition:
+        x_comp = dict(tear.composition)
+    elif feed and feed.composition:
+        x_comp = dict(feed.composition)
+    else:
+        x_comp = {}
+    x_T = tear.temperature if tear.temperature else (
+        feed.temperature if feed else T_REF_C)
+    rs.history.append(x_mass)
 
-    # buffers para Wegstein
-    x_prev:     float = guess
-    f_prev:     float = guess
+    # buffers Wegstein (sólo masa)
+    xm_prev = None
+    fm_prev = None
 
     for it in range(max_iter):
-        # 1. Propagar el resto del flowsheet con el tear actual
-        _propagate_until_stable(fs)
+        # (a) limpiar los streams internos NO lockeados del SCC para que se
+        #     recomputen desde el tear inyectado (si no, _solve_mass_iteration
+        #     los ve "ya resueltos" y no los actualiza entre iteraciones).
+        for s in scc_streams:
+            if s.id != tear.id and not getattr(s, "mass_flow_locked", False):
+                s.mass_flow = 0.0
 
-        # 2. Calcular nuevo valor del tear: balance del bloque
-        #    cuya OUTPUT es el tear stream.
-        #
-        #    El tear pertenece al output del bloque tear.src:
-        #      sum(in tear.src) = tear.mass_flow + sum(otros out tear.src)
-        #      → tear_new = sum(in) - sum(otros out)
-        f_new = _balance_at_block(fs, tear.src, exclude_stream_id=tear.id)
+        # (b) inyectar el guess y CONGELAR el tear (lock temporal) para que
+        #     la propagación forward no lo pise antes de leer S-gases.
+        x_mass = max(x_mass, 1e-6)
+        tear.mass_flow = x_mass
+        if x_comp:
+            tear.composition = dict(x_comp)
+        tear.temperature = x_T
+        _was_locked = getattr(tear, "mass_flow_locked", False)
+        tear.mass_flow_locked = True
 
-        if f_new <= 0:
-            # algo está mal — break con no-converged
+        # (c) propagar el loop con química (mixer + reactor)
+        _propagate_loop_with_chemistry(fs)
+
+        # (d) recalcular el tear: desbloquear y dejar que su bloque fuente
+        #     (splitter/separador) lo produzca desde el estado POST-reacción.
+        tear.mass_flow_locked = _was_locked
+        tear.mass_flow = 0.0
+        solve_splitters(fs)
+        solve_flashes(fs)
+        solve_mechanical_separators(fs)
+        solve_columns(fs)
+        for _ in range(3):
+            if not _solve_mass_iteration(fs):
+                break
+        auto_propagate_compositions(fs)
+
+        f_mass = tear.mass_flow
+        f_comp = dict(tear.composition or {})
+        f_T = tear.temperature
+
+        # bloque fuente sin caudal recomputable → no se puede tearear
+        if f_mass <= 0:
             rs.converged = False
             rs.iterations = it + 1
-            rs.final_value = tear.mass_flow
+            rs.final_value = x_mass
             return rs
 
-        x_n = tear.mass_flow
+        # (e) norma de convergencia sobre el vector completo
+        scale = max(abs(x_mass), abs(f_mass), 1e-9)
+        d_mass = abs(f_mass - x_mass) / scale
+        keys = set(f_comp) | set(x_comp)
+        d_x = max((abs(f_comp.get(k, 0.0) - x_comp.get(k, 0.0))
+                   for k in keys), default=0.0)
+        d_T = abs(f_T - x_T) / max(abs(f_T), 1.0)
+        rs.history.append(f_mass)
 
-        # 3. Test de convergencia
-        diff = abs(f_new - x_n)
-        scale = max(abs(f_new), abs(x_n), 1e-9)
-        if diff / scale < tol:
-            tear.mass_flow = f_new
-            rs.history.append(f_new)
-            # propagar una vez más para que el resto del flowsheet
-            # use el valor final del tear
-            _propagate_until_stable(fs)
+        if max(d_mass, d_x, d_T) < tol:
+            x_mass, x_comp, x_T = f_mass, f_comp, f_T
             rs.converged = True
             rs.iterations = it + 1
-            rs.final_value = f_new
+            rs.final_value = f_mass
+            # propagación final con el tear convergido
+            tear.mass_flow = f_mass
+            tear.composition = dict(f_comp)
+            tear.temperature = f_T
             return rs
 
-        # 4. Wegstein update
-        if it == 0:
-            # primera iter: substitution directa
-            x_next = f_new
-        else:
-            denom = (x_n - x_prev)
-            if abs(denom) < 1e-12:
-                x_next = f_new
-            else:
-                s = (f_new - f_prev) / denom
-                # estabilizar: si s ∉ (−5, 1), usar substitution
-                if -5.0 < s < 0.99:
-                    q = s / (s - 1.0)
-                    x_next = (1.0 - q) * f_new + q * x_n
-                else:
-                    x_next = f_new
+        # (f) Wegstein sobre la masa total; composición/T por sustitución.
+        x_next = _wegstein_scalar(x_mass, f_mass, xm_prev, fm_prev)
+        xm_prev, fm_prev = x_mass, f_mass
+        x_mass = x_next
+        x_comp = f_comp
+        x_T = f_T
 
-        # actualizar buffers
-        x_prev, f_prev = x_n, f_new
-        tear.mass_flow = x_next
-        rs.history.append(x_next)
-
-    # no convergió
     rs.converged = False
     rs.iterations = max_iter
-    rs.final_value = tear.mass_flow
+    rs.final_value = x_mass
     return rs
 
 
