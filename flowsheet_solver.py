@@ -2959,6 +2959,28 @@ def effective_pressure(fs, b):
     return p if p >= 1.0 else 1.0
 
 
+def effective_temperature(fs, b):
+    """Temperatura efectiva [K] de un bloque para PRESENTACIÓN: su T_op_K
+    declarada, o si no la declara (0/None), el promedio de las temperaturas
+    de sus corrientes de PROCESO conectadas (in + out).  Mismo criterio de
+    corrientes que effective_pressure (excluye utility/ambient).  Devuelve
+    0.0 si no hay ninguna T disponible (no se puede derivar).
+
+    OJO unidades: block.T_op_K está en KELVIN, pero stream.temperature está
+    en °C — se convierte (°C + 273.15) para devolver siempre Kelvin."""
+    t_decl = float(getattr(b, "T_op_K", 0.0) or 0.0)
+    if t_decl:
+        return t_decl
+    temps = []
+    for s in fs.streams.values():
+        if (s.src == b.id or s.dst == b.id) and \
+                (s.role or "") not in ("utility", "ambient"):
+            t = getattr(s, "temperature", None)
+            if t is not None:                       # °C → K
+                temps.append(float(t) + 273.15)
+    return sum(temps) / len(temps) if temps else 0.0
+
+
 def solve_pressure_hydraulic(fs, max_iter=8):
     """Solver hidráulico iterativo — acopla bombas + tuberías +
     downstream para auto-dimensionar bombas/compresores.

@@ -43,6 +43,7 @@ import sys
 import os
 import json
 import subprocess
+import warnings
 from typing import List
 
 from PySide6.QtCore import (
@@ -5945,6 +5946,10 @@ class FlowsheetMainWindow(QMainWindow):
         self._aux_visibility_action.setShortcut("Ctrl+U")
         self._aux_visibility_action.triggered.connect(self._toggle_aux_visibility)
         m_view.addAction(self._aux_visibility_action)
+        # Tabla de corrientes — acción de PRIMER NIVEL (antes solo vivía en
+        # "Docks legacy").  Reusa la acción robusta del toolbar.
+        if getattr(self, "_streams_table_action", None) is not None:
+            m_view.addAction(self._streams_table_action)
         # Inspector dock (slide-out de la nueva UI)
         if hasattr(self, "_inspector_dock") and self._inspector_dock is not None:
             m_view.addAction(self._inspector_dock.toggleViewAction())
@@ -5955,15 +5960,10 @@ class FlowsheetMainWindow(QMainWindow):
         for attr, label in (
             ("lib_dock",        "Biblioteca de equipos (vieja)"),
             ("props_dock",      "Propiedades (viejo)"),
-            ("streams_dock",    "Tabla de corrientes"),
             ("reactivity_dock", "Predictor de reactividad"),
         ):
             d = getattr(self, attr, None)
             if d is None:
-                continue
-            # la tabla de corrientes usa la acción robusta del toolbar
-            if attr == "streams_dock" and getattr(self, "_streams_table_action", None):
-                m_legacy.addAction(self._streams_table_action)
                 continue
             act = d.toggleViewAction()
             act.setText(label)
@@ -7134,6 +7134,37 @@ class FlowsheetMainWindow(QMainWindow):
             logging.getLogger(__name__).debug(
                 f"predictor post-solve fallo: {e}")
 
+    @staticmethod
+    def _dedup_costing_warnings(caught):
+        """Colapsa los UserWarning capturados a una lista de strings únicos,
+        preservando el orden de primera aparición (un mismo warning de CEPCI
+        se dispara una vez por equipo → ~41 copias idénticas)."""
+        seen, out = set(), []
+        for w in caught:
+            if not issubclass(w.category, UserWarning):
+                continue
+            msg = str(w.message).strip()
+            if msg not in seen:
+                seen.add(msg)
+                out.append(msg)
+        return out
+
+    def _show_costing_warnings(self, caught, context):
+        """Muestra los warnings de costeo capturados en un diálogo:
+        contador en el texto principal + lista completa en setDetailedText.
+        No hace nada si no hubo warnings."""
+        msgs = self._dedup_costing_warnings(caught)
+        if not msgs:
+            return
+        box = QMessageBox(self)
+        box.setIcon(QMessageBox.Warning)
+        box.setWindowTitle("Advertencias de costeo")
+        box.setText(f"{len(msgs)} advertencia(s) de costeo durante {context}.\n"
+                    "El cálculo se completó; revisá el detalle para ver qué "
+                    "rangos/extrapolaciones afectan la confiabilidad.")
+        box.setDetailedText("\n\n".join(f"• {m}" for m in msgs))
+        box.exec()
+
     def action_compute(self):
         # delegamos al editor Tk en una llamada simple para no duplicar lógica.
         # En este scaffold, mostramos los números clave en el panel.
@@ -7145,8 +7176,10 @@ class FlowsheetMainWindow(QMainWindow):
                 {"nombre": b.eq_type, "S": b.S, "n": b.n}
                 for b in self.fs.blocks.values()
             ]
-            res = eq.lang_fci(equipos, plant_type="Fluid processing",
-                              year_target=2024)
+            with warnings.catch_warnings(record=True) as caught:
+                warnings.simplefilter("always")
+                res = eq.lang_fci(equipos, plant_type="Fluid processing",
+                                  year_target=2024)
             isbl_mm = eq.isbl_implicito(res["FCI_MMUSD"], 0.30, 0.10, 0.10)
             feeds    = [s for s in self.fs.streams.values() if s.role == "feed"]
             products = [s for s in self.fs.streams.values() if s.role == "product"]
@@ -7166,7 +7199,12 @@ class FlowsheetMainWindow(QMainWindow):
                 f"Ingresos:     $ {revenue:>14,.0f}",
                 f"Materia prima:$ {raw_mp:>14,.0f}",
             ]
+            warn_msgs = self._dedup_costing_warnings(caught)
+            if warn_msgs:
+                lines += ["", f"⚠ {len(warn_msgs)} advertencia(s) de costeo "
+                              "(ver diálogo)."]
             self.results_box.setPlainText("\n".join(lines))
+            self._show_costing_warnings(caught, "el cálculo de costos")
         except Exception as e:
             QMessageBox.critical(self, "Error",
                                   f"{type(e).__name__}: {e}")
@@ -7321,14 +7359,17 @@ class FlowsheetMainWindow(QMainWindow):
             feeds    = [s for s in self.fs.streams.values() if s.role == "feed"]
             products = [s for s in self.fs.streams.values() if s.role == "product"]
             import capex as _capex
-            isbl = _capex.compute_fci(self.fs).get("sum_cbm")
-            isbl_musd = (isbl / 1e6) if isbl else None
-            fexp.write_project_xlsx(path, self.fs, isbl_musd, feeds, products)
+            with warnings.catch_warnings(record=True) as caught:
+                warnings.simplefilter("always")
+                isbl = _capex.compute_fci(self.fs).get("sum_cbm")
+                isbl_musd = (isbl / 1e6) if isbl else None
+                fexp.write_project_xlsx(path, self.fs, isbl_musd, feeds, products)
         except Exception as e:
             QMessageBox.critical(self, "Falló la exportación",
                                   f"{type(e).__name__}: {e}")
             return
         self.status.showMessage(f"Exportado: {path}", 6000)
+        self._show_costing_warnings(caught, "la exportación a Excel")
 
     # ---------------------------------------------------
     # EXPORT (PDF / SVG / PNG)
