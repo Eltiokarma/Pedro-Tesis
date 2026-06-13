@@ -39,9 +39,11 @@ def _purge_blocks(clave):
 
 # ── DISPARA en las purgas genuinas (split físico, comp idéntica) ────────
 def test_dispara_en_purgas_genuinas():
+    # hda_full K-101 (gas de reciclo) y T-103 (corte recirculante).
+    # NOTA: industrial V-301 (S-blowdown) ERA un disparo, pero PR-G2a lo
+    # convirtió a splitter (purga = fracción) → ya no dispara.
     casos = [("hda_full", "K-101"),    # S-purga ≡ S-gas-pre (benzene/H2/CH4)
-             ("hda_full", "T-103"),    # S-14 ≡ S-13 (benzene .01/toluene .99)
-             ("industrial", "V-301")]  # S-blowdown ≡ S-MP-steam (water 1.0)
+             ("hda_full", "T-103")]    # S-14 ≡ S-13 (benzene .01/toluene .99)
     for clave, blk in casos:
         _, _, blocks = _purge_blocks(clave)
         assert blk in blocks, f"{clave}/{blk}: purga genuina debería disparar, got {blocks}"
@@ -60,13 +62,23 @@ def test_no_dispara_en_separadores():
 
 
 def test_disparos_exactos_en_los_41():
+    # PR-G2a convirtió industrial V-301 a splitter → quedan 2 disparos.
     got = set()
     for e in reg.list_examples():
         _, _, blocks = _purge_blocks(e["clave"])
         for b in blocks:
             got.add((e["clave"], b))
-    assert got == {("hda_full", "K-101"), ("hda_full", "T-103"),
-                   ("industrial", "V-301")}, f"set de disparos inesperado: {got}"
+    assert got == {("hda_full", "K-101"), ("hda_full", "T-103")}, \
+        f"set de disparos inesperado: {got}"
+
+
+def test_industrial_v301_convertido_no_dispara():
+    """PR-G2a: V-301 pasó a splitter (purga de vapor = fracción) → el
+    [W-PURGE-ABS] que disparaba en A2.2 ya no aparece."""
+    fs, _, blocks = _purge_blocks("industrial")
+    assert "V-301" not in blocks
+    v301 = next(b for b in fs.blocks.values() if b.name == "V-301")
+    assert v301.splitter_active
 
 
 # ── loops determinados por splitter NO disparan ─────────────────────────
