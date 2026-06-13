@@ -56,6 +56,17 @@ def _eff_p(fs, b):
         return float(getattr(b, "P_op_bar", 0.0) or 0.0) or 1.0
 
 
+def _eff_t(fs, b):
+    """Temperatura efectiva [K] del bloque para la tabla: T_op_K declarada o,
+    si es 0, el promedio de Ts de corrientes de proceso adyacentes.  Import
+    lazy para evitar ciclo.  Devuelve 0.0 si no hay forma de derivarla."""
+    try:
+        from flowsheet_solver import effective_temperature
+        return effective_temperature(fs, b)
+    except Exception:
+        return float(getattr(b, "T_op_K", 0.0) or 0.0)
+
+
 # ======================================================
 # EQUIPOS DEL PFD
 # ======================================================
@@ -77,6 +88,37 @@ def _block_material(fs, block_id):
             if s.composition:
                 comps.append(s.composition)
     return eq.suggested_material(comps, p_op_bar=p_op)
+
+
+def _material_origin(fs, block_id, material):
+    """Explica de dónde salió el Material del bloque: override manual, default
+    CS, o qué regla heurística (especie corrosiva / H2 a alta P) lo gatilló.
+    Solo presentación — espeja la lógica de eq.suggested_material."""
+    b = fs.blocks.get(block_id)
+    if b is None:
+        return "default (CS)"
+    if getattr(b, "material", None):
+        return f"override: {b.material}"
+    if material == eq.MATERIAL_DEFAULT:
+        return f"default ({eq.MATERIAL_DEFAULT})"
+    p_op = _eff_p(fs, b)
+    # H2 a alta presión (Turton: H2 embrittlement ≥ 50 bar)
+    for s in fs.streams.values():
+        if (s.src == block_id or s.dst == block_id) and s.composition:
+            if p_op >= 50 and s.composition.get("hydrogen", 0) >= 0.05 \
+                    and material == "SS304":
+                return "heurística: H2 a alta P (≥50 bar)"
+    # Especie corrosiva que mapea al material elegido
+    for s in fs.streams.values():
+        if (s.src == block_id or s.dst == block_id) and s.composition:
+            for sp, frac in s.composition.items():
+                if frac < 0.01:
+                    continue
+                spl = sp.lower()
+                for kw, mat in eq.CORROSIVE_SPECIES.items():
+                    if kw in spl and mat == material:
+                        return f"heurística: {kw} → {mat}"
+    return "heurística"
 
 
 def collect_equipment_rows(fs, year_target=2024):
@@ -125,11 +167,14 @@ def collect_equipment_rows(fs, year_target=2024):
             "Unit":       spec.get("S_unit", ""),
             "N° units":   int(b.n),
             _col_E():     float(funits.conv_energy(getattr(b, "duty", 0.0))),
+            # T_op / P_op: mostrar lo EFECTIVO que usó el costing/heurística,
+            # no el crudo del bloque (que es 0/1 cuando no se declara y el
+            # valor real lo aportan las corrientes adyacentes).
             _col_T().replace("T ", "T_op "):
-                float(funits.conv_temp((getattr(b, "T_op_K", 0.0) or 0.0) - 273.15))
-                if (getattr(b, "T_op_K", 0.0) or 0.0) else 0.0,
+                float(funits.conv_temp(_eff_t(fs, b) - 273.15))
+                if _eff_t(fs, b) else 0.0,
             _col_P().replace("P ", "P_op "):
-                float(funits.conv_pressure(getattr(b, "P_op_bar", 0.0) or 0.0)),
+                float(funits.conv_pressure(_eff_p(fs, b))),
             _col_dP():    float(funits.conv_pressure(getattr(b, "delta_p_bar", 0.0) or 0.0)),
             "η":          float(getattr(b, "efficiency", 0.0) or 0.0),
             "Reactions":  ",".join(getattr(b, "reactions", []) or []),
@@ -142,6 +187,9 @@ def collect_equipment_rows(fs, year_target=2024):
             f"Cp USD ({year_target})":  cp_usd,
             f"CBM USD ({year_target})": cbm,
             "S fuera rango":            "⚠" if fuera_rango else "",
+            # Columna nueva al final (no altera el orden de las existentes):
+            # de dónde salió el Material (heurística + regla, u override).
+            "Material (origen)":        _material_origin(fs, b.id, material),
         }
         # Column specs (FUG-resueltos por solve_columns)
         if getattr(b, "column_active", False):
