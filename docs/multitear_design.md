@@ -149,16 +149,53 @@ y/o gas_sweet/hda_full, con haber_rec como ancla mono intacta.
 
 | capa | PR | qué construye | ancla / verificación | goldens |
 |:----:|----|---------------|----------------------|---------|
-| 1 | partición | enumeración de ciclos fundamentales + set de tears mínimo (circuit rank) por SCC | unit test: el ancla sintética arroja 2 tears; hda_full arroja 3 | ninguno |
-| 2 | tear reciclo-aware | extender `_choose_tear` → devolver **lista** de tears, ranking §2.2 | unit test: elige R1+R2 (ancla), S-gas-pre+S-tol-recic (hda_full), NO S-2 | ninguno (mono sigue igual) |
-| 3 | Wegstein/Broyden multi-tear | bucle simultáneo sobre el vector de N tears | **ancla sintética converge a SS exacto** (xfail→pass); haber_rec byte-idéntico | ninguno aún |
-| 4 | S2-B (no-deducción) | el tear no se deduce por balance en `_solve_mass_iteration` | ancla + hda_full live: interior >0, balance cierra | ninguno aún |
-| 5 | S2-C (flash por degeneración) | separador pasivo degenerado → flash activo (vía `_flash_method` de #86) | gas_sweet/hda_full: V-101 produce vapor real | ninguno aún |
-| 6 | racionalizar locks + encender | deslockear los parches internos de hda_full/gas_sweet; loops vivos | gate: **solo hda_full/gas_sweet** mueven golden; otros 39 byte-idénticos | **hda_full, gas_sweet** |
+| 1 ✅ | #89 | enumeración de ciclos fundamentales + set de tears mínimo (circuit rank) por SCC | unit test: el ancla sintética arroja 2 tears; hda_full arroja 3 | ninguno |
+| 2 ✅ | #90 | extender `_choose_tear` → devolver **lista** de tears, ranking §2.2 | unit test: elige R1+R2 (ancla), S-gas-pre+S-tol-recic (hda_full), NO S-2 | ninguno (mono sigue igual) |
+| 3 ✅ | #91 | Broyden multi-tear: bucle simultáneo sobre el vector de N tears | **ancla sintética converge a SS exacto** (xfail→pass); haber_rec byte-idéntico | ninguno |
+| 4 ✅ | #92 | S2-B (no-deducción): el tear no se deduce por balance en `_solve_mass_iteration` | RC2 cerrado: hda_full live deja de converger-falso | ninguno |
+| 5 ✅ | #93 | S2-C (flash por degeneración): separador pasivo degenerado → flash activo (vía `_flash_method` de #86) | **ancla sintética S2-C converge** (H₂/benceno, balance cierra) | ninguno |
+| 6 ⏸️ | — | racionalizar locks + encender hda_full/gas_sweet vivos | **diferido** (ver §3.1) | **diferido** |
 
 **Orden no negociable:** 1→2→3 deben estar antes de 4→5 (S2-B/S2-C son inútiles
 si el tear está mal elegido y Wegstein aborta, como medimos). La capa 6 (mover
 goldens) es la última y solo después de que el motor converja el loop vivo.
+
+### 3.1 Estado del proyecto — capas 1-5 COMPLETAS, capa 6 DIFERIDA
+
+**El motor multi-tear está construido y validado como capacidad GENERAL** sobre
+anclas sintéticas con SS calculado a mano (`tests/test_multitear_*`):
+partición de SCC, selección de tear reciclo-aware, convergencia simultánea
+Broyden, no-deducción del tear (RC2 cerrado) y separador activo por degeneración
+(S2-C). Cualquier proceso del lienzo con reciclos acoplados que el usuario arme
+puede converger por este motor.
+
+**Capa 6 (encender los 2 ejemplos reales hda_full/gas_sweet) queda DIFERIDA**,
+por hallazgos medidos:
+
+- **hda_full** está *underdetermined* por el lock de **purga a masa fija**
+  (`S-purga`). Racionalizándolo a **fracción** (φ = S-purga/S-gas-recic = 0.5,
+  medido) el loop pasa a estar determinado; con eso + pareo de lados del HX
+  feed-efluente E-101 (2-in/2-out) + guard de back-deducción del tear, el loop
+  **converge numéricamente**.  PERO el SS resultante es **físicamente
+  incorrecto**: el reciclo de tolueno colapsa a 0 (imposible con 85% de
+  conversión) porque **el tren de destilación (T-101/102/103) no propaga el
+  reciclo de tolueno en la pasada viva** → punto fijo espurio. Encenderlo bien
+  exige robustecer la propagación de columnas en el loop vivo (pieza profunda,
+  fuera del alcance "racionalizar locks + encender").
+- **gas_sweet** (3 ciclos + columnas + lazo de aminas) es aún más complejo.
+
+**Decisión (acordada):** declarar el motor COMPLETO como capacidad general
+validada en anclas; mantener hda_full/gas_sweet **FROZEN** — sus goldens
+hand-tuned son físicamente correctos y el closure los resuelve bien. Mover sus
+goldens requeriría primero un SS vivo físicamente correcto, bloqueado por la
+propagación de columnas (futuro: "Capa 6 + propagación de columnas en loop
+vivo"). **NO se aceptó mover el golden desde un SS espurio** (regla de oro del
+proyecto: nunca un converged falso).
+
+**Capacidad general reutilizable entregada:** Capas 1-5 — un motor de reciclos
+acoplados nivel sequential-modular (tear-set mínimo + tear reciclo-aware +
+Broyden simultáneo + no-deducción + separador activo por degeneración),
+validado en anclas sintéticas, byte-idéntico sobre los 41 ejemplos.
 
 ---
 
@@ -173,26 +210,38 @@ goldens) es la última y solo después de que el motor converja el loop vivo.
 | caso vectorial composición | Broyden tea el vector {mass, comp, T}; el ancla sintética es mono-componente (aísla la mecánica de masa); gas_sweet/hda_full ejercitan composición |
 | sobre-pinneo enmascarando bugs | el ancla sintética NO está pinneada → fuerza el motor de verdad (hoy colapsa, como debe) |
 
-### Anclas de regresión por tipo
-- **Mono-reciclo:** `haber_rec` (golden de producción) — protege el path escalar.
-- **Multi acoplado sintético:** `tests/test_multitear_anchor.py` — SS exacto a
-  mano, no pinneado, mono-componente. **xfail hoy** (motor no existe), debe
-  **flipear a pass** en la capa 3.
-- **Multi acoplado real:** `gas_sweet` (más simple) y `hda_full` — validación de
-  composición/flash; sus goldens se mueven recién en la capa 6.
+### Anclas de regresión por tipo (estado final)
+- **Mono-reciclo:** `haber_rec` (golden de producción) — protege el path escalar;
+  byte-idéntico en todas las capas.
+- **Multi acoplado sintético (masa):** `tests/test_multitear_anchor.py` — dos
+  reciclos acoplados, SS exacto a mano. **Verde desde capa 3** (Broyden lo
+  converge al SS exacto).
+- **Multi acoplado sintético (con flash):** `tests/test_multitear_s2c.py` —
+  separador degenerado H₂/benceno; **verde desde capa 5** (S2-C activa el flash,
+  balance cierra).
+- **Multi acoplado real:** `gas_sweet`, `hda_full` — **FROZEN** (capa 6 diferida);
+  sus goldens NO se movieron. Encenderlos vivos es trabajo futuro (propagación de
+  columnas en loop vivo).
 
 ---
 
-## 5. Resumen ejecutivo
+## 5. Resumen ejecutivo (estado FINAL)
 
 - El problema NO es "multi-reciclo" en general (industrial = 3 SCC paralelos ya
   funciona); es **reciclos acoplados en un mismo SCC** (gas_sweet, hda_full).
-- El plan original S2-B+S2-C es **insuficiente**: primero hay que arreglar
+- El plan original S2-B+S2-C resultó **insuficiente**: primero hubo que construir
   **selección de tear (set mínimo, reciclo-aware)** y **convergencia simultánea
   (Broyden)**. Medido: con el tear mal elegido, ni el flash activo rescata.
 - Approach validado contra DWSIM (Recycle blocks + Global Broyden) y la teoría de
   tearing (Motard / circuit rank).
-- Ancla sintética lista: dos reciclos acoplados, SS exacto a mano, hoy colapsa
-  (xfail) → será la prueba dura de la capa 3.
-- Secuencia de 6 capas, cada una medible; los goldens se mueven recién en la
-  última, y solo hda_full+gas_sweet.
+- **Capas 1-5 COMPLETAS (#89-#93):** motor multi-tear general — partición,
+  tear reciclo-aware, Broyden simultáneo, no-deducción (RC2 cerrado), separador
+  activo por degeneración. Validado en anclas sintéticas con SS exacto a mano;
+  **byte-idéntico** sobre los 41 ejemplos.
+- **Capa 6 DIFERIDA (ver §3.1):** encender hda_full/gas_sweet vivos requiere
+  además robustecer la **propagación de columnas en el loop vivo** (sin eso el
+  reciclo de tolueno colapsa → SS espurio). Se mantienen **FROZEN** con sus
+  goldens hand-tuned (físicamente correctos). No se mueve ningún golden desde un
+  SS espurio (regla de oro: nunca un converged falso).
+- **Entregable neto:** un motor de reciclos acoplados nivel sequential-modular,
+  reutilizable para cualquier proceso del lienzo, sin tocar los 41 goldens.
