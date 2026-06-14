@@ -171,13 +171,13 @@
   "sum_duty": -103.905947
  },
  "hda_full": {
-  "ISBL": 31216425.33,
+  "ISBL": 31519919.54,
   "energy_errors": 0,
   "mass_errors": 0,
-  "n_blocks": 22,
-  "n_streams": 24,
+  "n_blocks": 23,
+  "n_streams": 25,
   "overall_status": "ok",
-  "sum_duty": -922.621254
+  "sum_duty": -805.119897
  },
  "hno3": {
   "ISBL": 10911433.67,
