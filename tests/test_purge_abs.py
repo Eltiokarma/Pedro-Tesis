@@ -9,9 +9,16 @@ una es una fase/producto/corte).  Solo el split físico subdetermina el
 caudal del reciclo.  (El rol NO discrimina: la purga canónica de haber_rec
 es role=waste — por eso A2.1, que filtraba por rol, estaba mal.)
 
-Disparos finales sobre los 41: hda_full K-101, hda_full T-103, industrial
-V-301 (purgas absolutas genuinas → input para PR-G2).  NO disparan los
-separadores (comp distinta) ni los loops ya determinados por splitter.
+Disparos finales sobre los 41: hda_full K-101 (purga de gas absoluta genuina
+→ input para PR-G2 / Fase 2 de T29c).  NO disparan los separadores (comp
+distinta) ni los loops ya determinados por splitter.
+
+T29c (loop de gas vivo + makeup de H2): tras re-sintonizar la separación de
+hda_full a un estado estacionario coherente, T-103 dejó de ser una purga
+absoluta (S-14/S-pesados ahora es tolueno puro, mientras S-13 recircula
+tolueno+benceno) y pasó a clasificar como SEPARADOR real (comp distinta) →
+ya no dispara.  Queda K-101 como única purga absoluta (el reparto del gas de
+reciclo sigue lockeado; su conversión a fracción es la Fase 2 diferida).
 """
 import os
 import re
@@ -39,11 +46,13 @@ def _purge_blocks(clave):
 
 # ── DISPARA en las purgas genuinas (split físico, comp idéntica) ────────
 def test_dispara_en_purgas_genuinas():
-    # hda_full K-101 (gas de reciclo) y T-103 (corte recirculante).
+    # hda_full K-101 (gas de reciclo): S-purga ≡ S-gas-pre (mismo gas dividido).
     # NOTA: industrial V-301 (S-blowdown) ERA un disparo, pero PR-G2a lo
     # convirtió a splitter (purga = fracción) → ya no dispara.
-    casos = [("hda_full", "K-101"),    # S-purga ≡ S-gas-pre (benzene/H2/CH4)
-             ("hda_full", "T-103")]    # S-14 ≡ S-13 (benzene .01/toluene .99)
+    # NOTA: hda_full T-103 ERA un disparo, pero T29c re-sintonizó la
+    # separación → ahora separa de verdad (comp distinta) → no dispara
+    # (ver test_no_dispara_en_separadores).
+    casos = [("hda_full", "K-101")]    # S-purga ≡ S-gas-pre (benzene/H2/CH4)
     for clave, blk in casos:
         _, _, blocks = _purge_blocks(clave)
         assert blk in blocks, f"{clave}/{blk}: purga genuina debería disparar, got {blocks}"
@@ -53,6 +62,7 @@ def test_dispara_en_purgas_genuinas():
 def test_no_dispara_en_separadores():
     casos = [("hda", "V-101"),         # H2/CH4 vs benzene/toluene
              ("hda_full", "T-101"),    # corte: benzene .1 vs .86
+             ("hda_full", "T-103"),    # T29c: tolueno puro (S-14) vs tol+benc (S-13)
              ("gas_sweet", "T-101"),   # gas tratado vs amina rica
              ("gas_sweet", "V-101")]   # flash CO2 vs amina
     for clave, blk in casos:
@@ -62,13 +72,15 @@ def test_no_dispara_en_separadores():
 
 
 def test_disparos_exactos_en_los_41():
-    # PR-G2a convirtió industrial V-301 a splitter → quedan 2 disparos.
+    # PR-G2a convirtió industrial V-301 a splitter; T29c re-sintonizó la
+    # separación de hda_full (T-103 ahora separa de verdad) → queda 1 disparo:
+    # K-101, la única purga de gas todavía lockeada en absoluto (Fase 2).
     got = set()
     for e in reg.list_examples():
         _, _, blocks = _purge_blocks(e["clave"])
         for b in blocks:
             got.add((e["clave"], b))
-    assert got == {("hda_full", "K-101"), ("hda_full", "T-103")}, \
+    assert got == {("hda_full", "K-101")}, \
         f"set de disparos inesperado: {got}"
 
 
