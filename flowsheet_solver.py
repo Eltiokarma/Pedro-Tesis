@@ -4867,6 +4867,57 @@ def _choose_tear(scc_streams, fs=None, scc_block_ids=None):
     return None
 
 
+def _choose_tears(scc_block_ids, fs):
+    """CAPA 2 — selección de tear reciclo-aware: UN tear por ciclo independiente.
+
+    Usa la descomposición de Capa 1 (`_decompose_scc_cycles`): el tear natural de
+    cada ciclo es su BACK-EDGE (el retorno de reciclo que el spanning tree dejó
+    fuera del árbol).  Ranking dentro del ciclo (docs/multitear_design.md §4.2):
+
+      1. el BACK-EDGE del ciclo (el reciclo real estructural);
+      2. `role == "recycle"`;
+      3. NO ser una "feed line" interna (destino con feed externo que NO cierra
+         el ciclo — el caso S-2, que el `_choose_tear` mono elegía mal);
+      4. menor caudal (rompe el lazo con menor error de arranque).
+
+    Excluye streams `mass_flow_locked` (heredado de S1: una frontera de diseño
+    no es variable de tear).
+
+    Devuelve lista de Streams (uno por ciclo).  Para un SCC mono-reciclo
+    devuelve el MISMO tear que `_choose_tear` (back-edge único) → byte-idéntico.
+
+    NOTA: esta capa SELECCIONA; NO resuelve.  El solve sigue usando
+    `_choose_tear` (mono) hasta la capa 3, que conmutará a esta selección.
+    """
+    bids = set(scc_block_ids)
+    cycles = _decompose_scc_cycles(scc_block_ids, fs)
+    if not cycles:
+        return []
+
+    def _has_external_input(bid):
+        return any(s.src not in bids and s.dst == bid and s.mass_flow > 0
+                   for s in fs.streams.values())
+
+    def _rank(s, back_id):
+        role = (getattr(s, "role", "") or "").lower()
+        is_back = (s.id == back_id)
+        is_recycle = (role == "recycle")
+        is_feedline = _has_external_input(s.dst) and not is_back
+        return (is_back, is_recycle, not is_feedline,
+                -float(s.mass_flow or 0.0))
+
+    tears = []
+    for c in cycles:
+        back_id = c["back_edge"].id
+        cands = [s for s in c["streams"]
+                 if not getattr(s, "mass_flow_locked", False)]
+        if not cands:
+            continue  # ciclo enteramente lockeado → sin variable de tear
+        cands.sort(key=lambda s: _rank(s, back_id), reverse=True)
+        tears.append(cands[0])
+    return tears
+
+
 def _nearest_external_feed(fs, scc_block_ids):
     """El feed externo de mayor caudal que entra al SCC (para el guess
     inicial de composición y T del tear)."""
