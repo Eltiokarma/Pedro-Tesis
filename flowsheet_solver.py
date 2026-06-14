@@ -4695,6 +4695,135 @@ def _streams_in_scc(scc_block_ids, fs):
             if s.src in bids and s.dst in bids]
 
 
+def _decompose_scc_cycles(scc_block_ids, fs):
+    """CAPA 1 — descompone un SCC en sus reciclos INDEPENDIENTES.
+
+    Implementa la base de ciclos fundamentales aprobada en
+    `docs/multitear_design.md` §2.1: un spanning tree (DFS dirigido desde la
+    entrada del SCC) deja exactamente `E_int − V + 1` aristas NO-árbol
+    (back-edges); cada back-edge + el camino (no dirigido) del árbol entre sus
+    extremos forma un ciclo fundamental.  El nº de back-edges = circuit rank =
+    nº de reciclos independientes (Motard / Upadhye-Grens).
+
+    El DFS arranca en la ENTRADA del SCC (bloque con feed externo) y sigue el
+    flujo de proceso, de modo que las aristas de árbol son la cadena forward y
+    los back-edges son los RETORNOS de reciclo (p.ej. gas y tolueno en
+    hda_full quedan como ciclos DISTINTOS).
+
+    Esta función es PURA ESTRUCTURA: NO elige tears (capa 2), NO resuelve
+    (capa 3), NO toca ningún stream.  Devuelve:
+
+        [ {"back_edge": Stream,
+           "streams":   [Stream, ...],   # back-edge + camino del árbol
+           "blocks":    [block_id, ...]} , ... ]
+
+    Lista vacía si el SCC no tiene ciclos (no debería pasar para un recycle SCC).
+    """
+    bids = set(scc_block_ids)
+    internal = _streams_in_scc(scc_block_ids, fs)
+    if not internal:
+        return []
+
+    # Adyacencia dirigida (out-edges), determinista por id de stream.
+    out_edges = {b: [] for b in bids}
+    for s in sorted(internal, key=lambda s: s.id):
+        out_edges[s.src].append(s)
+
+    # Raíz: la entrada del SCC (bloque con feed externo de mayor caudal); si no
+    # hay, el menor id (determinista).
+    def _has_external_input(bid):
+        return any(s.src not in bids and s.dst == bid and s.mass_flow > 0
+                   for s in fs.streams.values())
+    entries = sorted(b for b in bids if _has_external_input(b))
+    root = entries[0] if entries else min(bids)
+
+    # DFS dirigido → árbol de expansión.  tree_parent[b] = (parent_block, stream).
+    tree_parent = {root: None}
+    tree_stream_ids = set()
+    visited = {root}
+    stack = [root]
+    while stack:
+        u = stack.pop()
+        for s in out_edges[u]:
+            v = s.dst
+            if v not in visited:
+                visited.add(v)
+                tree_parent[v] = (u, s)
+                tree_stream_ids.add(s.id)
+                stack.append(v)
+
+    # Si el DFS dirigido desde la raíz no alcanza todo el SCC (raro: puede pasar
+    # si la entrada no domina), completar el árbol de forma no dirigida.
+    if len(visited) < len(bids):
+        undirected = {b: [] for b in bids}
+        for s in internal:
+            undirected[s.src].append((s.dst, s))
+            undirected[s.dst].append((s.src, s))
+        stack = [root]
+        while stack:
+            u = stack.pop()
+            for v, s in sorted(undirected[u], key=lambda t: t[1].id):
+                if v not in visited:
+                    visited.add(v)
+                    tree_parent[v] = (u, s)
+                    tree_stream_ids.add(s.id)
+                    stack.append(v)
+
+    # Back-edges = aristas internas que NO quedaron en el árbol.
+    back_edges = [s for s in sorted(internal, key=lambda s: s.id)
+                  if s.id not in tree_stream_ids]
+
+    # Adyacencia NO dirigida del árbol, para hallar el camino entre extremos.
+    tree_adj = {b: [] for b in bids}
+    for b, link in tree_parent.items():
+        if link is not None:
+            parent, s = link
+            tree_adj[b].append((parent, s))
+            tree_adj[parent].append((b, s))
+
+    def _tree_path_streams(a, b):
+        """Streams del árbol en el camino (no dirigido) de a hacia b (BFS)."""
+        if a == b:
+            return []
+        prev = {a: None}
+        q = [a]
+        while q:
+            nxt = []
+            for u in q:
+                for v, s in tree_adj[u]:
+                    if v not in prev:
+                        prev[v] = (u, s)
+                        nxt.append(v)
+            if b in prev:
+                break
+            q = nxt
+        if b not in prev:
+            return []
+        path = []
+        cur = b
+        while prev[cur] is not None:
+            u, s = prev[cur]
+            path.append(s)
+            cur = u
+        return path
+
+    cycles = []
+    for be in back_edges:
+        path = _tree_path_streams(be.src, be.dst)
+        streams = [be] + path
+        blocks = sorted({s.src for s in streams} | {s.dst for s in streams})
+        cycles.append({"back_edge": be, "streams": streams, "blocks": blocks})
+    return cycles
+
+
+def _scc_circuit_rank(scc_block_ids, fs):
+    """Nº de reciclos independientes del SCC = E_int − V + 1 (circuit rank)."""
+    bids = set(scc_block_ids)
+    e_int = sum(1 for s in fs.streams.values()
+                if s.src in bids and s.dst in bids)
+    return e_int - len(bids) + 1
+
+
 def _choose_tear(scc_streams, fs=None, scc_block_ids=None):
     """Elige el stream a tearear en un reciclo.
 
