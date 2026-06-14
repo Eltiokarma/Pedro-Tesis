@@ -30,6 +30,7 @@ lowercase con '_' (e.g., 'methanol') para coincidir con las claves
 de components.py (catálogo viejo) y de los streams en flowsheet_model.
 """
 
+import json
 import math
 import re
 from dataclasses import dataclass, field
@@ -82,10 +83,21 @@ class ComponentThermo:
     # functional_groups.detect_groups() lazy on demand).
     functional_groups: List[str] = field(default_factory=list)
     # Procedencia del compuesto.
-    #   'experimental' — del thermo_db curado (NIST/DIPPR/FIT)
+    #   'unverified'   — DEFAULT honesto: el dato existe y se usa, pero su
+    #                    fuente NO está confirmada en el catálogo (.md no
+    #                    declara procedencia).  Los valores son buenos
+    #                    (verificados contra NIST en barridos, error ~0%);
+    #                    lo único que no se conoce es la fuente.  NO afirmar
+    #                    'experimental' sin base — sería falsa precisión.
+    #   'pseudo'       — pseudo-componente (cut de petróleo, sólido
+    #                    alimentario, especie sin VLE/DIPPR riguroso) según
+    #                    data/pseudo_components.json.  No tiene datos
+    #                    experimentales por definición.
+    #   'experimental' — del thermo_db curado con fuente CONFIRMADA
+    #                    (NIST/DIPPR/FIT).  Sólo si hay base, no por default.
     #   'estimated'    — estimado via Joback/Benson
     #   'predicted'    — producto generado por un template del predictor
-    origin: str = "experimental"
+    origin: str = "unverified"
     # Si origin in ('estimated', 'predicted'): cual metodo lo estimo.
     estimation_method: str = ""        # 'joback', 'benson', 'auto_combustion'
     # Bandas de incertidumbre por campo, en su escala natural.
@@ -396,10 +408,54 @@ _DEFAULTS: Dict[str, object] = {
 }
 
 
+_PSEUDO_PATH = Path(__file__).parent / "data" / "pseudo_components.json"
+
+
+def _pseudo_names() -> set:
+    """Nombres canónicos de los pseudo-componentes según el catálogo curado
+    data/pseudo_components.json — la ÚNICA autoridad sobre qué es pseudo (la
+    misma que usa el auditor).  Incluye las tres categorías: cuts de petróleo
+    (industrial), sólidos alimentarios/biológicos (food) y especies que el VLE
+    no modela rigurosamente (material).  Devuelve los nombres ya normalizados
+    a la convención del thermo_db."""
+    try:
+        d = json.loads(_PSEUDO_PATH.read_text(encoding="utf-8"))
+    except Exception:
+        return set()
+    names = set()
+    for key in ("industrial_pseudo", "food_pseudo_allowed",
+                "material_pseudo_allowed"):
+        for n in d.get(key, []):
+            cn = _normalize_name(n)
+            if cn:
+                names.add(cn)
+    return names
+
+
+def _apply_pseudo_provenance(db: Dict[str, "ComponentThermo"]) -> None:
+    """PR-E — marca la procedencia REAL de los pseudo-componentes.
+
+    Un compuesto designado pseudo en pseudo_components.json no tiene datos
+    experimentales en el sentido VLE/DIPPR riguroso (es un cut de petróleo,
+    un sólido alimentario o una especie que el solver VLE no modela): afirmar
+    origin='experimental' para él era falso.  Se marca origin/quality='pseudo'.
+
+    SOLO toca compuestos con entrada PROPIA en el db (match por clave directa,
+    no por alias): así un alias como vegetable_oil→triolein NO marca a la
+    molécula real triolein como pseudo.  No altera ningún VALOR numérico
+    (MW/Tb/Antoine/Cp/ΔHf) — solo el metadato de procedencia."""
+    for cn in _pseudo_names():
+        c = db.get(cn)          # clave directa del dict (sin resolver alias)
+        if c is not None:
+            c.origin = "pseudo"
+            c.quality = "pseudo"
+
+
 def _ensure_loaded() -> Dict[str, ComponentThermo]:
     global _DB
     if _DB is None:
         _DB = _parse_db()
+        _apply_pseudo_provenance(_DB)
     return _DB
 
 
