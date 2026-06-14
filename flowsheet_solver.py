@@ -2683,6 +2683,154 @@ def solve_columns(fs):
     return msgs
 
 
+def _flash_method(comp_names, T_flash_K):
+    """Selector de método VLE (PR-2).
+
+    Devuelve 'eos' si (needs_eos AND has_eos_all), si no 'nrtl'.
+      · needs_eos:   algún comp SIN Antoine (antoine_A/B/C), O algún comp con
+                     tc_c no-None tal que T_flash_K ≥ tc_c+273.15 (supercrítico).
+      · has_eos_all: todos los comps tienen tc_c, pc_bar y omega no-None.
+
+    Un comp sin data EOS (p.ej. glucosa) fuerza 'nrtl' aunque needs_eos —
+    por eso ethanol/rxn_flash_col (que llevan glucosa) quedan en NRTL.
+    """
+    try:
+        import thermo_db as _td
+    except ImportError:
+        return "nrtl"
+    needs_eos = False
+    has_eos_all = True
+    for c in comp_names:
+        comp = _td.get(c)
+        if comp is None:
+            has_eos_all = False
+            continue
+        no_antoine = (comp.antoine_A is None or comp.antoine_B is None
+                      or comp.antoine_C is None)
+        supercrit = (comp.tc_c is not None
+                     and T_flash_K >= comp.tc_c + 273.15)
+        if no_antoine or supercrit:
+            needs_eos = True
+        if comp.tc_c is None or comp.pc_bar is None or comp.omega is None:
+            has_eos_all = False
+    return "eos" if (needs_eos and has_eos_all) else "nrtl"
+
+
+def _solve_flash_eos_block(b, fs, feed, all_names, outs, T_K, P_bar):
+    """Rama EOS φ-φ de solve_flashes (PR-2).  Como has_eos_all=True no hay
+    no-volátiles: se flashean TODOS los componentes con eos.flash_TP_eos.
+    Distribución de masas, locks y propagación de P espejan exactamente la
+    rama NRTL.  Devuelve la lista de mensajes del bloque."""
+    import eos as _eos
+    try:
+        import thermo_db as _td
+    except ImportError:
+        _td = None
+
+    def _mw(c):
+        comp = _td.get(c) if _td is not None else None
+        return comp.mw if (comp and comp.mw > 0) else 1.0
+
+    msgs = []
+    mws = [_mw(c) for c in all_names]
+    # feed.composition son fracciones MÁSICAS → molares (zᵢ ∝ wᵢ/MWᵢ).
+    z_moles = [feed.composition[all_names[i]] / mws[i]
+               for i in range(len(all_names))]
+    zt = sum(z_moles) or 1.0
+    z = [zm / zt for zm in z_moles]
+    try:
+        res = _eos.flash_TP_eos(all_names, z, T_K, P_bar)
+    except Exception as e:
+        return [f"✗ Flash {b.name}: {type(e).__name__}: {e}"]
+    if res is None:
+        return [f"⚠ Flash {b.name}: EOS no convergió"]
+
+    vap_out = next((s for s in outs
+                     if "vap" in (s.src_port or "").lower()
+                     or s.phase in ("vapor", "gas")), None)
+    liq_out = next((s for s in outs if s is not vap_out), None)
+    if vap_out is None:
+        vap_out, liq_out = outs[0], outs[1]
+
+    V_frac = res["V_frac"]
+    L_mass_v = sum((1 - V_frac) * res["x"][i] * mws[i]
+                   for i in range(len(all_names)))
+    V_mass_v = sum(V_frac * res["y"][i] * mws[i]
+                   for i in range(len(all_names)))
+    tot_v = L_mass_v + V_mass_v
+    if tot_v <= 0:
+        return msgs
+    feed_mass = sum(feed.composition[c] for c in all_names) * feed.mass_flow
+    scale = feed_mass / tot_v
+    liq_masses = {all_names[i]: (1 - V_frac) * res["x"][i] * mws[i] * scale
+                  for i in range(len(all_names))}
+    vap_masses = {all_names[i]: V_frac * res["y"][i] * mws[i] * scale
+                  for i in range(len(all_names))}
+    L_mass = sum(liq_masses.values())
+    V_mass = sum(vap_masses.values())
+    total_mass = L_mass + V_mass
+    if total_mass <= 0:
+        return msgs
+    L_frac_mass = L_mass / total_mass
+    V_frac_mass = V_mass / total_mass
+    x_mass = {c: liq_masses[c] / L_mass for c in liq_masses} if L_mass > 0 else {}
+    y_mass = {c: vap_masses[c] / V_mass for c in vap_masses} if V_mass > 0 else {}
+
+    if vap_out is not None:
+        if not getattr(vap_out, "composition_locked", False):
+            vap_out.composition = y_mass
+            vap_out.main_component = max(y_mass, key=y_mass.get) if y_mass else ""
+        vap_out.phase = "vapor"
+        if not _is_mass_locked(vap_out):
+            vap_out.mass_flow = feed.mass_flow * V_frac_mass
+        if not _is_temp_locked(vap_out):
+            vap_out.temperature = T_K - 273.15
+    if liq_out is not None:
+        if not getattr(liq_out, "composition_locked", False):
+            liq_out.composition = x_mass
+            liq_out.main_component = max(x_mass, key=x_mass.get) if x_mass else ""
+        liq_out.phase = "liquid"
+        if not _is_mass_locked(liq_out):
+            liq_out.mass_flow = feed.mass_flow * L_frac_mass
+        if not _is_temp_locked(liq_out):
+            liq_out.temperature = T_K - 273.15
+
+    if vap_out is not None and not _is_pressure_locked(vap_out):
+        vap_out.pressure_bar = P_bar
+    if liq_out is not None and not _is_pressure_locked(liq_out):
+        liq_out.pressure_bar = P_bar
+
+    if V_frac_mass < 0.005:
+        msgs.append(
+            f"⚠ Flash {b.name}: V/F_mass={V_frac_mass:.4f} → single-phase "
+            f"liquid a {T_K-273.15:.1f}°C, {P_bar:.2f}bar. Vapor stream "
+            f"{vap_out.name if vap_out else '?'} con mass≈0; revisar si el "
+            f"flash es necesario o si T/P son correctas."
+        )
+        if vap_out is not None:
+            if not _is_mass_locked(vap_out):
+                vap_out.mass_flow = 0.0
+            if not _is_phase_locked(vap_out):
+                vap_out.phase = "vapor"
+    elif V_frac_mass > 0.995:
+        msgs.append(
+            f"⚠ Flash {b.name}: V/F_mass={V_frac_mass:.4f} → single-phase "
+            f"vapor a {T_K-273.15:.1f}°C, {P_bar:.2f}bar. Líquido stream "
+            f"{liq_out.name if liq_out else '?'} con mass≈0; revisar."
+        )
+        if liq_out is not None:
+            if not _is_mass_locked(liq_out):
+                liq_out.mass_flow = 0.0
+            if not _is_phase_locked(liq_out):
+                liq_out.phase = "liquid"
+
+    msgs.append(
+        f"✓ Flash {b.name}: método=eos  V/F_mass={V_frac_mass:.3f}  "
+        f"T={T_K-273.15:.1f}°C  P={P_bar:.2f}bar"
+    )
+    return msgs
+
+
 def solve_flashes(fs):
     """Para cada bloque tipo Vessel con flash_active=True, computa
     automáticamente las composiciones de salida vapor/líquido usando
@@ -2712,6 +2860,16 @@ def solve_flashes(fs):
             continue
         all_names = list(feed.composition.keys())
         if len(all_names) < 2:
+            continue
+        # ── Selección automática de método VLE (PR-2) ──
+        # NRTL (γ-φ) para orgánicos con Antoine; EOS Peng-Robinson (φ-φ)
+        # para mezclas con componentes supercríticos o sin Antoine que SÍ
+        # tienen data EOS (Tc/Pc/ω).  La rama NRTL queda byte-idéntica.
+        T_K = b.flash_T_K or (feed.temperature + 273.15)
+        P_bar = b.flash_P_bar or 1.013
+        if _flash_method(all_names, T_K) == "eos":
+            msgs.extend(_solve_flash_eos_block(b, fs, feed, all_names,
+                                               outs, T_K, P_bar))
             continue
         # Separar VOLÁTILES (con Antoine) de NO-VOLÁTILES (azúcares, sólidos
         # sin presión de vapor: glucosa, sacarosa…).  El NRTL sólo modela los

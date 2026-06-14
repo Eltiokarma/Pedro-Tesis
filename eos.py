@@ -359,3 +359,126 @@ def psat_bar(name: str, T_C: float) -> Optional[float]:
     if P is None:
         return None
     return P / 1e5  # Pa → bar
+
+
+# ============================================================
+# Flash isotérmico φ-φ (Peng-Robinson)
+# ============================================================
+
+def _rachford_rice(z: Sequence[float], K: Sequence[float],
+                   tol: float = 1e-12, max_iter: int = 200) -> float:
+    """Resuelve  Σ z_i·(K_i−1)/(1 + V·(K_i−1)) = 0  por bisección en V∈(0,1).
+
+    g(V) es monótona decreciente.  Devuelve V=0 si g(0)<0 (todo líquido,
+    bubble) ó V=1 si g(1)>0 (todo vapor, dew); de lo contrario la raíz en
+    (0,1).  (Rachford & Rice, Trans. AIME 195 (1952).)
+    """
+    n = len(z)
+
+    def g(V: float) -> float:
+        return sum(z[i] * (K[i] - 1.0) / (1.0 + V * (K[i] - 1.0))
+                   for i in range(n))
+
+    if g(0.0) < 0.0:
+        return 0.0
+    if g(1.0) > 0.0:
+        return 1.0
+    lo, hi = 0.0, 1.0
+    for _ in range(max_iter):
+        mid = 0.5 * (lo + hi)
+        gm = g(mid)
+        if abs(gm) < tol:
+            return mid
+        if gm > 0.0:
+            lo = mid
+        else:
+            hi = mid
+    return 0.5 * (lo + hi)
+
+
+def flash_TP_eos(names: Sequence[str], z_mol: Sequence[float],
+                 T_K: float, P_bar: float,
+                 max_iter: int = 60, tol: float = 1e-8) -> Optional[dict]:
+    """Flash isotérmico φ-φ con Peng-Robinson.  MISMA firma/return que
+    nrtl.flash_TP.  K_i = φ_i^L(x) / φ_i^V(y), iterado por sustitución
+    sucesiva (guess inicial de Wilson 1969; PR 1976; Rachford-Rice 1952).
+
+    Returns dict {'V_frac','x','y','K','iterations'} (x,y en orden de `names`,
+    fracciones MOLARES) o None si:
+      · algún componente carece de tc_c/pc_bar/omega, o
+      · no converge / no hay solución bifásica física.
+    """
+    n = len(names)
+    if n < 1 or n != len(z_mol):
+        return None
+    consts = [_eos_consts(nm) for nm in names]
+    if any(c is None for c in consts):
+        return None
+    comps_props = [(c[0], c[1], c[2]) for c in consts]  # (Tc_K, Pc_Pa, omega)
+    P_Pa = P_bar * 1e5
+
+    s = sum(z_mol) or 1.0
+    z = [zi / s for zi in z_mol]
+
+    # (1) Guess inicial de Wilson.
+    K = [(Pc / P_Pa) * math.exp(5.373 * (1.0 + w) * (1.0 - Tc / T_K))
+         for (Tc, Pc, w) in comps_props]
+
+    def _edge(V: float, it: int) -> dict:
+        """Devuelve el borde single-phase (V=0 ó 1) con x=z ó y=z."""
+        if V <= 1e-6:
+            x = list(z)
+            yraw = [K[i] * x[i] for i in range(n)]
+            sy = sum(yraw) or 1.0
+            return dict(V_frac=0.0, x=x, y=[v / sy for v in yraw],
+                        K=list(K), iterations=it)
+        xraw = [z[i] / K[i] for i in range(n)]
+        sx = sum(xraw) or 1.0
+        return dict(V_frac=1.0, x=[v / sx for v in xraw], y=list(z),
+                    K=list(K), iterations=it)
+
+    it = 0
+    for it in range(1, max_iter + 1):
+        # (2) Rachford-Rice por V.
+        V = _rachford_rice(z, K)
+        # (6) Bordes single-phase: no forzar bifásico.
+        if V <= 1e-6 or V >= 1.0 - 1e-6:
+            return _edge(V, it)
+        # (3) Composiciones de fase.
+        x = [z[i] / (1.0 + V * (K[i] - 1.0)) for i in range(n)]
+        y = [K[i] * x[i] for i in range(n)]
+        sx, sy = sum(x), sum(y)
+        if sx <= 0 or sy <= 0:
+            return None
+        x = [xi / sx for xi in x]
+        y = [yi / sy for yi in y]
+        # (4) K nuevos por igualdad de fugacidad (vdW, kij=0).
+        phiL = fugacity_coeff_mix(comps_props, x, T_K, P_Pa, "liquid")
+        phiV = fugacity_coeff_mix(comps_props, y, T_K, P_Pa, "vapor")
+        if phiL is None or phiV is None:
+            return None
+        K_new = [phiL[i] / phiV[i] for i in range(n)]
+        max_dk = max(abs(K_new[i] - K[i]) / max(K[i], 1e-12)
+                     for i in range(n))
+        K = K_new
+        # (5) Convergencia.
+        if max_dk < tol:
+            break
+
+    V = _rachford_rice(z, K)
+    if V <= 1e-6 or V >= 1.0 - 1e-6:
+        return _edge(V, it)
+    x = [z[i] / (1.0 + V * (K[i] - 1.0)) for i in range(n)]
+    y = [K[i] * x[i] for i in range(n)]
+    sx, sy = sum(x), sum(y)
+    if sx <= 0 or sy <= 0:
+        return None
+    x = [xi / sx for xi in x]
+    y = [yi / sy for yi in y]
+
+    # Validación de conservación: z_i ≈ (1−V)·x_i + V·y_i.
+    for i in range(n):
+        if abs(z[i] - ((1.0 - V) * x[i] + V * y[i])) > 1e-6:
+            return None
+
+    return dict(V_frac=V, x=x, y=y, K=K, iterations=it)
