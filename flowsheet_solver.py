@@ -114,6 +114,7 @@ class RecycleSolution:
     iterations:   int       = 0
     final_value:  float     = 0.0
     history:      List[float] = field(default_factory=list)
+    s2c_activated: List[str] = field(default_factory=list)  # CAPA 5: separadores activados como flash
 
 
 @dataclass
@@ -5150,6 +5151,86 @@ def _solve_recycle_wegstein(fs, scc_block_ids,
     return rs
 
 
+def _is_vl_separator(fs, b):
+    """(a-fix) S2-C: ¿`b` es un separador vapor/líquido GENUINO?
+
+    Equipo tipo vessel/flash/separador, 1 entrada de proceso, 2 salidas con
+    composición declarada DISTINTA.  Excluye splitters same-comp, HX (lados
+    separados), mixers (2-in), bombas/compresores.  Regla por FÍSICA, no por
+    nombre de bloque.
+    """
+    et = (b.eq_type or "").lower()
+    if not any(t in et for t in ("vessel", "flash", "separator",
+                                 "knock", "drum")):
+        return False
+    outs = [s for s in fs.streams.values() if s.src == b.id]
+    ins = [s for s in fs.streams.values() if s.dst == b.id]
+    if len(outs) != 2 or len(ins) < 1:
+        return False
+    # Composición DECLARADA (capturada por _reset_propagated_values antes de que
+    # la propagación la pise; fallback a la actual si no hay snapshot).  Usar la
+    # declarada es clave: en el loop vivo, auto_propagate iguala ambas salidas a
+    # la del feed → la actual ya no discrimina.
+    def _decl(s):
+        c = getattr(s, "_comp_declared", None)
+        return (c if c is not None else (s.composition or {})) or {}
+    c0, c1 = _decl(outs[0]), _decl(outs[1])
+    distinct = (set(c0) != set(c1)
+                or any(abs(c0.get(k, 0.0) - c1.get(k, 0.0)) > 1e-6
+                       for k in set(c0) | set(c1)))
+    return distinct
+
+
+def _activate_s2c(fs, scc_block_ids):
+    """S2-C (CAPA 5): activa como FLASH los separadores v/l PASIVOS de un loop
+    vivo cuyo split pasivo DEGENERÓ.  Se llama tras una pasada-sonda pasiva.
+
+    Las TRES condiciones (docs/multitear_design.md, por FÍSICA no por nombre):
+      (a-fix) `_is_vl_separator`: separador v/l genuino (2 salidas, comp DECLARADA
+              distinta);
+      (b)     PASIVO hoy (sin flash/splitter/separator_active);
+      (c-fix) DEGENERA: una salida cae a <1e-3·feed con feed >0.
+
+    Activa `flash_active` con la P/T de operación PROPAGADAS (de la corriente de
+    feed, no placeholders) y lo deja activo durante TODO el solve — así
+    `solve_flashes` (PR-2, método por `_flash_method`) produce el split real en
+    cada forward-pass.  Es una mutación runtime del fs (no se persiste al JSON) y
+    sólo ocurre en loops vivos acoplados (Broyden), nunca en los 41 frozen.
+
+    Devuelve la lista de nombres de bloques activados.
+    """
+    activated = []
+    for bid in scc_block_ids:
+        b = fs.blocks.get(bid)
+        if b is None:
+            continue
+        # (b) pasivo
+        if (getattr(b, "flash_active", False)
+                or getattr(b, "splitter_active", False)
+                or getattr(b, "separator_active", False)):
+            continue
+        # (a-fix) separador v/l genuino
+        if not _is_vl_separator(fs, b):
+            continue
+        outs = [s for s in fs.streams.values() if s.src == b.id]
+        ins = [s for s in fs.streams.values() if s.dst == b.id]
+        feed = next((s for s in ins
+                     if s.mass_flow > 0 and (s.composition or {})), None)
+        if feed is None:
+            continue
+        # (c-fix) degeneración: una salida ≈0 con feed >0
+        if min(outs[0].mass_flow, outs[1].mass_flow) >= 1e-3 * feed.mass_flow:
+            continue
+        # Activar flash con P/T de operación PROPAGADAS.
+        b.flash_active = True
+        b.flash_T_K = ((feed.temperature + 273.15) if feed.temperature
+                       else (b.T_op_K or 298.15))
+        b.flash_P_bar = (feed.pressure_bar if (feed.pressure_bar or 0) > 1.02
+                         else (b.P_op_bar if (b.P_op_bar or 0) > 1.0 else 1.013))
+        activated.append(b.name)
+    return activated
+
+
 def _tears_forward_pass(fs, scc_streams, tears, x_vec):
     """Un forward-pass del vector de tears (método de tearing textbook + S2-B):
 
@@ -5191,11 +5272,16 @@ def _tears_forward_pass(fs, scc_streams, tears, x_vec):
         for t, wl in zip(tears, was_locked):
             t.mass_flow_locked = wl
             t.mass_flow = 0.0
-        solve_splitters(fs)
-        solve_flashes(fs)
-        solve_mechanical_separators(fs)
-        solve_columns(fs)
-        for _ in range(3):
+        # Orden FÍSICO e iterado: el separador (flash, incl. S2-C) produce su
+        # split PRIMERO; recién después los splitters lo distribuyen a
+        # reciclo/producto.  Interleaved unas pasadas para que productos y
+        # reciclos queden consistentes con el mismo split (evita staleness).
+        for _ in range(5):
+            solve_flashes(fs)
+            solve_mechanical_separators(fs)
+            solve_columns(fs)
+            solve_splitters(fs)
+            auto_propagate_compositions(fs)
             if not _solve_mass_iteration(fs):
                 break
         auto_propagate_compositions(fs)
@@ -5233,6 +5319,14 @@ def _solve_recycle_broyden(fs, scc_block_ids, tears,
     x = [max(_initial_guess(fs, scc_block_ids, t), 1e-6) for t in tears]
     # Composición/T inyectadas por sustitución directa (como el Wegstein mono):
     # las fija el forward-pass; acá solo teamos el vector de masas.
+
+    # S2-C (CAPA 5): pasada-sonda pasiva → detectar separadores v/l pasivos cuyo
+    # split DEGENERA y activarlos como flash para todo el solve.  Sin esto, un
+    # separador pasivo no produce el split que alimenta el reciclo y el loop
+    # colapsa.  Sólo afecta loops vivos acoplados (este path).
+    _tears_forward_pass(fs, scc_streams, tears, x)
+    s2c_blocks = _activate_s2c(fs, scc_block_ids)
+    rs.s2c_activated = s2c_blocks
 
     # H = inversa aproximada del jacobiano de F.  H₀ = −I.
     H = [[(-1.0 if i == j else 0.0) for j in range(n)] for i in range(n)]
