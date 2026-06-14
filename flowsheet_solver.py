@@ -4707,7 +4707,15 @@ def _choose_tear(scc_streams, fs=None, scc_block_ids=None):
     varios candidatos, se prefiere el marcado con role recycle/internal.
 
     Fallback (compat): primer stream sin mass_flow declarado.
+
+    S1 (tear-fix): un stream `mass_flow_locked` es FRONTERA DE DISEÑO, no una
+    variable libre — no puede ser el tear.  Se excluye de los candidatos en
+    ambos caminos (back-edge y fallback).  Mantiene el ranking por role para
+    el resto.
     """
+    def _tearable(s):
+        return not getattr(s, "mass_flow_locked", False)
+
     if fs is not None and scc_block_ids is not None:
         bids = set(scc_block_ids)
 
@@ -4715,7 +4723,8 @@ def _choose_tear(scc_streams, fs=None, scc_block_ids=None):
             return any(s.src not in bids and s.dst == bid and s.mass_flow > 0
                        for s in fs.streams.values())
 
-        back_edges = [s for s in scc_streams if _has_external_input(s.dst)]
+        back_edges = [s for s in scc_streams
+                      if _has_external_input(s.dst) and _tearable(s)]
         if back_edges:
             def _rank(s):
                 role = (getattr(s, "role", "") or "").lower()
@@ -4723,7 +4732,7 @@ def _choose_tear(scc_streams, fs=None, scc_block_ids=None):
             back_edges.sort(key=_rank, reverse=True)
             return back_edges[0]
 
-    unknowns = [s for s in scc_streams if s.mass_flow <= 0]
+    unknowns = [s for s in scc_streams if s.mass_flow <= 0 and _tearable(s)]
     if unknowns:
         return unknowns[0]
     return None
