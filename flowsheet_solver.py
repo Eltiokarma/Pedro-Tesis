@@ -597,6 +597,14 @@ def _reset_propagated_values(fs):
         b._batch_profile = None
 
 
+# S2-B (CAPA 4): streams que son TEAR de un SCC en resolución activa.  Mientras
+# están acá, `_solve_mass_iteration` NO los deduce por balance — su valor lo fija
+# EXCLUSIVAMENTE el paso de convergencia (Broyden/Wegstein).  Cierra RC2 (la
+# "deducción circular" que hacía que cualquier guess se auto-satisficiera →
+# converged falso).  Lo setea/limpia `_tears_forward_pass`.
+_ACTIVE_TEAR_IDS: set = set()
+
+
 def _solve_mass_iteration(fs):
     """Una pasada sobre todos los bloques.  Devuelve lista de tuplas
     (stream_name, new_mass_flow) con lo que se propagó esta pasada.
@@ -641,10 +649,13 @@ def _solve_mass_iteration(fs):
         if not proc_ins or not proc_outs:
             continue          # bloque puramente de servicio (header CW, etc.)
 
+        # S2-B: un tear activo NO es candidato a deducción por balance.
         unknown_ins   = [s for s in proc_ins
-                          if not _is_mass_locked(s) and s.mass_flow == 0]
+                          if not _is_mass_locked(s) and s.mass_flow == 0
+                          and s.id not in _ACTIVE_TEAR_IDS]
         unknown_outs  = [s for s in proc_outs
-                          if not _is_mass_locked(s) and s.mass_flow == 0]
+                          if not _is_mass_locked(s) and s.mass_flow == 0
+                          and s.id not in _ACTIVE_TEAR_IDS]
 
         if not unknown_ins and len(unknown_outs) == 1:
             sum_in        = sum(s.mass_flow for s in proc_ins)
@@ -5140,42 +5151,58 @@ def _solve_recycle_wegstein(fs, scc_block_ids,
 
 
 def _tears_forward_pass(fs, scc_streams, tears, x_vec):
-    """Un forward-pass del vector de tears (mecánica idéntica al Wegstein):
+    """Un forward-pass del vector de tears (método de tearing textbook + S2-B):
 
-      (a) limpia los internos NO lockeados y NO-tear del SCC;
-      (b) inyecta el vector x_vec en los tears y los CONGELA;
-      (c) propaga el loop con química (mixer + reactor);
-      (d) desbloquea los tears, los pone a 0 y deja que sus bloques fuente
-          (splitter/flash/separador/columna) los RECALCULEN.
+      (a) limpia los internos NO-tear NO-lockeados del SCC;
+      (b) inyecta x_vec en los tears y los CONGELA durante TODO el pass
+          (S2-B: el tear nunca se deduce por balance — su valor es el inyectado);
+      (c) propaga el loop con química + unit ops (los demás streams se computan
+          desde los tears fijos + feeds externos);
+      (d) g(x) = lo que el BLOQUE FUENTE de cada tear produce, por balance
+          (Σin − Σotros_out del src).  El tear sigue lockeado → nunca se pisa
+          con su propio guess (cierra RC2: el residuo G(x)−x es genuino).
 
-    Devuelve el vector recalculado G(x) = [t.mass_flow por tear].
+    Devuelve el vector recalculado G(x).
     """
+    global _ACTIVE_TEAR_IDS
     tear_ids = {t.id for t in tears}
-    # (a)
-    for s in scc_streams:
-        if s.id not in tear_ids and not getattr(s, "mass_flow_locked", False):
-            s.mass_flow = 0.0
-    # (b)
-    was_locked = []
-    for t, xi in zip(tears, x_vec):
-        t.mass_flow = max(xi, 1e-6)
-        was_locked.append(getattr(t, "mass_flow_locked", False))
-        t.mass_flow_locked = True
-    # (c)
-    _propagate_loop_with_chemistry(fs)
-    # (d)
-    for t, wl in zip(tears, was_locked):
-        t.mass_flow_locked = wl
-        t.mass_flow = 0.0
-    solve_splitters(fs)
-    solve_flashes(fs)
-    solve_mechanical_separators(fs)
-    solve_columns(fs)
-    for _ in range(3):
-        if not _solve_mass_iteration(fs):
-            break
-    auto_propagate_compositions(fs)
-    return [t.mass_flow for t in tears]
+    _prev_active = _ACTIVE_TEAR_IDS
+    # S2-B activo durante TODO el pass: ningún tear se deduce por balance.
+    _ACTIVE_TEAR_IDS = set(tear_ids)
+    try:
+        # (a) limpiar internos no-tear no-lockeados
+        for s in scc_streams:
+            if (s.id not in tear_ids
+                    and not getattr(s, "mass_flow_locked", False)):
+                s.mass_flow = 0.0
+        # (b) inyectar el guess y CONGELAR los tears durante la propagación
+        was_locked = []
+        for t, xi in zip(tears, x_vec):
+            t.mass_flow = max(xi, 1e-6)
+            was_locked.append(getattr(t, "mass_flow_locked", False))
+            t.mass_flow_locked = True
+        # (c) propagar el loop con química (tears fijos)
+        _propagate_loop_with_chemistry(fs)
+        # (d) recalcular: desbloquear, poner a 0 y dejar que el BLOQUE FUENTE
+        #     (splitter/flash/separador/columna) produzca el tear.  El guard
+        #     S2-B impide que _solve_mass_iteration lo deduzca por balance —
+        #     si el tear NO tiene un productor real (separador pasivo), queda
+        #     en 0 → residuo grande → converged=False HONESTO (no un falso a 0).
+        for t, wl in zip(tears, was_locked):
+            t.mass_flow_locked = wl
+            t.mass_flow = 0.0
+        solve_splitters(fs)
+        solve_flashes(fs)
+        solve_mechanical_separators(fs)
+        solve_columns(fs)
+        for _ in range(3):
+            if not _solve_mass_iteration(fs):
+                break
+        auto_propagate_compositions(fs)
+        g = [t.mass_flow for t in tears]
+    finally:
+        _ACTIVE_TEAR_IDS = _prev_active
+    return g
 
 
 def _solve_recycle_broyden(fs, scc_block_ids, tears,
