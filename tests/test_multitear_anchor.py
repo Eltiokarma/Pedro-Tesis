@@ -39,12 +39,6 @@ os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 from flowsheet_model import Flowsheet, Block, Stream
 from flowsheet_solver import solve
 
-try:
-    import pytest
-    _HAS_PYTEST = True
-except ImportError:
-    _HAS_PYTEST = False
-
 
 # Estado estacionario exacto (derivado a mano arriba).
 EXPECTED_SS = {
@@ -125,17 +119,17 @@ def _solve_and_compare(tol=0.5):
     return ok, got, res
 
 
-if _HAS_PYTEST:
-    @pytest.mark.xfail(strict=True,
-                       reason="motor multi-tear aún no construido (fase de "
-                              "diseño); el Wegstein mono-tear colapsa este caso")
-    def test_multitear_anchor_converges():
-        ok, got, res = _solve_and_compare()
-        assert ok, f"status={res.overall_status} got={got} exp={EXPECTED_SS}"
-else:
-    def test_multitear_anchor_converges():
-        # Sin pytest (modo manual / fase de diseño): reportar, no romper.
-        ok, got, res = _solve_and_compare()
-        print(f"[ANCLA multi-tear] converge={ok} "
-              f"(esperado False hasta construir el motor)  "
-              f"status={res.overall_status}")
+def test_multitear_anchor_converges():
+    """CAPA 3 — el motor Broyden converge el loop ACOPLADO al SS exacto.
+
+    Convergencia REAL (no un 'converged' falso a 0): status != error, todos
+    los interiores >0, y cada stream en su valor exacto calculado a mano.
+    """
+    ok, got, res = _solve_and_compare()
+    assert ok, f"status={res.overall_status} got={got} exp={EXPECTED_SS}"
+    assert res.overall_status != "error"
+    # interiores estrictamente > 0 (no colapso)
+    for k in ("S-a", "S-fwd", "R1", "R2", "Prod"):
+        assert got[k] > 0.0, f"{k} colapsó a {got[k]}"
+    # el tear vector convergió (RecycleSolution presente y converged)
+    assert any(rs.converged for rs in res.recycle_solutions)
