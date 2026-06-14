@@ -5139,6 +5139,147 @@ def _solve_recycle_wegstein(fs, scc_block_ids,
     return rs
 
 
+def _tears_forward_pass(fs, scc_streams, tears, x_vec):
+    """Un forward-pass del vector de tears (mecánica idéntica al Wegstein):
+
+      (a) limpia los internos NO lockeados y NO-tear del SCC;
+      (b) inyecta el vector x_vec en los tears y los CONGELA;
+      (c) propaga el loop con química (mixer + reactor);
+      (d) desbloquea los tears, los pone a 0 y deja que sus bloques fuente
+          (splitter/flash/separador/columna) los RECALCULEN.
+
+    Devuelve el vector recalculado G(x) = [t.mass_flow por tear].
+    """
+    tear_ids = {t.id for t in tears}
+    # (a)
+    for s in scc_streams:
+        if s.id not in tear_ids and not getattr(s, "mass_flow_locked", False):
+            s.mass_flow = 0.0
+    # (b)
+    was_locked = []
+    for t, xi in zip(tears, x_vec):
+        t.mass_flow = max(xi, 1e-6)
+        was_locked.append(getattr(t, "mass_flow_locked", False))
+        t.mass_flow_locked = True
+    # (c)
+    _propagate_loop_with_chemistry(fs)
+    # (d)
+    for t, wl in zip(tears, was_locked):
+        t.mass_flow_locked = wl
+        t.mass_flow = 0.0
+    solve_splitters(fs)
+    solve_flashes(fs)
+    solve_mechanical_separators(fs)
+    solve_columns(fs)
+    for _ in range(3):
+        if not _solve_mass_iteration(fs):
+            break
+    auto_propagate_compositions(fs)
+    return [t.mass_flow for t in tears]
+
+
+def _solve_recycle_broyden(fs, scc_block_ids, tears,
+                           max_iter=50, tol=0.001):
+    """CAPA 3 — convergencia multi-tear SIMULTÁNEA (Broyden).
+
+    Resuelve los N tears de un SCC ACOPLADO a la vez (docs/multitear_design.md
+    §4.3): los tears interactúan (el gas mueve al tolueno), así que el Wegstein
+    por-tear oscila/colapsa; Broyden (cuasi-Newton multivariable) captura el
+    acoplamiento vía un jacobiano inverso aproximado.
+
+    Función residual  F(x) = G(x) − x , con G el forward-pass (recálculo de los
+    tears tras propagar el loop).  Inversa inicial H₀ = −I  → el primer paso es
+    sustitución directa (x₁ = G(x₀)).  Actualización de Broyden "buena" sobre H.
+
+    Fallback honesto: si Broyden diverge (no-finito / negativo), degrada a
+    sustitución amortiguada; si no converge en max_iter, `converged=False`
+    (nunca un "converged" falso a 0).
+    """
+    scc_streams = _streams_in_scc(scc_block_ids, fs)
+    n = len(tears)
+    rs = RecycleSolution(
+        cycle_blocks=[fs.blocks[bid].name for bid in scc_block_ids],
+        tear_stream="+".join(t.name for t in tears),
+    )
+
+    # Guess inicial por tear (mismo criterio escalar que el mono).
+    x = [max(_initial_guess(fs, scc_block_ids, t), 1e-6) for t in tears]
+    # Composición/T inyectadas por sustitución directa (como el Wegstein mono):
+    # las fija el forward-pass; acá solo teamos el vector de masas.
+
+    # H = inversa aproximada del jacobiano de F.  H₀ = −I.
+    H = [[(-1.0 if i == j else 0.0) for j in range(n)] for i in range(n)]
+
+    def _matvec(M, v):
+        return [sum(M[i][j] * v[j] for j in range(n)) for i in range(n)]
+
+    def _residual(xv):
+        g = _tears_forward_pass(fs, scc_streams, tears, xv)
+        return [g[i] - xv[i] for i in range(n)], g
+
+    F, g = _residual(x)
+    rs.history.append(sum(x))
+
+    for it in range(max_iter):
+        scale = max(max(abs(v) for v in x), 1e-9)
+        if max(abs(f) for f in F) / scale < tol:
+            rs.converged = True
+            rs.iterations = it + 1
+            rs.final_value = sum(g)
+            # fijar el SS convergido y propagarlo
+            _tears_forward_pass(fs, scc_streams, tears, x)
+            return rs
+
+        # paso Broyden:  dx = −H·F
+        dx = [-v for v in _matvec(H, F)]
+        x_new = [x[i] + dx[i] for i in range(n)]
+
+        _INF = float("inf")
+        ok = all(v == v and -_INF < v < _INF and v > 0 for v in x_new)
+        if not ok:
+            # fallback: sustitución amortiguada
+            x_new = [max(0.5 * x[i] + 0.5 * g[i], 1e-6) for i in range(n)]
+            dx = [x_new[i] - x[i] for i in range(n)]
+
+        F_new, g = _residual(x_new)
+        dF = [F_new[i] - F[i] for i in range(n)]
+
+        # actualización de Broyden "buena" sobre H:
+        #   H += ((dx − H·dF) (dxᵀ H)) / (dxᵀ H dF)
+        HdF = _matvec(H, dF)
+        dxT_H = [sum(dx[i] * H[i][j] for i in range(n)) for j in range(n)]
+        denom = sum(dx[i] * HdF[i] for i in range(n))
+        if abs(denom) > 1e-30:
+            num = [dx[i] - HdF[i] for i in range(n)]
+            for i in range(n):
+                for j in range(n):
+                    H[i][j] += num[i] * dxT_H[j] / denom
+
+        x, F = x_new, F_new
+        rs.history.append(sum(x))
+
+    rs.converged = False
+    rs.iterations = max_iter
+    rs.final_value = sum(x)
+    return rs
+
+
+def _solve_recycle_multitear(fs, scc_block_ids, max_iter=50, tol=0.001):
+    """Dispatcher de convergencia de reciclos (CAPA 3).
+
+    - SCC mono-reciclo (circuit rank ≤ 1): delega en el Wegstein escalar
+      ACTUAL → byte-idéntico (haber_rec, ancla de no-regresión).
+    - SCC multi-reciclo acoplado (rank ≥ 2): Broyden simultáneo sobre el
+      vector de tears (Capa 2 los elige; uno por ciclo).
+    """
+    tears = _choose_tears(scc_block_ids, fs)
+    if len(tears) <= 1:
+        return _solve_recycle_wegstein(fs, scc_block_ids,
+                                       max_iter=max_iter, tol=tol)
+    return _solve_recycle_broyden(fs, scc_block_ids, tears,
+                                  max_iter=max_iter, tol=tol)
+
+
 # ======================================================
 # ENTRYPOINT
 # ======================================================
@@ -5254,7 +5395,7 @@ def solve(fs, max_iter=MAX_ITER):
         if _is_pure_service_scc(scc, fs):
             service_loop_sccs.append(scc)
             continue
-        rs = _solve_recycle_wegstein(fs, scc)
+        rs = _solve_recycle_multitear(fs, scc)
         result.recycle_solutions.append(rs)
 
     # 4. Re-propagar después de los tears resueltos (cierra todo lo
@@ -5389,7 +5530,7 @@ def solve(fs, max_iter=MAX_ITER):
                     continue   # lazo de servicio: caudal analítico
                 scc_streams = _streams_in_scc(scc, fs)
                 if not all(s.mass_flow > 0 for s in scc_streams):
-                    _solve_recycle_wegstein(fs, scc, max_iter=10)
+                    _solve_recycle_multitear(fs, scc, max_iter=10)
             # Correr los separadores/columnas AHORA para propagar la
             # composición del recycle de vuelta al inlet del reactor antes
             # de la próxima iteración.  Sin esto, si el tear del recycle
