@@ -4069,6 +4069,12 @@ class StreamItem(QGraphicsPathItem):
         # con scene=None es no-op (ver guard adentro), así que ahora
         # que scene existe sí crea los _EndpointHandle naranjas.
         self._rebuild_handles()
+        # Re-anclar AHORA que el item está en escena.  El update_path() del
+        # __init__ corrió con self.scene()==None; aunque _resolve_port toma
+        # editor.scene como red de seguridad, este segundo pase garantiza que
+        # AMBOS extremos (cola=src y cabeza=dst) queden anclados a los puertos
+        # vivos en el momento de entrar a la escena, sin depender del hover.
+        self.update_path(rebuild_handles=False)
 
     def remove_from_scene(self, scene: QGraphicsScene):
         # remover handles de waypoints si estaban activos
@@ -7921,6 +7927,11 @@ class FlowsheetMainWindow(QMainWindow):
             self._bubble_manager.refresh_all()
         if getattr(self, "_hx_bubble_manager", None) is not None:
             self._hx_bubble_manager.refresh_all()
+        # Red de seguridad GUI-only: re-anclar en el próximo ciclo del
+        # event-loop, cuando la geometría de los puertos recién renderizados
+        # ya está asentada (corrige el extremo COLA/src que en el GUI real
+        # quedaba stale hasta el hover).
+        self._schedule_stream_reanchor()
 
     # ---------------------------------------------------
     # UNDO / REDO infrastructure
@@ -8018,6 +8029,25 @@ class FlowsheetMainWindow(QMainWindow):
             self._bubble_manager._refresh_leaders()
         if getattr(self, "_hx_bubble_manager", None) is not None:
             self._hx_bubble_manager._refresh_leaders()
+
+    def _schedule_stream_reanchor(self):
+        """Re-ancla TODOS los streams en el PRÓXIMO ciclo del event-loop.
+
+        Red de seguridad para el bug de geometría stale que se observa SOLO
+        en el GUI real (no headless/offscreen): tras un _rebuild_scene la
+        geometría de algún puerto recién renderizado puede no estar asentada
+        todavía en el primer pase síncrono, dejando el extremo COLA (src) de
+        la flecha desalineado hasta que un hover dispara update_path.  Un
+        QTimer.singleShot(0) corre después de que Qt procesó el layout/paint
+        diferido, garantizando que el re-anclaje suceda sin intervención del
+        user.  Idempotente y barato (<50 streams)."""
+        from PySide6.QtCore import QTimer
+        def _do():
+            try:
+                self._refresh_all_stream_paths()
+            except RuntimeError:
+                pass   # escena/objetos C++ destruidos (shutdown)
+        QTimer.singleShot(0, _do)
 
     def _remove_block_item(self, bid):
         item = self.scene.block_items.pop(bid, None)
