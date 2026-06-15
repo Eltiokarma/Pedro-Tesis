@@ -116,11 +116,42 @@ def test_placeholder_bonus_ldpe_r027():
 
 
 # ── 1.6 [W-SPLIT-LOCK] ──────────────────────────────────────────────────
-def test_split_lock_talara_v101():
-    """talara V-101: flujos lockeados invertidos respecto a las fracciones."""
-    _, res = _solve("talara")
+def test_split_lock_talara_v101_corregido():
+    """talara V-101 (desalador): el cruce fracción↔stream fue corregido.
+
+    El cruce era: splitter_fractions=[0.952, 0.048] asignaba 0.952 a la
+    salmuera (S-brine, 25000 t/a) y 0.048 al crudo desalado (C1-desalado,
+    500000 t/a) — invertido.  Corregido a [0.048, 0.952] para alinear con
+    el orden de outputs [S-brine, C1-desalado].  V-101 ya NO debe disparar
+    [W-SPLIT-LOCK] y su split debe cerrar el balance."""
+    fs, res = _solve("talara")
     lines = _lines(res, "W-SPLIT-LOCK")
-    assert any("V-101" in w for w in lines)
+    assert not any("V-101" in w for w in lines), \
+        f"V-101 no debe disparar W-SPLIT-LOCK tras el fix: {lines}"
+
+    b = next(b for b in fs.blocks.values() if b.name == "V-101")
+    ins = [s for s in fs.streams.values() if s.dst == b.id]
+    outs = [s for s in fs.streams.values() if s.src == b.id]
+    feed = sum(s.mass_flow for s in ins)
+    assert abs(sum(s.mass_flow for s in outs) - feed) < 1e-6  # Σout = feed
+    # cada fracción cuadra con el flujo lockeado de su output (tol 2%)
+    for k, s in enumerate(outs):
+        expected = feed * b.splitter_fractions[k]
+        assert abs(s.mass_flow - expected) / max(abs(expected), 1.0) < 0.02
+
+
+def test_split_lock_detector_sigue_vivo():
+    """El detector [W-SPLIT-LOCK] sigue funcionando: si se RE-introduce el
+    cruce en V-101 (invertir las fracciones), el warning vuelve a dispararse.
+    Garantiza que el fix de arriba es lo que limpió el warning, no que el
+    detector quedó muerto."""
+    fs = reg.load_example("talara")
+    b = next(b for b in fs.blocks.values() if b.name == "V-101")
+    b.splitter_fractions = list(reversed(b.splitter_fractions))  # re-cruzar
+    res = fsv.solve(fs)
+    lines = _lines(res, "W-SPLIT-LOCK")
+    assert any("V-101" in w for w in lines), \
+        "el detector W-SPLIT-LOCK debe disparar con el cruce re-introducido"
 
 
 # ── 1.7 [W-DUTY-S] ──────────────────────────────────────────────────────
