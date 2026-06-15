@@ -262,7 +262,7 @@
    "duty": 0.0,
    "duty_locked": false,
    "efficiency": 0.75,
-   "eq_type": "Tower (column shell)",
+   "eq_type": "Vessel — vertical",
    "evaporator_active": false,
    "final_moisture": 0.02,
    "flash_P_bar": 1.013,
