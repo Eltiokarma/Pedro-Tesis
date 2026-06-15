@@ -275,6 +275,22 @@ COLOR_UTIL_HOT        = "#ef6c2b"   # naranja — servicio caliente
 COLOR_UTIL_HOT_SEL    = "#c4541d"
 COLOR_UTIL_COLD       = "#3fa9dd"   # celeste — servicio frío
 COLOR_UTIL_COLD_SEL   = "#2b80ab"
+# Degradado DENTRO del lazo: el family lo fija el servicio (calienta/enfría),
+# pero el TONO se modula por la temperatura de cada corriente, de la más
+# caliente (tono profundo/saturado) a la más fría (tono pálido).
+COLOR_UTIL_HOT_PALE   = "#f9bd7c"   # naranja claro — extremo frío del lazo caliente
+COLOR_UTIL_HOT_DEEP   = "#c4361a"   # rojo-naranja — extremo caliente
+COLOR_UTIL_COLD_PALE  = "#bfe3f5"   # celeste pálido — extremo frío del lazo
+COLOR_UTIL_COLD_DEEP  = "#1773aa"   # azul intenso — extremo más caliente del lazo
+
+
+def _lerp_color(c0, c1, t):
+    """Interpola linealmente entre dos QColor (t en [0,1])."""
+    return QColor(
+        int(round(c0.red()   + (c1.red()   - c0.red())   * t)),
+        int(round(c0.green() + (c1.green() - c0.green()) * t)),
+        int(round(c0.blue()  + (c1.blue()  - c0.blue())  * t)),
+    )
 
 # Mapeo status string → color
 STATUS_COLORS = {
@@ -4101,24 +4117,26 @@ class StreamItem(QGraphicsPathItem):
             if item.scene() is scene:
                 scene.removeItem(item)
 
-    def _utility_is_hot(self):
-        """¿El LAZO de servicio de esta corriente es de calentamiento?
+    def _utility_loop_info(self):
+        """Servicio del LAZO + rango de temperaturas, para colorear.
 
-        Color POR INTERCAMBIADOR (no por corriente suelta): TODO el lazo de
-        servicio de un HX se pinta del mismo color según si ese equipo
-        CALIENTA (duty>0 → caliente/naranja) o ENFRÍA (duty<0 → frío/celeste).
-        Sin esto, un lazo de calentamiento quedaba mezclado (supply de vapor
-        caliente + retorno de condensado frío) y confundía.
+        Devuelve (is_hot, tmin, tmax):
+          · is_hot: el lazo CALIENTA (duty del HX servido > 0) o ENFRÍA.  Fija
+            el FAMILY de color (naranja vs celeste) — consistente para todo el
+            lazo, sin importar la T de cada corriente suelta.
+          · tmin/tmax: rango de temperatura de las corrientes del lazo, para
+            modular el TONO (más caliente = tono profundo, más frío = pálido).
 
-        Recorre el cluster (BFS por streams auto_aux) hasta encontrar el HX de
-        PROCESO servido y usa el signo de su duty.  Fallback: temperatura
-        máxima del lazo vs UTILITY_HOT_T_C.
+        Recorre el cluster (BFS por streams auto_aux) hasta el HX de proceso
+        servido.  Fallback de is_hot: tmax >= UTILITY_HOT_T_C.
         """
         fs = self.fs
         s = self.model
         seen_b, seen_s = set(), {s.id}
         frontier = [s.src, s.dst]
-        hx_duty, max_t = None, float(getattr(s, "temperature", 25.0) or 25.0)
+        hx_duty = None
+        t0 = float(getattr(s, "temperature", 25.0) or 25.0)
+        tmin = tmax = t0
         while frontier:
             bid = frontier.pop()
             if bid is None or bid in seen_b:
@@ -4128,40 +4146,48 @@ class StreamItem(QGraphicsPathItem):
             if b is None:
                 continue
             if not getattr(b, "auto_aux", False):
-                # HX de proceso servido por el lazo → su duty manda
                 d = float(getattr(b, "duty", 0.0) or 0.0)
                 if hx_duty is None or abs(d) > abs(hx_duty):
                     hx_duty = d
                 continue   # no cruzar al lado de proceso del HX
-            # bloque aux (header/bomba): seguir por sus streams auto_aux
             for o in fs.streams.values():
                 if not getattr(o, "auto_aux", False):
                     continue
                 if o.src == bid or o.dst == bid:
-                    max_t = max(max_t, float(getattr(o, "temperature", 25.0) or 25.0))
+                    t = float(getattr(o, "temperature", 25.0) or 25.0)
+                    tmin = min(tmin, t)
+                    tmax = max(tmax, t)
                     if o.id not in seen_s:
                         seen_s.add(o.id)
                         frontier += [o.src, o.dst]
         if hx_duty is not None and abs(hx_duty) > 1e-9:
-            return hx_duty > 0
-        return max_t >= UTILITY_HOT_T_C
+            is_hot = hx_duty > 0
+        else:
+            is_hot = tmax >= UTILITY_HOT_T_C
+        return is_hot, tmin, tmax
 
     def _color(self):
         role = self.model.role
         sel = self.isSelected()
-        # UTILITY: color por INTERCAMBIADOR (caliente=naranja, frío=celeste)
-        # para que el user diferencie calentamiento de enfriamiento de un
-        # vistazo, con TODO el lazo del mismo color.  El status crítico
-        # (error/warn) sigue teniendo prioridad para no ocultar un desbalance.
+        # UTILITY: family por INTERCAMBIADOR (naranja=calienta, celeste=enfría)
+        # + degradado de TONO por temperatura DENTRO del lazo (de la corriente
+        # más caliente a la más fría).  El status crítico (error/warn) tiene
+        # prioridad para no ocultar un desbalance.
         if role == "utility":
             if self._status == "error":
                 return COLOR_STATUS_ERROR
             if self._status == "warning":
                 return COLOR_STATUS_WARN
-            hot = self._utility_is_hot()
+            is_hot, tmin, tmax = self._utility_loop_info()
+            T = float(getattr(self.model, "temperature", 25.0) or 25.0)
+            frac = (T - tmin) / (tmax - tmin) if (tmax - tmin) > 1e-6 else 0.5
+            frac = 0.0 if frac < 0.0 else (1.0 if frac > 1.0 else frac)
+            pale = QColor(COLOR_UTIL_HOT_PALE if is_hot else COLOR_UTIL_COLD_PALE)
+            deep = QColor(COLOR_UTIL_HOT_DEEP if is_hot else COLOR_UTIL_COLD_DEEP)
+            col = _lerp_color(pale, deep, frac)
             if sel:
-                return QColor(COLOR_UTIL_HOT_SEL if hot else COLOR_UTIL_COLD_SEL)
-            return QColor(COLOR_UTIL_HOT if hot else COLOR_UTIL_COLD)
+                col = col.darker(118)
+            return col
         # Selección siempre tiene prioridad para feedback inmediato.
         if sel:
             return QColor(STREAM_ROLE_COLORS_SEL.get(role, "#c62828"))
