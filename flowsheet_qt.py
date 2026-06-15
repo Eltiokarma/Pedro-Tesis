@@ -4101,20 +4101,64 @@ class StreamItem(QGraphicsPathItem):
             if item.scene() is scene:
                 scene.removeItem(item)
 
+    def _utility_is_hot(self):
+        """¿El LAZO de servicio de esta corriente es de calentamiento?
+
+        Color POR INTERCAMBIADOR (no por corriente suelta): TODO el lazo de
+        servicio de un HX se pinta del mismo color según si ese equipo
+        CALIENTA (duty>0 → caliente/naranja) o ENFRÍA (duty<0 → frío/celeste).
+        Sin esto, un lazo de calentamiento quedaba mezclado (supply de vapor
+        caliente + retorno de condensado frío) y confundía.
+
+        Recorre el cluster (BFS por streams auto_aux) hasta encontrar el HX de
+        PROCESO servido y usa el signo de su duty.  Fallback: temperatura
+        máxima del lazo vs UTILITY_HOT_T_C.
+        """
+        fs = self.fs
+        s = self.model
+        seen_b, seen_s = set(), {s.id}
+        frontier = [s.src, s.dst]
+        hx_duty, max_t = None, float(getattr(s, "temperature", 25.0) or 25.0)
+        while frontier:
+            bid = frontier.pop()
+            if bid is None or bid in seen_b:
+                continue
+            seen_b.add(bid)
+            b = fs.blocks.get(bid)
+            if b is None:
+                continue
+            if not getattr(b, "auto_aux", False):
+                # HX de proceso servido por el lazo → su duty manda
+                d = float(getattr(b, "duty", 0.0) or 0.0)
+                if hx_duty is None or abs(d) > abs(hx_duty):
+                    hx_duty = d
+                continue   # no cruzar al lado de proceso del HX
+            # bloque aux (header/bomba): seguir por sus streams auto_aux
+            for o in fs.streams.values():
+                if not getattr(o, "auto_aux", False):
+                    continue
+                if o.src == bid or o.dst == bid:
+                    max_t = max(max_t, float(getattr(o, "temperature", 25.0) or 25.0))
+                    if o.id not in seen_s:
+                        seen_s.add(o.id)
+                        frontier += [o.src, o.dst]
+        if hx_duty is not None and abs(hx_duty) > 1e-9:
+            return hx_duty > 0
+        return max_t >= UTILITY_HOT_T_C
+
     def _color(self):
         role = self.model.role
         sel = self.isSelected()
-        # UTILITY: color por temperatura (caliente=naranja, frío=celeste) para
-        # que el user diferencie calentamiento de enfriamiento de un vistazo.
-        # El status crítico (error/warn) sigue teniendo prioridad para no
-        # ocultar un desbalance.
+        # UTILITY: color por INTERCAMBIADOR (caliente=naranja, frío=celeste)
+        # para que el user diferencie calentamiento de enfriamiento de un
+        # vistazo, con TODO el lazo del mismo color.  El status crítico
+        # (error/warn) sigue teniendo prioridad para no ocultar un desbalance.
         if role == "utility":
             if self._status == "error":
                 return COLOR_STATUS_ERROR
             if self._status == "warning":
                 return COLOR_STATUS_WARN
-            T = float(getattr(self.model, "temperature", 25.0) or 25.0)
-            hot = T >= UTILITY_HOT_T_C
+            hot = self._utility_is_hot()
             if sel:
                 return QColor(COLOR_UTIL_HOT_SEL if hot else COLOR_UTIL_COLD_SEL)
             return QColor(COLOR_UTIL_HOT if hot else COLOR_UTIL_COLD)
