@@ -2641,8 +2641,8 @@
    "solute_component": "",
    "splitter_active": true,
    "splitter_fractions": [
-    0.952,
-    0.048
+    0.048,
+    0.952
    ],
    "task_ref": "",
    "tray_efficiency": null,
