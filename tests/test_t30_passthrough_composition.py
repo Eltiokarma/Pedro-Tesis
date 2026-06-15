@@ -58,6 +58,35 @@ def test_override_conservado_y_warning():
     assert len(hits) == 1 and "A8-gas-cool" in hits[0]
 
 
+def test_override_e203_balance_oxidacion_consistente():
+    """El override de E-203 es FINGIDO pero físicamente consistente: la
+    composición declarada de A8-gas-cool corresponde a NO + ½O₂ → NO₂ con
+    cierre de masa y O₂ disponible (Camino B — ver docs/hno3_e203_oxidacion_
+    override.md).  Codifica la auditoría: el número no es imposible."""
+    import os
+    fs = reg.load_example("hno3")
+    fsv.solve(fs)
+    inn = _stream(fs, "A7b-gas-eco")
+    out = _stream(fs, "A8-gas-cool")
+    m = inn.mass_flow
+    no_c = (inn.composition["nitric oxide"] - out.composition["nitric oxide"]) * m
+    o2_c = (inn.composition["oxygen"] - out.composition["oxygen"]) * m
+    no2_p = out.composition["nitrogen dioxide"] * out.mass_flow
+    MW = {"NO": 30.01, "O2": 32.00, "NO2": 46.01}
+    # estequiometría NO + ½O₂ → NO₂: O₂_cons/NO_cons (mol) ≈ 0.5
+    assert abs((o2_c / MW["O2"]) / (no_c / MW["NO"]) - 0.5) < 0.02
+    # NO consumido (mol) = NO₂ producido (mol)
+    assert abs(no_c / MW["NO"] - no2_p / MW["NO2"]) / (no2_p / MW["NO2"]) < 0.02
+    # cierre de masa: NO_cons + O₂_cons = NO₂_prod
+    assert abs((no_c + o2_c) - no2_p) / no2_p < 0.01
+    # O₂ disponible: queda O₂ en el outlet (el número no es imposible)
+    assert out.composition["oxygen"] * out.mass_flow > 0
+    # decisión documentada (Camino B): la nota de override existe
+    doc = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+                       "docs", "hno3_e203_oxidacion_override.md")
+    assert os.path.isfile(doc), "falta la nota de decisión del override de E-203"
+
+
 def test_warning_es_advisory_no_altera_status():
     fs = reg.load_example("hno3")
     res = fsv.solve(fs)
