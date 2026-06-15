@@ -158,8 +158,10 @@ _UTIL_BLOCK_EQ    = "Storage tank — cone roof"
 _HEADER_BLOCK_EQ  = "Utility header"
 _AMBIENT_BLOCK_EQ = "Ambient"
 _PUMP_BLOCK_EQ    = "Pump — centrifugal"
-_AUX_OFFSET       = 110.0     # px del puerto hacia afuera
+_AUX_OFFSET       = 110.0     # px del puerto hacia afuera (specs abiertos)
 _PUMP_INSET       = 55.0      # px entre header y bomba de circulación
+_AUX_CLUSTER_GAP  = 70.0      # px entre el HX y el header del lazo (debajo)
+_AUX_STACK_GAP    = 36.0      # px entre el header y la bomba (apilados)
 
 # Head típico de la bomba de circulación según el lazo (m de columna de
 # fluido).  Se convierte a Δp para que el solver compute W eléctrica:
@@ -331,18 +333,20 @@ def instantiate_auxiliaries(fs, block):
             for s in fs.streams.values())
         if already:
             continue
-        # Posición del header: al lado del primer puerto del cycle.
-        anchor_sp = sps[0]
-        side, frac = ports.get(anchor_sp.port_name, ("right", 0.5))
-        px, py = _port_xy(block, w, h, side, frac)
-        dx, dy = _SIDE_OUT.get(side, (1, 0))
-        hx_x = px + dx * _AUX_OFFSET - 40.0
-        hx_y = py + dy * _AUX_OFFSET - 15.0
-        # Anti-overlap: si la posición candidata pisa otro bloque, empuja
-        # más afuera en la dirección del puerto.
+        # LAYOUT (regla determinista): cluster compacto DIRECTAMENTE DEBAJO
+        # del equipo padre.  El header y la bomba se apilan verticalmente
+        # bajo el HX, centrados horizontalmente respecto a su cuerpo — el
+        # lazo de servicio "pertenece" visualmente a SU intercambiador, no
+        # deriva de costado hacia equipos vecinos ni invade el flujo de
+        # proceso.  La resolución anti-overlap empuja SOLO hacia abajo
+        # (dx=0, dy=+1) para conservar la pertenencia vertical.
         hdr_w, hdr_h = _visual_block_dims(_HEADER_BLOCK_EQ)
+        pump_w, pump_h = _visual_block_dims(_PUMP_BLOCK_EQ)
+        # header centrado bajo el HX, con un gap cómodo
+        hx_x = block.x + (w - hdr_w) / 2.0
+        hx_y = block.y + h + _AUX_CLUSTER_GAP
         hx_x, hx_y = _resolve_aux_position(fs, hx_x, hx_y, hdr_w, hdr_h,
-                                            dx, dy, exclude_id=None)
+                                            0.0, 1.0, exclude_id=None)
 
         # Header (utility) block — compartido por todas las corrientes
         # del lazo (mismo bloque).
@@ -354,14 +358,12 @@ def instantiate_auxiliaries(fs, block):
         fs.blocks[hid] = header
         created.append(hid)
 
-        # Bomba de circulación auto_aux, intercalada en la rama SUPPLY.
-        # Se ubica entre el header y el equipo, sobre la línea supply.
-        pump_x = hx_x - dx * _PUMP_INSET if side in ("right", "left") \
-            else hx_x + 25.0
-        pump_y = hx_y + 20.0 if side in ("right", "left") else hx_y - dy * _PUMP_INSET
-        pump_w, pump_h = _visual_block_dims(_PUMP_BLOCK_EQ)
+        # Bomba de circulación auto_aux: apilada DEBAJO del header, centrada
+        # respecto a él — completa el cluster vertical HX → header → bomba.
+        pump_x = hx_x + (hdr_w - pump_w) / 2.0
+        pump_y = hx_y + hdr_h + _AUX_STACK_GAP
         pump_x, pump_y = _resolve_aux_position(
-            fs, pump_x, pump_y, pump_w, pump_h, dx, dy, exclude_id=None)
+            fs, pump_x, pump_y, pump_w, pump_h, 0.0, 1.0, exclude_id=None)
         pid = fs.new_id()
         pump = Block(id=pid, name=_unique_name(fs, f"P-{cycle[:5]}"),
                      eq_type=_PUMP_BLOCK_EQ, S=0.5,
