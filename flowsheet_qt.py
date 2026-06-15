@@ -5058,13 +5058,33 @@ class StreamItem(QGraphicsPathItem):
         # renderizan con item.W/H (= BLOCK_DIMS del glyph ISA × 1.6), que
         # difieren de pfd.block_dims tras la migración a glyphs ISA — usar
         # block_dims acá dejaba la punta de la flecha separada del nodo.
+        # FIX geometría stale: StreamItem.__init__ corre update_path ANTES de
+        # add_to_scene, así que self.scene() es None en el PRIMER render y la
+        # flecha caía a un fallback por model-coords (desalineado del nodo ISA)
+        # que NADIE re-anclaba hasta que un hover disparaba update_path con el
+        # item ya en escena.  Eso era el "al pasar el mouse recién se acomoda".
+        # Los BlockItem (y sus port_items) YA están en la escena cuando se
+        # construyen los streams (los bloques se renderizan primero), así que
+        # tomamos la escena del editor como red de seguridad cuando el propio
+        # StreamItem todavía no fue agregado.
         sc = self.scene()
+        if sc is None and getattr(self, "editor", None) is not None:
+            sc = getattr(self.editor, "scene", None)
         item = sc.block_items.get(b.id) if sc is not None else None
         if item is not None:
             ell = getattr(item, "port_items", {}).get(pname)
-            if ell is not None:
-                c = ell.sceneBoundingRect().center()
-                return side, c.x(), c.y()
+            # Robustez (1.2): anclar al CENTRO REAL del puerto SOLO si el
+            # elipse está realmente asentado — en una escena y con un
+            # sceneBoundingRect no-nulo.  Si no lo está (escena nula o rect
+            # 0×0), NO anclamos a una geometría basura silenciosa: caemos al
+            # fallback geométrico determinista de abajo, que un
+            # _refresh_all_stream_paths (fin de _rebuild_scene) o un hover
+            # posterior re-ancla al puerto vivo.
+            if ell is not None and ell.scene() is not None:
+                r = ell.sceneBoundingRect()
+                if r.width() or r.height():
+                    c = r.center()
+                    return side, c.x(), c.y()
             w, h = getattr(item, "W", None), getattr(item, "H", None)
             if w is None or h is None:
                 w, h = pfd.block_dims(b.eq_type)
@@ -7883,6 +7903,15 @@ class FlowsheetMainWindow(QMainWindow):
             self._render_block(b)
         for s in self.fs.streams.values():
             self._render_stream(s)
+        # FIX geometría stale + lanes: re-rutear TODOS los streams una vez que
+        # bloques Y streams están en escena.  El _resolve_port ya ancla a los
+        # puertos vivos en el primer render (toma editor.scene), pero el LANE
+        # ASSIGNMENT de cada stream lee los `_last_pts` de los OTROS streams,
+        # que recién están todos poblados al terminar este loop — sin este
+        # pase, los streams construidos primero asignaban lane contra un
+        # conjunto incompleto y quedaban apilados/solapados.  También deja los
+        # jumpers (cruces) coherentes.  Idempotente y barato (<50 streams).
+        self._refresh_all_stream_paths()
         self._refresh_port_colors()
         # Respetar el toggle de corrientes auxiliares (Ctrl+U) tras
         # cargar / undo / redo.
