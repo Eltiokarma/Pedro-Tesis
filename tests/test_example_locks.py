@@ -221,7 +221,13 @@ class TestExistingExamplesUnaffected(unittest.TestCase):
             self.assertFalse(by_name[n].mass_flow_locked,
                 f"{n} es intermedio: debe propagarse, no quedar hardcoded")
         self.assertAlmostEqual(by_name["S-1"].mass_flow, 11000, delta=55)
-        self.assertAlmostEqual(by_name["S-benceno"].mass_flow, 8500, delta=43)
+        # Benceno producido por la química REAL R035 (toluene + H2 → benzene +
+        # methane), no por un número pre-cocido.  Balance: 11000 t/a tolueno al
+        # reactor × conversión 0.8045 = 8850 t/a reaccionado → 8850/92.14 × 78.11
+        # = 7503 t/a benceno.  El 8500 anterior era pre-química-real; R035 (#79) +
+        # makeup de H2 (#83) movieron el benceno convergido a 7503 (balance cierra,
+        # mass_errors=0).
+        self.assertAlmostEqual(by_name["S-benceno"].mass_flow, 7503, delta=43)
 
 
 if __name__ == "__main__":
