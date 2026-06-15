@@ -267,6 +267,31 @@ COLOR_STATUS_UNRUN   = QColor("#1976d2")   # azul — no ejecutado / stale
 COLOR_STATUS_DIRTY   = QColor("#7b1fa2")   # violeta — flowsheet editado
                                             # post-solve (datos stale)
 
+# Corrientes de SERVICIO (utility): color por temperatura para que el user
+# distinga de un vistazo el servicio CALIENTE (vapor / aceite térmico) del
+# FRÍO (agua de enfriamiento).  Umbral en °C: por encima = caliente.
+UTILITY_HOT_T_C       = 60.0
+COLOR_UTIL_HOT        = "#ef6c2b"   # naranja — servicio caliente
+COLOR_UTIL_HOT_SEL    = "#c4541d"
+COLOR_UTIL_COLD       = "#3fa9dd"   # celeste — servicio frío
+COLOR_UTIL_COLD_SEL   = "#2b80ab"
+# Degradado DENTRO del lazo: el family lo fija el servicio (calienta/enfría),
+# pero el TONO se modula por la temperatura de cada corriente, de la más
+# caliente (tono profundo/saturado) a la más fría (tono pálido).
+COLOR_UTIL_HOT_PALE   = "#f9bd7c"   # naranja claro — extremo frío del lazo caliente
+COLOR_UTIL_HOT_DEEP   = "#c4361a"   # rojo-naranja — extremo caliente
+COLOR_UTIL_COLD_PALE  = "#bfe3f5"   # celeste pálido — extremo frío del lazo
+COLOR_UTIL_COLD_DEEP  = "#1773aa"   # azul intenso — extremo más caliente del lazo
+
+
+def _lerp_color(c0, c1, t):
+    """Interpola linealmente entre dos QColor (t en [0,1])."""
+    return QColor(
+        int(round(c0.red()   + (c1.red()   - c0.red())   * t)),
+        int(round(c0.green() + (c1.green() - c0.green()) * t)),
+        int(round(c0.blue()  + (c1.blue()  - c0.blue())  * t)),
+    )
+
 # Mapeo status string → color
 STATUS_COLORS = {
     "ok":      COLOR_STATUS_OK,
@@ -4092,10 +4117,80 @@ class StreamItem(QGraphicsPathItem):
             if item.scene() is scene:
                 scene.removeItem(item)
 
+    def _utility_loop_info(self):
+        """Servicio del LAZO + rango de temperaturas, para colorear.
+
+        Devuelve (is_hot, tmin, tmax):
+          · is_hot: el lazo CALIENTA (duty del HX servido > 0) o ENFRÍA.  Fija
+            el FAMILY de color (naranja vs celeste) — consistente para todo el
+            lazo, sin importar la T de cada corriente suelta.
+          · tmin/tmax: rango de temperatura de las corrientes del lazo, para
+            modular el TONO (más caliente = tono profundo, más frío = pálido).
+
+        Recorre el cluster (BFS por streams auto_aux) hasta el HX de proceso
+        servido.  Fallback de is_hot: tmax >= UTILITY_HOT_T_C.
+        """
+        fs = self.fs
+        s = self.model
+        seen_b, seen_s = set(), {s.id}
+        frontier = [s.src, s.dst]
+        hx_duty = None
+        t0 = float(getattr(s, "temperature", 25.0) or 25.0)
+        tmin = tmax = t0
+        while frontier:
+            bid = frontier.pop()
+            if bid is None or bid in seen_b:
+                continue
+            seen_b.add(bid)
+            b = fs.blocks.get(bid)
+            if b is None:
+                continue
+            if not getattr(b, "auto_aux", False):
+                d = float(getattr(b, "duty", 0.0) or 0.0)
+                if hx_duty is None or abs(d) > abs(hx_duty):
+                    hx_duty = d
+                continue   # no cruzar al lado de proceso del HX
+            for o in fs.streams.values():
+                if not getattr(o, "auto_aux", False):
+                    continue
+                if o.src == bid or o.dst == bid:
+                    t = float(getattr(o, "temperature", 25.0) or 25.0)
+                    tmin = min(tmin, t)
+                    tmax = max(tmax, t)
+                    if o.id not in seen_s:
+                        seen_s.add(o.id)
+                        frontier += [o.src, o.dst]
+        if hx_duty is not None and abs(hx_duty) > 1e-9:
+            is_hot = hx_duty > 0
+        else:
+            is_hot = tmax >= UTILITY_HOT_T_C
+        return is_hot, tmin, tmax
+
     def _color(self):
+        role = self.model.role
+        sel = self.isSelected()
+        # UTILITY: family por INTERCAMBIADOR (naranja=calienta, celeste=enfría)
+        # + degradado de TONO por temperatura DENTRO del lazo (de la corriente
+        # más caliente a la más fría).  El status crítico (error/warn) tiene
+        # prioridad para no ocultar un desbalance.
+        if role == "utility":
+            if self._status == "error":
+                return COLOR_STATUS_ERROR
+            if self._status == "warning":
+                return COLOR_STATUS_WARN
+            is_hot, tmin, tmax = self._utility_loop_info()
+            T = float(getattr(self.model, "temperature", 25.0) or 25.0)
+            frac = (T - tmin) / (tmax - tmin) if (tmax - tmin) > 1e-6 else 0.5
+            frac = 0.0 if frac < 0.0 else (1.0 if frac > 1.0 else frac)
+            pale = QColor(COLOR_UTIL_HOT_PALE if is_hot else COLOR_UTIL_COLD_PALE)
+            deep = QColor(COLOR_UTIL_HOT_DEEP if is_hot else COLOR_UTIL_COLD_DEEP)
+            col = _lerp_color(pale, deep, frac)
+            if sel:
+                col = col.darker(118)
+            return col
         # Selección siempre tiene prioridad para feedback inmediato.
-        if self.isSelected():
-            return QColor(STREAM_ROLE_COLORS_SEL.get(self.model.role, "#c62828"))
+        if sel:
+            return QColor(STREAM_ROLE_COLORS_SEL.get(role, "#c62828"))
         # Status crítico sobreescribe el color por role (error o warning
         # vienen del último solve y son los más informativos para el user).
         if self._status == "error":
@@ -4106,7 +4201,7 @@ class StreamItem(QGraphicsPathItem):
             # gris-azul tenue para indicar "no resuelto / sin verificar"
             return QColor("#9aa5b1")
         # status == "ok" o cualquier otro: color normal por role
-        return QColor(STREAM_ROLE_COLORS.get(self.model.role, "#37474f"))
+        return QColor(STREAM_ROLE_COLORS.get(role, "#37474f"))
 
     def hoverEnterEvent(self, event):
         """Engrosa la línea al hover para feedback visual."""
@@ -4451,9 +4546,18 @@ class StreamItem(QGraphicsPathItem):
             # tuberías rodean por arriba/abajo/izq/der según menor
             # costo Manhattan.  Padding 12px ≈ 3× ancho de stream.
             if self.editor is not None and not _rigid:
+                # ¿este stream es parte de un lazo de SERVICIO?  Si lo es, NO
+                # esquivar los OTROS bloques auto_aux (header/bomba del mismo
+                # cluster): son locales al lazo y esquivarlos generaba los
+                # "cuadrados"/loops innecesarios (la tubería rodeaba su propio
+                # header).  Los equipos de PROCESO sí se siguen esquivando.
+                _is_aux = (s.role or "") == "utility" \
+                    or bool(getattr(s, "auto_aux", False))
                 obstacles = []
                 for bid, item in self.editor.block_items_iter():
                     if bid == s.src or bid == s.dst:
+                        continue
+                    if _is_aux and getattr(item.model, "auto_aux", False):
                         continue
                     bm = item.model
                     # dims VISUALES del BlockItem (ISA glyph escalado),
@@ -5134,8 +5238,18 @@ class StreamItem(QGraphicsPathItem):
         h_sides = ("left", "right")
         v_sides = ("top", "bottom")
 
-        # ambos horizontales opuestos
+        # ambos horizontales
         if side1 in h_sides and side2 in h_sides:
+            # MISMO lado (right+right o left+left): C-shape sobre ese lado en
+            # vez de rodear por arriba.  Sin esto, un puerto que sale a la
+            # derecha hacia otro que también entra por la derecha generaba un
+            # "cuadrado" enorme por encima de los bloques — típico en los
+            # lazos de servicio (bomba.descarga(right) → HX.shell_in(right)).
+            if side1 == side2:
+                if abs(x1 - x2) < 2 and abs(y1 - y2) < 2:
+                    return [x1, y1, x2, y2]
+                xc = max(ex1, ex2) if side1 == "right" else min(ex1, ex2)
+                return [x1, y1, xc, y1, xc, y2, x2, y2]
             # cond_fwd: el destino está FÍSICAMENTE a la derecha del
             # origen (right→left) o a la izquierda (left→right).  Usa
             # x1/x2 directos, NO ex1/ex2 (que requerían 2×ROUTING_GAP
@@ -5151,9 +5265,19 @@ class StreamItem(QGraphicsPathItem):
                 # produce líneas más naturales aunque haya poco espacio.
                 mx = (x1 + x2) / 2
                 return [x1, y1, mx, y1, mx, y2, x2, y2]
-            # backward (raro: dst físicamente atrás del src): rodea por arriba
-            ymin = min(b_src.y, b_dst.y) - 40
-            return [x1, y1, ex1, ey1, ex1, ymin, ex2, ymin, ex2, ey2, x2, y2]
+            # backward (dst físicamente atrás del src): hay que rodear.  Elegir
+            # rodear por ARRIBA o por ABAJO según cuál da menor excursión
+            # vertical — antes rodeaba SIEMPRE por arriba, lo que en los lazos
+            # de servicio (cluster debajo del HX) trepaba por encima del equipo
+            # de proceso formando un cuadrado innecesario.
+            h_src = pfd.block_dims(b_src.eq_type)[1]
+            h_dst = pfd.block_dims(b_dst.eq_type)[1]
+            top_y = min(b_src.y, b_dst.y) - 40
+            bot_y = max(b_src.y + h_src, b_dst.y + h_dst) + 40
+            exc_top = (y1 - top_y) + (y2 - top_y)
+            exc_bot = (bot_y - y1) + (bot_y - y2)
+            yw = top_y if exc_top <= exc_bot else bot_y
+            return [x1, y1, ex1, ey1, ex1, yw, ex2, yw, ex2, ey2, x2, y2]
 
         # ambos verticales opuestos
         if side1 in v_sides and side2 in v_sides:
