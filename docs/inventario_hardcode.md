@@ -401,6 +401,48 @@ proyectos respectivos (pseudo-cortes / columnas activas) en vez de forzar un
 re-tipado que rompería su física. Regresión-guard en
 `tests/test_columnas_que_no_separan.py`.
 
+### 6.7 Batch de placeholders con base curada → química real (2026-06-15)
+
+De los 9 placeholders con base curada (§1b), **1 se conectó** a su química
+real (`reactions=[RNNN_PLACEHOLDER]`→`[RNNN]`, `reactor_mode`=`stoich`,
+conversión de diseño, composición de salida ahora CALCULADA por balance, no
+hardcodeada).  Los otros 8 se **difieren** por motivos físicos medidos
+(auditados antes de tocar; conectar cada uno se probó en memoria):
+
+| ejemplo / reactor | reacción | estado | motivo |
+|---|---|---|---|
+| `chloralkali_hcl/R-201` | R028 (H₂+Cl₂→2 HCl) | ✅ **CONECTADO** conv 0.999 | reproduce el diseño (err 0.0), balance 1:1→2 cierra, duty exo, sin cascada |
+| `acetic/R-101` | R026 (CH₃OH+CO→CH₃COOH) | ⏸ DIFERIDO | el reactor conecta bien (balance 1:1:1 cierra), **pero** alimenta `V-101`, un separador **pasivo** cuyo split (purga de CO vs. líquido AcOH) el motor no calcula; al computar la salida del reactor, el detector marca esos locks como redundantes → cascada al **proyecto de separación activa** |
+| `beer/R-101` | R007 (Glucosa→2 EtOH+2 CO₂) | ⏸ DIFERIDO | igual que acetic: el reactor conecta, pero el separador pasivo aguas abajo (CO₂ vs. vino) cascadea el `redundant_lock` |
+| `bread/R-101` | R007 | ⏸ DIFERIDO | el placeholder es un **no-op** (salida=entrada); conectar la fermentación mete CO₂/etanol que el horno H-101 NO ventea → cascadea a otro bloque |
+| `sulfuric/R-101` | R006 (2 SO₂+O₂→2 SO₃) | ⏸ DIFERIDO | conectar dispara un **`[W-ENERGY-BLOCK]` nuevo** (resid −28 kW) — el modelo de energía del reactor exotérmico fuerte no cierra |
+| `cement/R-101` | R029 (CaCO₃→CaO+CO₂) | ⏸ DIFERIDO | **mismatch de especie**: R029 produce `quicklime` (CaO), pero el ejemplo produce `clinker` (≠ CaO) |
+| `ldpe/R-101` | R027 (C₂H₄→PE) | ⏸ DIFERIDO | **pseudo-polímero**: en `stoich` la reacción no dispara (no produce PE; sin MW para el polímero) |
+| `soap/R-101` | R030 (saponificación) | ⏸ DIFERIDO | **pseudo-componentes** (vegetable_oil/soap): la reacción no dispara |
+| `urea/R-101` | R031 (síntesis urea) | ⏸ DIFERIDO | **pseudo-componente** urea: la reacción no dispara (no produce urea) |
+
+**Hallazgos del batch (la mayoría de los placeholders están enredados):**
+
+1. **Pseudo-componentes (4: ldpe, soap, urea, cement):** el solver `stoich`
+   necesita MW de los productos, que los pseudo-componentes no traen → la
+   reacción no dispara.  Frente aparte (dar MW/thermo a los pseudo o un modo
+   de reactor por fracción másica).
+2. **Separador pasivo aguas abajo (2: acetic, beer):** el reactor conecta y
+   cierra balance, pero al pasar su salida de *hardcodeada* a *calculada*, el
+   separador pasivo que lo sigue queda con locks "redundantes" que el motor
+   propagaría MAL (sin separar).  Resolverlos es el **proyecto de flash/
+   separación activa**, no este PR.
+3. **Cascada de proceso (1: bread):** el horno aguas abajo no ventea los
+   gases de fermentación.
+4. **Energía (1: sulfuric):** el cierre de energía del reactor exotérmico no
+   cuadra (`[W-ENERGY-BLOCK]`).
+
+Solo `chloralkali_hcl/R-201` conecta limpio y aislado (su salida va a un
+proceso que ya espera HCl puro, sin separador pasivo intermedio).  chloralkali
+conserva su `R-101` custom como placeholder, así que el conteo de ejemplos con
+`[W-PLACEHOLDER]` sigue en ~15.  Tests en
+`tests/test_placeholders_quimica_conectada.py`.
+
 ---
 
 ### Apéndice — cómo reproducir esta medición
