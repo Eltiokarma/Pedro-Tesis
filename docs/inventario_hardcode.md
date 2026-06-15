@@ -380,6 +380,27 @@ transforman composición ilegítimamente):
    habilitan el encendido de reciclos en vivo; los terminales pueden quedar
    como spec declarada y solo **documentarse**.
 
+### 6.6 Estado de resolución (actualizado 2026-06-15)
+
+Trabajo aplicado sobre el diagnóstico de arriba (la medición original se
+conserva como registro histórico):
+
+| monstruo | estado | PR / nota |
+|---|---|---|
+| `talara/V-101` (desalador) | ✅ **CORREGIDO** — fracciones del splitter alineadas con sus salidas | fix de talara |
+| `hno3/E-203` (oxidación) | ✅ **DOCUMENTADO** — override intencional, físicamente consistente; química real diferida | `docs/hno3_e203_oxidacion_override.md` |
+| `hydraulic/T-101` (1-in/1-out de agua) | ✅ **RE-TIPADO** — `Tower (column shell)` → `Vessel — vertical`; agua pura no se separa en una columna. Golden byte-idéntico (un Tower pasivo ya se costeaba como vessel). | este PR |
+| `talara/T-201` (torre de vacío) | ⏸ **DIFERIDO** — es una torre de vacío **real** (eq_type=Tower correcto para costeo) modelada como splitter de masa 55/45 sobre el pseudo-componente `crude_oil`. Re-tiparla la mis-costearía; fraccionar de verdad (VGO vs resid por punto de ebullición) necesita pseudo-cortes distintos → **proyecto de pseudo-componentes**, no un re-tipado. Ya es un splitter correcto en composición (no miente). | diferido |
+| `hda_full/T-103` (columna en loop) | ⏸ **DIFERIDO** — columna pasiva en el **loop frozen** de hda_full que sí hace una separación débil (S-14 tolueno puro, S-13 retiene benceno). Re-tiparla a splitter **perdería** esa separación; activarla (`column_active`) es riesgoso con el loop frozen. Es parte del **proyecto "columnas activas"** (las 6 columnas en loop). | diferido |
+
+**Veredicto de las 3 'columnas que no separan':** solo `hydraulic/T-101` era
+un re-tipado limpio y aislado (single-component pass-through). Las otras dos NO
+son mis-tipados triviales — `talara/T-201` está correctamente tipada (torre
+real) y `hda_full/T-103` es una columna de loop frozen — y se difieren a sus
+proyectos respectivos (pseudo-cortes / columnas activas) en vez de forzar un
+re-tipado que rompería su física. Regresión-guard en
+`tests/test_columnas_que_no_separan.py`.
+
 ---
 
 ### Apéndice — cómo reproducir esta medición
