@@ -5,13 +5,16 @@ fundamentales (circuit rank = E_int − V + 1) dentro de un SCC, SIN resolver ni
 elegir tears (eso es capa 2/3).  Es pura estructura.
 
 Anclas:
-  - gas_sweet / hda_full: SCC acoplado → 3 ciclos DISTINTOS (el bug raíz era
-    verlos como un solo loop). En hda_full, gas y tolueno quedan separados.
+  - gas_sweet / hda_full: SCC acoplado → 2 ciclos REALES DISTINTOS (gas +
+    tolueno). NOTA port-aware: antes daban 3, pero el 3º era un ciclo FALSO que
+    cruzaba los dos lados del HX feed-efluente E-101 (tube↔shell); con la
+    descomposición port-aware ese artefacto desaparece y el rank baja a 2, que
+    es el nº físico de reciclos.
   - haber_rec / mono-reciclo: 1 ciclo (no se sobre-particiona lo simple).
   - industrial: cada uno de sus 3 SCC → 1 ciclo.
   - ancla sintética (#88): 2 ciclos independientes.
-Invariante transversal: nº de ciclos == circuit rank, y el set de back-edges
-rompe TODOS los ciclos (subgrafo restante acíclico).
+Invariante transversal: nº de ciclos == circuit rank (ambos port-aware), y el
+set de back-edges rompe TODOS los ciclos (subgrafo port-aware restante acíclico).
 """
 import os
 
@@ -30,10 +33,17 @@ def _recycle_sccs(fs):
 
 
 def _remaining_is_acyclic(scc, fs, back_edge_ids):
+    # PORT-AWARE: usa los mismos nodos que la descomposición (HX de 4 puertos
+    # desdoblados por lado), para no ver como "ciclo" el cruce falso de un HX.
+    node_src, node_dst = F._portaware_nodes(scc, fs)
     sub = [s for s in F._streams_in_scc(scc, fs) if s.id not in back_edge_ids]
     adj = collections.defaultdict(list)
+    nodes = set()
     for s in sub:
-        adj[s.src].append(s.dst)
+        u, v = node_src(s), node_dst(s)
+        adj[u].append(v)
+        nodes.add(u)
+        nodes.add(v)
     WHITE, GRAY, BLACK = 0, 1, 2
     color = {}
 
@@ -48,7 +58,7 @@ def _remaining_is_acyclic(scc, fs, back_edge_ids):
         color[u] = BLACK
         return False
 
-    return not any(dfs(b) for b in set(scc) if color.get(b, WHITE) == WHITE)
+    return not any(dfs(n) for n in nodes if color.get(n, WHITE) == WHITE)
 
 
 def _assert_basis_valid(scc, fs):
@@ -72,12 +82,15 @@ def _assert_basis_valid(scc, fs):
     return cycles
 
 
-def test_gas_sweet_3_ciclos_acoplados():
+def test_gas_sweet_2_ciclos_acoplados():
+    # 2 reciclos reales (amina rica + amina pobre). El 3º que daba antes era el
+    # ciclo FALSO del HX feed-efluente E-101 (cruce tube↔shell), eliminado por
+    # la descomposición port-aware.
     fs = reg.load_example("gas_sweet")
     sccs = _recycle_sccs(fs)
     assert len(sccs) == 1
     cycles = _assert_basis_valid(sccs[0], fs)
-    assert len(cycles) == 3
+    assert len(cycles) == 2
 
 
 def test_hda_full_gas_y_tolueno_son_ciclos_distintos():
@@ -85,7 +98,9 @@ def test_hda_full_gas_y_tolueno_son_ciclos_distintos():
     sccs = _recycle_sccs(fs)
     assert len(sccs) == 1
     cycles = _assert_basis_valid(sccs[0], fs)
-    assert len(cycles) == 3
+    # 2 reciclos reales (gas + tolueno). El 3º que daba antes era el ciclo
+    # FALSO del HX feed-efluente E-101 (cruce tube↔shell), eliminado port-aware.
+    assert len(cycles) == 2
     # El bug raíz: gas y tolueno fusionados en un solo loop. Acá deben caer
     # en ciclos DISTINTOS.
     def cycle_of(stream_name):

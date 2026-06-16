@@ -18,10 +18,10 @@ Condiciones de aceptación medidas:
   · C1 — hda elige `S-9-recic` AUNQUE su role sea "internal" (estructura, no tag).
   · C2 — gate 41/41 byte-idéntico (verificado por `gate_examples.py`, no acá).
   · C3 — hda_full: PARCIAL.  Identifica `S-tol-recic` (reciclo de tolueno) y la
-    raíz correcta (P-101), pero el lazo de gas sale como `S-gas-pre` (back-edge
-    natural, equivalente a tearear `S-gas-recic`) y aparece `S-3` (falso ciclo
-    del HX feed-efluente E-101, 2-in/2-out).  Eliminar esos dos residuos exige
-    descomposición a nivel de puertos del HX — frente aparte (documentado).
+    raíz correcta (P-101).  El residuo `S-3` (falso ciclo del HX feed-efluente
+    E-101) quedó RESUELTO por la detección de ciclos port-aware
+    (ver test_ciclo_hx_4puertos).  Persiste solo el lazo de gas como `S-gas-pre`
+    (back-edge natural, equivalente a tearear `S-gas-recic`).
 
 USO:  python -m unittest tests.test_tear_selection_estructural -v
 """
@@ -106,7 +106,7 @@ class TestC1_HdaEstructural(unittest.TestCase):
 
 class TestC3_HdaFullParcial(unittest.TestCase):
     """hda_full: mejora medible (identifica S-tol-recic; raíz correcta), con
-    residuo documentado (S-gas-pre, S-3 del falso ciclo del HX)."""
+    residuo S-3 (falso ciclo del HX) ya RESUELTO port-aware; persiste S-gas-pre)."""
 
     def _multi(self, mutate=None):
         import flowsheet_solver as fsv
@@ -122,15 +122,18 @@ class TestC3_HdaFullParcial(unittest.TestCase):
         self.assertIn("S-tol-recic", names,
                       f"esperaba el reciclo de tolueno; got {names}")
 
-    def test_residuo_documentado(self):
-        # RESIDUO conocido (fuera de scope): el lazo de gas sale como S-gas-pre
-        # (back-edge natural; tearearlo es equivalente a S-gas-recic) y aparece
-        # S-3 (falso ciclo del HX feed-efluente E-101).  Este test FIJA el
-        # estado actual para que un futuro fix del HX lo actualice a propósito.
+    def test_residuo_S3_RESUELTO_por_portaware(self):
+        # ACTUALIZADO: el residuo #2 (S-3, falso ciclo del HX feed-efluente
+        # E-101) quedó RESUELTO por la detección de ciclos port-aware (ver
+        # test_ciclo_hx_4puertos). Ya NO aparece como tear.
         names = self._multi(lambda d: _unlock_recycles(
             d, ("S-gas-recic", "S-tol-recic")))
-        self.assertIn("S-gas-pre", names)   # residuo 1: back-edge del gas
-        self.assertIn("S-3", names)         # residuo 2: falso ciclo del HX E-101
+        self.assertNotIn("S-3", names,
+                         f"S-3 (falso ciclo del HX) ya no debe ser tear; {names}")
+        # Residuo #1 que PERSISTE por diseño: el lazo de gas sale como
+        # S-gas-pre (back-edge natural; tearearlo equivale a S-gas-recic —
+        # preferir uno u otro sería semántico/role).
+        self.assertIn("S-gas-pre", names)
 
 
 if __name__ == "__main__":
