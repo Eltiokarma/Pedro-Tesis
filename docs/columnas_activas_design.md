@@ -335,7 +335,7 @@ los goldens que mueve esa capa (declarados de antemano).
 |:--:|---|---|---|
 | **1** | Ancla + diseño | 8/8 anchor verdes; gate 41/41 | ninguno |
 | **2** ✅ | **Terminales limpias clase A**: acetic/T-101 ✅ activada; dist_eth_az/T-101 ⏸ diferida (azeótropo) | split FUG D=9.94/B=1847 ≈ hardcode 10/1847; ancla intacta; gate 41/41 | **acetic** (sum_duty 16.6→36.4) |
-| **3** | **Columnas en loop, lazo aislado**: hda/T-101 (1 reciclo, el más simple) | hda converge vivo; tolueno propaga; balance cierra | hda |
+| **3** ✅ | **Columnas en loop**: hda/T-101 (1 reciclo) — benceno/tolueno, lazo vivo | converge en ~3 iters; P-101 balancea (Σin=Σout=10858); S-8 benceno 7503 @ 0.98; mass_err=0 | **hda** (sum_duty −90.8→14.7) |
 | **4** | **hda_full tren T-101/102/103** con propagación en loop vivo | el reciclo de tolueno NO colapsa; multi-tear converge a SS físico | hda_full (sale de FROZEN) |
 | **5** | **gas_sweet T-101/T-102** (absorción/stripping de aminas) | lazo de aminas converge; gas dulce sin fuga de amina | gas_sweet (sale de FROZEN) |
 | **6** | **Desbloquear placeholders** acetic/beer (separación activa aguas abajo) | reactor+separador computan; `[W-PLACEHOLDER]` baja | acetic, beer |
@@ -452,8 +452,36 @@ motor funciona — el frente solo lo **extiende a loops**, no lo reinventa.
   verdes (p4 falla solo por `PySide6` ausente en el entorno headless — UI test,
   no relacionado).
 
-### 6.5 Próxima capa
-Capa 3 del plan (§4.5): `hda/T-101` — primera columna **en loop** (1 reciclo,
-el caso más simple), donde se ejercita por primera vez la propagación en loop
-vivo (las 4 reglas de §4.3). dist_eth_az espera el frente de destilación
-azeotrópica.
+### 6.5 Capa 3 — `hda/T-101` ACTIVADA en loop vivo ✅
+
+Primera columna **en loop** activada. Resultó un fix de **DATOS**, no de motor:
+
+- **Root cause real (corrige el diagnóstico previo):** el lazo NO necesitaba
+  "construir solver" (Wegstein vectorial + nodo mixer ya existen y funcionan).
+  El bug era **selección de tear**: `_choose_tear` elegía `S-2` (arista forward
+  E-101→F-101) en vez del reciclo físico, porque `S-9-recic` estaba mal
+  etiquetado `role="internal"`. hda tiene dos puntos de mezcla con feed externo
+  (tolueno en P-101, makeup H₂ en F-101) → dos back-edges; sin el tag, el
+  desempate mispickea. Con `role="recycle"` el ranking de `_choose_tear` elige
+  el reciclo y todo converge.
+- **Fix (DATOS, 4 cambios + cleanup):** `S-9-recic.role`=recycle + des-lockear
+  el tear (mass+comp); activar T-101 (LK=benzene/HK=toluene, FUG, R=1.5,
+  x_D=0.98, x_B=0.02); des-lockear comp de S-7/S-8; propagar el producto
+  terminal S-benceno (patrón capa 1).
+- **Medido:** converge en ~3 iters (tear 1866→1978→2002→2008); P-101 Σin=Σout
+  =10858; S-8 benceno 7503 @ 0.98 (= flujo del SS frozen); **mass_err=0**;
+  validate_ui hda ok (mass 0, eng 0). Solo el golden de hda se movió
+  (sum_duty −90.8→14.7, la columna computa reboiler/condensador real); los
+  otros 40 byte-idénticos.
+- **Warnings:** `[W-ENERGY-BLOCK] T-101` intrínseco a columnas activas (no
+  regresión); `[W-ENERGY-BLOCK] P-101` **pre-existente** (ya estaba en baseline).
+- **Bug latente anotado (fuera de alcance):** `_choose_tear`/`_choose_tears`
+  mispickea el back-edge en topologías con ≥2 puntos de mezcla cuando el reciclo
+  NO está taggeado `role="recycle"`. Endurecer el selector para que elija el
+  back-edge físico sin depender del tag es una mejora SEPARADA — relevante para
+  la capa agéntica (flowsheets sin roles pre-taggeados). NO se tocó acá.
+
+**Próxima capa:** clase D restante — `hda_full` (3 columnas) y `gas_sweet`
+(absorbers de amina). Antes de aplicarles el mismo camino mínimo, verificar si
+sus reciclos están bien taggeados `role="recycle"` (si no → taggear, o endurecer
+el selector). `dist_eth_az` espera el frente de destilación azeotrópica.
