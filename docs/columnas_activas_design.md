@@ -1,9 +1,13 @@
 # Diseño — Columnas activas (Frente B)
 
-**Estado:** PLANO DE ARQUITECTURA (fase de diseño). **CERO código de motor
-escrito.** El único código de este PR es el *ancla sintética*
-(`tests/test_columna_ancla_sintetica.py`) + este documento. No se activó
-ninguna columna, no se tocó el solver de columnas, no se movió ningún golden.
+**Estado:** PLANO DE ARQUITECTURA + **CAPA 1 (terminales limpias) EJECUTADA**.
+El diseño no escribió código de motor; la Capa 1 **activa** la columna terminal
+limpia `acetic/T-101` (sin tocar el solver: el motor FUG ya existe) y mueve solo
+su golden. Ver §6 (Estado de ejecución).
+
+> **Progreso:** Capa 1 (este frente) — `acetic/T-101` **ACTIVADA** ✅ ;
+> `dist_eth_az/T-101` **DIFERIDA** (azeotropía, ver §6). Gate 41/41 (solo el
+> golden de acetic cambió).
 
 **Base:** rama viva con #97–#101 mergeados (HEAD = merge #101,
 `feat(chloralkali)…`). Gate `python gate_examples.py` → **41/41 verde** al
@@ -195,7 +199,7 @@ Henley-Seader, *Separation Process Principles* (FUG y MESH).
 
 | clase | columnas | nota |
 |---|---|---|
-| **A. Activar limpio** (terminal, par LK/HK claro) | acetic/T-101, dist_eth_az/T-101 | binarios/azeotrópicos con keys obvios; dist_eth_az necesitará ruta azeotrópica (warning del motor) |
+| **A. Activar limpio** (terminal, par LK/HK claro) | acetic/T-101 ✅ activada (Capa 1); dist_eth_az/T-101 ⏸ diferida | acetic = binario metanol/acético limpio (α=6.1), activado. dist_eth_az pide x_D=0.956 etanol = **el azeótropo** (FUG mide α_top=0.95<1) → necesita destilación azeotrópica/extractiva con entrainer (frente aparte) |
 | **B. Activar con pseudo-cortes** (terminal, multi-corte sobre pseudo-componente) | cdu/T-101, talara/T-101, talara/T-201 | NO son columnas binarias: son fraccionadoras de crudo. Requieren **pseudo-componentes/cortes por punto de ebullición**, no FUG binario → dependen de otro frente |
 | **C. Placeholder reactivo** | hno3/T-401 | absorbedor reactivo (NOₓ→HNO₃); pertenece al frente de química, no al de separación |
 | **D. Acopladas a loop vivo** | gas_sweet/T-101, gas_sweet/T-102, hda/T-101, hda_full/T-101, hda_full/T-102, hda_full/T-103 | el núcleo caro: requieren la propagación en loop vivo (§1.3 matiz) + el multi-tear FROZEN |
@@ -309,6 +313,13 @@ construir) es la propagación de columnas en loop vivo.
   goldens hand-tuned (físicamente correctos). Encenderlos vivos es la última
   capa, y solo tras validar la propagación contra el ancla.
 
+> **Re-validación Capa 1 (2026-06-15):** las 4 reglas siguen **vigentes** — se
+> re-confirmó que `solve_columns()` corre dentro del lazo de reciclos
+> (`flowsheet_solver.py:5104` lazo principal, `:5282` lazo Wegstein, `:5621`),
+> así que una columna en loop ya se resuelve por pasada del tear; lo que falta
+> (capas 3-5) es endurecer la propagación, no reescribir el dispatch. No hay
+> desfasaje que corregir.
+
 ### 4.4 Manejo de parámetros faltantes
 Ver §2.3. Resumen: LK/HK derivables del feed; x_D/x_B = spec del ejemplo o
 `[típico]` citada; R_factor=1.3 `[típico]`; N por Gilliland; q del feed.
@@ -322,8 +333,8 @@ los goldens que mueve esa capa (declarados de antemano).
 
 | capa | qué activa | ancla / verificación | goldens |
 |:--:|---|---|---|
-| **1** | Ancla + diseño (este PR) | 8/8 anchor verdes; gate 41/41 | ninguno |
-| **2** | **Terminales limpias clase A**: acetic/T-101, dist_eth_az/T-101 | split FUG ≈ hardcode (o golden nuevo justificado); ancla intacta | acetic, dist_eth_az |
+| **1** | Ancla + diseño | 8/8 anchor verdes; gate 41/41 | ninguno |
+| **2** ✅ | **Terminales limpias clase A**: acetic/T-101 ✅ activada; dist_eth_az/T-101 ⏸ diferida (azeótropo) | split FUG D=9.94/B=1847 ≈ hardcode 10/1847; ancla intacta; gate 41/41 | **acetic** (sum_duty 16.6→36.4) |
 | **3** | **Columnas en loop, lazo aislado**: hda/T-101 (1 reciclo, el más simple) | hda converge vivo; tolueno propaga; balance cierra | hda |
 | **4** | **hda_full tren T-101/102/103** con propagación en loop vivo | el reciclo de tolueno NO colapsa; multi-tear converge a SS físico | hda_full (sale de FROZEN) |
 | **5** | **gas_sweet T-101/T-102** (absorción/stripping de aminas) | lazo de aminas converge; gas dulce sin fuga de amina | gas_sweet (sale de FROZEN) |
@@ -372,8 +383,77 @@ motor funciona — el frente solo lo **extiende a loops**, no lo reinventa.
   gas_sweet/hda/hda_full (hoy FROZEN).
 - **Plan:** 6 capas, terminales primero (riesgo bajo) y loops después (riesgo
   alto), cada una medible contra el ancla sintética, goldens uno por capa.
-- **Entregable de este PR (diseño):** este documento + el ancla sintética
+- **Entregable del PR de diseño:** este documento + el ancla sintética
   (`tests/test_columna_ancla_sintetica.py`, 8/8 verde) + el inventario y
-  dimensionamiento medidos. **Gate 41/41.** Cero columnas activadas, cero
-  goldens movidos. Es el PLANO para aprobar la arquitectura ANTES de activar una
-  sola columna.
+  dimensionamiento medidos. Es el PLANO de la arquitectura.
+
+---
+
+## 6. Estado de ejecución — CAPA 1 (terminales limpias)
+
+> **Modo de la Capa 1:** auditar antes de tocar; re-validar el diseño contra el
+> repo (no confiar en el doc a ciegas); gate antes de commit. Solo se activó la
+> columna **terminal limpia** confirmada; la enredada se difirió.
+
+### 6.1 Re-validación del diseño (FASE 0)
+- Gate 41/41 verde y ancla sintética 8/8 verde al abrir.
+- **Universo re-medido desde los JSON:** sigue siendo **6 activas + 13 pasivas**
+  (no 14: `hydraulic/T-101` ya es Vessel). Clase A = `acetic/T-101` +
+  `dist_eth_az/T-101`.
+- **Motor integrado:** re-confirmado `solve_columns()` en el lazo principal y en
+  el Wegstein (§4.3, nota). Las 4 reglas de loop vivo siguen vigentes.
+
+### 6.2 `acetic/T-101` — ACTIVADA ✅
+- **Qué separa:** feed S-4 (de V-101) = 99.46 % ácido acético / 0.54 % metanol →
+  destilado metanol (LK, bp 65 °C) / fondo ácido acético (HK, bp 118 °C).
+  Terminal (productos a tanques TK-104/TK-105 vía coolers E-102/E-103).
+- **Parámetros (derivados del split declarado, `[típico]` citado):**
+  `column_LK=methanol`, `column_HK=acetic_acid` (los 2 componentes del feed,
+  α=6.1>1); `column_x_D_LK=0.99` (recuperación alta de metanol overhead,
+  `[típico]`); `column_x_B_LK=0.0001` (ácido acético producto ≈ libre de
+  metanol, spec de diseño); `column_R_factor=1.5` (`[típico]` Turton/Seader,
+  igual que las 6 activas hermanas); `column_method=fug`, `N` por Gilliland.
+- **Reproduce el split declarado:** FUG da D=9.94 / B=1847.06 vs. hardcode
+  10 / 1847 (Δ<0.6 %). El hardcode previo era "puro" idealizado (metanol 1.0 /
+  acético 1.0); el FUG da 99 % / 99.99 %, físicamente más honesto.
+- **Streams liberados:** se quitaron los locks de composición de las salidas de
+  la columna (S-vap, S-fondo) y de los 2 productos terminales aguas abajo
+  (S-livianos, S-AcOH, que estaban clavados "puros" — el cooler pass-through no
+  separa; ahora propagan el split calculado). 4 comps intermedias/terminales
+  pasan de hardcode a calculadas.
+- **Golden:** solo `acetic` cambió — `sum_duty` 16.57 → 36.44 (la columna ahora
+  computa su reboiler/condensador real, R≈1.5·R_min con R_min alto por ser una
+  separación de traza a alta pureza). `overall_status`, `n_blocks`, `n_streams`,
+  `mass_errors=0`, `energy_errors=0`, `ISBL` **idénticos**. Los otros 40
+  byte-idénticos.
+- **Warnings:** el único warning nuevo es `[W-ENERGY-BLOCK] T-101` — que es
+  **intrínseco a TODA columna activa** en este motor (medido: las 6 activas
+  existentes lo emiten también; el cierre de energía advisory no contabiliza
+  reboiler/condensador igual que el FUG). NO es regresión: es el mismo advisory
+  que las hermanas. El `[W-COMP-OVERRIDE]` de cascada se eliminó liberando los
+  2 productos terminales.
+
+### 6.3 `dist_eth_az/T-101` — DIFERIDA ⏸
+- Su destilado objetivo declarado es **etanol 0.956 = el azeótropo etanol/agua**.
+  Medido con FUG: α_top = **0.95 < 1** → warning `AZEOTROPO PASADO`. La
+  destilación simple (FUG/MESH) **no puede** cruzar/alcanzar el azeótropo;
+  requiere destilación **azeotrópica/extractiva con entrainer** (tercer
+  componente) — un frente propio, fuera del alcance "activar limpio".
+- **No se forzó** (regla: no forzar una columna enredada). Queda pasiva con su
+  golden intacto.
+
+### 6.4 Verificación (FASE 2)
+- **Gate:** 41/41 verde; solo el golden de `acetic` se regeneró (Δ sum_duty),
+  los 40 restantes byte-idénticos.
+- **Ancla sintética:** 8/8 verde (intacta).
+- **Tests:** `tests/test_columna_capa1_acetic.py` (5/5) — columna activa, split
+  físico, balance por componente cierra, reproduce el split declarado, sin
+  errores de balance. Suites de destilación (p1/p2/p3, columns, simple, mccabe)
+  verdes (p4 falla solo por `PySide6` ausente en el entorno headless — UI test,
+  no relacionado).
+
+### 6.5 Próxima capa
+Capa 3 del plan (§4.5): `hda/T-101` — primera columna **en loop** (1 reciclo,
+el caso más simple), donde se ejercita por primera vez la propagación en loop
+vivo (las 4 reglas de §4.3). dist_eth_az espera el frente de destilación
+azeotrópica.
