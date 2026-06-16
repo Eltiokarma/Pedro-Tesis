@@ -475,13 +475,31 @@ Primera columna **en loop** activada. Resultó un fix de **DATOS**, no de motor:
   otros 40 byte-idénticos.
 - **Warnings:** `[W-ENERGY-BLOCK] T-101` intrínseco a columnas activas (no
   regresión); `[W-ENERGY-BLOCK] P-101` **pre-existente** (ya estaba en baseline).
-- **Bug latente anotado (fuera de alcance):** `_choose_tear`/`_choose_tears`
-  mispickea el back-edge en topologías con ≥2 puntos de mezcla cuando el reciclo
-  NO está taggeado `role="recycle"`. Endurecer el selector para que elija el
-  back-edge físico sin depender del tag es una mejora SEPARADA — relevante para
-  la capa agéntica (flowsheets sin roles pre-taggeados). NO se tocó acá.
+- **Bug del selector — RESUELTO (C1+C2), de-risk de la dependencia de `role`:**
+  el selector mispickeaba el back-edge en topologías con ≥2 puntos de mezcla
+  cuando el reciclo NO estaba taggeado `role="recycle"`. Fix **estructural**
+  (`flowsheet_solver.py`): la raíz del spanning tree en `_decompose_scc_cycles`
+  pasa a ser la entrada con **mayor feed externo** (antes: menor id), y
+  `_choose_tear` rankea los back-edges por el caudal de feed externo de su
+  **destino** (estructura), con `role` como desempate secundario. Resultado
+  medido: **hda elige `S-9-recic` por estructura aunque su role sea "internal"**
+  (C1); **gate 41/41 byte-idéntico** (C2). Test: `tests/test_tear_selection_estructural.py`.
+  El tag `role="recycle"` queda como dato correcto pero **ya no es load-bearing**.
 
-**Próxima capa:** clase D restante — `hda_full` (3 columnas) y `gas_sweet`
-(absorbers de amina). Antes de aplicarles el mismo camino mínimo, verificar si
-sus reciclos están bien taggeados `role="recycle"` (si no → taggear, o endurecer
-el selector). `dist_eth_az` espera el frente de destilación azeotrópica.
+### 6.6 Residuo de selección en hda_full (frente aparte)
+Para `hda_full` el fix estructural identifica bien el **reciclo de tolueno**
+(`S-tol-recic`) y enraíza en P-101, pero quedan **dos residuos** que NO se
+resuelven con selección de tear sola (medidos, documentados como frente propio):
+1. **Lazo de gas → `S-gas-pre`** (no `S-gas-recic`): `S-gas-pre` (K-101→F-101)
+   es el back-edge natural; tearearlo rompe el lazo de gas **igual** que
+   `S-gas-recic` (están en serie). Preferir `S-gas-recic` sería un criterio
+   **semántico/role**, justo lo que este fix elimina.
+2. **Falso ciclo del HX feed-efluente `E-101`** (2-in/2-out: S-1/S-4 in,
+   S-2/S-4b out) → aparece `S-3` como tear. No es un reciclo de proceso sino un
+   artefacto de modelar el HX como un nodo único; eliminarlo exige descomponer
+   el grafo a nivel de **puertos** del HX. Cambio estructural mayor → tarea aparte.
+
+**Próxima capa:** clase D restante — `hda_full` (3 columnas, requiere antes el
+fix del falso ciclo del HX + des-lockear sus reciclos) y `gas_sweet` (absorbers
+de amina, fuera de la familia FUG). `dist_eth_az` espera el frente de
+destilación azeotrópica.
