@@ -4707,6 +4707,70 @@ def _streams_in_scc(scc_block_ids, fs):
             if s.src in bids and s.dst in bids]
 
 
+# Prefijo de puerto → lado canónico de un HX de 4 puertos.  Los dos lados de un
+# HX NO se mezclan, así que para la DETECCIÓN DE CICLOS hay que parear cada
+# entrada con la salida de SU MISMO lado.  steam/cond = lado de servicio;
+# liq/vap/process = lado de proceso; tube/shell/cool nombran su propio lado.
+_HX_SIDE_BY_PREFIX = (
+    ("tube", "tube"), ("shell", "shell"),
+    ("steam", "util"), ("cond", "util"),
+    ("liq", "proc"), ("vap", "proc"), ("process", "proc"),
+    ("cool", "cool"),
+)
+
+
+def _stream_side(port):
+    """Lado canónico de un puerto de HX (None si no se reconoce)."""
+    p = (port or "").lower()
+    for pre, side in _HX_SIDE_BY_PREFIX:
+        if p.startswith(pre):
+            return side
+    return None
+
+
+def _four_port_hx_ids(fs):
+    """block_ids de HX (incl. fired heater / boiler) con ≥2 entradas Y ≥2
+    salidas → 4 puertos con lados que NO se mezclan (tube/shell, proceso/
+    servicio).  Para la detección de ciclos sus aristas se parean por lado:
+    así un HX feed-efluente no genera el ciclo FALSO que cruza sus dos lados
+    (medido en hda_full/E-101 y gas_sweet/E-101: inflaba el circuit rank a 3
+    e introducía un tear espurio).  El HX SIGUE en el SCC si ambos lados están
+    realmente en el lazo (correcto); lo que se elimina es el ciclo cruzado."""
+    ids = set()
+    for b in fs.blocks.values():
+        el = (b.eq_type or "").lower()
+        if not any(k in el for k in ("heat exch", "fired", "boiler")):
+            continue
+        ins = sum(1 for s in fs.streams.values() if s.dst == b.id)
+        outs = sum(1 for s in fs.streams.values() if s.src == b.id)
+        if ins >= 2 and outs >= 2:
+            ids.add(b.id)
+    return ids
+
+
+def _portaware_nodes(scc_block_ids, fs):
+    """Funciones de nodo PORT-AWARE para la detección de ciclos.
+
+    Devuelve (node_src, node_dst): mapean un stream a su nodo origen/destino.
+    Un bloque normal es su block_id; un HX de 4 puertos se desdobla en
+    (block_id, lado) para que las aristas no crucen lados.  Centraliza el
+    pareo por lado (reusado por `_decompose_scc_cycles` y `_scc_circuit_rank`)."""
+    hx = _four_port_hx_ids(fs) & set(scc_block_ids)
+
+    def node_src(s):
+        return (s.src, _stream_side(s.src_port)) if s.src in hx else s.src
+
+    def node_dst(s):
+        return (s.dst, _stream_side(s.dst_port)) if s.dst in hx else s.dst
+
+    return node_src, node_dst
+
+
+def _node_block(n):
+    """block_id de un nodo port-aware (desdobla la tupla (block, lado))."""
+    return n[0] if isinstance(n, tuple) else n
+
+
 def _decompose_scc_cycles(scc_block_ids, fs):
     """CAPA 1 — descompone un SCC en sus reciclos INDEPENDIENTES.
 
@@ -4736,10 +4800,19 @@ def _decompose_scc_cycles(scc_block_ids, fs):
     if not internal:
         return []
 
-    # Adyacencia dirigida (out-edges), determinista por id de stream.
-    out_edges = {b: [] for b in bids}
+    # PORT-AWARE: los nodos son block_ids, salvo los HX de 4 puertos que se
+    # desdoblan en (block_id, lado) para que las aristas no crucen lados (un HX
+    # feed-efluente no debe generar el ciclo FALSO que cruza tube↔shell).
+    node_src, node_dst = _portaware_nodes(scc_block_ids, fs)
+    nodes = set()
+    for s in internal:
+        nodes.add(node_src(s))
+        nodes.add(node_dst(s))
+
+    # Adyacencia dirigida (out-edges) por NODO, determinista por id de stream.
+    out_edges = {n: [] for n in nodes}
     for s in sorted(internal, key=lambda s: s.id):
-        out_edges[s.src].append(s)
+        out_edges[node_src(s)].append(s)
 
     # Raíz: la entrada del SCC con el feed externo de MAYOR caudal (el punto de
     # mezcla del feed principal).  Así el DFS forward deja como back-edges los
@@ -4756,10 +4829,18 @@ def _decompose_scc_cycles(scc_block_ids, fs):
         return sum(s.mass_flow for s in fs.streams.values()
                    if s.src not in bids and s.dst == bid and s.mass_flow > 0)
     entries = [b for b in bids if _has_external_input(b)]
-    root = (max(entries, key=lambda b: (_external_feed(b), -b))
-            if entries else min(bids))
+    root_block = (max(entries, key=lambda b: (_external_feed(b), -b))
+                  if entries else min(bids))
+    # nodo raíz: el del bloque raíz (si es HX 4-puertos, cualquiera de sus lados
+    # presente; determinista por orden de nodos).
+    root = next((n for n in sorted(nodes, key=repr)
+                 if _node_block(n) == root_block), None)
+    if root is None:
+        root = next(iter(sorted(nodes, key=repr)), None)
+    if root is None:
+        return []
 
-    # DFS dirigido → árbol de expansión.  tree_parent[b] = (parent_block, stream).
+    # DFS dirigido → árbol de expansión.  tree_parent[nodo] = (padre, stream).
     tree_parent = {root: None}
     tree_stream_ids = set()
     visited = {root}
@@ -4767,7 +4848,7 @@ def _decompose_scc_cycles(scc_block_ids, fs):
     while stack:
         u = stack.pop()
         for s in out_edges[u]:
-            v = s.dst
+            v = node_dst(s)
             if v not in visited:
                 visited.add(v)
                 tree_parent[v] = (u, s)
@@ -4776,11 +4857,11 @@ def _decompose_scc_cycles(scc_block_ids, fs):
 
     # Si el DFS dirigido desde la raíz no alcanza todo el SCC (raro: puede pasar
     # si la entrada no domina), completar el árbol de forma no dirigida.
-    if len(visited) < len(bids):
-        undirected = {b: [] for b in bids}
+    if len(visited) < len(nodes):
+        undirected = {n: [] for n in nodes}
         for s in internal:
-            undirected[s.src].append((s.dst, s))
-            undirected[s.dst].append((s.src, s))
+            undirected[node_src(s)].append((node_dst(s), s))
+            undirected[node_dst(s)].append((node_src(s), s))
         stack = [root]
         while stack:
             u = stack.pop()
@@ -4795,13 +4876,13 @@ def _decompose_scc_cycles(scc_block_ids, fs):
     back_edges = [s for s in sorted(internal, key=lambda s: s.id)
                   if s.id not in tree_stream_ids]
 
-    # Adyacencia NO dirigida del árbol, para hallar el camino entre extremos.
-    tree_adj = {b: [] for b in bids}
-    for b, link in tree_parent.items():
+    # Adyacencia NO dirigida del árbol (por nodo), para el camino entre extremos.
+    tree_adj = {n: [] for n in nodes}
+    for n, link in tree_parent.items():
         if link is not None:
             parent, s = link
-            tree_adj[b].append((parent, s))
-            tree_adj[parent].append((b, s))
+            tree_adj[n].append((parent, s))
+            tree_adj[parent].append((n, s))
 
     def _tree_path_streams(a, b):
         """Streams del árbol en el camino (no dirigido) de a hacia b (BFS)."""
@@ -4831,7 +4912,7 @@ def _decompose_scc_cycles(scc_block_ids, fs):
 
     cycles = []
     for be in back_edges:
-        path = _tree_path_streams(be.src, be.dst)
+        path = _tree_path_streams(node_src(be), node_dst(be))
         streams = [be] + path
         blocks = sorted({s.src for s in streams} | {s.dst for s in streams})
         cycles.append({"back_edge": be, "streams": streams, "blocks": blocks})
@@ -4839,11 +4920,20 @@ def _decompose_scc_cycles(scc_block_ids, fs):
 
 
 def _scc_circuit_rank(scc_block_ids, fs):
-    """Nº de reciclos independientes del SCC = E_int − V + 1 (circuit rank)."""
-    bids = set(scc_block_ids)
-    e_int = sum(1 for s in fs.streams.values()
-                if s.src in bids and s.dst in bids)
-    return e_int - len(bids) + 1
+    """Nº de reciclos independientes del SCC = E_int − V + 1 (circuit rank).
+
+    PORT-AWARE y consistente con `_decompose_scc_cycles`: V cuenta los nodos
+    desdoblando los HX de 4 puertos en (block, lado).  Así el ciclo FALSO que
+    cruza los dos lados de un HX feed-efluente NO infla el rank (medido en
+    hda_full/gas_sweet: 3 → 2, que es el nº real de reciclos: gas + tolueno)."""
+    internal = _streams_in_scc(scc_block_ids, fs)
+    node_src, node_dst = _portaware_nodes(scc_block_ids, fs)
+    nodes = set()
+    for s in internal:
+        nodes.add(node_src(s))
+        nodes.add(node_dst(s))
+    e_int = len(internal)
+    return e_int - len(nodes) + 1
 
 
 def _choose_tear(scc_streams, fs=None, scc_block_ids=None):

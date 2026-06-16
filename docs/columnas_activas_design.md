@@ -494,12 +494,36 @@ resuelven con selección de tear sola (medidos, documentados como frente propio)
    es el back-edge natural; tearearlo rompe el lazo de gas **igual** que
    `S-gas-recic` (están en serie). Preferir `S-gas-recic` sería un criterio
    **semántico/role**, justo lo que este fix elimina.
-2. **Falso ciclo del HX feed-efluente `E-101`** (2-in/2-out: S-1/S-4 in,
-   S-2/S-4b out) → aparece `S-3` como tear. No es un reciclo de proceso sino un
-   artefacto de modelar el HX como un nodo único; eliminarlo exige descomponer
-   el grafo a nivel de **puertos** del HX. Cambio estructural mayor → tarea aparte.
+2. **Falso ciclo del HX feed-efluente `E-101`** — ✅ **RESUELTO** (port-aware).
 
-**Próxima capa:** clase D restante — `hda_full` (3 columnas, requiere antes el
-fix del falso ciclo del HX + des-lockear sus reciclos) y `gas_sweet` (absorbers
-de amina, fuera de la familia FUG). `dist_eth_az` espera el frente de
+### 6.7 Detección de ciclos PORT-AWARE para HX de 4 puertos ✅
+El residuo #2 de §6.6 era un **ciclo falso**: la descomposición colapsaba un HX
+de 4 puertos (2-in/2-out, lados que no se mezclan) a un nodo único → aristas que
+cruzaban tube↔shell → ciclo inexistente que inflaba el circuit rank e introducía
+un tear espurio (`S-3` en hda_full).
+
+**Fix** (`flowsheet_solver.py`, port-aware vía `_portaware_nodes`):
+`_decompose_scc_cycles` y `_scc_circuit_rank` desdoblan cada HX de 4 puertos en
+nodos `(block, lado)` (tube/shell, proceso/servicio), derivando el lado del
+nombre de puerto. Las aristas de detección de ciclos ya **no cruzan lados**.
+
+**Hallazgo que corrige la premisa inicial:** el HX **NO sale del SCC** — en un
+feed-efluente ambos lados están genuinamente en el lazo (la recirculación pasa
+por el HX dos veces), así que el bloque DEBE seguir en el SCC. Lo que se elimina
+es el ciclo FALSO → el circuit rank baja al nº **real** de reciclos:
+- **hda_full**: 3 → **2** (gas + tolueno); back-edges `[S-gas-pre, S-tol-recic]`,
+  sin `S-3`/`S-4`.
+- **gas_sweet**: 3 → **2**; sin el back-edge falso `S-lean-hot`.
+- **industrial/E-202** (proceso/servicio): su SCC de servicio queda consistente.
+
+Los 3 HX de 4 puertos de los 41 (todos en SCC de reciclo): `hda_full/E-101`,
+`gas_sweet/E-101`, `industrial/E-202`. **Gate 41/41 byte-idéntico** (el resolve
+multitear no está wired a los ejemplos frozen; el solver de presión no dependía
+del ciclo falso). Tests multitear actualizados a rank-2 (codificaban el rank-3
+con el ciclo falso) + `tests/test_ciclo_hx_4puertos.py`.
+
+**Próxima capa:** clase D restante — `hda_full` (3 columnas; con el ciclo falso
+fuera, su estructura de reciclo real gas+tolueno queda limpia → sigue
+des-lockear sus reciclos + wire del resolve multi-tear Broyden) y `gas_sweet`
+(absorbers de amina, fuera de la familia FUG). `dist_eth_az` espera el frente de
 destilación azeotrópica.

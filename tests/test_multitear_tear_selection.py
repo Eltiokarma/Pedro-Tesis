@@ -42,10 +42,17 @@ def _live(example):
 
 
 def _breaks_all_cycles(scc, fs, tear_ids):
+    # PORT-AWARE: mismos nodos que la descomposición (HX 4-puertos por lado),
+    # para no contar como ciclo el cruce falso de un HX feed-efluente.
+    node_src, node_dst = F._portaware_nodes(scc, fs)
     sub = [s for s in F._streams_in_scc(scc, fs) if s.id not in tear_ids]
     adj = collections.defaultdict(list)
+    nodes = set()
     for s in sub:
-        adj[s.src].append(s.dst)
+        u, v = node_src(s), node_dst(s)
+        adj[u].append(v)
+        nodes.add(u)
+        nodes.add(v)
     WHITE, GRAY, BLACK = 0, 1, 2
     color = {}
 
@@ -60,7 +67,7 @@ def _breaks_all_cycles(scc, fs, tear_ids):
         color[u] = BLACK
         return False
 
-    return not any(dfs(b) for b in set(scc) if color.get(b, WHITE) == WHITE)
+    return not any(dfs(n) for n in nodes if color.get(n, WHITE) == WHITE)
 
 
 def _cycle_index_of(cycles, stream_name):
@@ -75,9 +82,14 @@ def test_hda_full_tear_por_ciclo_no_S2():
     tears = F._choose_tears(scc, fs)
     names = [t.name for t in tears]
 
-    assert len(tears) == len(cycles) == 3
+    # 2 reciclos reales (gas + tolueno). El 3º era el ciclo FALSO del HX
+    # feed-efluente E-101 (cruce tube↔shell), eliminado por la descomposición
+    # port-aware → ya no genera un tear espurio (antes: S-3).
+    assert len(tears) == len(cycles) == 2
     # PRUEBA DURA: el bug S-2 está corregido.
     assert "S-2" not in names, f"S-2 no debe ser tear; tears={names}"
+    # y el residuo del HX (S-3) ya no es tear.
+    assert "S-3" not in names, f"S-3 (falso ciclo del HX) no debe ser tear; {names}"
     # gas y tolueno eligen su reciclo real.
     gas_tear = next(t for t in tears
                     if _cycle_index_of(cycles, t.name)
@@ -85,17 +97,19 @@ def test_hda_full_tear_por_ciclo_no_S2():
     assert gas_tear.name in ("S-gas-pre", "S-gas-recic"), gas_tear.name
     assert "S-tol-recic" in names, f"tear de tolueno debe ser S-tol-recic; {names}"
     # tears distintos, ninguno lockeado, rompen todos los ciclos.
-    assert len(set(t.id for t in tears)) == 3
+    assert len(set(t.id for t in tears)) == 2
     assert all(not getattr(t, "mass_flow_locked", False) for t in tears)
     assert _breaks_all_cycles(scc, fs, {t.id for t in tears})
 
 
-def test_gas_sweet_tres_tears_reciclos_reales():
+def test_gas_sweet_dos_tears_reciclos_reales():
+    # 2 reciclos reales (amina rica + pobre); el 3º era el ciclo falso del HX
+    # feed-efluente E-101, eliminado port-aware.
     fs = _live("gas_sweet")
     scc = _recycle_scc(fs)
     tears = F._choose_tears(scc, fs)
-    assert len(tears) == 3
-    assert len(set(t.id for t in tears)) == 3
+    assert len(tears) == 2
+    assert len(set(t.id for t in tears)) == 2
     assert all(not getattr(t, "mass_flow_locked", False) for t in tears)
     assert _breaks_all_cycles(scc, fs, {t.id for t in tears})
 
