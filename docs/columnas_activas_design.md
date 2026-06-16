@@ -335,7 +335,8 @@ los goldens que mueve esa capa (declarados de antemano).
 |:--:|---|---|---|
 | **1** | Ancla + diseño | 8/8 anchor verdes; gate 41/41 | ninguno |
 | **2** ✅ | **Terminales limpias clase A**: acetic/T-101 ✅ activada; dist_eth_az/T-101 ⏸ diferida (azeótropo) | split FUG D=9.94/B=1847 ≈ hardcode 10/1847; ancla intacta; gate 41/41 | **acetic** (sum_duty 16.6→36.4) |
-| **3** | **Columnas en loop, lazo aislado**: hda/T-101 (1 reciclo, el más simple) | hda converge vivo; tolueno propaga; balance cierra | hda |
+| **3** ⚠️ | **Columnas en loop**: hda/T-101 (1 reciclo) — intento medido | **NECESITA FIX** (ver `columnas_capa3_hda_diagnostico.md`): la columna separa bien (0.98, balance propio cierra) pero hda **no converge vivo** — el nodo de mezcla P-101 back-deduce el tear → colapsa (bloqueo de solver, no de columna) | ninguno (no se activó) |
+| **3b** | **Pre-req solver de reciclo-vivo**: nodo de mezcla feed+reciclo no back-deducido + Wegstein vectorial del tear | ancla multi-tear sintética; hda corre vivo sin colapsar | — |
 | **4** | **hda_full tren T-101/102/103** con propagación en loop vivo | el reciclo de tolueno NO colapsa; multi-tear converge a SS físico | hda_full (sale de FROZEN) |
 | **5** | **gas_sweet T-101/T-102** (absorción/stripping de aminas) | lazo de aminas converge; gas dulce sin fuga de amina | gas_sweet (sale de FROZEN) |
 | **6** | **Desbloquear placeholders** acetic/beer (separación activa aguas abajo) | reactor+separador computan; `[W-PLACEHOLDER]` baja | acetic, beer |
@@ -452,8 +453,17 @@ motor funciona — el frente solo lo **extiende a loops**, no lo reinventa.
   verdes (p4 falla solo por `PySide6` ausente en el entorno headless — UI test,
   no relacionado).
 
-### 6.5 Próxima capa
-Capa 3 del plan (§4.5): `hda/T-101` — primera columna **en loop** (1 reciclo,
-el caso más simple), donde se ejercita por primera vez la propagación en loop
-vivo (las 4 reglas de §4.3). dist_eth_az espera el frente de destilación
-azeotrópica.
+### 6.5 Próxima capa — ACTUALIZADO tras medir Capa 3
+Capa 3 (`hda/T-101`, primera columna en loop) se **intentó y midió**
+(`columnas_capa3_hda_diagnostico.md`): **NECESITA FIX**. La columna separa
+correcto (pureza 0.98, su balance cierra), pero hda **no converge vivo** —
+des-pinear el tear colapsa el lazo porque el nodo de mezcla P-101 back-deduce
+el tear en vez de sumar feed+reciclo (bloqueo de **solver**, independiente de la
+columna; medido con la columna pasiva también). No se activó nada, no se movió
+ningún golden (regla de oro: no mover desde un SS espurio `status=error`).
+
+**Reordenamiento del plan:** antes de cualquier columna en loop (clase D) va una
+**Capa 3b de solver**: reciclo-vivo con nodo de mezcla no back-deducido +
+Wegstein vectorial del tear (la pieza diferida del multi-tear, §3.1 de
+`multitear_design.md`). Es "construir solver", no "activar columna". `dist_eth_az`
+sigue esperando el frente de destilación azeotrópica.
