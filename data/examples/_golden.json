@@ -6,7 +6,7 @@
   "n_blocks": 14,
   "n_streams": 13,
   "overall_status": "warning",
-  "sum_duty": 16.57227
+  "sum_duty": 36.442233
  },
  "air_sep": {
   "ISBL": 2859386.45,
@@ -168,7 +168,7 @@
   "n_blocks": 13,
   "n_streams": 13,
   "overall_status": "ok",
-  "sum_duty": -90.768789
+  "sum_duty": 14.668872
  },
  "hda_full": {
   "ISBL": 31519919.54,
