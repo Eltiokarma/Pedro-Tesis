@@ -4741,13 +4741,23 @@ def _decompose_scc_cycles(scc_block_ids, fs):
     for s in sorted(internal, key=lambda s: s.id):
         out_edges[s.src].append(s)
 
-    # Raíz: la entrada del SCC (bloque con feed externo de mayor caudal); si no
-    # hay, el menor id (determinista).
+    # Raíz: la entrada del SCC con el feed externo de MAYOR caudal (el punto de
+    # mezcla del feed principal).  Así el DFS forward deja como back-edges los
+    # RETORNOS de reciclo y NO las feed-lines forward.  Antes se tomaba el menor
+    # id (`entries[0]`), lo que enraizaba en el mixer del feed secundario (p.ej.
+    # makeup H₂ en F-101 en hda) y hacía que el back-edge fuera una arista
+    # forward (S-2) en vez del reciclo real (S-9-recic).  Determinista: a igual
+    # caudal, menor id.  (Coincide con el intento documentado del docstring.)
     def _has_external_input(bid):
         return any(s.src not in bids and s.dst == bid and s.mass_flow > 0
                    for s in fs.streams.values())
-    entries = sorted(b for b in bids if _has_external_input(b))
-    root = entries[0] if entries else min(bids)
+
+    def _external_feed(bid):
+        return sum(s.mass_flow for s in fs.streams.values()
+                   if s.src not in bids and s.dst == bid and s.mass_flow > 0)
+    entries = [b for b in bids if _has_external_input(b)]
+    root = (max(entries, key=lambda b: (_external_feed(b), -b))
+            if entries else min(bids))
 
     # DFS dirigido → árbol de expansión.  tree_parent[b] = (parent_block, stream).
     tree_parent = {root: None}
@@ -4864,12 +4874,22 @@ def _choose_tear(scc_streams, fs=None, scc_block_ids=None):
             return any(s.src not in bids and s.dst == bid and s.mass_flow > 0
                        for s in fs.streams.values())
 
+        def _external_feed(bid):
+            return sum(s.mass_flow for s in fs.streams.values()
+                       if s.src not in bids and s.dst == bid and s.mass_flow > 0)
+
         back_edges = [s for s in scc_streams
                       if _has_external_input(s.dst) and _tearable(s)]
         if back_edges:
+            # Criterio PRIMARIO = ESTRUCTURA: el reciclo de diseño vuelve al
+            # mixer del feed PRINCIPAL (mayor caudal externo).  Esto distingue
+            # S-9-recic (→P-101, tolueno 8850) de la feed-line forward S-2
+            # (→F-101, makeup H₂ 481) SIN depender del tag `role`.  El ranking
+            # por role se mantiene como DESEMPATE secundario (additivo).
             def _rank(s):
                 role = (getattr(s, "role", "") or "").lower()
-                return (role in ("recycle",), role in ("recycle", "internal"))
+                return (_external_feed(s.dst),
+                        role in ("recycle",), role in ("recycle", "internal"))
             back_edges.sort(key=_rank, reverse=True)
             return back_edges[0]
 
