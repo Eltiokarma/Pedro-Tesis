@@ -623,6 +623,12 @@ def _solve_mass_iteration(fs):
     requiere que `_reset_propagated_values()` haya corrido al inicio
     de solve(), si no los valores viejos persisten."""
     propagated = []
+    # HX de 4 puertos (2-in/2-out, lados que NO se mezclan): la propagación de
+    # masa debe ser PORT-AWARE (cada lado conserva su propia masa), si no, con
+    # ambos lados vivos quedan 2 salidas desconocidas y la regla de bloque no
+    # dispara → colapsan a 0.  Es el análogo de #106 (que hizo port-aware la
+    # DETECCIÓN DE CICLOS) pero en el forward pass.  Se computa una vez.
+    hx4 = _four_port_hx_ids(fs)
     for b in fs.blocks.values():
         ins  = [s for s in fs.streams.values() if s.dst == b.id]
         outs = [s for s in fs.streams.values() if s.src == b.id]
@@ -649,6 +655,43 @@ def _solve_mass_iteration(fs):
         proc_outs = [s for s in outs if not _is_hx_service(s)]
         if not proc_ins or not proc_outs:
             continue          # bloque puramente de servicio (header CW, etc.)
+
+        # ── HX de 4 puertos: balance PORT-AWARE por lado ──────────────────
+        # Para un HX 4-puertos, parear inlet↔outlet del MISMO lado (tube_in→
+        # tube_out, shell_in→shell_out): cada lado conserva su masa.  Sólo se
+        # actúa sobre lados 1-in/1-out donde NINGUNO de los dos está mass-locked
+        # (el patrón feed-efluente VIVO).  Cuando un lado tiene un ancla locked
+        # (caso closure de los 41 goldens) la regla de bloque ya lo resuelve →
+        # se deja intacto → byte-idéntico.  Es ADITIVO (se sigue a la regla de
+        # bloque normal).  Resuelve el colapso a 0 que ocurre cuando AMBOS lados
+        # están vivos (loop): con 2 salidas desconocidas la regla de bloque no
+        # dispara y colapsan a 0.
+        if b.id in hx4:
+            side_ins, side_outs = {}, {}
+            for s in proc_ins:
+                side_ins.setdefault(_stream_side(s.dst_port), []).append(s)
+            for s in proc_outs:
+                side_outs.setdefault(_stream_side(s.src_port), []).append(s)
+            for side in set(side_ins) | set(side_outs):
+                if side is None:
+                    continue
+                si = side_ins.get(side, [])
+                so = side_outs.get(side, [])
+                if len(si) != 1 or len(so) != 1:
+                    continue          # lado no es 1-in/1-out → regla de bloque
+                a, c = si[0], so[0]
+                # Sólo el caso VIVO: ambos lados sin lock (sin ancla closure) y
+                # ninguno es tear activo.  Con un lado locked → regla de bloque.
+                if _is_mass_locked(a) or _is_mass_locked(c):
+                    continue
+                if a.id in _ACTIVE_TEAR_IDS or c.id in _ACTIVE_TEAR_IDS:
+                    continue
+                if c.mass_flow == 0 and a.mass_flow > 0:
+                    c.mass_flow = a.mass_flow
+                    propagated.append((c.name, a.mass_flow))
+                elif a.mass_flow == 0 and c.mass_flow > 0:
+                    a.mass_flow = c.mass_flow
+                    propagated.append((a.name, c.mass_flow))
 
         # S2-B: un tear activo NO es candidato a deducción por balance.
         unknown_ins   = [s for s in proc_ins
