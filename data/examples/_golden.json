@@ -108,13 +108,13 @@
   "sum_duty": 134.739189
  },
  "ethane_pfr": {
-  "ISBL": 6542565.43,
+  "ISBL": 6550977.93,
   "energy_errors": 0,
   "mass_errors": 0,
-  "n_blocks": 6,
-  "n_streams": 5,
+  "n_blocks": 7,
+  "n_streams": 6,
   "overall_status": "ok",
-  "sum_duty": 70.815324
+  "sum_duty": 73.450108
  },
  "ethanol": {
   "ISBL": 3223059.01,
@@ -126,13 +126,13 @@
   "sum_duty": 1624.02741
  },
  "ethylene_crk": {
-  "ISBL": 6897010.32,
+  "ISBL": 6905422.83,
   "energy_errors": 0,
   "mass_errors": 0,
-  "n_blocks": 10,
-  "n_streams": 9,
+  "n_blocks": 11,
+  "n_streams": 10,
   "overall_status": "ok",
-  "sum_duty": 95.295355
+  "sum_duty": 97.930139
  },
  "gas_sweet": {
   "ISBL": 12772945.7,
@@ -162,31 +162,31 @@
   "sum_duty": -118.363432
  },
  "hda": {
-  "ISBL": 9730653.53,
+  "ISBL": 10080068.06,
   "energy_errors": 0,
   "mass_errors": 0,
-  "n_blocks": 13,
-  "n_streams": 13,
+  "n_blocks": 14,
+  "n_streams": 14,
   "overall_status": "ok",
-  "sum_duty": 14.668872
+  "sum_duty": 153.44339
  },
  "hda_full": {
-  "ISBL": 31519919.54,
-  "energy_errors": 0,
-  "mass_errors": 0,
-  "n_blocks": 23,
-  "n_streams": 25,
-  "overall_status": "ok",
-  "sum_duty": -805.119897
- },
- "hno3": {
-  "ISBL": 10978953.64,
+  "ISBL": 32922261.63,
   "energy_errors": 0,
   "mass_errors": 0,
   "n_blocks": 24,
-  "n_streams": 24,
+  "n_streams": 26,
+  "overall_status": "ok",
+  "sum_duty": -68.59292
+ },
+ "hno3": {
+  "ISBL": 10998092.75,
+  "energy_errors": 0,
+  "mass_errors": 0,
+  "n_blocks": 25,
+  "n_streams": 25,
   "overall_status": "warning",
-  "sum_duty": -778.286517
+  "sum_duty": -771.672114
  },
  "hydraulic": {
   "ISBL": 974463.65,
@@ -306,13 +306,13 @@
   "sum_duty": 481.791578
  },
  "smr_eq": {
-  "ISBL": 10297711.46,
+  "ISBL": 10384822.8,
   "energy_errors": 0,
   "mass_errors": 0,
-  "n_blocks": 9,
-  "n_streams": 8,
+  "n_blocks": 10,
+  "n_streams": 9,
   "overall_status": "ok",
-  "sum_duty": -30.425025
+  "sum_duty": 2.407862
  },
  "soap": {
   "ISBL": 1386433.33,
@@ -333,22 +333,22 @@
   "sum_duty": 42311.503963
  },
  "sulfuric": {
-  "ISBL": 1107012.21,
+  "ISBL": 1123837.23,
   "energy_errors": 0,
   "mass_errors": 0,
-  "n_blocks": 10,
-  "n_streams": 9,
+  "n_blocks": 12,
+  "n_streams": 11,
   "overall_status": "ok",
-  "sum_duty": -54.937067
+  "sum_duty": -53.841438
  },
  "talara": {
-  "ISBL": 41714438.44,
+  "ISBL": 42375845.01,
   "energy_errors": 0,
   "mass_errors": 0,
-  "n_blocks": 44,
-  "n_streams": 47,
+  "n_blocks": 45,
+  "n_streams": 48,
   "overall_status": "ok",
-  "sum_duty": 8889.630828
+  "sum_duty": 9159.049622
  },
  "urea": {
   "ISBL": 5125500.16,

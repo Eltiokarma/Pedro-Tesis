@@ -42,6 +42,19 @@ _EXCEPCIONES_SOLIDOS = {
     ("potato_chips", "S-papa-cruda"),
 }
 
+# Feeds gaseosos exentos de compresor propio:
+#  · urea/S-CO2: entra a M-101 y el K-101 existente comprime la mezcla a la
+#    presión del reactor — la elevación ya está maquinada aguas abajo.
+#  · gas_sweet/S-gas-acido: condición de frontera — el gas ácido LLEGA del
+#    campo a 50 bar (lock explícito origin='user'); comprimir 1 Mtm/a desde
+#    1 atm sería una máquina de ~36 MW que no existe en una planta de aminas.
+#  · smr_eq/S-vapor: header de vapor (fase "vapor"); el vapor se GENERA a
+#    presión en la caldera, nunca se comprime desde 1 atm.
+_EXCEPCIONES_GAS = {
+    ("urea", "S-CO2"),
+    ("gas_sweet", "S-gas-acido"),
+}
+
 
 def _example_keys():
     keys = []
@@ -120,6 +133,27 @@ class TestIniciosDeEjemplos(unittest.TestCase):
                     dst["eq_type"].startswith("Pump"),
                     f"{key}: feed líquido '{s.get('name')}' entra a "
                     f"'{dst['eq_type']}' ({dst['name']}) sin bomba de "
+                    f"alimentación")
+
+    def test_feeds_gaseosos_pasan_por_compresor(self):
+        """Todo feed gaseoso entra al proceso a través de un compresor: la
+        presión de llegada no es un dato, es trabajo calculado.  Fase "vapor"
+        (headers de vapor de caldera) y _EXCEPCIONES_GAS quedan exentos."""
+        for key in _example_keys():
+            d = _load(key)
+            blocks = {int(k): v for k, v in d.get("blocks", {}).items()}
+            for s in d.get("streams", {}).values():
+                if s.get("role") != "feed" or (s.get("phase") or "") != "gas":
+                    continue
+                if (key, s.get("name")) in _EXCEPCIONES_GAS:
+                    continue
+                dst = blocks.get(s.get("dst"))
+                self.assertIsNotNone(
+                    dst, f"{key}: feed '{s.get('name')}' sin bloque destino")
+                self.assertTrue(
+                    dst["eq_type"].startswith("Compressor"),
+                    f"{key}: feed gaseoso '{s.get('name')}' entra a "
+                    f"'{dst['eq_type']}' ({dst['name']}) sin compresor de "
                     f"alimentación")
 
     def test_bombas_y_compresores_tienen_succion(self):
