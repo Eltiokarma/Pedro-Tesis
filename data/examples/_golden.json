@@ -225,11 +225,11 @@
   "sum_duty": 415.055559
  },
  "methanol": {
-  "ISBL": 5826391.97,
+  "ISBL": 6053970.38,
   "energy_errors": 0,
   "mass_errors": 0,
-  "n_blocks": 8,
-  "n_streams": 7,
+  "n_blocks": 9,
+  "n_streams": 8,
   "overall_status": "ok",
   "sum_duty": -300.268263
  },
