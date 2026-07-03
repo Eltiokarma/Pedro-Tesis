@@ -24,7 +24,7 @@
   "n_blocks": 8,
   "n_streams": 7,
   "overall_status": "warning",
-  "sum_duty": 902.914507
+  "sum_duty": 35.608925
  },
  "beer": {
   "ISBL": 1763438.11,
@@ -60,7 +60,7 @@
   "n_blocks": 13,
   "n_streams": 12,
   "overall_status": "ok",
-  "sum_duty": 139.847827
+  "sum_duty": 121.323759
  },
  "cement": {
   "ISBL": 4326315.1,
@@ -105,7 +105,7 @@
   "n_blocks": 8,
   "n_streams": 7,
   "overall_status": "ok",
-  "sum_duty": 134.739189
+  "sum_duty": 126.739189
  },
  "ethane_pfr": {
   "ISBL": 6550977.93,
@@ -123,7 +123,7 @@
   "n_blocks": 12,
   "n_streams": 11,
   "overall_status": "warning",
-  "sum_duty": 1624.02741
+  "sum_duty": 1614.02741
  },
  "ethylene_crk": {
   "ISBL": 6905422.83,
@@ -141,7 +141,7 @@
   "n_blocks": 13,
   "n_streams": 16,
   "overall_status": "ok",
-  "sum_duty": 3994.425186
+  "sum_duty": 4480.949346
  },
  "glass": {
   "ISBL": 1146665.34,
@@ -168,7 +168,7 @@
   "n_blocks": 14,
   "n_streams": 14,
   "overall_status": "ok",
-  "sum_duty": 153.44339
+  "sum_duty": 129.689019
  },
  "hda_full": {
   "ISBL": 32922261.63,
@@ -177,7 +177,7 @@
   "n_blocks": 24,
   "n_streams": 26,
   "overall_status": "ok",
-  "sum_duty": -68.59292
+  "sum_duty": -273.901894
  },
  "hno3": {
   "ISBL": 10998092.75,
@@ -225,13 +225,13 @@
   "sum_duty": 415.055559
  },
  "methanol": {
-  "ISBL": 6053970.38,
+  "ISBL": 5978407.82,
   "energy_errors": 0,
   "mass_errors": 0,
   "n_blocks": 9,
   "n_streams": 8,
   "overall_status": "ok",
-  "sum_duty": -300.268263
+  "sum_duty": -738.815499
  },
  "nuclear": {
   "ISBL": 1688932.86,

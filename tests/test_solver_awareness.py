@@ -37,10 +37,12 @@ def _lines(res, tag):
 
 
 # ── 1.1 [W-ENERGY-BLOCK] ────────────────────────────────────────────────
-def test_energy_block_ammonia_compressor():
-    """ammonia K-101: duty 1200 declarado vs ΔH≈319 → resid≈-881 kW visible
-    con causa de compresor."""
-    _, res = _solve("ammonia")
+def test_energy_block_methanol_compressor():
+    """methanol K-101: duty politrópico calculado (~361 kW) vs ΔH≈18 kW de
+    corrientes (descarga T lockeada = interenfriamiento implícito) → resid
+    visible con causa de compresor.  (Antes el caso era ammonia con duty
+    1200 hardcodeado; ese duty ya se calcula y su balance cierra.)"""
+    _, res = _solve("methanol")
     lines = _lines(res, "W-ENERGY-BLOCK")
     k101 = [w for w in lines if "K-101" in w]
     assert k101, "K-101 debe disparar W-ENERGY-BLOCK"

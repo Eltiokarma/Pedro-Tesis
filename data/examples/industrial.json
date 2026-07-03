@@ -2304,7 +2304,8 @@
    "temperature": 200,
    "temperature_locked": true,
    "vapor_fraction": 0.0,
-   "waypoints": []
+   "waypoints": [],
+   "pressure_lock_origin": "user"
   },
   "31": {
    "active_reactions": [],
@@ -3198,7 +3199,8 @@
    "temperature": 30,
    "temperature_locked": true,
    "vapor_fraction": 0.0,
-   "waypoints": []
+   "waypoints": [],
+   "pressure_lock_origin": "user"
   },
   "49": {
    "active_reactions": [],
@@ -3657,7 +3659,8 @@
    "temperature": 30,
    "temperature_locked": true,
    "vapor_fraction": 0.0,
-   "waypoints": []
+   "waypoints": [],
+   "pressure_lock_origin": "user"
   },
   "58": {
    "active_reactions": [],

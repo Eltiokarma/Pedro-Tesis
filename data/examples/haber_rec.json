@@ -861,7 +861,8 @@
    "temperature": 333,
    "temperature_locked": true,
    "vapor_fraction": 0.0,
-   "waypoints": []
+   "waypoints": [],
+   "pressure_lock_origin": "user"
   },
   "13": {
    "active_reactions": [],
@@ -913,7 +914,8 @@
    "temperature": 80,
    "temperature_locked": true,
    "vapor_fraction": 0.0,
-   "waypoints": []
+   "waypoints": [],
+   "pressure_lock_origin": "user"
   },
   "14": {
    "active_reactions": [],
