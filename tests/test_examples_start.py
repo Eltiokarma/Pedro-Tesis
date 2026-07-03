@@ -30,6 +30,18 @@ _FUENTES_OK = ("Storage tank", "Vessel")
 # Máquinas que impulsan fluido: SIEMPRE necesitan succión.
 _MOVEDORES = ("Pump", "Compressor")
 
+# Feeds de fase "liquid" que en realidad son sólidos transportados (harina/
+# masa, caliza, batch de vidrio, papa entera): van por faja/tornillo, no por
+# bomba.  (clave_ejemplo, nombre_feed).
+_EXCEPCIONES_SOLIDOS = {
+    ("bread", "S-masa-cruda"),
+    ("cement", "S-caliza"),
+    ("glass", "S-silica"),
+    ("glass", "S-soda"),
+    ("glass", "S-lime"),
+    ("potato_chips", "S-papa-cruda"),
+}
+
 
 def _example_keys():
     keys = []
@@ -88,6 +100,27 @@ class TestIniciosDeEjemplos(unittest.TestCase):
                     b["eq_type"].startswith(_FUENTES_OK),
                     f"{key}: bloque fuente {b['name']} es '{b['eq_type']}' "
                     f"(debe ser tanque o vessel)")
+
+    def test_feeds_liquidos_pasan_por_bomba(self):
+        """Todo feed líquido entra al proceso a través de una bomba (nivel
+        DWSIM: nada fluye sin un impulsor).  Los sólidos transportados de
+        _EXCEPCIONES_SOLIDOS van por faja/tornillo y quedan exentos."""
+        for key in _example_keys():
+            d = _load(key)
+            blocks = {int(k): v for k, v in d.get("blocks", {}).items()}
+            for s in d.get("streams", {}).values():
+                if s.get("role") != "feed" or (s.get("phase") or "") != "liquid":
+                    continue
+                if (key, s.get("name")) in _EXCEPCIONES_SOLIDOS:
+                    continue
+                dst = blocks.get(s.get("dst"))
+                self.assertIsNotNone(
+                    dst, f"{key}: feed '{s.get('name')}' sin bloque destino")
+                self.assertTrue(
+                    dst["eq_type"].startswith("Pump"),
+                    f"{key}: feed líquido '{s.get('name')}' entra a "
+                    f"'{dst['eq_type']}' ({dst['name']}) sin bomba de "
+                    f"alimentación")
 
     def test_bombas_y_compresores_tienen_succion(self):
         """Toda bomba/compresor tiene corriente de entrada (succión)."""
