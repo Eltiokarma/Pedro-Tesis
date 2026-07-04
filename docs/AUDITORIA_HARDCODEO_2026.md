@@ -150,7 +150,7 @@ verifican que el catálogo quedó limpio.
 | fallback U/ΔT_lm + varios | 26 | HX riguroso (datos completos) |
 | HX utility fuera de rango | 14 | partir en WHB + trim cooler (14 coolers que terminan a 40–80 °C) |
 | HX cruce térmico | 18 | perfiles T de columnas (capa 3) |
-| balance por componente estricto | 14 | splits de flash (2 crit/12 mayor) |
+| balance por componente estricto | 0 | ✅ resuelto (ver sección) |
 | HX approach < 10 K | 13 | política de utilities (CW 35 °C) |
 | W-ENERGY-BLOCK (torres/reactores) | 19 | energía de columnas (capa 3) |
 | haber W-COMP-T, hda_full W-PURGE-ABS (PR-G2), urea M-101 | 3 | documentados arriba |
@@ -168,6 +168,37 @@ vacía: máquina adiabática).  Los 14 `HX-utility-rango` restantes son
 coolers que enfrían hasta 40–80 °C: colapsan un WHB + trim cooler reales
 en un solo bloque; partirlos es la cirugía sugerida como siguiente paso
 (misma mecánica que las bombas/compresores de alimentación).
+
+## Balance por componente — triage (14 → 0)
+
+Los 14 hallazgos (2 CRÍTICO / 12 MAYOR) eran de dos naturalezas:
+
+**CRÍTICO — `industrial/V-202` (metanol 49% off, H₂ 83% off):** estaba
+tipado como *splitter* (fracciones 0.85/0.15) pero declaraba composiciones
+DISTINTAS en cada salida (S-MeOH 98% metanol, S-vent gas).  Un splitter
+fuerza composición idéntica, así que las composiciones locked distintas
+fabricaban metanol de la nada (S-MeOH pedía 19 751 t/a de metanol con solo
+10 257 en la alimentación).  **Fix:** re-tipado a *flash* real (80 bar,
+40 °C) — la termodinámica separa metanol+agua (líquido) de H₂/CO/metano
+(vapor) y conserva cada componente a Δ≈0, sin hardcode.  El producto de
+metanol pasó de 20 154 (fabricado) a 9 061 t/a (88% de recuperación en un
+flash — número honesto).
+
+**MAYOR — 12 redondeos de fracciones hardcodeadas (Δ 1–5%):** dos patrones:
+- Mixers y el calentador-mezclador (`leche_gloria/M-101`, `quimpac/M-101`,
+  `hda/F-101`) + pass-throughs (HX `leche_gloria/E-102`, homogeneizador
+  `S-homog`): **desbloquear la composición de salida** → el solver la
+  computa por conservación exacta.
+- Separadores reales (`penicillin/F-101` filtro, `hda/V-101` KO drum,
+  `quimpac/T-301` torre de secado): la composición de salida ES una spec
+  de separación (no se puede propagar).  **Se recalcula la salida
+  por-diferencia** (alimentación − productos spec) y se congela exacta.
+  En T-301 el cloro seco quedó como spec {Cl₂, agua} y el ácido gastado
+  como by-difference {H₂SO₄, agua}.
+
+**Resultado:** catálogo completo **0 CRÍTICO / 0 MAYOR**.  El gate ratchet
+`gate_component_balance.py` protege ahora los 41 ejemplos (whitelist =
+catálogo completo); cualquier regresión de balance lo pone rojo.
 
 ## Verificación
 

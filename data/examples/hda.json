@@ -1215,11 +1215,8 @@
    "bubble_show_composition": false,
    "bubble_show_enthalpy": false,
    "bubble_visible": false,
-   "composition": {
-    "toluene": 0.9581,
-    "hydrogen": 0.0419
-   },
-   "composition_locked": true,
+   "composition": {},
+   "composition_locked": false,
    "cp": 0.0,
    "delta_h_vap_override": 0.0,
    "display_number": 0,
@@ -1229,7 +1226,7 @@
    "energy_kW": 0.0,
    "id": 16,
    "is_pipe": false,
-   "main_component": "toluene",
+   "main_component": "",
    "mass_flow": 0.0,
    "mass_flow_locked": false,
    "name": "S-3",
@@ -1366,8 +1363,9 @@
    "bubble_show_enthalpy": false,
    "bubble_visible": false,
    "composition": {
-    "benzene": 0.7773,
-    "toluene": 0.2227
+    "toluene": 0.222685,
+    "hydrogen": 0.000256,
+    "benzene": 0.777058
    },
    "composition_locked": true,
    "cp": 0.0,

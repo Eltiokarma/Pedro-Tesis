@@ -1149,8 +1149,9 @@
    "bubble_show_enthalpy": false,
    "bubble_visible": false,
    "composition": {
-    "glucose": 0.036,
-    "water": 0.964
+    "glucose": 0.036489,
+    "penicillin": 1.9e-05,
+    "water": 0.963492
    },
    "composition_locked": true,
    "cp": 0.0,

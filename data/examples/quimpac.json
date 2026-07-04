@@ -2297,11 +2297,8 @@
    "bubble_show_composition": false,
    "bubble_show_enthalpy": false,
    "bubble_visible": false,
-   "composition": {
-    "sodium chloride": 0.2,
-    "water": 0.8
-   },
-   "composition_locked": true,
+   "composition": {},
+   "composition_locked": false,
    "cp": 0.0,
    "delta_h_vap_override": 0.0,
    "display_number": 0,
@@ -3041,8 +3038,9 @@
    "bubble_show_enthalpy": false,
    "bubble_visible": false,
    "composition": {
-    "sulfuric acid": 0.55,
-    "water": 0.45
+    "chlorine": 4.7e-05,
+    "water": 0.430186,
+    "sulfuric acid": 0.569767
    },
    "composition_locked": true,
    "cp": 0.0,
@@ -3054,8 +3052,8 @@
    "energy_kW": 0.0,
    "id": 40,
    "is_pipe": false,
-   "main_component": "",
-   "mass_flow": 43,
+   "main_component": "sulfuric acid",
+   "mass_flow": 43.0,
    "mass_flow_locked": true,
    "name": "S-acid-spent",
    "phase": "liquid",
@@ -3107,7 +3105,7 @@
    "energy_kW": 0.0,
    "id": 41,
    "is_pipe": false,
-   "main_component": "",
+   "main_component": "chlorine",
    "mass_flow": 0.0,
    "mass_flow_locked": false,
    "name": "S-cl2-dry",

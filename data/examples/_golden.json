@@ -168,7 +168,7 @@
   "n_blocks": 14,
   "n_streams": 14,
   "overall_status": "ok",
-  "sum_duty": 58.268845
+  "sum_duty": 58.965481
  },
  "hda_full": {
   "ISBL": 32922261.63,
@@ -204,7 +204,7 @@
   "n_blocks": 29,
   "n_streams": 31,
   "overall_status": "warning",
-  "sum_duty": -4027.88548
+  "sum_duty": -3810.570218
  },
  "ldpe": {
   "ISBL": 2447864.43,
@@ -222,7 +222,7 @@
   "n_blocks": 21,
   "n_streams": 22,
   "overall_status": "ok",
-  "sum_duty": 415.055559
+  "sum_duty": 415.05391
  },
  "methanol": {
   "ISBL": 5978407.82,
@@ -285,7 +285,7 @@
   "n_blocks": 28,
   "n_streams": 28,
   "overall_status": "ok",
-  "sum_duty": 1583.436233
+  "sum_duty": 1583.437364
  },
  "rankine": {
   "ISBL": 271860377.93,
