@@ -256,6 +256,30 @@ cracking 827 °C) generan solo vapor MP en este modelo de 2 bloques; una
 planta real cascada HP→MP→LP en varios WHB.  El modelo es correcto en masa
 y energía; la integración multi-nivel es refinamiento futuro.
 
+## Energía de columnas — condensador contabilizado (W-ENERGY-BLOCK 19→16)
+
+Una columna es un equipo de DOS duties: reboiler (Q_reb > 0, vapor) y
+condensador (Q_cond < 0, agua).  El solver FUG ya computaba AMBOS
+(`design_column` devuelve `Q_reb_kW` y `Q_cond_kW`) pero asignaba solo
+`b.duty = Q_reb` y **descartaba el condensador**, así que el chequeo de
+energía trataba la columna como equipo de un solo duty y reportaba un
+residual espurio = −Q_cond (ethanol T-101: −1578 kW, el peor del catálogo).
+
+**Fix:** el solver ahora almacena `_Q_reb_kW` y `_Q_cond_kW`; el chequeo
+`W-ENERGY-BLOCK` es column-aware (balance neto = Q_reb + Q_cond).  Cerró 3
+de 8 columnas (acetic, air_sep, ethanol — incluido el residual gigante).
+Golden intacto (b.duty sin cambio; solo el chequeo y un atributo runtime).
+
+**Diferido — 5 columnas (el programa grande):** distillation, ethylene_crk,
+hda, industrial, rxn_flash_col.  Su residual es la brecha entre el método
+FUG (Q_reb = R·D·ΔH_vap promedio, condensador total) y el ΔH riguroso de
+las corrientes — se destapa cuando el destilado sale VAPOR (industrial
+T-201 vaporiza 23 711 t/a y FUG da Q_reb=271 vs ΔH~800 kW).  Cerrarlo
+requiere **energía de columna rigurosa (tray-by-tray)** con el mismo modelo
+entálpico que las corrientes.  El mensaje del warning ahora lo dice
+explícitamente (no "Ts no cierran", que era engañoso) para que el
+estudiante entienda que es la aproximación del método, no un error de masa.
+
 ## Verificación
 
 - `gate_examples.py` 41/41 verde (directo y `--registry`).
