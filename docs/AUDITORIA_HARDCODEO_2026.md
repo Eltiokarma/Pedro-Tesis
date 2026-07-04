@@ -99,7 +99,7 @@ explícitos (E-xxx) tras cada compresor de alimentación.
 
 ## Campaña de warnings (fase 2 — nivel DWSIM)
 
-Censo catálogo-completo: **237 → 200 warnings** y 4 ejemplos pasaron de
+Censo catálogo-completo: **237 → 196 warnings** y 4 ejemplos pasaron de
 `warning` a `ok` (acetic, air_sep, ammonia, hno3).
 
 ### Capacidad nueva del solver: compresión multi-etapa con interenfriamiento
@@ -147,13 +147,27 @@ verifican que el catálogo quedó limpio.
 |---|---|---|
 | pseudo-componentes | 63 | Frente C (moléculas reales) |
 | W-PLACEHOLDER (reactores estructurales) | 24 | química conectada (PR #101) |
-| fallback U/ΔT_lm + varios | 24 | HX riguroso (datos completos) |
-| HX utility fuera de rango | 20 | asignar WHB/steam-gen por servicio |
+| fallback U/ΔT_lm + varios | 26 | HX riguroso (datos completos) |
+| HX utility fuera de rango | 14 | partir en WHB + trim cooler (14 coolers que terminan a 40–80 °C) |
 | HX cruce térmico | 18 | perfiles T de columnas (capa 3) |
 | balance por componente estricto | 14 | splits de flash (2 crit/12 mayor) |
 | HX approach < 10 K | 13 | política de utilities (CW 35 °C) |
 | W-ENERGY-BLOCK (torres/reactores) | 19 | energía de columnas (capa 3) |
 | haber W-COMP-T, hda_full W-PURGE-ABS (PR-G2), urea M-101 | 3 | documentados arriba |
+
+### WHB / utilities de generación
+
+El guard de rango de utility ya no aplica a utilities de generación
+(`bfw_to_steam_*`): un WHB enfría gas mucho más caliente que la Tsat del
+vapor que genera — ese es su propósito.  Asignados servicios de generación
+donde la T de salida del proceso lo permite: ethane_pfr E-101 (827→400 °C,
+vapor HP — el TLE clásico del cracker), glass E-101 (1500→200, MP, WHR),
+hno3 E-202 (400→200, MP).  Las turbinas de nuclear/rankine (TUR-101,
+modeladas como HX) quedaron sin utility (`heat_source_locked` con fuente
+vacía: máquina adiabática).  Los 14 `HX-utility-rango` restantes son
+coolers que enfrían hasta 40–80 °C: colapsan un WHB + trim cooler reales
+en un solo bloque; partirlos es la cirugía sugerida como siguiente paso
+(misma mecánica que las bombas/compresores de alimentación).
 
 ## Verificación
 
