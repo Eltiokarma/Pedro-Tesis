@@ -52,17 +52,45 @@ class TestCompressorTout(unittest.TestCase):
     """
 
     def test_aire_5x_eta075(self):
+        # Validación del caso de libro (1 ETAPA): se desactiva el tren
+        # multi-etapa con max_ratio_per_stage grande.
         import equipment_design as ed
         res = ed.compressor_sizing(
             m_kg_s=1.0, P_in_bar=1.0, P_out_bar=5.0,
             T_in_K=300.0, mw_avg=28.97, k=1.4, eta_isen=0.75, z=1.0,
+            max_ratio_per_stage=1e9,
         )
         T_out_expected = 533.50
+        self.assertEqual(res["n_stages"], 1)
         self.assertTrue(
             _close(res["T_out_K"], T_out_expected),
             f"T_out compresor: esperado {T_out_expected:.1f} K, "
             f"obtenido {res['T_out_K']:.1f} K"
         )
+
+    def test_aire_5x_multietapa_default(self):
+        """Con el default industrial (ratio ≤ 4 por etapa), ratio 5 se
+        divide en 2 etapas con intercooler a T_in: descarga más fría que
+        la de 1 etapa y calor de interenfriamiento contabilizado."""
+        import equipment_design as ed
+        res = ed.compressor_sizing(
+            m_kg_s=1.0, P_in_bar=1.0, P_out_bar=5.0,
+            T_in_K=300.0, mw_avg=28.97, k=1.4, eta_isen=0.75, z=1.0,
+        )
+        self.assertEqual(res["n_stages"], 2)
+        # por etapa: r = √5 → ΔT_isen = 300·(5^(0.2857/... )… ≈ 77.8 K
+        # T_out = 300 + 77.8/0.75 ≈ 403.7 K
+        self.assertTrue(_close(res["T_out_K"], 403.4, tol=0.01),
+                        f"T_out multietapa: {res['T_out_K']:.1f} K")
+        self.assertGreater(res["Q_intercool_kW"], 0.0)
+        # el trabajo del tren es MENOR que el de 1 etapa (beneficio del
+        # interenfriamiento)
+        res1 = ed.compressor_sizing(
+            m_kg_s=1.0, P_in_bar=1.0, P_out_bar=5.0,
+            T_in_K=300.0, mw_avg=28.97, k=1.4, eta_isen=0.75, z=1.0,
+            max_ratio_per_stage=1e9,
+        )
+        self.assertLess(res["W_act_kW"], res1["W_act_kW"])
 
 
 # ─────────────────────────────────────────────────────────────

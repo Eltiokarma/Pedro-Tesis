@@ -5,17 +5,17 @@
   "mass_errors": 0,
   "n_blocks": 14,
   "n_streams": 13,
-  "overall_status": "warning",
-  "sum_duty": 36.442233
+  "overall_status": "ok",
+  "sum_duty": 25.641324
  },
  "air_sep": {
-  "ISBL": 2859386.45,
+  "ISBL": 2859387.1,
   "energy_errors": 0,
   "mass_errors": 0,
   "n_blocks": 9,
   "n_streams": 8,
-  "overall_status": "warning",
-  "sum_duty": 9.184045
+  "overall_status": "ok",
+  "sum_duty": 16.276318
  },
  "ammonia": {
   "ISBL": 7922613.62,
@@ -23,8 +23,8 @@
   "mass_errors": 0,
   "n_blocks": 8,
   "n_streams": 7,
-  "overall_status": "warning",
-  "sum_duty": 35.608925
+  "overall_status": "ok",
+  "sum_duty": -93.369279
  },
  "beer": {
   "ISBL": 1763438.11,
@@ -123,7 +123,7 @@
   "n_blocks": 12,
   "n_streams": 11,
   "overall_status": "warning",
-  "sum_duty": 1614.02741
+  "sum_duty": 1615.360721
  },
  "ethylene_crk": {
   "ISBL": 6905422.83,
@@ -132,7 +132,7 @@
   "n_blocks": 11,
   "n_streams": 10,
   "overall_status": "ok",
-  "sum_duty": 97.930139
+  "sum_duty": 97.415425
  },
  "gas_sweet": {
   "ISBL": 12772945.7,
@@ -159,7 +159,7 @@
   "n_blocks": 10,
   "n_streams": 10,
   "overall_status": "ok",
-  "sum_duty": -118.363432
+  "sum_duty": -125.21583
  },
  "hda": {
   "ISBL": 10080068.06,
@@ -168,7 +168,7 @@
   "n_blocks": 14,
   "n_streams": 14,
   "overall_status": "ok",
-  "sum_duty": 129.689019
+  "sum_duty": 58.268845
  },
  "hda_full": {
   "ISBL": 32922261.63,
@@ -177,7 +177,7 @@
   "n_blocks": 24,
   "n_streams": 26,
   "overall_status": "ok",
-  "sum_duty": -273.901894
+  "sum_duty": -652.954804
  },
  "hno3": {
   "ISBL": 10998092.75,
@@ -185,8 +185,8 @@
   "mass_errors": 0,
   "n_blocks": 25,
   "n_streams": 25,
-  "overall_status": "warning",
-  "sum_duty": -771.672114
+  "overall_status": "ok",
+  "sum_duty": -883.002748
  },
  "hydraulic": {
   "ISBL": 974463.65,
@@ -198,13 +198,13 @@
   "sum_duty": 9.360386
  },
  "industrial": {
-  "ISBL": 26620407.54,
+  "ISBL": 28501733.7,
   "energy_errors": 0,
   "mass_errors": 0,
   "n_blocks": 29,
   "n_streams": 31,
   "overall_status": "warning",
-  "sum_duty": -5153.271315
+  "sum_duty": -4027.88548
  },
  "ldpe": {
   "ISBL": 2447864.43,
@@ -213,7 +213,7 @@
   "n_blocks": 6,
   "n_streams": 5,
   "overall_status": "ok",
-  "sum_duty": 70.579141
+  "sum_duty": 37.180994
  },
  "leche_gloria": {
   "ISBL": 12169990.53,
@@ -231,7 +231,7 @@
   "n_blocks": 9,
   "n_streams": 8,
   "overall_status": "ok",
-  "sum_duty": -738.815499
+  "sum_duty": -859.360241
  },
  "nuclear": {
   "ISBL": 1688932.86,
@@ -285,7 +285,7 @@
   "n_blocks": 28,
   "n_streams": 28,
   "overall_status": "ok",
-  "sum_duty": 1583.779975
+  "sum_duty": 1583.436233
  },
  "rankine": {
   "ISBL": 271860377.93,
@@ -297,7 +297,7 @@
   "sum_duty": 0.160825
  },
  "rxn_flash_col": {
-  "ISBL": 3672000.39,
+  "ISBL": 3466167.77,
   "energy_errors": 0,
   "mass_errors": 0,
   "n_blocks": 9,
@@ -312,7 +312,7 @@
   "n_blocks": 10,
   "n_streams": 9,
   "overall_status": "ok",
-  "sum_duty": 2.407862
+  "sum_duty": -13.997778
  },
  "soap": {
   "ISBL": 1386433.33,
@@ -339,16 +339,16 @@
   "n_blocks": 12,
   "n_streams": 11,
   "overall_status": "ok",
-  "sum_duty": -53.841438
+  "sum_duty": -76.664234
  },
  "talara": {
-  "ISBL": 42375845.01,
+  "ISBL": 42705888.83,
   "energy_errors": 0,
   "mass_errors": 0,
   "n_blocks": 45,
   "n_streams": 48,
   "overall_status": "ok",
-  "sum_duty": 9159.049622
+  "sum_duty": 8992.338447
  },
  "urea": {
   "ISBL": 5125500.16,
@@ -357,7 +357,7 @@
   "n_blocks": 11,
   "n_streams": 10,
   "overall_status": "ok",
-  "sum_duty": 136.495623
+  "sum_duty": 115.426574
  },
  "water_treat": {
   "ISBL": 6058217.54,

@@ -97,6 +97,64 @@ explícitos (E-xxx) tras cada compresor de alimentación.
    ethanol T-101, distillation T-101…).  Se resuelve al activar la
    energía de columnas (capa 3), no maquillando las Ts.
 
+## Campaña de warnings (fase 2 — nivel DWSIM)
+
+Censo catálogo-completo: **237 → 200 warnings** y 4 ejemplos pasaron de
+`warning` a `ok` (acetic, air_sep, ammonia, hno3).
+
+### Capacidad nueva del solver: compresión multi-etapa con interenfriamiento
+
+`equipment_design.compressor_sizing` ahora modela el tren completo cuando
+el ratio total supera 4 (práctica industrial API 617): N etapas de ratio
+igual, intercooler a T_succión entre etapas.  Devuelve `n_stages`,
+`Q_intercool_kW` y el W/T_out del tren; con ratio ≤ 4 degenera exactamente
+en el cálculo de 1 etapa previo (validado en `test_equipos_referencia`:
+caso de libro 1→5 bar con `max_ratio_per_stage` desactivado, y el caso
+multi-etapa default).  El cierre de energía de bloques descuenta
+`Q_intercool` (W_in = ΔH + Q_intercoolers) y `[W-COMP-T]` reporta las
+etapas del modelo.
+
+Efecto: descargas de 628–1322 °C (adiabática 1 etapa) pasaron a 84–210 °C;
+`W-COMP-T` 7→1 (queda haber_rec, máquina genuinamente caliente),
+`W-T-OVERRIDE` 7→0, `W-DUTY-S` 2→0.
+
+### Datos: temperaturas calculadas y congeladas
+
+- Descargas de compresor (13 corrientes en 11 ejemplos): resueltas con el
+  modelo multi-etapa y **congeladas al valor resuelto** (lock = snapshot
+  del propio solver; evita el desorden de iteración aguas abajo).
+- Salidas de mixers/tanques pasivos (8 sitios): T entálpicamente
+  consistente por bisección sobre `stream_enthalpy` (duty espurio → 0).
+  `W-MIXER-DUTY` 7→1, `W-TANK-DUTY` 3→0.  Excepción: urea M-101 (mezcla
+  NH₃-líquido + CO₂-gas: las referencias de entalpía de fases distintas no
+  admiten una T adiabática representable; +44 kW residuales documentados).
+- rxn_flash_col E-101 re-tipado air cooler → floating head (calienta
+  25→87 °C antes del flash; `W-SIGN` 1→0).
+- air_sep: ancla de diseño 6 bar en el compresor de aire (sizing ya no
+  degenerado) — descarga y duty calculados.
+- hda S-5 re-faseado a two_phase; hno3 A8-gas-cool composición propagada
+  (no declarada); industrial K-101 y talara F-HTN redimensionados al duty
+  calculado.
+
+Los detectores siguen vivos: los tests de `test_solver_awareness` que
+usaban estos defectos del catálogo como fixture ahora RE-INTRODUCEN el
+defecto en memoria (patrón `test_split_lock_detector_sigue_vivo`) y
+verifican que el catálogo quedó limpio.
+
+### Warnings restantes (200) — programas propios
+
+| Familia | n | Programa |
+|---|---|---|
+| pseudo-componentes | 63 | Frente C (moléculas reales) |
+| W-PLACEHOLDER (reactores estructurales) | 24 | química conectada (PR #101) |
+| fallback U/ΔT_lm + varios | 24 | HX riguroso (datos completos) |
+| HX utility fuera de rango | 20 | asignar WHB/steam-gen por servicio |
+| HX cruce térmico | 18 | perfiles T de columnas (capa 3) |
+| balance por componente estricto | 14 | splits de flash (2 crit/12 mayor) |
+| HX approach < 10 K | 13 | política de utilities (CW 35 °C) |
+| W-ENERGY-BLOCK (torres/reactores) | 19 | energía de columnas (capa 3) |
+| haber W-COMP-T, hda_full W-PURGE-ABS (PR-G2), urea M-101 | 3 | documentados arriba |
+
 ## Verificación
 
 - `gate_examples.py` 41/41 verde (directo y `--registry`).

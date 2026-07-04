@@ -161,7 +161,7 @@
    "HETP_m": null,
    "K_souders_brown": null,
    "P_op_bar": 1.0,
-   "S": 1200.0,
+   "S": 2000.0,
    "S_locked": true,
    "T_op_K": 0.0,
    "U_override": null,
@@ -3706,7 +3706,7 @@
    "target_purity_component": "",
    "target_purity_fraction": 0.0,
    "target_temperature": -999.0,
-   "temperature": 130,
+   "temperature": 80.0,
    "temperature_locked": true,
    "vapor_fraction": 0.0,
    "waypoints": []
@@ -5662,8 +5662,8 @@
    "target_purity_component": "",
    "target_purity_fraction": 0.0,
    "target_temperature": -999.0,
-   "temperature": 350,
-   "temperature_locked": true,
+   "temperature": 25,
+   "temperature_locked": false,
    "vapor_fraction": 0.0,
    "waypoints": []
   },
@@ -6082,7 +6082,7 @@
    "target_purity_component": "",
    "target_purity_fraction": 0.0,
    "target_temperature": -999.0,
-   "temperature": 350,
+   "temperature": 140.7,
    "temperature_locked": true,
    "vapor_fraction": 0.0,
    "waypoints": []

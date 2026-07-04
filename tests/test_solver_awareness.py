@@ -37,16 +37,20 @@ def _lines(res, tag):
 
 
 # ── 1.1 [W-ENERGY-BLOCK] ────────────────────────────────────────────────
-def test_energy_block_methanol_compressor():
-    """methanol K-101: duty politrópico calculado (~361 kW) vs ΔH≈18 kW de
-    corrientes (descarga T lockeada = interenfriamiento implícito) → resid
-    visible con causa de compresor.  (Antes el caso era ammonia con duty
-    1200 hardcodeado; ese duty ya se calcula y su balance cierra.)"""
-    _, res = _solve("methanol")
-    lines = _lines(res, "W-ENERGY-BLOCK")
-    k101 = [w for w in lines if "K-101" in w]
-    assert k101, "K-101 debe disparar W-ENERGY-BLOCK"
-    assert "≠ ΔH" in k101[0]
+def test_energy_block_compressor_detector_sigue_vivo():
+    """El catálogo ya calcula los duties de máquina (multi-etapa con
+    intercooling contabilizado), así que methanol K-101 ya NO dispara.
+    Detector vivo: si se RE-introduce un duty espurio hardcodeado (el
+    defecto histórico de ammonia: 1200 kW declarados), vuelve a disparar."""
+    fs = reg.load_example("methanol")
+    k = next(b for b in fs.blocks.values() if b.name == "K-101")
+    k.duty = 5000.0
+    k.duty_locked = True
+    res = fsv.solve(fs)
+    lines = [w for w in res.awareness_warnings
+             if w.startswith("[W-ENERGY-BLOCK]") and "K-101" in w]
+    assert lines, "K-101 con duty espurio debe disparar W-ENERGY-BLOCK"
+    assert "≠ ΔH" in lines[0]
 
 
 def test_energy_block_barrido_amplio():
@@ -62,10 +66,20 @@ def test_energy_block_barrido_amplio():
 
 # ── 1.2 [W-COMP-T] ──────────────────────────────────────────────────────
 def test_comp_t_ldpe_extremo():
-    """ldpe K-101/S-HP: descarga isentrópica 1 etapa ~1322 °C >> 250 °C."""
+    """ldpe K-101/S-HP: con el modelo multi-etapa la descarga baja de
+    ~1322 °C (1 etapa) a ~134 °C → ya NO dispara.  Detector vivo: si la
+    descarga se fuerza a un valor >250 °C (lock), vuelve a disparar."""
     _, res = _solve("ldpe")
-    lines = _lines(res, "W-COMP-T")
-    assert any("S-HP" in w and "250" in w for w in lines)
+    assert not any("S-HP" in w for w in _lines(res, "W-COMP-T")), \
+        "multi-etapa debería mantener la descarga < 250 °C"
+    fs = reg.load_example("ldpe")
+    s = next(x for x in fs.streams.values() if x.name == "S-HP")
+    s.temperature = 1322.0
+    s.temperature_locked = True
+    res2 = fsv.solve(fs)
+    lines = [w for w in res2.awareness_warnings
+             if w.startswith("[W-COMP-T]") and "S-HP" in w and "250" in w]
+    assert lines, "descarga forzada a 1322 °C debe disparar W-COMP-T"
 
 
 def test_comp_t_solo_supera_umbral():
@@ -79,22 +93,41 @@ def test_comp_t_solo_supera_umbral():
 
 # ── 1.3 [W-T-OVERRIDE] ──────────────────────────────────────────────────
 def test_t_override_se_dispara():
-    """Al menos un ejemplo pierde la intención de T declarada (no locked)."""
-    total = 0
-    for e in reg.list_examples():
-        _, res = _solve(e["clave"])
-        total += len(_lines(res, "W-T-OVERRIDE"))
-    assert total >= 3
+    """El catálogo ya no pierde intenciones de T (las descargas quedaron
+    lockeadas al valor resuelto o declaradas a 25 = 'calcular').  Detector
+    vivo: una T declarada ≠25 sin lock que el solver recalcula dispara."""
+    fs = reg.load_example("ammonia")
+    s = next(x for x in fs.streams.values() if x.name == "S-1")
+    s.temperature = 500.0            # intención declarada que el solver pisará
+    s.temperature_locked = False
+    res = fsv.solve(fs)
+    lines = [w for w in res.awareness_warnings
+             if w.startswith("[W-T-OVERRIDE]") and "S-1" in w]
+    assert lines, "T declarada 500°C recalculada debe disparar W-T-OVERRIDE"
 
 
 # ── 1.4 [W-MIXER-DUTY] / [W-TANK-DUTY] ──────────────────────────────────
 def test_mixer_duty_industrial():
-    _, res = _solve("industrial")
+    """industrial M-101 quedó con salida entálpicamente consistente (72.8 °C)
+    → ya no dispara.  Detector vivo: re-introducir la T espuria dispara."""
+    fs = reg.load_example("industrial")
+    b = next(x for x in fs.blocks.values() if x.name == "M-101")
+    out = next(s for s in fs.streams.values() if s.src == b.id)
+    out.temperature = 25.0           # T espuria: la mezcla real da ~72.8 °C
+    out.temperature_locked = True
+    res = fsv.solve(fs)
     assert any("M-101" in w for w in _lines(res, "W-MIXER-DUTY"))
 
 
 def test_tank_duty_industrial():
-    _, res = _solve("industrial")
+    """industrial TK-301 quedó con salida entálpicamente consistente
+    (137.9 °C) → ya no dispara.  Detector vivo: T espuria dispara."""
+    fs = reg.load_example("industrial")
+    b = next(x for x in fs.blocks.values() if x.name == "TK-301")
+    out = next(s for s in fs.streams.values() if s.src == b.id)
+    out.temperature = 25.0           # T espuria: la mezcla real da ~137.9 °C
+    out.temperature_locked = True
+    res = fsv.solve(fs)
     assert any("TK-301" in w for w in _lines(res, "W-TANK-DUTY"))
 
 
@@ -158,16 +191,33 @@ def test_split_lock_detector_sigue_vivo():
 
 # ── 1.7 [W-DUTY-S] ──────────────────────────────────────────────────────
 def test_duty_s_talara_fhtn():
+    """talara F-HTN fue redimensionado (S=2000 ≥ duty 1948) → ya no
+    dispara.  Detector vivo: S subdeclarado dispara."""
     _, res = _solve("talara")
-    assert any("F-HTN" in w for w in _lines(res, "W-DUTY-S"))
+    assert not any("F-HTN" in w for w in _lines(res, "W-DUTY-S"))
+    fs = reg.load_example("talara")
+    b = next(x for x in fs.blocks.values() if x.name == "F-HTN")
+    b.S = 1200.0                     # el defecto histórico
+    res2 = fsv.solve(fs)
+    lines = [w for w in res2.awareness_warnings
+             if w.startswith("[W-DUTY-S]") and "F-HTN" in w]
+    assert lines, "S=1200 < duty≈1948 debe disparar W-DUTY-S"
 
 
 # ── 1.8 [W-SIGN] ────────────────────────────────────────────────────────
 def test_sign_rxn_flash_col_aircooler():
-    """rxn_flash_col E-101: air cooler con duty positivo (debería ser <0)."""
+    """rxn_flash_col E-101 calentaba (25→87 °C) y estaba mal tipado como
+    air cooler; re-tipado a floating head → ya no dispara.  Detector vivo:
+    re-tipar a air cooler (duty>0) vuelve a disparar."""
     _, res = _solve("rxn_flash_col")
-    lines = _lines(res, "W-SIGN")
-    assert any("E-101" in w and "air cooler" in w for w in lines)
+    assert not any("E-101" in w for w in _lines(res, "W-SIGN"))
+    fs = reg.load_example("rxn_flash_col")
+    b = next(x for x in fs.blocks.values() if x.name == "E-101")
+    b.eq_type = "Heat exch. — air cooler"     # el mal tipado histórico
+    res2 = fsv.solve(fs)
+    lines = [w for w in res2.awareness_warnings
+             if w.startswith("[W-SIGN]") and "E-101" in w and "air cooler" in w]
+    assert lines, "air cooler con duty>0 debe disparar W-SIGN"
 
 
 # ── INVARIANTE: los warnings NO alteran overall_status ──────────────────

@@ -1262,8 +1262,8 @@
    "target_purity_component": "",
    "target_purity_fraction": 0.0,
    "target_temperature": -999.0,
-   "temperature": 120,
-   "temperature_locked": false,
+   "temperature": 179.5,
+   "temperature_locked": true,
    "vapor_fraction": 0.0,
    "waypoints": [],
    "pressure_lock_origin": "user"
@@ -1315,7 +1315,7 @@
    "target_purity_component": "",
    "target_purity_fraction": 0.0,
    "target_temperature": -999.0,
-   "temperature": 80,
+   "temperature": 111.3,
    "temperature_locked": true,
    "vapor_fraction": 0.0,
    "waypoints": []
