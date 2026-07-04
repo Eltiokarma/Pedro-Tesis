@@ -280,6 +280,30 @@ entálpico que las corrientes.  El mensaje del warning ahora lo dice
 explícitamente (no "Ts no cierran", que era engañoso) para que el
 estudiante entienda que es la aproximación del método, no un error de masa.
 
+## Notas — warnings restantes (esperados, NO se persiguen a cero)
+
+Cierre de la campaña: **237 → 105 warnings surfaced**.  Los balances y
+pseudos que podían enseñar algo FALSO en la lección básica están en **0**.
+Los 105 restantes son awareness de diseño, defaults conservadores o
+programas con nombre — se dejan visibles a propósito (el simulador es
+honesto sobre sus aproximaciones), no son bugs:
+
+| Familia | n | Naturaleza / por qué se deja |
+|---|---|---|
+| W-PLACEHOLDER | 24 | Reactores estructurales (química vía outputs locked): diseño intencional; su programa es la química conectada (PR #101). Awareness, no error. |
+| HX-fallback-U | 21 | El HX usa U/ΔT_lm de tabla cuando faltan datos rigurosos (utility de un solo punto). Default conservador declarado — el número es defendible, el warning avisa que no es riguroso. |
+| HX-cruce-termico | 20 | El perfil ΔT proceso/utility se cruza porque las utilities se modelan a T constante (no zonificadas). Correcto en energía; el perfil fino requiere HX multi-zona. |
+| W-ENERGY-BLOCK | 16 | 5 columnas (energía tray-by-tray, documentado); 6 compresores (aftercooler implícito, documentado); 2 reactores (signo de Q_rxn); 3 vessels/horno. |
+| HX-approach | 13 | Approach < 10 K con agua de enfriamiento a 35 °C — política de utilities, no error de modelo. Bajar el approach = subir área/costo (trade-off real). |
+| otro / T-calc / W-COMP-T / W-PURGE-ABS / W-MIXER-DUTY | 11 | Singletons documentados: haber_rec K-101 (máquina genuinamente caliente), hda E-102 (diferido), hda_full purga (PR-G2), urea M-101 (mezcla bifásica NH₃-líq+CO₂-gas). |
+
+**Criterio:** un warning se persigue a cero si puede hacer que el
+estudiante aprenda algo incorrecto en un balance de masa o energía básico
+(esos están resueltos).  Un warning que documenta honestamente una
+aproximación de método (FUG, U de tabla, utility de un punto) o una
+decisión de diseño (approach, placeholder) se DEJA visible — esconderlo
+sería menos honesto que mostrarlo.
+
 ## Verificación
 
 - `gate_examples.py` 41/41 verde (directo y `--registry`).
