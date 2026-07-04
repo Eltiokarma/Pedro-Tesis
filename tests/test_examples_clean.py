@@ -51,6 +51,11 @@ CLEAN_EXAMPLES = [
     'sulfuric',
     'urea',
     'water_treat',
+    # limpios tras el triage de pseudo-componentes (cortes de petróleo →
+    # INFO legítimo) y de balance por componente
+    'cdu',
+    'potato_chips',
+    'soap',
 ]
 
 

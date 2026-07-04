@@ -200,6 +200,33 @@ flash — número honesto).
 `gate_component_balance.py` protege ahora los 41 ejemplos (whitelist =
 catálogo completo); cualquier regresión de balance lo pone rojo.
 
+## Pseudo-componentes — triage (63 warnings → 0)
+
+Los 63 warnings colapsaban en **7 pseudo-componentes** y el diagnóstico era
+que casi todos son legítimos:
+
+- **Cortes de petróleo** (`crude_oil`, `naphtha`, `kerosene`, `diesel`,
+  `gasoline_97`, `atmospheric_residue` — 57 streams en cdu/talara/sugar):
+  son pseudo-componentes LEGÍTIMOS caracterizados por rango de ebullición
+  (TBP), exactamente como los modela DWSIM/Aspen/Pro-II.  El mensaje viejo
+  ("reemplazar por molécula real") era guía ERRÓNEA — un corte lumpea
+  cientos de hidrocarburos, no hay una molécula que lo sustituya.  Nueva
+  categoría `petroleum_pseudo_allowed` → **INFO** con mensaje honesto.
+- **`vegetable_oil`** (6 streams en potato_chips/soap): resultó ser un
+  alias de `triolein` en thermo_db (mismo MW 885.4, **con** Antoine) — es
+  modelable, no un pseudo sin VLE.  Movido a `food_pseudo_allowed` (aceite
+  bio ~triolein) → INFO.  (No se renombró a `triolein` porque la reacción
+  R030 de saponificación referencia `vegetable_oil` por nombre.)
+- **`syngas`**: único que queda en `industrial_pseudo` → warning genuino
+  (mezcla H₂/CO/CO₂/CH₄ variable; modelar como componentes reales cuando
+  la composición esté fija).  Hoy 0 streams lo usan.
+
+**Resultado:** 63 → **0 warnings de pseudo**; el total de warnings
+surfaced del catálogo bajó de 196 a **119**.  cdu, potato_chips y soap
+quedaron completamente limpios y entraron a `CLEAN_EXAMPLES`.  La
+clasificación vive en `data/pseudo_components.json` (curada, versionada);
+`test_consistency_audit` verifica petróleo→INFO y syngas→warning.
+
 ## Verificación
 
 - `gate_examples.py` 41/41 verde (directo y `--registry`).

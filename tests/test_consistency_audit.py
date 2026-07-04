@@ -94,9 +94,7 @@ def test_component_balance_does_not_silence_hx():
         "el auditor debe seguir cazando un desbalance real en un HX"
 
 
-def test_pseudo_components_detected():
-    """Un stream con pseudo-componentes industriales (crude_oil, naphtha)
-    debe generar warnings de pseudo."""
+def _pseudo_stream(name, composition, main):
     fs = fm.Flowsheet()
     from flowsheet_model import Block, Stream
     tk  = Block(id=1, name="TK", eq_type="Storage tank — cone roof",
@@ -104,20 +102,41 @@ def test_pseudo_components_detected():
     col = Block(id=2, name="COL", eq_type="Tower (column shell)",
                 S=10, n=1, x=100, y=0)
     fs.blocks = {1: tk, 2: col}
-    s = Stream(id=10, name="S-crudo", src=1, dst=2, mass_flow=100,
-               composition={"crude_oil": 0.6, "naphtha": 0.4},
-               main_component="crude_oil", temperature=25)
+    s = Stream(id=10, name=name, src=1, dst=2, mass_flow=100,
+               composition=composition, main_component=main, temperature=25)
     s.composition_locked = True
     fs.streams = {10: s}
+    return audit_flowsheet(fs)
 
-    report = audit_flowsheet(fs)
+
+def test_petroleum_cuts_son_info_no_warning():
+    """Los cortes de petróleo (crude_oil, naphtha) son pseudo-componentes
+    LEGÍTIMOS (caracterización TBP) → severity='info', NO warning: no hay
+    'molécula real' con la que reemplazar un corte lumpeado."""
+    report = _pseudo_stream("S-crudo",
+                            {"crude_oil": 0.6, "naphtha": 0.4}, "crude_oil")
     pseudo = report.by_category('pseudo')
     pseudo_names = {f.data.get('component') for f in pseudo}
     assert {'crude_oil', 'naphtha'} & pseudo_names, \
-        f"No detectó pseudo-componentes industriales. Vio: {pseudo_names}"
-    assert any(f.severity == 'warning' for f in pseudo), \
-        "Los pseudo industriales deben ser severity='warning'"
-    print(f"  ✓ Pseudo industrial: {len(pseudo)} hallazgos detectados")
+        f"No detectó los cortes de petróleo. Vio: {pseudo_names}"
+    for f in pseudo:
+        assert f.severity == 'info', \
+            f"Corte de petróleo '{f.data.get('component')}' debe ser INFO, " \
+            f"no {f.severity}"
+    assert any("petróleo" in f.message for f in pseudo)
+    print(f"  ✓ Cortes de petróleo: {len(pseudo)} INFO (legítimos)")
+
+
+def test_pseudo_industrial_genuino_es_warning():
+    """Un pseudo industrial genuino sin molécula de reemplazo (syngas: mezcla
+    variable H2/CO/CO2/CH4) sigue generando warning."""
+    report = _pseudo_stream("S-syn", {"syngas": 1.0}, "syngas")
+    pseudo = report.by_category('pseudo')
+    assert any(f.data.get('component') == 'syngas' and f.severity == 'warning'
+               for f in pseudo), \
+        "syngas debe seguir siendo warning. Vio: " \
+        f"{[(f.data.get('component'), f.severity) for f in pseudo]}"
+    print("  ✓ syngas: warning (pseudo industrial genuino)")
 
 
 def test_food_pseudo_is_info_not_warning():

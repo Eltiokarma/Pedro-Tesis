@@ -25,11 +25,14 @@ VALID_PHASES = {"liquid", "vapor", "gas", "two_phase"}
 _WATER_NAMES = {"water", "h2o", "agua"}
 
 # Fallback hardcoded si no existe data/pseudo_components.json.
-INDUSTRIAL_PSEUDO_FALLBACK = {
-    'syngas', 'vegetable_oil', 'biodiesel', 'glycerin', 'naphtha',
-    'kerosene', 'diesel', 'atmospheric_residue', 'crude_oil',
+INDUSTRIAL_PSEUDO_FALLBACK = {'syngas'}
+# Cortes de petróleo (TBP): pseudo-componentes LEGÍTIMOS, no reemplazables por
+# una molécula.  INFO, no warning.
+PETROLEUM_PSEUDO_FALLBACK = {
+    'crude_oil', 'naphtha', 'kerosene', 'diesel', 'gasoline_97',
+    'atmospheric_residue',
 }
-FOOD_PSEUDO_FALLBACK = {'sucrose', 'glucose'}
+FOOD_PSEUDO_FALLBACK = {'sucrose', 'glucose', 'vegetable_oil'}
 # Especies inorgánicas / materiales sin modelo VLE razonable (sales, óxidos,
 # minerales, polímeros, mezclas).  Son reales pero el solver VLE no las modela
 # rigurosamente → auditor genera INFO (no error), no hay nada que "arreglar".
@@ -41,11 +44,12 @@ _PSEUDO_CACHE = None
 def _load_pseudo_sets():
     """Carga (lazy) los sets de pseudo-componentes desde el JSON curado.
     Fallback a los sets hardcoded si el archivo no existe o es inválido.
-    Devuelve (industrial, food, material)."""
+    Devuelve (industrial, petroleum, food, material)."""
     global _PSEUDO_CACHE
     if _PSEUDO_CACHE is not None:
         return _PSEUDO_CACHE
     industrial = set(INDUSTRIAL_PSEUDO_FALLBACK)
+    petroleum = set(PETROLEUM_PSEUDO_FALLBACK)
     food = set(FOOD_PSEUDO_FALLBACK)
     material = set(MATERIAL_PSEUDO_FALLBACK)
     path = os.path.join(os.path.dirname(os.path.abspath(__file__)),
@@ -55,13 +59,15 @@ def _load_pseudo_sets():
             d = json.load(fh)
         if isinstance(d.get("industrial_pseudo"), list):
             industrial = set(d["industrial_pseudo"])
+        if isinstance(d.get("petroleum_pseudo_allowed"), list):
+            petroleum = set(d["petroleum_pseudo_allowed"])
         if isinstance(d.get("food_pseudo_allowed"), list):
             food = set(d["food_pseudo_allowed"])
         if isinstance(d.get("material_pseudo_allowed"), list):
             material = set(d["material_pseudo_allowed"])
     except (OSError, ValueError):
         pass
-    _PSEUDO_CACHE = (industrial, food, material)
+    _PSEUDO_CACHE = (industrial, petroleum, food, material)
     return _PSEUDO_CACHE
 
 
@@ -523,7 +529,7 @@ def _audit_pressure_source(fs, findings):
 # ======================================================================
 
 def _audit_pseudo(fs, findings):
-    industrial, food, material = _load_pseudo_sets()
+    industrial, petroleum, food, material = _load_pseudo_sets()
     for s in fs.streams.values():
         seen = set()
         for c in _stream_components(s):
@@ -539,6 +545,16 @@ def _audit_pseudo(fs, findings):
                              f"molécula real (ver Frente C). Balances por "
                              f"componente y VLE no son físicamente "
                              f"significativos para este stream."),
+                    data={'component': c}))
+            elif c in petroleum:
+                findings.append(AuditFinding(
+                    category='pseudo', severity='info',
+                    target_kind='stream', target_name=s.name,
+                    message=(f"{s.name}: corte de petróleo '{c}' — "
+                             f"pseudo-componente legítimo caracterizado por "
+                             f"rango de ebullición (TBP), como en todo "
+                             f"simulador de proceso. No se reemplaza por una "
+                             f"molécula; VLE aproximado por caracterización."),
                     data={'component': c}))
             elif c in food:
                 findings.append(AuditFinding(
