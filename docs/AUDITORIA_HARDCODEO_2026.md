@@ -227,6 +227,35 @@ quedaron completamente limpios y entraron a `CLEAN_EXAMPLES`.  La
 clasificación vive en `data/pseudo_components.json` (curada, versionada);
 `test_consistency_audit` verifica petróleo→INFO y syngas→warning.
 
+## Integración energética — WHB + trim cooler (14 → 1)
+
+Los 14 coolers que enfriaban un stream caliente (260–1450 °C) hasta
+40–130 °C en UN bloque disparaban `HX-utility-rango` (el agua de
+enfriamiento no toma un gas a 800 °C).  La planta real recupera ese calor
+de alta: **caldera de recuperación (WHB) que genera vapor** + **trim cooler
+con agua** para el acercamiento final.  Cada cooler se partió en dos:
+
+- WHB (`Heat exch. — WHB packaged`, `bfw_to_steam_MP`): enfría hasta 200 °C
+  generando vapor MP (Tsat 184 °C).
+- Trim cooler (`floating head`, `cooling_water`): 200 °C → T final.
+
+El stream intermedio hereda la composición locked de la salida (un cooler
+no cambia composición) → cero propagación distinta, cero `redundant_lock`.
+**13 de 14 aplicados** (cdu ×2, cement, ethane_pfr, ethylene_crk,
+haber_rec, hda_full, methanol, smr_eq, sulfuric, talara ×3).  ISBL de esos
+ejemplos cae 1–6% (el vapor recuperado descuenta OPEX) salvo donde el WHB
+agrega CAPEX neto (sulfuric +4.6%).
+
+**Diferido — `hda/E-102`:** alimenta un flash spec'd (V-101) dentro de un
+loop de reciclo; el bloque extra corre la convergencia del tear ~45 t/a y
+descuadra el balance.  Requiere re-anclar el tear, fuera del alcance de
+esta cirugía.  Queda 1 `HX-utility-rango` documentado.
+
+**Nota de simplificación:** los servicios muy calientes (cement 1450 °C,
+cracking 827 °C) generan solo vapor MP en este modelo de 2 bloques; una
+planta real cascada HP→MP→LP en varios WHB.  El modelo es correcto en masa
+y energía; la integración multi-nivel es refinamiento futuro.
+
 ## Verificación
 
 - `gate_examples.py` 41/41 verde (directo y `--registry`).
