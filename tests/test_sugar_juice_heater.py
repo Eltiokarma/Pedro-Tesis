@@ -38,11 +38,12 @@ def test_no_hay_reaccion_solo_calentamiento():
 
 def test_s1_se_propaga_desde_sjugo_por_t30():
     """Como ahora es un pass-through 1-in-1-out, T30 lo clasifica y la
-    composición de S-1 se propaga desde S-jugo (no depende de hardcode)."""
+    composición de S-1 se propaga desde S-jugo (no depende de hardcode).
+    Con la bomba de alimentación P-101, la entrada es S-jugo-b (descarga)."""
     fs = reg.load_example("sugar")
     fsv.solve(fs)
     io = fsv._passthrough_io(_block(fs, "R-101"), fs)
-    assert io is not None and (io[0].name, io[1].name) == ("S-jugo", "S-1")
+    assert io is not None and (io[0].name, io[1].name) == ("S-jugo-b", "S-1")
 
 
 def test_duty_calentamiento_se_mantiene_sin_warnings():

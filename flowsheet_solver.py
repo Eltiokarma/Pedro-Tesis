@@ -1276,6 +1276,9 @@ def _propagate_T_compressor_isentropic(b, fs, propagated=None, skipped=None,
             return False
         T_out_K = res["T_out_K"]
         W_elec_kW = res["W_act_kW"]        # POSITIVO (consume)
+        # multi-etapa: el cierre de energía y los mensajes usan estos datos
+        b._n_stages = int(res.get("n_stages", 1) or 1)
+        b._q_intercool_kW = float(res.get("Q_intercool_kW", 0.0) or 0.0)
     else:
         # TURBINA / EXPANSOR — expansión isentrópica
         exponent = (k - 1.0) / k
@@ -2708,6 +2711,12 @@ def solve_columns(fs):
         Q_total = (res.get("Q_reb_kW", 0) or 0)
         if not _is_duty_locked(b):
             b.duty = Q_total
+        # Duties del par reboiler/condensador (runtime) — el condensador NO
+        # es un bloque separado en estos ejemplos, así que el balance de
+        # energía del bloque columna debe contarlo (net = Q_reb + Q_cond).
+        # Los consume _compute_awareness_warnings (W-ENERGY-BLOCK).
+        b._Q_reb_kW = Q_total
+        b._Q_cond_kW = float(res.get("Q_cond_kW", 0.0) or 0.0)
 
         # Atributos informativos (no persistidos, runtime)
         b._column_N = res.get("N")
@@ -6227,15 +6236,30 @@ def _compute_awareness_warnings(fs):
                     m_in = sum(s.mass_flow * TM_TO_KG / SEC_PER_YEAR
                                for s in ins)
                     q_rxn = -m_in * hor
-                resid = h_out - h_in - duty - q_rxn
+                # Compresor multi-etapa: W_in = ΔH + Q_intercoolers →
+                # el calor extraído entre etapas cierra el balance.
+                q_ic = float(getattr(b, "_q_intercool_kW", 0.0) or 0.0)
+                # Columna: es un equipo de DOS duties.  b.duty = Q_reb, pero
+                # el condensador (Q_cond < 0) NO es un bloque separado en
+                # estos ejemplos → el balance neto es Q_reb + Q_cond.
+                q_cond = float(getattr(b, "_Q_cond_kW", 0.0) or 0.0)
+                resid = h_out - h_in - duty - q_rxn + q_ic - q_cond
                 scale = max(abs(h_in), abs(h_out), abs(duty), 10.0)
                 if abs(resid) > 10.0 and abs(resid) / scale > 0.10:
+                    is_column = "tower" in eqt.lower() or "column" in eqt.lower()
                     if has_rxn and rxn_resolves:
                         cause = ("reactor con reacción real → posible signo "
                                  "de Q_rxn o Ts de producto inconsistentes")
                     elif is_electrical:
                         cause = (f"duty declarado ({duty:.0f} kW) ≠ ΔH de "
                                  f"corrientes ({h_out - h_in:.0f} kW)")
+                    elif is_column:
+                        cause = (f"duties FUG (Q_reb={duty:.0f}, "
+                                 f"Q_cond={q_cond:.0f} kW) aproximan mal el "
+                                 f"ΔH riguroso de corrientes ({h_out - h_in:.0f} "
+                                 f"kW) — destilado vapor / ΔH_vap promedio; "
+                                 f"requiere energía de columna rigurosa "
+                                 f"(tray-by-tray)")
                     else:
                         cause = "Ts de corrientes no cierran el balance"
                     warns.append(
@@ -6250,12 +6274,14 @@ def _compute_awareness_warnings(fs):
                 if hot is None or s.temperature > hot.temperature:
                     hot = s
             if hot is not None and hot.temperature > 250.0:
+                n_st = int(getattr(b, "_n_stages", 1) or 1)
                 warns.append(
-                    f"[W-COMP-T] {b.name}/{hot.name}: descarga isentrópica "
-                    f"de 1 etapa = {hot.temperature:.0f} °C (>250 °C, límite "
-                    f"mecánico API 618). Planta real usa compresión "
-                    f"multietapa con intercooling. Considerar dividir en N "
-                    f"etapas o declarar T_descarga con lock.")
+                    f"[W-COMP-T] {b.name}/{hot.name}: descarga = "
+                    f"{hot.temperature:.0f} °C (>250 °C, límite mecánico "
+                    f"API 618) aun con el modelo multi-etapa ({n_st} "
+                    f"etapa(s), intercooling a T_succión). Revisar T de "
+                    f"succión / ratio, o declarar T_descarga con lock si "
+                    f"hay aftercooler.")
 
         # ── 1.4 [W-MIXER-DUTY]/[W-TANK-DUTY] duty en equipo pasivo ───
         if abs(duty) > 5.0:
