@@ -2708,15 +2708,38 @@ def solve_columns(fs):
         # condensador es un HX separado en el flowsheet típicamente).
         # Aquí asignamos Q_reb al bloque Tower (representa el calor
         # neto consumido).
-        Q_total = (res.get("Q_reb_kW", 0) or 0)
+        #
+        # ── Energía por PRIMERA LEY (cierra el balance del bloque) ──
+        # Una columna adiabática cumple  Q_reb + Q_cond = ΔH_corrientes
+        # (H_D + H_B − H_F) EXACTO.  El método FUG estima Q_reb con un
+        # ΔH_vap PROMEDIO y condensador total, lo que no coincide con la
+        # entalpía rigurosa de las corrientes (peor si el destilado sale
+        # vapor).  En vez de eso: estimamos el condensador por su latente
+        # (ajustado por la fase del destilado) y DERIVAMOS el reboiler del
+        # balance global → net = ΔH exacto, ambos duties físicos.
+        Q_cond = float(res.get("Q_cond_kW", 0.0) or 0.0)   # FUG: -(R+1)·D·dh
+        R_col = float(res.get("R", 0.0) or 0.0)
+        if dist_is_vapor and (R_col + 1.0) > 0:
+            # condensador PARCIAL: sólo condensa el reflujo L=R·D (el
+            # destilado sale vapor), no el (R+1)·D del condensador total.
+            Q_cond *= R_col / (R_col + 1.0)
+        try:
+            H_F = _stream_enthalpy_kW(feed) or 0.0
+            H_D = _stream_enthalpy_kW(dist_stream) or 0.0
+            H_B = _stream_enthalpy_kW(bot_stream) or 0.0
+            dH_streams = H_D + H_B - H_F
+            Q_reb = dH_streams - Q_cond            # primera ley
+        except Exception:
+            Q_reb = (res.get("Q_reb_kW", 0) or 0)  # fallback al FUG
         if not _is_duty_locked(b):
-            b.duty = Q_total
+            b.duty = Q_reb
         # Duties del par reboiler/condensador (runtime) — el condensador NO
         # es un bloque separado en estos ejemplos, así que el balance de
         # energía del bloque columna debe contarlo (net = Q_reb + Q_cond).
         # Los consume _compute_awareness_warnings (W-ENERGY-BLOCK).
-        b._Q_reb_kW = Q_total
-        b._Q_cond_kW = float(res.get("Q_cond_kW", 0.0) or 0.0)
+        b._Q_reb_kW = b.duty
+        b._Q_cond_kW = Q_cond
+        Q_total = b.duty
 
         # Atributos informativos (no persistidos, runtime)
         b._column_N = res.get("N")

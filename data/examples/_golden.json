@@ -6,7 +6,7 @@
   "n_blocks": 14,
   "n_streams": 13,
   "overall_status": "ok",
-  "sum_duty": 25.641324
+  "sum_duty": 15.930262
  },
  "air_sep": {
   "ISBL": 2859387.1,
@@ -15,7 +15,7 @@
   "n_blocks": 9,
   "n_streams": 8,
   "overall_status": "ok",
-  "sum_duty": 16.276318
+  "sum_duty": 11.488275
  },
  "ammonia": {
   "ISBL": 7922613.62,
@@ -105,7 +105,7 @@
   "n_blocks": 8,
   "n_streams": 7,
   "overall_status": "ok",
-  "sum_duty": 126.739189
+  "sum_duty": 130.490264
  },
  "ethane_pfr": {
   "ISBL": 6408177.02,
@@ -123,7 +123,7 @@
   "n_blocks": 12,
   "n_streams": 11,
   "overall_status": "warning",
-  "sum_duty": 1615.360721
+  "sum_duty": 1592.463263
  },
  "ethylene_crk": {
   "ISBL": 6762621.92,
@@ -132,7 +132,7 @@
   "n_blocks": 12,
   "n_streams": 11,
   "overall_status": "ok",
-  "sum_duty": 97.415425
+  "sum_duty": 64.97026
  },
  "gas_sweet": {
   "ISBL": 12772945.7,
@@ -168,7 +168,7 @@
   "n_blocks": 14,
   "n_streams": 14,
   "overall_status": "ok",
-  "sum_duty": 58.965481
+  "sum_duty": 56.747978
  },
  "hda_full": {
   "ISBL": 32940733.98,
@@ -204,7 +204,7 @@
   "n_blocks": 29,
   "n_streams": 31,
   "overall_status": "warning",
-  "sum_duty": -3810.570218
+  "sum_duty": -3382.092075
  },
  "ldpe": {
   "ISBL": 2447864.43,
@@ -303,7 +303,7 @@
   "n_blocks": 9,
   "n_streams": 8,
   "overall_status": "ok",
-  "sum_duty": 481.791578
+  "sum_duty": 499.422251
  },
  "smr_eq": {
   "ISBL": 10231887.19,
