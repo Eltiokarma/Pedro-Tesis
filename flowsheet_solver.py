@@ -6134,6 +6134,28 @@ def _block_reaction_status(b):
     return (True, any_resolves, bonus)
 
 
+def _reaction_all_species_have_mw(rid):
+    """True si TODAS las especies de la reacción `rid` tienen MW>0 en
+    thermo_db (condición necesaria para que el reactor estequiométrico
+    resuelva el balance molar).  Un solo pseudo sin MW → False."""
+    try:
+        import reactions_db as _rdb
+        import thermo_db as _td
+    except Exception:
+        return False
+    try:
+        r = _rdb.get(rid)
+    except Exception:
+        r = None
+    if r is None or not getattr(r, "stoich", None):
+        return False
+    for sp in r.stoich:
+        c = _td.get(sp.thermo_name)
+        if c is None or not getattr(c, "mw", 0) or c.mw <= 0:
+            return False
+    return True
+
+
 def _comp_approx_equal(c1, c2, tol=0.02):
     """True si dos composiciones (dict componente→fracción másica) son
     aproximadamente iguales: ambas no vacías, MISMO conjunto de componentes
@@ -6229,8 +6251,19 @@ def _compute_awareness_warnings(fs):
                    f"(chemistry via outputs locked): exento de balance "
                    f"elemental y de energía.")
             for rid, base in ph_bonus:
-                msg += (f" La reacción {base} existe curada en reactions_db "
-                        f"— considerar usarla (hoy declarada como {rid}).")
+                # ¿el motor estequiométrico PUEDE resolverla? Sólo si TODAS
+                # las especies tienen MW (los pseudo-componentes sin MW —
+                # polietileno, jabón, cal — rompen el balance molar).
+                connectable = _reaction_all_species_have_mw(base)
+                if connectable:
+                    msg += (f" La reacción {base} existe curada y todas sus "
+                            f"especies tienen MW → CONECTABLE (cambiar {rid}→"
+                            f"{base}, reactor_mode='stoich', y re-propagar la "
+                            f"cadena downstream — Frente C).")
+                else:
+                    msg += (f" La reacción {base} existe curada pero usa "
+                            f"pseudo-componentes SIN MW → NO conectable con el "
+                            f"motor estequiométrico; placeholder legítimo.")
             warns.append(msg)
 
         # ── 1.1 [W-ENERGY-BLOCK] cierre global de energía por bloque ──
