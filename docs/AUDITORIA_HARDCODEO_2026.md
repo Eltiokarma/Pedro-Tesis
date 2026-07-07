@@ -371,3 +371,53 @@ riguroso requiere caracterización por curva de destilación (TBP → pseudo-
 componentes con Tb/SG/MW y correlaciones de Lee-Kesler/Riazi) — una adición
 de termodinámica sustancial y de bajo retorno (ya son INFO, no warning).
 Documentado como mejora futura, no bloqueante.
+
+## MEDIA/ALTA (sesión 3) — química conectada en los 4 reactores tratables (W-PLACEHOLDER 24→20)
+
+Los 4 reactores que el triage marcó CONECTABLES (todas las especies con MW)
+ahora corren química real, con su cadena downstream re-propagada:
+
+- **beer / R007** (fermentación glucosa→2 etanol+2 CO₂): V-101 separa el CO₂
+  (único gas) del vino por-diferencia.
+- **acetic / R026** (carbonilación metanol+CO→ácido acético): V-101 quita el
+  CO gas; T-101 (columna activa) se auto-resuelve.  El output honesto
+  (acetic_acid 0.9456 a conv 0.95, antes 0.99 hardcodeado) sube el destilado
+  de metanol sin reaccionar de D≈10 a D≈58.
+- **bread / R007**: H-101 (horno) evapora los volátiles (CO₂, etanol) + la
+  fracción de agua del original; S-pan pass-through desbloqueado.
+- **sulfuric / R006** (2SO₂+O₂→2SO₃): la cadena de coolers desbloqueada
+  propaga; ABS-101 mantiene la estequiometría SO₃+H₂O→H₂SO₄ recalculada a
+  mano (la hidratación no está curada en el catálogo — no se tocó
+  reactions_db para no arrastrar termo por Hess).
+
+Método: `reactions=[real]`, `reactor_mode='stoich'`, `heat_of_reaction=0`
+(el solver lo computa), output del reactor desbloqueado, y cada separador
+downstream recalculado por-diferencia (iterando hasta converger).  Balance
+por componente **0/0** en los 4; el calor de reacción ahora es calculado
+(acetic sum_duty 16→−105, sulfuric −77→−98 exotérmicos); ISBL intacto.
+
+**Restan 20 W-PLACEHOLDER legítimos** (química no modelable por el motor:
+pseudo-componentes sin MW, electrólisis, fusión, cortes de petróleo).
+
+## Estado de W-ENERGY-BLOCK restantes (12) — awareness legítimo
+
+Tras cerrar las columnas por primera ley, quedan 12, todos honestos:
+
+- **6 compresores**: el modelo multi-etapa (Q_intercool) cierra los que
+  comprimen gas ideal, pero NO los casos con quirks físicos: urea K-101
+  (descarga a fase densa/líquida a 150 bar — el gas se licúa, el ΔH incluye
+  latente que el modelo gaseoso no captura), hno3 K-501 (turboexpansor,
+  duty<0), haber_rec K-101 (máquina genuinamente caliente a 333 °C),
+  industrial K-202 (duty≈0 sobre reciclo). No son bugs — el warning avisa
+  que el modelo isentrópico simple no aplica a esos regímenes.
+- **3 reactores** (ammonia, methanol, sulfuric R-101): "posible signo de
+  Q_rxn o Ts de producto". El balance de energía de reactor depende de la
+  convención de signo del calor de reacción y la T de producto declarada;
+  es un programa aparte (energía de reactor, análogo a energía de columna).
+- **3 vessels/otros**: potato_chips FR-101 (freidora), sulfuric ABS-101
+  (absorbedor con calor de absorción implícito), etc.
+
+Estos se dejan visibles a propósito (el simulador es honesto sobre los
+regímenes donde su modelo simplificado no aplica), coherente con el
+criterio de la campaña: perseguir a cero sólo lo que puede enseñar algo
+falso en un balance básico (masa/energía → ya en 0), documentar el resto.
