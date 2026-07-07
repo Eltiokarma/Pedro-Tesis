@@ -398,3 +398,26 @@ por componente **0/0** en los 4; el calor de reacción ahora es calculado
 
 **Restan 20 W-PLACEHOLDER legítimos** (química no modelable por el motor:
 pseudo-componentes sin MW, electrólisis, fusión, cortes de petróleo).
+
+## Estado de W-ENERGY-BLOCK restantes (12) — awareness legítimo
+
+Tras cerrar las columnas por primera ley, quedan 12, todos honestos:
+
+- **6 compresores**: el modelo multi-etapa (Q_intercool) cierra los que
+  comprimen gas ideal, pero NO los casos con quirks físicos: urea K-101
+  (descarga a fase densa/líquida a 150 bar — el gas se licúa, el ΔH incluye
+  latente que el modelo gaseoso no captura), hno3 K-501 (turboexpansor,
+  duty<0), haber_rec K-101 (máquina genuinamente caliente a 333 °C),
+  industrial K-202 (duty≈0 sobre reciclo). No son bugs — el warning avisa
+  que el modelo isentrópico simple no aplica a esos regímenes.
+- **3 reactores** (ammonia, methanol, sulfuric R-101): "posible signo de
+  Q_rxn o Ts de producto". El balance de energía de reactor depende de la
+  convención de signo del calor de reacción y la T de producto declarada;
+  es un programa aparte (energía de reactor, análogo a energía de columna).
+- **3 vessels/otros**: potato_chips FR-101 (freidora), sulfuric ABS-101
+  (absorbedor con calor de absorción implícito), etc.
+
+Estos se dejan visibles a propósito (el simulador es honesto sobre los
+regímenes donde su modelo simplificado no aplica), coherente con el
+criterio de la campaña: perseguir a cero sólo lo que puede enseñar algo
+falso en un balance básico (masa/energía → ya en 0), documentar el resto.
