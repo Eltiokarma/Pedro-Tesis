@@ -625,12 +625,33 @@ def _audit_redundant_locks(fs, findings):
         is_tank = "tank" in (src.eq_type or "").lower()
         if is_tank and not _block_has_inputs(fs, src.id):
             continue                       # tanque feeder sin upstream → spec
+        # Separador (1-in-N-out, N>1): cada salida es una fase/corte con
+        # composición DISTINTA que el equipo reparte.  La propagación copia
+        # la misma composición del input a todas las salidas → no aplica.  Y
+        # si el unit op no puede recalcular el reparto rigurosamente (VLE de
+        # N2/O2 criogénico, cortes de crudo pseudo, sólidos), el lock ES la
+        # spec de separación → load-bearing, NO redundante.  (Una columna que
+        # SÍ separa rigurosamente recomputa y sobreescribe el lock; ahí el
+        # detector no lo ve como locked tras solve.)
+        _proc_outs = [t for t in fs.streams.values()
+                      if t.src == src.id and t.dst != -1
+                      and not getattr(t, "auto_aux", False)]
+        if len(_proc_outs) > 1 and not all(
+                _has_antoine(_thermo(c)) for c in _stream_components(s)):
+            continue
         # ¿El upstream RECALCULA la composición? Solo si tiene una reacción
         # real (no placeholder) o una unit op automática activa.
         rxn_ids = list(getattr(src, "reactions", None) or [])
         has_custom = bool(getattr(src, "custom_reactions", None))
         rxn_recalcs = has_custom or _any_reaction_resolves(rxn_ids)
         has_rxn_tags = bool(rxn_ids or has_custom)
+        # Reactor con reacción PLACEHOLDER (no resoluble): la química define
+        # composiciones de salida que el motor no puede calcular — el lock es
+        # load-bearing AUNQUE el bloque tenga splitter/flash activo (p.ej.
+        # talara R-FCC/R-FCK: fraccionador de cortes con reacción R_FCC
+        # placeholder; cada corte tiene composición distinta hardcodeada).
+        if has_rxn_tags and not rxn_recalcs:
+            continue
         active = (getattr(src, "column_active", False)
                   or getattr(src, "flash_active", False)
                   or getattr(src, "splitter_active", False))
@@ -662,8 +683,18 @@ def _audit_redundant_locks(fs, findings):
             # hardcodeada representa química que el solver no puede calcular
             # (especies fuera de thermo_db). El lock es load-bearing.
             continue
-        # Equipo no-reactivo (mixer/pump/HX): el lock SÍ se respeta, pero si
-        # ningún input tiene composición lockeada el solver pudo propagarla.
+        # Separador (1-in-N-out con N>1): cada salida lleva una composición
+        # DISTINTA que el equipo reparte.  La propagación copiaría la misma
+        # composición del input a TODAS las salidas → no aplica.  El lock es
+        # load-bearing (es la spec de separación), NO redundante.
+        proc_outs = [t for t in fs.streams.values()
+                     if t.src == src.id and t.dst != -1
+                     and not getattr(t, "auto_aux", False)]
+        if len(proc_outs) > 1:
+            continue
+        # Equipo no-reactivo 1-in-1-out (pass-through: HX/bomba): el lock SÍ
+        # se respeta, pero si ningún input tiene composición lockeada el
+        # solver pudo propagarla → redundante.
         inputs = [t for t in fs.streams.values() if t.dst == src.id]
         if inputs and not any(getattr(t, "composition_locked", False)
                               for t in inputs):

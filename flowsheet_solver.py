@@ -2708,15 +2708,38 @@ def solve_columns(fs):
         # condensador es un HX separado en el flowsheet típicamente).
         # Aquí asignamos Q_reb al bloque Tower (representa el calor
         # neto consumido).
-        Q_total = (res.get("Q_reb_kW", 0) or 0)
+        #
+        # ── Energía por PRIMERA LEY (cierra el balance del bloque) ──
+        # Una columna adiabática cumple  Q_reb + Q_cond = ΔH_corrientes
+        # (H_D + H_B − H_F) EXACTO.  El método FUG estima Q_reb con un
+        # ΔH_vap PROMEDIO y condensador total, lo que no coincide con la
+        # entalpía rigurosa de las corrientes (peor si el destilado sale
+        # vapor).  En vez de eso: estimamos el condensador por su latente
+        # (ajustado por la fase del destilado) y DERIVAMOS el reboiler del
+        # balance global → net = ΔH exacto, ambos duties físicos.
+        Q_cond = float(res.get("Q_cond_kW", 0.0) or 0.0)   # FUG: -(R+1)·D·dh
+        R_col = float(res.get("R", 0.0) or 0.0)
+        if dist_is_vapor and (R_col + 1.0) > 0:
+            # condensador PARCIAL: sólo condensa el reflujo L=R·D (el
+            # destilado sale vapor), no el (R+1)·D del condensador total.
+            Q_cond *= R_col / (R_col + 1.0)
+        try:
+            H_F = _stream_enthalpy_kW(feed) or 0.0
+            H_D = _stream_enthalpy_kW(dist_stream) or 0.0
+            H_B = _stream_enthalpy_kW(bot_stream) or 0.0
+            dH_streams = H_D + H_B - H_F
+            Q_reb = dH_streams - Q_cond            # primera ley
+        except Exception:
+            Q_reb = (res.get("Q_reb_kW", 0) or 0)  # fallback al FUG
         if not _is_duty_locked(b):
-            b.duty = Q_total
+            b.duty = Q_reb
         # Duties del par reboiler/condensador (runtime) — el condensador NO
         # es un bloque separado en estos ejemplos, así que el balance de
         # energía del bloque columna debe contarlo (net = Q_reb + Q_cond).
         # Los consume _compute_awareness_warnings (W-ENERGY-BLOCK).
-        b._Q_reb_kW = Q_total
-        b._Q_cond_kW = float(res.get("Q_cond_kW", 0.0) or 0.0)
+        b._Q_reb_kW = b.duty
+        b._Q_cond_kW = Q_cond
+        Q_total = b.duty
 
         # Atributos informativos (no persistidos, runtime)
         b._column_N = res.get("N")
@@ -6111,6 +6134,28 @@ def _block_reaction_status(b):
     return (True, any_resolves, bonus)
 
 
+def _reaction_all_species_have_mw(rid):
+    """True si TODAS las especies de la reacción `rid` tienen MW>0 en
+    thermo_db (condición necesaria para que el reactor estequiométrico
+    resuelva el balance molar).  Un solo pseudo sin MW → False."""
+    try:
+        import reactions_db as _rdb
+        import thermo_db as _td
+    except Exception:
+        return False
+    try:
+        r = _rdb.get(rid)
+    except Exception:
+        r = None
+    if r is None or not getattr(r, "stoich", None):
+        return False
+    for sp in r.stoich:
+        c = _td.get(sp.thermo_name)
+        if c is None or not getattr(c, "mw", 0) or c.mw <= 0:
+            return False
+    return True
+
+
 def _comp_approx_equal(c1, c2, tol=0.02):
     """True si dos composiciones (dict componente→fracción másica) son
     aproximadamente iguales: ambas no vacías, MISMO conjunto de componentes
@@ -6206,8 +6251,19 @@ def _compute_awareness_warnings(fs):
                    f"(chemistry via outputs locked): exento de balance "
                    f"elemental y de energía.")
             for rid, base in ph_bonus:
-                msg += (f" La reacción {base} existe curada en reactions_db "
-                        f"— considerar usarla (hoy declarada como {rid}).")
+                # ¿el motor estequiométrico PUEDE resolverla? Sólo si TODAS
+                # las especies tienen MW (los pseudo-componentes sin MW —
+                # polietileno, jabón, cal — rompen el balance molar).
+                connectable = _reaction_all_species_have_mw(base)
+                if connectable:
+                    msg += (f" La reacción {base} existe curada y todas sus "
+                            f"especies tienen MW → CONECTABLE (cambiar {rid}→"
+                            f"{base}, reactor_mode='stoich', y re-propagar la "
+                            f"cadena downstream — Frente C).")
+                else:
+                    msg += (f" La reacción {base} existe curada pero usa "
+                            f"pseudo-componentes SIN MW → NO conectable con el "
+                            f"motor estequiométrico; placeholder legítimo.")
             warns.append(msg)
 
         # ── 1.1 [W-ENERGY-BLOCK] cierre global de energía por bloque ──

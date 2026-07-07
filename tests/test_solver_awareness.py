@@ -54,14 +54,16 @@ def test_energy_block_compressor_detector_sigue_vivo():
 
 
 def test_energy_block_barrido_amplio():
-    """El barrido de cierre de energía debe disparar en múltiples ejemplos
-    (reactores reales descuadrados + compresores/bombas con duty espurio)."""
+    """El barrido de cierre de energía sigue disparando en varios ejemplos
+    (compresores con aftercooler implícito, reactores con Q_rxn, hornos).
+    Tras cerrar las columnas por primera ley (Q_reb+Q_cond=ΔH), el conteo
+    bajó a ~9 — el detector sigue vivo y con cobertura amplia."""
     n = 0
     for e in reg.list_examples():
         _, res = _solve(e["clave"])
         if _lines(res, "W-ENERGY-BLOCK"):
             n += 1
-    assert n >= 12, f"esperado barrido amplio, sólo {n} ejemplos"
+    assert n >= 7, f"esperado barrido amplio, sólo {n} ejemplos"
 
 
 # ── 1.2 [W-COMP-T] ──────────────────────────────────────────────────────
