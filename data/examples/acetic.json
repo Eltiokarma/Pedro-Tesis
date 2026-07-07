@@ -490,7 +490,7 @@
    "flash_P_bar": 1.013,
    "flash_T_K": 298.15,
    "flash_active": false,
-   "heat_of_reaction": -2216.0,
+   "heat_of_reaction": 0.0,
    "heat_source": "",
    "heat_source_locked": false,
    "id": 7,
@@ -503,10 +503,10 @@
    "packing_type": "",
    "reaction_warnings": [],
    "reactions": [
-    "R026_PLACEHOLDER"
+    "R026"
    ],
    "reactor_conversion": 0.95,
-   "reactor_mode": "equilibrium",
+   "reactor_mode": "stoich",
    "reactor_volume_L": 0.0,
    "separator_active": false,
    "solid_components": [],
@@ -1382,12 +1382,8 @@
    "bubble_show_composition": false,
    "bubble_show_enthalpy": false,
    "bubble_visible": false,
-   "composition": {
-    "acetic_acid": 0.9899,
-    "co": 0.0048,
-    "methanol": 0.0053
-   },
-   "composition_locked": true,
+   "composition": {},
+   "composition_locked": false,
    "cp": 0.0,
    "delta_h_vap_override": 0.0,
    "display_number": 0,
@@ -1397,7 +1393,7 @@
    "energy_kW": 0.0,
    "id": 21,
    "is_pipe": false,
-   "main_component": "acetic_acid",
+   "main_component": "",
    "mass_flow": 0.0,
    "mass_flow_locked": false,
    "name": "S-3",
@@ -1449,7 +1445,7 @@
    "id": 22,
    "is_pipe": false,
    "main_component": "co",
-   "mass_flow": 9,
+   "mass_flow": 43.3,
    "mass_flow_locked": true,
    "name": "S-purga",
    "phase": "gas",
@@ -1487,8 +1483,8 @@
    "bubble_show_enthalpy": false,
    "bubble_visible": false,
    "composition": {
-    "acetic_acid": 0.9946,
-    "methanol": 0.0054
+    "acetic_acid": 0.968107,
+    "methanol": 0.031893
    },
    "composition_locked": true,
    "cp": 0.0,
@@ -1501,8 +1497,8 @@
    "id": 23,
    "is_pipe": false,
    "main_component": "acetic_acid",
-   "mass_flow": 0.0,
-   "mass_flow_locked": false,
+   "mass_flow": 1822.7,
+   "mass_flow_locked": true,
    "name": "S-4",
    "phase": "liquid",
    "phase_locked": true,

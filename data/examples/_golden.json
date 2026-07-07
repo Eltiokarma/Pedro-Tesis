@@ -6,7 +6,7 @@
   "n_blocks": 14,
   "n_streams": 13,
   "overall_status": "ok",
-  "sum_duty": 15.930262
+  "sum_duty": -105.42989
  },
  "air_sep": {
   "ISBL": 2859387.1,
@@ -33,7 +33,7 @@
   "n_blocks": 7,
   "n_streams": 6,
   "overall_status": "ok",
-  "sum_duty": -1.277669
+  "sum_duty": -3.616011
  },
  "biodiesel": {
   "ISBL": 1477223.5,
@@ -51,7 +51,7 @@
   "n_blocks": 7,
   "n_streams": 6,
   "overall_status": "ok",
-  "sum_duty": 9.474989
+  "sum_duty": 10.332161
  },
  "cdu": {
   "ISBL": 6441928.37,
@@ -339,7 +339,7 @@
   "n_blocks": 13,
   "n_streams": 12,
   "overall_status": "ok",
-  "sum_duty": -76.663332
+  "sum_duty": -98.026026
  },
  "talara": {
   "ISBL": 42214019.64,

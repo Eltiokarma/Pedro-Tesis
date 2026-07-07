@@ -76,9 +76,12 @@ class TestAceticColumnaActiva(unittest.TestCase):
                 msg=f"balance de {comp} no cierra: in={m_in:.3f} out={m_out:.3f}")
 
     def test_reproduce_split_declarado(self):
-        # El hardcode previo: D≈10 (metanol), B≈1847 (acético).
-        self.assertAlmostEqual(self.sbyname["S-vap"].mass_flow, 10.0, delta=1.0)
-        self.assertAlmostEqual(self.sbyname["S-fondo"].mass_flow, 1847.0, delta=2.0)
+        # Tras conectar la química real (R026, carbonilación de metanol,
+        # conv 0.95), el reactor computa acetic_acid=0.9456 (antes 0.99
+        # hardcodeado): queda más metanol sin reaccionar → el destilado
+        # sube a D≈58 (metanol) y los fondos bajan a B≈1764 (ácido).
+        self.assertAlmostEqual(self.sbyname["S-vap"].mass_flow, 58.5, delta=2.0)
+        self.assertAlmostEqual(self.sbyname["S-fondo"].mass_flow, 1764.0, delta=3.0)
 
     def test_no_hay_errores_de_balance(self):
         # El solver no debe reportar errores duros de masa/energía nuevos.

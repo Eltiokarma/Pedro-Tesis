@@ -371,3 +371,30 @@ riguroso requiere caracterización por curva de destilación (TBP → pseudo-
 componentes con Tb/SG/MW y correlaciones de Lee-Kesler/Riazi) — una adición
 de termodinámica sustancial y de bajo retorno (ya son INFO, no warning).
 Documentado como mejora futura, no bloqueante.
+
+## MEDIA/ALTA (sesión 3) — química conectada en los 4 reactores tratables (W-PLACEHOLDER 24→20)
+
+Los 4 reactores que el triage marcó CONECTABLES (todas las especies con MW)
+ahora corren química real, con su cadena downstream re-propagada:
+
+- **beer / R007** (fermentación glucosa→2 etanol+2 CO₂): V-101 separa el CO₂
+  (único gas) del vino por-diferencia.
+- **acetic / R026** (carbonilación metanol+CO→ácido acético): V-101 quita el
+  CO gas; T-101 (columna activa) se auto-resuelve.  El output honesto
+  (acetic_acid 0.9456 a conv 0.95, antes 0.99 hardcodeado) sube el destilado
+  de metanol sin reaccionar de D≈10 a D≈58.
+- **bread / R007**: H-101 (horno) evapora los volátiles (CO₂, etanol) + la
+  fracción de agua del original; S-pan pass-through desbloqueado.
+- **sulfuric / R006** (2SO₂+O₂→2SO₃): la cadena de coolers desbloqueada
+  propaga; ABS-101 mantiene la estequiometría SO₃+H₂O→H₂SO₄ recalculada a
+  mano (la hidratación no está curada en el catálogo — no se tocó
+  reactions_db para no arrastrar termo por Hess).
+
+Método: `reactions=[real]`, `reactor_mode='stoich'`, `heat_of_reaction=0`
+(el solver lo computa), output del reactor desbloqueado, y cada separador
+downstream recalculado por-diferencia (iterando hasta converger).  Balance
+por componente **0/0** en los 4; el calor de reacción ahora es calculado
+(acetic sum_duty 16→−105, sulfuric −77→−98 exotérmicos); ISBL intacto.
+
+**Restan 20 W-PLACEHOLDER legítimos** (química no modelable por el motor:
+pseudo-componentes sin MW, electrólisis, fusión, cortes de petróleo).

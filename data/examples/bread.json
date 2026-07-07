@@ -207,10 +207,10 @@
    "packing_type": "",
    "reaction_warnings": [],
    "reactions": [
-    "R007_PLACEHOLDER"
+    "R007"
    ],
    "reactor_conversion": 0.95,
-   "reactor_mode": "equilibrium",
+   "reactor_mode": "stoich",
    "reactor_volume_L": 0.0,
    "separator_active": false,
    "solid_components": [],
@@ -660,12 +660,8 @@
    "bubble_show_composition": false,
    "bubble_show_enthalpy": false,
    "bubble_visible": false,
-   "composition": {
-    "glucose": 0.05,
-    "starch": 0.45,
-    "water": 0.5
-   },
-   "composition_locked": true,
+   "composition": {},
+   "composition_locked": false,
    "cp": 0.0,
    "delta_h_vap_override": 0.0,
    "display_number": 0,
@@ -675,7 +671,7 @@
    "energy_kW": 0.0,
    "id": 10,
    "is_pipe": false,
-   "main_component": "starch",
+   "main_component": "",
    "mass_flow": 0.0,
    "mass_flow_locked": false,
    "name": "S-leudada",
@@ -714,7 +710,9 @@
    "bubble_show_enthalpy": false,
    "bubble_visible": false,
    "composition": {
-    "water": 1.0
+    "co2": 0.138548,
+    "ethanol": 0.145034,
+    "water": 0.716418
    },
    "composition_locked": true,
    "cp": 0.0,
@@ -727,7 +725,7 @@
    "id": 11,
    "is_pipe": false,
    "main_component": "water",
-   "mass_flow": 120,
+   "mass_flow": 167.5,
    "mass_flow_locked": true,
    "name": "S-vapor",
    "phase": "vapor",
@@ -765,9 +763,9 @@
    "bubble_show_enthalpy": false,
    "bubble_visible": false,
    "composition": {
-    "glucose": 0.0568,
-    "starch": 0.5114,
-    "water": 0.4318
+    "glucose": 0.003003,
+    "starch": 0.540541,
+    "water": 0.456456
    },
    "composition_locked": true,
    "cp": 0.0,
@@ -780,8 +778,8 @@
    "id": 12,
    "is_pipe": false,
    "main_component": "starch",
-   "mass_flow": 0.0,
-   "mass_flow_locked": false,
+   "mass_flow": 832.5,
+   "mass_flow_locked": true,
    "name": "S-pan-cal",
    "phase": "liquid",
    "phase_locked": true,
@@ -817,12 +815,8 @@
    "bubble_show_composition": false,
    "bubble_show_enthalpy": false,
    "bubble_visible": false,
-   "composition": {
-    "glucose": 0.0568,
-    "starch": 0.5114,
-    "water": 0.4318
-   },
-   "composition_locked": true,
+   "composition": {},
+   "composition_locked": false,
    "cp": 0.0,
    "delta_h_vap_override": 0.0,
    "display_number": 0,
@@ -832,7 +826,7 @@
    "energy_kW": 0.0,
    "id": 13,
    "is_pipe": false,
-   "main_component": "starch",
+   "main_component": "",
    "mass_flow": 0.0,
    "mass_flow_locked": false,
    "name": "S-pan",
