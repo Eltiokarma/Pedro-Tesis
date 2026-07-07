@@ -314,3 +314,60 @@ sería menos honesto que mostrarlo.
 - Suite unittest = línea base; tests estilo-función de los ejemplos
   tocados en verde (`test_solver_awareness` reapuntado: el caso didáctico
   del detector pasó de ammonia-duty-espurio a methanol-intercooler).
+
+---
+
+# Sesión 2 (2026-07) — mejoras altas/medias
+
+Continuación tras el merge del PR #108.  Foco: cerrar los programas
+grandes que quedaron diferidos.
+
+## ALTA — Energía de columna por PRIMERA LEY (W-ENERGY-BLOCK columnas 5→0)
+
+Las 5 columnas que el fix column-aware no había cerrado (el ΔH riguroso no
+coincidía con el Q_reb del FUG) ahora cierran EXACTO.  Para cada columna
+adiabática se computa Q_cond por su latente (ajustado por fase del
+destilado: condensador parcial si sale vapor, total si líquido) y se
+DERIVA Q_reb = ΔH_corrientes − Q_cond (primera ley).  El caso testigo
+industrial T-201 (destilado vapor) pasó de Q_reb=271 FUG (condensador total
+ficticio) a Q_reb=699, Q_cond≈0 (físico).  W-ENERGY-BLOCK total 16→11.
+
+## ALTA — Química conectada: triage 4 conectables / 20 legítimos
+
+De los 24 W-PLACEHOLDER, sólo **4** son técnicamente conectables (acetic
+R026, beer+bread R007, sulfuric R006): reacción curada con MW completo en
+todas las especies.  Los otros **20 son legítimos** — el motor
+estequiométrico no puede resolverlos porque usan pseudo-componentes sin MW
+(polietileno, jabón, cal, cortes de petróleo) o química no modelable
+(electrólisis, fusión, HDS/FCC/reformado).  Nuevo helper
+`_reaction_all_species_have_mw` + mensaje que lo dice.  Conectar los 4
+requiere re-propagar su cadena downstream (separadores hardcodeados) — es
+Frente C acotado a 4 ejemplos, no se hizo en batch para no arriesgar el
+balance 0/0.
+
+## MEDIA — redundant_lock 18→0
+
+Triage empírico (¿desbloquear cambia el resultado?).  Dos guards nuevos en
+el detector (separador multi-salida y reactor-placeholder son load-bearing,
+no redundantes) + 7 locks genuinamente redundantes quitados de los datos
+(propagan idéntico: air_sep N2/O2, hda_full S-4, industrial blowdown/steam/
+supply, y toda la cadena de syngas de smr_eq aguas abajo del reactor de
+equilibrio R003/R002).  Golden intacto.
+
+## MEDIA — hda/E-102 WHB: diferido con razón
+
+Reintentado con mid locked + recálculo iterativo de S-6 por-diferencia; no
+converge.  E-102 alimenta el KO drum V-101 (separador spec'd con purga de
+masa locked) DENTRO del loop de reciclo de tolueno; el bloque extra corre
+la convergencia del tear y descuadra el balance ~45 t/a.  Requiere
+re-anclar el tear del reciclo — cambio a nivel de solver, fuera del alcance
+de esta limpieza.  Queda 1 HX-utility-rango documentado.
+
+## Pendiente opcional — caracterización TBP de cortes de petróleo
+
+Los 6 cortes (crude_oil, naphtha, diesel, kerosene, gasoline_97,
+atmospheric_residue) son hoy pseudo-componentes INFO legítimos.  Darles VLE
+riguroso requiere caracterización por curva de destilación (TBP → pseudo-
+componentes con Tb/SG/MW y correlaciones de Lee-Kesler/Riazi) — una adición
+de termodinámica sustancial y de bajo retorno (ya son INFO, no warning).
+Documentado como mejora futura, no bloqueante.
