@@ -1,20 +1,14 @@
 {
   "crit_frac": 0.05,
   "examples": {
-    "ldpe": {
-      "example": "ldpe",
-      "findings": [],
-      "n_critico": 0,
-      "n_mayor": 0
-    },
-    "soap": {
-      "example": "soap",
+    "smr_eq": {
+      "example": "smr_eq",
       "findings": [],
       "n_critico": 0,
       "n_mayor": 0
     }
   },
-  "n_examples": 2,
+  "n_examples": 1,
   "tol_rel": 0.01,
   "total_critico": 0,
   "total_mayor": 0
