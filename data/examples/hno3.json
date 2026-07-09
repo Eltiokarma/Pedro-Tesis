@@ -129,6 +129,7 @@
    "heat_source_locked": false,
    "id": 10,
    "inline_reaction": [
+    "R033",
     "R034"
    ],
    "mech_sep_active": false,
