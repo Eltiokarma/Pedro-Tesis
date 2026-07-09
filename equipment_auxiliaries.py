@@ -161,7 +161,12 @@ _PUMP_BLOCK_EQ    = "Pump — centrifugal"
 _AUX_OFFSET       = 110.0     # px del puerto hacia afuera (specs abiertos)
 _PUMP_INSET       = 55.0      # px entre header y bomba de circulación
 _AUX_CLUSTER_GAP  = 70.0      # px entre el HX y el header del lazo (debajo)
-_AUX_STACK_GAP    = 36.0      # px entre el header y la bomba (apilados)
+_AUX_STACK_GAP    = 60.0      # px entre el header y la bomba (apilados).
+                              # ≥ 2×padding del router (12) + ancho de canal:
+                              # con 36 px el corredor header↔bomba era más
+                              # angosto que las bandas padded y el retorno del
+                              # lazo clipeaba el tope de la bomba (test
+                              # aux_no_atraviesan_bloques_metanol).
 
 # Head típico de la bomba de circulación según el lazo (m de columna de
 # fluido).  Se convierte a Δp para que el solver compute W eléctrica:

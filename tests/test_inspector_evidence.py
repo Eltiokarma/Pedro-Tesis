@@ -186,10 +186,17 @@ def test_compressor_preparada_y_razon():
         "trabajo real debe ser >= isentrópico"
     assert d["T_out_C"] >= d["T_isen_C"], \
         "T real de descarga debe ser >= isentrópica"
-    # sin razón de compresión (caso K-101 de air_sep) → instrucción exacta
+    # sin razón de compresión → instrucción exacta.  air_sep/K-101 (el caso
+    # real original) ya tiene ancla de diseño de 6 bar (campaña 2026-07), así
+    # que el defecto se RE-INTRODUCE en memoria (patrón detector-sigue-vivo):
+    # delta_p en 0 y descarga a la P de succión.
     fs2 = _solved("air_sep")
     k2 = next(b for b in fs2.blocks.values() if "Compressor" in b.eq_type)
-    assert (k2.delta_p_bar or 0) <= 0
+    k2.delta_p_bar = 0.0
+    suc = next(s for s in fs2.streams.values() if s.dst == k2.id)
+    for s in fs2.streams.values():
+        if s.src == k2.id:
+            s.pressure_bar = suc.pressure_bar
     fig2, d2 = ev.compressor_figure(k2, fs2)
     assert fig2 is None
     _assert_reason(d2, "delta_p_bar")

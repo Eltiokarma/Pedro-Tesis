@@ -136,13 +136,14 @@ def test_tank_duty_industrial():
 # ── 1.5 [W-PLACEHOLDER] + bonus ─────────────────────────────────────────
 def test_placeholder_quince_ejemplos():
     """Los reactores estructurales (química via outputs locked) deben ser
-    visibles en ~15 ejemplos."""
+    visibles en ~11 ejemplos (eran ~15; la sesión 3 conectó la química real
+    de acetic/beer/bread/sulfuric → ya no son placeholder)."""
     n = 0
     for e in reg.list_examples():
         _, res = _solve(e["clave"])
         if _lines(res, "W-PLACEHOLDER"):
             n += 1
-    assert n >= 14, f"esperado ~15 ejemplos con placeholder, hay {n}"
+    assert n >= 10, f"esperado ~11 ejemplos con placeholder, hay {n}"
 
 
 def test_placeholder_bonus_ldpe_r027():

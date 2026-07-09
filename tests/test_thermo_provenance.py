@@ -36,8 +36,8 @@ def test_pseudos_marcados_desde_el_catalogo():
     db = td._ensure_loaded()
     pj = json.load(open(os.path.join("data", "pseudo_components.json")))
     listed = set()
-    for k in ("industrial_pseudo", "food_pseudo_allowed",
-              "material_pseudo_allowed"):
+    for k in ("industrial_pseudo", "petroleum_pseudo_allowed",
+              "food_pseudo_allowed", "material_pseudo_allowed"):
         for n in pj.get(k, []):
             listed.add(td._normalize_name(n))
     marked = {n for n, c in db.items() if c.origin == "pseudo"}
