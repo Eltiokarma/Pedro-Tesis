@@ -421,3 +421,62 @@ Estos se dejan visibles a propósito (el simulador es honesto sobre los
 regímenes donde su modelo simplificado no aplica), coherente con el
 criterio de la campaña: perseguir a cero sólo lo que puede enseñar algo
 falso en un balance básico (masa/energía → ya en 0), documentar el resto.
+
+---
+
+# Sesión 4 (2026-07) — el gate rojo, la suite verde y dos bugs reales
+
+Continuación tras el merge del PR #110.  Al retomar, `gate_component_balance`
+estaba ROJO (2/41) y la suite pytest tenía 12 fallos preexistentes.
+
+## Gate de balance por componente: 41/41 verde otra vez
+
+- **hno3/V-201** (0/3 MAYOR): el condensador Ostwald hace DOS químicas — la
+  oxidación 2NO+O₂→2NO₂ (que antes vivía como override en E-203) y la
+  absorción R034.  Sólo declaraba R034.  Verificado numéricamente que
+  R033+R034 explican el cambio exacto (agua −36.6, NO −420, NO₂ +457 t/a);
+  declarar ambas cierra el LSQ del auditor a 0/0.
+- **sulfuric/ABS-101** (0/2 MAYOR): las salidas lockeadas de la sesión 3 no
+  arrastraban el SO₂ no convertido (55.2 t/a entraban, 20.0 salían) y el
+  H₂SO₄ excedía el SO₃ disponible.  Re-derivadas por estequiometría R032
+  exacta sobre el gas forward de los feeds (2065.0 t/a) y agua de absorción
+  ajustada a la spec de producto 98%: S-H2O 306.34→295.1, S-H2SO4
+  1532.3→1475.3, S-vent 840.6→884.8.  Además el trim cooler E-101T ya no
+  queda con masa retro-propagada inconsistente (2055.6 vs 2065.0).
+
+## Suite completa verde: 12 fallos preexistentes con dos bugs reales
+
+**Bugs de código encontrados por los tests:**
+
+1. `thermo_db._pseudo_names()` no leía `petroleum_pseudo_allowed` (categoría
+   creada en el triage de pseudos al sacar los cortes de `industrial_pseudo`)
+   → los 6 cortes de petróleo habían perdido su procedencia `origin='pseudo'`
+   y volvían a `unverified`.
+2. `equipment_auxiliaries._AUX_STACK_GAP=36` px: el corredor header↔bomba era
+   más angosto que las bandas padded del router (12 px por lado) y el retorno
+   del lazo de CW clipeaba el tope de la bomba (3 cruces en metanol).  36→60.
+
+**Tests desactualizados por sesiones deliberadas (actualizados al estado
+nuevo, con el patrón detector-sigue-vivo donde aplica):** t30 (el override de
+E-203 fue retirado — el mecanismo se prueba re-introduciéndolo en memoria y
+el catálogo se verifica sin overrides), placeholders (4 conectados vs 4
+diferidos), example_locks (hda S-9-recic es tear real convergido), service
+loops (3 lazos con el trim del split WHB), inspector (air_sep con ancla de
+6 bar), y `gate_economics_panel` (el sanity MACRS≠lineal sólo aplica con
+NPV>0 — un proyecto sin renta imponible no paga impuestos y la igualdad es
+aritmética correcta; industrial quedó honestamente no rentable tras el
+retipado de V-202).
+
+## TRABAJOS_FUTUROS §2 resuelto: is_cross_exchange y las auto_aux
+
+El conteo estructural ≥2in/≥2out de `is_cross_exchange` contaba el lazo CW
+propio del HX como si fuera proceso → falso positivo "E-101: cross-exchange
+no cierra energía (>5%)" en metanol+aux.  Las corrientes `auto_aux` se
+excluyen ahora del conteo; el tratamiento (utility de trim) no cambia, sólo
+desaparece el mensaje engañoso.  Regresión cubierta en test_service_loops.
+
+## Verificación
+
+pytest **586 passed** / unittest **OK** / gates **7/7 verdes** (examples
+directo y --registry, component_balance, eos, eos_flash, simulate,
+pressure_source, economics_panel).

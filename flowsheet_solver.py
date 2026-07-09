@@ -1578,8 +1578,15 @@ def is_cross_exchange(fs, b):
     spec = _eq_mod.EQUIPMENT_DATA.get(b.eq_type, {})
     if spec.get("categoria") != "Heat exchangers":
         return False
-    ins  = [s for s in fs.streams.values() if s.dst == b.id]
-    outs = [s for s in fs.streams.values() if s.src == b.id]
+    # Las corrientes auto_aux (lazo de CW/servicio instanciado por
+    # equipment_auxiliaries) NO cuentan como proceso: un HX con su propio
+    # lazo de cooling water parecía 2-in-2-out y el "par" era su propia
+    # utility → falso positivo "cross-exchange no cierra energía"
+    # (metanol+aux, TRABAJOS_FUTUROS §2).
+    ins  = [s for s in fs.streams.values()
+            if s.dst == b.id and not getattr(s, "auto_aux", False)]
+    outs = [s for s in fs.streams.values()
+            if s.src == b.id and not getattr(s, "auto_aux", False)]
     if not (len(ins) >= 2 and len(outs) >= 2):
         return False
 

@@ -177,6 +177,12 @@ def test_metanol_con_aux_sin_warnings_espurios():
     # 3 lazos: E-101, E-103 y el trim cooler que dejó el split WHB+trim de
     # la integración energética (el WHB genera vapor — no lleva lazo de CW).
     assert len(res.service_loops) == 3
+    # el lazo de CW propio NO convierte al HX en "cross-exchange": las
+    # corrientes auto_aux se excluyen del conteo estructural de
+    # is_cross_exchange (falso positivo "no cierra energía" — TF §2).
+    xw = [w for w in getattr(fs, "_solver_warnings", [])
+          if "cross-exchange" in w]
+    assert xw == [], f"falso positivo de cross-exchange con aux: {xw}"
     # los caudales del lazo quedaron fijados analíticamente (> 0)
     aux_flows = [s.mass_flow for s in fs.streams.values()
                  if getattr(s, "auto_aux", False)

@@ -19,13 +19,12 @@ Cada ítem indica dónde está el código y por qué quedó fuera de alcance.
    desconocidos NO-aux; (b) eximir también cuando todos los desconocidos del
    SCC son auto_aux.  Ambas requieren revisar los 41 goldens.
 
-2. **`is_cross_exchange` cuenta corrientes auto_aux** (`flowsheet_solver.py:1571`).
-   El test estructural ≥2 in / ≥2 out cuenta el lazo CW propio del HX como si
-   fuera proceso → falso positivo "E-101: cross-exchange no cierra energía
-   (>5%)" en metanol+aux (el "par" es su propia cooling water).  El tratamiento
-   final (utility de trim) es correcto; el mensaje es engañoso.  Fix natural:
-   excluir auto_aux del conteo estructural.  Auditado en la Tarea B (FASE 1.5);
-   no implementado por estar fuera del mandato.
+2. ✅ **`is_cross_exchange` cuenta corrientes auto_aux** (`flowsheet_solver.py`).
+   RESUELTO (sesión 2026-07): el conteo estructural ≥2 in / ≥2 out excluye
+   ahora las corrientes `auto_aux` — el lazo CW propio del HX ya no lo
+   disfraza de cross-exchange y el falso positivo "E-101: cross-exchange no
+   cierra energía (>5%)" en metanol+aux desapareció.  Regresión cubierta en
+   `test_service_loops.test_metanol_con_aux_sin_warnings_espurios`.
 
 3. **`_solve_mass_iteration` no aplica fracciones de splitter** durante el
    tearing (solo `solve_splitters` corre después, en el loop de unit ops).
