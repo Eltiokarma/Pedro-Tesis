@@ -480,3 +480,32 @@ desaparece el mensaje engañoso.  Regresión cubierta en test_service_loops.
 pytest **586 passed** / unittest **OK** / gates **7/7 verdes** (examples
 directo y --registry, component_balance, eos, eos_flash, simulate,
 pressure_source, economics_panel).
+
+
+## Energía de reactor por PRIMERA LEY (W-ENERGY-BLOCK 12→9)
+
+El programa anunciado en la sesión 3 ("energía de reactor, análogo a energía
+de columna").  El AUTO-DUTY de los reactores con química real aproximaba el
+duty externo con `Q_sens = m·c̄p_in·(T_op − T_in)` — el cp de la ENTRADA:
+
+- ignoraba el cambio de composición (Cp y latente de los PRODUCTOS: el NH₃
+  del efluente no tiene el ΔH_vap del N₂+H₂ del feed);
+- ignoraba cualquier T de salida DECLARADA ≠ T_op (ammonia opera con
+  T_op=450 °C pero su efluente de diseño sale a 500 °C: los 85 kW de ese
+  calentamiento quedaban sin dueño → residual espurio).
+
+**Fix (flowsheet_solver, AUTO-DUTY):** con Ts, composición y fase de los
+outlets ya resueltas, el duty se DERIVA por primera ley con el MISMO modelo
+entálpico de corrientes que usa el chequeo: `duty = H_out − H_in + Q_rxn`
+(endo+).  Fallback al Q_sensible previo si alguna entalpía no es resoluble
+(iteraciones tempranas).  Adiabático sigue en duty=0.
+
+Efecto: los duties de 17 reactores del catálogo se refinaron (golden
+regenerado; ISBL intacto en TODOS — el duty de reactor no alimenta el
+costeo).  Casos testigo: ammonia R-101 −146.6→−61.8 kW (la reacción libera
+146.6; 84.8 calientan el efluente 450→500 °C y el jacket sólo quita 61.8),
+methanol −808.9→−616.8, sulfuric −20.9→−45.8.  Los 3 W-ENERGY-BLOCK de
+reactor desaparecen; quedan **9** (6 compresores con quirks físicos + 3
+vessels: freidora, absorbedor, horno F-301), todos awareness documentado.
+Detector vivo: `test_energia_reactor_detector_sigue_vivo` re-introduce el
+duty isotermo en memoria y exige que vuelva a disparar.

@@ -2351,6 +2351,36 @@ def solve_equilibrium_reactors(fs):
                         s_out.phase = phase_inf
                         s_out.vapor_fraction = vfrac
 
+        # ── ENERGÍA DE REACTOR por PRIMERA LEY (programa análogo al de
+        # columnas).  Q_sensible con cp̄ de ENTRADA aproximaba mal el duty:
+        # ignora el cambio de composición (Cp/latente de los productos) y
+        # cualquier T de salida DECLARADA ≠ T_op (ammonia 450→500 °C con
+        # T_op=450 dejaba 85 kW sin dueño → [W-ENERGY-BLOCK] espurio).
+        # Con Ts, composición y fase de los outlets ya resueltas, el duty
+        # externo real es duty = H_out − H_in + Q_rxn(endo+), con el MISMO
+        # modelo entálpico de corrientes que usa el chequeo de cierre.
+        # Fallback al Q_sensible previo si alguna entalpía no es resoluble
+        # (masa/Cp pendientes en iteraciones tempranas del solve).
+        if not _is_duty_locked(b) and not is_adiabatic:
+            h_in_fl = h_out_fl = 0.0
+            fl_ok = True
+            for s in ins:
+                h = _stream_enthalpy_kW(s)
+                if h is None:
+                    fl_ok = False
+                    break
+                h_in_fl += h
+            if fl_ok:
+                for s_out in outs:
+                    h = _stream_enthalpy_kW(s_out)
+                    if h is None:
+                        fl_ok = False
+                        break
+                    h_out_fl += h
+            if fl_ok:
+                Q_total_kW = h_out_fl - h_in_fl + Q_rxn_kW
+                b.duty = Q_total_kW
+
         msgs.append(f"✓ Reactor {b.name}{adiab_tag}: ΔH_rxn={Q_rxn_kW:+.2f} kW, "
                      f"Q_sens={Q_sensible_kW:+.2f} kW, "
                      f"Q_total={Q_total_kW:+.2f} kW, T_out={T_op_C:.0f}°C, "

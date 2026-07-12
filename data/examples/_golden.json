@@ -6,7 +6,7 @@
   "n_blocks": 14,
   "n_streams": 13,
   "overall_status": "ok",
-  "sum_duty": -105.42989
+  "sum_duty": -103.412942
  },
  "air_sep": {
   "ISBL": 2859387.1,
@@ -24,7 +24,7 @@
   "n_blocks": 8,
   "n_streams": 7,
   "overall_status": "ok",
-  "sum_duty": -93.369279
+  "sum_duty": -8.659785
  },
  "beer": {
   "ISBL": 1763438.11,
@@ -33,7 +33,7 @@
   "n_blocks": 7,
   "n_streams": 6,
   "overall_status": "ok",
-  "sum_duty": -3.616011
+  "sum_duty": -3.647831
  },
  "biodiesel": {
   "ISBL": 1477223.5,
@@ -42,7 +42,7 @@
   "n_blocks": 9,
   "n_streams": 8,
   "overall_status": "ok",
-  "sum_duty": 4.173938
+  "sum_duty": 4.234496
  },
  "bread": {
   "ISBL": 1956122.41,
@@ -51,7 +51,7 @@
   "n_blocks": 7,
   "n_streams": 6,
   "overall_status": "ok",
-  "sum_duty": 10.332161
+  "sum_duty": 10.383593
  },
  "cdu": {
   "ISBL": 6441928.37,
@@ -78,7 +78,7 @@
   "n_blocks": 13,
   "n_streams": 13,
   "overall_status": "ok",
-  "sum_duty": -13.844517
+  "sum_duty": -17.873138
  },
  "desal": {
   "ISBL": 7871739.06,
@@ -114,7 +114,7 @@
   "n_blocks": 8,
   "n_streams": 7,
   "overall_status": "ok",
-  "sum_duty": 73.450108
+  "sum_duty": 80.225873
  },
  "ethanol": {
   "ISBL": 3223059.01,
@@ -123,7 +123,7 @@
   "n_blocks": 12,
   "n_streams": 11,
   "overall_status": "warning",
-  "sum_duty": 1592.463263
+  "sum_duty": 1593.429376
  },
  "ethylene_crk": {
   "ISBL": 6762621.92,
@@ -132,7 +132,7 @@
   "n_blocks": 12,
   "n_streams": 11,
   "overall_status": "ok",
-  "sum_duty": 64.97026
+  "sum_duty": 69.922634
  },
  "gas_sweet": {
   "ISBL": 12772945.7,
@@ -159,7 +159,7 @@
   "n_blocks": 11,
   "n_streams": 11,
   "overall_status": "ok",
-  "sum_duty": -125.21583
+  "sum_duty": -104.494901
  },
  "hda": {
   "ISBL": 10080068.06,
@@ -168,7 +168,7 @@
   "n_blocks": 14,
   "n_streams": 14,
   "overall_status": "ok",
-  "sum_duty": 56.747978
+  "sum_duty": 60.186134
  },
  "hda_full": {
   "ISBL": 32940733.98,
@@ -177,7 +177,7 @@
   "n_blocks": 25,
   "n_streams": 27,
   "overall_status": "ok",
-  "sum_duty": -652.954804
+  "sum_duty": -438.873367
  },
  "hno3": {
   "ISBL": 10998092.75,
@@ -204,7 +204,7 @@
   "n_blocks": 29,
   "n_streams": 31,
   "overall_status": "warning",
-  "sum_duty": -3382.092075
+  "sum_duty": -3032.172825
  },
  "ldpe": {
   "ISBL": 2447864.43,
@@ -231,7 +231,7 @@
   "n_blocks": 10,
   "n_streams": 9,
   "overall_status": "ok",
-  "sum_duty": -859.360241
+  "sum_duty": -667.240902
  },
  "nuclear": {
   "ISBL": 1688932.86,
@@ -303,7 +303,7 @@
   "n_blocks": 9,
   "n_streams": 8,
   "overall_status": "ok",
-  "sum_duty": 499.422251
+  "sum_duty": 500.050791
  },
  "smr_eq": {
   "ISBL": 10231887.19,
@@ -312,7 +312,7 @@
   "n_blocks": 11,
   "n_streams": 10,
   "overall_status": "ok",
-  "sum_duty": -13.997778
+  "sum_duty": -35.163215
  },
  "soap": {
   "ISBL": 1386433.33,
@@ -339,7 +339,7 @@
   "n_blocks": 13,
   "n_streams": 12,
   "overall_status": "ok",
-  "sum_duty": -98.031469
+  "sum_duty": -122.896603
  },
  "talara": {
   "ISBL": 42214019.64,
