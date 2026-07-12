@@ -509,3 +509,34 @@ reactor desaparecen; quedan **9** (6 compresores con quirks físicos + 3
 vessels: freidora, absorbedor, horno F-301), todos awareness documentado.
 Detector vivo: `test_energia_reactor_detector_sigue_vivo` re-introduce el
 duty isotermo en memoria y exige que vuelva a disparar.
+
+
+## Chequeo ELEMENTAL de balance (TRABAJOS_FUTUROS §13 — estreno)
+
+Nuevo en `audit_examples_components`: conservación de ÁTOMOS por bloque
+(`audit_block_elements`, mode='element').  A diferencia del chequeo por
+especie, aplica también a reactores con química real y placeholders — los
+átomos se conservan aunque haya reacción — y caza reacciones mal balanceadas
+u outputs de reactor escritos a mano que crean/destruyen elementos.  La masa
+de cada componente se reparte por fracción másica de FÓRMULA (thermo_db ya
+trae las 310), así los bloques de pura conservación dan 0 exacto; los
+pseudo sin fórmula ('Mix') saltean el bloque silenciosamente.
+
+**Estreno sobre el catálogo: 8 hallazgos en 3 ejemplos, triage:**
+
+- **air_sep/V-101 (arreglado)**: el secador quitaba 5 t/a de agua de un
+  aire SIN humedad declarada (agua creada de la nada).  El feed declara
+  ahora 0.5% de humedad ({N2 0.763165, O2 0.231835, H2O 0.005}) y el
+  balance cierra EXACTO; S-pure queda seco e idéntico aguas abajo.
+- **hno3/R-301 (arreglado)**: la composición de salida del oxidador estaba
+  redondeada a mano a 2–3 decimales (el O no cerraba 1.4%; el agua "perdía"
+  245 t/a en una oxidación que no la toca).  Recomputada EXACTA con
+  2NO+O₂→2NO₂ manteniendo la spec de diseño (NO out = 0.009).
+- **talara/R-SMR y hno3/T-401 (diferidos, documentados)**: estructurales —
+  el SMR declara más H2 del que su CH4 permite (sin steam), y la torre de
+  absorción produce más HNO3 del que el N alimentado alcanza.  Cirugías de
+  tren completo (TRABAJOS_FUTUROS §16–17), confinadas en el ratchet.
+
+**Ratchet:** `tests/test_element_balance.py` — 39/41 elemental-limpios;
+cualquier hallazgo nuevo o fuera del bloque documentado es regresión.
+Baseline versionado en outputs/element_balance_baseline.json.

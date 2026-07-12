@@ -284,6 +284,135 @@ def _check_total_only(b, comp_in, comp_out, block_flow, mode="total") -> List[di
 
 
 # ----------------------------------------------------------------------
+# Chequeo ELEMENTAL (C/H/O/N/S/…) — TRABAJOS_FUTUROS §13
+# ----------------------------------------------------------------------
+# Los átomos se conservan AUNQUE haya química: este chequeo aplica también a
+# los bloques que el chequeo por especie saltea (reactores con química real)
+# y caza reacciones mal balanceadas en átomos o outputs de reactor escritos
+# a mano que crean/destruyen elementos.  Best-effort: si algún componente
+# no-traza del bloque no tiene fórmula parseable (pseudo 'Mix', cortes de
+# petróleo), el bloque se saltea silenciosamente (no hay base atómica).
+_ATOMIC_MASS = {
+    "H": 1.008, "C": 12.011, "N": 14.007, "O": 15.999, "S": 32.06,
+    "Cl": 35.45, "Na": 22.99, "K": 39.098, "Ca": 40.078, "Mg": 24.305,
+    "Si": 28.085, "Al": 26.982, "Fe": 55.845, "P": 30.974, "F": 18.998,
+    "Br": 79.904, "I": 126.904, "B": 10.811, "Ar": 39.948, "He": 4.003,
+}
+_ELEMENT_RE = None
+
+
+def _parse_formula(f: str) -> Optional[Dict[str, int]]:
+    """'C7H8' → {'C': 7, 'H': 8}.  None si no es una fórmula química real
+    (pseudo 'Mix', vacía, caracteres no consumidos)."""
+    global _ELEMENT_RE
+    if _ELEMENT_RE is None:
+        import re
+        _ELEMENT_RE = re.compile(r"([A-Z][a-z]?)(\d*)")
+    if not f or not f[0].isupper():
+        return None
+    elems = _ELEMENT_RE.findall(f)
+    if "".join(e + n for e, n in elems) != f:
+        return None
+    out: Dict[str, int] = {}
+    for el, n in elems:
+        if el not in _ATOMIC_MASS:
+            return None                    # elemento fuera de tabla → skip
+        out[el] = out.get(el, 0) + (int(n) if n else 1)
+    return out
+
+
+def _formula_for(name: str) -> Optional[Dict[str, int]]:
+    try:
+        import thermo_db as _td
+        c = _td.get(name)
+        if c is not None and getattr(c, "formula", ""):
+            return _parse_formula(c.formula)
+    except Exception:
+        pass
+    return None
+
+
+def _element_masses(comp_masses: Dict[str, float],
+                    block_flow: float) -> Optional[Dict[str, float]]:
+    """{elemento: tm/año} para un lado del bloque.  La masa del componente
+    se reparte por fracción másica de FÓRMULA (n_E·A_E / Σ n·A), así la suma
+    elemental reproduce EXACTO la masa del componente (sin drift por el MW
+    del thermo_db).  None si algún componente no-traza no tiene fórmula."""
+    out: Dict[str, float] = {}
+    for c, m in comp_masses.items():
+        counts = _formula_for(c)
+        if counts is None:
+            if m >= TRACE_FRAC * block_flow:
+                return None                # no parseable y no-traza → skip
+            continue                       # traza sin fórmula → ignorar
+        fw = sum(n * _ATOMIC_MASS[el] for el, n in counts.items())
+        if fw <= 0:
+            return None
+        for el, n in counts.items():
+            out[el] = out.get(el, 0.0) + m * (n * _ATOMIC_MASS[el]) / fw
+    return out
+
+
+def audit_block_elements(fs, b) -> List[dict]:
+    """Conservación de átomos por bloque.  Aplica a TODOS los bloques con
+    in/out y composición (incluidos reactores: la química conserva átomos)."""
+    if getattr(b, "auto_aux", False):
+        return []
+    ins = [s for s in fs.streams.values()
+           if s.dst == b.id and s.src != -1 and s.dst != -1 and s.mass_flow > 0]
+    outs = [s for s in fs.streams.values()
+            if s.src == b.id and s.src != -1 and s.dst != -1 and s.mass_flow > 0]
+    if not ins or not outs:
+        return []
+    comp_in: Dict[str, float] = {}
+    comp_out: Dict[str, float] = {}
+    for s in ins:
+        for c, m in _stream_component_mass(s).items():
+            comp_in[c] = comp_in.get(c, 0.0) + m
+    for s in outs:
+        for c, m in _stream_component_mass(s).items():
+            comp_out[c] = comp_out.get(c, 0.0) + m
+    if not comp_in or not comp_out:
+        return []                          # un lado sin composición → n/a
+    block_flow = max(sum(comp_in.values()), sum(comp_out.values()))
+    if block_flow <= 0:
+        return []
+    # Un stream CON masa pero SIN composición aportaría cero átomos y
+    # fabricaría un desbalance falso — el bloque no es evaluable.
+    for s in ins + outs:
+        if not _stream_component_mass(s) and \
+                s.mass_flow >= TRACE_FRAC * block_flow:
+            return []
+    el_in = _element_masses(comp_in, block_flow)
+    el_out = _element_masses(comp_out, block_flow)
+    if el_in is None or el_out is None:
+        return []                          # pseudo sin fórmula → no evaluable
+    findings = []
+    for el in sorted(set(el_in) | set(el_out)):
+        mi, mo = el_in.get(el, 0.0), el_out.get(el, 0.0)
+        if max(mi, mo) < TRACE_FRAC * block_flow:
+            continue
+        d = abs(mi - mo)
+        rel = d / max(mi, mo, 1e-9)
+        if rel < TOL_REL:
+            continue
+        findings.append({
+            "mode": "element", "component": el,
+            "in": round(mi, 3), "out": round(mo, 3), "delta": round(d, 3),
+            "rel_pct": round(rel * 100.0, 2),
+            "block_flow_pct": round(d / max(block_flow, 1e-9) * 100.0, 2),
+            "severity": _severity(d, block_flow),
+            "block": b.name, "block_id": b.id,
+            "message": (f"{b.name}: elemento '{el}' no se conserva — "
+                        f"in={mi:.1f} out={mo:.1f} tm/a (Δ={d:.1f}, "
+                        f"{rel*100:.1f}% del elemento) — reacción mal "
+                        f"balanceada en átomos u output de reactor "
+                        f"inconsistente"),
+        })
+    return findings
+
+
+# ----------------------------------------------------------------------
 # Auditoría de un bloque y de un flowsheet
 # ----------------------------------------------------------------------
 def audit_block(fs, b) -> List[dict]:
@@ -328,14 +457,23 @@ def audit_block(fs, b) -> List[dict]:
 
 def audit_flowsheet_components(fs) -> dict:
     """Audita TODOS los bloques de un flowsheet ya resuelto.  Devuelve
-    {findings: [...], n_critico, n_mayor}."""
+    {findings: [...], n_critico, n_mayor, element_findings, n_elem_critico,
+    n_elem_mayor}.  Los hallazgos ELEMENTALES van en lista propia (no entran
+    al ratchet de gate_component_balance hasta tener su propia whitelist)."""
     findings: List[dict] = []
+    element_findings: List[dict] = []
     for b in fs.blocks.values():
         findings += audit_block(fs, b)
+        element_findings += audit_block_elements(fs, b)
     return {
         "findings": findings,
         "n_critico": sum(1 for f in findings if f.get("severity") == "CRITICO"),
         "n_mayor": sum(1 for f in findings if f.get("severity") == "MAYOR"),
+        "element_findings": element_findings,
+        "n_elem_critico": sum(1 for f in element_findings
+                              if f.get("severity") == "CRITICO"),
+        "n_elem_mayor": sum(1 for f in element_findings
+                            if f.get("severity") == "MAYOR"),
     }
 
 

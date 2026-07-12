@@ -92,13 +92,17 @@ Cada ítem indica dónde está el código y por qué quedó fuera de alcance.
 
 ## Balance de masa por componente (auditoría — harness audit_examples_components.py)
 
-13. **Chequeo elemental C/H/O por bloque** (FUERA DE SCOPE de la sesión de
-    balance): requiere agregar `formula` a `Component` (components.py) y un
-    parser de fórmula a (C,H,O,...).  El harness actual valida conservación de
-    masa POR ESPECIE (y estequiometría con inline_reaction); el chequeo
-    elemental cazaría además reacciones mal balanceadas en átomos.  Punto de
-    partida: `reactions_db._check_element_balance` ya hace balance elemental
-    de las reacciones del catálogo; faltaría extenderlo a los streams.
+13. ✅ **Chequeo elemental C/H/O por bloque** — RESUELTO (sesión 2026-07).
+    No hizo falta tocar components.py: thermo_db ya trae `formula` para los
+    310 compuestos.  `audit_examples_components.audit_block_elements` reparte
+    la masa de cada componente por fracción másica de fórmula y verifica
+    conservación de átomos por bloque — TAMBIÉN en reactores con química
+    real y placeholders (los átomos se conservan aunque haya reacción).
+    Hallazgos de estreno: air_sep V-101 (secador que creaba agua de aire
+    seco → humedad 0.5% declarada en el feed) y hno3 R-301 (composición
+    redondeada a mano → recomputada exacta).  Ratchet en
+    `tests/test_element_balance.py`: 39/41 elemental-limpios; los 2
+    estructurales quedan confinados y documentados (ítems 16–17).
 
 14. **hda_full — inconsistencia ESTRUCTURAL del lazo (no resoluble por
     composición)**: el ejemplo quedó PARCIALMENTE corregido (F-101 ya no
@@ -131,3 +135,23 @@ Cada ítem indica dónde está el código y por qué quedó fuera de alcance.
     separador real (crudo ≈ metanol+agua condensados, vapor = gases ligeros) y
     converger el reciclo. Por eso industrial NO entra a la whitelist todavía.
     El chequeo de balance lo sigue reportando en el baseline (2 CRÍTICO en V-202).
+
+16. **talara — R-SMR crea H y destruye C (elemental CRÍTICO, confinado)**:
+    el tren de hidrógeno declara 2 700 t/a de H2 + 300 de CO2 desde 3 000 t/a
+    de CH4 SIN alimentación de vapor.  Imposible atómicamente: 3 000 t/a de
+    CH4 rinden a lo sumo ~1 508 t/a de H2 (CH4+2H2O→CO2+4H2) y producirían
+    ~8 231 t/a de CO2 consumiendo ~6 739 t/a de steam.  Fix correcto:
+    agregar el feed de vapor y RE-DIMENSIONAR el tren (CH4 5 372 t/a para
+    sostener los 2 700 de H2 que consumen los HDT aguas abajo, CO2 14 738)
+    — cirugía mayor en un ejemplo de 48 bloques (compresor, OPEX, golden).
+    Detectado por el chequeo elemental (§13); confinado en el ratchet.
+
+17. **hno3 — T-401 produce más HNO3 del que sus NOx permiten (elemental
+    MAYOR, confinado)**: con los feeds actuales (NOx de R-301 + agua +
+    aire de blanqueo), el N reactivo disponible (~52 kmol/a NO+NO2) no
+    alcanza para el producto declarado (6 200 t/a @60% = 59 kmol de HNO3
+    + colas).  El spec del ejemplo excede el balance atómico: cerrar exige
+    re-derivar el tren de absorción completo (conversión de R-301, caudal
+    de crudo/colas, y el turboexpansor K-501 aguas abajo).  Emparentado
+    con el acople oxidación/absorción documentado en
+    docs/hno3_e203_oxidacion_override.md.  Confinado en el ratchet.

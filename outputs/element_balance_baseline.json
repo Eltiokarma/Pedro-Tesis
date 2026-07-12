@@ -1,0 +1,287 @@
+{
+ "acetic": {
+  "n_elem_critico": 0,
+  "n_elem_mayor": 0,
+  "element_findings": []
+ },
+ "air_sep": {
+  "n_elem_critico": 0,
+  "n_elem_mayor": 0,
+  "element_findings": []
+ },
+ "ammonia": {
+  "n_elem_critico": 0,
+  "n_elem_mayor": 0,
+  "element_findings": []
+ },
+ "beer": {
+  "n_elem_critico": 0,
+  "n_elem_mayor": 0,
+  "element_findings": []
+ },
+ "biodiesel": {
+  "n_elem_critico": 0,
+  "n_elem_mayor": 0,
+  "element_findings": []
+ },
+ "bread": {
+  "n_elem_critico": 0,
+  "n_elem_mayor": 0,
+  "element_findings": []
+ },
+ "cdu": {
+  "n_elem_critico": 0,
+  "n_elem_mayor": 0,
+  "element_findings": []
+ },
+ "cement": {
+  "n_elem_critico": 0,
+  "n_elem_mayor": 0,
+  "element_findings": []
+ },
+ "chloralkali_hcl": {
+  "n_elem_critico": 0,
+  "n_elem_mayor": 0,
+  "element_findings": []
+ },
+ "desal": {
+  "n_elem_critico": 0,
+  "n_elem_mayor": 0,
+  "element_findings": []
+ },
+ "dist_eth_az": {
+  "n_elem_critico": 0,
+  "n_elem_mayor": 0,
+  "element_findings": []
+ },
+ "distillation": {
+  "n_elem_critico": 0,
+  "n_elem_mayor": 0,
+  "element_findings": []
+ },
+ "ethane_pfr": {
+  "n_elem_critico": 0,
+  "n_elem_mayor": 0,
+  "element_findings": []
+ },
+ "ethanol": {
+  "n_elem_critico": 0,
+  "n_elem_mayor": 0,
+  "element_findings": []
+ },
+ "ethylene_crk": {
+  "n_elem_critico": 0,
+  "n_elem_mayor": 0,
+  "element_findings": []
+ },
+ "gas_sweet": {
+  "n_elem_critico": 0,
+  "n_elem_mayor": 0,
+  "element_findings": []
+ },
+ "glass": {
+  "n_elem_critico": 0,
+  "n_elem_mayor": 0,
+  "element_findings": []
+ },
+ "haber_rec": {
+  "n_elem_critico": 0,
+  "n_elem_mayor": 0,
+  "element_findings": []
+ },
+ "hda": {
+  "n_elem_critico": 0,
+  "n_elem_mayor": 0,
+  "element_findings": []
+ },
+ "hda_full": {
+  "n_elem_critico": 0,
+  "n_elem_mayor": 0,
+  "element_findings": []
+ },
+ "hno3": {
+  "n_elem_critico": 0,
+  "n_elem_mayor": 3,
+  "element_findings": [
+   {
+    "mode": "element",
+    "component": "H",
+    "in": 513.639,
+    "out": 370.016,
+    "delta": 143.622,
+    "rel_pct": 27.96,
+    "block_flow_pct": 0.78,
+    "severity": "MAYOR",
+    "block": "T-401",
+    "block_id": 15,
+    "message": "T-401: elemento 'H' no se conserva — in=513.6 out=370.0 tm/a (Δ=143.6, 28.0% del elemento) — reacción mal balanceada en átomos u output de reactor inconsistente"
+   },
+   {
+    "mode": "element",
+    "component": "N",
+    "in": 11963.5,
+    "out": 11675.142,
+    "delta": 288.358,
+    "rel_pct": 2.41,
+    "block_flow_pct": 1.56,
+    "severity": "MAYOR",
+    "block": "T-401",
+    "block_id": 15,
+    "message": "T-401: elemento 'N' no se conserva — in=11963.5 out=11675.1 tm/a (Δ=288.4, 2.4% del elemento) — reacción mal balanceada en átomos u output de reactor inconsistente"
+   },
+   {
+    "mode": "element",
+    "component": "O",
+    "in": 6022.861,
+    "out": 6454.842,
+    "delta": 431.981,
+    "rel_pct": 6.69,
+    "block_flow_pct": 2.34,
+    "severity": "MAYOR",
+    "block": "T-401",
+    "block_id": 15,
+    "message": "T-401: elemento 'O' no se conserva — in=6022.9 out=6454.8 tm/a (Δ=432.0, 6.7% del elemento) — reacción mal balanceada en átomos u output de reactor inconsistente"
+   }
+  ]
+ },
+ "hydraulic": {
+  "n_elem_critico": 0,
+  "n_elem_mayor": 0,
+  "element_findings": []
+ },
+ "industrial": {
+  "n_elem_critico": 0,
+  "n_elem_mayor": 0,
+  "element_findings": []
+ },
+ "ldpe": {
+  "n_elem_critico": 0,
+  "n_elem_mayor": 0,
+  "element_findings": []
+ },
+ "leche_gloria": {
+  "n_elem_critico": 0,
+  "n_elem_mayor": 0,
+  "element_findings": []
+ },
+ "methanol": {
+  "n_elem_critico": 0,
+  "n_elem_mayor": 0,
+  "element_findings": []
+ },
+ "nuclear": {
+  "n_elem_critico": 0,
+  "n_elem_mayor": 0,
+  "element_findings": []
+ },
+ "pasteurizer": {
+  "n_elem_critico": 0,
+  "n_elem_mayor": 0,
+  "element_findings": []
+ },
+ "penicillin": {
+  "n_elem_critico": 0,
+  "n_elem_mayor": 0,
+  "element_findings": []
+ },
+ "pineapple": {
+  "n_elem_critico": 0,
+  "n_elem_mayor": 0,
+  "element_findings": []
+ },
+ "potato_chips": {
+  "n_elem_critico": 0,
+  "n_elem_mayor": 0,
+  "element_findings": []
+ },
+ "quimpac": {
+  "n_elem_critico": 0,
+  "n_elem_mayor": 0,
+  "element_findings": []
+ },
+ "rankine": {
+  "n_elem_critico": 0,
+  "n_elem_mayor": 0,
+  "element_findings": []
+ },
+ "rxn_flash_col": {
+  "n_elem_critico": 0,
+  "n_elem_mayor": 0,
+  "element_findings": []
+ },
+ "smr_eq": {
+  "n_elem_critico": 0,
+  "n_elem_mayor": 0,
+  "element_findings": []
+ },
+ "soap": {
+  "n_elem_critico": 0,
+  "n_elem_mayor": 0,
+  "element_findings": []
+ },
+ "sugar": {
+  "n_elem_critico": 0,
+  "n_elem_mayor": 0,
+  "element_findings": []
+ },
+ "sulfuric": {
+  "n_elem_critico": 0,
+  "n_elem_mayor": 0,
+  "element_findings": []
+ },
+ "talara": {
+  "n_elem_critico": 3,
+  "n_elem_mayor": 0,
+  "element_findings": [
+   {
+    "mode": "element",
+    "component": "C",
+    "in": 2246.026,
+    "out": 83.898,
+    "delta": 2162.128,
+    "rel_pct": 96.26,
+    "block_flow_pct": 72.07,
+    "severity": "CRITICO",
+    "block": "R-SMR",
+    "block_id": 37,
+    "message": "R-SMR: elemento 'C' no se conserva — in=2246.0 out=83.9 tm/a (Δ=2162.1, 96.3% del elemento) — reacción mal balanceada en átomos u output de reactor inconsistente"
+   },
+   {
+    "mode": "element",
+    "component": "H",
+    "in": 753.974,
+    "out": 2697.979,
+    "delta": 1944.005,
+    "rel_pct": 72.05,
+    "block_flow_pct": 64.8,
+    "severity": "CRITICO",
+    "block": "R-SMR",
+    "block_id": 37,
+    "message": "R-SMR: elemento 'H' no se conserva — in=754.0 out=2698.0 tm/a (Δ=1944.0, 72.1% del elemento) — reacción mal balanceada en átomos u output de reactor inconsistente"
+   },
+   {
+    "mode": "element",
+    "component": "O",
+    "in": 0.0,
+    "out": 218.124,
+    "delta": 218.124,
+    "rel_pct": 100.0,
+    "block_flow_pct": 7.27,
+    "severity": "CRITICO",
+    "block": "R-SMR",
+    "block_id": 37,
+    "message": "R-SMR: elemento 'O' no se conserva — in=0.0 out=218.1 tm/a (Δ=218.1, 100.0% del elemento) — reacción mal balanceada en átomos u output de reactor inconsistente"
+   }
+  ]
+ },
+ "urea": {
+  "n_elem_critico": 0,
+  "n_elem_mayor": 0,
+  "element_findings": []
+ },
+ "water_treat": {
+  "n_elem_critico": 0,
+  "n_elem_mayor": 0,
+  "element_findings": []
+ }
+}
