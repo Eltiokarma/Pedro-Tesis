@@ -838,9 +838,10 @@ UTILITIES = {
         "name":       "Cooling water",
         "units":      "tm",
         "price":      0.30,
-        "delta_h":    63.0,    # 4.18 kJ/kg·K × 15 °C ΔT típico
+        "delta_h":    63.0,    # 4.18 kJ/kg·K × 15 °C ΔT típico (30→45)
         "type":       "cooling",
-        "T_range":    (35, 200),  # no enfría debajo de 35°C
+        "T_range":    (30, 200),  # supply 30 °C típico (Sinnott/Turton);
+                                  # antes 35 (torre pobre) — TF §5, 2026-07
         "efficiency": 1.0,
     },
     "refrigeration": {
@@ -989,7 +990,7 @@ def autoselect_heat_source(eq_type, duty_kw, T_avg):
             return "bfw_to_steam_LP"
     # Resto de coolers: agua o refrigerante (la advertencia de "alta T,
     # debería ser WHB" la emite size_heat_exchanger en sus diagnostics).
-    if T_avg > 35:
+    if T_avg > 30:      # frontera = T de suministro de CW (30 °C típico)
         return "cooling_water"
     return "refrigeration"
 

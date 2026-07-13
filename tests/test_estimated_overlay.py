@@ -58,7 +58,7 @@ class TestOverlayVacioIdentico(_OverlayTestBase):
     def test_sourceado_no_sombreado(self):
         c = td.get("methanol")
         self.assertIsNotNone(c)
-        self.assertEqual(c.origin, "experimental")   # gana el .md, no el overlay
+        self.assertEqual(c.origin, "unverified")   # gana el .md, no el overlay
 
     def test_overlay_vacio_no_inventa(self):
         self.assertIsNone(td.get("urea"))             # no estimada → None
@@ -116,7 +116,7 @@ class TestEstimadoRecuperableYConsumible(_OverlayTestBase):
     def test_b_sourceado_sigue_ganando_con_overlay_lleno(self):
         # Con el overlay poblado, un compuesto del .md sigue siendo sourceado.
         self._add_urea()
-        self.assertEqual(td.get("ammonia").origin, "experimental")
+        self.assertEqual(td.get("ammonia").origin, "unverified")
 
 
 class TestSeamEquilibrioOverlay(_OverlayTestBase):
@@ -182,7 +182,7 @@ class TestSeamEquilibrioOverlay(_OverlayTestBase):
         self.assertAlmostEqual(r1["outlet_composition"]["ammonia"], nh3_0,
                                delta=1e-12)
         # sourceado gana a través del seam; urea (no participa en R004) ausente
-        self.assertEqual(td.get("ammonia").origin, "experimental")
+        self.assertEqual(td.get("ammonia").origin, "unverified")
         self.assertNotIn("urea", r1["outlet_composition"])
         self.assertAlmostEqual(sum(r1["outlet_composition"].values()), 1.0,
                                delta=1e-6)

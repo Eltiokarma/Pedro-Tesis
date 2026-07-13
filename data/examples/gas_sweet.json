@@ -1,5 +1,5 @@
 {
- "_next_id": 30,
+ "_next_id": 32,
  "blocks": {
   "1": {
    "HETP_m": null,
@@ -925,8 +925,8 @@
    "delta_p_bar": 0.0,
    "dryer_active": false,
    "dtlm_override": null,
-   "duty": 40.0,
-   "duty_locked": true,
+   "duty": 0.0,
+   "duty_locked": false,
    "efficiency": 0.75,
    "eq_type": "Pump — centrifugal",
    "evaporator_active": false,
@@ -1020,8 +1020,8 @@
    "pipe_diameter_m": 0.0,
    "pipe_length_m": 0.0,
    "pipe_roughness_m": 4.5e-05,
-   "pressure_bar": 1.013,
-   "pressure_locked": false,
+   "pressure_bar": 50.0,
+   "pressure_locked": true,
    "price_usd_per_tm": 180.0,
    "reaction_warnings": [],
    "residence_time_s": null,
@@ -1036,7 +1036,8 @@
    "temperature": 40,
    "temperature_locked": true,
    "vapor_fraction": 0.0,
-   "waypoints": []
+   "waypoints": [],
+   "pressure_lock_origin": "user"
   },
   "15": {
    "active_reactions": [],

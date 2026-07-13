@@ -5,17 +5,17 @@
   "mass_errors": 0,
   "n_blocks": 14,
   "n_streams": 13,
-  "overall_status": "warning",
-  "sum_duty": 16.57227
+  "overall_status": "ok",
+  "sum_duty": -103.412942
  },
  "air_sep": {
-  "ISBL": 2859386.45,
+  "ISBL": 2859387.1,
   "energy_errors": 0,
   "mass_errors": 0,
   "n_blocks": 9,
   "n_streams": 8,
-  "overall_status": "warning",
-  "sum_duty": 9.184045
+  "overall_status": "ok",
+  "sum_duty": 11.160706
  },
  "ammonia": {
   "ISBL": 7922613.62,
@@ -23,26 +23,26 @@
   "mass_errors": 0,
   "n_blocks": 8,
   "n_streams": 7,
-  "overall_status": "warning",
-  "sum_duty": 902.914507
+  "overall_status": "ok",
+  "sum_duty": -8.659785
  },
  "beer": {
-  "ISBL": 1737716.21,
-  "energy_errors": 0,
-  "mass_errors": 0,
-  "n_blocks": 6,
-  "n_streams": 5,
-  "overall_status": "ok",
-  "sum_duty": -1.277669
- },
- "biodiesel": {
-  "ISBL": 1425779.71,
+  "ISBL": 1763438.11,
   "energy_errors": 0,
   "mass_errors": 0,
   "n_blocks": 7,
   "n_streams": 6,
   "overall_status": "ok",
-  "sum_duty": 4.173938
+  "sum_duty": -3.647831
+ },
+ "biodiesel": {
+  "ISBL": 1477223.5,
+  "energy_errors": 0,
+  "mass_errors": 0,
+  "n_blocks": 9,
+  "n_streams": 8,
+  "overall_status": "ok",
+  "sum_duty": 4.234496
  },
  "bread": {
   "ISBL": 1956122.41,
@@ -51,41 +51,41 @@
   "n_blocks": 7,
   "n_streams": 6,
   "overall_status": "ok",
-  "sum_duty": 9.474989
+  "sum_duty": 10.383593
  },
  "cdu": {
-  "ISBL": 6730533.43,
+  "ISBL": 6441928.37,
   "energy_errors": 0,
   "mass_errors": 0,
-  "n_blocks": 13,
-  "n_streams": 12,
+  "n_blocks": 15,
+  "n_streams": 14,
   "overall_status": "ok",
-  "sum_duty": 139.847827
+  "sum_duty": 121.323759
  },
  "cement": {
-  "ISBL": 4326315.1,
+  "ISBL": 4183514.39,
   "energy_errors": 0,
   "mass_errors": 0,
-  "n_blocks": 6,
-  "n_streams": 5,
+  "n_blocks": 7,
+  "n_streams": 6,
   "overall_status": "ok",
   "sum_duty": 2.32623
  },
  "chloralkali_hcl": {
-  "ISBL": 6995082.73,
+  "ISBL": 7072248.42,
   "energy_errors": 0,
   "mass_errors": 0,
-  "n_blocks": 10,
-  "n_streams": 10,
+  "n_blocks": 13,
+  "n_streams": 13,
   "overall_status": "ok",
-  "sum_duty": -4.032988
+  "sum_duty": -17.873138
  },
  "desal": {
-  "ISBL": 7846017.16,
+  "ISBL": 7871739.06,
   "energy_errors": 0,
   "mass_errors": 0,
-  "n_blocks": 7,
-  "n_streams": 8,
+  "n_blocks": 8,
+  "n_streams": 9,
   "overall_status": "ok",
   "sum_duty": 55.451533
  },
@@ -105,34 +105,34 @@
   "n_blocks": 8,
   "n_streams": 7,
   "overall_status": "ok",
-  "sum_duty": 134.739189
+  "sum_duty": 130.490264
  },
  "ethane_pfr": {
-  "ISBL": 6542565.43,
+  "ISBL": 6408177.02,
   "energy_errors": 0,
   "mass_errors": 0,
-  "n_blocks": 6,
-  "n_streams": 5,
+  "n_blocks": 8,
+  "n_streams": 7,
   "overall_status": "ok",
-  "sum_duty": 70.815324
+  "sum_duty": 80.225873
  },
  "ethanol": {
-  "ISBL": 3192951.41,
+  "ISBL": 3223059.01,
   "energy_errors": 0,
   "mass_errors": 0,
-  "n_blocks": 11,
-  "n_streams": 10,
+  "n_blocks": 12,
+  "n_streams": 11,
   "overall_status": "warning",
-  "sum_duty": 1624.02741
+  "sum_duty": 1593.433031
  },
  "ethylene_crk": {
-  "ISBL": 6897010.32,
+  "ISBL": 6762621.92,
   "energy_errors": 0,
   "mass_errors": 0,
-  "n_blocks": 10,
-  "n_streams": 9,
+  "n_blocks": 12,
+  "n_streams": 11,
   "overall_status": "ok",
-  "sum_duty": 95.295355
+  "sum_duty": 69.922634
  },
  "gas_sweet": {
   "ISBL": 12772945.7,
@@ -141,7 +141,7 @@
   "n_blocks": 13,
   "n_streams": 16,
   "overall_status": "ok",
-  "sum_duty": 3994.425186
+  "sum_duty": 4480.949346
  },
  "glass": {
   "ISBL": 1146665.34,
@@ -153,40 +153,40 @@
   "sum_duty": 207.557078
  },
  "haber_rec": {
-  "ISBL": 25103084.27,
+  "ISBL": 13943896.38,
   "energy_errors": 0,
   "mass_errors": 0,
-  "n_blocks": 10,
-  "n_streams": 10,
+  "n_blocks": 11,
+  "n_streams": 11,
   "overall_status": "ok",
-  "sum_duty": -118.363432
+  "sum_duty": -104.494901
  },
  "hda": {
-  "ISBL": 9414377.2,
+  "ISBL": 10080068.06,
   "energy_errors": 0,
   "mass_errors": 0,
-  "n_blocks": 12,
-  "n_streams": 12,
+  "n_blocks": 14,
+  "n_streams": 14,
   "overall_status": "ok",
-  "sum_duty": -103.905947
+  "sum_duty": 60.185814
  },
  "hda_full": {
-  "ISBL": 31216425.33,
+  "ISBL": 32940733.98,
   "energy_errors": 0,
   "mass_errors": 0,
-  "n_blocks": 22,
-  "n_streams": 24,
+  "n_blocks": 25,
+  "n_streams": 27,
   "overall_status": "ok",
-  "sum_duty": -729.188915
+  "sum_duty": -438.873367
  },
  "hno3": {
-  "ISBL": 10911433.67,
+  "ISBL": 10998092.75,
   "energy_errors": 0,
   "mass_errors": 0,
-  "n_blocks": 22,
-  "n_streams": 22,
-  "overall_status": "warning",
-  "sum_duty": -778.431711
+  "n_blocks": 25,
+  "n_streams": 25,
+  "overall_status": "ok",
+  "sum_duty": -843.315305
  },
  "hydraulic": {
   "ISBL": 974463.65,
@@ -198,13 +198,13 @@
   "sum_duty": 9.360386
  },
  "industrial": {
-  "ISBL": 26594685.65,
+  "ISBL": 27678253.12,
   "energy_errors": 0,
   "mass_errors": 0,
-  "n_blocks": 28,
+  "n_blocks": 29,
   "n_streams": 30,
   "overall_status": "warning",
-  "sum_duty": -5153.271315
+  "sum_duty": -5473.507777
  },
  "ldpe": {
   "ISBL": 2447864.43,
@@ -213,25 +213,25 @@
   "n_blocks": 6,
   "n_streams": 5,
   "overall_status": "ok",
-  "sum_duty": 70.579141
+  "sum_duty": 37.180994
  },
  "leche_gloria": {
-  "ISBL": 12139882.92,
+  "ISBL": 12169990.53,
   "energy_errors": 0,
   "mass_errors": 0,
-  "n_blocks": 20,
-  "n_streams": 21,
+  "n_blocks": 21,
+  "n_streams": 22,
   "overall_status": "ok",
-  "sum_duty": 415.055559
+  "sum_duty": 415.05391
  },
  "methanol": {
-  "ISBL": 5826391.97,
+  "ISBL": 5606075.03,
   "energy_errors": 0,
   "mass_errors": 0,
-  "n_blocks": 8,
-  "n_streams": 7,
+  "n_blocks": 10,
+  "n_streams": 9,
   "overall_status": "ok",
-  "sum_duty": -300.268263
+  "sum_duty": -667.240902
  },
  "nuclear": {
   "ISBL": 1688932.86,
@@ -243,49 +243,49 @@
   "sum_duty": 0.165649
  },
  "pasteurizer": {
-  "ISBL": 642814.97,
+  "ISBL": 668536.87,
   "energy_errors": 0,
   "mass_errors": 0,
-  "n_blocks": 5,
-  "n_streams": 4,
+  "n_blocks": 6,
+  "n_streams": 5,
   "overall_status": "ok",
   "sum_duty": -0.117503
  },
  "penicillin": {
-  "ISBL": 4504039.32,
+  "ISBL": 4529761.21,
   "energy_errors": 0,
   "mass_errors": 0,
-  "n_blocks": 9,
-  "n_streams": 8,
+  "n_blocks": 10,
+  "n_streams": 9,
   "overall_status": "ok",
   "sum_duty": -0.000531
  },
  "pineapple": {
-  "ISBL": 4324345.3,
+  "ISBL": 4350067.2,
   "energy_errors": 0,
   "mass_errors": 0,
-  "n_blocks": 7,
-  "n_streams": 6,
+  "n_blocks": 8,
+  "n_streams": 7,
   "overall_status": "ok",
   "sum_duty": 52.073118
  },
  "potato_chips": {
-  "ISBL": 1139870.93,
+  "ISBL": 1165592.83,
   "energy_errors": 0,
   "mass_errors": 0,
-  "n_blocks": 5,
-  "n_streams": 4,
+  "n_blocks": 6,
+  "n_streams": 5,
   "overall_status": "ok",
   "sum_duty": 76.0
  },
  "quimpac": {
-  "ISBL": 51103256.13,
+  "ISBL": 51315461.77,
   "energy_errors": 0,
   "mass_errors": 0,
-  "n_blocks": 24,
-  "n_streams": 24,
+  "n_blocks": 28,
+  "n_streams": 28,
   "overall_status": "ok",
-  "sum_duty": 1583.779975
+  "sum_duty": 1583.43729
  },
  "rankine": {
   "ISBL": 271860377.93,
@@ -297,74 +297,74 @@
   "sum_duty": 0.160825
  },
  "rxn_flash_col": {
-  "ISBL": 3641892.79,
-  "energy_errors": 0,
-  "mass_errors": 0,
-  "n_blocks": 8,
-  "n_streams": 7,
-  "overall_status": "ok",
-  "sum_duty": 481.791578
- },
- "smr_eq": {
-  "ISBL": 10297711.46,
+  "ISBL": 3466167.77,
   "energy_errors": 0,
   "mass_errors": 0,
   "n_blocks": 9,
   "n_streams": 8,
   "overall_status": "ok",
-  "sum_duty": -30.425025
+  "sum_duty": 500.050791
  },
- "soap": {
-  "ISBL": 1334989.54,
+ "smr_eq": {
+  "ISBL": 10231887.19,
   "energy_errors": 0,
   "mass_errors": 0,
-  "n_blocks": 7,
-  "n_streams": 6,
+  "n_blocks": 11,
+  "n_streams": 10,
+  "overall_status": "ok",
+  "sum_duty": -35.163215
+ },
+ "soap": {
+  "ISBL": 1386433.33,
+  "energy_errors": 0,
+  "mass_errors": 0,
+  "n_blocks": 9,
+  "n_streams": 8,
   "overall_status": "ok",
   "sum_duty": 6.818021
  },
  "sugar": {
-  "ISBL": 57523418.64,
+  "ISBL": 56872103.62,
   "energy_errors": 0,
   "mass_errors": 0,
-  "n_blocks": 14,
-  "n_streams": 18,
+  "n_blocks": 15,
+  "n_streams": 19,
   "overall_status": "ok",
   "sum_duty": 42311.503963
  },
  "sulfuric": {
-  "ISBL": 1081290.32,
+  "ISBL": 1176071.87,
+  "energy_errors": 0,
+  "mass_errors": 0,
+  "n_blocks": 13,
+  "n_streams": 12,
+  "overall_status": "ok",
+  "sum_duty": -122.896603
+ },
+ "talara": {
+  "ISBL": 42365738.58,
+  "energy_errors": 0,
+  "mass_errors": 0,
+  "n_blocks": 49,
+  "n_streams": 52,
+  "overall_status": "ok",
+  "sum_duty": 9073.439807
+ },
+ "urea": {
+  "ISBL": 5125500.16,
+  "energy_errors": 0,
+  "mass_errors": 0,
+  "n_blocks": 11,
+  "n_streams": 10,
+  "overall_status": "ok",
+  "sum_duty": 115.426574
+ },
+ "water_treat": {
+  "ISBL": 6058217.54,
   "energy_errors": 0,
   "mass_errors": 0,
   "n_blocks": 9,
   "n_streams": 8,
-  "overall_status": "ok",
-  "sum_duty": -54.937067
- },
- "talara": {
-  "ISBL": 66389143.61,
-  "energy_errors": 0,
-  "mass_errors": 0,
-  "n_blocks": 42,
-  "n_streams": 45,
-  "overall_status": "ok",
-  "sum_duty": 8887.784697
- },
- "urea": {
-  "ISBL": 5083702.08,
-  "energy_errors": 0,
-  "mass_errors": 0,
-  "n_blocks": 10,
-  "n_streams": 9,
-  "overall_status": "ok",
-  "sum_duty": 136.495623
- },
- "water_treat": {
-  "ISBL": 6032495.65,
-  "energy_errors": 0,
-  "mass_errors": 0,
-  "n_blocks": 8,
-  "n_streams": 7,
   "overall_status": "ok",
   "sum_duty": 0.0
  }

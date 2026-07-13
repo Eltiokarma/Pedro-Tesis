@@ -215,13 +215,26 @@ class TestExistingExamplesUnaffected(unittest.TestCase):
         by_name = {s.name: s for s in fs.streams.values()}
         self.assertTrue(by_name["S-feed-tol"].mass_flow_locked,
             "el feed fresco debe seguir locked")
-        self.assertTrue(by_name["S-9-recic"].mass_flow_locked,
-            "el tear del recycle debe seguir locked (spec del loop)")
+        # Capa 3 del Frente B (T-101 columna activa EN LOOP): S-9-recic pasó
+        # de spec lockeada a TEAR REAL — role='recycle', masa/comp des-lockeadas
+        # (las converge Wegstein), ver commit "primera columna EN LOOP activada".
+        self.assertEqual(by_name["S-9-recic"].role, "recycle",
+            "S-9-recic debe estar etiquetado role='recycle' (selección de tear)")
+        self.assertFalse(by_name["S-9-recic"].mass_flow_locked,
+            "el tear del recycle lo converge el solver (ya no es spec lockeada)")
         for n in ("S-1", "S-2", "S-3", "S-4", "S-5", "S-6", "S-7", "S-8"):
             self.assertFalse(by_name[n].mass_flow_locked,
                 f"{n} es intermedio: debe propagarse, no quedar hardcoded")
-        self.assertAlmostEqual(by_name["S-1"].mass_flow, 11000, delta=55)
-        self.assertAlmostEqual(by_name["S-benceno"].mass_flow, 8500, delta=43)
+        # S-1 = feed (8850) + reciclo CONVERGIDO por Wegstein (~2076; la spec
+        # vieja lockeada decía 2150 — el tear real converge un poco más abajo).
+        self.assertAlmostEqual(by_name["S-1"].mass_flow, 10926, delta=55)
+        # Benceno producido por la química REAL R035 (toluene + H2 → benzene +
+        # methane), no por un número pre-cocido.  Balance: 11000 t/a tolueno al
+        # reactor × conversión 0.8045 = 8850 t/a reaccionado → 8850/92.14 × 78.11
+        # = 7503 t/a benceno.  El 8500 anterior era pre-química-real; R035 (#79) +
+        # makeup de H2 (#83) movieron el benceno convergido a 7503 (balance cierra,
+        # mass_errors=0).
+        self.assertAlmostEqual(by_name["S-benceno"].mass_flow, 7503, delta=43)
 
 
 if __name__ == "__main__":

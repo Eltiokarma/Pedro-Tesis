@@ -43,6 +43,7 @@ import sys
 import os
 import json
 import subprocess
+import warnings
 from typing import List
 
 from PySide6.QtCore import (
@@ -265,6 +266,31 @@ COLOR_STATUS_ERROR   = QColor("#c62828")   # rojo — error / desbalance
 COLOR_STATUS_UNRUN   = QColor("#1976d2")   # azul — no ejecutado / stale
 COLOR_STATUS_DIRTY   = QColor("#7b1fa2")   # violeta — flowsheet editado
                                             # post-solve (datos stale)
+
+# Corrientes de SERVICIO (utility): color por temperatura para que el user
+# distinga de un vistazo el servicio CALIENTE (vapor / aceite térmico) del
+# FRÍO (agua de enfriamiento).  Umbral en °C: por encima = caliente.
+UTILITY_HOT_T_C       = 60.0
+COLOR_UTIL_HOT        = "#ef6c2b"   # naranja — servicio caliente
+COLOR_UTIL_HOT_SEL    = "#c4541d"
+COLOR_UTIL_COLD       = "#3fa9dd"   # celeste — servicio frío
+COLOR_UTIL_COLD_SEL   = "#2b80ab"
+# Degradado DENTRO del lazo: el family lo fija el servicio (calienta/enfría),
+# pero el TONO se modula por la temperatura de cada corriente, de la más
+# caliente (tono profundo/saturado) a la más fría (tono pálido).
+COLOR_UTIL_HOT_PALE   = "#f9bd7c"   # naranja claro — extremo frío del lazo caliente
+COLOR_UTIL_HOT_DEEP   = "#c4361a"   # rojo-naranja — extremo caliente
+COLOR_UTIL_COLD_PALE  = "#bfe3f5"   # celeste pálido — extremo frío del lazo
+COLOR_UTIL_COLD_DEEP  = "#1773aa"   # azul intenso — extremo más caliente del lazo
+
+
+def _lerp_color(c0, c1, t):
+    """Interpola linealmente entre dos QColor (t en [0,1])."""
+    return QColor(
+        int(round(c0.red()   + (c1.red()   - c0.red())   * t)),
+        int(round(c0.green() + (c1.green() - c0.green()) * t)),
+        int(round(c0.blue()  + (c1.blue()  - c0.blue())  * t)),
+    )
 
 # Mapeo status string → color
 STATUS_COLORS = {
@@ -2403,6 +2429,26 @@ class _StreamHandle(QGraphicsEllipseItem):
         except Exception:
             pass
 
+    def mousePressEvent(self, event):
+        # TF §7: snapshot para undo del drag de waypoint (el move real lo
+        # hace el default de QGraphicsItem via itemChange)
+        if event.button() == Qt.LeftButton:
+            si = self._stream_item
+            editor = getattr(si, "editor", None) if si is not None else None
+            self._undo_before = (editor.begin_action()
+                                 if editor is not None else None)
+        super().mousePressEvent(event)
+
+    def mouseReleaseEvent(self, event):
+        super().mouseReleaseEvent(event)
+        if event.button() == Qt.LeftButton                 and getattr(self, "_undo_before", None) is not None:
+            si = self._stream_item
+            editor = getattr(si, "editor", None) if si is not None else None
+            if editor is not None:
+                nm = si.model.name if (si is not None and si.model) else ""
+                editor.end_action(f"Editar ruta {nm}", self._undo_before)
+            self._undo_before = None
+
     def itemChange(self, change, value):
         # GUARD: si el stream subyacente fue borrado pero el handle
         # quedó vivo (caso reportado: borrar nodo + drag posterior →
@@ -2918,6 +2964,9 @@ class _GhostStreamHandle(QGraphicsEllipseItem):
 
     def mousePressEvent(self, event):
         si = self._stream_item
+        # TF §7: el bake de bends muta model.waypoints → una acción de undo
+        editor = getattr(si, "editor", None)
+        before = editor.begin_action() if editor is not None else None
         pts = getattr(si, '_last_pts', None)
         if pts and len(pts) >= 6:
             # bakear todos los bend points interiores en model.waypoints
@@ -2930,6 +2979,8 @@ class _GhostStreamHandle(QGraphicsEllipseItem):
             # la posición clickeada
             si.model.waypoints = [[self.pos().x(), self.pos().y()]]
         si.update_path()
+        if editor is not None:
+            editor.end_action(f"Editar ruta {si.model.name}", before)
         event.accept()
 
 
@@ -3091,6 +3142,12 @@ class _EndpointHandle(QGraphicsEllipseItem):
         if event.button() == Qt.LeftButton:
             self._press_pos = QPointF(self.pos())   # pos del handle al apretar
             self._drag_committed = False
+            # TF §7: snapshot para undo del drag de endpoint (reconexión /
+            # dejar flotante).  end_action no-opea en drags accidentales.
+            si = self._stream_item
+            editor = getattr(si, "editor", None) if si is not None else None
+            self._undo_before = (editor.begin_action()
+                                 if editor is not None else None)
         super().mousePressEvent(event)
 
     def mouseDoubleClickEvent(self, event):
@@ -3262,12 +3319,19 @@ class _EndpointHandle(QGraphicsEllipseItem):
         super().mouseReleaseEvent(event)
         self._press_pos = None
         self._drag_committed = False
+        # TF §7: capturar el snapshot ANTES del update_path (puede destruir
+        # 'self' vía _rebuild_handles — tocar self después sería inseguro).
+        _undo_before = getattr(self, "_undo_before", None)
+        self._undo_before = None
         # Refresh (puede destruir 'self' via _rebuild_handles)
         si.update_path()
         # Notificar al editor que algo cambió (mark_dirty)
         editor = getattr(si, "editor", None)
         if editor is not None and hasattr(editor, "_mark_dirty"):
             editor._mark_dirty()
+        # TF §7: push undo de la reconexión / desconexión del endpoint
+        if editor is not None and _undo_before is not None:
+            editor.end_action(f"Reconectar {si.model.name}", _undo_before)
 
 
 # ── PRINCIPIO "TODO LO AUTO SE VE" (FASE 4) ────────────────────────────
@@ -4068,6 +4132,12 @@ class StreamItem(QGraphicsPathItem):
         # con scene=None es no-op (ver guard adentro), así que ahora
         # que scene existe sí crea los _EndpointHandle naranjas.
         self._rebuild_handles()
+        # Re-anclar AHORA que el item está en escena.  El update_path() del
+        # __init__ corrió con self.scene()==None; aunque _resolve_port toma
+        # editor.scene como red de seguridad, este segundo pase garantiza que
+        # AMBOS extremos (cola=src y cabeza=dst) queden anclados a los puertos
+        # vivos en el momento de entrar a la escena, sin depender del hover.
+        self.update_path(rebuild_handles=False)
 
     def remove_from_scene(self, scene: QGraphicsScene):
         # remover handles de waypoints si estaban activos
@@ -4085,10 +4155,80 @@ class StreamItem(QGraphicsPathItem):
             if item.scene() is scene:
                 scene.removeItem(item)
 
+    def _utility_loop_info(self):
+        """Servicio del LAZO + rango de temperaturas, para colorear.
+
+        Devuelve (is_hot, tmin, tmax):
+          · is_hot: el lazo CALIENTA (duty del HX servido > 0) o ENFRÍA.  Fija
+            el FAMILY de color (naranja vs celeste) — consistente para todo el
+            lazo, sin importar la T de cada corriente suelta.
+          · tmin/tmax: rango de temperatura de las corrientes del lazo, para
+            modular el TONO (más caliente = tono profundo, más frío = pálido).
+
+        Recorre el cluster (BFS por streams auto_aux) hasta el HX de proceso
+        servido.  Fallback de is_hot: tmax >= UTILITY_HOT_T_C.
+        """
+        fs = self.fs
+        s = self.model
+        seen_b, seen_s = set(), {s.id}
+        frontier = [s.src, s.dst]
+        hx_duty = None
+        t0 = float(getattr(s, "temperature", 25.0) or 25.0)
+        tmin = tmax = t0
+        while frontier:
+            bid = frontier.pop()
+            if bid is None or bid in seen_b:
+                continue
+            seen_b.add(bid)
+            b = fs.blocks.get(bid)
+            if b is None:
+                continue
+            if not getattr(b, "auto_aux", False):
+                d = float(getattr(b, "duty", 0.0) or 0.0)
+                if hx_duty is None or abs(d) > abs(hx_duty):
+                    hx_duty = d
+                continue   # no cruzar al lado de proceso del HX
+            for o in fs.streams.values():
+                if not getattr(o, "auto_aux", False):
+                    continue
+                if o.src == bid or o.dst == bid:
+                    t = float(getattr(o, "temperature", 25.0) or 25.0)
+                    tmin = min(tmin, t)
+                    tmax = max(tmax, t)
+                    if o.id not in seen_s:
+                        seen_s.add(o.id)
+                        frontier += [o.src, o.dst]
+        if hx_duty is not None and abs(hx_duty) > 1e-9:
+            is_hot = hx_duty > 0
+        else:
+            is_hot = tmax >= UTILITY_HOT_T_C
+        return is_hot, tmin, tmax
+
     def _color(self):
+        role = self.model.role
+        sel = self.isSelected()
+        # UTILITY: family por INTERCAMBIADOR (naranja=calienta, celeste=enfría)
+        # + degradado de TONO por temperatura DENTRO del lazo (de la corriente
+        # más caliente a la más fría).  El status crítico (error/warn) tiene
+        # prioridad para no ocultar un desbalance.
+        if role == "utility":
+            if self._status == "error":
+                return COLOR_STATUS_ERROR
+            if self._status == "warning":
+                return COLOR_STATUS_WARN
+            is_hot, tmin, tmax = self._utility_loop_info()
+            T = float(getattr(self.model, "temperature", 25.0) or 25.0)
+            frac = (T - tmin) / (tmax - tmin) if (tmax - tmin) > 1e-6 else 0.5
+            frac = 0.0 if frac < 0.0 else (1.0 if frac > 1.0 else frac)
+            pale = QColor(COLOR_UTIL_HOT_PALE if is_hot else COLOR_UTIL_COLD_PALE)
+            deep = QColor(COLOR_UTIL_HOT_DEEP if is_hot else COLOR_UTIL_COLD_DEEP)
+            col = _lerp_color(pale, deep, frac)
+            if sel:
+                col = col.darker(118)
+            return col
         # Selección siempre tiene prioridad para feedback inmediato.
-        if self.isSelected():
-            return QColor(STREAM_ROLE_COLORS_SEL.get(self.model.role, "#c62828"))
+        if sel:
+            return QColor(STREAM_ROLE_COLORS_SEL.get(role, "#c62828"))
         # Status crítico sobreescribe el color por role (error o warning
         # vienen del último solve y son los más informativos para el user).
         if self._status == "error":
@@ -4099,7 +4239,7 @@ class StreamItem(QGraphicsPathItem):
             # gris-azul tenue para indicar "no resuelto / sin verificar"
             return QColor("#9aa5b1")
         # status == "ok" o cualquier otro: color normal por role
-        return QColor(STREAM_ROLE_COLORS.get(self.model.role, "#37474f"))
+        return QColor(STREAM_ROLE_COLORS.get(role, "#37474f"))
 
     def hoverEnterEvent(self, event):
         """Engrosa la línea al hover para feedback visual."""
@@ -4444,9 +4584,18 @@ class StreamItem(QGraphicsPathItem):
             # tuberías rodean por arriba/abajo/izq/der según menor
             # costo Manhattan.  Padding 12px ≈ 3× ancho de stream.
             if self.editor is not None and not _rigid:
+                # ¿este stream es parte de un lazo de SERVICIO?  Si lo es, NO
+                # esquivar los OTROS bloques auto_aux (header/bomba del mismo
+                # cluster): son locales al lazo y esquivarlos generaba los
+                # "cuadrados"/loops innecesarios (la tubería rodeaba su propio
+                # header).  Los equipos de PROCESO sí se siguen esquivando.
+                _is_aux = (s.role or "") == "utility" \
+                    or bool(getattr(s, "auto_aux", False))
                 obstacles = []
                 for bid, item in self.editor.block_items_iter():
                     if bid == s.src or bid == s.dst:
+                        continue
+                    if _is_aux and getattr(item.model, "auto_aux", False):
                         continue
                     bm = item.model
                     # dims VISUALES del BlockItem (ISA glyph escalado),
@@ -4929,6 +5078,9 @@ class StreamItem(QGraphicsPathItem):
             has_floating = (s.src == -1 or s.dst == -1)
             if not has_floating:
                 if self._begin_segment_drag(event.scenePos()):
+                    # TF §7: snapshot para undo del drag de segmento
+                    if self.editor is not None:
+                        self._undo_before = self.editor.begin_action()
                     self.setSelected(True)
                     event.accept()
                     return
@@ -4939,6 +5091,9 @@ class StreamItem(QGraphicsPathItem):
             self.setSelected(True)
             self._drag_origin = event.scenePos()
             self._drag_snap = self._translation_snapshot()
+            # TF §7: snapshot para undo del translate de flotante
+            if self.editor is not None:
+                self._undo_before = self.editor.begin_action()
             event.accept()
             return
         super().mousePressEvent(event)
@@ -4967,11 +5122,21 @@ class StreamItem(QGraphicsPathItem):
                 # _simplify_orthogonal del render; el modelo conserva
                 # la ruta del usuario).
                 self.update_path(rebuild_handles=True)
+            # TF §7: push undo (end_action no-opea si no hubo cambio real,
+            # p.ej. click de selección sin drag)
+            if self.editor is not None                     and getattr(self, "_undo_before", None) is not None:
+                self.editor.end_action(f"Editar ruta {self.model.name}",
+                                       self._undo_before)
+                self._undo_before = None
             event.accept()
             return
         if getattr(self, "_drag_origin", None) is not None:
             self._drag_origin = None
             self._drag_snap = None
+            if self.editor is not None                     and getattr(self, "_undo_before", None) is not None:
+                self.editor.end_action(f"Mover {self.model.name}",
+                                       self._undo_before)
+                self._undo_before = None
             event.accept()
             return
         super().mouseReleaseEvent(event)
@@ -5057,13 +5222,33 @@ class StreamItem(QGraphicsPathItem):
         # renderizan con item.W/H (= BLOCK_DIMS del glyph ISA × 1.6), que
         # difieren de pfd.block_dims tras la migración a glyphs ISA — usar
         # block_dims acá dejaba la punta de la flecha separada del nodo.
+        # FIX geometría stale: StreamItem.__init__ corre update_path ANTES de
+        # add_to_scene, así que self.scene() es None en el PRIMER render y la
+        # flecha caía a un fallback por model-coords (desalineado del nodo ISA)
+        # que NADIE re-anclaba hasta que un hover disparaba update_path con el
+        # item ya en escena.  Eso era el "al pasar el mouse recién se acomoda".
+        # Los BlockItem (y sus port_items) YA están en la escena cuando se
+        # construyen los streams (los bloques se renderizan primero), así que
+        # tomamos la escena del editor como red de seguridad cuando el propio
+        # StreamItem todavía no fue agregado.
         sc = self.scene()
+        if sc is None and getattr(self, "editor", None) is not None:
+            sc = getattr(self.editor, "scene", None)
         item = sc.block_items.get(b.id) if sc is not None else None
         if item is not None:
             ell = getattr(item, "port_items", {}).get(pname)
-            if ell is not None:
-                c = ell.sceneBoundingRect().center()
-                return side, c.x(), c.y()
+            # Robustez (1.2): anclar al CENTRO REAL del puerto SOLO si el
+            # elipse está realmente asentado — en una escena y con un
+            # sceneBoundingRect no-nulo.  Si no lo está (escena nula o rect
+            # 0×0), NO anclamos a una geometría basura silenciosa: caemos al
+            # fallback geométrico determinista de abajo, que un
+            # _refresh_all_stream_paths (fin de _rebuild_scene) o un hover
+            # posterior re-ancla al puerto vivo.
+            if ell is not None and ell.scene() is not None:
+                r = ell.sceneBoundingRect()
+                if r.width() or r.height():
+                    c = r.center()
+                    return side, c.x(), c.y()
             w, h = getattr(item, "W", None), getattr(item, "H", None)
             if w is None or h is None:
                 w, h = pfd.block_dims(b.eq_type)
@@ -5107,8 +5292,18 @@ class StreamItem(QGraphicsPathItem):
         h_sides = ("left", "right")
         v_sides = ("top", "bottom")
 
-        # ambos horizontales opuestos
+        # ambos horizontales
         if side1 in h_sides and side2 in h_sides:
+            # MISMO lado (right+right o left+left): C-shape sobre ese lado en
+            # vez de rodear por arriba.  Sin esto, un puerto que sale a la
+            # derecha hacia otro que también entra por la derecha generaba un
+            # "cuadrado" enorme por encima de los bloques — típico en los
+            # lazos de servicio (bomba.descarga(right) → HX.shell_in(right)).
+            if side1 == side2:
+                if abs(x1 - x2) < 2 and abs(y1 - y2) < 2:
+                    return [x1, y1, x2, y2]
+                xc = max(ex1, ex2) if side1 == "right" else min(ex1, ex2)
+                return [x1, y1, xc, y1, xc, y2, x2, y2]
             # cond_fwd: el destino está FÍSICAMENTE a la derecha del
             # origen (right→left) o a la izquierda (left→right).  Usa
             # x1/x2 directos, NO ex1/ex2 (que requerían 2×ROUTING_GAP
@@ -5124,9 +5319,19 @@ class StreamItem(QGraphicsPathItem):
                 # produce líneas más naturales aunque haya poco espacio.
                 mx = (x1 + x2) / 2
                 return [x1, y1, mx, y1, mx, y2, x2, y2]
-            # backward (raro: dst físicamente atrás del src): rodea por arriba
-            ymin = min(b_src.y, b_dst.y) - 40
-            return [x1, y1, ex1, ey1, ex1, ymin, ex2, ymin, ex2, ey2, x2, y2]
+            # backward (dst físicamente atrás del src): hay que rodear.  Elegir
+            # rodear por ARRIBA o por ABAJO según cuál da menor excursión
+            # vertical — antes rodeaba SIEMPRE por arriba, lo que en los lazos
+            # de servicio (cluster debajo del HX) trepaba por encima del equipo
+            # de proceso formando un cuadrado innecesario.
+            h_src = pfd.block_dims(b_src.eq_type)[1]
+            h_dst = pfd.block_dims(b_dst.eq_type)[1]
+            top_y = min(b_src.y, b_dst.y) - 40
+            bot_y = max(b_src.y + h_src, b_dst.y + h_dst) + 40
+            exc_top = (y1 - top_y) + (y2 - top_y)
+            exc_bot = (bot_y - y1) + (bot_y - y2)
+            yw = top_y if exc_top <= exc_bot else bot_y
+            return [x1, y1, ex1, ey1, ex1, yw, ex2, yw, ex2, ey2, x2, y2]
 
         # ambos verticales opuestos
         if side1 in v_sides and side2 in v_sides:
@@ -5945,6 +6150,10 @@ class FlowsheetMainWindow(QMainWindow):
         self._aux_visibility_action.setShortcut("Ctrl+U")
         self._aux_visibility_action.triggered.connect(self._toggle_aux_visibility)
         m_view.addAction(self._aux_visibility_action)
+        # Tabla de corrientes — acción de PRIMER NIVEL (antes solo vivía en
+        # "Docks legacy").  Reusa la acción robusta del toolbar.
+        if getattr(self, "_streams_table_action", None) is not None:
+            m_view.addAction(self._streams_table_action)
         # Inspector dock (slide-out de la nueva UI)
         if hasattr(self, "_inspector_dock") and self._inspector_dock is not None:
             m_view.addAction(self._inspector_dock.toggleViewAction())
@@ -5955,15 +6164,10 @@ class FlowsheetMainWindow(QMainWindow):
         for attr, label in (
             ("lib_dock",        "Biblioteca de equipos (vieja)"),
             ("props_dock",      "Propiedades (viejo)"),
-            ("streams_dock",    "Tabla de corrientes"),
             ("reactivity_dock", "Predictor de reactividad"),
         ):
             d = getattr(self, attr, None)
             if d is None:
-                continue
-            # la tabla de corrientes usa la acción robusta del toolbar
-            if attr == "streams_dock" and getattr(self, "_streams_table_action", None):
-                m_legacy.addAction(self._streams_table_action)
                 continue
             act = d.toggleViewAction()
             act.setText(label)
@@ -7061,8 +7265,9 @@ class FlowsheetMainWindow(QMainWindow):
                 f"  {tag} {r['stream_name']} (block {r['block_name']}): "
                 f"duty={duty_s}, T_final={r['t_final']:.1f}°C  [{r['message']}]"
             )
-        # refrescar streams en escena
-        for sid, sit in self.scene.stream_items.items():
+        # refrescar streams en escena (orden por id — TF §6)
+        for sid, sit in sorted(self.scene.stream_items.items(),
+                               key=lambda kv: kv[1].model.id):
             sit.update_path()
         QMessageBox.information(self, "Goal-seek resultado",
                                   "\n".join(report))
@@ -7134,6 +7339,37 @@ class FlowsheetMainWindow(QMainWindow):
             logging.getLogger(__name__).debug(
                 f"predictor post-solve fallo: {e}")
 
+    @staticmethod
+    def _dedup_costing_warnings(caught):
+        """Colapsa los UserWarning capturados a una lista de strings únicos,
+        preservando el orden de primera aparición (un mismo warning de CEPCI
+        se dispara una vez por equipo → ~41 copias idénticas)."""
+        seen, out = set(), []
+        for w in caught:
+            if not issubclass(w.category, UserWarning):
+                continue
+            msg = str(w.message).strip()
+            if msg not in seen:
+                seen.add(msg)
+                out.append(msg)
+        return out
+
+    def _show_costing_warnings(self, caught, context):
+        """Muestra los warnings de costeo capturados en un diálogo:
+        contador en el texto principal + lista completa en setDetailedText.
+        No hace nada si no hubo warnings."""
+        msgs = self._dedup_costing_warnings(caught)
+        if not msgs:
+            return
+        box = QMessageBox(self)
+        box.setIcon(QMessageBox.Warning)
+        box.setWindowTitle("Advertencias de costeo")
+        box.setText(f"{len(msgs)} advertencia(s) de costeo durante {context}.\n"
+                    "El cálculo se completó; revisá el detalle para ver qué "
+                    "rangos/extrapolaciones afectan la confiabilidad.")
+        box.setDetailedText("\n\n".join(f"• {m}" for m in msgs))
+        box.exec()
+
     def action_compute(self):
         # delegamos al editor Tk en una llamada simple para no duplicar lógica.
         # En este scaffold, mostramos los números clave en el panel.
@@ -7145,8 +7381,10 @@ class FlowsheetMainWindow(QMainWindow):
                 {"nombre": b.eq_type, "S": b.S, "n": b.n}
                 for b in self.fs.blocks.values()
             ]
-            res = eq.lang_fci(equipos, plant_type="Fluid processing",
-                              year_target=2024)
+            with warnings.catch_warnings(record=True) as caught:
+                warnings.simplefilter("always")
+                res = eq.lang_fci(equipos, plant_type="Fluid processing",
+                                  year_target=2024)
             isbl_mm = eq.isbl_implicito(res["FCI_MMUSD"], 0.30, 0.10, 0.10)
             feeds    = [s for s in self.fs.streams.values() if s.role == "feed"]
             products = [s for s in self.fs.streams.values() if s.role == "product"]
@@ -7166,7 +7404,12 @@ class FlowsheetMainWindow(QMainWindow):
                 f"Ingresos:     $ {revenue:>14,.0f}",
                 f"Materia prima:$ {raw_mp:>14,.0f}",
             ]
+            warn_msgs = self._dedup_costing_warnings(caught)
+            if warn_msgs:
+                lines += ["", f"⚠ {len(warn_msgs)} advertencia(s) de costeo "
+                              "(ver diálogo)."]
             self.results_box.setPlainText("\n".join(lines))
+            self._show_costing_warnings(caught, "el cálculo de costos")
         except Exception as e:
             QMessageBox.critical(self, "Error",
                                   f"{type(e).__name__}: {e}")
@@ -7321,14 +7564,17 @@ class FlowsheetMainWindow(QMainWindow):
             feeds    = [s for s in self.fs.streams.values() if s.role == "feed"]
             products = [s for s in self.fs.streams.values() if s.role == "product"]
             import capex as _capex
-            isbl = _capex.compute_fci(self.fs).get("sum_cbm")
-            isbl_musd = (isbl / 1e6) if isbl else None
-            fexp.write_project_xlsx(path, self.fs, isbl_musd, feeds, products)
+            with warnings.catch_warnings(record=True) as caught:
+                warnings.simplefilter("always")
+                isbl = _capex.compute_fci(self.fs).get("sum_cbm")
+                isbl_musd = (isbl / 1e6) if isbl else None
+                fexp.write_project_xlsx(path, self.fs, isbl_musd, feeds, products)
         except Exception as e:
             QMessageBox.critical(self, "Falló la exportación",
                                   f"{type(e).__name__}: {e}")
             return
         self.status.showMessage(f"Exportado: {path}", 6000)
+        self._show_costing_warnings(caught, "la exportación a Excel")
 
     # ---------------------------------------------------
     # EXPORT (PDF / SVG / PNG)
@@ -7828,7 +8074,13 @@ class FlowsheetMainWindow(QMainWindow):
     # ---------------------------------------------------
 
     def stream_items_iter(self):
-        return self.scene.stream_items.items()
+        # TF §6: orden DETERMINISTA por id.  El lane offset de un stream
+        # depende de los _last_pts vigentes de los demás; si el re-ruteo
+        # global va por id ascendente, los dominantes (id menor) rutean
+        # primero y la asignación de lanes converge a un punto fijo estable
+        # entre repaints (sin "saltos" de unos px entre frames).
+        return sorted(self.scene.stream_items.items(),
+                      key=lambda kv: getattr(kv[1].model, "id", kv[0]))
 
     def block_items_iter(self):
         return self.scene.block_items.items()
@@ -7842,6 +8094,15 @@ class FlowsheetMainWindow(QMainWindow):
             self._render_block(b)
         for s in self.fs.streams.values():
             self._render_stream(s)
+        # FIX geometría stale + lanes: re-rutear TODOS los streams una vez que
+        # bloques Y streams están en escena.  El _resolve_port ya ancla a los
+        # puertos vivos en el primer render (toma editor.scene), pero el LANE
+        # ASSIGNMENT de cada stream lee los `_last_pts` de los OTROS streams,
+        # que recién están todos poblados al terminar este loop — sin este
+        # pase, los streams construidos primero asignaban lane contra un
+        # conjunto incompleto y quedaban apilados/solapados.  También deja los
+        # jumpers (cruces) coherentes.  Idempotente y barato (<50 streams).
+        self._refresh_all_stream_paths()
         self._refresh_port_colors()
         # Respetar el toggle de corrientes auxiliares (Ctrl+U) tras
         # cargar / undo / redo.
@@ -7851,6 +8112,11 @@ class FlowsheetMainWindow(QMainWindow):
             self._bubble_manager.refresh_all()
         if getattr(self, "_hx_bubble_manager", None) is not None:
             self._hx_bubble_manager.refresh_all()
+        # Red de seguridad GUI-only: re-anclar en el próximo ciclo del
+        # event-loop, cuando la geometría de los puertos recién renderizados
+        # ya está asentada (corrige el extremo COLA/src que en el GUI real
+        # quedaba stale hasta el hover).
+        self._schedule_stream_reanchor()
 
     # ---------------------------------------------------
     # UNDO / REDO infrastructure
@@ -7940,14 +8206,35 @@ class FlowsheetMainWindow(QMainWindow):
     def _refresh_all_stream_paths(self):
         """Re-renderiza el path de TODOS los streams.  Necesario después
         de mover bloques o de un solve, para que los cruces (jumpers)
-        queden coherentes."""
-        for sid, item in self.scene.stream_items.items():
+        queden coherentes.  Orden por id (TF §6): los lanes dominantes
+        rutean primero → asignación determinista entre repaints."""
+        for sid, item in sorted(self.scene.stream_items.items(),
+                                key=lambda kv: kv[1].model.id):
             item.update_path(rebuild_handles=False)
         # Burbujas: actualizar leaders (anclas de streams cambiaron)
         if getattr(self, "_bubble_manager", None) is not None:
             self._bubble_manager._refresh_leaders()
         if getattr(self, "_hx_bubble_manager", None) is not None:
             self._hx_bubble_manager._refresh_leaders()
+
+    def _schedule_stream_reanchor(self):
+        """Re-ancla TODOS los streams en el PRÓXIMO ciclo del event-loop.
+
+        Red de seguridad para el bug de geometría stale que se observa SOLO
+        en el GUI real (no headless/offscreen): tras un _rebuild_scene la
+        geometría de algún puerto recién renderizado puede no estar asentada
+        todavía en el primer pase síncrono, dejando el extremo COLA (src) de
+        la flecha desalineado hasta que un hover dispara update_path.  Un
+        QTimer.singleShot(0) corre después de que Qt procesó el layout/paint
+        diferido, garantizando que el re-anclaje suceda sin intervención del
+        user.  Idempotente y barato (<50 streams)."""
+        from PySide6.QtCore import QTimer
+        def _do():
+            try:
+                self._refresh_all_stream_paths()
+            except RuntimeError:
+                pass   # escena/objetos C++ destruidos (shutdown)
+        QTimer.singleShot(0, _do)
 
     def _remove_block_item(self, bid):
         item = self.scene.block_items.pop(bid, None)

@@ -507,13 +507,23 @@ CORROSIVE_SPECIES = {
 }
 
 
-def suggested_material(composition_dicts, p_op_bar=1.0):
+def suggested_material(composition_dicts, p_op_bar=1.0, eq_type=None):
     """Heurística: dado una lista de composition dicts {comp:frac}
     de las corrientes adjuntas al bloque, devuelve el material más
     severo necesario según CORROSIVE_SPECIES.
 
     Si presión > 50 bar y feed tiene H2 → upgrade a SS304 mínimo
-    (H2 embrittlement at high P)."""
+    (H2 embrittlement at high P).
+
+    EXCEPCIÓN fired heaters: un horno se costea como CS aunque sus
+    corrientes sean corrosivas.  La corrosión por H2S/H2 la sufren solo
+    los TUBOS (aleación), no la carcasa, refractario ni quemadores (CS
+    siempre); aplicar el FM de aleación a la estructura completa
+    sobrecostea.  El costo de la metalurgia de tubos queda implícito en
+    el FBM del horno.  Práctica estándar de estimación clase 4-5 (Turton).
+    """
+    if eq_type and "Fired heater" in eq_type:
+        return MATERIAL_DEFAULT
     best   = MATERIAL_DEFAULT
     best_f = MATERIAL_FACTORS[best]
     for comp in composition_dicts:

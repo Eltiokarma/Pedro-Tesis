@@ -53,16 +53,27 @@ def estimate_compound(compound_name: str) -> Optional[Dict[str, ThermoEstimate]]
 
     if comp is not None and comp.dh_f_gas_kJ_mol is not None:
         # Confidence segun origin
-        origin = getattr(comp, "origin", "experimental")
+        origin = getattr(comp, "origin", "unverified")
         if origin == "experimental":
             conf = Confidence.ALTA
             method = "experimental (thermo_db)"
             unc = 1.0   # ~1 kJ/mol tipico NIST
+        elif origin == "unverified":
+            # PR-E — el valor está en el catálogo y matchea NIST en barridos,
+            # pero su fuente no está confirmada: confianza MEDIA, sin afirmar
+            # 'experimental'.  NO degrada el dato, solo es honesto sobre él.
+            conf = Confidence.MEDIA
+            method = "thermo_db (fuente no verificada)"
+            unc = 5.0
         elif origin == "estimated":
             conf = Confidence.MEDIA
             method = f"estimated ({getattr(comp, 'estimation_method', 'unknown')})"
             est_unc = getattr(comp, "estimation_uncertainty", {})
             unc = est_unc.get("dh_f", 12.0) if isinstance(est_unc, dict) else 12.0
+        elif origin == "pseudo":
+            conf = Confidence.BAJA
+            method = "pseudo-componente (sin VLE/DIPPR riguroso)"
+            unc = 20.0
         else:
             conf = Confidence.BAJA
             method = "predicted (thermo_db)"

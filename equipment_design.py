@@ -138,7 +138,8 @@ def compressor_sizing(m_kg_s:    float,
                        k:         float = 1.4,
                        eta_isen:  float = 0.75,
                        eta_mech:  float = 0.95,
-                       z:         float = 1.0) -> Optional[Dict]:
+                       z:         float = 1.0,
+                       max_ratio_per_stage: float = 4.0) -> Optional[Dict]:
     """Dimensiona un compresor centrífugo/axial isentrópico.
 
     Trabajo isentrópico (ideal, gas ideal — Turton 5ª §6.5):
@@ -160,8 +161,10 @@ def compressor_sizing(m_kg_s:    float,
                                                     daría la división
                                                     incorrecta de T)
 
-    Etapas recomendadas: ratio_per_stage ≤ 4 industrial.  Si
-    ratio total > 4, recomendar multi-stage con intercoolers.
+    Etapas: ratio_per_stage ≤ 4 industrial.  Si ratio total > 4, el
+    cálculo ES multi-etapa con intercoolers a T_in: W_act y T_out son
+    los del tren completo y Q_intercool_kW el calor extraído entre
+    etapas (0 si n_stages=1).
 
     Args:
         m_kg_s:    caudal másico
@@ -191,33 +194,48 @@ def compressor_sizing(m_kg_s:    float,
     R = 8.314  # J/(mol·K)
     ratio = P_out_bar / P_in_bar
     k_eff = max(min(k, 1.7), 1.05)
-    # Trabajo isentrópico (J/kg)
     exponent = (k_eff - 1.0) / k_eff
-    factor = (ratio ** exponent) - 1.0
     R_specific = R / (mw_avg * 1e-3)   # J/(kg·K)
-    w_isen_J_kg = z * R_specific * T_in_K * (k_eff / (k_eff - 1.0)) * factor
-    W_isen_kW = m_kg_s * w_isen_J_kg / 1000.0
     eta_i = max(min(eta_isen, 0.95), 0.30)
     eta_m = max(min(eta_mech, 0.99), 0.50)
+
+    # ── Multi-etapa con interenfriamiento ──
+    # Práctica industrial (Turton §6.5, API 617): ratio por etapa ≤ 4 con
+    # intercooler que devuelve el gas a la T de succión entre etapas.  Con
+    # ratio ≤ 4 (n_stages=1, Q_intercool=0) degenera EXACTAMENTE en el
+    # cálculo de 1 etapa previo (mismos W y T_out).
+    r_max = max(float(max_ratio_per_stage or 4.0), 1.2)
+    n_stages = max(1, math.ceil(math.log(ratio) / math.log(r_max)))
+    r_stage = ratio ** (1.0 / n_stages)
+    factor_st = (r_stage ** exponent) - 1.0
+    cp_J_kg_K = R_specific * k_eff / (k_eff - 1.0)   # gas ideal, consistente
+
+    w_isen_J_kg = 0.0
+    Q_intercool_kW = 0.0
+    T_out = T_in_K
+    for stage in range(n_stages):
+        # todas las etapas succionan a T_in (intercooler ideal a T_in)
+        w_isen_J_kg += z * R_specific * T_in_K * (k_eff / (k_eff - 1.0)) * factor_st
+        # T_out real de la etapa: ΔT_act = ΔT_isen / η_isen
+        T_out = T_in_K + T_in_K * factor_st / eta_i
+        if stage < n_stages - 1:
+            # calor extraído por el intercooler de esta etapa
+            Q_intercool_kW += m_kg_s * cp_J_kg_K * (T_out - T_in_K) / 1000.0
+    W_isen_kW = m_kg_s * w_isen_J_kg / 1000.0
     W_act_kW = W_isen_kW / (eta_i * eta_m)
-    # T_out isentrópica: T_out_s = T_in · ratio^((k-1)/k)
-    T_out_s = T_in_K * (ratio ** exponent)
-    # T_out real (corrigiendo por ineficiencia):
-    # h_out = h_in + (h_out_s - h_in) / η_isen → ΔT_act = ΔT_isen / η_isen
-    delta_T = (T_out_s - T_in_K) / eta_i
-    T_out = T_in_K + delta_T
     # Q de succión: V = n·R·T/P, n_mol/s = m_kg_s / MW_kg
     Q_m3_s = m_kg_s / (mw_avg * 1e-3) * R * T_in_K / (P_in_bar * 1e5)
     Q_m3_h = Q_m3_s * 3600
-    # Etapas: si ratio > 4, multi-stage con ratio_per_stage = ratio^(1/n)
-    n_stages_rec = max(1, math.ceil(math.log(ratio) / math.log(4.0)))
     return dict(
         ratio=ratio,
-        n_stages_rec=n_stages_rec,
+        ratio_per_stage=r_stage,
+        n_stages=n_stages,
+        n_stages_rec=n_stages,
         W_isen_kW=W_isen_kW,
         W_act_kW=W_act_kW,
         T_out_K=T_out,
         T_out_C=T_out - 273.15,
+        Q_intercool_kW=Q_intercool_kW,
         Q_in_m3_h=Q_m3_h,
         head_kJ_kg=w_isen_J_kg / 1000.0,
         eta_total=eta_i * eta_m,

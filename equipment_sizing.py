@@ -293,8 +293,10 @@ def _rigorous_lmtd_simple(fs, block, diag):
 
     # Guard de rango (punto 5): si la T del proceso excede el T_max de la
     # utility por >50°C, advertir (típico WHB modelado como cooler normal).
+    # NO aplica a utilities de generación: un WHB enfría gas mucho más
+    # caliente que la Tsat del vapor que genera — ese es su propósito.
     t_proc_max = max(T_pin, T_pout)
-    if t_proc_max > t_hi + 50.0:
+    if util_type != "generation" and t_proc_max > t_hi + 50.0:
         extra = (" — verificar si debería ser un WHB/steam-generator"
                  if util_type == "cooling" else "")
         diag["warnings"].append(

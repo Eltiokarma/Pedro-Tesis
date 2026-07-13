@@ -1676,6 +1676,18 @@ class BlockInspectorPanel(QWidget):
         # Compresores / ventiladores: diagrama de compresión T-r
         # (lazy al abrir Termodinámica — junto a delta_p/η).
         eqs_low = (eq_type or "").lower()
+        # Bombas: curva característica H-Q típica anclada al punto de
+        # operación (TF §11 — rotulada "no de fabricante").
+        if "pump" in eqs_low or "bomba" in eqs_low:
+            try:
+                import inspector_evidence as _ev
+                l.addWidget(self._figure_card(
+                    "Curva característica (típica)",
+                    _ev.pump_figure(b, self.fs)))
+            except Exception as exc:
+                l.addWidget(self._diag_placeholder_card(
+                    "Curva característica (típica)",
+                    f"inspector_evidence no disponible: {exc}"))
         if "compressor" in eqs_low or "fan" in eqs_low:
             try:
                 import inspector_evidence as _ev
