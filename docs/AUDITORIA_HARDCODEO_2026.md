@@ -590,3 +590,24 @@ idempotente.  NPV −67.3M → **+7.36M**: la "no rentabilidad honesta"
 documentada era el artefacto de arreglar V-202 dejando el carrusel; con
 TODA la física correcta el ejemplo vuelve a ser rentable y el sanity
 MACRS≠lineal del gate económico aplica de nuevo por sí solo.
+
+
+## hno3 T-401: el tren de absorción re-derivado (§17 — ratchet elemental 41/41)
+
+El último estructural del catálogo.  Los outputs a mano de T-401 producían
+más HNO3 del que el N alimentado permitía (y el aire de blanqueo era 6×
+chico para la re-oxidación).  Re-derivación con extents exactos:
+
+- **R034** (3NO2+H2O→2HNO3+NO) fija ξ2=25.16 kmol por el N reactivo
+  disponible → producto 6 200→**5 707.7 t/a @60%**.
+- **R033** (2NO+O2→2NO2) debe re-oxidar el NO regenerado: ξ1=14.54 kmol →
+  el aire de blanqueo sube 500→**3 218.7 t/a** (O2 estequiométrico + 2.5%
+  de exceso en colas, el diseño real de una torre Ostwald).
+- Agua de absorción 3 000→**1 532.9** (la que admite el balance con ácido
+  al 60% y colas al 2.9% de humedad).
+- Colas A14 re-derivadas (14 043.9 t/a, comp exacta hasta el stack) y
+  blanqueador V-501 ajustado (vent 91.8 t/a, producto final 5 615.9 @61%).
+
+**El catálogo completo audita limpio en especie Y elemental: ratchet
+41/41, _KNOWN_DIRTY vacío.**  Con esto cierran los cuatro estructurales
+históricos (§14 hda_full, §15 industrial, §16 talara, §17 hno3).

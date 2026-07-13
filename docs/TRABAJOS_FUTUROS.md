@@ -138,12 +138,18 @@ Cada ítem indica dónde está el código y por qué quedó fuera de alcance.
     Balance elemental EXACTO (ratchet 40/41); ISBL +0.36% (compresor de
     CH4 re-dimensionado al caudal real).
 
-17. **hno3 — T-401 produce más HNO3 del que sus NOx permiten (elemental
-    MAYOR, confinado)**: con los feeds actuales (NOx de R-301 + agua +
-    aire de blanqueo), el N reactivo disponible (~52 kmol/a NO+NO2) no
-    alcanza para el producto declarado (6 200 t/a @60% = 59 kmol de HNO3
-    + colas).  El spec del ejemplo excede el balance atómico: cerrar exige
-    re-derivar el tren de absorción completo (conversión de R-301, caudal
-    de crudo/colas, y el turboexpansor K-501 aguas abajo).  Emparentado
-    con el acople oxidación/absorción documentado en
-    docs/hno3_e203_oxidacion_override.md.  Confinado en el ratchet.
+17. ✅ **hno3 — T-401 produce más HNO3 del que sus NOx permiten** —
+    RESUELTO (sesión 2026-07).  El tren de absorción se RE-DERIVÓ completo
+    con extents exactos de R033 (re-oxidación del NO que la absorción
+    regenera) + R034 (3NO2+H2O→2HNO3+NO), manteniendo las specs de diseño
+    (ácido 60%, slips de abatement NO=10 / NO2=2.5 t/a, colas con 2.5% O2
+    y 2.9% agua):
+    · producto A13 6 200→5 707.7 t/a (el alcanzable con el N alimentado);
+    · aire de blanqueo 500→3 218.7 t/a — la torre necesita el O2 de la
+      re-oxidación (ξ1=14.54 kmol), el aire anterior era 6× chico;
+    · agua de absorción 3 000→1 532.9 t/a (la que el balance de agua admite
+      con el producto al 60%);
+    · colas A14 re-derivadas (14 043.9 t/a) y blanqueador V-501 ajustado
+      (vent 91.8, producto final 5 615.9 @61%).
+    Balance por especie Y elemental 0/0 → el ratchet elemental queda
+    **41/41** (catálogo completo limpio, _KNOWN_DIRTY vacío).

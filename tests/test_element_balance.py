@@ -6,14 +6,11 @@ real) y los placeholders con outputs escritos a mano.  Cobertura:
 
   (A) Unidad: parser de fórmulas y reparto de masa elemental.
   (B) Detector: un reactor con output que crea átomos dispara.
-  (C) RATCHET del catálogo: tras la sesión 2026-07, 40/41 ejemplos auditan
-      elemental-limpio.  El hallazgo ESTRUCTURAL conocido queda confinado
-      a su bloque (deuda documentada en TRABAJOS_FUTUROS §17):
-        · hno3/T-401: el HNO3 producido excede el N de los NOx alimentados
-          (el spec 6 200 t/a @60% no es alcanzable con ese feed) — requiere
-          re-derivar el tren de absorción completo.
-      (talara/R-SMR se cerró en esta misma sesión: feed de vapor C21-steam
-      + resize CH4/CO2 por estequiometría exacta, H2 de los HDT intacto.)
+  (C) RATCHET del catálogo: 41/41 ejemplos auditan elemental-limpio tras
+      la sesión 2026-07 (talara/R-SMR cerrado con feed de vapor + resize
+      exacto; hno3/T-401 cerrado re-derivando el tren de absorción con
+      extents R033+R034: producto 5 707.7 t/a @60%, aire de blanqueo
+      3 218.7, agua 1 532.9).  Cualquier hallazgo nuevo es regresión.
 """
 import os
 import sys
@@ -26,7 +23,8 @@ from flowsheet_model import Block, Stream, Flowsheet
 aec._headless()
 
 # Ejemplos con hallazgos elementales ESTRUCTURALES conocidos → bloque dueño.
-_KNOWN_DIRTY = {"hno3": "T-401"}
+# (vacío desde 2026-07: el catálogo completo audita elemental-limpio)
+_KNOWN_DIRTY = {}
 
 
 # ── (A) unidad ──────────────────────────────────────────────────────────
@@ -84,8 +82,9 @@ def test_pseudo_sin_formula_saltea_sin_ruido():
 
 # ── (C) ratchet del catálogo ───────────────────────────────────────────
 def test_catalogo_elemental_ratchet():
-    """39/41 ejemplos elemental-limpios; los 2 conocidos confinados a su
-    bloque estructural documentado.  Cualquier hallazgo nuevo = regresión."""
+    """41/41 ejemplos elemental-limpios (con _KNOWN_DIRTY vacío).  Cualquier
+    hallazgo nuevo = regresión; si un ejemplo entra en deuda documentada,
+    registrarlo en _KNOWN_DIRTY con su bloque dueño."""
     for key in aec._example_keys():
         rep = aec.audit_example(key)
         ef = rep["element_findings"]
