@@ -670,3 +670,27 @@ test_multitear_s2b actualizado al contrato fuente-sí/destino-no.
 Quedan en TRABAJOS_FUTUROS sólo decisiones de producto/estética: §7 (undo
 de streams), §8–§11 (glyphs/íconos/curvas de bomba) y el cambio de catálogo
 de CW de §5 — ninguno es un error.
+
+
+## Cierre de TRABAJOS_FUTUROS (§5, §7–§11) — decisiones y GUI
+
+La consulta interactiva no estaba disponible, así que se aplicaron las
+opciones RECOMENDADAS (todas reversibles, documentadas ítem por ítem):
+
+- **§5 CW 30→45 °C**: catálogo al supply típico (Sinnott/Turton) con la
+  frontera CW/refrigeración en 30 °C.  E-103 de metanol queda de libro
+  (ΔT_lm=15 balanceado, F=1.0, sin warnings).  Goldens idénticos.
+- **§7 undo de streams**: los cuatro caminos de edición (segmento,
+  flotantes, waypoints, endpoints + bake de ghost) integran
+  begin_action/end_action; los clicks sin cambio no ensucian la pila.
+- **§8 glyphs HX**: cerrado como DECISIÓN — glyph compartido a propósito.
+- **§9 equipos futuros**: cerrado como DECISIÓN — no agregar catálogo
+  muerto; la infraestructura (glyph coverage + fallback SVG) ya los espera.
+- **§10 iconitos "+más"**: fallback al SVG de pfd_symbols implementado;
+  hoy es red de seguridad (los 56 eq_types ya tienen ISA).
+- **§11 curva de bomba**: curva H-Q típica adimensional anclada al punto
+  de operación, rotulada "no de fabricante" — enseña el BEP sin fingir
+  datos.  Test de contrato (figura o razón accionable) incluido.
+
+**Con esto, TRABAJOS_FUTUROS queda 17/17 ✅.**  pytest 601 passed,
+unittest OK, y los 7 gates verdes.

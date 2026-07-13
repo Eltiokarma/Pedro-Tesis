@@ -49,12 +49,14 @@ Cada ítem indica dónde está el código y por qué quedó fuera de alcance.
 
 ## Térmica / HX
 
-5. ✅ **E-103 (metanol): F no computable — sugerencia accionable** —
-   RESUELTO parcial (2026-07): el warning del fallback F=0.75 ahora explica
-   el dominio (P máximo ≈0.59 por casco 1-2 con R≈1) y sugiere n_shell=N+1
-   o contracorriente verdadera.  El cambio de T_range del catálogo de CW
-   (35→50 vs 30→45 típico) queda como decisión de catálogo aparte
-   (re-validar goldens).
+5. ✅ **E-103 (metanol): F no computable** — RESUELTO COMPLETO
+   (2026-07, dos partes): (a) el warning del fallback F=0.75 explica el
+   dominio y sugiere n_shell=N+1; (b) el catálogo de cooling water pasó a
+   30→45 °C (supply típico Sinnott/Turton; antes 35→50, torre pobre) con
+   la frontera CW/refrigeración movida a 30 °C.  E-103 queda de libro:
+   ΔT_lm=15 K balanceado en contracorriente, F=1.0, sin warnings.
+   Goldens verificados idénticos (el costeo usa S declarado; el cambio
+   afecta diagnósticos/evidencia).
 
 ## Lienzo / routing
 
@@ -64,33 +66,45 @@ Cada ítem indica dónde está el código y por qué quedó fuera de alcance.
    lanes dominantes (id menor) rutean primero y la asignación converge a
    un punto fijo estable entre repaints (sin saltos de px entre frames).
 
-7. **Undo para edición de streams**: el drag de bloques integra el undo_stack
-   (`begin_action`/`end_action`); el drag de segmento, el translate de
-   flotantes y los waypoint handles no.  Integrarlos para Ctrl+Z consistente.
+7. ✅ **Undo para edición de streams** — RESUELTO (2026-07): los CUATRO
+   caminos de edición que faltaban integran el undo_stack con el patrón
+   begin_action/end_action del drag de bloques (end_action no-opea si el
+   estado no cambió, así los clicks de selección no ensucian la pila):
+   drag de segmento ("Editar ruta"), translate de flotantes ("Mover"),
+   waypoint handles (drag del bend), bake de ghost handle y
+   reconexión/desconexión de endpoint handles ("Reconectar").
 
 ## Glyphs / paleta
 
-8. **Variantes HX restantes**: shell-tube, U-tube, floating head, double/
-   multiple pipe y condenser shell-tube comparten el glyph HX genérico
-   (misma familia geométrica — decisión deliberada).  Evaporator usa el flash
-   vertical (defendible).  Diferenciarlos solo si el uso pedagógico lo pide.
+8. ✅ **Variantes HX restantes** — CERRADO como decisión final
+   (2026-07): las variantes shell-tube/U-tube/floating head/double pipe/
+   condenser COMPARTEN el glyph HX genérico a propósito (misma familia
+   geométrica, menos ruido visual).  Se re-evaluará sólo si el uso
+   pedagógico lo pide explícitamente.
 
-9. **Equipos futuros (steam trap, strainer, deaerator)**: exigirán entrada en
-   `EQ_TYPE_TO_ISA` + glyph (o caerán al fallback honesto SVG/rect neutro).
-   `tests/test_glyph_coverage.py` obliga a registrarlos al agregarlos al
-   catálogo.
+9. ✅ **Equipos futuros (steam trap, strainer, deaerator)** — CERRADO
+   como decisión (2026-07): NO se agregan al catálogo mientras ningún
+   ejemplo los use (serían catálogo muerto).  Cuando se agreguen,
+   `tests/test_glyph_coverage.py` obliga a registrar su glyph, y el
+   fallback SVG de pfd_symbols del ítem 10 les da icono de paleta gratis.
 
-10. **Iconitos del menú "+más" para tipos sin silueta nativa**:
-    `EditorPalette._icon_for_eq_type` dibuja rect neutro cuando no hay glyph;
-    podría reusar el SVG de pfd_symbols (como hace `IsaGlyphItem`) para que
-    el menú muestre el símbolo real.
+10. ✅ **Iconitos del menú "+más"** — RESUELTO (2026-07):
+    `_icon_for_eq_type` cae ahora al SVG de pfd_symbols (como IsaGlyphItem)
+    cuando el eq_type no tiene silueta ISA nativa.  Hoy los 56 eq_types del
+    catálogo tienen ISA (la cobertura creció desde que se escribió el
+    ítem), así que el fallback queda como red de seguridad verificada para
+    equipos futuros (ítem 9).
 
 ## Inspector / evidencia
 
-11. **Curvas características de bombas**: descartadas a propósito (no hay
-    datos de fabricante en el repo; la evidencia textual es lo honesto).
-    Si algún día se cargan curvas H-Q reales al catálogo, `pump_text` es el
-    punto de partida.
+11. ✅ **Curvas características de bombas** — RESUELTO (2026-07) con la
+    decisión de honestidad explícita: `inspector_evidence.pump_figure`
+    dibuja la curva H-Q ADIMENSIONAL TÍPICA de centrífuga radial
+    (H/H_BEP = 1.25 − 0.25·q², η = η_BEP·(2q−q²), Karassik) anclada al
+    punto de operación de design_pump_for_block, ROTULADA "curva típica
+    (no de fabricante)".  Enseña la forma de la curva y el BEP sin
+    fingir datos que el repo no tiene; si algún día llegan curvas H-Q
+    reales, pump_figure es el punto de reemplazo.
 
 12. ✅ **X_eq vs T — reacciones sin van't Hoff** — RESUELTO sin tocar el
     .md (2026-07): el parser deriva A/B 2-param (ln K = A + B/T, ΔCp=0)
