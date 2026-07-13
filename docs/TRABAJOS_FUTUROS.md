@@ -9,15 +9,11 @@ Cada ítem indica dónde está el código y por qué quedó fuera de alcance.
 
 ## Solver
 
-1. **SCC mixto proceso+aux — tear elige corriente auxiliar** (`flowsheet_solver.py`,
-   `_choose_tear` ~4380).  En `hda_full`+aux, Tarjan fusiona el reciclo de
-   gas/tolueno con dos lazos CW (comparten HXs) en un SCC de 18 bloques.  Todos
-   los DESCONOCIDOS del SCC son corrientes aux (el proceso está declarado),
-   pero el criterio conservador mandatado ("solo eximir SCC 100% aux") lo manda
-   a Wegstein, que elige `U-aux-1` de tear y falla en 1 iter (igual que antes
-   del fix — preexistente).  Mejoras candidatas: (a) `_choose_tear` prefiere
-   desconocidos NO-aux; (b) eximir también cuando todos los desconocidos del
-   SCC son auto_aux.  Ambas requieren revisar los 41 goldens.
+1. ✅ **SCC mixto proceso+aux — tear elige corriente auxiliar** —
+   RESUELTO como efecto de §3 (verificado 2026-07): con S2-D y el contrato
+   fuente/destino del tear, el multitear (Broyden, 11 tears) converge el
+   SCC mixto de hda_full+aux en 12 iteraciones sin warnings espurios.
+   Regresión congelada en tests/test_tf_pendientes_menores.py.
 
 2. ✅ **`is_cross_exchange` cuenta corrientes auto_aux** (`flowsheet_solver.py`).
    RESUELTO (sesión 2026-07): el conteo estructural ≥2 in / ≥2 out excluye
@@ -45,31 +41,28 @@ Cada ítem indica dónde está el código y por qué quedó fuera de alcance.
    regresión permanente en tests/test_splitter_tearing.py.  Goldens
    regenerados (5 ejemplos con refinamientos ≤0.2 kW + industrial vivo).
 
-4. **Inferencia de duty en HX standalone**: con un HX aislado (agua 80→40 °C,
-   flujo y T lockeados) el solver no infiere el duty → el lazo de servicio
-   reporta "m pendiente (HX sin duty)".  Revisar las condiciones de
-   `_infer_duty` para ese caso mínimo (hoy solo se puebla en flowsheets
-   completos).
+4. ✅ **Inferencia de duty en HX standalone** — VERIFICADO RESUELTO
+   (2026-07): el caso mínimo (HX aislado, agua 80→40 °C con flujo y Ts
+   lockeados) infiere duty=−5.3 kW y el lazo de servicio se dimensiona
+   analíticamente (m=2 649 tm/año, sin "m pendiente").  Congelado en
+   tests/test_tf_pendientes_menores.py.
 
 ## Térmica / HX
 
-5. **E-103 (metanol): F no computable — límite real del modelo 1-2.**
-   Con proceso 60→45 °C y cooling water 35→50 °C (catálogo), R=1 y P=0.6
-   exceden la factibilidad de un casco 1-2 (P_max(R=1)≈0.586) → F cae al
-   0.75 conservador con warning honesto.  Mejoras: sugerir `n_shell=2` en el
-   propio warning, y/o revisar el `T_range` de cooling water del catálogo de
-   utilities (35→50; lo típico es 30→45 [típico], que haría F computable ≈0.9).
-   Cambio de catálogo = re-validar goldens.
+5. ✅ **E-103 (metanol): F no computable — sugerencia accionable** —
+   RESUELTO parcial (2026-07): el warning del fallback F=0.75 ahora explica
+   el dominio (P máximo ≈0.59 por casco 1-2 con R≈1) y sugiere n_shell=N+1
+   o contracorriente verdadera.  El cambio de T_range del catálogo de CW
+   (35→50 vs 30→45 típico) queda como decisión de catálogo aparte
+   (re-validar goldens).
 
 ## Lienzo / routing
 
-6. **Lane offset orden-dependiente**: `_apply_lane_offset` depende de los
-   `_last_pts` vigentes de los demás streams, que evolucionan entre repaints
-   (el timer de animación re-rutea) → un path autoruteado puede desplazarse
-   unos px entre frames.  No afecta la interacción (el hit-test usa la
-   geometría del momento del press), pero explica "saltos" visuales.
-   Determinizar el orden de asignación de lanes (p. ej. por id, en una pasada
-   global) o cachear lanes por par de streams.
+6. ✅ **Lane offset orden-dependiente** — RESUELTO (2026-07): el re-ruteo
+   global va ahora en orden DETERMINISTA por id de stream
+   (stream_items_iter ordenado + los dos loops bulk de update_path): los
+   lanes dominantes (id menor) rutean primero y la asignación converge a
+   un punto fijo estable entre repaints (sin saltos de px entre frames).
 
 7. **Undo para edición de streams**: el drag de bloques integra el undo_stack
    (`begin_action`/`end_action`); el drag de segmento, el translate de
@@ -99,9 +92,14 @@ Cada ítem indica dónde está el código y por qué quedó fuera de alcance.
     Si algún día se cargan curvas H-Q reales al catálogo, `pump_text` es el
     punto de partida.
 
-12. **X_eq vs T — 10 reacciones sin van't Hoff** (R022–R031): hoy producen el
-    placeholder honesto con la lista de ids.  Completar A/B en
-    `data/reactions_db.md` con fuentes para habilitarlas.
+12. ✅ **X_eq vs T — reacciones sin van't Hoff** — RESUELTO sin tocar el
+    .md (2026-07): el parser deriva A/B 2-param (ln K = A + B/T, ΔCp=0)
+    desde los ΔH/ΔG a 298 K YA curados con fuentes en cada entrada —
+    B=−ΔH/R, A=lnK298−B/298.15 (la misma forma de build_custom_reaction).
+    GUARD del invariante del seam: sólo derivan las reacciones con TODAS
+    sus especies sourceadas (MW>0) → R026 y R028 habilitadas; las demás
+    (polietileno, jabón, cal, urea, MDEA) siguen placeholder honesto
+    porque su X_eq no sería resoluble de todos modos.
 
 ## Balance de masa por componente (auditoría — harness audit_examples_components.py)
 
