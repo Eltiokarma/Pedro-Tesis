@@ -2429,6 +2429,26 @@ class _StreamHandle(QGraphicsEllipseItem):
         except Exception:
             pass
 
+    def mousePressEvent(self, event):
+        # TF §7: snapshot para undo del drag de waypoint (el move real lo
+        # hace el default de QGraphicsItem via itemChange)
+        if event.button() == Qt.LeftButton:
+            si = self._stream_item
+            editor = getattr(si, "editor", None) if si is not None else None
+            self._undo_before = (editor.begin_action()
+                                 if editor is not None else None)
+        super().mousePressEvent(event)
+
+    def mouseReleaseEvent(self, event):
+        super().mouseReleaseEvent(event)
+        if event.button() == Qt.LeftButton                 and getattr(self, "_undo_before", None) is not None:
+            si = self._stream_item
+            editor = getattr(si, "editor", None) if si is not None else None
+            if editor is not None:
+                nm = si.model.name if (si is not None and si.model) else ""
+                editor.end_action(f"Editar ruta {nm}", self._undo_before)
+            self._undo_before = None
+
     def itemChange(self, change, value):
         # GUARD: si el stream subyacente fue borrado pero el handle
         # quedó vivo (caso reportado: borrar nodo + drag posterior →
@@ -2944,6 +2964,9 @@ class _GhostStreamHandle(QGraphicsEllipseItem):
 
     def mousePressEvent(self, event):
         si = self._stream_item
+        # TF §7: el bake de bends muta model.waypoints → una acción de undo
+        editor = getattr(si, "editor", None)
+        before = editor.begin_action() if editor is not None else None
         pts = getattr(si, '_last_pts', None)
         if pts and len(pts) >= 6:
             # bakear todos los bend points interiores en model.waypoints
@@ -2956,6 +2979,8 @@ class _GhostStreamHandle(QGraphicsEllipseItem):
             # la posición clickeada
             si.model.waypoints = [[self.pos().x(), self.pos().y()]]
         si.update_path()
+        if editor is not None:
+            editor.end_action(f"Editar ruta {si.model.name}", before)
         event.accept()
 
 
@@ -3117,6 +3142,12 @@ class _EndpointHandle(QGraphicsEllipseItem):
         if event.button() == Qt.LeftButton:
             self._press_pos = QPointF(self.pos())   # pos del handle al apretar
             self._drag_committed = False
+            # TF §7: snapshot para undo del drag de endpoint (reconexión /
+            # dejar flotante).  end_action no-opea en drags accidentales.
+            si = self._stream_item
+            editor = getattr(si, "editor", None) if si is not None else None
+            self._undo_before = (editor.begin_action()
+                                 if editor is not None else None)
         super().mousePressEvent(event)
 
     def mouseDoubleClickEvent(self, event):
@@ -3288,12 +3319,19 @@ class _EndpointHandle(QGraphicsEllipseItem):
         super().mouseReleaseEvent(event)
         self._press_pos = None
         self._drag_committed = False
+        # TF §7: capturar el snapshot ANTES del update_path (puede destruir
+        # 'self' vía _rebuild_handles — tocar self después sería inseguro).
+        _undo_before = getattr(self, "_undo_before", None)
+        self._undo_before = None
         # Refresh (puede destruir 'self' via _rebuild_handles)
         si.update_path()
         # Notificar al editor que algo cambió (mark_dirty)
         editor = getattr(si, "editor", None)
         if editor is not None and hasattr(editor, "_mark_dirty"):
             editor._mark_dirty()
+        # TF §7: push undo de la reconexión / desconexión del endpoint
+        if editor is not None and _undo_before is not None:
+            editor.end_action(f"Reconectar {si.model.name}", _undo_before)
 
 
 # ── PRINCIPIO "TODO LO AUTO SE VE" (FASE 4) ────────────────────────────
@@ -5040,6 +5078,9 @@ class StreamItem(QGraphicsPathItem):
             has_floating = (s.src == -1 or s.dst == -1)
             if not has_floating:
                 if self._begin_segment_drag(event.scenePos()):
+                    # TF §7: snapshot para undo del drag de segmento
+                    if self.editor is not None:
+                        self._undo_before = self.editor.begin_action()
                     self.setSelected(True)
                     event.accept()
                     return
@@ -5050,6 +5091,9 @@ class StreamItem(QGraphicsPathItem):
             self.setSelected(True)
             self._drag_origin = event.scenePos()
             self._drag_snap = self._translation_snapshot()
+            # TF §7: snapshot para undo del translate de flotante
+            if self.editor is not None:
+                self._undo_before = self.editor.begin_action()
             event.accept()
             return
         super().mousePressEvent(event)
@@ -5078,11 +5122,21 @@ class StreamItem(QGraphicsPathItem):
                 # _simplify_orthogonal del render; el modelo conserva
                 # la ruta del usuario).
                 self.update_path(rebuild_handles=True)
+            # TF §7: push undo (end_action no-opea si no hubo cambio real,
+            # p.ej. click de selección sin drag)
+            if self.editor is not None                     and getattr(self, "_undo_before", None) is not None:
+                self.editor.end_action(f"Editar ruta {self.model.name}",
+                                       self._undo_before)
+                self._undo_before = None
             event.accept()
             return
         if getattr(self, "_drag_origin", None) is not None:
             self._drag_origin = None
             self._drag_snap = None
+            if self.editor is not None                     and getattr(self, "_undo_before", None) is not None:
+                self.editor.end_action(f"Mover {self.model.name}",
+                                       self._undo_before)
+                self._undo_before = None
             event.accept()
             return
         super().mouseReleaseEvent(event)
@@ -7211,8 +7265,9 @@ class FlowsheetMainWindow(QMainWindow):
                 f"  {tag} {r['stream_name']} (block {r['block_name']}): "
                 f"duty={duty_s}, T_final={r['t_final']:.1f}°C  [{r['message']}]"
             )
-        # refrescar streams en escena
-        for sid, sit in self.scene.stream_items.items():
+        # refrescar streams en escena (orden por id — TF §6)
+        for sid, sit in sorted(self.scene.stream_items.items(),
+                               key=lambda kv: kv[1].model.id):
             sit.update_path()
         QMessageBox.information(self, "Goal-seek resultado",
                                   "\n".join(report))
@@ -8019,7 +8074,13 @@ class FlowsheetMainWindow(QMainWindow):
     # ---------------------------------------------------
 
     def stream_items_iter(self):
-        return self.scene.stream_items.items()
+        # TF §6: orden DETERMINISTA por id.  El lane offset de un stream
+        # depende de los _last_pts vigentes de los demás; si el re-ruteo
+        # global va por id ascendente, los dominantes (id menor) rutean
+        # primero y la asignación de lanes converge a un punto fijo estable
+        # entre repaints (sin "saltos" de unos px entre frames).
+        return sorted(self.scene.stream_items.items(),
+                      key=lambda kv: getattr(kv[1].model, "id", kv[0]))
 
     def block_items_iter(self):
         return self.scene.block_items.items()
@@ -8145,8 +8206,10 @@ class FlowsheetMainWindow(QMainWindow):
     def _refresh_all_stream_paths(self):
         """Re-renderiza el path de TODOS los streams.  Necesario después
         de mover bloques o de un solve, para que los cruces (jumpers)
-        queden coherentes."""
-        for sid, item in self.scene.stream_items.items():
+        queden coherentes.  Orden por id (TF §6): los lanes dominantes
+        rutean primero → asignación determinista entre repaints."""
+        for sid, item in sorted(self.scene.stream_items.items(),
+                                key=lambda kv: kv[1].model.id):
             item.update_path(rebuild_handles=False)
         # Burbujas: actualizar leaders (anclas de streams cambiaron)
         if getattr(self, "_bubble_manager", None) is not None:

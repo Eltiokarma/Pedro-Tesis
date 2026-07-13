@@ -31,10 +31,12 @@ def test_passthrough_propaga_comp_desde_inlet():
 
 
 def test_passthrough_io_clasifica_air_cooler():
+    """Tras el split WHB+trim de la integración energética, E-102 (WHB)
+    descarga en S-5-hot (el trim cooler E-102T hace S-5-hot → S-5)."""
     fs = reg.load_example("hda_full")
     fsv.solve(fs)
     io = fsv._passthrough_io(_block(fs, "E-102"), fs)        # 1-in-1-out
-    assert io is not None and (io[0].name, io[1].name) == ("S-4b", "S-5")
+    assert io is not None and (io[0].name, io[1].name) == ("S-4b", "S-5-hot")
 
 
 def test_feed_effluent_hx_NO_es_passthrough():
@@ -46,11 +48,40 @@ def test_feed_effluent_hx_NO_es_passthrough():
 
 
 # (b) override: comp declarada que difiere se conserva + warning ──────────
-def test_override_conservado_y_warning():
-    """hno3/E-203 (air cooler) hardcodea la oxidación NO+½O2→NO2: su outlet
-    A8-gas-cool tiene NO2 que el inlet no trae.  El motor CONSERVA esa comp
-    y emite [W-COMP-OVERRIDE]."""
+#
+# El caso real original (hno3/E-203 con la oxidación hardcodeada en
+# A8-gas-cool) fue RETIRADO en la campaña de warnings 2026-07: la composición
+# ahora se propaga y la oxidación vive en V-201 como química declarada
+# (inline_reaction R033+R034).  El MECANISMO de override sigue vivo en el
+# motor, así que estos tests re-introducen el defecto EN MEMORIA (patrón
+# detector-sigue-vivo) y verifican que el catálogo quedó limpio.
+
+# Composición históricamente hardcodeada en A8-gas-cool (oxidación parcial
+# NO+½O₂→NO₂ escrita a mano — ver docs/hno3_e203_oxidacion_override.md).
+_A8_OVERRIDE = {
+    "nitric oxide": 0.07999893334755537,
+    "nitrogen": 0.7189904134611538,
+    "nitrogen dioxide": 0.04907934560872522,
+    "nitrous oxide": 0.000999986666844442,
+    "oxygen": 0.04493273423021026,
+    "water": 0.10599858668551085,
+}
+
+
+def _hno3_con_override_en_memoria():
+    """Carga hno3 y RE-INTRODUCE el override retirado: A8-gas-cool declara
+    una composición distinta a su inlet (E-203 es pass-through)."""
     fs = reg.load_example("hno3")
+    out = _stream(fs, "A8-gas-cool")
+    out.composition = dict(_A8_OVERRIDE)
+    out.composition_locked = True
+    return fs
+
+
+def test_override_conservado_y_warning():
+    """Un pass-through cuyo outlet declara comp ≠ inlet conserva la comp
+    declarada y emite [W-COMP-OVERRIDE] (mecanismo vivo, fixture en memoria)."""
+    fs = _hno3_con_override_en_memoria()
     res = fsv.solve(fs)
     out = _stream(fs, "A8-gas-cool").composition
     assert out.get("nitrogen dioxide", 0) > 0.01        # override conservado
@@ -58,55 +89,32 @@ def test_override_conservado_y_warning():
     assert len(hits) == 1 and "A8-gas-cool" in hits[0]
 
 
-def test_override_e203_balance_oxidacion_consistente():
-    """El override de E-203 es FINGIDO pero físicamente consistente: la
-    composición declarada de A8-gas-cool corresponde a NO + ½O₂ → NO₂ con
-    cierre de masa y O₂ disponible (Camino B — ver docs/hno3_e203_oxidacion_
-    override.md).  Codifica la auditoría: el número no es imposible."""
-    import os
-    fs = reg.load_example("hno3")
-    fsv.solve(fs)
-    inn = _stream(fs, "A7b-gas-eco")
-    out = _stream(fs, "A8-gas-cool")
-    m = inn.mass_flow
-    no_c = (inn.composition["nitric oxide"] - out.composition["nitric oxide"]) * m
-    o2_c = (inn.composition["oxygen"] - out.composition["oxygen"]) * m
-    no2_p = out.composition["nitrogen dioxide"] * out.mass_flow
-    MW = {"NO": 30.01, "O2": 32.00, "NO2": 46.01}
-    # estequiometría NO + ½O₂ → NO₂: O₂_cons/NO_cons (mol) ≈ 0.5
-    assert abs((o2_c / MW["O2"]) / (no_c / MW["NO"]) - 0.5) < 0.02
-    # NO consumido (mol) = NO₂ producido (mol)
-    assert abs(no_c / MW["NO"] - no2_p / MW["NO2"]) / (no2_p / MW["NO2"]) < 0.02
-    # cierre de masa: NO_cons + O₂_cons = NO₂_prod
-    assert abs((no_c + o2_c) - no2_p) / no2_p < 0.01
-    # O₂ disponible: queda O₂ en el outlet (el número no es imposible)
-    assert out.composition["oxygen"] * out.mass_flow > 0
-    # decisión documentada (Camino B): la nota de override existe
-    doc = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
-                       "docs", "hno3_e203_oxidacion_override.md")
-    assert os.path.isfile(doc), "falta la nota de decisión del override de E-203"
+def test_v201_oxidacion_y_absorcion_consistentes():
+    """La química que antes vivía hardcodeada en E-203 ahora está DECLARADA
+    en V-201 (cooler-condenser Ostwald): R033 (2NO+O₂→2NO₂) + R034
+    (3NO₂+H₂O→2HNO₃+NO) explican el cambio de composición por mínimos
+    cuadrados (auditor de balance por componente → 0 hallazgos)."""
+    import audit_examples_components as aec
+    v201 = _block(reg.load_example("hno3"), "V-201")
+    assert sorted(v201.inline_reaction) == ["R033", "R034"]
+    rep = aec.audit_example("hno3")
+    assert rep["n_critico"] == 0 and rep["n_mayor"] == 0, rep["findings"]
 
 
 def test_warning_es_advisory_no_altera_status():
-    fs = reg.load_example("hno3")
+    fs = _hno3_con_override_en_memoria()
     res = fsv.solve(fs)
     assert any("W-COMP-OVERRIDE" in w for w in res.awareness_warnings)
     assert res.overall_status in ("ok", "warning")       # NO 'error'
 
 
-def test_override_dispara_solo_en_hno3():
-    """De los ~120 pass-through con comp == inlet, ninguno dispara override;
-    solo hno3/E-203 (química hardcodeada)."""
-    total = 0
+def test_catalogo_sin_overrides():
+    """Ningún ejemplo del catálogo dispara W-COMP-OVERRIDE: el único caso
+    (hno3/E-203) fue retirado — su química es ahora declarada en V-201."""
     for meta in reg.list_examples():
         res = fsv.solve(reg.load_example(meta["clave"]))
         hits = [w for w in res.awareness_warnings if "W-COMP-OVERRIDE" in w]
-        if meta["clave"] == "hno3":
-            assert len(hits) == 1
-        else:
-            assert not hits, f"{meta['clave']} no debería tener override"
-        total += len(hits)
-    assert total == 1
+        assert not hits, f"{meta['clave']} no debería tener override: {hits}"
 
 
 # (c) reactores/flashes/columnas NO se ven afectados ─────────────────────

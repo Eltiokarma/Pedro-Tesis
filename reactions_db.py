@@ -621,6 +621,40 @@ def _parse_one(rxn_id: str, body: str) -> Optional[Reaction]:
     m = re.search(r"^-?\s*B\s*=\s*([+-]?[\d.eE+-]+)\s*K", body, re.MULTILINE)
     if m: rxn.vant_hoff_B = float(m.group(1))
 
+    # TF §12 — derivación 2-param cuando el .md no trae A/B pero SÍ trae
+    # ΔH y ΔG curados a 298 K (con sus fuentes en la propia entrada):
+    #   ln K = A + B/T  (forma del catálogo, ΔCp = 0)
+    #   B = −ΔH/R   ·   ln K(298) = −ΔG/(R·298.15)   ·   A = lnK298 − B/298
+    # Es la MISMA forma 2-param que usa build_custom_reaction; habilita la
+    # curva X_eq(T) del inspector sin duplicar datos derivados en el .md.
+    # GUARD (invariante del seam de equilibrio): sólo si TODAS las especies
+    # de la reacción resuelven en thermo_db con MW>0 — una reacción con
+    # pseudo-componentes sin MW (polietileno, jabón, cal, urea) no es
+    # resoluble por el seam aunque tenga K(T), y darle A/B rompería el
+    # invariante "van't Hoff ⇒ especies sourceadas".  Las entradas con A/B
+    # explícitos no se tocan.
+    if (rxn.vant_hoff_A is None and rxn.vant_hoff_B is None
+            and rxn.dh_rxn_298_kJ_mol is not None
+            and rxn.dg_rxn_298_kJ_mol is not None
+            and rxn.stoich):
+        def _all_species_sourced():
+            try:
+                import thermo_db as _td
+            except ImportError:
+                return False
+            for sp in rxn.stoich:
+                tn = sp.thermo_name
+                c = _td.get(tn) if tn else None
+                if c is None or not getattr(c, "mw", 0) or c.mw <= 0:
+                    return False
+            return True
+        if _all_species_sourced():
+            _R = 8.314462618e-3          # kJ/(mol·K)
+            B = -rxn.dh_rxn_298_kJ_mol / _R
+            lnK298 = -rxn.dg_rxn_298_kJ_mol / (_R * 298.15)
+            rxn.vant_hoff_A = lnK298 - B / 298.15
+            rxn.vant_hoff_B = B
+
     # Irreversible
     rxn.irreversible = "Marcado irreversible" in body or "marcado irreversible" in body
 

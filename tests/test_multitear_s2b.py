@@ -26,8 +26,12 @@ from tests.test_multitear_anchor import build_dual_recycle_fs
 
 
 def test_active_tear_not_deduced_by_balance():
-    """Un bloque 1-in(lock 100)/1-out(0): normalmente mass_iteration deduce
-    out=100.  Marcado como tear activo, NO se deduce (queda en 0)."""
+    """Contrato S2-B refinado (TF §3): un tear activo SÍ puede PRODUCIRSE en
+    su bloque FUENTE (deducción forward Σin−Σotros_out — necesaria cuando la
+    fuente es un pass-through, p.ej. el compresor de reciclo K-202 de
+    industrial), pero NUNCA deducirse en su bloque DESTINO (unknown_ins del
+    mixer) — esa es la deducción circular RC2 que devolvía el propio guess."""
+    # (a) FUENTE: 1-in(lock 100)/1-out(tear, 0) → se PRODUCE forward.
     fs = Flowsheet()
     b = fs.new_id()
     fs.blocks[b] = Block(id=b, name="B", eq_type="Mixer — static",
@@ -38,17 +42,34 @@ def test_active_tear_not_deduced_by_balance():
     so = Stream(id=fs.new_id(), name="out", src=b, dst=-1, mass_flow=0.0)
     fs.streams[so.id] = so
 
-    # sin marcar → se deduce
-    F._ACTIVE_TEAR_IDS = set()
-    F._solve_mass_iteration(fs)
-    assert so.mass_flow == 100.0
-
-    # marcado como tear activo → NO se deduce
-    so.mass_flow = 0.0
     F._ACTIVE_TEAR_IDS = {so.id}
     try:
         F._solve_mass_iteration(fs)
-        assert so.mass_flow == 0.0, "el tear activo no debe deducirse por balance"
+        assert so.mass_flow == 100.0, \
+            "el tear debe PRODUCIRSE en su bloque fuente (forward)"
+    finally:
+        F._ACTIVE_TEAR_IDS = set()
+
+    # (b) DESTINO: mixer con out resuelto (stale del guess) y el tear como
+    # única entrada desconocida → NO se deduce backward (el eco RC2).
+    fs2 = Flowsheet()
+    m = fs2.new_id()
+    fs2.blocks[m] = Block(id=m, name="MIX", eq_type="Mixer — static",
+                          S=1.0, x=0, y=0)
+    f2 = Stream(id=fs2.new_id(), name="feed", src=-1, dst=m, mass_flow=50.0)
+    f2.mass_flow_locked = True
+    fs2.streams[f2.id] = f2
+    tear2 = Stream(id=fs2.new_id(), name="rec", src=-1, dst=m, mass_flow=0.0)
+    fs2.streams[tear2.id] = tear2
+    out2 = Stream(id=fs2.new_id(), name="mix-out", src=m, dst=-1,
+                  mass_flow=60.0)          # stale: propagado desde un guess
+    fs2.streams[out2.id] = out2
+
+    F._ACTIVE_TEAR_IDS = {tear2.id}
+    try:
+        F._solve_mass_iteration(fs2)
+        assert tear2.mass_flow == 0.0, \
+            "el tear NO debe deducirse backward en su bloque destino (RC2)"
     finally:
         F._ACTIVE_TEAR_IDS = set()
 

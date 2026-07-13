@@ -421,3 +421,276 @@ Estos se dejan visibles a propósito (el simulador es honesto sobre los
 regímenes donde su modelo simplificado no aplica), coherente con el
 criterio de la campaña: perseguir a cero sólo lo que puede enseñar algo
 falso en un balance básico (masa/energía → ya en 0), documentar el resto.
+
+---
+
+# Sesión 4 (2026-07) — el gate rojo, la suite verde y dos bugs reales
+
+Continuación tras el merge del PR #110.  Al retomar, `gate_component_balance`
+estaba ROJO (2/41) y la suite pytest tenía 12 fallos preexistentes.
+
+## Gate de balance por componente: 41/41 verde otra vez
+
+- **hno3/V-201** (0/3 MAYOR): el condensador Ostwald hace DOS químicas — la
+  oxidación 2NO+O₂→2NO₂ (que antes vivía como override en E-203) y la
+  absorción R034.  Sólo declaraba R034.  Verificado numéricamente que
+  R033+R034 explican el cambio exacto (agua −36.6, NO −420, NO₂ +457 t/a);
+  declarar ambas cierra el LSQ del auditor a 0/0.
+- **sulfuric/ABS-101** (0/2 MAYOR): las salidas lockeadas de la sesión 3 no
+  arrastraban el SO₂ no convertido (55.2 t/a entraban, 20.0 salían) y el
+  H₂SO₄ excedía el SO₃ disponible.  Re-derivadas por estequiometría R032
+  exacta sobre el gas forward de los feeds (2065.0 t/a) y agua de absorción
+  ajustada a la spec de producto 98%: S-H2O 306.34→295.1, S-H2SO4
+  1532.3→1475.3, S-vent 840.6→884.8.  Además el trim cooler E-101T ya no
+  queda con masa retro-propagada inconsistente (2055.6 vs 2065.0).
+
+## Suite completa verde: 12 fallos preexistentes con dos bugs reales
+
+**Bugs de código encontrados por los tests:**
+
+1. `thermo_db._pseudo_names()` no leía `petroleum_pseudo_allowed` (categoría
+   creada en el triage de pseudos al sacar los cortes de `industrial_pseudo`)
+   → los 6 cortes de petróleo habían perdido su procedencia `origin='pseudo'`
+   y volvían a `unverified`.
+2. `equipment_auxiliaries._AUX_STACK_GAP=36` px: el corredor header↔bomba era
+   más angosto que las bandas padded del router (12 px por lado) y el retorno
+   del lazo de CW clipeaba el tope de la bomba (3 cruces en metanol).  36→60.
+
+**Tests desactualizados por sesiones deliberadas (actualizados al estado
+nuevo, con el patrón detector-sigue-vivo donde aplica):** t30 (el override de
+E-203 fue retirado — el mecanismo se prueba re-introduciéndolo en memoria y
+el catálogo se verifica sin overrides), placeholders (4 conectados vs 4
+diferidos), example_locks (hda S-9-recic es tear real convergido), service
+loops (3 lazos con el trim del split WHB), inspector (air_sep con ancla de
+6 bar), y `gate_economics_panel` (el sanity MACRS≠lineal sólo aplica con
+NPV>0 — un proyecto sin renta imponible no paga impuestos y la igualdad es
+aritmética correcta; industrial quedó honestamente no rentable tras el
+retipado de V-202).
+
+## TRABAJOS_FUTUROS §2 resuelto: is_cross_exchange y las auto_aux
+
+El conteo estructural ≥2in/≥2out de `is_cross_exchange` contaba el lazo CW
+propio del HX como si fuera proceso → falso positivo "E-101: cross-exchange
+no cierra energía (>5%)" en metanol+aux.  Las corrientes `auto_aux` se
+excluyen ahora del conteo; el tratamiento (utility de trim) no cambia, sólo
+desaparece el mensaje engañoso.  Regresión cubierta en test_service_loops.
+
+## Verificación
+
+pytest **586 passed** / unittest **OK** / gates **7/7 verdes** (examples
+directo y --registry, component_balance, eos, eos_flash, simulate,
+pressure_source, economics_panel).
+
+
+## Energía de reactor por PRIMERA LEY (W-ENERGY-BLOCK 12→9)
+
+El programa anunciado en la sesión 3 ("energía de reactor, análogo a energía
+de columna").  El AUTO-DUTY de los reactores con química real aproximaba el
+duty externo con `Q_sens = m·c̄p_in·(T_op − T_in)` — el cp de la ENTRADA:
+
+- ignoraba el cambio de composición (Cp y latente de los PRODUCTOS: el NH₃
+  del efluente no tiene el ΔH_vap del N₂+H₂ del feed);
+- ignoraba cualquier T de salida DECLARADA ≠ T_op (ammonia opera con
+  T_op=450 °C pero su efluente de diseño sale a 500 °C: los 85 kW de ese
+  calentamiento quedaban sin dueño → residual espurio).
+
+**Fix (flowsheet_solver, AUTO-DUTY):** con Ts, composición y fase de los
+outlets ya resueltas, el duty se DERIVA por primera ley con el MISMO modelo
+entálpico de corrientes que usa el chequeo: `duty = H_out − H_in + Q_rxn`
+(endo+).  Fallback al Q_sensible previo si alguna entalpía no es resoluble
+(iteraciones tempranas).  Adiabático sigue en duty=0.
+
+Efecto: los duties de 17 reactores del catálogo se refinaron (golden
+regenerado; ISBL intacto en TODOS — el duty de reactor no alimenta el
+costeo).  Casos testigo: ammonia R-101 −146.6→−61.8 kW (la reacción libera
+146.6; 84.8 calientan el efluente 450→500 °C y el jacket sólo quita 61.8),
+methanol −808.9→−616.8, sulfuric −20.9→−45.8.  Los 3 W-ENERGY-BLOCK de
+reactor desaparecen; quedan **9** (6 compresores con quirks físicos + 3
+vessels: freidora, absorbedor, horno F-301), todos awareness documentado.
+Detector vivo: `test_energia_reactor_detector_sigue_vivo` re-introduce el
+duty isotermo en memoria y exige que vuelva a disparar.
+
+
+## Chequeo ELEMENTAL de balance (TRABAJOS_FUTUROS §13 — estreno)
+
+Nuevo en `audit_examples_components`: conservación de ÁTOMOS por bloque
+(`audit_block_elements`, mode='element').  A diferencia del chequeo por
+especie, aplica también a reactores con química real y placeholders — los
+átomos se conservan aunque haya reacción — y caza reacciones mal balanceadas
+u outputs de reactor escritos a mano que crean/destruyen elementos.  La masa
+de cada componente se reparte por fracción másica de FÓRMULA (thermo_db ya
+trae las 310), así los bloques de pura conservación dan 0 exacto; los
+pseudo sin fórmula ('Mix') saltean el bloque silenciosamente.
+
+**Estreno sobre el catálogo: 8 hallazgos en 3 ejemplos, triage:**
+
+- **air_sep/V-101 (arreglado)**: el secador quitaba 5 t/a de agua de un
+  aire SIN humedad declarada (agua creada de la nada).  El feed declara
+  ahora 0.5% de humedad ({N2 0.763165, O2 0.231835, H2O 0.005}) y el
+  balance cierra EXACTO; S-pure queda seco e idéntico aguas abajo.
+- **hno3/R-301 (arreglado)**: la composición de salida del oxidador estaba
+  redondeada a mano a 2–3 decimales (el O no cerraba 1.4%; el agua "perdía"
+  245 t/a en una oxidación que no la toca).  Recomputada EXACTA con
+  2NO+O₂→2NO₂ manteniendo la spec de diseño (NO out = 0.009).
+- **talara/R-SMR y hno3/T-401 (diferidos, documentados)**: estructurales —
+  el SMR declara más H2 del que su CH4 permite (sin steam), y la torre de
+  absorción produce más HNO3 del que el N alimentado alcanza.  Cirugías de
+  tren completo (TRABAJOS_FUTUROS §16–17), confinadas en el ratchet.
+
+**Ratchet:** `tests/test_element_balance.py` — 39/41 elemental-limpios;
+cualquier hallazgo nuevo o fuera del bloque documentado es regresión.
+Baseline versionado en outputs/element_balance_baseline.json.
+
+
+## talara R-SMR: el tren de H2 re-dimensionado (§16 resuelto)
+
+El chequeo elemental había destapado el peor hallazgo del catálogo: el
+reformador declaraba 2 700 t/a de H2 + 300 de CO2 desde 3 000 t/a de CH4
+sin vapor — atómicamente imposible (el H salía de la nada y el 96% del C
+desaparecía).  Cirugía aplicada manteniendo la demanda de H2 de los tres
+hidrotratadores (800+1 500+400 = 2 700 t/a) como spec de diseño:
+
+- **Nuevo feed de vapor de proceso** `C21-steam` (12 051.5 t/a, fase
+  vapor a 300 °C) desde el header TK-STM — la regla de arranque lo acepta
+  sin excepción (el vapor se genera a presión, no se comprime).
+- **CH4 re-dimensionado**: C20-CH4 3 000 → 5 368.9 t/a (334.49 kmol/a
+  reaccionan + el slip de 2.7 t/a que sale con el H2).
+- **CO2 honesto**: C20b-CO2 300 → 14 720.4 t/a (la relación másica CO2/H2
+  del SMR es ~5.5 — el número chico anterior escondía el carbono).
+
+Balance elemental EXACTO (C/H/O en 0.0); el ratchet pasa a **40/41**
+(queda sólo hno3/T-401, §17).  ISBL de talara +0.36% (el compresor K-101
+ahora dimensionado al caudal real de CH4); golden regenerado.
+
+
+## industrial V-201: separador real y fin del carrusel de metanol (§15)
+
+El último gran estructural del catálogo.  V-201 repartía el efluente del
+reactor en crudo (25 000 t/a) y reciclo (275 000) con la MISMA composición
+(41% metanol): un splitter de caudal, no un separador — 113 000 t/a de
+metanol recirculaban a perpetuidad sin salida física, y el producto real
+había caído a 9 061 t/a cuando V-202 se volvió honesto.
+
+**Cirugía:**
+- V-201 re-tipado a **flash real** (40 °C / 80 bar, patrón V-202): condensa
+  metanol+agua (crudo 89% MeOH) y deja el gas magro (83% H2 / 7% MeOH).
+- El punto fijo del lazo (reciclo 280 930 t/a) se iteró POR FUERA del
+  solver — el tearing aún no aplica fracciones de splitter
+  (TRABAJOS_FUTUROS §3), Wegstein se quedaba en el valor semilla — y se
+  congeló como ancla sintética junto con el crudo (21 840.8).  Fracciones
+  de V-203 ajustadas exactas (0.091103/0.908897) para que el reciclo
+  cierre con 0.0 de slack.
+- V-202 sin gases que ventear → tambor de producto (vent eliminado);
+  S-vap re-faseado líquido (condensador total a 80 bar).
+
+**Resultado:** producto 9 061 → **21 280 t/a** de metanol crudo al 91.5%
+(consistente con el CO alimentado: el feed es H2/CO molar ≈ 19, el CO
+limita), balance por especie Y elemental 0/0 en una sola pasada de solve,
+idempotente.  NPV −67.3M → **+7.36M**: la "no rentabilidad honesta"
+documentada era el artefacto de arreglar V-202 dejando el carrusel; con
+TODA la física correcta el ejemplo vuelve a ser rentable y el sanity
+MACRS≠lineal del gate económico aplica de nuevo por sí solo.
+
+
+## hno3 T-401: el tren de absorción re-derivado (§17 — ratchet elemental 41/41)
+
+El último estructural del catálogo.  Los outputs a mano de T-401 producían
+más HNO3 del que el N alimentado permitía (y el aire de blanqueo era 6×
+chico para la re-oxidación).  Re-derivación con extents exactos:
+
+- **R034** (3NO2+H2O→2HNO3+NO) fija ξ2=25.16 kmol por el N reactivo
+  disponible → producto 6 200→**5 707.7 t/a @60%**.
+- **R033** (2NO+O2→2NO2) debe re-oxidar el NO regenerado: ξ1=14.54 kmol →
+  el aire de blanqueo sube 500→**3 218.7 t/a** (O2 estequiométrico + 2.5%
+  de exceso en colas, el diseño real de una torre Ostwald).
+- Agua de absorción 3 000→**1 532.9** (la que admite el balance con ácido
+  al 60% y colas al 2.9% de humedad).
+- Colas A14 re-derivadas (14 043.9 t/a, comp exacta hasta el stack) y
+  blanqueador V-501 ajustado (vent 91.8 t/a, producto final 5 615.9 @61%).
+
+**El catálogo completo audita limpio en especie Y elemental: ratchet
+41/41, _KNOWN_DIRTY vacío.**  Con esto cierran los cuatro estructurales
+históricos (§14 hda_full, §15 industrial, §16 talara, §17 hno3).
+
+
+## Tearing honesto de punta a punta (TF §3) — el lazo de industrial VIVO
+
+El gap de solver que obligó al ancla sintética del §15.  El diagnóstico
+destapó una cadena de TRES ecos que se tapaban entre sí (por eso el Wegstein
+"convergía" en 1 iteración devolviendo la semilla, f(x)=x):
+
+1. **El splitter no repartía durante el tearing**: con purga y reciclo
+   desconocidos (2 incógnitas), la regla sudoku de bloque no dispara y
+   V-203 se atascaba.  → La ecuación del splitter (out_i = frac_i·Σin)
+   vive ahora en `_solve_mass_iteration`.
+2. **Eco backward (S2-D)**: durante la propagación con el tear inyectado,
+   la succión del compresor de reciclo (S-rec-cold) se deducía HACIA ATRÁS
+   desde el propio guess (K-202: in = out lockeado); en el recompute ese
+   stale rebotaba de vuelta al tear.  → Dentro del SCC activo la deducción
+   backward queda deshabilitada (anti-causal respecto al lazo).
+3. **Eco en el destino (S2-B mono, contrato refinado)**: el tear se
+   re-deducía en su MIXER destino desde internos stale (M-101: tear =
+   S-3 − feed).  → El camino mono de Wegstein activa S2-B como el
+   multitear, con el contrato refinado: el tear se PRODUCE en su bloque
+   FUENTE (forward, necesario para fuentes pass-through), nunca se deduce
+   en su destino.
+
+Además, **UPDATE-closure**: las reglas sudoku sólo llenaban ceros — tras
+converger el tear, los unit-ops re-escriben sus salidas pero las cadenas
+pass-through aguas abajo retenían masas de iteraciones intermedias (E-201
+con in=21 283 / out=24 426).  Un bloque resuelto pero desbalanceado con
+UNA salida libre ahora se re-deriva (backward análogo sólo fuera del SCC).
+
+**Resultado:** el lazo de industrial converge VIVO (Wegstein real: semilla
+10 000 → 31 700 → … → 278 436 en 10 iteraciones), el ancla sintética se
+retiró del JSON, y el catálogo completo sigue verde: 41/41 goldens (5
+refinamientos ≤0.2 kW por el update-closure — estados más consistentes),
+balance por especie y elemental 0/0, económico verde (industrial NPV
++7.78M).  Contratos congelados en tests/test_splitter_tearing.py y
+test_multitear_s2b actualizado al contrato fuente-sí/destino-no.
+
+
+## Barrida final de TRABAJOS_FUTUROS (§1, §4, §5, §6, §12)
+
+- **§1 (SCC mixto proceso+aux)** — resuelto como EFECTO de §3: con S2-D y
+  el contrato fuente/destino, el multitear converge hda_full+aux (Broyden,
+  11 tears, 12 iteraciones) sin warnings espurios.  Verificado y congelado.
+- **§4 (duty en HX standalone)** — verificado resuelto: el caso mínimo
+  infiere duty=−5.3 kW y el lazo de servicio dimensiona analíticamente.
+- **§5 (F no computable)** — el warning del fallback 0.75 ahora enseña el
+  dominio (P_max≈0.59 por casco 1-2 con R≈1) y sugiere n_shell=N+1.
+- **§6 (lane offset orden-dependiente)** — re-ruteo global determinista
+  por id: los lanes dominantes rutean primero, la asignación converge a un
+  punto fijo estable entre repaints.
+- **§12 (X_eq sin van't Hoff)** — A/B 2-param derivados AL PARSEAR desde
+  los ΔH/ΔG curados (sin duplicar datos en el .md), con el guard del
+  invariante del seam (sólo especies sourceadas): R026 y R028 habilitadas;
+  el resto sigue placeholder honesto (pseudo sin MW).
+
+Quedan en TRABAJOS_FUTUROS sólo decisiones de producto/estética: §7 (undo
+de streams), §8–§11 (glyphs/íconos/curvas de bomba) y el cambio de catálogo
+de CW de §5 — ninguno es un error.
+
+
+## Cierre de TRABAJOS_FUTUROS (§5, §7–§11) — decisiones y GUI
+
+La consulta interactiva no estaba disponible, así que se aplicaron las
+opciones RECOMENDADAS (todas reversibles, documentadas ítem por ítem):
+
+- **§5 CW 30→45 °C**: catálogo al supply típico (Sinnott/Turton) con la
+  frontera CW/refrigeración en 30 °C.  E-103 de metanol queda de libro
+  (ΔT_lm=15 balanceado, F=1.0, sin warnings).  Goldens idénticos.
+- **§7 undo de streams**: los cuatro caminos de edición (segmento,
+  flotantes, waypoints, endpoints + bake de ghost) integran
+  begin_action/end_action; los clicks sin cambio no ensucian la pila.
+- **§8 glyphs HX**: cerrado como DECISIÓN — glyph compartido a propósito.
+- **§9 equipos futuros**: cerrado como DECISIÓN — no agregar catálogo
+  muerto; la infraestructura (glyph coverage + fallback SVG) ya los espera.
+- **§10 iconitos "+más"**: fallback al SVG de pfd_symbols implementado;
+  hoy es red de seguridad (los 56 eq_types ya tienen ISA).
+- **§11 curva de bomba**: curva H-Q típica adimensional anclada al punto
+  de operación, rotulada "no de fabricante" — enseña el BEP sin fingir
+  datos.  Test de contrato (figura o razón accionable) incluido.
+
+**Con esto, TRABAJOS_FUTUROS queda 17/17 ✅.**  pytest 601 passed,
+unittest OK, y los 7 gates verdes.

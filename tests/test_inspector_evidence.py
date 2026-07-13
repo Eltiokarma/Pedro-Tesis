@@ -186,13 +186,36 @@ def test_compressor_preparada_y_razon():
         "trabajo real debe ser >= isentrópico"
     assert d["T_out_C"] >= d["T_isen_C"], \
         "T real de descarga debe ser >= isentrópica"
-    # sin razón de compresión (caso K-101 de air_sep) → instrucción exacta
+    # sin razón de compresión → instrucción exacta.  air_sep/K-101 (el caso
+    # real original) ya tiene ancla de diseño de 6 bar (campaña 2026-07), así
+    # que el defecto se RE-INTRODUCE en memoria (patrón detector-sigue-vivo):
+    # delta_p en 0 y descarga a la P de succión.
     fs2 = _solved("air_sep")
     k2 = next(b for b in fs2.blocks.values() if "Compressor" in b.eq_type)
-    assert (k2.delta_p_bar or 0) <= 0
+    k2.delta_p_bar = 0.0
+    suc = next(s for s in fs2.streams.values() if s.dst == k2.id)
+    for s in fs2.streams.values():
+        if s.src == k2.id:
+            s.pressure_bar = suc.pressure_bar
     fig2, d2 = ev.compressor_figure(k2, fs2)
     assert fig2 is None
     _assert_reason(d2, "delta_p_bar")
+
+
+# ── 8. Curva característica de bomba (TF §11) ──────────────────────────
+def test_pump_figure_tipica_y_razon():
+    """La curva H-Q típica se ancla al punto de operación calculado y se
+    rotula honesta ('typical_curve').  Sin succión/descarga → razón exacta."""
+    fs = _solved("ethanol")
+    p = next(b for b in fs.blocks.values() if "Pump" in b.eq_type)
+    fig, d = ev.pump_figure(p, fs)
+    assert fig is not None, f"sin figura: {d}"
+    assert d["typical_curve"] is True
+    assert d["Q_m3_h"] > 0 and d["head_m"] > 0
+    # no-bomba → razón
+    hx = next(b for b in fs.blocks.values() if "Heat exch" in b.eq_type)
+    fig2, d2 = ev.pump_figure(hx, fs)
+    assert fig2 is None and "no es una bomba" in d2["reason"]
 
 
 # ── contrato: nunca (None, None) ───────────────────────────────────────
@@ -204,7 +227,8 @@ def test_contrato_nunca_none_none():
     fs.blocks[bid] = b
     for fn in (ev.mccabe_figure, ev.profile_figure, ev.flash_figure,
                ev.reactor_figure, ev.hx_tq_figure,
-               ev.equilibrium_figure, ev.compressor_figure):
+               ev.equilibrium_figure, ev.compressor_figure,
+               ev.pump_figure):
         fig, d = fn(b, fs)
         if fig is None:
             assert isinstance(d, dict) and d.get("reason"), \

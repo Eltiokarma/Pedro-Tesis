@@ -66,6 +66,41 @@ def test_energy_block_barrido_amplio():
     assert n >= 7, f"esperado barrido amplio, sólo {n} ejemplos"
 
 
+def test_energia_reactor_primera_ley():
+    """Programa de energía de reactor (análogo al de columnas): el duty de
+    un reactor con química real se deriva por PRIMERA LEY con el mismo
+    modelo entálpico del chequeo (duty = H_out − H_in + Q_rxn), así que
+    ammonia/methanol/sulfuric R-101 ya NO disparan W-ENERGY-BLOCK."""
+    for clave in ("ammonia", "methanol", "sulfuric"):
+        fs, res = _solve(clave)
+        hits = [w for w in _lines(res, "W-ENERGY-BLOCK") if "R-101" in w]
+        assert hits == [], f"{clave}/R-101 debería cerrar energía: {hits}"
+        # el duty refinado cierra el balance contra las corrientes
+        from stream_enthalpy import stream_enthalpy_kW
+        b = next(x for x in fs.blocks.values() if x.name == "R-101")
+        ins = [s for s in fs.streams.values() if s.dst == b.id]
+        outs = [s for s in fs.streams.values() if s.src == b.id]
+        h_in = sum(stream_enthalpy_kW(s) or 0.0 for s in ins)
+        h_out = sum(stream_enthalpy_kW(s) or 0.0 for s in outs)
+        m_in = sum(s.mass_flow for s in ins) * 1000.0 / (365 * 24 * 3600.0)
+        q_rxn = -m_in * b.heat_of_reaction
+        resid = h_out - h_in - b.duty - q_rxn
+        assert abs(resid) < 1.0, f"{clave}/R-101 resid={resid:+.1f} kW"
+
+
+def test_energia_reactor_detector_sigue_vivo():
+    """Detector vivo: re-introducir el defecto histórico EN MEMORIA (duty
+    isotermo = −Q_rxn completo, ignorando que la salida declarada sale más
+    caliente que la entrada) vuelve a disparar W-ENERGY-BLOCK en ammonia."""
+    fs = reg.load_example("ammonia")
+    b = next(x for x in fs.blocks.values() if x.name == "R-101")
+    b.duty = -146.6           # el valor isotermo previo al programa
+    b.duty_locked = True
+    res = fsv.solve(fs)
+    hits = [w for w in _lines(res, "W-ENERGY-BLOCK") if "R-101" in w]
+    assert hits, "duty isotermo con salida más caliente debe disparar"
+
+
 # ── 1.2 [W-COMP-T] ──────────────────────────────────────────────────────
 def test_comp_t_ldpe_extremo():
     """ldpe K-101/S-HP: con el modelo multi-etapa la descarga baja de
@@ -136,13 +171,14 @@ def test_tank_duty_industrial():
 # ── 1.5 [W-PLACEHOLDER] + bonus ─────────────────────────────────────────
 def test_placeholder_quince_ejemplos():
     """Los reactores estructurales (química via outputs locked) deben ser
-    visibles en ~15 ejemplos."""
+    visibles en ~11 ejemplos (eran ~15; la sesión 3 conectó la química real
+    de acetic/beer/bread/sulfuric → ya no son placeholder)."""
     n = 0
     for e in reg.list_examples():
         _, res = _solve(e["clave"])
         if _lines(res, "W-PLACEHOLDER"):
             n += 1
-    assert n >= 14, f"esperado ~15 ejemplos con placeholder, hay {n}"
+    assert n >= 10, f"esperado ~11 ejemplos con placeholder, hay {n}"
 
 
 def test_placeholder_bonus_ldpe_r027():

@@ -414,17 +414,18 @@ _PSEUDO_PATH = Path(__file__).parent / "data" / "pseudo_components.json"
 def _pseudo_names() -> set:
     """Nombres canónicos de los pseudo-componentes según el catálogo curado
     data/pseudo_components.json — la ÚNICA autoridad sobre qué es pseudo (la
-    misma que usa el auditor).  Incluye las tres categorías: cuts de petróleo
-    (industrial), sólidos alimentarios/biológicos (food) y especies que el VLE
-    no modela rigurosamente (material).  Devuelve los nombres ya normalizados
+    misma que usa el auditor).  Incluye las cuatro categorías: mezclas
+    industriales (industrial), cortes de petróleo (petroleum), sólidos
+    alimentarios/biológicos (food) y especies que el VLE no modela
+    rigurosamente (material).  Devuelve los nombres ya normalizados
     a la convención del thermo_db."""
     try:
         d = json.loads(_PSEUDO_PATH.read_text(encoding="utf-8"))
     except Exception:
         return set()
     names = set()
-    for key in ("industrial_pseudo", "food_pseudo_allowed",
-                "material_pseudo_allowed"):
+    for key in ("industrial_pseudo", "petroleum_pseudo_allowed",
+                "food_pseudo_allowed", "material_pseudo_allowed"):
         for n in d.get(key, []):
             cn = _normalize_name(n)
             if cn:

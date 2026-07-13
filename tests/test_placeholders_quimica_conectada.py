@@ -1,21 +1,18 @@
 """Batch — química real conectada a placeholders con base curada.
 
-De los 9 placeholders con base curada en reactions_db, **1 se conectó** a su
-química real (patrón T29a/b): el motor ahora CALCULA la composición de salida
-por balance estequiométrico en vez de leerla hardcodeada.
+Historia en dos tandas:
 
-  · chloralkali_hcl/R-201 → R028 (H2 + Cl2 → 2 HCl), conv 0.999
+  · T29a/b: chloralkali_hcl/R-201 → R028 (H2 + Cl2 → 2 HCl), conv 0.999.
+  · Sesión 3 (2026-07): el triage de conectabilidad (todas las especies con
+    MW en reactions_db) marcó 4 reactores más como tratables y se conectaron
+    con su cadena downstream re-propagada por-diferencia:
+      · acetic/R-101  → R026 (metanol + CO → ácido acético)
+      · beer/R-101    → R007 (glucosa → 2 etanol + 2 CO2)
+      · bread/R-101   → R007 (fermentación de la masa)
+      · sulfuric/R-101 → R006 (2 SO2 + O2 → 2 SO3)
 
-Los otros 8 se DIFIEREN (siguen placeholder honesto, ver
-docs/inventario_hardcode.md §6.7):
-  · acetic/R-101 (R026), beer/R-101 (R007): el reactor conecta, pero alimenta
-    un separador PASIVO aguas abajo (V-101 / separador de beer) cuyo split
-    hardcodeado el motor no calcula → al computar la salida del reactor, el
-    detector marca esos locks como redundantes (cascada al proyecto de
-    separación activa).
-  · bread (R007): el placeholder es no-op; conectar mete CO2/etanol que el
-    horno H-101 no ventea (cascadea a otro bloque).
-  · sulfuric (R006): conectar dispara un [W-ENERGY-BLOCK] nuevo.
+Los otros 4 con base curada se DIFIEREN (siguen placeholder honesto, ver
+docs/inventario_hardcode.md §6.7 y docs/AUDITORIA_HARDCODEO_2026.md):
   · cement (R029): mismatch de especie (R029 produce quicklime, no clinker).
   · ldpe (R027), soap (R030), urea (R031): pseudo-componentes sin MW → la
     reacción no dispara en modo stoich.
@@ -64,11 +61,41 @@ def test_chloralkali_r028_conectado():
     assert b.duty < 0          # R028 fuertemente exotérmica (ΔH=−184.6)
 
 
+# ── conectados sesión 3: acetic/beer/bread/sulfuric ─────────────────────
+def test_conectados_sesion3_corren_quimica_real():
+    """Los 4 reactores conectados en la sesión 3 declaran su reacción curada,
+    corren en modo stoich, ya no disparan W-PLACEHOLDER y su ejemplo cierra
+    el balance de masa."""
+    for clave, blk, rid in [("acetic", "R-101", "R026"),
+                            ("beer", "R-101", "R007"),
+                            ("bread", "R-101", "R007"),
+                            ("sulfuric", "R-101", "R006")]:
+        fs, res, b, ins, outs = _reactor_io(clave, blk)
+        assert b.reactions == [rid], \
+            f"{clave}/{blk} debe declarar {rid}, tiene {b.reactions}"
+        assert b.reactor_mode == "stoich"
+        assert _no_placeholder(res, blk), \
+            f"{clave}/{blk} ya no debería disparar W-PLACEHOLDER (conectado)"
+        assert len(res.mass_balance_errors) == 0, \
+            f"{clave}: el balance de masa debe seguir cerrando"
+
+
+def test_conectados_calor_de_reaccion_calculado():
+    """El calor de reacción de los conectados lo computa el solver (no
+    heat_of_reaction hardcodeado): los exotérmicos salen con duty < 0."""
+    for clave, blk in [("acetic", "R-101"), ("sulfuric", "R-101")]:
+        fs0 = reg.load_example(clave)          # declarado, PRE-solve
+        b0 = next(b for b in fs0.blocks.values() if b.name == blk)
+        assert b0.heat_of_reaction == 0, \
+            f"{clave}/{blk}: heat_of_reaction declarado debe ser 0 (calculado)"
+        fs, res, b, ins, outs = _reactor_io(clave, blk)
+        assert b.duty < 0, \
+            f"{clave}/{blk}: la reacción es exotérmica, duty debe ser < 0"
+
+
 # ── diferidos: siguen siendo placeholder honesto ────────────────────────
 def test_diferidos_siguen_placeholder():
-    for clave, blk in [("acetic", "R-101"), ("beer", "R-101"),
-                       ("bread", "R-101"), ("sulfuric", "R-101"),
-                       ("cement", "R-101"), ("ldpe", "R-101"),
+    for clave, blk in [("cement", "R-101"), ("ldpe", "R-101"),
                        ("soap", "R-101"), ("urea", "R-101")]:
         res = fsv.solve(reg.load_example(clave))
         assert any("PLACEHOLDER" in w and blk in w

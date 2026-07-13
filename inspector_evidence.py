@@ -298,6 +298,80 @@ def pump_text(block, fs) -> Optional[str]:
         return None
 
 
+def pump_figure(block, fs):
+    """TF §11 — curva característica H-Q de bomba centrífuga.
+
+    DECISIÓN DE HONESTIDAD: el repo no tiene curvas de fabricante, así que
+    se dibuja la curva ADIMENSIONAL TÍPICA de una centrífuga radial
+    (H/H_BEP = 1.25 − 0.25·(Q/Q_BEP)², shutoff ≈125% del head de BEP;
+    η(q) = η_BEP·(2q − q²), parábola con pico en el BEP — Karassik,
+    Pump Handbook) ANCLADA al punto de operación que calcula
+    equipment_design.design_pump_for_block, asumiendo operación EN el BEP.
+    El rótulo lo dice explícitamente: es una curva típica, no del
+    fabricante — sirve para enseñar la forma de la curva y el concepto de
+    BEP, no para rating.
+
+    Devuelve (Figure, dict) o (None, {"reason": str}).
+    """
+    try:
+        import matplotlib
+        matplotlib.use("Agg")
+        from matplotlib.figure import Figure
+    except Exception:
+        return _no_fig(_MPL_REASON)
+    try:
+        eq = (block.eq_type or "").lower()
+        if not ("pump" in eq or "bomba" in eq):
+            return _no_fig("el bloque no es una bomba")
+        import equipment_design as _ed
+        ps = _ed.design_pump_for_block(block, fs)
+        if ps is None:
+            return _no_fig("el dimensionado de la bomba no es computable "
+                           "— conectá succión/descarga y ejecutá el solver")
+        Q_op = float(ps.get("Q_m3_h") or 0.0)
+        H_op = float(ps.get("head_m") or 0.0)
+        if Q_op <= 0 or H_op <= 0:
+            return _no_fig("la bomba no tiene caudal/head resueltos — "
+                           "ejecutá el solver primero")
+        eta_bep = float(getattr(block, "efficiency", 0.75) or 0.75)
+
+        # Curva típica adimensional anclada en el punto de operación (BEP)
+        import numpy as _np
+        q = _np.linspace(0.0, 1.5, 121)          # Q/Q_BEP
+        H = H_op * (1.25 - 0.25 * q ** 2)        # H/H_BEP típica radial
+        eta = _np.clip(eta_bep * (2 * q - q ** 2), 0.0, 1.0)
+
+        fig = Figure(figsize=(4.6, 3.2), dpi=100)
+        ax = fig.add_subplot(111)
+        ax.plot(q * Q_op, H, lw=2.0, color="#1f6feb", label="H–Q típica")
+        ax.plot(Q_op, H_op, "o", ms=8, color="#d29922", zorder=5,
+                label="punto de operación (≈BEP)")
+        ax2 = ax.twinx()
+        ax2.plot(q * Q_op, eta * 100, lw=1.4, ls="--", color="#3fb950",
+                 label="η típica")
+        ax2.set_ylabel("η [%]", fontsize=8, color="#3fb950")
+        ax2.set_ylim(0, 100)
+        ax.set_xlabel("Q [m³/h]", fontsize=8)
+        ax.set_ylabel("Head [m]", fontsize=8)
+        ax.set_title(f"{block.name}: curva característica", fontsize=9)
+        ax.grid(alpha=0.25)
+        ax.annotate(f"Q={Q_op:.1f} m³/h\nH={H_op:.1f} m\nη_BEP≈{eta_bep:.2f}",
+                    xy=(Q_op, H_op), xytext=(8, -10),
+                    textcoords="offset points", fontsize=7.5)
+        fig.text(0.5, 0.005,
+                 "curva TÍPICA de centrífuga radial (no de fabricante), "
+                 "anclada al punto de operación calculado",
+                 ha="center", fontsize=6.6, style="italic", color="#8b949e")
+        h1, l1 = ax.get_legend_handles_labels()
+        h2, l2 = ax2.get_legend_handles_labels()
+        ax.legend(h1 + h2, l1 + l2, fontsize=7, loc="lower left")
+        fig.tight_layout(rect=(0, 0.03, 1, 1))
+        return fig, {"Q_m3_h": Q_op, "head_m": H_op, "eta_bep": eta_bep,
+                     "typical_curve": True}
+    except Exception as e:
+        return _no_fig(f"{type(e).__name__}: {e}")
+
+
 def compressor_text(block, fs) -> Optional[str]:
     try:
         eq = (block.eq_type or "").lower()

@@ -95,9 +95,17 @@ def gate_equivalence_and_smoke():
         if abs((npv_macrs_panel or 0) - (npv_macrs_sim or 0)) > _TOL:
             fails.append((clave, f"MACRS panel NPV={npv_macrs_panel} != "
                                  f"simulate {npv_macrs_sim}"))
-        # MACRS7 debe diferir del lineal (sanity: el método sí se aplica)
+        # MACRS7 debe diferir del lineal (sanity: el método sí se aplica).
+        # Solo exigible con NPV>0: un proyecto sin renta imponible en ningún
+        # año (industrial post-retipado honesto de V-202, NPV<<0) no paga
+        # impuestos, y sin impuestos el método de depreciación no cambia el
+        # flujo — la igualdad es aritmética correcta, no un bug del panel.
         if abs((npv_macrs_panel or 0) - (npv_panel or 0)) < 1.0:
-            fails.append((clave, "MACRS7 NPV == lineal (método no aplicado?)"))
+            if (npv_panel or 0) > 0:
+                fails.append((clave, "MACRS7 NPV == lineal (método no aplicado?)"))
+            else:
+                print(f"     · {clave}: MACRS7 == lineal con NPV<0 "
+                      f"(sin renta imponible — esperado)")
         panel.combo_dep.setCurrentIndex(panel.combo_dep.findText("Lineal"))
         print(f"     · {clave}: lineal NPV={npv_panel:,.0f}  "
               f"MACRS7 NPV={npv_macrs_panel:,.0f}  ✓render")

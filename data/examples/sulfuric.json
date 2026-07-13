@@ -1259,7 +1259,7 @@
    "id": 15,
    "is_pipe": false,
    "main_component": "water",
-   "mass_flow": 306.34,
+   "mass_flow": 295.1,
    "mass_flow_locked": true,
    "name": "S-H2O",
    "phase": "liquid",
@@ -1297,8 +1297,8 @@
    "bubble_show_enthalpy": false,
    "bubble_visible": false,
    "composition": {
-    "sulfuric_acid": 0.980097,
-    "water": 0.019903
+    "sulfuric_acid": 0.979974,
+    "water": 0.020026
    },
    "composition_locked": true,
    "cp": 0.0,
@@ -1311,7 +1311,7 @@
    "id": 16,
    "is_pipe": false,
    "main_component": "sulfuric_acid",
-   "mass_flow": 1532.3,
+   "mass_flow": 1475.3,
    "mass_flow_locked": true,
    "name": "S-H2SO4",
    "phase": "liquid",
@@ -1349,9 +1349,9 @@
    "bubble_show_enthalpy": false,
    "bubble_visible": false,
    "composition": {
-    "nitrogen": 0.972468,
-    "oxygen": 0.003687,
-    "so2": 0.023845
+    "nitrogen": 0.923647,
+    "oxygen": 0.014029,
+    "so2": 0.062324
    },
    "composition_locked": true,
    "cp": 0.0,
@@ -1364,7 +1364,7 @@
    "id": 17,
    "is_pipe": false,
    "main_component": "nitrogen",
-   "mass_flow": 840.6,
+   "mass_flow": 884.8,
    "mass_flow_locked": true,
    "name": "S-vent",
    "phase": "gas",

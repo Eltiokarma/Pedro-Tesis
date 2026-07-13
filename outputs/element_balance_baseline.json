@@ -1,0 +1,207 @@
+{
+ "acetic": {
+  "n_elem_critico": 0,
+  "n_elem_mayor": 0,
+  "element_findings": []
+ },
+ "air_sep": {
+  "n_elem_critico": 0,
+  "n_elem_mayor": 0,
+  "element_findings": []
+ },
+ "ammonia": {
+  "n_elem_critico": 0,
+  "n_elem_mayor": 0,
+  "element_findings": []
+ },
+ "beer": {
+  "n_elem_critico": 0,
+  "n_elem_mayor": 0,
+  "element_findings": []
+ },
+ "biodiesel": {
+  "n_elem_critico": 0,
+  "n_elem_mayor": 0,
+  "element_findings": []
+ },
+ "bread": {
+  "n_elem_critico": 0,
+  "n_elem_mayor": 0,
+  "element_findings": []
+ },
+ "cdu": {
+  "n_elem_critico": 0,
+  "n_elem_mayor": 0,
+  "element_findings": []
+ },
+ "cement": {
+  "n_elem_critico": 0,
+  "n_elem_mayor": 0,
+  "element_findings": []
+ },
+ "chloralkali_hcl": {
+  "n_elem_critico": 0,
+  "n_elem_mayor": 0,
+  "element_findings": []
+ },
+ "desal": {
+  "n_elem_critico": 0,
+  "n_elem_mayor": 0,
+  "element_findings": []
+ },
+ "dist_eth_az": {
+  "n_elem_critico": 0,
+  "n_elem_mayor": 0,
+  "element_findings": []
+ },
+ "distillation": {
+  "n_elem_critico": 0,
+  "n_elem_mayor": 0,
+  "element_findings": []
+ },
+ "ethane_pfr": {
+  "n_elem_critico": 0,
+  "n_elem_mayor": 0,
+  "element_findings": []
+ },
+ "ethanol": {
+  "n_elem_critico": 0,
+  "n_elem_mayor": 0,
+  "element_findings": []
+ },
+ "ethylene_crk": {
+  "n_elem_critico": 0,
+  "n_elem_mayor": 0,
+  "element_findings": []
+ },
+ "gas_sweet": {
+  "n_elem_critico": 0,
+  "n_elem_mayor": 0,
+  "element_findings": []
+ },
+ "glass": {
+  "n_elem_critico": 0,
+  "n_elem_mayor": 0,
+  "element_findings": []
+ },
+ "haber_rec": {
+  "n_elem_critico": 0,
+  "n_elem_mayor": 0,
+  "element_findings": []
+ },
+ "hda": {
+  "n_elem_critico": 0,
+  "n_elem_mayor": 0,
+  "element_findings": []
+ },
+ "hda_full": {
+  "n_elem_critico": 0,
+  "n_elem_mayor": 0,
+  "element_findings": []
+ },
+ "hno3": {
+  "n_elem_critico": 0,
+  "n_elem_mayor": 0,
+  "element_findings": []
+ },
+ "hydraulic": {
+  "n_elem_critico": 0,
+  "n_elem_mayor": 0,
+  "element_findings": []
+ },
+ "industrial": {
+  "n_elem_critico": 0,
+  "n_elem_mayor": 0,
+  "element_findings": []
+ },
+ "ldpe": {
+  "n_elem_critico": 0,
+  "n_elem_mayor": 0,
+  "element_findings": []
+ },
+ "leche_gloria": {
+  "n_elem_critico": 0,
+  "n_elem_mayor": 0,
+  "element_findings": []
+ },
+ "methanol": {
+  "n_elem_critico": 0,
+  "n_elem_mayor": 0,
+  "element_findings": []
+ },
+ "nuclear": {
+  "n_elem_critico": 0,
+  "n_elem_mayor": 0,
+  "element_findings": []
+ },
+ "pasteurizer": {
+  "n_elem_critico": 0,
+  "n_elem_mayor": 0,
+  "element_findings": []
+ },
+ "penicillin": {
+  "n_elem_critico": 0,
+  "n_elem_mayor": 0,
+  "element_findings": []
+ },
+ "pineapple": {
+  "n_elem_critico": 0,
+  "n_elem_mayor": 0,
+  "element_findings": []
+ },
+ "potato_chips": {
+  "n_elem_critico": 0,
+  "n_elem_mayor": 0,
+  "element_findings": []
+ },
+ "quimpac": {
+  "n_elem_critico": 0,
+  "n_elem_mayor": 0,
+  "element_findings": []
+ },
+ "rankine": {
+  "n_elem_critico": 0,
+  "n_elem_mayor": 0,
+  "element_findings": []
+ },
+ "rxn_flash_col": {
+  "n_elem_critico": 0,
+  "n_elem_mayor": 0,
+  "element_findings": []
+ },
+ "smr_eq": {
+  "n_elem_critico": 0,
+  "n_elem_mayor": 0,
+  "element_findings": []
+ },
+ "soap": {
+  "n_elem_critico": 0,
+  "n_elem_mayor": 0,
+  "element_findings": []
+ },
+ "sugar": {
+  "n_elem_critico": 0,
+  "n_elem_mayor": 0,
+  "element_findings": []
+ },
+ "sulfuric": {
+  "n_elem_critico": 0,
+  "n_elem_mayor": 0,
+  "element_findings": []
+ },
+ "talara": {
+  "n_elem_critico": 0,
+  "n_elem_mayor": 0,
+  "element_findings": []
+ },
+ "urea": {
+  "n_elem_critico": 0,
+  "n_elem_mayor": 0,
+  "element_findings": []
+ },
+ "water_treat": {
+  "n_elem_critico": 0,
+  "n_elem_mayor": 0,
+  "element_findings": []
+ }
+}

@@ -1197,10 +1197,17 @@ class EditorPalette(QFrame):
 
     def _icon_for_eq_type(self, eq_type: str, size: int = 22):
         """Genera un QIcon de 22px renderizando la silueta ISA del
-        eq_type via BlockGlyph (mismo dibujo que se ve en el lienzo)."""
+        eq_type via BlockGlyph (mismo dibujo que se ve en el lienzo).
+        TF §10: si el eq_type NO tiene silueta ISA nativa, reusa el SVG
+        de pfd_symbols (como hace IsaGlyphItem) en vez del rect neutro —
+        el menú "+más" muestra el símbolo real."""
         from PySide6.QtGui import QPixmap, QIcon
         try:
             isa = isa_type_for_eq(eq_type)
+            if isa not in BLOCK_DIMS:
+                icon = self._icon_from_pfd_svg(eq_type, size)
+                if icon is not None:
+                    return icon
             nw, nh = BLOCK_DIMS.get(isa, (60, 60))
             px = QPixmap(size + 4, size + 4)
             px.fill(Qt.transparent)
@@ -1218,6 +1225,33 @@ class EditorPalette(QFrame):
             return QIcon(px)
         except Exception:
             return QIcon()
+
+    def _icon_from_pfd_svg(self, eq_type: str, size: int = 22):
+        """TF §10 — QIcon desde el símbolo SVG de pfd_symbols para
+        eq_types sin silueta ISA nativa.  None si tampoco hay SVG."""
+        from PySide6.QtGui import QPixmap, QIcon
+        try:
+            import pfd_symbols as pfd
+            from PySide6.QtSvg import QSvgRenderer
+            from PySide6.QtCore import QRectF
+            raw = pfd.EQ_TYPE_TO_SYMBOL.get(eq_type, "")
+            if not raw:
+                return None
+            svg = pfd.wrap_svg(raw, w=size, h=size)
+            if not svg:
+                return None
+            renderer = QSvgRenderer(bytes(svg, "utf-8"))
+            if not renderer.isValid():
+                return None
+            px = QPixmap(size + 4, size + 4)
+            px.fill(Qt.transparent)
+            p = QPainter(px)
+            p.setRenderHint(QPainter.Antialiasing, True)
+            renderer.render(p, QRectF(2, 2, size, size))
+            p.end()
+            return QIcon(px)
+        except Exception:
+            return None
 
     def _show_variants_menu(self, palette_id: str, anchor_widget):
         """Muestra un popup con todas las variantes de una categoría.
