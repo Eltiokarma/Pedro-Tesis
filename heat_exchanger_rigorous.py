@@ -132,8 +132,12 @@ def f_correction_factor(R: float, P: float, n_shell: int = 1,
         F_raw = None
 
     if F_raw is None:
-        return 0.75, ("F no computable (P/R fuera de dominio físico) — "
-                      "asumido 0.75 conservador")
+        return 0.75, (f"F no computable (P/R fuera de la factibilidad de "
+                      f"{n_shell} casco(s) 1-2; con R≈1 el máximo es "
+                      f"P≈0.59 por casco) — asumido 0.75 conservador. "
+                      f"Considerar n_shell={n_shell + 1} (dos cascos en "
+                      f"serie amplían el dominio) o contracorriente "
+                      f"verdadero")
     warning = None
     if F_raw < 0.75:
         warning = (f"F={F_raw:.3f} < 0.75 — diseño shell-tube ineficiente "

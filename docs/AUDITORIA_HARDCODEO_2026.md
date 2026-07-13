@@ -648,3 +648,25 @@ refinamientos ≤0.2 kW por el update-closure — estados más consistentes),
 balance por especie y elemental 0/0, económico verde (industrial NPV
 +7.78M).  Contratos congelados en tests/test_splitter_tearing.py y
 test_multitear_s2b actualizado al contrato fuente-sí/destino-no.
+
+
+## Barrida final de TRABAJOS_FUTUROS (§1, §4, §5, §6, §12)
+
+- **§1 (SCC mixto proceso+aux)** — resuelto como EFECTO de §3: con S2-D y
+  el contrato fuente/destino, el multitear converge hda_full+aux (Broyden,
+  11 tears, 12 iteraciones) sin warnings espurios.  Verificado y congelado.
+- **§4 (duty en HX standalone)** — verificado resuelto: el caso mínimo
+  infiere duty=−5.3 kW y el lazo de servicio dimensiona analíticamente.
+- **§5 (F no computable)** — el warning del fallback 0.75 ahora enseña el
+  dominio (P_max≈0.59 por casco 1-2 con R≈1) y sugiere n_shell=N+1.
+- **§6 (lane offset orden-dependiente)** — re-ruteo global determinista
+  por id: los lanes dominantes rutean primero, la asignación converge a un
+  punto fijo estable entre repaints.
+- **§12 (X_eq sin van't Hoff)** — A/B 2-param derivados AL PARSEAR desde
+  los ΔH/ΔG curados (sin duplicar datos en el .md), con el guard del
+  invariante del seam (sólo especies sourceadas): R026 y R028 habilitadas;
+  el resto sigue placeholder honesto (pseudo sin MW).
+
+Quedan en TRABAJOS_FUTUROS sólo decisiones de producto/estética: §7 (undo
+de streams), §8–§11 (glyphs/íconos/curvas de bomba) y el cambio de catálogo
+de CW de §5 — ninguno es un error.

@@ -7211,8 +7211,9 @@ class FlowsheetMainWindow(QMainWindow):
                 f"  {tag} {r['stream_name']} (block {r['block_name']}): "
                 f"duty={duty_s}, T_final={r['t_final']:.1f}°C  [{r['message']}]"
             )
-        # refrescar streams en escena
-        for sid, sit in self.scene.stream_items.items():
+        # refrescar streams en escena (orden por id — TF §6)
+        for sid, sit in sorted(self.scene.stream_items.items(),
+                               key=lambda kv: kv[1].model.id):
             sit.update_path()
         QMessageBox.information(self, "Goal-seek resultado",
                                   "\n".join(report))
@@ -8019,7 +8020,13 @@ class FlowsheetMainWindow(QMainWindow):
     # ---------------------------------------------------
 
     def stream_items_iter(self):
-        return self.scene.stream_items.items()
+        # TF §6: orden DETERMINISTA por id.  El lane offset de un stream
+        # depende de los _last_pts vigentes de los demás; si el re-ruteo
+        # global va por id ascendente, los dominantes (id menor) rutean
+        # primero y la asignación de lanes converge a un punto fijo estable
+        # entre repaints (sin "saltos" de unos px entre frames).
+        return sorted(self.scene.stream_items.items(),
+                      key=lambda kv: getattr(kv[1].model, "id", kv[0]))
 
     def block_items_iter(self):
         return self.scene.block_items.items()
@@ -8145,8 +8152,10 @@ class FlowsheetMainWindow(QMainWindow):
     def _refresh_all_stream_paths(self):
         """Re-renderiza el path de TODOS los streams.  Necesario después
         de mover bloques o de un solve, para que los cruces (jumpers)
-        queden coherentes."""
-        for sid, item in self.scene.stream_items.items():
+        queden coherentes.  Orden por id (TF §6): los lanes dominantes
+        rutean primero → asignación determinista entre repaints."""
+        for sid, item in sorted(self.scene.stream_items.items(),
+                                key=lambda kv: kv[1].model.id):
             item.update_path(rebuild_handles=False)
         # Burbujas: actualizar leaders (anclas de streams cambiaron)
         if getattr(self, "_bubble_manager", None) is not None:
