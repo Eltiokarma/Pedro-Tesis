@@ -561,3 +561,32 @@ hidrotratadores (800+1 500+400 = 2 700 t/a) como spec de diseño:
 Balance elemental EXACTO (C/H/O en 0.0); el ratchet pasa a **40/41**
 (queda sólo hno3/T-401, §17).  ISBL de talara +0.36% (el compresor K-101
 ahora dimensionado al caudal real de CH4); golden regenerado.
+
+
+## industrial V-201: separador real y fin del carrusel de metanol (§15)
+
+El último gran estructural del catálogo.  V-201 repartía el efluente del
+reactor en crudo (25 000 t/a) y reciclo (275 000) con la MISMA composición
+(41% metanol): un splitter de caudal, no un separador — 113 000 t/a de
+metanol recirculaban a perpetuidad sin salida física, y el producto real
+había caído a 9 061 t/a cuando V-202 se volvió honesto.
+
+**Cirugía:**
+- V-201 re-tipado a **flash real** (40 °C / 80 bar, patrón V-202): condensa
+  metanol+agua (crudo 89% MeOH) y deja el gas magro (83% H2 / 7% MeOH).
+- El punto fijo del lazo (reciclo 280 930 t/a) se iteró POR FUERA del
+  solver — el tearing aún no aplica fracciones de splitter
+  (TRABAJOS_FUTUROS §3), Wegstein se quedaba en el valor semilla — y se
+  congeló como ancla sintética junto con el crudo (21 840.8).  Fracciones
+  de V-203 ajustadas exactas (0.091103/0.908897) para que el reciclo
+  cierre con 0.0 de slack.
+- V-202 sin gases que ventear → tambor de producto (vent eliminado);
+  S-vap re-faseado líquido (condensador total a 80 bar).
+
+**Resultado:** producto 9 061 → **21 280 t/a** de metanol crudo al 91.5%
+(consistente con el CO alimentado: el feed es H2/CO molar ≈ 19, el CO
+limita), balance por especie Y elemental 0/0 en una sola pasada de solve,
+idempotente.  NPV −67.3M → **+7.36M**: la "no rentabilidad honesta"
+documentada era el artefacto de arreglar V-202 dejando el carrusel; con
+TODA la física correcta el ejemplo vuelve a ser rentable y el sanity
+MACRS≠lineal del gate económico aplica de nuevo por sí solo.

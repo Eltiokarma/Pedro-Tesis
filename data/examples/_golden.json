@@ -198,13 +198,13 @@
   "sum_duty": 9.360386
  },
  "industrial": {
-  "ISBL": 28501733.7,
+  "ISBL": 27678253.12,
   "energy_errors": 0,
   "mass_errors": 0,
   "n_blocks": 29,
-  "n_streams": 31,
+  "n_streams": 30,
   "overall_status": "warning",
-  "sum_duty": -3032.172825
+  "sum_duty": -5507.434678
  },
  "ldpe": {
   "ISBL": 2447864.43,
