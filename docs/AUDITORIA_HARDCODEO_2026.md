@@ -611,3 +611,40 @@ chico para la re-oxidación).  Re-derivación con extents exactos:
 **El catálogo completo audita limpio en especie Y elemental: ratchet
 41/41, _KNOWN_DIRTY vacío.**  Con esto cierran los cuatro estructurales
 históricos (§14 hda_full, §15 industrial, §16 talara, §17 hno3).
+
+
+## Tearing honesto de punta a punta (TF §3) — el lazo de industrial VIVO
+
+El gap de solver que obligó al ancla sintética del §15.  El diagnóstico
+destapó una cadena de TRES ecos que se tapaban entre sí (por eso el Wegstein
+"convergía" en 1 iteración devolviendo la semilla, f(x)=x):
+
+1. **El splitter no repartía durante el tearing**: con purga y reciclo
+   desconocidos (2 incógnitas), la regla sudoku de bloque no dispara y
+   V-203 se atascaba.  → La ecuación del splitter (out_i = frac_i·Σin)
+   vive ahora en `_solve_mass_iteration`.
+2. **Eco backward (S2-D)**: durante la propagación con el tear inyectado,
+   la succión del compresor de reciclo (S-rec-cold) se deducía HACIA ATRÁS
+   desde el propio guess (K-202: in = out lockeado); en el recompute ese
+   stale rebotaba de vuelta al tear.  → Dentro del SCC activo la deducción
+   backward queda deshabilitada (anti-causal respecto al lazo).
+3. **Eco en el destino (S2-B mono, contrato refinado)**: el tear se
+   re-deducía en su MIXER destino desde internos stale (M-101: tear =
+   S-3 − feed).  → El camino mono de Wegstein activa S2-B como el
+   multitear, con el contrato refinado: el tear se PRODUCE en su bloque
+   FUENTE (forward, necesario para fuentes pass-through), nunca se deduce
+   en su destino.
+
+Además, **UPDATE-closure**: las reglas sudoku sólo llenaban ceros — tras
+converger el tear, los unit-ops re-escriben sus salidas pero las cadenas
+pass-through aguas abajo retenían masas de iteraciones intermedias (E-201
+con in=21 283 / out=24 426).  Un bloque resuelto pero desbalanceado con
+UNA salida libre ahora se re-deriva (backward análogo sólo fuera del SCC).
+
+**Resultado:** el lazo de industrial converge VIVO (Wegstein real: semilla
+10 000 → 31 700 → … → 278 436 en 10 iteraciones), el ancla sintética se
+retiró del JSON, y el catálogo completo sigue verde: 41/41 goldens (5
+refinamientos ≤0.2 kW por el update-closure — estados más consistentes),
+balance por especie y elemental 0/0, económico verde (industrial NPV
++7.78M).  Contratos congelados en tests/test_splitter_tearing.py y
+test_multitear_s2b actualizado al contrato fuente-sí/destino-no.

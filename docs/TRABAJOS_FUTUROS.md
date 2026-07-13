@@ -26,11 +26,24 @@ Cada ítem indica dónde está el código y por qué quedó fuera de alcance.
    cierra energía (>5%)" en metanol+aux desapareció.  Regresión cubierta en
    `test_service_loops.test_metanol_con_aux_sin_warnings_espurios`.
 
-3. **`_solve_mass_iteration` no aplica fracciones de splitter** durante el
-   tearing (solo `solve_splitters` corre después, en el loop de unit ops).
-   Los reciclos con purga fraccional convergen hoy por caminos indirectos.
-   Integrar la distribución del splitter a la iteración de masa haría el
-   Wegstein converger a la solución real con menos vueltas.
+3. ✅ **`_solve_mass_iteration` no aplica fracciones de splitter** —
+   RESUELTO (sesión 2026-07).  El tearing ahora es honesto de punta a punta;
+   fueron necesarias CUATRO piezas (los ecos se tapaban entre sí):
+   · la ecuación del splitter (out_i = frac_i·Σin) vive también en la
+     iteración de masa (mismo mapeo frac→stream que solve_splitters);
+   · S2-B en el camino MONO de Wegstein con contrato refinado — el tear se
+     PRODUCE en su bloque fuente (forward, necesario cuando la fuente es un
+     pass-through como el K-202 de industrial) y NUNCA se deduce en su
+     bloque destino (el eco RC2 que devolvía el propio guess);
+   · S2-D: dentro del SCC activo no hay deducción backward (la succión del
+     compresor de reciclo se rellenaba desde el tear inyectado y rebotaba);
+   · UPDATE-closure: un bloque resuelto pero desbalanceado con UNA salida
+     libre se re-deriva — las cadenas pass-through aguas abajo del lazo
+     quedaban stale con masas de iteraciones intermedias.
+   El ancla sintética de industrial (§15) se RETIRÓ: su lazo converge VIVO
+   por Wegstein (10 iteraciones, punto fijo ~278 000 t/a) y queda como
+   regresión permanente en tests/test_splitter_tearing.py.  Goldens
+   regenerados (5 ejemplos con refinamientos ≤0.2 kW + industrial vivo).
 
 4. **Inferencia de duty en HX standalone**: con un HX aislado (agua 80→40 °C,
    flujo y T lockeados) el solver no infiere el duty → el lazo de servicio
