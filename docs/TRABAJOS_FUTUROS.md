@@ -136,15 +136,14 @@ Cada ítem indica dónde está el código y por qué quedó fuera de alcance.
     converger el reciclo. Por eso industrial NO entra a la whitelist todavía.
     El chequeo de balance lo sigue reportando en el baseline (2 CRÍTICO en V-202).
 
-16. **talara — R-SMR crea H y destruye C (elemental CRÍTICO, confinado)**:
-    el tren de hidrógeno declara 2 700 t/a de H2 + 300 de CO2 desde 3 000 t/a
-    de CH4 SIN alimentación de vapor.  Imposible atómicamente: 3 000 t/a de
-    CH4 rinden a lo sumo ~1 508 t/a de H2 (CH4+2H2O→CO2+4H2) y producirían
-    ~8 231 t/a de CO2 consumiendo ~6 739 t/a de steam.  Fix correcto:
-    agregar el feed de vapor y RE-DIMENSIONAR el tren (CH4 5 372 t/a para
-    sostener los 2 700 de H2 que consumen los HDT aguas abajo, CO2 14 738)
-    — cirugía mayor en un ejemplo de 48 bloques (compresor, OPEX, golden).
-    Detectado por el chequeo elemental (§13); confinado en el ratchet.
+16. ✅ **talara — R-SMR crea H y destruye C** — RESUELTO (sesión 2026-07).
+    El tren de hidrógeno tiene ahora su feed de vapor de proceso
+    (`C21-steam`, 12 051.5 t/a desde el header TK-STM) y el CH4/CO2
+    re-dimensionados por estequiometría exacta CH4+2H2O→CO2+4H2:
+    C20-CH4 3 000→5 368.9 t/a, C20b-CO2 300→14 720.4 t/a, manteniendo
+    los 2 700 t/a de H2 que consumen los HDT (800/1 500/400 intactos).
+    Balance elemental EXACTO (ratchet 40/41); ISBL +0.36% (compresor de
+    CH4 re-dimensionado al caudal real).
 
 17. **hno3 — T-401 produce más HNO3 del que sus NOx permiten (elemental
     MAYOR, confinado)**: con los feeds actuales (NOx de R-301 + agua +

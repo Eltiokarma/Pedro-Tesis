@@ -540,3 +540,24 @@ pseudo sin fórmula ('Mix') saltean el bloque silenciosamente.
 **Ratchet:** `tests/test_element_balance.py` — 39/41 elemental-limpios;
 cualquier hallazgo nuevo o fuera del bloque documentado es regresión.
 Baseline versionado en outputs/element_balance_baseline.json.
+
+
+## talara R-SMR: el tren de H2 re-dimensionado (§16 resuelto)
+
+El chequeo elemental había destapado el peor hallazgo del catálogo: el
+reformador declaraba 2 700 t/a de H2 + 300 de CO2 desde 3 000 t/a de CH4
+sin vapor — atómicamente imposible (el H salía de la nada y el 96% del C
+desaparecía).  Cirugía aplicada manteniendo la demanda de H2 de los tres
+hidrotratadores (800+1 500+400 = 2 700 t/a) como spec de diseño:
+
+- **Nuevo feed de vapor de proceso** `C21-steam` (12 051.5 t/a, fase
+  vapor a 300 °C) desde el header TK-STM — la regla de arranque lo acepta
+  sin excepción (el vapor se genera a presión, no se comprime).
+- **CH4 re-dimensionado**: C20-CH4 3 000 → 5 368.9 t/a (334.49 kmol/a
+  reaccionan + el slip de 2.7 t/a que sale con el H2).
+- **CO2 honesto**: C20b-CO2 300 → 14 720.4 t/a (la relación másica CO2/H2
+  del SMR es ~5.5 — el número chico anterior escondía el carbono).
+
+Balance elemental EXACTO (C/H/O en 0.0); el ratchet pasa a **40/41**
+(queda sólo hno3/T-401, §17).  ISBL de talara +0.36% (el compresor K-101
+ahora dimensionado al caudal real de CH4); golden regenerado.

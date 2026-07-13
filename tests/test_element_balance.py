@@ -6,15 +6,14 @@ real) y los placeholders con outputs escritos a mano.  Cobertura:
 
   (A) Unidad: parser de fórmulas y reparto de masa elemental.
   (B) Detector: un reactor con output que crea átomos dispara.
-  (C) RATCHET del catálogo: tras la sesión 2026-07, 39/41 ejemplos auditan
-      elemental-limpio.  Los 2 hallazgos ESTRUCTURALES conocidos quedan
-      confinados a su bloque (deuda documentada en TRABAJOS_FUTUROS):
-        · talara/R-SMR: produce 2 700 t/a de H2 desde 3 000 t/a de CH4 SIN
-          vapor de agua (H sale de la nada, el C desaparece) — re-dimensionar
-          el tren de hidrógeno (feed CH4 + steam + CO2) es cirugía mayor.
+  (C) RATCHET del catálogo: tras la sesión 2026-07, 40/41 ejemplos auditan
+      elemental-limpio.  El hallazgo ESTRUCTURAL conocido queda confinado
+      a su bloque (deuda documentada en TRABAJOS_FUTUROS §17):
         · hno3/T-401: el HNO3 producido excede el N de los NOx alimentados
           (el spec 6 200 t/a @60% no es alcanzable con ese feed) — requiere
           re-derivar el tren de absorción completo.
+      (talara/R-SMR se cerró en esta misma sesión: feed de vapor C21-steam
+      + resize CH4/CO2 por estequiometría exacta, H2 de los HDT intacto.)
 """
 import os
 import sys
@@ -27,7 +26,7 @@ from flowsheet_model import Block, Stream, Flowsheet
 aec._headless()
 
 # Ejemplos con hallazgos elementales ESTRUCTURALES conocidos → bloque dueño.
-_KNOWN_DIRTY = {"talara": "R-SMR", "hno3": "T-401"}
+_KNOWN_DIRTY = {"hno3": "T-401"}
 
 
 # ── (A) unidad ──────────────────────────────────────────────────────────

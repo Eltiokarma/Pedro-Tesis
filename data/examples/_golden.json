@@ -342,13 +342,13 @@
   "sum_duty": -122.896603
  },
  "talara": {
-  "ISBL": 42214019.64,
+  "ISBL": 42365738.58,
   "energy_errors": 0,
   "mass_errors": 0,
-  "n_blocks": 48,
-  "n_streams": 51,
+  "n_blocks": 49,
+  "n_streams": 52,
   "overall_status": "ok",
-  "sum_duty": 8992.338447
+  "sum_duty": 9073.439807
  },
  "urea": {
   "ISBL": 5125500.16,

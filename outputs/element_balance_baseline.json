@@ -230,49 +230,9 @@
   "element_findings": []
  },
  "talara": {
-  "n_elem_critico": 3,
+  "n_elem_critico": 0,
   "n_elem_mayor": 0,
-  "element_findings": [
-   {
-    "mode": "element",
-    "component": "C",
-    "in": 2246.026,
-    "out": 83.898,
-    "delta": 2162.128,
-    "rel_pct": 96.26,
-    "block_flow_pct": 72.07,
-    "severity": "CRITICO",
-    "block": "R-SMR",
-    "block_id": 37,
-    "message": "R-SMR: elemento 'C' no se conserva — in=2246.0 out=83.9 tm/a (Δ=2162.1, 96.3% del elemento) — reacción mal balanceada en átomos u output de reactor inconsistente"
-   },
-   {
-    "mode": "element",
-    "component": "H",
-    "in": 753.974,
-    "out": 2697.979,
-    "delta": 1944.005,
-    "rel_pct": 72.05,
-    "block_flow_pct": 64.8,
-    "severity": "CRITICO",
-    "block": "R-SMR",
-    "block_id": 37,
-    "message": "R-SMR: elemento 'H' no se conserva — in=754.0 out=2698.0 tm/a (Δ=1944.0, 72.1% del elemento) — reacción mal balanceada en átomos u output de reactor inconsistente"
-   },
-   {
-    "mode": "element",
-    "component": "O",
-    "in": 0.0,
-    "out": 218.124,
-    "delta": 218.124,
-    "rel_pct": 100.0,
-    "block_flow_pct": 7.27,
-    "severity": "CRITICO",
-    "block": "R-SMR",
-    "block_id": 37,
-    "message": "R-SMR: elemento 'O' no se conserva — in=0.0 out=218.1 tm/a (Δ=218.1, 100.0% del elemento) — reacción mal balanceada en átomos u output de reactor inconsistente"
-   }
-  ]
+  "element_findings": []
  },
  "urea": {
   "n_elem_critico": 0,
