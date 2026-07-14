@@ -1134,7 +1134,7 @@
    "mass_flow": 0.0,
    "mass_flow_locked": false,
    "name": "S-quench",
-   "phase": "",
+   "phase": "vapor",
    "phase_locked": false,
    "pipe_K_local": 0.0,
    "pipe_diameter_m": 0.0,
@@ -1203,7 +1203,7 @@
    "target_purity_component": "",
    "target_purity_fraction": 0.0,
    "target_temperature": -999.0,
-   "temperature": 157,
+   "temperature": 117.8,
    "temperature_locked": true,
    "vapor_fraction": 0.0,
    "waypoints": []

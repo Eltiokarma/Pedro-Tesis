@@ -132,7 +132,7 @@
   "n_blocks": 12,
   "n_streams": 11,
   "overall_status": "ok",
-  "sum_duty": 70.499979
+  "sum_duty": 86.366575
  },
  "gas_sweet": {
   "ISBL": 12772945.7,
@@ -159,7 +159,7 @@
   "n_blocks": 11,
   "n_streams": 11,
   "overall_status": "ok",
-  "sum_duty": -104.494901
+  "sum_duty": -77.789713
  },
  "hda": {
   "ISBL": 10080068.06,
@@ -180,7 +180,7 @@
   "sum_duty": -438.873367
  },
  "hno3": {
-  "ISBL": 10998092.75,
+  "ISBL": 11057056.75,
   "energy_errors": 0,
   "mass_errors": 0,
   "n_blocks": 25,
@@ -276,7 +276,7 @@
   "n_blocks": 6,
   "n_streams": 5,
   "overall_status": "ok",
-  "sum_duty": 76.0
+  "sum_duty": 62.710861
  },
  "quimpac": {
   "ISBL": 51315461.77,
