@@ -3824,6 +3824,20 @@ def solve_pressure_propagation(fs):
             P_in_util = _pmin(ins_util)
             # Fallback global (bloques sin partición clara).
             P_in_min = _pmin(ins)
+            # HX de 4 puertos: parear por LADO (tube/shell).  Los dos lados
+            # de proceso de un cross-exchanger tampoco se mezclan — la salida
+            # del lado rico hereda la P del inlet rico, no del pobre.  Sin
+            # esto, min(rich 50, lean 1.5) colapsaba AMBAS salidas al mínimo
+            # (medido en gas_sweet/E-101: rich 50 → 0.01 bar).
+            _is_4port = b.id in _four_port_hx_ids(fs)
+            P_in_by_side = {}
+            if _is_4port:
+                for s in ins:
+                    side = _stream_side(s.dst_port)
+                    if side is not None and s.pressure_bar > 0:
+                        P_in_by_side[side] = min(
+                            P_in_by_side.get(side, s.pressure_bar),
+                            s.pressure_bar)
             # ΔP del bloque
             dp_block = getattr(b, "delta_p_bar", 0.0)
             # Es bomba/compresor con η declarada y dp positivo? Sí → setear duty
@@ -3853,10 +3867,15 @@ def solve_pressure_propagation(fs):
                 if is_column and "fondo" in (s_out.src_port or "").lower():
                     dp_out = abs(dp_block)
                 # La salida de servicio hereda la P del lado servicio; la de
-                # proceso, la del lado proceso.  Si no hay inlet del mismo
-                # lado, cae al fallback global.
-                out_is_util = (s_out.role or "") in ("utility", "ambient")
-                P_ref = (P_in_util if out_is_util else P_in_proc)
+                # proceso, la del lado proceso.  En un HX de 4 puertos se
+                # afina al LADO (tube/shell) del puerto de salida.  Si no hay
+                # inlet del mismo lado, cae al fallback global.
+                P_ref = None
+                if _is_4port:
+                    P_ref = P_in_by_side.get(_stream_side(s_out.src_port))
+                if P_ref is None:
+                    out_is_util = (s_out.role or "") in ("utility", "ambient")
+                    P_ref = (P_in_util if out_is_util else P_in_proc)
                 if P_ref is None:
                     P_ref = P_in_min
                 P_out = P_ref + dp_out - dp_pipe_bar

@@ -135,13 +135,13 @@
   "sum_duty": 86.366575
  },
  "gas_sweet": {
-  "ISBL": 12772945.7,
+  "ISBL": 12845907.68,
   "energy_errors": 0,
   "mass_errors": 0,
   "n_blocks": 13,
   "n_streams": 16,
   "overall_status": "ok",
-  "sum_duty": 4480.949346
+  "sum_duty": 4491.729834
  },
  "glass": {
   "ISBL": 1146665.34,
@@ -171,13 +171,13 @@
   "sum_duty": 60.185814
  },
  "hda_full": {
-  "ISBL": 32940733.98,
+  "ISBL": 31377897.75,
   "energy_errors": 0,
   "mass_errors": 0,
   "n_blocks": 25,
   "n_streams": 27,
   "overall_status": "ok",
-  "sum_duty": -438.873367
+  "sum_duty": -541.868209
  },
  "hno3": {
   "ISBL": 11057056.75,

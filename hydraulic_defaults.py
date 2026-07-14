@@ -233,6 +233,19 @@ EXAMPLE_PRESETS: Dict[str, Dict] = {
     # sección de separación opera a ~1.5 bar.  Anclar la ENTRADA del flash
     # (no la columna) evita que V-101 aparezca creando presión.
     "_example_hda":                       {"target": ("S-5", 1.5)},
+    # gas_sweet: el lazo de amina opera cerca de atmosférico.  El amina rico
+    # (absorbedor a 50 bar) hace let-down al regenerador (~1.8 bar); el
+    # regenerador y su condensador de tope están a ~1.5 bar; el amina pobre
+    # baja de vuelta escalonándose por el tren de enfriamiento hasta la
+    # succión de la bomba de recirculación.  Se declaran esas presiones de
+    # operación (el modelo simple no captura el let-down ni el perfil de la
+    # columna de despojo, y sin anclas el lazo colapsaba a vacío).
+    "_example_gas_sweetening": {"targets": [("S-rich-hot", 1.8),
+                                            ("S-top-strip", 1.5),
+                                            ("S-lean-bot", 1.8),
+                                            ("S-lean-hot", 1.7),
+                                            ("S-lean-warm", 1.5),
+                                            ("S-lean-cold", 1.3)]},
 }
 
 
