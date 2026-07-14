@@ -1735,7 +1735,7 @@
    "crystallizer_active": false,
    "custom_reactions": [],
    "cyclone_active": false,
-   "delta_p_bar": 0.0,
+   "delta_p_bar": -0.1,
    "dryer_active": false,
    "dtlm_override": null,
    "duty": 0.0,

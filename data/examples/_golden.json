@@ -285,7 +285,7 @@
   "n_blocks": 28,
   "n_streams": 28,
   "overall_status": "ok",
-  "sum_duty": 1583.43729
+  "sum_duty": 1583.441896
  },
  "rankine": {
   "ISBL": 271860377.93,
@@ -333,7 +333,7 @@
   "sum_duty": 42311.503963
  },
  "sulfuric": {
-  "ISBL": 1176071.87,
+  "ISBL": 1176071.73,
   "energy_errors": 0,
   "mass_errors": 0,
   "n_blocks": 13,
