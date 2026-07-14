@@ -54,16 +54,20 @@ def test_energy_block_compressor_detector_sigue_vivo():
 
 
 def test_energy_block_barrido_amplio():
-    """El barrido de cierre de energía sigue disparando en varios ejemplos
-    (compresores con aftercooler implícito, reactores con Q_rxn, hornos).
-    Tras cerrar las columnas por primera ley (Q_reb+Q_cond=ΔH), el conteo
-    bajó a ~9 — el detector sigue vivo y con cobertura amplia."""
+    """El barrido de cierre de energía sigue disparando en los ejemplos con
+    inconsistencia térmica real.  Tras (a) cerrar las columnas por primera
+    ley (Q_reb+Q_cond=ΔH) y (b) la auditoría de energía 2026-07 —que fijó las
+    T de descarga politrópicas de los compresores aislados y declaró el calor
+    de reacción faltante en absorbedores/freidoras— el conteo bajó a los pocos
+    casos genuinamente acoplados (lazo de reciclo de `industrial`, K-501 de
+    `hno3`, mezclador con flash NH3 de `urea`).  El detector sigue vivo; lo
+    que se redujo es el ruido de datos, no la cobertura del algoritmo."""
     n = 0
     for e in reg.list_examples():
         _, res = _solve(e["clave"])
         if _lines(res, "W-ENERGY-BLOCK"):
             n += 1
-    assert n >= 7, f"esperado barrido amplio, sólo {n} ejemplos"
+    assert n >= 2, f"el detector debe seguir vivo, sólo {n} ejemplos"
 
 
 def test_energia_reactor_primera_ley():

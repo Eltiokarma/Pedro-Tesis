@@ -215,27 +215,38 @@ def lock_pump_train(fs, feed_stream_name: str, target_stream_name: str,
 # Sólo para trenes SIN reactor de alta P (el solver siembra P_op_bar de los
 # reactores automáticamente, así que ammonia/methanol/hda/smr/etc. ya tienen
 # anchor).  Acá van los trenes bomba→columna casi atmosféricos y similares.
+# Anchors de presión por ejemplo.  "target" fija UN stream; "targets" fija
+# VARIOS (trenes con más de una columna / lazo de amina).  El anchor va sobre
+# el FEED de la columna (no sobre el producto): la columna define su presión
+# de operación y es exenta del audit pressure_source, así el tren no colapsa a
+# vacío por acumular ΔP sin nada que lo sostenga NI fabrica presión en el
+# último bloque pasivo antes del tanque.  La bomba de carga upstream se
+# auto-dimensiona para entregar el anchor a través de las pérdidas del tren.
 EXAMPLE_PRESETS: Dict[str, Dict] = {
     "_example_distillation":              {"target": ("S-3", 1.2)},
     "_example_ethanol":                   {"target": ("S-4", 1.1)},
     "_example_distillation_ethanol_water": {"target": ("S-feed-hot", 1.5)},
-    "_example_crude_distillation":        {"target": ("S-crude-hot", 2.5)},
+    "_example_crude_distillation":        {"target": ("S-3", 1.8)},
     "_example_biodiesel":                 {"target": ("S-1", 4.0)},
     "_example_reactor_flash_column":      {"target": ("S-fermentado", 10.0)},
+    "_example_hda":                       {"target": ("S-6", 1.8)},
 }
 
 
 def apply_example_hydraulics(fs, example_name: str) -> List[str]:
-    """Conveniencia para los ejemplos: aplica defaults típicos + el anchor
-    downstream específico del ejemplo (si lo necesita)."""
+    """Conveniencia para los ejemplos: aplica defaults típicos + el/los anchor(s)
+    downstream específicos del ejemplo (si los necesita)."""
     msgs = apply_typical_pressures(fs)
-    preset = EXAMPLE_PRESETS.get(example_name)
-    if preset and preset.get("target"):
-        tgt_name, tgt_P = preset["target"]
-        by_name = {s.name: s for s in fs.streams.values()}
-        if tgt_name in by_name and not by_name[tgt_name].pressure_locked:
-            by_name[tgt_name].pressure_bar = float(tgt_P)
-            by_name[tgt_name].pressure_locked = True
-            by_name[tgt_name].pressure_lock_origin = "preset"
+    preset = EXAMPLE_PRESETS.get(example_name) or {}
+    by_name = {s.name: s for s in fs.streams.values()}
+    targets = list(preset.get("targets", []))
+    if preset.get("target"):
+        targets.append(preset["target"])
+    for tgt_name, tgt_P in targets:
+        s = by_name.get(tgt_name)
+        if s is not None and not s.pressure_locked:
+            s.pressure_bar = float(tgt_P)
+            s.pressure_locked = True
+            s.pressure_lock_origin = "preset"
             msgs.append(f"anchor {tgt_name}: P={tgt_P:.2f} bar (lock)")
     return msgs
