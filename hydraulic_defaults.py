@@ -229,7 +229,10 @@ EXAMPLE_PRESETS: Dict[str, Dict] = {
     "_example_crude_distillation":        {"target": ("S-3", 1.8)},
     "_example_biodiesel":                 {"target": ("S-1", 4.0)},
     "_example_reactor_flash_column":      {"target": ("S-fermentado", 10.0)},
-    "_example_hda":                       {"target": ("S-6", 1.8)},
+    # hda: el efluente del reactor (25 bar) hace let-down al flash V-101; la
+    # sección de separación opera a ~1.5 bar.  Anclar la ENTRADA del flash
+    # (no la columna) evita que V-101 aparezca creando presión.
+    "_example_hda":                       {"target": ("S-5", 1.5)},
 }
 
 

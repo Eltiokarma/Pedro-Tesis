@@ -3806,8 +3806,24 @@ def solve_pressure_propagation(fs):
             if len(ins_with_p) != len(ins):
                 continue
             # P_in_min: si hay varios inlets, el output toma la menor
-            # (asumimos que las P se igualan en el mixer)
-            P_in_min = min(s.pressure_bar for s in ins)
+            # (asumimos que las P se igualan en el mixer).  Los dos lados de
+            # un HX de 4 puertos NO se mezclan: la P de la salida de PROCESO
+            # la fija el proceso, no el servicio (cooling water / aire), y
+            # viceversa.  Sin esta partición, el lado-aire de un air-cooler
+            # (ambient a 1 atm) arrastraba la salida de proceso al mínimo y
+            # colapsaba una sección de alta P (medido en industrial/E-101:
+            # 80.8 → 0.71 bar).
+            def _pmin(streams):
+                vals = [s.pressure_bar for s in streams if s.pressure_bar > 0]
+                return min(vals) if vals else None
+            ins_proc = [s for s in ins
+                        if (s.role or "") not in ("utility", "ambient")]
+            ins_util = [s for s in ins
+                        if (s.role or "") in ("utility", "ambient")]
+            P_in_proc = _pmin(ins_proc)
+            P_in_util = _pmin(ins_util)
+            # Fallback global (bloques sin partición clara).
+            P_in_min = _pmin(ins)
             # ΔP del bloque
             dp_block = getattr(b, "delta_p_bar", 0.0)
             # Es bomba/compresor con η declarada y dp positivo? Sí → setear duty
@@ -3836,7 +3852,14 @@ def solve_pressure_propagation(fs):
                 dp_out = dp_block
                 if is_column and "fondo" in (s_out.src_port or "").lower():
                     dp_out = abs(dp_block)
-                P_out = P_in_min + dp_out - dp_pipe_bar
+                # La salida de servicio hereda la P del lado servicio; la de
+                # proceso, la del lado proceso.  Si no hay inlet del mismo
+                # lado, cae al fallback global.
+                out_is_util = (s_out.role or "") in ("utility", "ambient")
+                P_ref = (P_in_util if out_is_util else P_in_proc)
+                if P_ref is None:
+                    P_ref = P_in_min
+                P_out = P_ref + dp_out - dp_pipe_bar
                 if abs(P_out - s_out.pressure_bar) > 1e-4:
                     s_out.pressure_bar = max(P_out, 0.01)
                     changed = True
