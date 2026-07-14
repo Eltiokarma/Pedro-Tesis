@@ -126,13 +126,13 @@
   "sum_duty": 1593.433031
  },
  "ethylene_crk": {
-  "ISBL": 6762621.92,
+  "ISBL": 6884969.09,
   "energy_errors": 0,
   "mass_errors": 0,
   "n_blocks": 12,
   "n_streams": 11,
   "overall_status": "ok",
-  "sum_duty": 69.922634
+  "sum_duty": 70.499979
  },
  "gas_sweet": {
   "ISBL": 12772945.7,
@@ -198,13 +198,13 @@
   "sum_duty": 9.360386
  },
  "industrial": {
-  "ISBL": 27678253.12,
+  "ISBL": 27679811.22,
   "energy_errors": 0,
   "mass_errors": 0,
   "n_blocks": 29,
   "n_streams": 30,
   "overall_status": "warning",
-  "sum_duty": -5473.507777
+  "sum_duty": -5469.050187
  },
  "ldpe": {
   "ISBL": 2447864.43,
@@ -225,7 +225,7 @@
   "sum_duty": 415.05391
  },
  "methanol": {
-  "ISBL": 5606075.03,
+  "ISBL": 5605318.32,
   "energy_errors": 0,
   "mass_errors": 0,
   "n_blocks": 10,

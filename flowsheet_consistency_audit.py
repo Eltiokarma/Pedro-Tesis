@@ -466,8 +466,18 @@ def _audit_pressure_source(fs, findings):
         carga (no de spec explícita) → recordatorio para declarar el origen.
     """
     for b in fs.blocks.values():
-        ins  = [s for s in fs.streams.values() if s.dst == b.id and s.src != -1]
-        outs = [s for s in fs.streams.values() if s.src == b.id and s.dst != -1]
+        # Sólo corrientes de PROCESO para el chequeo de "presión creada":
+        # en un HX de 4 puertos el lado de servicio (cooling water / steam)
+        # tiene su propio régimen de presión (lazo de bomba a ~2-3 bar) que
+        # NO se mezcla con el proceso.  Incluir la utility haría comparar su
+        # P de entrada (baja) contra la salida de proceso (alta) → falso
+        # positivo (medido en industrial/E-102 con su lazo de servicio).
+        ins  = [s for s in fs.streams.values()
+                if s.dst == b.id and s.src != -1
+                and (s.role or "") not in ("utility", "ambient")]
+        outs = [s for s in fs.streams.values()
+                if s.src == b.id and s.dst != -1
+                and (s.role or "") not in ("utility", "ambient")]
         if not ins or not outs:
             continue
         pin  = max((s.pressure_bar for s in ins if s.pressure_bar > 0),

@@ -308,6 +308,13 @@ def instantiate_auxiliaries(fs, block):
             specs = [sp for sp in specs if sp.role != "utility"]
     except Exception:
         pass
+    # heat_source_locked con heat_source vacío = el user forzó "sin
+    # utility" (p.ej. pseudo-turbina cuyo duty es trabajo de eje, no calor
+    # a remover).  size_utility_streams respeta ese lock y dejaría el lazo
+    # en mass_flow=0 → streams sin resolver; no instanciarlo.
+    if getattr(block, "heat_source_locked", False) \
+            and not (getattr(block, "heat_source", "") or ""):
+        specs = [sp for sp in specs if sp.role != "utility"]
     if not specs:
         return []
 

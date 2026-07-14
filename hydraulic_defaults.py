@@ -109,6 +109,7 @@ def apply_typical_pressures(fs, presets: Optional[Dict] = None) -> List[str]:
         if presets.get(s.name, {}).get("P") is not None:
             s.pressure_bar = float(presets[s.name]["P"])
             s.pressure_locked = True
+            s.pressure_lock_origin = "preset"
             continue
         if getattr(s, "pressure_locked", False):
             continue
@@ -116,14 +117,17 @@ def apply_typical_pressures(fs, presets: Optional[Dict] = None) -> List[str]:
         if role == "feed":
             s.pressure_bar = ATM
             s.pressure_locked = True
+            s.pressure_lock_origin = "preset"
             msgs.append(f"feed {s.name}: P={ATM:.3f} bar (lock)")
-        elif role == "product":
-            dst = _block_by_id(fs, s.dst)
-            if dst is not None and any(k in (dst.eq_type or "").lower()
-                                       for k in ("tank", "storage")):
-                s.pressure_bar = 1.5
-                s.pressure_locked = True
-                msgs.append(f"product {s.name}→tanque: P=1.5 bar (lock)")
+        # NOTA: el viejo lock producto→tanque (1.5 bar) se eliminó.  Fijar
+        # 1.5 bar en el producto SIN bomba de transferencia en el tren
+        # fabricaba presión sin dispositivo (audit pressure_source) en el
+        # último bloque antes del tanque (medido en ethanol/E-103,
+        # dist_eth_az/E-102, sugar/FL-101+DR-101, industrial/V-202,
+        # leche_gloria/CHURN-101, glass/E-101, bread/E-101, talara).  El
+        # producto llega al tanque a la P que el tren realmente entrega;
+        # si un ejemplo tiene bomba de transferencia, su target se declara
+        # con lock_pump_train / EXAMPLE_PRESETS como cualquier anchor.
 
     # ---- 3) ΔP típica por equipo --------------------------------------
     for b in fs.blocks.values():
@@ -193,12 +197,14 @@ def lock_pump_train(fs, feed_stream_name: str, target_stream_name: str,
     if feed is not None:
         feed.pressure_bar = float(feed_P_bar)
         feed.pressure_locked = True
+        feed.pressure_lock_origin = "preset"
         msgs.append(f"feed {feed_stream_name}: P={feed_P_bar:.3f} bar (lock)")
     else:
         msgs.append(f"⚠ lock_pump_train: feed '{feed_stream_name}' no existe")
     if tgt is not None:
         tgt.pressure_bar = float(target_P_bar)
         tgt.pressure_locked = True
+        tgt.pressure_lock_origin = "preset"
         msgs.append(f"target {target_stream_name}: P={target_P_bar:.2f} bar (lock)")
     else:
         msgs.append(f"⚠ lock_pump_train: target '{target_stream_name}' no existe")
@@ -230,5 +236,6 @@ def apply_example_hydraulics(fs, example_name: str) -> List[str]:
         if tgt_name in by_name and not by_name[tgt_name].pressure_locked:
             by_name[tgt_name].pressure_bar = float(tgt_P)
             by_name[tgt_name].pressure_locked = True
+            by_name[tgt_name].pressure_lock_origin = "preset"
             msgs.append(f"anchor {tgt_name}: P={tgt_P:.2f} bar (lock)")
     return msgs

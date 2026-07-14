@@ -296,9 +296,34 @@ def _build_adjacency(fs):
 
 
 def _strongly_connected_components(fs):
-    """Tarjan SCC.  Devuelve lista de listas de block_ids.
-    Cada SCC con > 1 bloque (o 1 bloque con auto-edge) es un reciclo."""
-    adj = _build_adjacency(fs)
+    """Tarjan SCC PORT-AWARE.  Devuelve lista de listas de block_ids.
+    Cada SCC con > 1 bloque (o 1 bloque con auto-edge) es un reciclo.
+
+    Port-aware: un HX de 4 puertos se desdobla en nodos (block_id, lado)
+    — mismo pareo que `_portaware_nodes` — para que sus dos lados NO se
+    mezclen en el grafo.  Sin esto, el lazo de circulación de servicio
+    (bomba→header→HX, creado por equipment_auxiliaries) comparte el nodo
+    del HX con un reciclo de PROCESO que pase por el otro lado y Tarjan
+    los fusiona en un solo SCC: el lazo pierde su exención analítica
+    (_is_pure_service_scc da False en el SCC mixto) y el tearing del
+    reciclo se contamina con las aristas de servicio (medido en
+    `industrial`/E-102: colapsaba el loop de MeOH con Δ=8.7% en E-103).
+    Con el desdoble, el lazo de servicio y el reciclo de proceso salen
+    como SCCs SEPARADOS (el block_id del HX aparece en ambos, correcto)."""
+    hx = _four_port_hx_ids(fs)
+
+    def _nsrc(s):
+        return (s.src, _stream_side(s.src_port)) if s.src in hx else s.src
+
+    def _ndst(s):
+        return (s.dst, _stream_side(s.dst_port)) if s.dst in hx else s.dst
+
+    adj = {bid: set() for bid in fs.blocks if bid not in hx}
+    for s in fs.streams.values():
+        if s.src in fs.blocks and s.dst in fs.blocks:
+            a, b = _nsrc(s), _ndst(s)
+            adj.setdefault(a, set()).add(b)
+            adj.setdefault(b, set())
     index_counter = [0]
     stack = []
     lowlinks = {}
@@ -331,7 +356,20 @@ def _strongly_connected_components(fs):
     for v in list(adj.keys()):
         if v not in index:
             strongconnect(v)
-    return result
+    # Nodos port-aware (block_id, lado) → block_ids únicos, preservando
+    # el orden de Tarjan.  Un mismo block_id puede aparecer en DOS SCCs
+    # distintos (HX con un lado en el reciclo de proceso y el otro en el
+    # lazo de servicio) — eso es correcto y deseado.
+    out = []
+    for comp in result:
+        seen, bids = set(), []
+        for n in comp:
+            b = n[0] if isinstance(n, tuple) else n
+            if b not in seen:
+                seen.add(b)
+                bids.append(b)
+        out.append(bids)
+    return out
 
 
 def _detect_cycles(fs):
@@ -3779,6 +3817,7 @@ def solve_pressure_propagation(fs):
                                       or "fan" in eq_lower
                                       or "bomba" in eq_lower)
             # Output P = P_in + dp_block - ΔP_pipe_calc del output
+            is_column = any(k in eq_lower for k in ("tower", "column"))
             for s_out in outs:
                 if getattr(s_out, "pressure_locked", False):
                     continue
@@ -3788,7 +3827,16 @@ def solve_pressure_propagation(fs):
                     dp_pipe_bar = dp_pipe["delta_P_bar"] if dp_pipe else 0.0
                 except Exception:
                     dp_pipe_bar = 0.0
-                P_out = P_in_min + dp_block - dp_pipe_bar
+                # Columna: el ΔP de platos se pierde hacia el TOPE (vapor
+                # sube contra la pérdida de carga); el FONDO es el punto de
+                # MAYOR presión de la torre (P_feed + ΔP de la sección de
+                # agotamiento).  Aplicar dp_block (<0) también al fondo
+                # dejaba los fondos sub-atmosféricos y el reboiler aguas
+                # abajo aparecía "creando" presión (audit pressure_source).
+                dp_out = dp_block
+                if is_column and "fondo" in (s_out.src_port or "").lower():
+                    dp_out = abs(dp_block)
+                P_out = P_in_min + dp_out - dp_pipe_bar
                 if abs(P_out - s_out.pressure_bar) > 1e-4:
                     s_out.pressure_bar = max(P_out, 0.01)
                     changed = True
