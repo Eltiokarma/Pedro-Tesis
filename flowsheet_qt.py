@@ -5443,15 +5443,20 @@ class _PaperFrame(QGraphicsItemGroup):
     PAPER_H = 960
 
     def __init__(self, project_title="PFD", area="100",
-                 drawing_no="PFD-100-001", rev="A", date=None):
+                 drawing_no="PFD-100-001", rev="A", date=None,
+                 legend_collapsed=False):
         super().__init__()
         self.setZValue(-100)
-        # decorativo puro: no participa del hit-testing (rubber band)
+        # decorativo puro: no participa del hit-testing (rubber band);
+        # el chevron de la leyenda se maneja por hit-test en la escena
+        # (legend_chevron_rect).
         self.setAcceptedMouseButtons(Qt.NoButton)
         self._project_title = project_title
         self._area          = area
         self._drawing_no    = drawing_no
         self._rev           = rev
+        self._legend_collapsed = bool(legend_collapsed)
+        self.legend_chevron_rect = None   # QRectF en coords de escena
         if date is None:
             import datetime
             date = datetime.date.today().isoformat()
@@ -5503,39 +5508,114 @@ class _PaperFrame(QGraphicsItemGroup):
             self._add_line(20,  H*t, 40,  H*t, 0.6)
             self._add_line(W-40, H*t, W-20, H*t, 0.6)
 
+    def _legend_dot(self, x, y, color, r=3.4):
+        d = QGraphicsEllipseItem(x, y, 2*r, 2*r, self)
+        d.setBrush(QBrush(QColor(color)))
+        d.setPen(QPen(Qt.NoPen))
+        d.setAcceptedMouseButtons(Qt.NoButton)
+        return d
+
     def _build_legend(self):
+        """Leyenda del lenguaje visual (artboard 2c): banda que extiende
+        el cuadro de título (esquina inferior derecha), colapsable desde
+        el chevron.  Cubre semáforo, puertos, servicio, roles y fases —
+        el stub anterior solo tenía 3 entradas del lenguaje viejo."""
         BLACK = self._BLACK
         SOFT  = self._SOFT
-        RED   = QColor(_tokens.TOK["stream_product"])
-        BLUE  = QColor(_tokens.TOK["stream_utility"])
+        T = _tokens.TOK
+        W, H  = self.PAPER_W, self.PAPER_H
 
-        # top-right corner
-        x0 = self.PAPER_W - 360
-        y0 = 60
-        gx, gy = x0, y0
-        self._add_rect(gx, gy, 320, 88, stroke_w=0.8, fill=self._PAPER)
-        f_title = QFont(self._sans, 9, QFont.Bold)
-        f_title.setLetterSpacing(QFont.AbsoluteSpacing, 1.2)
-        f_body  = QFont(self._mono, 8)
-        self._add_text(gx + 12, gy + 6,  "LEYENDA", f_title)
-        self._add_line(gx + 12, gy + 26, gx + 308, gy + 26, 0.4)
-        # process line
-        self._add_line(gx + 14, gy + 42, gx + 42, gy + 42, 2.2, BLACK)
-        self._add_text(gx + 50, gy + 36, "Línea de proceso", f_body)
-        # product
-        self._add_line(gx + 14, gy + 58, gx + 42, gy + 58, 2.2, RED)
-        self._add_text(gx + 50, gy + 52, "Producto",         f_body)
-        # utility
-        self._add_line(gx + 14, gy + 74, gx + 42, gy + 74, 2.2, BLUE)
-        self._add_text(gx + 50, gy + 68, "Agua / utility",   f_body)
+        bw = 460
+        bx = W - 500                      # alineada con el cuadro de título
+        collapsed = self._legend_collapsed
+        bh = 26 if collapsed else 118
+        by = H - 160 - bh - 6
 
-        # port sample
-        ell = QGraphicsEllipseItem(gx + 196, gy + 38, 7.2, 7.2, self)
-        ell.setBrush(QBrush(self._PAPER))
-        ell.setPen(QPen(BLACK, 1.6))
-        self._add_text(gx + 212, gy + 36, "Conexión",  f_body)
-        self._add_text(gx + 196, gy + 52, "tm/año",    QFont(self._mono, 8), color=SOFT)
-        self._add_text(gx + 196, gy + 68, "S = m², V = m³", QFont(self._mono, 8), color=SOFT)
+        # tipografía de documento — escala de plano (excepción 2g)
+        f_head = QFont(self._sans, 9, QFont.Bold)
+        f_head.setLetterSpacing(QFont.AbsoluteSpacing, 1.2)
+        f_sub  = QFont(self._sans, 7)
+        f_grp  = QFont(self._sans, 7, QFont.Bold)
+        f_item = QFont(self._mono, 7)
+
+        self._add_rect(bx, by, bw, bh, stroke_w=0.8, fill=self._PAPER)
+        self._add_text(bx + 12, by + 6, "LEYENDA", f_head)
+        self._add_text(bx + 106, by + 8, self._project_title, f_sub,
+                       color=SOFT)
+        chev = self._add_text(bx + bw - 24, by + 5,
+                              "▸" if collapsed else "▾",
+                              QFont(self._sans, 9), color=SOFT)
+        # hit-área generosa alrededor del chevron (coords de escena; el
+        # grupo vive en (0,0) — FlowsheetScene.mousePressEvent la testea)
+        from PySide6.QtCore import QRectF
+        self.legend_chevron_rect = QRectF(bx + bw - 34, by, 34, 24)
+        if collapsed:
+            return
+        self._add_line(bx + 12, by + 24, bx + bw - 12, by + 24, 0.4)
+
+        rows = (by + 46, by + 64, by + 82, by + 100)
+
+        # ── Estado (semáforo del solver) ──
+        x0 = bx + 12
+        self._add_text(x0, by + 28, "ESTADO", f_grp, color=SOFT)
+        estados = (
+            ("ok",      "Resuelto"),
+            ("warning", "Advertencia !"),
+            ("error",   "Error ×"),
+            ("stale",   "Desactualizado"),
+        )
+        for (st, lbl), ry in zip(estados, rows):
+            sq = QGraphicsRectItem(x0, ry - 8, 11, 11, self)
+            fill = _tokens.status_fill_hex(st)
+            sq.setBrush(QBrush(QColor(fill)) if fill
+                        else QBrush(self._PAPER))
+            pen = QPen(QColor(_tokens.status_hex(st)), 1.3)
+            if st == "stale":
+                pen.setStyle(Qt.DashLine)
+            sq.setPen(pen)
+            sq.setAcceptedMouseButtons(Qt.NoButton)
+            self._add_text(x0 + 17, ry - 8, lbl, f_item)
+
+        # ── Puertos (paleta técnica, 2 columnas de 3) ──
+        x1 = bx + 128
+        self._add_text(x1, by + 28, "PUERTOS", f_grp, color=SOFT)
+        puertos = (
+            ("port_process_in",  "Proc. in"),
+            ("port_process_out", "Proc. out"),
+            ("port_utility_in",  "Util. in"),
+            ("port_utility_out", "Util. out"),
+            ("port_aux",         "Aux"),
+            ("port_drain",       "Drenaje"),
+        )
+        for i, (tok, lbl) in enumerate(puertos):
+            cx = x1 + (0 if i < 3 else 70)
+            ry = rows[i % 3]
+            self._legend_dot(cx, ry - 6, T[tok])
+            self._add_text(cx + 12, ry - 8, lbl, f_item)
+
+        # ── Servicio (por temperatura) ──
+        x2 = bx + 264
+        self._add_text(x2, by + 28, "SERVICIO", f_grp, color=SOFT)
+        self._add_line(x2, rows[0] - 2, x2 + 24, rows[0] - 2, 2.0,
+                       QColor(T["service_hot"]))
+        self._add_text(x2 + 30, rows[0] - 8, "Caliente ↑", f_item)
+        self._add_line(x2, rows[1] - 2, x2 + 24, rows[1] - 2, 2.0,
+                       QColor(T["service_cold"]))
+        self._add_text(x2 + 30, rows[1] - 8, "Frío ↓", f_item)
+
+        # ── Corriente · fase ──
+        x3 = bx + 352
+        self._add_text(x3, by + 28, "CORRIENTE · FASE", f_grp, color=SOFT)
+        self._add_line(x3, rows[0] - 2, x3 + 24, rows[0] - 2, 2.2,
+                       QColor(T["stream_internal"]))
+        self._add_text(x3 + 30, rows[0] - 8, "Interna", f_item)
+        self._add_line(x3, rows[1] - 2, x3 + 24, rows[1] - 2, 2.2,
+                       QColor(T["stream_product"]))
+        self._add_text(x3 + 30, rows[1] - 8, "Producto", f_item)
+        self._legend_dot(x3, rows[2] - 6, T["phase_liq"])
+        self._add_text(x3 + 12, rows[2] - 8, "Líq.", f_item)
+        self._legend_dot(x3 + 52, rows[2] - 6, T["phase_vap"])
+        self._add_text(x3 + 64, rows[2] - 8, "Vap.", f_item)
 
     def _build_title_block(self):
         BLACK = self._BLACK
@@ -5610,6 +5690,8 @@ class FlowsheetScene(QGraphicsScene):
                 self.paper_frame = _PaperFrame(
                     project_title=project_title,
                     area=area, drawing_no=drawing_no,
+                    legend_collapsed=getattr(
+                        self, "_legend_collapsed", False),
                 )
                 self.paper_frame.setPos(0, 0)
                 self.addItem(self.paper_frame)
@@ -5617,6 +5699,34 @@ class FlowsheetScene(QGraphicsScene):
         else:
             if self.paper_frame is not None:
                 self.paper_frame.setVisible(False)
+
+    def toggle_legend_collapsed(self):
+        """Pliega/despliega la leyenda del Marco PFD (artboard 2c) —
+        reconstruye el marco conservando su metadata."""
+        self._legend_collapsed = not getattr(self, "_legend_collapsed",
+                                             False)
+        pf = self.paper_frame
+        if pf is None:
+            return
+        title, area, dwg = pf._project_title, pf._area, pf._drawing_no
+        visible = pf.isVisible()
+        self.removeItem(pf)
+        self.paper_frame = None
+        if visible:
+            self.set_paper_visible(True, project_title=title,
+                                   area=area, drawing_no=dwg)
+
+    def mousePressEvent(self, event):
+        # Chevron de la leyenda del Marco PFD (el marco es decorativo y
+        # no acepta mouse — el hit-test vive acá).
+        pf = self.paper_frame
+        if (pf is not None and pf.isVisible()
+                and pf.legend_chevron_rect is not None
+                and pf.legend_chevron_rect.contains(event.scenePos())):
+            self.toggle_legend_collapsed()
+            event.accept()
+            return
+        super().mousePressEvent(event)
 
     # Cada cuántos pasos de grilla va una línea mayor (canvas_grid_major)
     GRID_MAJOR_EVERY = 5
@@ -6594,10 +6704,14 @@ class FlowsheetMainWindow(QMainWindow):
                 it.set_status(st)
 
     def _apply_active_palette(self):
-        """Reconstruye la capa canvas con la paleta del tema activo."""
+        """Reconstruye la capa canvas con la paleta del tema activo.
+
+        Orden importante: primero los items (clear_flowsheet poda TODO
+        lo que tenga z>-100, incluidos los HIJOS del marco PFD), después
+        retint() que re-tinta papel/grilla y reconstruye el marco."""
         _refresh_canvas_palette()
-        self.scene.retint()
         self._rebuild_scene_keep_status()
+        self.scene.retint()
 
     def _on_theme_changed(self):
         """Único punto de re-tinte del editor: al cambiar tema, la capa
