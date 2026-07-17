@@ -97,8 +97,11 @@ STATUS_TOKEN = {
 }
 
 # Tinte de relleno por estado (fill del glifo). None = fill neutro bg_elev.
+# ok SÍ tinta: el lienzo está lleno de dots de puertos de colores y un
+# "éxito silencioso" resultaba invisible — el equipo debe cambiar de
+# color al resolver (feedback de uso post-rediseño).
 STATUS_FILL_TOKEN = {
-    "ok":      None,          # el éxito no grita
+    "ok":      "green_bg",
     "warning": "amber_bg",
     "error":   "danger_bg",
     "stale":   None,
