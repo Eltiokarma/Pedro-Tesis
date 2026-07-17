@@ -53,7 +53,7 @@ from PySide6.QtCore import (
 from PySide6.QtGui import (
     QAction, QActionGroup, QPen, QBrush, QColor, QPainter, QFont, QPainterPath,
     QPolygonF, QPainterPathStroker, QFontMetrics, QKeySequence,
-    QTransform, QIcon,
+    QTransform, QIcon, QLinearGradient,
 )
 from PySide6.QtWidgets import (
     QApplication, QMainWindow, QGraphicsScene, QGraphicsView,
@@ -4262,6 +4262,49 @@ class StreamItem(QGraphicsPathItem):
         return QColor(_tokens.TOK[self._ROLE_TOKEN.get(role,
                                                         "stream_internal")])
 
+    def _utility_gradient(self):
+        """Extremos del gradiente de temperatura real T_in→T_out
+        (pendiente ⚡ del 2a): el trazo va del color de la T propia
+        (arranque) al de la T de la SIGUIENTE corriente del lazo
+        (llegada), con los mismos extremos pale/deep del tono sólido —
+        así el lazo completo se lee como un circuito térmico continuo
+        (pálido=frío, profundo=caliente dentro del rango del lazo).
+
+        Devuelve (QColor inicio, QColor fin) o None → trazo sólido
+        (status crítico, lazo sin rango térmico o sin corriente
+        siguiente legible)."""
+        if self._status in ("error", "warning"):
+            return None
+        try:
+            is_hot, tmin, tmax = self._utility_loop_info()
+            if (tmax - tmin) <= 1e-6:
+                return None
+            s = self.model
+            nxt = [o for o in self.fs.streams.values()
+                   if o.src == s.dst and o.id != s.id
+                   and ((o.role or "") == "utility"
+                        or getattr(o, "auto_aux", False))]
+            if not nxt:
+                return None
+            T_self = float(getattr(s, "temperature", 25.0) or 25.0)
+            T_next = float(getattr(nxt[0], "temperature", 25.0) or 25.0)
+            pale = QColor(COLOR_UTIL_HOT_PALE if is_hot
+                          else COLOR_UTIL_COLD_PALE)
+            deep = QColor(COLOR_UTIL_HOT_DEEP if is_hot
+                          else COLOR_UTIL_COLD_DEEP)
+
+            def _c(T):
+                f = (T - tmin) / (tmax - tmin)
+                f = 0.0 if f < 0.0 else (1.0 if f > 1.0 else f)
+                return _lerp_color(pale, deep, f)
+
+            c0, c1 = _c(T_self), _c(T_next)
+            if c0.rgba() == c1.rgba():
+                return None
+            return c0, c1
+        except Exception:
+            return None
+
     def hoverEnterEvent(self, event):
         """Engrosa la línea al hover para feedback visual."""
         self._hovered = True
@@ -4729,7 +4772,19 @@ class StreamItem(QGraphicsPathItem):
         # Hover: engrosar línea +50% para feedback visual
         if self._hovered:
             width *= 1.5
-        pen = QPen(color, width)
+        # Gradiente de temperatura real T_in→T_out (solo utilities): el
+        # pen toma un QLinearGradient a lo largo del path; la punta de
+        # flecha hereda el color de llegada (_grad_end_color).
+        grad_ends = self._utility_gradient() if role == "utility" else None
+        self._grad_end_color = grad_ends[1] if grad_ends else None
+        if grad_ends is not None and len(pts) >= 4:
+            g = QLinearGradient(QPointF(pts[0], pts[1]),
+                                QPointF(pts[-2], pts[-1]))
+            g.setColorAt(0.0, grad_ends[0])
+            g.setColorAt(1.0, grad_ends[1])
+            pen = QPen(QBrush(g), width)
+        else:
+            pen = QPen(color, width)
         pen.setCapStyle(Qt.FlatCap)
         pen.setJoinStyle(Qt.MiterJoin)
         # utility / waste con línea punteada para distinguir aún más
@@ -5074,7 +5129,8 @@ class StreamItem(QGraphicsPathItem):
         b1  = QPointF(x_end - size*ux + wing*nx, y_end - size*uy + wing*ny)
         b2  = QPointF(x_end - size*ux - wing*nx, y_end - size*uy - wing*ny)
         self.arrow_head.setPolygon(QPolygonF([tip, b1, b2]))
-        self.arrow_head.setBrush(QBrush(self._color()))
+        self.arrow_head.setBrush(QBrush(getattr(self, "_grad_end_color", None)
+                                        or self._color()))
 
     def shape(self):
         """Hit area más ancha que el stroke visible (2.4 px) → click sobre
