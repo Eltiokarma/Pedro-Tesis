@@ -30,6 +30,7 @@ from PySide6.QtWidgets import (
 import pfd_fonts
 import block_inspector as _bi
 from block_inspector import _PrefsBus
+from tokens import qfont, FONT_UI, FONT_VALUE
 from inspector_widgets import _tok   # lector de TOK en caliente (compartido)
 
 
@@ -64,7 +65,7 @@ class EconTabs(QWidget):
             b = QPushButton(lab)
             b.setCheckable(True)
             b.setCursor(Qt.PointingHandCursor)
-            b.setFont(QFont(pfd_fonts.SANS, 9, QFont.DemiBold))
+            b.setFont(qfont(FONT_UI))
             self._group.addButton(b, i)
             self._buttons.append(b)
             lay.addWidget(b)
@@ -124,7 +125,7 @@ class ConfigPanel(QGroupBox):
         # header (chevron + título + "Editar")
         head = QPushButton()
         head.setCursor(Qt.PointingHandCursor)
-        head.setFont(QFont(pfd_fonts.SANS, 9, QFont.DemiBold))
+        head.setFont(qfont(FONT_UI))
         head.clicked.connect(self.toggle)
         self._head = head
         root.addWidget(head)
@@ -136,7 +137,7 @@ class ConfigPanel(QGroupBox):
         self._rchips: List[QLabel] = []
         for label, val in self._summary_items():
             chip = QLabel(f"{label}: {val}")
-            chip.setFont(QFont(pfd_fonts.MONO, 8))
+            chip.setFont(qfont(FONT_VALUE))
             self._rchips.append(chip)
             sl.addWidget(chip)
         sl.addStretch(1)
@@ -150,7 +151,7 @@ class ConfigPanel(QGroupBox):
         self.in_tax = QLineEdit(str(self._params.get("tax_rate", "")))
         self.in_disc = QLineEdit(str(self._params.get("discount_rate", "")))
         for w in (self.in_life, self.in_tax, self.in_disc):
-            w.setFont(QFont(pfd_fonts.MONO, 9))
+            w.setFont(qfont(FONT_VALUE))
             w.editingFinished.connect(self.paramsChanged.emit)
         fl.addRow("Vida (años):", self.in_life)
         fl.addRow("Impuestos:", self.in_tax)
@@ -224,17 +225,17 @@ class FinancialTable(QTableView):
         model = QStandardItemModel(len(self._rows), ncol, self)
         if self._headers:
             model.setHorizontalHeaderLabels(self._headers)
-        mono = QFont(pfd_fonts.MONO, 9)
-        mono_b = QFont(pfd_fonts.MONO, 9, QFont.DemiBold)
+        mono = qfont(FONT_VALUE)
+        mono_b = qfont(FONT_VALUE); mono_b.setWeight(QFont.DemiBold)
+        sans = qfont(FONT_UI)
+        sans_b = qfont(FONT_UI); sans_b.setWeight(QFont.DemiBold)
         for r, row in enumerate(self._rows):
             kind = row.get("kind", "normal")
             for c, cell in enumerate(row["cells"]):
                 it = QStandardItem(str(cell))
                 # col 0 = label (left/sans), resto numérico (right/mono)
                 if c == 0:
-                    it.setFont(QFont(pfd_fonts.SANS, 9,
-                                     QFont.DemiBold if kind in ("total", "grp")
-                                     else QFont.Normal))
+                    it.setFont(sans_b if kind in ("total", "grp") else sans)
                     it.setTextAlignment(Qt.AlignLeft | Qt.AlignVCenter)
                 else:
                     it.setFont(mono_b if kind == "total" else mono)

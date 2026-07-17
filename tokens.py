@@ -66,6 +66,46 @@ TOK = {
     # chip de tipo
     "tag_bg":       "#ede7d6",
     "tag_ink":      "#6b6253",
+    # fases (dots LIQ/VAP/GAS/2-φ — artboard 2a familia 6: set cohesivo
+    # líquido=azul frío, vapor=ámbar cálido, gas=gris pálido, 2φ=violeta)
+    "phase_liq":    "#2f6690",
+    "phase_vap":    "#c47a1e",
+    "phase_gas":    "#8a8172",
+    "phase_2ph":    "#6d5a9c",
+    # ── capa canvas (artboard 2a) ──
+    # papel y grilla — el papel es plano de dibujo, no panel
+    "canvas_bg":         "#fbfaf6",
+    "canvas_grid":       "#eae5d9",
+    "canvas_grid_major": "#ddd6c6",
+    # puertos — paleta técnica propia (8 clases, ordenadas frío→cálido;
+    # NO derivan del acento ni del semáforo)
+    "port_process_in":  "#4f7a3a",
+    "port_process_out": "#2f6690",
+    "port_utility_in":  "#c86a12",
+    "port_utility_out": "#b0442a",
+    "port_fuel":        "#6d4a2f",
+    "port_vent":        "#8a8172",
+    "port_drain":       "#4a5a63",
+    "port_aux":         "#6d5a9c",
+    # servicio por temperatura (el matiz ES el significado)
+    "service_hot":       "#d5501f",
+    "service_hot_pale":  "#f4c8a8",
+    "service_hot_deep":  "#a8320f",
+    "service_cold":      "#2b8fc4",
+    "service_cold_pale": "#bfe0f0",
+    "service_cold_deep": "#125f88",
+    # roles de stream (selección = +peso de trazo + halo accent_soft,
+    # nunca un hex distinto del rol)
+    "stream_internal": "#2a2620",
+    "stream_product":  "#b8323f",
+    "stream_utility":  "#2f4d9e",
+    "stream_waste":    "#6d4c41",
+    # labels on-canvas y duty badges (atados al eje de servicio)
+    "label_bg":       "#e0ffffff",   # #AARRGGBB — pill al 88 %
+    "label_ink":      "#26221c",
+    "label_ink_soft": "#6b6256",
+    "duty_hot":       "#b8323f",
+    "duty_cold":      "#2f6690",
     # catálogo Sinnott (extensión HX riguroso)
     "sinnott":        "#6e3aa6",
     "sinnott_ink":    "#4a2873",
@@ -97,8 +137,11 @@ STATUS_TOKEN = {
 }
 
 # Tinte de relleno por estado (fill del glifo). None = fill neutro bg_elev.
+# ok SÍ tinta: el lienzo está lleno de dots de puertos de colores y un
+# "éxito silencioso" resultaba invisible — el equipo debe cambiar de
+# color al resolver (feedback de uso post-rediseño).
 STATUS_FILL_TOKEN = {
-    "ok":      None,          # el éxito no grita
+    "ok":      "green_bg",
     "warning": "amber_bg",
     "error":   "danger_bg",
     "stale":   None,
@@ -121,15 +164,61 @@ def status_fill_hex(status: str):
 
 
 # ════════════════════════════════════════════════════════
+#  SEVERIDAD — una sola escala (artboard 2a familia 5)
+# ════════════════════════════════════════════════════════
+# Estaba triplicada (badges del canvas, dock de reactividad, chips) con
+# hex propios (#c41e3a/#e57c00/#f4b400/#9ca3af).  Se alinea con los
+# tokens semánticos existentes → hereda el par dark gratis.
+
+SEVERITY_TOKEN = {
+    "critical": "danger",
+    "high":     "orange",
+    "medium":   "amber",
+    "low":      "ink_soft",
+}
+
+
+def severity_hex(severity: str) -> str:
+    """Color (hex) para una severidad de warning, leído en caliente."""
+    return TOK[SEVERITY_TOKEN.get(severity, "ink_soft")]
+
+
+# ════════════════════════════════════════════════════════
 #  TIPOGRAFÍA — 4 tamaños (artboard 1a)
 # ════════════════════════════════════════════════════════
 # (familia, pt, peso QFont).  Las familias se resuelven vía pfd_fonts si
 # los Plex están embebidos; estos nombres son los canónicos.
 
-FONT_TITLE = ("IBM Plex Sans", 15, 600)   # títulos de panel
-FONT_UI    = ("IBM Plex Sans", 12, 400)   # texto de interfaz
+FONT_DISPLAY = ("IBM Plex Sans", 26, 700) # KPI hero (solo panel económico)
+FONT_TITLE = ("IBM Plex Sans", 15, 600)   # títulos de panel/diálogo
+FONT_UI    = ("IBM Plex Sans", 12, 400)   # texto de interfaz · botones · celdas
 FONT_VALUE = ("IBM Plex Mono", 11.5, 500) # valores numéricos · tabular
-FONT_LABEL = ("IBM Plex Sans", 10, 600)   # labels/kickers · caps
+FONT_HINT  = ("IBM Plex Sans", 11, 400)   # hint/caption · subtexto de KPI
+FONT_LABEL = ("IBM Plex Sans", 10, 600)   # labels/kickers · caps (mínimo del sistema)
+
+
+def qfont(spec):
+    """QFont desde un token de tipografía (familia, pt, peso 100-900).
+
+    Único constructor de fuentes del frontend: resuelve la familia vía
+    pfd_fonts (fallback si los Plex no están embebidos) y usa la escala
+    de pesos CSS que Qt6 adopta nativamente.  Import lazy de Qt para
+    mantener el módulo headless-safe.
+    """
+    from PySide6.QtGui import QFont
+    fam, pt, weight = spec
+    try:
+        import pfd_fonts
+        if "Mono" in fam:
+            fam = pfd_fonts.MONO
+        elif "Sans" in fam:
+            fam = pfd_fonts.SANS
+    except Exception:
+        pass
+    f = QFont(fam)
+    f.setPointSizeF(float(pt))
+    f.setWeight(QFont.Weight(int(weight)))
+    return f
 
 
 # ════════════════════════════════════════════════════════
@@ -191,6 +280,23 @@ THEME_LIGHT = {
     "orange": "#c26329", "orange_bg": "#f5e1d0",
     "danger": "#b8453a", "danger_bg": "#f3dcd8",
     "tag_bg": "#ede7d6", "tag_ink": "#6b6253",
+    "phase_liq": "#2f6690", "phase_vap": "#c47a1e",
+    "phase_gas": "#8a8172", "phase_2ph": "#6d5a9c",
+    "canvas_bg": "#fbfaf6", "canvas_grid": "#eae5d9",
+    "canvas_grid_major": "#ddd6c6",
+    "port_process_in": "#4f7a3a", "port_process_out": "#2f6690",
+    "port_utility_in": "#c86a12", "port_utility_out": "#b0442a",
+    "port_fuel": "#6d4a2f", "port_vent": "#8a8172",
+    "port_drain": "#4a5a63", "port_aux": "#6d5a9c",
+    "service_hot": "#d5501f", "service_hot_pale": "#f4c8a8",
+    "service_hot_deep": "#a8320f",
+    "service_cold": "#2b8fc4", "service_cold_pale": "#bfe0f0",
+    "service_cold_deep": "#125f88",
+    "stream_internal": "#2a2620", "stream_product": "#b8323f",
+    "stream_utility": "#2f4d9e", "stream_waste": "#6d4c41",
+    "label_bg": "#e0ffffff", "label_ink": "#26221c",
+    "label_ink_soft": "#6b6256",
+    "duty_hot": "#b8323f", "duty_cold": "#2f6690",
     "sinnott": "#6e3aa6", "sinnott_ink": "#4a2873", "sinnott_bg": "#efebf7",
     "sinnott_ribbon": "#8a5cc0", "turton_ink": "#3548b4",
     "status_fallback": "#5f7bd6",
@@ -210,6 +316,23 @@ THEME_DARK = {
     "orange": "#d18a55", "orange_bg": "#2e2118",
     "danger": "#d97262", "danger_bg": "#2e1a17",
     "tag_bg": "#2a241d", "tag_ink": "#a59a89",
+    "phase_liq": "#6fa8d6", "phase_vap": "#e0a94e",
+    "phase_gas": "#b3a892", "phase_2ph": "#a795d6",
+    "canvas_bg": "#221d15", "canvas_grid": "#2c2519",
+    "canvas_grid_major": "#38301f",
+    "port_process_in": "#8fb46a", "port_process_out": "#6fa8d6",
+    "port_utility_in": "#e0a94e", "port_utility_out": "#d98a68",
+    "port_fuel": "#b08a63", "port_vent": "#b3a892",
+    "port_drain": "#8ba0aa", "port_aux": "#a795d6",
+    "service_hot": "#e88a5a", "service_hot_pale": "#5a3320",
+    "service_hot_deep": "#f0a877",
+    "service_cold": "#63b8e0", "service_cold_pale": "#1e3a4a",
+    "service_cold_deep": "#8fcdec",
+    "stream_internal": "#d8cfbf", "stream_product": "#e07a82",
+    "stream_utility": "#8595d8", "stream_waste": "#b39a8a",
+    "label_bg": "#e626211a", "label_ink": "#efe7d6",
+    "label_ink_soft": "#a59a89",
+    "duty_hot": "#e07a82", "duty_cold": "#6fa8d6",
     "sinnott": "#b598e0", "sinnott_ink": "#d3befa", "sinnott_bg": "#2a2535",
     "sinnott_ribbon": "#9978c9", "turton_ink": "#b4befa",
     "status_fallback": "#9aaef0",

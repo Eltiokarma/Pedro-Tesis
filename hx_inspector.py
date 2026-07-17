@@ -24,6 +24,8 @@ from PySide6.QtWidgets import (
 )
 
 import pfd_fonts
+from tokens import (qfont, FONT_DISPLAY, FONT_TITLE, FONT_UI,
+                    FONT_VALUE, FONT_HINT, FONT_LABEL)
 from block_inspector import TOK
 import hx_icons as hi
 
@@ -190,13 +192,13 @@ def _subsect_header(title: str, sub: str = "") -> QWidget:
     w = QWidget()
     lay = QHBoxLayout(w); lay.setContentsMargins(0, 0, 0, 0); lay.setSpacing(8)
     tl = QLabel(title.upper())
-    f = QFont(pfd_fonts.SANS, 8, QFont.DemiBold); f.setLetterSpacing(QFont.AbsoluteSpacing, 0.8)
+    f = qfont(FONT_LABEL); f.setLetterSpacing(QFont.AbsoluteSpacing, 0.8)
     tl.setFont(f)
     tl.setStyleSheet(f"color:{TOK['ink_soft']};")
     lay.addWidget(tl)
     lay.addStretch(1)
     if sub:
-        sb = QLabel(sub); sb.setFont(QFont(pfd_fonts.MONO, 8))
+        sb = QLabel(sub); sb.setFont(qfont(FONT_VALUE))
         sb.setStyleSheet(f"color:{TOK['ink_soft']};")
         lay.addWidget(sb)
     return w
@@ -226,7 +228,7 @@ class HXSourceRibbon(QLabel):
                 }.get(source, ("fallback", TOK["ink_soft"], "transparent", True))
         label, fg, bg, dashed = kind
         self.setText(label)
-        f = QFont(pfd_fonts.MONO, 7, QFont.Bold); f.setLetterSpacing(QFont.AbsoluteSpacing, 0.5)
+        f = qfont(FONT_VALUE); f.setLetterSpacing(QFont.AbsoluteSpacing, 0.5)
         self.setFont(f)
         border = (f"1px dashed {TOK['ink_ghost']}" if dashed else "0")
         self.setStyleSheet(
@@ -264,7 +266,7 @@ class DiagnosticCard(QFrame):
         col = QVBoxLayout(); col.setContentsMargins(11, 9, 11, 9); col.setSpacing(3)
         # label + corner
         top = QHBoxLayout(); top.setContentsMargins(0, 0, 0, 0); top.setSpacing(5)
-        lab = QLabel(label); lab.setFont(QFont(pfd_fonts.SANS, 8))
+        lab = QLabel(label); lab.setFont(qfont(FONT_HINT))
         lab.setStyleSheet(f"color:{TOK['ink_mute']};")
         top.addWidget(lab); top.addStretch(1)
         if corner_icon:
@@ -274,7 +276,7 @@ class DiagnosticCard(QFrame):
         # value
         vrow = QHBoxLayout(); vrow.setContentsMargins(0, 0, 0, 0); vrow.setSpacing(4)
         val = QLabel(value)
-        vf = QFont(pfd_fonts.MONO, 17, QFont.DemiBold)
+        vf = qfont(FONT_VALUE)
         if state == "fallback":
             vf.setItalic(True)
         val.setFont(vf)
@@ -283,7 +285,7 @@ class DiagnosticCard(QFrame):
         val.setStyleSheet(f"color:{vcol};")
         vrow.addWidget(val)
         if unit:
-            u = QLabel(unit); u.setFont(QFont(pfd_fonts.MONO, 8))
+            u = QLabel(unit); u.setFont(qfont(FONT_VALUE))
             u.setStyleSheet(f"color:{TOK['ink_soft']};")
             vrow.addWidget(u, 0, Qt.AlignBottom)
         vrow.addStretch(1)
@@ -291,7 +293,7 @@ class DiagnosticCard(QFrame):
         # sub
         sub = QHBoxLayout(); sub.setContentsMargins(0, 0, 0, 0); sub.setSpacing(6)
         if subtext is not None:
-            st = QLabel(subtext); st.setFont(QFont(pfd_fonts.SANS, 8))
+            st = QLabel(subtext); st.setFont(qfont(FONT_HINT))
             st.setStyleSheet(f"color:{TOK['ink_mute']};")
             sub.addWidget(st)
         else:
@@ -391,11 +393,11 @@ def make_empty_state(kind: str) -> QWidget:
     lay.setAlignment(Qt.AlignHCenter)
     ic = hi.GlyphLabel(icon, 28, TOK["ink_soft"], 1.4); lay.addWidget(ic, 0, Qt.AlignHCenter)
     tl = QLabel(title); tl.setAlignment(Qt.AlignCenter); tl.setWordWrap(True)
-    tl.setFont(QFont(pfd_fonts.SANS, 10, QFont.DemiBold))
+    tl.setFont(qfont(FONT_LABEL))
     tl.setStyleSheet(f"color:{TOK['ink']};")
     lay.addWidget(tl)
     bd = QLabel(body); bd.setAlignment(Qt.AlignCenter); bd.setWordWrap(True)
-    bd.setFont(QFont(pfd_fonts.SANS, 9)); bd.setStyleSheet(f"color:{TOK['ink_mute']};")
+    bd.setFont(qfont(FONT_HINT)); bd.setStyleSheet(f"color:{TOK['ink_mute']};")
     lay.addWidget(bd)
     if tip:
         tprow = QFrame()
@@ -403,7 +405,7 @@ def make_empty_state(kind: str) -> QWidget:
         tl2.addStretch(1)
         tl2.addWidget(hi.GlyphLabel("lightbulb", 13, TOK["ink_soft"], 1.6), 0, Qt.AlignTop)
         tp = QLabel(tip); tp.setWordWrap(True)
-        tp.setFont(QFont(pfd_fonts.SANS, 8)); tp.setStyleSheet(f"color:{TOK['ink_soft']};")
+        tp.setFont(qfont(FONT_HINT)); tp.setStyleSheet(f"color:{TOK['ink_soft']};")
         tp.setMaximumWidth(280)
         tl2.addWidget(tp); tl2.addStretch(1)
         lay.addWidget(tprow)
@@ -439,15 +441,15 @@ class WarningRow(QFrame):
         lay = QHBoxLayout(self); lay.setContentsMargins(11, 8, 10, 8); lay.setSpacing(10)
         lay.addWidget(hi.GlyphLabel(glyph, 16, gc, 1.6), 0, Qt.AlignTop)
         col = QVBoxLayout(); col.setContentsMargins(0, 0, 0, 0); col.setSpacing(2)
-        tl = QLabel(title); tl.setFont(QFont(pfd_fonts.SANS, 9, QFont.DemiBold))
+        tl = QLabel(title); tl.setFont(qfont(FONT_LABEL))
         tl.setStyleSheet(f"color:{tc};")
         col.addWidget(tl)
-        dl = QLabel(desc); dl.setWordWrap(True); dl.setFont(QFont(pfd_fonts.SANS, 8))
+        dl = QLabel(desc); dl.setWordWrap(True); dl.setFont(qfont(FONT_HINT))
         dl.setStyleSheet(f"color:{TOK['ink_mute']};")
         col.addWidget(dl)
         lay.addLayout(col, 1)
         cta = QPushButton("Ver explicación"); cta.setCursor(Qt.PointingHandCursor)
-        cta.setFont(QFont(pfd_fonts.SANS, 8))
+        cta.setFont(qfont(FONT_HINT))
         cta.setStyleSheet(
             f"QPushButton {{ background:transparent; color:{TOK['accent']}; "
             f"border:0; padding:2px 6px; border-radius:4px; }} "
@@ -479,7 +481,7 @@ class WarningPanel(QWidget):
         more = len(self._warnings) - len(shown)
         if more > 0:
             btn = QPushButton(f"+{more} aviso{'s' if more != 1 else ''} más")
-            btn.setCursor(Qt.PointingHandCursor); btn.setFont(QFont(pfd_fonts.SANS, 8))
+            btn.setCursor(Qt.PointingHandCursor); btn.setFont(qfont(FONT_HINT))
             btn.setStyleSheet(
                 f"QPushButton {{ background:{TOK['bg_mute']}; color:{TOK['ink_mute']}; "
                 f"border:0; border-radius:6px; padding:6px 10px; text-align:left; }} "
@@ -548,13 +550,13 @@ class WHBSubcomponent(QFrame):
         ico.setPixmap(hi.glyph_pixmap("topic-whb", 14, TOK["sinnott_ink"], 1.6))
         hd.addWidget(ico)
         tl = QLabel("WHB · Generación de vapor")
-        tl.setFont(QFont(pfd_fonts.SANS, 9, QFont.DemiBold))
+        tl.setFont(qfont(FONT_LABEL))
         tl.setStyleSheet(f"color:{TOK['sinnott_ink']};")
         hd.addWidget(tl); hd.addStretch(1)
         st_txt = {"ok": "dentro de rango", "warn": "scale mismatch",
                   "error": "fuera de rango"}[state]
         st_c = {"ok": TOK["green"], "warn": TOK["amber"], "error": TOK["danger"]}[state]
-        pill = QLabel(st_txt); pill.setFont(QFont(pfd_fonts.SANS, 8, QFont.DemiBold))
+        pill = QLabel(st_txt); pill.setFont(qfont(FONT_LABEL))
         pill.setStyleSheet(
             f"color:{st_c}; background:{TOK['bg_elev']}; border:1px solid {st_c}; "
             f"border-radius:9px; padding:2px 8px;")
@@ -564,10 +566,10 @@ class WHBSubcomponent(QFrame):
         # rows
         def row(label, value, right_w):
             r = QHBoxLayout(); r.setSpacing(8)
-            l = QLabel(label); l.setFont(QFont(pfd_fonts.SANS, 8))
+            l = QLabel(label); l.setFont(qfont(FONT_HINT))
             l.setStyleSheet(f"color:{TOK['ink_mute']};"); l.setFixedWidth(92)
             r.addWidget(l)
-            v = QLabel(value); v.setFont(QFont(pfd_fonts.MONO, 9))
+            v = QLabel(value); v.setFont(qfont(FONT_VALUE))
             v.setStyleSheet(f"color:{TOK['ink']};")
             r.addWidget(v); r.addStretch(1)
             if right_w:
@@ -575,7 +577,7 @@ class WHBSubcomponent(QFrame):
             return r
         lay.addLayout(row("Tasa de vapor", f"{_grp(whb['steam_kg_per_h'])} kg/h",
                           HXSourceRibbon("computed_from_streams")))
-        src = QLabel("Sinnott '19"); src.setFont(QFont(pfd_fonts.SANS, 8))
+        src = QLabel("Sinnott '19"); src.setFont(qfont(FONT_HINT))
         src.setStyleSheet(f"color:{TOK['sinnott_ink']};")
         lay.addLayout(row(f"Rango {whb['variant']}",
                           f"{_grp(whb['range_min'])} – {_grp(whb['range_max'])}", src))
@@ -590,10 +592,10 @@ class WHBSubcomponent(QFrame):
         lay.addWidget(_RangeBar(whb["steam_kg_per_h"], whb["range_min"],
                                 whb["range_max"], state))
         bounds = QHBoxLayout()
-        b1 = QLabel(_grp(whb["range_min"])); b1.setFont(QFont(pfd_fonts.MONO, 7))
+        b1 = QLabel(_grp(whb["range_min"])); b1.setFont(qfont(FONT_VALUE))
         b2 = QLabel("↑ " + _grp(whb["steam_kg_per_h"]))
-        b2.setFont(QFont(pfd_fonts.MONO, 7, QFont.DemiBold))
-        b3 = QLabel(_grp(whb["range_max"])); b3.setFont(QFont(pfd_fonts.MONO, 7))
+        b2.setFont(qfont(FONT_VALUE))
+        b3 = QLabel(_grp(whb["range_max"])); b3.setFont(qfont(FONT_VALUE))
         for b in (b1, b2, b3):
             b.setStyleSheet(f"color:{TOK['ink_soft']};")
         b2.setStyleSheet(f"color:{TOK['danger'] if state=='error' else TOK['ink']};")
@@ -604,12 +606,12 @@ class WHBSubcomponent(QFrame):
         msg = {"ok": "Tu HX está bien dimensionado para esta correlación.",
                "warn": "Tu HX está cerca del piso del rango; el factor de instalación queda aproximado.",
                "error": "Tu HX está fuera del rango; considerá un kettle reboiler o un boiler de planta."}[state]
-        ml = QLabel(msg); ml.setWordWrap(True); ml.setFont(QFont(pfd_fonts.SANS, 8))
+        ml = QLabel(msg); ml.setWordWrap(True); ml.setFont(qfont(FONT_HINT))
         ml.setStyleSheet(f"color:{TOK['ink_mute']}; font-style:italic;")
         lay.addWidget(ml)
         if state == "error" and on_open:
             why = QPushButton("Por qué →"); why.setCursor(Qt.PointingHandCursor)
-            why.setFont(QFont(pfd_fonts.SANS, 8))
+            why.setFont(qfont(FONT_HINT))
             why.setStyleSheet(
                 f"QPushButton {{ background:transparent; color:{TOK['accent']}; "
                 f"border:0; text-align:left; padding:0; }} "
@@ -628,7 +630,7 @@ class CorrelationBadge(QPushButton):
         is_sinnott = which == "sinnott"
         self.setText(("Sinnott  " if is_sinnott else "Turton  ") + str(year))
         self.setCursor(Qt.PointingHandCursor)
-        self.setFont(QFont(pfd_fonts.MONO, 8, QFont.DemiBold))
+        self.setFont(qfont(FONT_VALUE))
         if source_full:
             self.setToolTip(source_full)
         bg = TOK["sinnott_bg"] if is_sinnott else TOK["spec_bg"]
@@ -650,7 +652,7 @@ class InstallChip(QLabel):
         else:
             txt = "F_BM dinámico"
         self.setText(txt)
-        self.setFont(QFont(pfd_fonts.SANS, 8, QFont.Medium))
+        self.setFont(qfont(FONT_LABEL))
         if sinnott:
             self.setStyleSheet(
                 f"color:{TOK['sinnott_ink']}; background:{TOK['sinnott_bg']}; "
@@ -700,10 +702,10 @@ class RigorousBlock(QFrame):
         hl = QHBoxLayout(self._hd); hl.setContentsMargins(12, 10, 12, 10); hl.setSpacing(8)
         self._tri = hi.GlyphLabel("tri-right", 10, TOK["ink_soft"], 0)
         hl.addWidget(self._tri)
-        tl = QLabel("Diseño riguroso"); tl.setFont(QFont(pfd_fonts.SANS, 9, QFont.DemiBold))
+        tl = QLabel("Diseño riguroso"); tl.setFont(qfont(FONT_LABEL))
         tl.setStyleSheet(f"color:{TOK['ink']};")
         hl.addWidget(tl)
-        sub = QLabel("servicio · pasos · U"); sub.setFont(QFont(pfd_fonts.MONO, 8))
+        sub = QLabel("servicio · pasos · U"); sub.setFont(qfont(FONT_VALUE))
         sub.setStyleSheet(f"color:{TOK['ink_soft']};")
         hl.addWidget(sub); hl.addStretch(1)
         self._hd.mousePressEvent = lambda e: self._toggle()
@@ -715,10 +717,10 @@ class RigorousBlock(QFrame):
 
         def kv(label, value):
             r = QHBoxLayout(); r.setSpacing(10)
-            l = QLabel(label); l.setFont(QFont(pfd_fonts.SANS, 9))
+            l = QLabel(label); l.setFont(qfont(FONT_HINT))
             l.setStyleSheet(f"color:{TOK['ink_mute']};"); l.setMinimumWidth(150)
             r.addWidget(l)
-            v = QLabel(value); v.setFont(QFont(pfd_fonts.MONO, 9))
+            v = QLabel(value); v.setFont(qfont(FONT_VALUE))
             v.setStyleSheet(f"color:{TOK['ink']};")
             r.addWidget(v); r.addStretch(1)
             return r
@@ -732,7 +734,7 @@ class RigorousBlock(QFrame):
                             f"{_fmt(vm['T_c_in'],0)} / {_fmt(vm['T_c_out'],0)} K"))
         note = QLabel("El fouling está plegado en el U de servicio (tablas "
                       "Perry/Sinnott por par de fluidos), no se modela R_f por separado.")
-        note.setWordWrap(True); note.setFont(QFont(pfd_fonts.SANS, 8))
+        note.setWordWrap(True); note.setFont(qfont(FONT_HINT))
         note.setStyleSheet(f"color:{TOK['ink_soft']}; font-style:italic;")
         bl.addWidget(note)
         root.addWidget(self._body)

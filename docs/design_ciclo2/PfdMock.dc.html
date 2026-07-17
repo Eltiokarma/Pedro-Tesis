@@ -1,0 +1,116 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<svg viewBox="0 0 920 480" width="100%" style="display:block; font-family:'IBM Plex Sans',sans-serif;">
+  <!-- grid -->
+  <defs>
+    <pattern id="pfdgrid" width="24" height="24" patternUnits="userSpaceOnUse">
+      <path d="M24 0H0V24" fill="none" stroke="var(--canvas_grid)" stroke-width="1"/>
+    </pattern>
+    <marker id="arrII" markerWidth="9" markerHeight="9" refX="7" refY="4.5" orient="auto"><path d="M0 0L9 4.5L0 9Z" fill="var(--stream_internal)"/></marker>
+    <marker id="arrPR" markerWidth="9" markerHeight="9" refX="7" refY="4.5" orient="auto"><path d="M0 0L9 4.5L0 9Z" fill="var(--stream_product)"/></marker>
+    <marker id="arrUT" markerWidth="9" markerHeight="9" refX="7" refY="4.5" orient="auto"><path d="M0 0L9 4.5L0 9Z" fill="var(--stream_utility)"/></marker>
+    <marker id="arrWA" markerWidth="9" markerHeight="9" refX="7" refY="4.5" orient="auto"><path d="M0 0L9 4.5L0 9Z" fill="var(--stream_waste)"/></marker>
+  </defs>
+  <rect x="0" y="0" width="920" height="480" fill="var(--canvas_bg)"/>
+  <rect x="0" y="0" width="920" height="480" fill="url(#pfdgrid)"/>
+
+  <!-- ══ STREAMS (drawn first, under blocks) ══ -->
+  <!-- feed -> pump (internal) -->
+  <path d="M118 150 H165" fill="none" stroke="var(--stream_internal)" stroke-width="2.4" marker-end="url(#arrII)"/>
+  <!-- pump -> hx (internal) -->
+  <path d="M215 150 H262" fill="none" stroke="var(--stream_internal)" stroke-width="2.4" marker-end="url(#arrII)"/>
+  <!-- hx -> reactor (internal) -->
+  <path d="M330 150 H392" fill="none" stroke="var(--stream_internal)" stroke-width="2.4" marker-end="url(#arrII)"/>
+  <!-- reactor -> compressor (internal) -->
+  <path d="M470 150 H548" fill="none" stroke="var(--stream_internal)" stroke-width="2.4" marker-end="url(#arrII)"/>
+  <!-- compressor -> column (internal) -->
+  <path d="M604 150 V96 H690" fill="none" stroke="var(--stream_internal)" stroke-width="2.4" marker-end="url(#arrII)"/>
+  <!-- column top -> product -->
+  <path d="M755 92 H860" fill="none" stroke="var(--stream_product)" stroke-width="2.8" marker-end="url(#arrPR)"/>
+  <!-- column bottom -> waste -->
+  <path d="M726 300 V372 H860" fill="none" stroke="var(--stream_waste)" stroke-width="2.4" marker-end="url(#arrWA)"/>
+  <!-- utility (steam) into hx -->
+  <path d="M296 250 V184" fill="none" stroke="var(--stream_utility)" stroke-width="2.2" marker-end="url(#arrUT)"/>
+
+  <!-- ══ STREAM LABELS ══ -->
+  <g font-size="11" font-weight="600">
+    <g><rect x="128" y="132" width="34" height="16" rx="4" fill="var(--label_bg)"/><text x="145" y="144" text-anchor="middle" fill="var(--label_ink)">S1</text></g>
+    <g><rect x="500" y="132" width="34" height="16" rx="4" fill="var(--label_bg)"/><text x="517" y="144" text-anchor="middle" fill="var(--label_ink)">S4</text></g>
+    <g><rect x="792" y="74" width="58" height="16" rx="4" fill="var(--label_bg)"/><text x="821" y="86" text-anchor="middle" fill="var(--label_ink)">Producto</text></g>
+    <g><rect x="800" y="354" width="46" height="16" rx="4" fill="var(--label_bg)"/><text x="823" y="366" text-anchor="middle" fill="var(--label_ink)">Purga</text></g>
+  </g>
+
+  <!-- ══ BLOCKS ══ -->
+  <!-- Feed tank : STALE (desaturated, dotted) -->
+  <g>
+    <rect x="72" y="120" width="44" height="60" rx="4" fill="var(--bg_elev)" stroke="var(--ink_soft)" stroke-width="1.6" stroke-dasharray="4 3"/>
+    <path d="M72 132 h44 M72 168 h44" stroke="var(--ink_soft)" stroke-width="1" opacity="0.6"/>
+    <circle cx="116" cy="150" r="4.5" fill="var(--port_process_out)"/>
+    <text x="94" y="196" text-anchor="middle" font-size="10.5" font-weight="600" fill="var(--label_ink_soft)">TK-101</text>
+  </g>
+  <!-- Pump : UNRUN (dotted stroke, neutral) -->
+  <g>
+    <circle cx="190" cy="150" r="25" fill="var(--bg_elev)" stroke="var(--ink_mute)" stroke-width="1.6" stroke-dasharray="3 3"/>
+    <path d="M190 150 L206 141 L206 159 Z" fill="var(--ink_mute)"/>
+    <circle cx="165" cy="150" r="4.5" fill="var(--port_process_in)"/>
+    <circle cx="215" cy="150" r="4.5" fill="var(--port_process_out)"/>
+    <text x="190" y="196" text-anchor="middle" font-size="10.5" font-weight="600" fill="var(--label_ink_soft)">P-101</text>
+  </g>
+  <!-- Heat exchanger : OK (green tint fill + green stroke) -->
+  <g>
+    <circle cx="296" cy="150" r="34" fill="var(--green_bg)" stroke="var(--green)" stroke-width="1.6"/>
+    <path d="M262 150 H330 M296 116 V184" stroke="var(--green)" stroke-width="1.2" opacity="0.7"/>
+    <circle cx="262" cy="150" r="4.5" fill="var(--port_process_in)"/>
+    <circle cx="330" cy="150" r="4.5" fill="var(--port_process_out)"/>
+    <circle cx="296" cy="184" r="4.5" fill="var(--port_utility_in)"/>
+    <text x="296" y="204" text-anchor="middle" font-size="10.5" font-weight="600" fill="var(--label_ink)">E-101</text>
+    <!-- service hot glyph -->
+    <g transform="translate(342,120)"><rect x="0" y="0" width="18" height="18" rx="4" fill="var(--service_hot)"/><text x="9" y="13" text-anchor="middle" font-size="11" font-weight="700" fill="#fff">↑</text></g>
+  </g>
+  <!-- Reactor : SELECTED (accent ring) + OK -->
+  <g>
+    <rect x="388" y="112" width="82" height="76" rx="10" fill="none" stroke="var(--accent)" stroke-width="2.2"/>
+    <rect x="394" y="118" width="70" height="64" rx="7" fill="var(--green_bg)" stroke="var(--green)" stroke-width="1.6"/>
+    <path d="M429 130 v40 M415 150 h28" stroke="var(--green)" stroke-width="1" opacity="0.6"/>
+    <circle cx="429" cy="140" r="9" fill="none" stroke="var(--green)" stroke-width="1"/>
+    <circle cx="392" cy="150" r="4.5" fill="var(--port_process_in)"/>
+    <circle cx="466" cy="150" r="4.5" fill="var(--port_process_out)"/>
+    <circle cx="429" cy="118" r="4.5" fill="var(--port_utility_in)"/>
+    <circle cx="429" cy="182" r="4.5" fill="var(--port_drain)"/>
+    <text x="429" y="204" text-anchor="middle" font-size="10.5" font-weight="600" fill="var(--label_ink)">R-101</text>
+  </g>
+  <!-- Compressor : WARNING (amber tint + chip) -->
+  <g>
+    <path d="M556 118 L604 108 L604 192 L556 182 Z" fill="var(--amber_bg)" stroke="var(--amber)" stroke-width="1.6" stroke-linejoin="round"/>
+    <circle cx="548" cy="150" r="4.5" fill="var(--port_process_in)"/>
+    <circle cx="604" cy="150" r="4.5" fill="var(--port_process_out)"/>
+    <text x="580" y="204" text-anchor="middle" font-size="10.5" font-weight="600" fill="var(--label_ink)">K-101</text>
+    <!-- warning chip: colour + symbol (daltonismo) -->
+    <g transform="translate(596,102)"><circle cx="9" cy="9" r="10" fill="var(--amber)" stroke="var(--canvas_bg)" stroke-width="1.5"/><text x="9" y="13.5" text-anchor="middle" font-size="12" font-weight="700" fill="#fff">!</text></g>
+  </g>
+  <!-- Column : ERROR (danger tint + chip) with reboiler/condenser duty badges -->
+  <g>
+    <rect x="690" y="92" width="66" height="208" rx="9" fill="var(--danger_bg)" stroke="var(--danger)" stroke-width="1.6"/>
+    <path d="M690 130 h66 M690 170 h66 M690 210 h66 M690 250 h66" stroke="var(--danger)" stroke-width="1" opacity="0.45"/>
+    <circle cx="690" cy="150" r="4.5" fill="var(--port_process_in)"/>
+    <circle cx="755" cy="92" r="4.5" fill="var(--port_process_out)"/>
+    <circle cx="726" cy="300" r="4.5" fill="var(--port_process_out)"/>
+    <text x="723" y="322" text-anchor="middle" font-size="10.5" font-weight="600" fill="var(--label_ink)">T-101</text>
+    <!-- error chip -->
+    <g transform="translate(746,84)"><circle cx="9" cy="9" r="10" fill="var(--danger)" stroke="var(--canvas_bg)" stroke-width="1.5"/><text x="9" y="13.5" text-anchor="middle" font-size="12" font-weight="700" fill="#fff">×</text></g>
+    <!-- duty badges -->
+    <g><rect x="620" y="84" width="60" height="18" rx="9" fill="var(--duty_cond, var(--duty_cold))"/><text x="650" y="97" text-anchor="middle" font-size="10.5" font-weight="700" fill="#fff">Qc 1.8</text></g>
+    <g><rect x="620" y="288" width="62" height="18" rx="9" fill="var(--duty_hot)"/><text x="651" y="301" text-anchor="middle" font-size="10.5" font-weight="700" fill="#fff">Qr 2.1</text></g>
+  </g>
+</svg>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;$preview&quot;:{&quot;width&quot;:920,&quot;height&quot;:480}}"></script>
+</body>
+</html>

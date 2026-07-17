@@ -36,6 +36,8 @@ from PySide6.QtWidgets import (
 )
 
 import pfd_fonts
+import flowsheet_units as funits
+from tokens import qfont, FONT_TITLE, FONT_UI, FONT_VALUE, FONT_HINT, FONT_LABEL
 from block_inspector import (
     TOK, ROW_PAD, SECT_GAP, PANEL_W,
     SpecField, _PrefsBus,
@@ -46,13 +48,26 @@ from block_inspector import (
 #  CONSTANTES VISUALES — phases + roles (replica del jsx)
 # ════════════════════════════════════════════════════════
 
-PHASE_DOT = {
-    "liquid":    "#3548b4",   # azul cobalto
-    "vapor":     "#c26329",   # naranja
-    "gas":       "#b8841a",   # ámbar
-    "two_phase": "#0d6e78",   # teal
-    "":          "#bab2a3",   # ghost
-}
+class _PhaseDot(dict):
+    """Dot de fase → token de TOK, leído en caliente (respeta tema).
+    Mantiene la API dict que ya consumen este módulo y streams_table."""
+    _MAP = {
+        "liquid":    "phase_liq",
+        "vapor":     "phase_vap",
+        "gas":       "phase_gas",
+        "two_phase": "phase_2ph",
+        "":          "ink_ghost",
+    }
+
+    def __getitem__(self, key):
+        return TOK[self._MAP[key]]
+
+    def get(self, key, default=None):
+        tok = self._MAP.get(key)
+        return TOK[tok] if tok else default
+
+
+PHASE_DOT = _PhaseDot()
 PHASE_LABEL = {
     "liquid": "LIQ", "vapor": "VAP", "gas": "GAS",
     "two_phase": "2-φ", "": "—",
@@ -96,15 +111,17 @@ class _StreamHeader(QFrame):
             f"background:{TOK['accent_tint']}; color:{TOK['accent']}; "
             f"border-radius:9px; border:1px solid {TOK['accent_soft']};"
         )
-        self._icon.setFont(QFont(pfd_fonts.MONO, 11, QFont.Bold))
+        self._icon.setFont(qfont(FONT_VALUE))
         lay.addWidget(self._icon)
 
         # title col
         col = QVBoxLayout(); col.setContentsMargins(0,0,0,0); col.setSpacing(2)
         self._tag = QLineEdit(self)
         self._tag.setFrame(False)
-        tf = QFont(pfd_fonts.MONO, 14)
-        tf.setWeight(QFont.Medium)
+        # título-valor mono del panel: conserva 14pt — FONT_VALUE (11.5)
+        # aplasta la jerarquía del header (excepción 2g)
+        tf = qfont(FONT_VALUE)
+        tf.setPointSizeF(14.0)
         self._tag.setFont(tf)
         self._tag.setStyleSheet(
             f"QLineEdit {{ background:transparent; color:{TOK['ink']}; "
@@ -120,9 +137,8 @@ class _StreamHeader(QFrame):
 
         sub_row = QHBoxLayout()
         sub_row.setContentsMargins(4, 0, 0, 0); sub_row.setSpacing(6)
-        self._chip = QLabel("STREAM")
-        cf = QFont(pfd_fonts.SANS, 8); cf.setBold(True)
-        self._chip.setFont(cf)
+        self._chip = QLabel("CORRIENTE")
+        self._chip.setFont(qfont(FONT_LABEL))
         self._chip.setStyleSheet(
             f"background:{TOK['tag_bg']}; color:{TOK['tag_ink']}; "
             f"padding:1px 7px; border-radius:4px; letter-spacing:1px;"
@@ -131,7 +147,7 @@ class _StreamHeader(QFrame):
         dot = QLabel("·"); dot.setStyleSheet(f"color:{TOK['ink_soft']};")
         sub_row.addWidget(dot)
         self._desc = QLabel(self)
-        self._desc.setFont(QFont(pfd_fonts.SANS, 9))
+        self._desc.setFont(qfont(FONT_HINT))
         self._desc.setStyleSheet(f"color:{TOK['ink_mute']};")
         sub_row.addWidget(self._desc, 1)
         col.addLayout(sub_row)
@@ -140,6 +156,7 @@ class _StreamHeader(QFrame):
         self._close = QToolButton(self)
         self._close.setText("✕")
         self._close.setFixedSize(28, 28)
+        # glifo-ícono ✕ (font-size:14px): tamaño geométrico, no tipografía (excepción 2g)
         self._close.setStyleSheet(
             f"QToolButton {{ background:transparent; color:{TOK['ink_mute']}; "
             f"border:0; border-radius:6px; font-size:14px; }} "
@@ -204,16 +221,19 @@ class _PathStrip(QFrame):
         mid = QVBoxLayout(); mid.setSpacing(4); mid.setAlignment(Qt.AlignCenter)
         bubble = QLabel(str(number) if number > 0 else "?")
         bubble.setFixedSize(52, 52); bubble.setAlignment(Qt.AlignCenter)
-        bubble.setFont(QFont(pfd_fonts.MONO, 16, QFont.Bold))
+        # burbuja circular 52×52: el 16pt está dimensionado al círculo —
+        # FONT_VALUE (11.5) rompe la proporción del elemento (excepción 2g)
+        bf = qfont(FONT_VALUE)
+        bf.setPointSizeF(16.0)
+        bubble.setFont(bf)
         bubble.setStyleSheet(
             f"background:{TOK['accent']}; color:white; "
             f"border-radius:26px;"
         )
         mid.addWidget(bubble, alignment=Qt.AlignCenter)
-        # mass flow text
-        mf_txt = f"{mass_flow:,.0f}".replace(",", " ")
-        mf = QLabel(f"{mf_txt}  tm/yr")
-        mf.setFont(QFont(pfd_fonts.MONO, 9))
+        # mass flow text — formateador único (respeta sistema de unidades)
+        mf = QLabel(funits.format_flow(mass_flow, funits.active_unit("flow")))
+        mf.setFont(qfont(FONT_VALUE))
         mf.setStyleSheet(f"color:{TOK['ink_mute']};")
         mf.setAlignment(Qt.AlignCenter)
         mid.addWidget(mf)
@@ -225,7 +245,7 @@ class _PathStrip(QFrame):
         phase_short = PHASE_LABEL.get(phase, "—")
         phase_color = PHASE_DOT.get(phase, TOK["ink_ghost"])
         ph = QLabel(phase_short)
-        ph.setFont(QFont(pfd_fonts.SANS, 8, QFont.Bold))
+        ph.setFont(qfont(FONT_LABEL))
         ph.setAlignment(Qt.AlignCenter)
         ph.setStyleSheet(
             f"background:{phase_color}; color:white; "
@@ -242,7 +262,7 @@ class _PathStrip(QFrame):
     def _make_col(self, header_text, tag, eq, direction, align_right=False):
         col = QVBoxLayout(); col.setSpacing(5)
         hd = QLabel(header_text)
-        hd.setFont(QFont(pfd_fonts.SANS, 7, QFont.Bold))
+        hd.setFont(qfont(FONT_LABEL))
         hd.setStyleSheet(
             f"color:{TOK['ink_soft']}; letter-spacing:1.5px;"
         )
@@ -262,11 +282,11 @@ class _PathStrip(QFrame):
         pl.addWidget(dot)
         ic = QVBoxLayout(); ic.setSpacing(2); ic.setContentsMargins(0,0,0,0)
         tg = QLabel(tag)
-        tg.setFont(QFont(pfd_fonts.MONO, 10, QFont.Bold))
+        tg.setFont(qfont(FONT_VALUE))
         tg.setStyleSheet(f"color:{TOK['ink']};")
         ic.addWidget(tg)
         eql = QLabel(eq.upper())
-        eql.setFont(QFont(pfd_fonts.SANS, 7))
+        eql.setFont(qfont(FONT_HINT))
         eql.setStyleSheet(
             f"color:{TOK['ink_soft']}; letter-spacing:1px;"
         )
@@ -340,11 +360,12 @@ class _StreamSidebar(QFrame):
             rl = QHBoxLayout(row); rl.setContentsMargins(8, 6, 8, 6); rl.setSpacing(8)
             ico = QLabel(icon); ico.setFixedWidth(14)
             ico.setAlignment(Qt.AlignCenter)
+            # glifo-ícono (T θ Σ Δ ≈ ↗): tamaño geométrico, no tipografía (excepción 2g)
             ico.setFont(QFont(pfd_fonts.MONO, 10, QFont.Bold))
             ico.setStyleSheet(f"color:{TOK['ink_mute']};")
             rl.addWidget(ico)
             lbl = QLabel(label)
-            lbl.setFont(QFont(pfd_fonts.SANS, 9))
+            lbl.setFont(qfont(FONT_UI))
             lbl.setStyleSheet(f"color:{TOK['ink']};")
             rl.addWidget(lbl, 1)
             row.mousePressEvent = (lambda ev, k=key: self._on_click(k))
@@ -357,7 +378,7 @@ class _StreamSidebar(QFrame):
         dl = QHBoxLayout(self._dof); dl.setContentsMargins(8, 8, 8, 8); dl.setSpacing(6)
         self._dof_dot = QLabel(); self._dof_dot.setFixedSize(8, 8)
         self._dof_text = QLabel("Consistente")
-        self._dof_text.setFont(QFont(pfd_fonts.SANS, 8))
+        self._dof_text.setFont(qfont(FONT_HINT))
         self._dof_text.setTextFormat(Qt.RichText)
         self._dof_text.setWordWrap(True)
         dl.addWidget(self._dof_dot)
@@ -420,18 +441,18 @@ class _StreamSidebar(QFrame):
 def _section_header(title: str, sub: str = "", help_text: str = "") -> QVBoxLayout:
     wrap = QVBoxLayout(); wrap.setContentsMargins(0,0,0,0); wrap.setSpacing(4)
     hd = QHBoxLayout(); hd.setContentsMargins(0,0,0,0); hd.setSpacing(8)
-    tl = QLabel(title); tl.setFont(QFont(pfd_fonts.SANS, 11, QFont.Bold))
+    tl = QLabel(title); tl.setFont(qfont(FONT_TITLE))
     tl.setStyleSheet(f"color:{TOK['ink']};")
     hd.addWidget(tl)
     if sub:
-        sl = QLabel(sub); sl.setFont(QFont(pfd_fonts.SANS, 8))
+        sl = QLabel(sub); sl.setFont(qfont(FONT_HINT))
         sl.setStyleSheet(f"color:{TOK['ink_soft']};")
         hd.addWidget(sl)
     hd.addStretch(1)
     wrap.addLayout(hd)
     if help_text:
         ht = QLabel(help_text); ht.setWordWrap(True)
-        ht.setFont(QFont(pfd_fonts.SANS, 8))
+        ht.setFont(qfont(FONT_HINT))
         ht.setStyleSheet(f"color:{TOK['ink_mute']}; line-height:1.4em;")
         wrap.addWidget(ht)
     return wrap
@@ -442,7 +463,7 @@ def _form_row(label: str, control, info: str = "") -> QFrame:
     lay = QHBoxLayout(r); lay.setContentsMargins(0, ROW_PAD//2, 0, ROW_PAD//2)
     lay.setSpacing(12)
     l = QLabel(label)
-    l.setFont(QFont(pfd_fonts.SANS, 9))
+    l.setFont(qfont(FONT_HINT))
     l.setStyleSheet(f"color:{TOK['ink_mute']};")
     l.setMinimumWidth(140)
     if info:
@@ -458,7 +479,8 @@ def _line_input(value: str = "") -> QLineEdit:
     e.setStyleSheet(
         f"QLineEdit {{ background:{TOK['bg_elev']}; color:{TOK['ink']}; "
         f"border:1px solid {TOK['line_strong']}; border-radius:7px; "
-        f"padding:6px 8px; font-family:'{pfd_fonts.SANS}'; font-size:9pt; }} "
+        f"padding:6px 8px; font-family:'{pfd_fonts.SANS}'; "
+        f"font-size:{FONT_HINT[1]}pt; }} "
         f"QLineEdit:focus {{ border:1.5px solid {TOK['accent']}; }}"
     )
     return e
@@ -469,7 +491,8 @@ def _combo() -> QComboBox:
     cb.setStyleSheet(
         f"QComboBox {{ background:{TOK['bg_elev']}; color:{TOK['ink']}; "
         f"border:1px solid {TOK['line_strong']}; border-radius:6px; "
-        f"padding:5px 8px; font-family:'{pfd_fonts.SANS}'; font-size:9pt; }} "
+        f"padding:5px 8px; font-family:'{pfd_fonts.SANS}'; "
+        f"font-size:{FONT_HINT[1]}pt; }} "
         f"QComboBox:hover {{ border:1px solid {TOK['accent_soft']}; }} "
         f"QComboBox::drop-down {{ border:0; }} "
         f"QComboBox QAbstractItemView {{ background:{TOK['bg_elev']}; "
@@ -567,13 +590,13 @@ class StreamInspectorPanel(QWidget):
             (self._stat_dof_lbl,  self._stat_dof_val,  self._stat_dof_unit),
         ]:
             col = QVBoxLayout(); col.setContentsMargins(0,0,0,0); col.setSpacing(1)
-            cap.setFont(QFont(pfd_fonts.SANS, 7, QFont.Bold))
+            cap.setFont(qfont(FONT_LABEL))
             cap.setStyleSheet(f"color:{TOK['ink_soft']}; letter-spacing:1px;")
             col.addWidget(cap)
             inner = QHBoxLayout(); inner.setSpacing(3); inner.setAlignment(Qt.AlignBaseline)
-            val.setFont(QFont(pfd_fonts.MONO, 11, QFont.Bold))
+            val.setFont(qfont(FONT_VALUE))
             val.setStyleSheet(f"color:{TOK['ink']};")
-            unit.setFont(QFont(pfd_fonts.SANS, 8))
+            unit.setFont(qfont(FONT_HINT))
             unit.setStyleSheet(f"color:{TOK['ink_soft']};")
             inner.addWidget(val); inner.addWidget(unit)
             col.addLayout(inner)
@@ -593,7 +616,7 @@ class StreamInspectorPanel(QWidget):
 
         self._save_btn = QPushButton("Guardar cambios")
         self._save_btn.setCursor(Qt.PointingHandCursor)
-        self._save_btn.setFont(QFont(pfd_fonts.SANS, 9, QFont.Bold))
+        self._save_btn.setFont(qfont(FONT_LABEL))
         self._save_btn.setStyleSheet(
             f"QPushButton {{ background:{TOK['accent']}; color:white; "
             f"border:0; border-radius:6px; padding:7px 16px; }} "
@@ -730,7 +753,7 @@ class StreamInspectorPanel(QWidget):
             btn.setCheckable(True)
             btn.setChecked(r == current_role)
             btn.setCursor(Qt.PointingHandCursor)
-            btn.setFont(QFont(pfd_fonts.SANS, 8, QFont.Bold))
+            btn.setFont(qfont(FONT_LABEL))
             on_style = (
                 f"QPushButton {{ background:{bg}; color:{fg}; "
                 f"border:1px solid {fg}; border-radius:12px; "
@@ -859,7 +882,7 @@ class StreamInspectorPanel(QWidget):
             btn = QPushButton(f"●  {label}")
             btn.setCheckable(True); btn.setChecked(p == current_phase)
             btn.setCursor(Qt.PointingHandCursor)
-            btn.setFont(QFont(pfd_fonts.SANS, 9, QFont.DemiBold))
+            btn.setFont(qfont(FONT_LABEL))
             on_style = (
                 f"QPushButton {{ background:{TOK['bg_elev']}; color:{TOK['ink']}; "
                 f"border:1px solid {TOK['accent']}; "
@@ -954,7 +977,7 @@ class StreamInspectorPanel(QWidget):
             ("", 22, Qt.AlignCenter),
         ]:
             lbl = QLabel(txt)
-            lbl.setFont(QFont(pfd_fonts.SANS, 7, QFont.Bold))
+            lbl.setFont(qfont(FONT_LABEL))
             lbl.setStyleSheet(
                 f"color:{TOK['ink_soft']}; letter-spacing:1.2px;"
             )
@@ -982,7 +1005,7 @@ class StreamInspectorPanel(QWidget):
         fl = QHBoxLayout(ftr); fl.setContentsMargins(12, 8, 12, 8); fl.setSpacing(8)
         add_btn = QPushButton("+ Agregar")
         add_btn.setCursor(Qt.PointingHandCursor)
-        add_btn.setFont(QFont(pfd_fonts.SANS, 9, QFont.Bold))
+        add_btn.setFont(qfont(FONT_LABEL))
         add_btn.setStyleSheet(
             f"QPushButton {{ background:{TOK['accent']}; color:white; "
             f"border:0; border-radius:5px; padding:4px 12px; }} "
@@ -992,7 +1015,7 @@ class StreamInspectorPanel(QWidget):
         fl.addWidget(add_btn)
         norm_btn = QPushButton("Normalizar Σ → 1.00")
         norm_btn.setCursor(Qt.PointingHandCursor)
-        norm_btn.setFont(QFont(pfd_fonts.SANS, 9))
+        norm_btn.setFont(qfont(FONT_HINT))
         norm_btn.setStyleSheet(
             f"QPushButton {{ background:transparent; color:{TOK['ink_mute']}; "
             f"border:1px solid {TOK['line']}; border-radius:5px; "
@@ -1003,7 +1026,7 @@ class StreamInspectorPanel(QWidget):
         fl.addWidget(norm_btn)
         fl.addStretch(1)
         self._sigma_lbl = QLabel("Σ = 0.00")
-        self._sigma_lbl.setFont(QFont(pfd_fonts.MONO, 10, QFont.Bold))
+        self._sigma_lbl.setFont(qfont(FONT_VALUE))
         fl.addWidget(self._sigma_lbl)
         self._comp_lay.addWidget(ftr)
         l.addWidget(self._comp_table)
@@ -1015,7 +1038,8 @@ class StreamInspectorPanel(QWidget):
         self._comp_lock_cb.setChecked(bool(getattr(s, "composition_locked", False)))
         self._comp_lock_cb.setStyleSheet(
             f"QCheckBox {{ color:{TOK['spec_ink']}; "
-            f"font-family:'{pfd_fonts.SANS}'; font-size:9pt; spacing:8px; }} "
+            f"font-family:'{pfd_fonts.SANS}'; "
+            f"font-size:{FONT_HINT[1]}pt; spacing:8px; }} "
             f"QCheckBox::indicator {{ width:16px; height:16px; "
             f"border:1.5px solid {TOK['line_strong']}; "
             f"border-radius:4px; background:{TOK['bg_elev']}; }} "
@@ -1058,11 +1082,11 @@ class StreamInspectorPanel(QWidget):
         rl.addWidget(dot)
         # name input
         nm = _line_input(name); nm.setMinimumWidth(110)
-        nm.setFont(QFont(pfd_fonts.SANS, 9))
+        nm.setFont(qfont(FONT_HINT))
         rl.addWidget(nm)
         # fraction input
         fr = _line_input(f"{frac:.4f}"); fr.setMaximumWidth(80)
-        fr.setFont(QFont(pfd_fonts.MONO, 9))
+        fr.setFont(qfont(FONT_VALUE))
         fr.textChanged.connect(self._update_sigma)
         rl.addWidget(fr)
         # mass flow estimado
@@ -1070,7 +1094,7 @@ class StreamInspectorPanel(QWidget):
         mass = float(s.mass_flow or 0)
         flow = frac * mass
         flow_lbl = QLabel(f"{flow:,.0f}".replace(",", " "))
-        flow_lbl.setFont(QFont(pfd_fonts.MONO, 9))
+        flow_lbl.setFont(qfont(FONT_VALUE))
         flow_lbl.setStyleSheet(f"color:{TOK['ink_mute']};")
         flow_lbl.setMinimumWidth(60); flow_lbl.setAlignment(Qt.AlignRight)
         rl.addWidget(flow_lbl)
@@ -1161,7 +1185,7 @@ class StreamInspectorPanel(QWidget):
         )
         self._pipe_cb = QCheckBox("Tratar como tubería física")
         self._pipe_cb.setChecked(is_pipe)
-        self._pipe_cb.setFont(QFont(pfd_fonts.SANS, 9, QFont.DemiBold))
+        self._pipe_cb.setFont(qfont(FONT_LABEL))
         self._pipe_cb.setStyleSheet(
             f"QCheckBox {{ color:{TOK['ink']}; spacing:10px; }} "
             f"QCheckBox::indicator {{ width:32px; height:18px; "
@@ -1241,7 +1265,7 @@ class StreamInspectorPanel(QWidget):
             r = QFrame(); rl = QHBoxLayout(r)
             rl.setContentsMargins(0, ROW_PAD // 2, 0, ROW_PAD // 2)
             rl.setSpacing(12)
-            k = QLabel(label); k.setFont(QFont(pfd_fonts.SANS, 9))
+            k = QLabel(label); k.setFont(qfont(FONT_HINT))
             k.setStyleSheet(f"color:{TOK['ink_mute']};"); k.setMinimumWidth(150)
             rl.addWidget(k)
             if value is None:
@@ -1250,7 +1274,7 @@ class StreamInspectorPanel(QWidget):
                 v.setToolTip(nd_note or ND[1])
             else:
                 v = QLabel(f"{value}{(' ' + unit) if unit else ''}")
-                v.setFont(QFont(pfd_fonts.MONO, 9))
+                v.setFont(qfont(FONT_VALUE))
                 v.setStyleSheet(f"color:{TOK['ink']};")
             rl.addWidget(v, 1)
             r.setStyleSheet(f"QFrame {{ border-bottom:1px solid {TOK['line_soft']}; }}")
@@ -1344,7 +1368,7 @@ class StreamInspectorPanel(QWidget):
             btn = QPushButton(f"{label}\n{descr}")
             btn.setMinimumHeight(64)
             btn.setCursor(Qt.PointingHandCursor)
-            btn.setFont(QFont(pfd_fonts.SANS, 9, QFont.DemiBold))
+            btn.setFont(qfont(FONT_LABEL))
             btn.setStyleSheet(
                 f"QPushButton {{ background:{TOK['bg_elev']}; "
                 f"color:{TOK['ink_mute']}; "
@@ -1363,7 +1387,7 @@ class StreamInspectorPanel(QWidget):
             "manuales si querés más control."
         )
         note.setWordWrap(True)
-        note.setFont(QFont(pfd_fonts.SANS, 8))
+        note.setFont(qfont(FONT_HINT))
         note.setStyleSheet(f"color:{TOK['ink_soft']}; padding-top:6px;")
         l.addWidget(note)
         return sect
@@ -1638,7 +1662,7 @@ class StreamInspectorDock(QDockWidget):
     una sola vez en FlowsheetMainWindow y se reusa via show_for()."""
 
     def __init__(self, parent=None):
-        super().__init__("Stream Inspector", parent)
+        super().__init__("Inspector de corriente", parent)
         self.setObjectName("StreamInspectorDock")
         self.setAllowedAreas(Qt.RightDockWidgetArea | Qt.LeftDockWidgetArea)
         self.setFeatures(

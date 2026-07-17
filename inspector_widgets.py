@@ -33,6 +33,7 @@ from PySide6.QtWidgets import (
 import pfd_fonts
 import block_inspector as _bi   # para leer TOK/ROW_PAD en caliente
 from block_inspector import _PrefsBus
+from tokens import qfont, FONT_VALUE, FONT_HINT, FONT_LABEL
 
 
 # ─────────────────────────────────────────────────────────────────────
@@ -122,7 +123,7 @@ class MetricCard(QFrame):
         # textos (todos los anchos clampados a >=0 — Windows GDI dibsection)
         # label
         p.setPen(QColor(_tok("ink_soft")))
-        f_lab = QFont(pfd_fonts.SANS, 7, QFont.Bold)
+        f_lab = qfont(FONT_LABEL)
         f_lab.setLetterSpacing(QFont.AbsoluteSpacing, 0.5)
         p.setFont(f_lab)
         p.drawText(QRectF(pad_l, 6, text_w, 14),
@@ -131,7 +132,7 @@ class MetricCard(QFrame):
         ink = _tok(_STATE_INK.get(self._state, "ink"), "ink") \
             if self._state in _STATE_INK else _tok("ink")
         p.setPen(QColor(ink))
-        f_val = QFont(pfd_fonts.MONO, 15, QFont.DemiBold)
+        f_val = qfont(FONT_VALUE)
         p.setFont(f_val)
         fm = p.fontMetrics()
         val_w = fm.horizontalAdvance(self._value)
@@ -140,19 +141,19 @@ class MetricCard(QFrame):
                    Qt.AlignLeft | Qt.AlignVCenter, self._value)
         if self._unit:
             p.setPen(QColor(_tok("ink_soft")))
-            p.setFont(QFont(pfd_fonts.MONO, 9))
+            p.setFont(qfont(FONT_VALUE))
             unit_w = max(0, w - pad_l - val_w - 8)
             p.drawText(QRectF(pad_l + val_w + 4, y_val, unit_w, 24),
                        Qt.AlignLeft | Qt.AlignVCenter, self._unit)
         # sub
         if self._sub:
             p.setPen(QColor(_tok("ink_mute")))
-            p.setFont(QFont(pfd_fonts.SANS, 8))
+            p.setFont(qfont(FONT_HINT))
             p.drawText(QRectF(pad_l, h - 16, text_w, 14),
                        Qt.AlignLeft | Qt.AlignVCenter, str(self._sub))
         # flag (chip arriba-derecha) — sólo si entra
         if self._flag and w > 60:
-            p.setFont(QFont(pfd_fonts.SANS, 7, QFont.Bold))
+            p.setFont(qfont(FONT_LABEL))
             ftxt = str(self._flag)
             fw = p.fontMetrics().horizontalAdvance(ftxt) + 10
             chip = QRectF(w - fw - 6, 6, fw, 14)
@@ -233,6 +234,8 @@ class StatusBadge(QFrame):
     # geometría dependiente de tamaño (lg vs normal)
     @property
     def _fs(self):
+        # glifo-ícono: tamaño geométrico, no tipografía (excepción 2g)
+        # (sizing dinámico del widget custom, acoplado a _dot/_padl/_padr)
         return 11 if self._lg else 9        # font size
     @property
     def _dot(self):
@@ -343,12 +346,12 @@ class GaugePill(QWidget):
         txt = self._text if self._text is not None \
             else f"{self._value * 100:.0f}"
         p.setPen(QColor(_tok("ink")))
-        p.setFont(QFont(pfd_fonts.MONO, 14, QFont.DemiBold))
+        p.setFont(qfont(FONT_VALUE))
         p.drawText(QRectF(0, cy - 24, w, 22),
                    Qt.AlignHCenter | Qt.AlignVCenter, f"{txt}{self._suffix}")
         # label
         p.setPen(QColor(_tok("ink_soft")))
-        f_lab = QFont(pfd_fonts.SANS, 7, QFont.Bold)
+        f_lab = qfont(FONT_LABEL)
         f_lab.setLetterSpacing(QFont.AbsoluteSpacing, 0.5)
         p.setFont(f_lab)
         p.drawText(QRectF(0, h - 13, w, 12),
@@ -368,7 +371,7 @@ class DeltaBar(QFrame):
         self._frac = max(0.0, min(1.0, float(frac)))
         self._value = str(value)
         self._kind = kind if kind in _BAR_KIND else "accent"
-        self.setFixedHeight(20)
+        self.setFixedHeight(24)   # +4px: label/valor pasan de mono 8pt a FONT_VALUE (11.5pt)
         self.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
         _PrefsBus.signal().connect(self.update)
 
@@ -384,7 +387,7 @@ class DeltaBar(QFrame):
         track_w = max(2, w - lab_w - val_w - 12)
         # label
         p.setPen(QColor(_tok("ink_mute")))
-        p.setFont(QFont(pfd_fonts.MONO, 8))
+        p.setFont(qfont(FONT_VALUE))
         p.drawText(QRectF(0, 0, lab_w, h),
                    Qt.AlignLeft | Qt.AlignVCenter, self._label)
         # track
@@ -397,7 +400,8 @@ class DeltaBar(QFrame):
                               3, 3)
         # valor
         p.setPen(QColor(_tok("ink")))
-        p.setFont(QFont(pfd_fonts.MONO, 8, QFont.DemiBold))
+        f_val = qfont(FONT_VALUE); f_val.setWeight(QFont.DemiBold)
+        p.setFont(f_val)
         p.drawText(QRectF(w - val_w, 0, val_w, h),
                    Qt.AlignRight | Qt.AlignVCenter, self._value)
 

@@ -1,9 +1,12 @@
 """
 tests/test_distillation_p4.py — PARCHE 4: UI del panel de columnas (smoke).
 
-Caso J: cargar un ejemplo con columna, resolver, seleccionar el bloque
-Tower y verificar que prop_label (texto plano monoespaciado) contiene los
-campos nuevos sin romper el formato existente.
+Caso J: cargar un ejemplo con columna, resolver, y verificar que el
+reporte de diseño de columna (texto plano monoespaciado) contiene los
+campos nuevos sin romper el formato.  Ciclo 2 (2f.4): el dock legacy
+'Propiedades y perfiles' murió — la fuente es ahora
+inspector_evidence.column_design_text, la evidencia que el Inspector
+de bloque muestra en Diagnóstico.
 
 USO:  QT_QPA_PLATFORM=offscreen python -m pytest tests/test_distillation_p4.py -v
 """
@@ -30,25 +33,16 @@ import examples_registry as reg
 
 class TestJ_PanelColumna(unittest.TestCase):
     def _panel_text(self, method):
-        from PySide6.QtWidgets import QApplication
-        app = QApplication.instance() or QApplication([])
-        import flowsheet_qt as fq
-        win = fq.FlowsheetMainWindow()
+        import inspector_evidence as ev
         # industrial_complete: columna T-201 multicomponente (separación
         # factible con las keys auto-detectadas → FUG produce N).
         fs = reg.load_example('industrial')
         col = next(b for b in fs.blocks.values()
                    if getattr(b, "column_active", False))
         col.column_method = method
-        win.fs = fs
-        win._rebuild_scene()
         fsv.solve(fs)
-        app.processEvents()
-        item = win.scene.block_items[col.id]
-        item.setSelected(True)
-        win._on_selection_changed()
-        app.processEvents()
-        return win.prop_label.text(), col
+        txt = ev.column_design_text(col, fs) or ""
+        return txt, col
 
     def test_fug_block_presente(self):
         txt, col = self._panel_text("fug")

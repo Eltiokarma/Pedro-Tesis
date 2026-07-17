@@ -15,6 +15,10 @@ escondido tras "Ver detalles") por un diálogo formateado:
 `SolverResultDialog` la renderiza.
 """
 
+import pfd_fonts
+from tokens import (FONT_DISPLAY, FONT_TITLE, FONT_UI, FONT_VALUE,
+                    FONT_HINT, FONT_LABEL)
+
 try:
     from block_inspector import TOK
 except Exception:
@@ -251,17 +255,21 @@ def _build_dialog(report, summary_text, parent=None):
     hl.setSpacing(14)
     ico = QLabel(report["icon"])
     ico.setStyleSheet(
-        f"color: {meta['ink']}; font-size: 30px; font-weight: 700;")
+        f"color: {meta['ink']}; font-family:'{pfd_fonts.SANS}'; "
+        f"font-size:{FONT_DISPLAY[1]}pt; font-weight:{FONT_DISPLAY[2]};")
     ico.setAlignment(Qt.AlignTop)
     hl.addWidget(ico)
     txt = QVBoxLayout()
     txt.setSpacing(2)
     h1 = QLabel(report["headline"])
     h1.setStyleSheet(
-        f"color: {meta['ink']}; font-size: 17px; font-weight: 700;")
+        f"color: {meta['ink']}; font-family:'{pfd_fonts.SANS}'; "
+        f"font-size:{FONT_TITLE[1]}pt; font-weight:{FONT_TITLE[2]};")
     sub = QLabel(report["explain"])
     sub.setWordWrap(True)
-    sub.setStyleSheet(f"color: {TOK['ink_mute']}; font-size: 11.5px;")
+    sub.setStyleSheet(f"color: {TOK['ink_mute']}; "
+                      f"font-family:'{pfd_fonts.SANS}'; "
+                      f"font-size:{FONT_UI[1]}pt; font-weight:{FONT_UI[2]};")
     txt.addWidget(h1)
     txt.addWidget(sub)
     hl.addLayout(txt, 1)
@@ -285,11 +293,15 @@ def _build_dialog(report, summary_text, parent=None):
         v = QLabel(value)
         v.setAlignment(Qt.AlignCenter)
         v.setStyleSheet(
-            f"color: {m['ink']}; font-size: 18px; font-weight: 700; "
+            f"color: {m['ink']}; font-family:'{pfd_fonts.MONO}'; "
+            f"font-size:{FONT_VALUE[1]}pt; font-weight:{FONT_VALUE[2]}; "
             f"background: transparent;")
         k = QLabel(label)
         k.setAlignment(Qt.AlignCenter)
-        k.setStyleSheet(f"color: {TOK['ink_mute']}; font-size: 10px; "
+        k.setStyleSheet(f"color: {TOK['ink_mute']}; "
+                        f"font-family:'{pfd_fonts.SANS}'; "
+                        f"font-size:{FONT_HINT[1]}pt; "
+                        f"font-weight:{FONT_HINT[2]}; "
                         f"background: transparent;")
         cl.addWidget(v)
         cl.addWidget(k)
@@ -308,8 +320,10 @@ def _build_dialog(report, summary_text, parent=None):
 
     if not report["sections"]:
         empty = QLabel("Sin observaciones — todo cerró limpio.")
-        empty.setStyleSheet(f"color: {TOK['ink_mute']}; font-size: 12px; "
-                            f"padding: 8px;")
+        empty.setStyleSheet(f"color: {TOK['ink_mute']}; "
+                            f"font-family:'{pfd_fonts.SANS}'; "
+                            f"font-size:{FONT_UI[1]}pt; "
+                            f"font-weight:{FONT_UI[2]}; padding: 8px;")
         bl.addWidget(empty)
 
     for sec in report["sections"]:
@@ -377,12 +391,12 @@ def _section_card(sec):
     hdr = QHBoxLayout()
     hdr.setSpacing(8)
     badge = QLabel(meta["icon"])
-    badge.setStyleSheet(f"color: {meta['ink']}; font-size: 15px; "
-                        f"font-weight: 700;")
+    badge.setStyleSheet(f"color: {meta['ink']}; "
+                        f"font-size: {FONT_TITLE[1]}pt; font-weight: 700;")
     hdr.addWidget(badge)
     title = QLabel(f"{sec['title']}  ({n})")
-    title.setStyleSheet(f"color: {TOK['ink']}; font-size: 13px; "
-                        f"font-weight: 700;")
+    title.setStyleSheet(f"color: {TOK['ink']}; "
+                        f"font-size: {FONT_UI[1]}pt; font-weight: 700;")
     hdr.addWidget(title)
     hdr.addStretch(1)
     cl.addLayout(hdr)
@@ -390,8 +404,8 @@ def _section_card(sec):
     if sec.get("explain"):
         ex = QLabel(sec["explain"])
         ex.setWordWrap(True)
-        ex.setStyleSheet(f"color: {TOK['ink_mute']}; font-size: 11px; "
-                        f"font-style: italic;")
+        ex.setStyleSheet(f"color: {TOK['ink_mute']}; "
+                        f"font-size: {FONT_HINT[1]}pt; font-style: italic;")
         cl.addWidget(ex)
 
     body = QWidget()
@@ -405,14 +419,15 @@ def _section_card(sec):
             rmeta = SEV["ok"] if d["converged"] else SEV["warn"]
             lh = QLabel(head)
             lh.setWordWrap(True)
-            lh.setStyleSheet(f"color: {rmeta['ink']}; font-size: 12px; "
-                            f"font-weight: 600;")
+            lh.setStyleSheet(f"color: {rmeta['ink']}; "
+                            f"font-size: {FONT_UI[1]}pt; font-weight: 600;")
             bl.addWidget(lh)
             for s in subs:
                 ls = QLabel("    " + s)
                 ls.setWordWrap(True)
                 ls.setStyleSheet(f"color: {TOK['ink_mute']}; "
-                                f"font-size: 11px; font-family: monospace;")
+                                f"font-size: {FONT_VALUE[1]}pt; "
+                                f"font-family: '{pfd_fonts.MONO}';")
                 bl.addWidget(ls)
     else:
         for r in rows:
