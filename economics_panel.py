@@ -80,7 +80,19 @@ class EconomicsPanel(QDialog):
             get_econ_inputs=self.collect_econ_inputs)
         self._rich = None
         self._rich_lay = outer
+        self._last_metrics = None
         self._mount_rich(None)          # estado vacío → pane Parámetros
+        # Cambio de tema → re-montar la vista para que las figuras
+        # matplotlib re-lean los tokens (antes quedaban con los colores
+        # del tema anterior; la anotación de payback era ilegible en dark).
+        from tokens import _PrefsBus
+        _PrefsBus.signal().connect(self._on_theme_changed)
+
+    def _on_theme_changed(self):
+        try:
+            self._mount_rich(self._last_metrics)
+        except RuntimeError:            # diálogo ya destruido (shutdown)
+            pass
 
     def _build_params_widget(self):
         """Formulario de parámetros (pane ⚙ de la rich view)."""
@@ -245,6 +257,7 @@ class EconomicsPanel(QDialog):
             rv.exportExcel.connect(export_cb)
         self._rich_lay.addWidget(rv, stretch=1)
         self._rich = rv
+        self._last_metrics = m
 
     # ── recolección de inputs ────────────────────────────────────────
     def collect_econ_inputs(self):
