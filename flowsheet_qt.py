@@ -408,7 +408,7 @@ class BlockEditDialog(QDialog):
 
         # info read-only
         lbl_type = QLabel(block.eq_type)
-        lbl_type.setStyleSheet("color: #555;")
+        lbl_type.setStyleSheet(f"color: {_tokens.TOK['ink_mute']};")
         layout.addRow("Tipo de equipo:", lbl_type)
 
         # nombre
@@ -429,7 +429,8 @@ class BlockEditDialog(QDialog):
         smax = spec.get("S_max")
         if smin is not None and smax is not None:
             hint = QLabel(f"Rango válido Turton: [{smin:g} – {smax:g}] {spec.get('S_unit','')}")
-            hint.setStyleSheet("color: #888; font-size: 8pt;")
+            hint.setStyleSheet(f"color: {_tokens.TOK['ink_soft']}; "
+                            f"font-size: {_tokens.FONT_HINT[1]}pt;")
             layout.addRow("", hint)
 
         # n
@@ -463,7 +464,8 @@ class BlockEditDialog(QDialog):
             "<0 extrae calor (cooler, condenser)\n"
             "=0 adiabático o no declarado"
         )
-        hint_duty.setStyleSheet("color: #888; font-size: 8pt;")
+        hint_duty.setStyleSheet(f"color: {_tokens.TOK['ink_soft']}; "
+                            f"font-size: {_tokens.FONT_HINT[1]}pt;")
         gb_layout.addRow("", hint_duty)
 
         # heat source
@@ -490,7 +492,8 @@ class BlockEditDialog(QDialog):
             ">0 endotérmica · <0 exotérmica · =0 sin reacción\n"
             "Ejemplo Methanol: CO+2H₂→CH₃OH, -200 kJ/kg input syngas"
         )
-        hint_hor.setStyleSheet("color: #888; font-size: 8pt;")
+        hint_hor.setStyleSheet(f"color: {_tokens.TOK['ink_soft']}; "
+                            f"font-size: {_tokens.FONT_HINT[1]}pt;")
         gb_layout.addRow("", hint_hor)
         # ocultar si NO es reactor
         is_reactor = "Reactor" in block.eq_type
@@ -528,7 +531,8 @@ class BlockEditDialog(QDialog):
             "de tabla (U_TYPICAL / DTLM_TYPICAL).  Útil para condensación\n"
             "de vapor puro (U~1500), aceite térmico (U~200), close-approach."
         )
-        hint_uov.setStyleSheet("color: #888; font-size: 8pt;")
+        hint_uov.setStyleSheet(f"color: {_tokens.TOK['ink_soft']}; "
+                            f"font-size: {_tokens.FONT_HINT[1]}pt;")
         gb_layout.addRow("", hint_uov)
         for _w in (self.u_over_label, self.u_over_edit,
                     self.dtlm_over_label, self.dtlm_over_edit, hint_uov):
@@ -587,7 +591,8 @@ class BlockEditDialog(QDialog):
             "Defaults: tray_spacing 0.6m (24\"), K=0.06, head 3m,\n"
             "tray_eff 1.0, HETP 0.5m.  Para empaque estructurado HETP~0.3m."
         )
-        hint_col.setStyleSheet("color: #888; font-size: 8pt;")
+        hint_col.setStyleSheet(f"color: {_tokens.TOK['ink_soft']}; "
+                            f"font-size: {_tokens.FONT_HINT[1]}pt;")
         col_layout.addRow("", hint_col)
         layout.addRow(self.gb_col_phys)
 
@@ -618,7 +623,8 @@ class BlockEditDialog(QDialog):
             "• cstr: tanque agitado, robusto para cinéticas stiff (requiere V > 0)\n"
             "• batch: RK4 dN/dt, V cte, P emergente (requiere V > 0 + tiempo de tanda)"
         )
-        hint_mode.setStyleSheet("color: #888; font-size: 8pt;")
+        hint_mode.setStyleSheet(f"color: {_tokens.TOK['ink_soft']}; "
+                            f"font-size: {_tokens.FONT_HINT[1]}pt;")
         eq_layout.addRow("", hint_mode)
 
         # T_op
@@ -630,7 +636,8 @@ class BlockEditDialog(QDialog):
         self.t_op_edit.setValue(getattr(block, "T_op_K", 0.0))
         eq_layout.addRow("T operación:", self.t_op_edit)
         hint_t = QLabel("0 = usa T promedio del input.")
-        hint_t.setStyleSheet("color: #888; font-size: 8pt;")
+        hint_t.setStyleSheet(f"color: {_tokens.TOK['ink_soft']}; "
+                            f"font-size: {_tokens.FONT_HINT[1]}pt;")
         eq_layout.addRow("", hint_t)
 
         # P_op
@@ -655,7 +662,8 @@ class BlockEditDialog(QDialog):
             "Volumen interno del reactor en litros.\n"
             "Solo aplica en modo PFR o CSTR (ignorado en equilibrium)."
         )
-        hint_vol.setStyleSheet("color: #888; font-size: 8pt;")
+        hint_vol.setStyleSheet(f"color: {_tokens.TOK['ink_soft']}; "
+                            f"font-size: {_tokens.FONT_HINT[1]}pt;")
         eq_layout.addRow("", hint_vol)
         self._vol_hint_widget = hint_vol
 
@@ -719,7 +727,8 @@ class BlockEditDialog(QDialog):
             "y heat_of_reaction automáticamente (oculta el manual\n"
             "de arriba). Si vacío: modo manual con kJ/kg declarado."
         )
-        hint_rxn.setStyleSheet("color: #888; font-size: 8pt;")
+        hint_rxn.setStyleSheet(f"color: {_tokens.TOK['ink_soft']}; "
+                            f"font-size: {_tokens.FONT_HINT[1]}pt;")
         eq_layout.addRow("", hint_rxn)
 
         # ---- Reacciones CUSTOM in-memory (Hallazgo 1) ----
@@ -745,7 +754,8 @@ class BlockEditDialog(QDialog):
             "2-parámetros).  Válida cerca de 298 K; el error crece a T\n"
             "lejana.  Para química validada usá el catálogo de arriba."
         )
-        hint_custom.setStyleSheet("color: #888; font-size: 8pt;")
+        hint_custom.setStyleSheet(f"color: {_tokens.TOK['ink_soft']}; "
+                            f"font-size: {_tokens.FONT_HINT[1]}pt;")
         eq_layout.addRow("", hint_custom)
 
         layout.addRow(self.gb_eq)
@@ -816,7 +826,8 @@ class BlockEditDialog(QDialog):
             "Para multicomp (>2 keys), aplica Fenske-Hengstebeck.\n"
             "Detecta azeotropos via NRTL (Capa 6)."
         )
-        hint_col.setStyleSheet("color: #888; font-size: 8pt;")
+        hint_col.setStyleSheet(f"color: {_tokens.TOK['ink_soft']}; "
+                            f"font-size: {_tokens.FONT_HINT[1]}pt;")
         col_layout.addRow("", hint_col)
         layout.addRow(self.gb_col)
 
@@ -855,7 +866,8 @@ class BlockEditDialog(QDialog):
             "Asignación por puerto: 'vapor' → vapor output, 'liquido'\n"
             "→ liquid output (sino, primer/segundo output)."
         )
-        hint_flash.setStyleSheet("color: #888; font-size: 8pt;")
+        hint_flash.setStyleSheet(f"color: {_tokens.TOK['ink_soft']}; "
+                            f"font-size: {_tokens.FONT_HINT[1]}pt;")
         flash_layout.addRow("", hint_flash)
         layout.addRow(self.gb_flash)
 
@@ -1033,7 +1045,8 @@ class BlockEditDialog(QDialog):
             "η_motor adicional: 0.95 (eléctrico AC)<br>"
             "W_elec = m·ΔP / (ρ·η_hyd·η_motor)"
         )
-        hint_rot.setStyleSheet("color: #888; font-size: 8pt;")
+        hint_rot.setStyleSheet(f"color: {_tokens.TOK['ink_soft']}; "
+                            f"font-size: {_tokens.FONT_HINT[1]}pt;")
         hint_rot.setTextFormat(Qt.RichText)
         rot_layout.addRow("", hint_rot)
         layout.addRow(self.gb_rot)
@@ -1102,7 +1115,8 @@ class BlockEditDialog(QDialog):
             "Marcá las reacciones que querés incluir en el balance.\n"
             "🟢 ALTA · 🟡 MEDIA · 🟠 BAJA · ⚫ no aplicable (fuera de rango T)"
         )
-        rxhint.setStyleSheet("color: #888; font-size: 8pt;")
+        rxhint.setStyleSheet(f"color: {_tokens.TOK['ink_soft']}; "
+                            f"font-size: {_tokens.FONT_HINT[1]}pt;")
         rxlay.addWidget(rxhint)
 
         layout.addRow(self.gb_reactivity)
@@ -1204,7 +1218,8 @@ class BlockEditDialog(QDialog):
             gbl.addWidget(self._species_tbl_in)
         else:
             lbl = QLabel("(sin streams conectados a la entrada)")
-            lbl.setStyleSheet("color: #888; font-style: italic;")
+            lbl.setStyleSheet(f"color: {_tokens.TOK['ink_soft']}; "
+                              f"font-style: italic;")
             gbl.addWidget(lbl)
 
         gbl.addWidget(QLabel("<b>▶ Salidas</b>"))
@@ -1214,14 +1229,16 @@ class BlockEditDialog(QDialog):
             gbl.addWidget(self._species_tbl_out)
         else:
             lbl = QLabel("(sin streams conectados a la salida)")
-            lbl.setStyleSheet("color: #888; font-style: italic;")
+            lbl.setStyleSheet(f"color: {_tokens.TOK['ink_soft']}; "
+                              f"font-style: italic;")
             gbl.addWidget(lbl)
 
         hint = QLabel(
             "ℹ Doble-click sobre un stream para editar sus valores. "
             "Las especies viven en las corrientes, no en el equipo."
         )
-        hint.setStyleSheet("color: #888; font-size: 8pt;")
+        hint.setStyleSheet(f"color: {_tokens.TOK['ink_soft']}; "
+                            f"font-size: {_tokens.FONT_HINT[1]}pt;")
         hint.setWordWrap(True)
         gbl.addWidget(hint)
 
@@ -1497,7 +1514,8 @@ class CustomReactionDialog(QDialog):
         hint = QLabel(
             "Elegí reactivos y productos. Los coeficientes, el balance "
             "atómico y el ΔH se calculan automáticamente.")
-        hint.setStyleSheet("color: #666; font-size: 9pt;")
+        hint.setStyleSheet(f"color: {_tokens.TOK['ink_soft']}; "
+                    f"font-size: {_tokens.FONT_HINT[1]}pt;")
         hint.setWordWrap(True)
         outer.addWidget(hint)
 
@@ -1641,15 +1659,16 @@ class CustomReactionDialog(QDialog):
     def _section_label(self, text):
         l = QLabel(text)
         l.setStyleSheet(
-            "font-size: 10pt; font-weight: 600; color: #555; "
-            "padding-top: 6px;")
+            f"font-size: {_tokens.FONT_LABEL[1]}pt; "
+            f"font-weight: {_tokens.FONT_LABEL[2]}; "
+            f"color: {_tokens.TOK['ink_mute']}; padding-top: 6px;")
         return l
 
     def _make_chip_container(self):
         fr = QFrame()
         fr.setStyleSheet(
-            "QFrame { background: #f5f5f7; border-radius: 10px; "
-            "padding: 6px; }")
+            f"QFrame {{ background: {_tokens.TOK['bg_mute']}; "
+            f"border-radius: 10px; padding: 6px; }}")
         fr.setMinimumHeight(54)
         lay = QHBoxLayout(fr)
         lay.setContentsMargins(8, 6, 8, 6)
@@ -1657,14 +1676,14 @@ class CustomReactionDialog(QDialog):
         return fr, lay
 
     def _badge_style(self, kind):
+        T = _tokens.TOK
+        base = (f"padding: 5px 14px; border-radius: 12px; "
+                f"font-size: {_tokens.FONT_HINT[1]}pt; font-weight: 500; ")
         if kind == "ok":
-            return ("padding: 5px 14px; border-radius: 12px; font-size: 9pt; "
-                    "font-weight: 500; color: #16632c; background: #d4ecd4;")
+            return base + f"color: {T['green']}; background: {T['green_bg']};"
         if kind == "bad":
-            return ("padding: 5px 14px; border-radius: 12px; font-size: 9pt; "
-                    "font-weight: 500; color: #8b0000; background: #fbd0d0;")
-        return ("padding: 5px 14px; border-radius: 12px; font-size: 9pt; "
-                "color: #666; background: #e8e8e8;")
+            return base + f"color: {T['danger']}; background: {T['danger_bg']};"
+        return base + f"color: {T['ink_mute']}; background: {T['bg_sunk']};"
 
     def _refresh_chips(self):
         """Limpia y reconstruye los layouts de chips desde reactant_chips
@@ -1713,9 +1732,10 @@ class CustomReactionDialog(QDialog):
         prefix = (f"{nu_abs} " if nu_abs > 1 else "")
         nm = ch.get("name") or ch.get("formula") or "?"
         phase = ch.get("phase", "g")
+        _c = _tokens.TOK["ink_soft"]
         lbl = QLabel(
             f"<b>{prefix}{nm}</b>"
-            f"&nbsp;&nbsp;<span style='color:#888; font-size:8pt;'>({phase})</span>"
+            f"&nbsp;&nbsp;<span style='color:{_c}; font-size:8pt;'>({phase})</span>"
         )
         h.addWidget(lbl)
         btn_x = QPushButton("×")
@@ -2174,7 +2194,8 @@ class OpexExtraRowDialog(QDialog):
             "Electric    4M kWh × $0.08\n"
             "Catalizador Pt   0.5 tm × $25000"
         )
-        hint.setStyleSheet("color: #888; font-size: 8pt;")
+        hint.setStyleSheet(f"color: {_tokens.TOK['ink_soft']}; "
+                            f"font-size: {_tokens.FONT_HINT[1]}pt;")
         layout.addRow("", hint)
 
         buttons = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
@@ -2215,7 +2236,7 @@ class OpexExtrasDialog(QDialog):
             "lanzar el análisis económico.  Las utilities derivadas de "
             "duties (heaters/coolers) se calculan aparte y NO aparecen acá."
         )
-        info.setStyleSheet("color: #555;")
+        info.setStyleSheet(f"color: {_tokens.TOK['ink_mute']};")
         info.setWordWrap(True)
         layout.addWidget(info)
 
@@ -3463,7 +3484,9 @@ class BlockItem(QGraphicsItemGroup):
         # --- textos (IBM Plex si está disponible, fallback al sistema) ---
         sans = pfd_fonts.SANS if pfd_fonts.available() else "Segoe UI"
         mono = pfd_fonts.MONO if pfd_fonts.available() else "Consolas"
-        f_title = QFont(sans, 9, QFont.Bold)
+        # On-canvas en unidades de escena (escala con el zoom): base
+        # FONT_LABEL — el único rol con tamaño relativo (artboard 2g).
+        f_title = QFont(sans, _tokens.FONT_LABEL[1], QFont.Bold)
 
         # Tag: AFUERA del bloque, encima, centrado (estilo PFD industrial).
         # La spec (S = … m²) NO se muestra en el bloque para reducir clutter
@@ -3485,6 +3508,7 @@ class BlockItem(QGraphicsItemGroup):
         # golpe los requerimientos energéticos sin abrir tooltips.
         # Icono: ↑Q heating, ↓Q cooling.
         self.duty_badge = QGraphicsSimpleTextItem("", parent=self)
+        # escala de densidad del plano, no UI (excepción 2g)
         self.duty_badge.setFont(QFont(mono, 8, QFont.Bold))
         self.duty_badge.setPos(self.W + 6, self.H / 2 - 7)
         self.duty_badge.setZValue(3)
@@ -3711,7 +3735,8 @@ class BlockItem(QGraphicsItemGroup):
         port_list = ", ".join(ports.keys()) if ports else "(sin puertos)"
         lines = [
             f"<b>{b.name}</b>",
-            f"<span style='color:#666;'>{b.eq_type}</span>",
+            f"<span style='color:{_tokens.TOK['ink_mute']};'>"
+            f"{b.eq_type}</span>",
             f"S = {b.S:g} {spec.get('S_unit','')}",
         ]
         if b.n > 1:
@@ -3735,7 +3760,8 @@ class BlockItem(QGraphicsItemGroup):
             lines.append(f"P_op = {b.P_op_bar:g} bar")
         if b.heat_source:
             lines.append(f"Utility: {b.heat_source}")
-        lines.append(f"<span style='color:#888; font-size:8pt;'>"
+        lines.append(f"<span style='color:{_tokens.TOK['ink_soft']}; "
+                     f"font-size:8pt;'>"
                      f"Puertos: {port_list}</span>")
         self.setToolTip("<br>".join(lines))
 
@@ -4095,12 +4121,13 @@ class StreamItem(QGraphicsPathItem):
 
         mono = pfd_fonts.MONO if pfd_fonts.available() else "Consolas"
         self.label_name = QGraphicsSimpleTextItem()
-        self.label_name.setFont(QFont(mono, 7, QFont.Medium))
+        # pill de stream: escala de densidad del plano (excepción 2g)
+        self.label_name.setFont(QFont(mono, 8, QFont.Medium))
         self.label_name.setZValue(7)
         self.label_name.setAcceptedMouseButtons(Qt.NoButton)
 
         self.label_flow = QGraphicsSimpleTextItem()
-        self.label_flow.setFont(QFont(mono, 7))
+        self.label_flow.setFont(QFont(mono, 8))
         self.label_flow.setBrush(QBrush(QColor(_tokens.TOK["label_ink_soft"])))
         self.label_flow.setZValue(7)
         self.label_flow.setAcceptedMouseButtons(Qt.NoButton)
@@ -6690,7 +6717,8 @@ class FlowsheetMainWindow(QMainWindow):
         layout.setContentsMargins(6, 6, 6, 6)
         self.prop_label = QLabel("(nada seleccionado)")
         self.prop_label.setStyleSheet(
-            "font-family: Consolas, monospace; font-size: 9pt;"
+            f"font-family: '{pfd_fonts.MONO}'; "
+            f"font-size: {_tokens.FONT_VALUE[1]}pt;"
         )
         self.prop_label.setWordWrap(True)
         self.prop_label.setAlignment(Qt.AlignTop | Qt.AlignLeft)
@@ -6790,7 +6818,9 @@ class FlowsheetMainWindow(QMainWindow):
         self.results_box = QTextEdit()
         self.results_box.setReadOnly(True)
         self.results_box.setStyleSheet(
-            "font-family: Consolas, monospace; font-size: 9pt; color: #1565c0;"
+            f"font-family: '{pfd_fonts.MONO}'; "
+            f"font-size: {_tokens.FONT_VALUE[1]}pt; "
+            f"color: {_tokens.TOK['spec']};"
         )
         self.results_box.setMaximumHeight(280)
         self.results_box.setPlainText("(apretá Calcular para estimar el ISBL)")
@@ -7126,7 +7156,8 @@ class FlowsheetMainWindow(QMainWindow):
         v = QVBoxLayout(dlg)
         txt = QTextEdit()
         txt.setReadOnly(True)
-        txt.setStyleSheet("font-family: Consolas, monospace; font-size: 9pt;")
+        txt.setStyleSheet(f"font-family: '{pfd_fonts.MONO}'; "
+            f"font-size: {_tokens.FONT_VALUE[1]}pt;")
         txt.setPlainText(text)
         v.addWidget(txt)
         btns = QDialogButtonBox(QDialogButtonBox.Close)
@@ -7178,7 +7209,8 @@ class FlowsheetMainWindow(QMainWindow):
         v = QVBoxLayout(dlg)
         txt = QTextEdit()
         txt.setReadOnly(True)
-        txt.setStyleSheet("font-family: Consolas, monospace; font-size: 9pt;")
+        txt.setStyleSheet(f"font-family: '{pfd_fonts.MONO}'; "
+            f"font-size: {_tokens.FONT_VALUE[1]}pt;")
         txt.setPlainText(text)
         v.addWidget(txt)
         btns = QDialogButtonBox(QDialogButtonBox.Close)
@@ -7454,8 +7486,8 @@ class FlowsheetMainWindow(QMainWindow):
 
         preview = QTextEdit()
         preview.setReadOnly(True)
-        preview.setStyleSheet("font-family: Consolas, monospace; "
-                                "font-size: 9pt;")
+        preview.setStyleSheet(f"font-family: '{pfd_fonts.MONO}'; "
+                        f"font-size: {_tokens.FONT_VALUE[1]}pt;")
 
         def _refresh_preview(*_args):
             name = combo.currentText()

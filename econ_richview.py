@@ -33,7 +33,8 @@ from PySide6.QtWidgets import (
 )
 
 import pfd_fonts
-from tokens import _PrefsBus, fmt_pct, fmt_years, qfont, FONT_LABEL
+from tokens import (_PrefsBus, fmt_pct, fmt_years, qfont, FONT_DISPLAY,
+                    FONT_TITLE, FONT_UI, FONT_VALUE, FONT_HINT, FONT_LABEL)
 from inspector_widgets import _tok, MetricCard, MetricGrid, StatusBadge
 from econ_widgets import FinancialTable
 
@@ -64,7 +65,7 @@ def _placeholder(text="Presioná «Calcular» en Parámetros para ver esta vista
     lbl = QLabel(text)
     lbl.setWordWrap(True)
     lbl.setAlignment(Qt.AlignCenter)
-    lbl.setFont(QFont(pfd_fonts.SANS, 10))
+    lbl.setFont(qfont(FONT_UI))
     lbl.setStyleSheet(f"color:{_tok('ink_soft')}; font-style:italic; "
                       f"padding:28px;")
     host = QWidget(); v = QVBoxLayout(host)
@@ -82,13 +83,16 @@ class _PanelHeader(QFrame):
                  desc="run_economics=True", parent=None):
         super().__init__(parent)
         self._tag, self._title, self._desc = tag, title, desc
-        self.setFixedHeight(58)
+        self.setFixedHeight(64)   # +6px: FONT_TITLE/FONT_HINT crecen vs. 12/8pt
         lay = QHBoxLayout(self)
         lay.setContentsMargins(14, 10, 12, 10); lay.setSpacing(10)
         # ícono $
         self._ico = QLabel("$")
         self._ico.setFixedSize(36, 36)
         self._ico.setAlignment(Qt.AlignCenter)
+        # glifo-ícono: tamaño geométrico, no tipografía (excepción 2g)
+        # glifo-ícono ($ en caja 36px): tamaño geométrico, no tipografía
+        # (excepción 2g)
         self._ico.setFont(QFont(pfd_fonts.SANS, 13, QFont.Bold))
         lay.addWidget(self._ico)
         # bloque texto
@@ -96,9 +100,9 @@ class _PanelHeader(QFrame):
         self._lab_tag = QLabel(tag)
         self._lab_tag.setFont(qfont(FONT_LABEL))
         self._lab_title = QLabel(title)
-        self._lab_title.setFont(QFont(pfd_fonts.MONO, 12))
+        self._lab_title.setFont(qfont(FONT_TITLE))
         self._lab_desc = QLabel(desc)
-        self._lab_desc.setFont(QFont(pfd_fonts.SANS, 8))
+        self._lab_desc.setFont(qfont(FONT_HINT))
         txt.addWidget(self._lab_tag)
         txt.addWidget(self._lab_title)
         txt.addWidget(self._lab_desc)
@@ -125,6 +129,7 @@ class _PanelHeader(QFrame):
         self._lab_title.setStyleSheet(f"color:{_tok('ink')};")
         self._lab_desc.setStyleSheet(f"color:{_tok('ink_mute')};")
         self._x.setStyleSheet(
+            # glifo-ícono: tamaño geométrico, no tipografía (excepción 2g)
             f"QPushButton {{ color:{_tok('ink_mute')}; border:none; "
             f"background:transparent; border-radius:6px; font-size:13px; }}"
             f"QPushButton:hover {{ background:{_tok('bg_mute')}; "
@@ -140,8 +145,8 @@ class _Kpi(QFrame):
         self._tone = tone
         v = QVBoxLayout(self); v.setContentsMargins(0, 0, 0, 0); v.setSpacing(1)
         self._k = QLabel(kicker.upper()); self._k.setFont(qfont(FONT_LABEL))
-        self._v = QLabel(value); self._v.setFont(QFont(pfd_fonts.MONO, 16, QFont.DemiBold))
-        self._s = QLabel(sub); self._s.setFont(QFont(pfd_fonts.SANS, 8))
+        self._v = QLabel(value); self._v.setFont(qfont(FONT_VALUE))
+        self._s = QLabel(sub); self._s.setFont(qfont(FONT_HINT))
         v.addWidget(self._k); v.addWidget(self._v); v.addWidget(self._s)
         _PrefsBus.signal().connect(self._restyle); self._restyle()
 
@@ -171,9 +176,9 @@ class _HeroStrip(QFrame):
         neg = (npv or 0) < 0
         self._npv_value = npv
         self._npv_v = QLabel(f"{_musd(npv, 1)}")
-        self._npv_v.setFont(QFont(pfd_fonts.MONO, 26, QFont.DemiBold))
+        self._npv_v.setFont(qfont(FONT_DISPLAY))
         self._npv_neg = neg
-        self._npv_u = QLabel("M USD"); self._npv_u.setFont(QFont(pfd_fonts.MONO, 11))
+        self._npv_u = QLabel("M USD"); self._npv_u.setFont(qfont(FONT_VALUE))
         row.addWidget(self._npv_v, alignment=Qt.AlignBottom)
         row.addWidget(self._npv_u, alignment=Qt.AlignBottom)
         row.addStretch(1)
@@ -219,7 +224,7 @@ class _Sidebar(QFrame):
 
     def __init__(self, verdict, parent=None):
         super().__init__(parent)
-        self.setFixedWidth(150)
+        self.setFixedWidth(168)   # FONT_UI (12pt) necesita +18px vs los 150 de 9pt
         self._verdict = verdict
         self._active = 0
         v = QVBoxLayout(self); v.setContentsMargins(8, 10, 8, 10); v.setSpacing(2)
@@ -227,14 +232,14 @@ class _Sidebar(QFrame):
         for i, (name, ico) in enumerate(self.ITEMS):
             item = QPushButton(f"  {ico}   {name}")
             item.setCursor(Qt.PointingHandCursor)
-            item.setFont(QFont(pfd_fonts.SANS, 10))
+            item.setFont(qfont(FONT_UI))
             item.clicked.connect(lambda _=False, k=i: self._on_item(k))
             self._labels.append(item)
             v.addWidget(item)
         v.addStretch(1)
         # chip veredicto
         self._dof = QLabel(f"●  {verdict.get('text', '—')}")
-        self._dof.setFont(QFont(pfd_fonts.SANS, 9, QFont.DemiBold))
+        self._dof.setFont(qfont(FONT_LABEL))
         v.addWidget(self._dof)
         _PrefsBus.signal().connect(self._restyle); self._restyle()
 
@@ -282,24 +287,24 @@ class _Footer(QFrame):
 
     def __init__(self, empty=False, show_export=False, parent=None):
         super().__init__(parent)
-        self.setFixedHeight(46)
+        self.setFixedHeight(50)   # +4px: botones pasan de 9pt a FONT_UI (12pt)
         lay = QHBoxLayout(self)
         lay.setContentsMargins(14, 8, 14, 8); lay.setSpacing(10)
         self._note = QLabel("configurá Parámetros y presioná Calcular"
                             if empty else
                             "actualizado tras el último cálculo")
-        self._note.setFont(QFont(pfd_fonts.SANS, 8))
+        self._note.setFont(qfont(FONT_HINT))
         lay.addWidget(self._note)
         lay.addStretch(1)
         self._btn_xls = QPushButton("Exportar Excel")
         self._btn_xls.setCursor(Qt.PointingHandCursor)
-        self._btn_xls.setFont(QFont(pfd_fonts.SANS, 9, QFont.Medium))
+        self._btn_xls.setFont(qfont(FONT_UI))
         self._btn_xls.clicked.connect(self.exportExcel.emit)
         self._btn_xls.setVisible(bool(show_export))
         lay.addWidget(self._btn_xls)
         self._btn = QPushButton("Re-correr análisis")
         self._btn.setCursor(Qt.PointingHandCursor)
-        self._btn.setFont(QFont(pfd_fonts.SANS, 9, QFont.Bold))
+        self._btn.setFont(qfont(FONT_UI))
         self._btn.clicked.connect(self.rerun.emit)
         lay.addWidget(self._btn)
         _PrefsBus.signal().connect(self._restyle); self._restyle()
@@ -330,7 +335,7 @@ def _evidence_card(title, badges, body_widget):
     card = QFrame(); card.setObjectName("evCard")
     v = QVBoxLayout(card); v.setContentsMargins(12, 10, 12, 12); v.setSpacing(8)
     head = QHBoxLayout(); head.setSpacing(6); head.setContentsMargins(0, 0, 0, 0)
-    t = QLabel(title); t.setFont(QFont(pfd_fonts.SANS, 10, QFont.DemiBold))
+    t = QLabel(title); t.setFont(qfont(FONT_LABEL))
     t.setStyleSheet(f"color:{_tok('ink')};")
     head.addWidget(t); head.addStretch(1)
     for b in (badges or []):
@@ -565,7 +570,7 @@ class EconRichView(QWidget):
                 FinancialTable(headers=["Concepto", "M USD"], rows=rows))
             v.addWidget(card)
             n = QLabel(ob["note"]); n.setWordWrap(True)
-            n.setFont(QFont(pfd_fonts.SANS, 8))
+            n.setFont(qfont(FONT_HINT))
             n.setStyleSheet(f"color:{_tok('ink_mute')}; font-style:italic;")
             v.addWidget(n)
         else:

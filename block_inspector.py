@@ -54,6 +54,7 @@ import equipment_costs as eq
 import tokens as _tokens
 from tokens import (
     TOK, PANEL_W,
+    qfont, FONT_TITLE, FONT_UI, FONT_VALUE, FONT_HINT, FONT_LABEL,
     THEME_LIGHT, THEME_DARK, ACCENTS, ACCENTS_DARK, DENSITIES,
     current_prefs, apply_preferences, _PrefsBus, _PREFS, _PREFS_PATH,
     load_prefs_from_disk, save_prefs_to_disk,
@@ -218,8 +219,7 @@ class SpecField(QFrame):
         self._input = QLineEdit(self)
         self._input.setObjectName("specInput")
         self._input.setFrame(False)
-        f = QFont(pfd_fonts.MONO, 10)
-        self._input.setFont(f)
+        self._input.setFont(qfont(FONT_VALUE))
         self._input.setPlaceholderText(placeholder)
         self._input.textEdited.connect(self._on_edited)
         self._input.setText(str(value) if value is not None else "")
@@ -229,8 +229,7 @@ class SpecField(QFrame):
         self._unit_lbl = QLabel(unit, self)
         self._unit_lbl.setObjectName("specUnit")
         self._unit_lbl.setContentsMargins(2, 0, 6, 0)
-        uf = QFont(pfd_fonts.MONO, 9)
-        self._unit_lbl.setFont(uf)
+        self._unit_lbl.setFont(qfont(FONT_VALUE))
         lay.addWidget(self._unit_lbl)
 
         # toggle
@@ -238,10 +237,8 @@ class SpecField(QFrame):
         self._toggle.setObjectName("specToggle")
         self._toggle.setText("spec")
         self._toggle.setCursor(Qt.PointingHandCursor)
-        tf = QFont(pfd_fonts.SANS, 8)
-        tf.setBold(True)
-        self._toggle.setFont(tf)
-        self._toggle.setFixedHeight(20)
+        self._toggle.setFont(qfont(FONT_LABEL))
+        self._toggle.setFixedHeight(24)  # 20→24: el texto del toggle creció 8→10 pt (2g)
         self._toggle.clicked.connect(self._on_toggle_clicked)
         lay.addWidget(self._toggle)
         lay.addSpacing(4)
@@ -364,7 +361,7 @@ class StreamPill(QFrame):
 
         # nombre stream (mono)
         nm = QLabel(name, self)
-        nf = QFont(pfd_fonts.MONO, 9)
+        nf = qfont(FONT_VALUE)
         nf.setBold(True)
         nm.setFont(nf)
         nm.setStyleSheet(f"color:{TOK['ink']};")
@@ -372,7 +369,7 @@ class StreamPill(QFrame):
 
         # phase chip
         ph = QLabel(phase.upper() if phase else "?", self)
-        pf = QFont(pfd_fonts.SANS, 7)
+        pf = qfont(FONT_HINT)
         pf.setBold(True)
         ph.setFont(pf)
         ph.setAlignment(Qt.AlignCenter)
@@ -391,6 +388,7 @@ class StreamPill(QFrame):
         P_s = f"{P:.1f}" if P else "—"
         m_s = f"{mdot:.2f}" if mdot else "—"
         meta.setText(
+            # micro-tipografía de chip de datos (px): escala de densidad, no tipografía (excepción 2g)
             f'<span style="color:{soft};font-size:9px;">T</span> '
             f'<b style="color:{ink};font-size:10px;font-family:\'{pfd_fonts.MONO}\';">{T_s}</b>'
             f'<span style="color:{soft};font-size:9px;"> K · </span>'
@@ -436,7 +434,7 @@ class ConfidenceBadge(QLabel):
     def __init__(self, level: str, parent=None):
         super().__init__(parent)
         ink, bg, label = self.PALETTE.get(level, self.PALETTE["na"])
-        f = QFont(pfd_fonts.SANS, 7)
+        f = qfont(FONT_HINT)
         f.setBold(True)
         self.setFont(f)
         self.setText(f"●  {label}")
@@ -478,12 +476,12 @@ class ReactionRow(QFrame):
         col.setContentsMargins(0, 0, 0, 0)
         col.setSpacing(1)
         idn = QLabel(f"{rxn_id} · {name}", self)
-        idn.setFont(QFont(pfd_fonts.MONO, 8))
+        idn.setFont(qfont(FONT_VALUE))
         idn.setStyleSheet(f"color:{TOK['ink_soft']};")
         idn.setSizePolicy(QSizePolicy.Ignored, QSizePolicy.Preferred)
         col.addWidget(idn)
         eq_lbl = QLabel(equation, self)
-        eq_lbl.setFont(QFont(pfd_fonts.MONO, 9))
+        eq_lbl.setFont(qfont(FONT_VALUE))
         eq_lbl.setStyleSheet(f"color:{TOK['ink']};")
         eq_lbl.setSizePolicy(QSizePolicy.Ignored, QSizePolicy.Preferred)
         col.addWidget(eq_lbl)
@@ -500,7 +498,7 @@ class ReactionRow(QFrame):
             kind_color = TOK["orange"] if dh < 0 else TOK["spec"]
             sign = "+" if dh > 0 else ""
             dh_lbl = QLabel(f"ΔH {sign}{dh:.0f}", self)
-            dh_lbl.setFont(QFont(pfd_fonts.MONO, 8))
+            dh_lbl.setFont(qfont(FONT_VALUE))
             dh_lbl.setStyleSheet(f"color:{kind_color};")
             dh_lbl.setAlignment(Qt.AlignRight)
             rcol.addWidget(dh_lbl)
@@ -536,7 +534,7 @@ class ReactionRow(QFrame):
                 f"border-radius: 7px; }}"
             )
             self._check.setText("✓")
-            self._check.setFont(QFont(pfd_fonts.SANS, 11, QFont.Bold))
+            self._check.setFont(qfont(FONT_LABEL))
             self._check.setStyleSheet(
                 f"background:{TOK['accent']}; color:white; border-radius:9px;"
             )
@@ -579,7 +577,7 @@ class _InspectorHeader(QFrame):
             f"background:{TOK['accent_tint']}; color:{TOK['accent']}; "
             f"border-radius:9px; border:1px solid {TOK['accent_soft']};"
         )
-        f = QFont(pfd_fonts.SANS, 13, QFont.Bold)
+        f = qfont(FONT_TITLE)
         self._icon.setFont(f)
         lay.addWidget(self._icon)
 
@@ -590,7 +588,7 @@ class _InspectorHeader(QFrame):
 
         self._tag = QLineEdit(self)
         self._tag.setFrame(False)
-        tf = QFont(pfd_fonts.MONO, 14)
+        tf = qfont(FONT_VALUE)
         tf.setWeight(QFont.Medium)
         self._tag.setFont(tf)
         self._tag.setStyleSheet(
@@ -609,7 +607,7 @@ class _InspectorHeader(QFrame):
         sub_row.setContentsMargins(4, 0, 0, 0)
         sub_row.setSpacing(6)
         self._chip = QLabel(self)
-        cf = QFont(pfd_fonts.SANS, 8)
+        cf = qfont(FONT_HINT)
         cf.setBold(True)
         self._chip.setFont(cf)
         self._chip.setStyleSheet(
@@ -620,7 +618,7 @@ class _InspectorHeader(QFrame):
         dot = QLabel("·", self); dot.setStyleSheet(f"color:{TOK['ink_soft']};")
         sub_row.addWidget(dot)
         self._desc = QLabel(self)
-        df = QFont(pfd_fonts.SANS, 9)
+        df = qfont(FONT_HINT)
         self._desc.setFont(df)
         self._desc.setStyleSheet(f"color:{TOK['ink_mute']};")
         sub_row.addWidget(self._desc, 1)
@@ -633,6 +631,7 @@ class _InspectorHeader(QFrame):
         self._close_btn.setFixedSize(28, 28)
         self._close_btn.setStyleSheet(
             f"QToolButton {{ background: transparent; color: {TOK['ink_mute']}; "
+            # glifo-ícono: tamaño geométrico, no tipografía (excepción 2g)
             f"border: 0; border-radius: 6px; font-size: 14px; }} "
             f"QToolButton:hover {{ background: {TOK['danger_bg']}; "
             f"color: {TOK['danger']}; }}"
@@ -687,14 +686,15 @@ class _StreamsStrip(QFrame):
         # col entradas
         col_in = QVBoxLayout(); col_in.setSpacing(4)
         lbl_in = QLabel(f"ENTRADAS · {len(streams_in)}")
-        lbl_in.setFont(QFont(pfd_fonts.SANS, 7, QFont.Bold))
+        lbl_in.setFont(qfont(FONT_LABEL))
         lbl_in.setStyleSheet(
             f"color:{TOK['ink_soft']}; letter-spacing:1.5px;"
         )
         col_in.addWidget(lbl_in)
         if not streams_in:
             empty = QLabel("(sin entradas)"); empty.setStyleSheet(
-                f"color:{TOK['ink_ghost']}; font-style:italic; font-size:9pt;")
+                f"color:{TOK['ink_ghost']}; font-style:italic; "
+                f"font-size:{FONT_HINT[1]}pt;")
             col_in.addWidget(empty)
         for s in streams_in:
             pill = StreamPill(
@@ -709,10 +709,11 @@ class _StreamsStrip(QFrame):
         # centro: block square con flechas
         mid = QVBoxLayout(); mid.setSpacing(2); mid.setAlignment(Qt.AlignCenter)
         arrow_up = QLabel("→"); arrow_up.setAlignment(Qt.AlignCenter)
+        # glifo-ícono: tamaño geométrico, no tipografía (excepción 2g)
         arrow_up.setStyleSheet(f"color:{TOK['ink_soft']}; font-size:14px;")
         sq = QLabel(block_tag)
         sq.setFixedSize(56, 56); sq.setAlignment(Qt.AlignCenter)
-        sq.setFont(QFont(pfd_fonts.MONO, 10, QFont.Bold))
+        sq.setFont(qfont(FONT_VALUE))
         sq.setStyleSheet(
             f"background:{TOK['accent']}; color:white; "
             f"border-radius:10px;"
@@ -725,14 +726,15 @@ class _StreamsStrip(QFrame):
         # col salidas
         col_out = QVBoxLayout(); col_out.setSpacing(4)
         lbl_out = QLabel(f"SALIDAS · {len(streams_out)}")
-        lbl_out.setFont(QFont(pfd_fonts.SANS, 7, QFont.Bold))
+        lbl_out.setFont(qfont(FONT_LABEL))
         lbl_out.setStyleSheet(
             f"color:{TOK['ink_soft']}; letter-spacing:1.5px;"
         )
         col_out.addWidget(lbl_out)
         if not streams_out:
             empty = QLabel("(sin salidas)"); empty.setStyleSheet(
-                f"color:{TOK['ink_ghost']}; font-style:italic; font-size:9pt;")
+                f"color:{TOK['ink_ghost']}; font-style:italic; "
+                f"font-size:{FONT_HINT[1]}pt;")
             col_out.addWidget(empty)
         for s in streams_out:
             pill = StreamPill(
@@ -778,7 +780,7 @@ class _InspectorSidebar(QFrame):
     def __init__(self, parent=None):
         super().__init__(parent)
         self.setObjectName("insSidebar")
-        self.setFixedWidth(168)
+        self.setFixedWidth(186)   # FONT_UI/HINT (12/11pt) necesita +18px
         self._lay = QVBoxLayout(self)
         self._lay.setContentsMargins(8, 12, 8, 12)
         self._lay.setSpacing(2)
@@ -794,7 +796,7 @@ class _InspectorSidebar(QFrame):
         df_lay.setContentsMargins(8, 8, 8, 8); df_lay.setSpacing(6)
         self._dof_dot = QLabel(self._dof); self._dof_dot.setFixedSize(8, 8)
         self._dof_text = QLabel("Sistema determinado", self._dof)
-        self._dof_text.setFont(QFont(pfd_fonts.SANS, 8))
+        self._dof_text.setFont(qfont(FONT_HINT))
         df_lay.addWidget(self._dof_dot)
         df_lay.addWidget(self._dof_text, 1)
         self._lay.addWidget(self._dof)
@@ -822,15 +824,15 @@ class _InspectorSidebar(QFrame):
 
             ico = QLabel(self.SECTION_ICON.get(key, "•"), row)
             ico.setFixedWidth(14); ico.setAlignment(Qt.AlignCenter)
-            ico.setFont(QFont(pfd_fonts.MONO, 10, QFont.Bold))
+            ico.setFont(qfont(FONT_VALUE))
             ico.setStyleSheet(f"color:{TOK['ink_mute']};")
             rlay.addWidget(ico)
             lbl = QLabel(self.SECTION_LABEL.get(key, key), row)
-            lbl.setFont(QFont(pfd_fonts.SANS, 9))
+            lbl.setFont(qfont(FONT_HINT))
             lbl.setStyleSheet(f"color:{TOK['ink']};")
             rlay.addWidget(lbl, 1)
             badge = QLabel("", row)
-            badge.setFont(QFont(pfd_fonts.MONO, 7, QFont.Bold))
+            badge.setFont(qfont(FONT_VALUE))
             badge.setStyleSheet(
                 f"color:{TOK['ink_soft']}; background:{TOK['bg_sunk']}; "
                 f"border-radius:8px; padding:1px 6px;"
@@ -996,11 +998,11 @@ class BlockInspectorPanel(QWidget):
             (self._stat_conv_lbl,  self._stat_conv_val),
         ]:
             col = QVBoxLayout(); col.setContentsMargins(0,0,0,0); col.setSpacing(1)
-            caps.setFont(QFont(pfd_fonts.SANS, 7, QFont.Bold))
+            caps.setFont(qfont(FONT_LABEL))
             caps.setStyleSheet(
                 f"color:{TOK['ink_soft']}; letter-spacing:1px;"
             )
-            val.setFont(QFont(pfd_fonts.MONO, 11, QFont.Bold))
+            val.setFont(qfont(FONT_VALUE))
             val.setStyleSheet(f"color:{TOK['ink']};")
             col.addWidget(caps); col.addWidget(val)
             lay.addLayout(col)
@@ -1015,9 +1017,9 @@ class BlockInspectorPanel(QWidget):
             (self._stat_hxdt_lbl, self._stat_hxdt_val),
         ]:
             col = QVBoxLayout(); col.setContentsMargins(0,0,0,0); col.setSpacing(1)
-            caps.setFont(QFont(pfd_fonts.SANS, 7, QFont.Bold))
+            caps.setFont(qfont(FONT_LABEL))
             caps.setStyleSheet(f"color:{TOK['ink_soft']}; letter-spacing:1px;")
-            val.setFont(QFont(pfd_fonts.MONO, 11, QFont.Bold))
+            val.setFont(qfont(FONT_VALUE))
             val.setStyleSheet(f"color:{TOK['ink_mute']};")
             col.addWidget(caps); col.addWidget(val)
             lay.addLayout(col)
@@ -1039,7 +1041,7 @@ class BlockInspectorPanel(QWidget):
         # save
         self._save_btn = QPushButton("Guardar cambios")
         self._save_btn.setCursor(Qt.PointingHandCursor)
-        sf = QFont(pfd_fonts.SANS, 9, QFont.Bold)
+        sf = qfont(FONT_LABEL)
         self._save_btn.setFont(sf)
         self._save_btn.setStyleSheet(
             f"QPushButton {{ background: {TOK['accent']}; color: white; "
@@ -1177,18 +1179,18 @@ class BlockInspectorPanel(QWidget):
     def _section_header(self, title: str, sub: str = "", help_text: str = ""):
         wrap = QVBoxLayout(); wrap.setContentsMargins(0, 0, 0, 0); wrap.setSpacing(4)
         hd = QHBoxLayout(); hd.setContentsMargins(0, 0, 0, 0); hd.setSpacing(8)
-        tl = QLabel(title); tl.setFont(QFont(pfd_fonts.SANS, 11, QFont.Bold))
+        tl = QLabel(title); tl.setFont(qfont(FONT_LABEL))
         tl.setStyleSheet(f"color:{TOK['ink']};")
         hd.addWidget(tl)
         if sub:
-            sb = QLabel(sub); sb.setFont(QFont(pfd_fonts.SANS, 8))
+            sb = QLabel(sub); sb.setFont(qfont(FONT_HINT))
             sb.setStyleSheet(f"color:{TOK['ink_soft']};")
             hd.addWidget(sb)
         hd.addStretch(1)
         wrap.addLayout(hd)
         if help_text:
             ht = QLabel(help_text); ht.setWordWrap(True)
-            ht.setFont(QFont(pfd_fonts.SANS, 8))
+            ht.setFont(qfont(FONT_HINT))
             ht.setStyleSheet(f"color:{TOK['ink_mute']}; line-height: 1.4em;")
             wrap.addWidget(ht)
         return wrap
@@ -1197,7 +1199,7 @@ class BlockInspectorPanel(QWidget):
         r = QFrame(); r.setObjectName("insRow")
         lay = QHBoxLayout(r); lay.setContentsMargins(0, 0, 0, 0)
         lay.setSpacing(12)
-        l = QLabel(label); l.setFont(QFont(pfd_fonts.SANS, 9))
+        l = QLabel(label); l.setFont(qfont(FONT_HINT))
         l.setStyleSheet(f"color:{TOK['ink_mute']};")
         l.setMinimumWidth(140)
         if info:
@@ -1355,7 +1357,7 @@ class BlockInspectorPanel(QWidget):
         s_min, s_max = spec.get("S_min"), spec.get("S_max")
         if s_min is not None and s_max is not None:
             hint = QLabel(f"Rango válido Turton: [{s_min:g} – {s_max:g}] {s_unit}")
-            hint.setFont(QFont(pfd_fonts.SANS, 7))
+            hint.setFont(qfont(FONT_HINT))
             hint.setStyleSheet(f"color:{TOK['ink_soft']}; padding-left:152px;")
             l.addWidget(hint)
 
@@ -1371,11 +1373,12 @@ class BlockInspectorPanel(QWidget):
         ico = QLabel("✨"); ico.setFixedSize(56, 56); ico.setAlignment(Qt.AlignCenter)
         ico.setStyleSheet(
             f"background:{TOK['accent_tint']}; color:{TOK['accent']}; "
+            # glifo-ícono: tamaño geométrico, no tipografía (excepción 2g)
             f"border-radius:14px; font-size:24px;"
         )
         lay.addWidget(ico, alignment=Qt.AlignCenter)
         ttl = QLabel("No hay nada que configurar acá")
-        ttl.setFont(QFont(pfd_fonts.SANS, 11, QFont.Bold))
+        ttl.setFont(qfont(FONT_LABEL))
         ttl.setStyleSheet(f"color:{TOK['ink']};")
         ttl.setAlignment(Qt.AlignCenter)
         lay.addWidget(ttl)
@@ -1386,7 +1389,7 @@ class BlockInspectorPanel(QWidget):
             "abre Sizing."
         )
         body.setWordWrap(True); body.setAlignment(Qt.AlignCenter)
-        body.setFont(QFont(pfd_fonts.SANS, 9))
+        body.setFont(qfont(FONT_HINT))
         body.setStyleSheet(f"color:{TOK['ink_mute']};")
         lay.addWidget(body)
 
@@ -1523,7 +1526,7 @@ class BlockInspectorPanel(QWidget):
         # modo del reactor
         mode_row = QHBoxLayout(); mode_row.setSpacing(6)
         mode_lbl = QLabel("Modo")
-        mode_lbl.setFont(QFont(pfd_fonts.SANS, 9))
+        mode_lbl.setFont(qfont(FONT_HINT))
         mode_lbl.setStyleSheet(f"color:{TOK['ink_mute']};")
         mode_lbl.setMinimumWidth(140)
         mode_cb = QComboBox()
@@ -1561,7 +1564,7 @@ class BlockInspectorPanel(QWidget):
         # tabla de reacciones
         if rdb and ids:
             list_label = QLabel("Catálogo de reacciones")
-            list_label.setFont(QFont(pfd_fonts.SANS, 8, QFont.Bold))
+            list_label.setFont(qfont(FONT_LABEL))
             list_label.setStyleSheet(f"color:{TOK['ink_soft']}; padding-top:8px; letter-spacing:1px;")
             l.addWidget(list_label)
             for rid in ids:
@@ -1584,7 +1587,7 @@ class BlockInspectorPanel(QWidget):
         # Reacciones in-memory que no están en el catálogo .md.  Cada
         # una es un dict {id, name, eq?, dh_rxn_298_kJ_mol?, …}.
         custom_hd = QLabel("Reacciones custom")
-        custom_hd.setFont(QFont(pfd_fonts.SANS, 8, QFont.Bold))
+        custom_hd.setFont(qfont(FONT_LABEL))
         custom_hd.setStyleSheet(
             f"color:{TOK['ink_soft']}; padding-top:12px; letter-spacing:1px;"
         )
@@ -1602,7 +1605,7 @@ class BlockInspectorPanel(QWidget):
         # Botón "+ Añadir reacción custom"
         add_btn = QPushButton("+  Añadir reacción custom")
         add_btn.setCursor(Qt.PointingHandCursor)
-        add_btn.setFont(QFont(pfd_fonts.SANS, 9))
+        add_btn.setFont(qfont(FONT_HINT))
         add_btn.setStyleSheet(
             f"QPushButton {{ background: transparent; color: {TOK['accent']}; "
             f"border: 1px dashed {TOK['accent_soft']}; border-radius: 7px; "
@@ -1655,17 +1658,18 @@ class BlockInspectorPanel(QWidget):
             rlay.setSpacing(8)
             # diamante indicador
             dot = QLabel("◆")
+            # glifo-ícono: tamaño geométrico, no tipografía (excepción 2g)
             dot.setStyleSheet(f"color:{TOK['spec']}; font-size:11px;")
             rlay.addWidget(dot)
             # nombre + id
             name = d.get("name") or d.get("id", "?")
             rid  = d.get("id", "?")
             nm = QLabel(name)
-            nm.setFont(QFont(pfd_fonts.MONO, 9))
+            nm.setFont(qfont(FONT_VALUE))
             nm.setStyleSheet(f"color:{TOK['ink']};")
             rlay.addWidget(nm, 1)
             rid_lbl = QLabel(rid)
-            rid_lbl.setFont(QFont(pfd_fonts.MONO, 8))
+            rid_lbl.setFont(qfont(FONT_VALUE))
             rid_lbl.setStyleSheet(f"color:{TOK['ink_soft']};")
             rlay.addWidget(rid_lbl)
             # botón eliminar
@@ -1743,7 +1747,7 @@ class BlockInspectorPanel(QWidget):
         # Toggle FUG/MESH automático
         act = QCheckBox("Activar diseño automático")
         act.setChecked(bool(getattr(b, "column_active", False)))
-        act.setFont(QFont(pfd_fonts.SANS, 9))
+        act.setFont(qfont(FONT_HINT))
         act.setStyleSheet(self._checkbox_style())
         self._extras["column_active"] = act
         l.addWidget(act)
@@ -1828,7 +1832,7 @@ class BlockInspectorPanel(QWidget):
 
         act = QCheckBox("Activar flash automático")
         act.setChecked(bool(getattr(b, "flash_active", False)))
-        act.setFont(QFont(pfd_fonts.SANS, 9))
+        act.setFont(qfont(FONT_HINT))
         act.setStyleSheet(self._checkbox_style())
         self._extras["flash_active"] = act
         l.addWidget(act)
@@ -1987,7 +1991,7 @@ class BlockInspectorPanel(QWidget):
     def _add_active_toggle(self, layout, key: str, label: str, checked: bool):
         cb = QCheckBox(label)
         cb.setChecked(bool(checked))
-        cb.setFont(QFont(pfd_fonts.SANS, 9))
+        cb.setFont(qfont(FONT_HINT))
         cb.setStyleSheet(self._checkbox_style())
         self._extras[key] = cb
         layout.addWidget(cb)
@@ -1998,7 +2002,7 @@ class BlockInspectorPanel(QWidget):
         lay = QHBoxLayout(r); lay.setContentsMargins(0, _tokens.ROW_PAD//2, 0, _tokens.ROW_PAD//2)
         lay.setSpacing(12)
         l = QLabel(label)
-        l.setFont(QFont(pfd_fonts.SANS, 9))
+        l.setFont(qfont(FONT_HINT))
         l.setStyleSheet(f"color:{TOK['ink_mute']};")
         l.setMinimumWidth(140)
         lay.addWidget(l); lay.addWidget(combo, 1)
@@ -2024,7 +2028,8 @@ class BlockInspectorPanel(QWidget):
         return (
             f"QLineEdit {{ background: {TOK['bg_elev']}; color: {TOK['ink']}; "
             f"border: 1px solid {TOK['line_strong']}; border-radius: 7px; "
-            f"padding: 6px 8px; font-family: '{pfd_fonts.SANS}'; font-size: 9pt; }} "
+            f"padding: 6px 8px; font-family: '{pfd_fonts.SANS}'; "
+            f"font-size: {FONT_HINT[1]}pt; }} "
             f"QLineEdit:focus {{ border: 1.5px solid {TOK['accent']}; }} "
             f"QLineEdit::placeholder {{ color: {TOK['ink_ghost']}; }}"
         )
@@ -2097,7 +2102,7 @@ class BlockInspectorPanel(QWidget):
         # Si no hay nada específico, mostrar placeholder
         if not (_is_hx(eq_type) or _is_tower(eq_type) or _is_pump_compressor(eq_type)):
             ph = QLabel("Geometría base (Tamaño S) en la sección Identidad.")
-            ph.setFont(QFont(pfd_fonts.SANS, 9))
+            ph.setFont(qfont(FONT_HINT))
             ph.setStyleSheet(f"color:{TOK['ink_soft']}; font-style:italic;")
             l.addWidget(ph)
 
@@ -2130,7 +2135,7 @@ class BlockInspectorPanel(QWidget):
         self._extras["heat_source"] = cb
         u_lay = QHBoxLayout()
         u_lbl = QLabel("Tipo de utility")
-        u_lbl.setFont(QFont(pfd_fonts.SANS, 9))
+        u_lbl.setFont(qfont(FONT_HINT))
         u_lbl.setStyleSheet(f"color:{TOK['ink_mute']};")
         u_lbl.setMinimumWidth(140)
         u_lay.addWidget(u_lbl); u_lay.addWidget(cb, 1)
@@ -2185,7 +2190,7 @@ class BlockInspectorPanel(QWidget):
         except Exception as exc:
             err = QLabel(f"⚠ inspector_evidence no disponible: {exc}")
             err.setWordWrap(True)
-            err.setFont(QFont(pfd_fonts.SANS, 9))
+            err.setFont(qfont(FONT_HINT))
             err.setStyleSheet(f"color:{TOK['danger']};")
             l.addWidget(err)
             return sect
@@ -2262,7 +2267,7 @@ class BlockInspectorPanel(QWidget):
                         "(el solver aún no produjo diagnóstico o el tipo "
                         "no tiene métricas asociadas).")
             ph.setWordWrap(True)
-            ph.setFont(QFont(pfd_fonts.SANS, 9))
+            ph.setFont(qfont(FONT_HINT))
             ph.setStyleSheet(f"color:{TOK['ink_soft']}; font-style:italic;")
             l.addWidget(ph)
 
@@ -2273,11 +2278,11 @@ class BlockInspectorPanel(QWidget):
         card = QFrame(); card.setObjectName("diagCard")
         cl = QVBoxLayout(card); cl.setContentsMargins(10, 8, 10, 8); cl.setSpacing(4)
         t = QLabel(title)
-        t.setFont(QFont(pfd_fonts.SANS, 9, QFont.Bold))
+        t.setFont(qfont(FONT_LABEL))
         t.setStyleSheet(f"color:{TOK['ink']};")
         cl.addWidget(t)
         body_lbl = QLabel(body)
-        body_lbl.setFont(QFont(pfd_fonts.MONO, 9))
+        body_lbl.setFont(qfont(FONT_VALUE))
         body_lbl.setStyleSheet(f"color:{TOK['ink']};")
         body_lbl.setWordWrap(True)
         body_lbl.setTextInteractionFlags(Qt.TextSelectableByMouse)
@@ -2303,7 +2308,7 @@ class BlockInspectorPanel(QWidget):
         cl.setContentsMargins(10, 8, 10, 8); cl.setSpacing(6)
         # título
         t = QLabel(title)
-        t.setFont(QFont(pfd_fonts.SANS, 9, QFont.Bold))
+        t.setFont(qfont(FONT_LABEL))
         t.setStyleSheet(f"color:{TOK['ink']};")
         cl.addWidget(t)
         # status badges (header)
@@ -2340,7 +2345,7 @@ class BlockInspectorPanel(QWidget):
         for w in metrics.get("warnings") or []:
             wl = QLabel(f"⚠ {w}")
             wl.setWordWrap(True)
-            wl.setFont(QFont(pfd_fonts.SANS, 8))
+            wl.setFont(qfont(FONT_HINT))
             wl.setStyleSheet(f"color:{TOK['amber']};")
             cl.addWidget(wl)
         card.setStyleSheet(
@@ -2407,11 +2412,11 @@ class BlockInspectorPanel(QWidget):
         cl = QVBoxLayout(card)
         cl.setContentsMargins(10, 8, 10, 8); cl.setSpacing(4)
         t = QLabel(title)
-        t.setFont(QFont(pfd_fonts.SANS, 9, QFont.Bold))
+        t.setFont(qfont(FONT_LABEL))
         t.setStyleSheet(f"color:{TOK['ink_soft']};")
         cl.addWidget(t)
         body = QLabel(f"◌ {reason}")
-        body.setFont(QFont(pfd_fonts.SANS, 9))
+        body.setFont(qfont(FONT_HINT))
         body.setStyleSheet(f"color:{TOK['ink_soft']}; font-style:italic;")
         body.setWordWrap(True)
         body.setTextInteractionFlags(Qt.TextSelectableByMouse)
@@ -2464,7 +2469,7 @@ class BlockInspectorPanel(QWidget):
         card = QFrame(); card.setObjectName("diagCard")
         cl = QVBoxLayout(card); cl.setContentsMargins(10, 8, 10, 8); cl.setSpacing(6)
         t = QLabel(title)
-        t.setFont(QFont(pfd_fonts.SANS, 9, QFont.Bold))
+        t.setFont(qfont(FONT_LABEL))
         t.setStyleSheet(f"color:{TOK['ink']};")
         cl.addWidget(t)
         canvas.setMinimumHeight(280)
@@ -2914,7 +2919,7 @@ class PreferencesDialog(QDialog):
         )
         note.setWordWrap(True)
         note.setStyleSheet(
-            f"color:{TOK['ink_soft']}; font-size:9pt; "
+            f"color:{TOK['ink_soft']}; font-size:{FONT_HINT[1]}pt; "
             f"background:{TOK['bg_mute']}; padding:8px; border-radius:6px;"
         )
         lay.addWidget(note)
@@ -2931,7 +2936,7 @@ class PreferencesDialog(QDialog):
 
     def _group_title(self, text: str) -> QLabel:
         l = QLabel(text)
-        l.setFont(QFont(pfd_fonts.SANS, 10, QFont.Bold))
+        l.setFont(qfont(FONT_LABEL))
         l.setStyleSheet(f"color:{TOK['ink']}; letter-spacing:0.5px;")
         return l
 

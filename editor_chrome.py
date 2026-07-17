@@ -43,6 +43,8 @@ from PySide6.QtWidgets import (
 )
 
 import pfd_fonts
+from tokens import (qfont, FONT_TITLE, FONT_UI, FONT_VALUE, FONT_HINT,
+                    FONT_LABEL)
 from block_inspector import TOK
 
 
@@ -827,7 +829,7 @@ class EditorTopbar(QFrame):
         self._logo = QLabel(self)
         self._logo.setFixedSize(28, 28)
         self._logo.setAlignment(Qt.AlignCenter)
-        f = QFont(pfd_fonts.SANS, 14, QFont.Bold)
+        f = QFont(pfd_fonts.SANS, 14, QFont.Bold)  # glifo-ícono: tamaño geométrico, no tipografía (excepción 2g)
         self._logo.setFont(f)
         self._logo.setText("◆")
         self._logo.setStyleSheet(self._qss_logo())
@@ -835,10 +837,10 @@ class EditorTopbar(QFrame):
 
         proj = QVBoxLayout(); proj.setContentsMargins(0,0,0,0); proj.setSpacing(0)
         self._project = QLabel("(sin nombre)", self)
-        self._project.setFont(QFont(pfd_fonts.MONO, 10, QFont.Medium))
+        self._project.setFont(qfont(FONT_VALUE))
         self._project.setStyleSheet(f"color:{TOK['ink']};")
         self._sub = QLabel("sin guardar", self)
-        sf = QFont(pfd_fonts.SANS, 8); self._sub.setFont(sf)
+        self._sub.setFont(qfont(FONT_HINT))
         self._sub.setStyleSheet(f"color:{TOK['ink_soft']};")
         proj.addWidget(self._project); proj.addWidget(self._sub)
         lay.addLayout(proj)
@@ -864,10 +866,10 @@ class EditorTopbar(QFrame):
         self._solver_dot.setFixedSize(8, 8)
         sc_lay.addWidget(self._solver_dot)
         self._solver_label = QLabel("en espera", self._solver_chip)
-        self._solver_label.setFont(QFont(pfd_fonts.SANS, 9, QFont.Medium))
+        self._solver_label.setFont(qfont(FONT_LABEL))
         sc_lay.addWidget(self._solver_label)
         self._solver_meta = QLabel("", self._solver_chip)
-        self._solver_meta.setFont(QFont(pfd_fonts.MONO, 8))
+        self._solver_meta.setFont(qfont(FONT_VALUE))
         self._solver_meta.setStyleSheet(f"color:{TOK['ink_soft']};")
         sc_lay.addWidget(self._solver_meta)
         lay.addWidget(self._solver_chip)
@@ -961,7 +963,7 @@ class EditorTopbar(QFrame):
         b.setToolTip(tooltip)
         b.setFixedSize(32, 32)
         b.setCursor(Qt.PointingHandCursor)
-        b.setFont(QFont(pfd_fonts.SANS, 14))
+        b.setFont(QFont(pfd_fonts.SANS, 14))  # glifo-ícono: tamaño geométrico, no tipografía (excepción 2g)
         b.setStyleSheet(self._qss_toolbutton())
         return b
 
@@ -974,14 +976,14 @@ class EditorTopbar(QFrame):
     def _mk_ghost_btn(self, text: str) -> QPushButton:
         b = QPushButton(text, self)
         b.setCursor(Qt.PointingHandCursor)
-        b.setFont(QFont(pfd_fonts.SANS, 9, QFont.Medium))
+        b.setFont(qfont(FONT_UI))
         b.setStyleSheet(self._qss_ghost())
         return b
 
     def _mk_primary_btn(self, text: str) -> QPushButton:
         b = QPushButton(text, self)
         b.setCursor(Qt.PointingHandCursor)
-        b.setFont(QFont(pfd_fonts.SANS, 9, QFont.Bold))
+        b.setFont(qfont(FONT_UI))
         b.setStyleSheet(self._qss_primary())
         return b
 
@@ -1193,7 +1195,7 @@ class _ToolButton(QToolButton):
         else:
             # tool icon — usar glyphs unicode minimalistas
             p.setPen(QPen(self._stroke, 1.6))
-            p.setFont(QFont(pfd_fonts.SANS, 14, QFont.Medium))
+            p.setFont(QFont(pfd_fonts.SANS, 14, QFont.Medium))  # glifo-ícono: tamaño geométrico, no tipografía (excepción 2g)
             glyph = {
                 "select":  "↖",
                 "pan":     "✥",
@@ -1315,7 +1317,7 @@ class EditorPalette(QFrame):
         self._drag_handle.setFixedSize(40, 14)
         self._drag_handle.setAlignment(Qt.AlignCenter)
         self._drag_handle.setCursor(Qt.SizeAllCursor)
-        self._drag_handle.setFont(QFont(pfd_fonts.SANS, 9, QFont.Bold))
+        self._drag_handle.setFont(QFont(pfd_fonts.SANS, 9, QFont.Bold))  # glifo-ícono: tamaño geométrico, no tipografía (excepción 2g)
         self._drag_handle.setStyleSheet(
             f"color: {TOK['ink_ghost']}; letter-spacing: -2px;"
         )
@@ -1360,7 +1362,7 @@ class EditorPalette(QFrame):
         plus = QToolButton(self)
         plus.setText("+"); plus.setFixedSize(40, 32)
         plus.setCursor(Qt.PointingHandCursor)
-        plus.setFont(QFont(pfd_fonts.SANS, 16, QFont.Bold))
+        plus.setFont(QFont(pfd_fonts.SANS, 16, QFont.Bold))  # glifo-ícono: tamaño geométrico, no tipografía (excepción 2g)
         plus.setToolTip("Catálogo completo de equipos")
         plus.setStyleSheet(self._qss_plus())
         self._plus = plus
@@ -1560,7 +1562,8 @@ class EditorPalette(QFrame):
         menu.setStyleSheet(
             f"QMenu {{ background: {TOK['bg_elev']}; color: {TOK['ink']}; "
             f"border: 1px solid {TOK['line']}; padding: 4px 0; "
-            f"font-family: '{pfd_fonts.SANS}'; font-size: 9pt; }} "
+            f"font-family: '{pfd_fonts.SANS}'; "
+            f"font-size: {FONT_HINT[1]}pt; }} "
             f"QMenu::item {{ padding: 6px 22px 6px 14px; }} "
             f"QMenu::item:selected {{ background: {TOK['accent_tint']}; "
             f"color: {TOK['accent_deep']}; }} "
@@ -1636,7 +1639,7 @@ class EditorZoom(QFrame):
         self._lbl_pct.setText("100%")
         self._lbl_pct.setFixedSize(54, 28)
         self._lbl_pct.setCursor(Qt.PointingHandCursor)
-        self._lbl_pct.setFont(QFont(pfd_fonts.MONO, 9, QFont.Medium))
+        self._lbl_pct.setFont(qfont(FONT_VALUE))
         self._lbl_pct.setToolTip("Click → 100% (⌘0)")
         self._lbl_pct.setStyleSheet(self._qss_pct())
         self._lbl_pct.clicked.connect(self.zoomResetRequested.emit)
@@ -1664,7 +1667,7 @@ class EditorZoom(QFrame):
         b.setText(glyph); b.setToolTip(tip)
         b.setFixedSize(28, 28)
         b.setCursor(Qt.PointingHandCursor)
-        b.setFont(QFont(pfd_fonts.SANS, 13, QFont.Medium))
+        b.setFont(QFont(pfd_fonts.SANS, 13, QFont.Medium))  # glifo-ícono: tamaño geométrico, no tipografía (excepción 2g)
         b.setStyleSheet(self._qss_btn())
         return b
 
@@ -2107,7 +2110,7 @@ class IsaGlyphItem(QGraphicsItem):
             p.setBrush(QBrush(QColor(chip_color))); p.setPen(Qt.NoPen)
             p.drawEllipse(QPointF(cx, cy), 7.5, 7.5)
             p.setPen(QPen(QColor("white"), 1.2))
-            p.setFont(QFont(pfd_fonts.SANS, 8, QFont.Bold))
+            p.setFont(QFont(pfd_fonts.SANS, 8, QFont.Bold))  # glifo-ícono: tamaño geométrico, no tipografía (excepción 2g)
             p.drawText(QRectF(cx-7, cy-7, 14, 14), Qt.AlignCenter, "!")
         elif status == "ok":
             # dot verde discreto — balance OK sin gritar
