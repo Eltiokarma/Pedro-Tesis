@@ -2907,9 +2907,10 @@ class PreferencesDialog(QDialog):
 
         # nota
         note = QLabel(
-            "Tema y acento se aplican al Inspector inmediatamente. "
-            "El editor (topbar, paleta, zoom) toma el nuevo estilo al "
-            "reiniciar la app."
+            "Tema, densidad y acento se aplican en vivo a toda la app "
+            "(lienzo, topbar, paneles).  La exportación PDF/SVG/PNG "
+            "sale siempre en papel claro salvo que actives «Exportar "
+            "como se ve» en Archivo ▸ Exportar."
         )
         note.setWordWrap(True)
         note.setStyleSheet(

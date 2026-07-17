@@ -96,7 +96,6 @@ import flowsheet_validation as fval
 import flowsheet_units as funits
 from flowsheet_model import (
     Block, Stream, Flowsheet,
-    STREAM_ROLE_COLORS, STREAM_ROLE_COLORS_SEL,
     BLOCK_W, BLOCK_H, GRID_STEP, ROUTING_GAP,
 )
 
@@ -213,34 +212,18 @@ def _get_svg_pixmap(eq_type, width, height, svg_str=None):
 
 
 # ======================================================
-# COLORES (paleta Material lite)
+# COLORES — capa canvas tokenizada (artboard 2a del ciclo 2)
 # ======================================================
+# Todo el lienzo deriva de tokens.TOK.  Los QColor module-level son
+# snapshots del tema activo: _refresh_canvas_palette() los recalcula al
+# importar y en cada themeChanged (los items del canvas se reconstruyen
+# vía _rebuild_scene, así que un snapshot alcanza).
 
-COLOR_CANVAS_BG     = QColor("#fbfaf6")   # papel de dibujo (warm off-white)
-COLOR_GRID          = QColor(13, 13, 13, 18)   # negro alpha=18/255 (~7%)
-COLOR_BLOCK_FILL    = QColor("#ffffff")
-COLOR_BLOCK_BORDER  = QColor("#5c6bc0")
 # Selección: anillo en el acento del tema (tokens 1a) — leído en caliente.
 def _selection_qcolor() -> QColor:
     return QColor(_tokens.TOK["accent"])
-COLOR_BLOCK_TEXT    = QColor("#1a1a1a")
-COLOR_BLOCK_SUB     = QColor("#6c6c70")
-COLOR_PORT_FREE     = QColor("#bbbbbb")
-COLOR_PORT_CONN     = QColor("#1565c0")
-# Paleta por tipo de puerto — se usa cuando el puerto está libre para
-# guiar visualmente al user (qué clase de stream se espera).  Cuando el
-# puerto se conecta, el color del puerto se satura (relleno sólido).
-# Conjunto compatible con daltonismo (verde ≠ rojo + diferencias de tono):
-COLOR_PORT_IN       = QColor("#2e7d32")   # verde — proceso entra
-COLOR_PORT_OUT      = QColor("#1565c0")   # azul — proceso sale
-COLOR_PORT_UTIL_IN  = QColor("#ef6c00")   # naranja — utility entra (CW/steam)
-COLOR_PORT_UTIL_OUT = QColor("#bf360c")   # naranja oscuro — utility sale
-COLOR_PORT_FUEL     = QColor("#5d4037")   # marrón — combustible
-COLOR_PORT_VENT     = QColor("#9e9e9e")   # gris — venteo / atmósfera
-COLOR_PORT_DRAIN    = QColor("#455a64")   # gris azulado — drenaje
-COLOR_PORT_AUX      = QColor("#7e57c2")   # violeta — auxiliar genérico
-# Tinte claro = puerto libre (con su color tenue como hint)
-# Color saturado = puerto conectado (mismo hue, alpha pleno)
+
+
 def _port_tint(color: QColor) -> QColor:
     """Devuelve una versión clara del color (alpha 60%, mismo hue)
     para puertos libres — el user ve el HINT del tipo pero no
@@ -248,17 +231,54 @@ def _port_tint(color: QColor) -> QColor:
     c = QColor(color)
     c.setAlpha(110)
     return c
-PORT_KIND_COLORS = {
-    "process_in":  COLOR_PORT_IN,
-    "process_out": COLOR_PORT_OUT,
-    "utility_in":  COLOR_PORT_UTIL_IN,
-    "utility_out": COLOR_PORT_UTIL_OUT,
-    "fuel":        COLOR_PORT_FUEL,
-    "vent":        COLOR_PORT_VENT,
-    "drain":       COLOR_PORT_DRAIN,
-    "aux":         COLOR_PORT_AUX,
-}
-COLOR_LABEL_BG      = QColor(255, 255, 255, 220)
+
+
+def _refresh_canvas_palette():
+    """Recalcula la paleta del canvas desde tokens.TOK (tema activo).
+
+    Los puertos son la paleta técnica propia del artboard 2a (8 clases,
+    frío→cálido, independiente del acento y del semáforo — la clase se
+    refuerza por posición/forma, daltónico-safe)."""
+    global COLOR_CANVAS_BG, COLOR_GRID, COLOR_GRID_MAJOR
+    global COLOR_BLOCK_FILL, COLOR_BLOCK_BORDER
+    global COLOR_BLOCK_TEXT, COLOR_BLOCK_SUB
+    global COLOR_PORT_FREE, COLOR_PORT_CONN, PORT_KIND_COLORS
+    global COLOR_LABEL_BG
+    global COLOR_UTIL_HOT, COLOR_UTIL_HOT_SEL
+    global COLOR_UTIL_COLD, COLOR_UTIL_COLD_SEL
+    global COLOR_UTIL_HOT_PALE, COLOR_UTIL_HOT_DEEP
+    global COLOR_UTIL_COLD_PALE, COLOR_UTIL_COLD_DEEP
+    T = _tokens.TOK
+    COLOR_CANVAS_BG   = QColor(T["canvas_bg"])
+    COLOR_GRID        = QColor(T["canvas_grid"])
+    COLOR_GRID_MAJOR  = QColor(T["canvas_grid_major"])
+    COLOR_BLOCK_FILL  = QColor(T["bg_elev"])
+    COLOR_BLOCK_BORDER = QColor(T["ink_mute"])
+    COLOR_BLOCK_TEXT  = QColor(T["label_ink"])
+    COLOR_BLOCK_SUB   = QColor(T["label_ink_soft"])
+    COLOR_PORT_FREE   = QColor(T["ink_ghost"])
+    COLOR_PORT_CONN   = QColor(T["port_process_out"])
+    PORT_KIND_COLORS = {
+        "process_in":  QColor(T["port_process_in"]),
+        "process_out": QColor(T["port_process_out"]),
+        "utility_in":  QColor(T["port_utility_in"]),
+        "utility_out": QColor(T["port_utility_out"]),
+        "fuel":        QColor(T["port_fuel"]),
+        "vent":        QColor(T["port_vent"]),
+        "drain":       QColor(T["port_drain"]),
+        "aux":         QColor(T["port_aux"]),
+    }
+    COLOR_LABEL_BG = QColor(T["label_bg"])
+    # Servicio por temperatura (familia 3 del 2a): el matiz ES el
+    # significado — caliente/frío se conservan en ambos temas.
+    COLOR_UTIL_HOT       = T["service_hot"]
+    COLOR_UTIL_HOT_SEL   = T["service_hot_deep"]
+    COLOR_UTIL_COLD      = T["service_cold"]
+    COLOR_UTIL_COLD_SEL  = T["service_cold_deep"]
+    COLOR_UTIL_HOT_PALE  = T["service_hot_pale"]
+    COLOR_UTIL_HOT_DEEP  = T["service_hot_deep"]
+    COLOR_UTIL_COLD_PALE = T["service_cold_pale"]
+    COLOR_UTIL_COLD_DEEP = T["service_cold_deep"]
 
 # ---- Status visual (semáforo del solver) ----
 # Un solo semáforo para toda la app: los colores viven en tokens.py
@@ -271,18 +291,12 @@ def status_qcolor(status: str) -> QColor:
 # Corrientes de SERVICIO (utility): color por temperatura para que el user
 # distinga de un vistazo el servicio CALIENTE (vapor / aceite térmico) del
 # FRÍO (agua de enfriamiento).  Umbral en °C: por encima = caliente.
+# Los colores viven en tokens (service_*) y los asigna
+# _refresh_canvas_palette() — acá solo el umbral físico.
 UTILITY_HOT_T_C       = 60.0
-COLOR_UTIL_HOT        = "#ef6c2b"   # naranja — servicio caliente
-COLOR_UTIL_HOT_SEL    = "#c4541d"
-COLOR_UTIL_COLD       = "#3fa9dd"   # celeste — servicio frío
-COLOR_UTIL_COLD_SEL   = "#2b80ab"
-# Degradado DENTRO del lazo: el family lo fija el servicio (calienta/enfría),
-# pero el TONO se modula por la temperatura de cada corriente, de la más
-# caliente (tono profundo/saturado) a la más fría (tono pálido).
-COLOR_UTIL_HOT_PALE   = "#f9bd7c"   # naranja claro — extremo frío del lazo caliente
-COLOR_UTIL_HOT_DEEP   = "#c4361a"   # rojo-naranja — extremo caliente
-COLOR_UTIL_COLD_PALE  = "#bfe3f5"   # celeste pálido — extremo frío del lazo
-COLOR_UTIL_COLD_DEEP  = "#1773aa"   # azul intenso — extremo más caliente del lazo
+
+# Inicializa los snapshots de paleta con el tema activo al importar.
+_refresh_canvas_palette()
 
 
 def _lerp_color(c0, c1, t):
@@ -2339,8 +2353,8 @@ class _StreamHandle(QGraphicsEllipseItem):
         self.setFlag(QGraphicsItem.ItemIsMovable, True)
         self.setFlag(QGraphicsItem.ItemIsSelectable, True)
         self.setFlag(QGraphicsItem.ItemSendsGeometryChanges, True)
-        self.setBrush(QBrush(QColor("#1f6feb")))
-        self.setPen(QPen(QColor("#ffffff"), 1.2))
+        self.setBrush(QBrush(QColor(_tokens.TOK["accent"])))
+        self.setPen(QPen(QColor(_tokens.TOK["bg_elev"]), 1.2))
         self.setZValue(20)        # por encima de BlockItem (z=10) — evita
                                    # que el bloque tape el handle si están
                                    # encimados
@@ -2971,8 +2985,9 @@ class _GhostStreamHandle(QGraphicsEllipseItem):
         r = self.RADIUS
         super().__init__(-r, -r, 2*r, 2*r)
         self._stream_item = stream_item
-        self.setBrush(QBrush(QColor(31, 111, 235, 130)))
-        self.setPen(QPen(QColor("#ffffff"), 1.0))
+        _mid = QColor(_tokens.TOK["accent"]); _mid.setAlpha(130)
+        self.setBrush(QBrush(_mid))
+        self.setPen(QPen(QColor(_tokens.TOK["bg_elev"]), 1.0))
         self.setZValue(19)        # encima de BlockItem (z=10)
         self.setCursor(Qt.PointingHandCursor)
         self.setToolTip("Click para hacer este bend editable, luego arrastrá")
@@ -3041,10 +3056,10 @@ class _EndpointHandle(QGraphicsEllipseItem):
         self.setFlag(QGraphicsItem.ItemIsMovable, True)
         self.setFlag(QGraphicsItem.ItemIsSelectable, True)
         self.setFlag(QGraphicsItem.ItemSendsGeometryChanges, True)
-        # estilo: doble anillo (afuera blanco, dentro naranja) para
-        # distinguir endpoints de waypoints regulares (azules)
-        self.setBrush(QBrush(QColor("#ffffff")))
-        self.setPen(QPen(QColor("#ef6c00"), 2.0))   # naranja
+        # estilo: doble anillo (fondo claro, aro naranja token) para
+        # distinguir endpoints de waypoints regulares (acento)
+        self.setBrush(QBrush(QColor(_tokens.TOK["bg_elev"])))
+        self.setPen(QPen(QColor(_tokens.TOK["orange"]), 2.0))
         # zValue alto para asegurar que esté POR ENCIMA del BlockItem
         # (z=10) — sino el bloque al que el stream se conecta tapa el
         # handle y los clicks van al bloque, no al handle.
@@ -3131,8 +3146,9 @@ class _EndpointHandle(QGraphicsEllipseItem):
         from PySide6.QtWidgets import QGraphicsEllipseItem as _E
         if self._snap_marker is None:
             self._snap_marker = _E(-10, -10, 20, 20)
-            self._snap_marker.setBrush(QBrush(QColor(46, 125, 50, 80)))
-            self._snap_marker.setPen(QPen(QColor("#2e7d32"), 2.0))
+            _halo = QColor(_tokens.TOK["green"]); _halo.setAlpha(80)
+            self._snap_marker.setBrush(QBrush(_halo))
+            self._snap_marker.setPen(QPen(QColor(_tokens.TOK["green"]), 2.0))
             self._snap_marker.setZValue(22)        # por encima del handle
             self._snap_marker.setAcceptedMouseButtons(Qt.NoButton)
             if self.scene():
@@ -3355,13 +3371,15 @@ class _EndpointHandle(QGraphicsEllipseItem):
 # sin intervención del user (P propagada, ΔP auto-dimensionado, duty auto,
 # T/fase inferidas).  Spec del user → estilo normal; calculado → este badge.
 def _auto_badge(text="AUTO"):
-    return ("<span style='background:#5b6f8f; color:#eef; "
+    return (f"<span style='background:{_tokens.TOK['auto_ribbon']}; "
+            f"color:{_tokens.TOK['bg_elev']}; "
             "border-radius:3px; padding:0 3px; font-size:7pt;'>"
             f"{text}</span>")
 
 
 def _spec_tag():
-    return "<span style='color:#888; font-size:7pt;'>[spec]</span>"
+    return (f"<span style='color:{_tokens.TOK['ink_soft']}; "
+            "font-size:7pt;'>[spec]</span>")
 
 
 def _pressure_origin_is_auto(s):
@@ -3597,11 +3615,11 @@ class BlockItem(QGraphicsItemGroup):
                     cx, cy, cx + ux * stub_len, cy + uy * stub_len,
                     parent=self,
                 )
-                stub.setPen(QPen(QColor("#0d0d0d"), 1.6))
+                stub.setPen(QPen(QColor(_tokens.TOK["stream_internal"]), 1.6))
                 stub.setZValue(0.5)   # encima del rect, debajo del puerto
                 self.decoration_items.append(stub)
             kind = ep.get_port_kind(self.model.eq_type, pname)
-            base_color = PORT_KIND_COLORS.get(kind, COLOR_PORT_AUX)
+            base_color = PORT_KIND_COLORS.get(kind, PORT_KIND_COLORS["aux"])
             ell = QGraphicsEllipseItem(cx - r, cy - r, 2*r, 2*r, parent=self)
             ell.setBrush(QBrush(_port_tint(base_color)))
             ell.setPen(QPen(base_color, 1.2))
@@ -3621,7 +3639,7 @@ class BlockItem(QGraphicsItemGroup):
         """
         for pname, ell in self.port_items.items():
             kind = ell.data(1) or "aux"
-            base_color = PORT_KIND_COLORS.get(kind, COLOR_PORT_AUX)
+            base_color = PORT_KIND_COLORS.get(kind, PORT_KIND_COLORS["aux"])
             if pname in used_ports:
                 ell.setBrush(QBrush(base_color))           # saturado
             else:
@@ -3634,11 +3652,9 @@ class BlockItem(QGraphicsItemGroup):
         Llamar despues de chemfx.analyze_flowsheet(fs) para refrescar
         todos los bloques. Es no-op si el bloque no tiene warnings.
 
-        Color por severity (max del bloque):
-          critical → rojo (#c41e3a)
-          high     → naranja (#e57c00)
-          medium   → amarillo (#f4b400)
-          (sin warnings → badge oculto)
+        Color por severity (max del bloque) — escala única del sistema
+        (tokens.severity_hex: critical→danger, high→orange, medium→amber;
+        sin warnings → badge oculto).
         """
         warns = getattr(self.model, "reaction_warnings", None) or []
         # Maximo de severidad en este bloque
@@ -3657,7 +3673,8 @@ class BlockItem(QGraphicsItemGroup):
         if not hasattr(self, "_warning_badge") or self._warning_badge is None:
             from PySide6.QtWidgets import QGraphicsEllipseItem
             self._warning_badge = QGraphicsEllipseItem(-7, -7, 14, 14)
-            self._warning_badge.setPen(QPen(QColor("#ffffff"), 1.5))
+            self._warning_badge.setPen(
+                QPen(QColor(_tokens.TOK["canvas_bg"]), 1.5))
             self._warning_badge.setZValue(20)   # encima del bloque
             self._warning_badge.setAcceptedMouseButtons(Qt.NoButton)
             self.addToGroup(self._warning_badge)
@@ -3665,13 +3682,8 @@ class BlockItem(QGraphicsItemGroup):
         if not warns:
             self._warning_badge.setVisible(False)
             return
-        color_map = {
-            "critical": "#c41e3a",
-            "high":     "#e57c00",
-            "medium":   "#f4b400",
-        }
-        color = color_map.get(max_sev, "#9ca3af")
-        self._warning_badge.setBrush(QBrush(QColor(color)))
+        self._warning_badge.setBrush(
+            QBrush(QColor(_tokens.severity_hex(max_sev))))
         self._warning_badge.setVisible(True)
         # Posicion: esquina superior derecha del bloque
         try:
@@ -3752,7 +3764,10 @@ class BlockItem(QGraphicsItemGroup):
             self.duty_badge.setText("")
             return
         arrow = "↑Q" if q > 0 else "↓Q"
-        color = QColor("#c41e3a") if q > 0 else QColor("#1565c0")
+        # Atado al eje de servicio (2a familia 5): calienta=duty_hot,
+        # enfría=duty_cold.
+        color = QColor(_tokens.TOK["duty_hot"] if q > 0
+                       else _tokens.TOK["duty_cold"])
         # Formato compacto: kW si <1000, MW si mayor
         if abs(q) >= 1000:
             val = f"{q/1000:+.2f} MW"
@@ -4073,7 +4088,7 @@ class StreamItem(QGraphicsPathItem):
         # borde del color del stream) + nombre + flujo en mono.
         self.label_bg = _RoundedRectBody(0, 0, 10, 10)
         self.label_bg.RADIUS = 3
-        self.label_bg.setBrush(QBrush(QColor("#ffffff")))
+        self.label_bg.setBrush(QBrush(COLOR_LABEL_BG))
         self.label_bg.setPen(QPen(Qt.NoPen))    # se setea en update_path con el color
         self.label_bg.setZValue(6)
         self.label_bg.setAcceptedMouseButtons(Qt.NoButton)
@@ -4086,7 +4101,7 @@ class StreamItem(QGraphicsPathItem):
 
         self.label_flow = QGraphicsSimpleTextItem()
         self.label_flow.setFont(QFont(mono, 7))
-        self.label_flow.setBrush(QBrush(QColor("#6b7280")))   # gris suave
+        self.label_flow.setBrush(QBrush(QColor(_tokens.TOK["label_ink_soft"])))
         self.label_flow.setZValue(7)
         self.label_flow.setAcceptedMouseButtons(Qt.NoButton)
 
@@ -4178,9 +4193,19 @@ class StreamItem(QGraphicsPathItem):
             is_hot = tmax >= UTILITY_HOT_T_C
         return is_hot, tmin, tmax
 
+    # Rol de corriente → token (artboard 2a familia 4).  La selección ya
+    # NO cambia el hex del rol: es +peso de trazo + halo accent_soft
+    # (ver update_path) — así el rol nunca se pierde al seleccionar.
+    _ROLE_TOKEN = {
+        "internal": "stream_internal",
+        "feed":     "stream_internal",
+        "product":  "stream_product",
+        "utility":  "stream_utility",
+        "waste":    "stream_waste",
+    }
+
     def _color(self):
         role = self.model.role
-        sel = self.isSelected()
         # UTILITY: family por INTERCAMBIADOR (naranja=calienta, celeste=enfría)
         # + degradado de TONO por temperatura DENTRO del lazo (de la corriente
         # más caliente a la más fría).  El status crítico (error/warn) tiene
@@ -4196,13 +4221,7 @@ class StreamItem(QGraphicsPathItem):
             frac = 0.0 if frac < 0.0 else (1.0 if frac > 1.0 else frac)
             pale = QColor(COLOR_UTIL_HOT_PALE if is_hot else COLOR_UTIL_COLD_PALE)
             deep = QColor(COLOR_UTIL_HOT_DEEP if is_hot else COLOR_UTIL_COLD_DEEP)
-            col = _lerp_color(pale, deep, frac)
-            if sel:
-                col = col.darker(118)
-            return col
-        # Selección siempre tiene prioridad para feedback inmediato.
-        if sel:
-            return QColor(STREAM_ROLE_COLORS_SEL.get(role, "#c62828"))
+            return _lerp_color(pale, deep, frac)
         # Status crítico sobreescribe el color por role (error o warning
         # vienen del último solve y son los más informativos para el user).
         if self._status == "error":
@@ -4210,10 +4229,11 @@ class StreamItem(QGraphicsPathItem):
         if self._status == "warning":
             return status_qcolor("warning")
         if self._status in ("stale", "unrun"):
-            # gris-azul tenue para indicar "no resuelto / sin verificar"
-            return QColor("#9aa5b1")
+            # tenue para indicar "no resuelto / sin verificar"
+            return QColor(_tokens.TOK["ink_soft"])
         # status == "ok" o cualquier otro: color normal por role
-        return QColor(STREAM_ROLE_COLORS.get(role, "#37474f"))
+        return QColor(_tokens.TOK[self._ROLE_TOKEN.get(role,
+                                                        "stream_internal")])
 
     def hoverEnterEvent(self, event):
         """Engrosa la línea al hover para feedback visual."""
@@ -4468,11 +4488,13 @@ class StreamItem(QGraphicsPathItem):
                 if f is not None:
                     d = f.data or {}
                     if "expected" in d:
-                        phase_txt = (f"{s.phase} ⚠ <span style='color:#b8860b;'>"
+                        phase_txt = (f"{s.phase} ⚠ <span style='color:"
+                                     f"{_tokens.TOK['amber']};'>"
                                      f"(flash da {d['expected']}, "
                                      f"V={d.get('V_frac', 0):.2f})</span>")
                     elif d.get("reason") == "melt":
-                        phase_txt = (f"{s.phase} <span style='color:#888;'>"
+                        phase_txt = (f"{s.phase} <span style='color:"
+                                     f"{_tokens.TOK['ink_soft']};'>"
                                      f"(fundido, fuera de VLE)</span>")
         # ── T con badge AUTO si fue inferida (no locked) ──
         t_txt = f"{s.temperature:g} °C"
@@ -4483,7 +4505,8 @@ class StreamItem(QGraphicsPathItem):
         p_tag = _auto_badge() if _pressure_origin_is_auto(s) else _spec_tag()
         lines = [
             f"<b>{s.name}</b>",
-            f"<span style='color:#666;'>{src_label} → {dst_label}</span>",
+            f"<span style='color:{_tokens.TOK['ink_mute']};'>"
+            f"{src_label} → {dst_label}</span>",
             f"Rol: {s.role}  ·  Fase: {phase_txt}",
             f"Flujo: <b>{s.mass_flow:g}</b> tm/año",
             f"T = {t_txt}",
@@ -4499,8 +4522,9 @@ class StreamItem(QGraphicsPathItem):
             for k, v in sorted(comp.items(), key=lambda kv: -kv[1]):
                 if v < 0.001:
                     continue
-                # Color de barra: gris si tiny, naranja si principal
-                color = "#c41e3a" if v > 0.5 else "#3a3a3a"
+                # Color de barra: tinta si tiny, danger si principal
+                color = (_tokens.TOK["danger"] if v > 0.5
+                         else _tokens.TOK["ink"])
                 pct = v * 100
                 rows.append(f"<span style='color:{color};'>"
                              f"&nbsp;&nbsp;{k}: {pct:.1f}%</span>")
@@ -4670,6 +4694,11 @@ class StreamItem(QGraphicsPathItem):
         role = self.model.role
         width = {"feed": 2.4, "internal": 2.4, "product": 2.4,
                  "waste": 1.6, "utility": 1.4}.get(role, 2.0)
+        # Selección (artboard 2a familia 4): el hex del rol no cambia —
+        # +peso de trazo + halo accent_soft debajo del path.
+        sel = self.isSelected()
+        if sel:
+            width += 1.2
         # Hover: engrosar línea +50% para feedback visual
         if self._hovered:
             width *= 1.5
@@ -4682,6 +4711,21 @@ class StreamItem(QGraphicsPathItem):
         elif role == "waste":
             pen.setDashPattern([3.0, 3.0])
         self.setPen(pen)
+        # Halo de selección (child item, debajo del trazo del rol)
+        if sel:
+            if getattr(self, "_sel_glow", None) is None:
+                from PySide6.QtWidgets import QGraphicsPathItem as _GPI
+                self._sel_glow = _GPI(self)
+                self._sel_glow.setZValue(-1)
+                self._sel_glow.setAcceptedMouseButtons(Qt.NoButton)
+            gpen = QPen(QColor(_tokens.TOK["accent_soft"]), width + 4.0)
+            gpen.setCapStyle(Qt.FlatCap)
+            gpen.setJoinStyle(Qt.MiterJoin)
+            self._sel_glow.setPen(gpen)
+            self._sel_glow.setPath(path)
+            self._sel_glow.setVisible(True)
+        elif getattr(self, "_sel_glow", None) is not None:
+            self._sel_glow.setVisible(False)
         self._draw_arrow(path, pts[-2], pts[-1], pts[-4], pts[-3])
         # Direction arrows intermedios (chevrons cada ~130 px)
         self._draw_direction_arrows(pts)
@@ -4820,7 +4864,9 @@ class StreamItem(QGraphicsPathItem):
 
     def itemChange(self, change, value):
         if change == QGraphicsItem.ItemSelectedHasChanged:
-            self._rebuild_handles()
+            # update_path refresca pen (peso) + halo de selección y
+            # reconstruye handles (rebuild_handles=True por default).
+            self.update_path()
         return super().itemChange(change, value)
 
     def contextMenuEvent(self, event):
@@ -5386,8 +5432,11 @@ class _PaperFrame(QGraphicsItemGroup):
 
         self._sans = pfd_fonts.SANS if pfd_fonts.available() else "Segoe UI"
         self._mono = pfd_fonts.MONO if pfd_fonts.available() else "Consolas"
-        self._BLACK = QColor("#0d0d0d")
-        self._SOFT  = QColor("#6b7280")
+        # Tinta de documento (tokens 2a) — el marco se reconstruye al
+        # cambiar tema (FlowsheetScene.retint), así que el snapshot vale.
+        self._BLACK = QColor(_tokens.TOK["label_ink"])
+        self._SOFT  = QColor(_tokens.TOK["label_ink_soft"])
+        self._PAPER = QColor(_tokens.TOK["canvas_bg"])
 
         self._build_frame()
         self._build_legend()
@@ -5430,15 +5479,14 @@ class _PaperFrame(QGraphicsItemGroup):
     def _build_legend(self):
         BLACK = self._BLACK
         SOFT  = self._SOFT
-        RED   = QColor("#c41e3a")
-        BLUE  = QColor("#1e3a8a")
+        RED   = QColor(_tokens.TOK["stream_product"])
+        BLUE  = QColor(_tokens.TOK["stream_utility"])
 
         # top-right corner
         x0 = self.PAPER_W - 360
         y0 = 60
         gx, gy = x0, y0
-        self._add_rect(gx, gy, 320, 88, stroke_w=0.8,
-                       fill=QColor("#ffffff"))
+        self._add_rect(gx, gy, 320, 88, stroke_w=0.8, fill=self._PAPER)
         f_title = QFont(self._sans, 9, QFont.Bold)
         f_title.setLetterSpacing(QFont.AbsoluteSpacing, 1.2)
         f_body  = QFont(self._mono, 8)
@@ -5456,7 +5504,7 @@ class _PaperFrame(QGraphicsItemGroup):
 
         # port sample
         ell = QGraphicsEllipseItem(gx + 196, gy + 38, 7.2, 7.2, self)
-        ell.setBrush(QBrush(QColor("#ffffff")))
+        ell.setBrush(QBrush(self._PAPER))
         ell.setPen(QPen(BLACK, 1.6))
         self._add_text(gx + 212, gy + 36, "Conexión",  f_body)
         self._add_text(gx + 196, gy + 52, "tm/año",    QFont(self._mono, 8), color=SOFT)
@@ -5470,7 +5518,7 @@ class _PaperFrame(QGraphicsItemGroup):
         # bottom-right
         bx = W - 500
         by = H - 160
-        self._add_rect(bx, by, 460, 120, stroke_w=1.4, fill=QColor("#ffffff"))
+        self._add_rect(bx, by, 460, 120, stroke_w=1.4, fill=self._PAPER)
         # internal grid
         self._add_line(bx,        by + 30,  bx + 460, by + 30,  0.8)
         self._add_line(bx,        by + 70,  bx + 460, by + 70,  0.8)
@@ -5543,8 +5591,12 @@ class FlowsheetScene(QGraphicsScene):
             if self.paper_frame is not None:
                 self.paper_frame.setVisible(False)
 
+    # Cada cuántos pasos de grilla va una línea mayor (canvas_grid_major)
+    GRID_MAJOR_EVERY = 5
+
     def _draw_grid(self):
-        pen = QPen(COLOR_GRID, 0)
+        pen       = QPen(COLOR_GRID, 0)
+        pen_major = QPen(COLOR_GRID_MAJOR, 0)
         rect = self.sceneRect()
         x0 = int(rect.left())
         y0 = int(rect.top())
@@ -5554,20 +5606,49 @@ class FlowsheetScene(QGraphicsScene):
         # alinear al múltiplo de step
         x0 = (x0 // step) * step
         y0 = (y0 // step) * step
+        # Se guardan las líneas (con flag de mayor) para poder re-tintar
+        # al cambiar tema sin reconstruir la escena entera.
+        self._grid_lines: list = []
+        major_span = step * self.GRID_MAJOR_EVERY
         for x in range(x0, x1 + step, step):
+            major = (x % major_span == 0)
             line = QGraphicsLineItem(x, y0, x, y1)
-            line.setPen(pen)
+            line.setPen(pen_major if major else pen)
             line.setZValue(-100)
             # decorativa: nunca participa del hit-testing (el press en
             # zona vacía debe iniciar el rubber band, no morir aquí)
             line.setAcceptedMouseButtons(Qt.NoButton)
             self.addItem(line)
+            self._grid_lines.append((line, major))
         for y in range(y0, y1 + step, step):
+            major = (y % major_span == 0)
             line = QGraphicsLineItem(x0, y, x1, y)
-            line.setPen(pen)
+            line.setPen(pen_major if major else pen)
             line.setZValue(-100)
             line.setAcceptedMouseButtons(Qt.NoButton)
             self.addItem(line)
+            self._grid_lines.append((line, major))
+
+    def retint(self):
+        """Re-tinta papel y grilla con la paleta del tema activo (los
+        snapshots module-level ya deben estar refrescados vía
+        _refresh_canvas_palette).  Los demás items se reconstruyen."""
+        self.setBackgroundBrush(QBrush(COLOR_CANVAS_BG))
+        pen       = QPen(COLOR_GRID, 0)
+        pen_major = QPen(COLOR_GRID_MAJOR, 0)
+        for line, major in getattr(self, "_grid_lines", []):
+            line.setPen(pen_major if major else pen)
+        # El marco PFD hornea la tinta de documento al construirse →
+        # reconstruirlo con la misma metadata.
+        if self.paper_frame is not None:
+            pf = self.paper_frame
+            visible = pf.isVisible()
+            title, area, dwg = pf._project_title, pf._area, pf._drawing_no
+            self.removeItem(pf)
+            self.paper_frame = None
+            if visible:
+                self.set_paper_visible(True, project_title=title,
+                                       area=area, drawing_no=dwg)
 
     def clear_flowsheet(self):
         # Borra los items conocidos via mapping
@@ -5861,6 +5942,15 @@ class FlowsheetMainWindow(QMainWindow):
         # selección
         self.scene.selectionChanged.connect(self._on_selection_changed)
 
+        # ── Tema en vivo (artboard 2b): el editor entero escucha
+        # themeChanged — antes solo los inspectores/economía respiraban
+        # y el canvas quedaba claro con glifos oscuros.
+        try:
+            _tokens._PrefsBus.signal().connect(self._on_theme_changed)
+        except Exception:
+            pass
+        self.setStyleSheet(self._window_qss())
+
         # Esc cancela conexión pendiente
         self._setup_shortcuts()
 
@@ -5985,35 +6075,19 @@ class FlowsheetMainWindow(QMainWindow):
         """Menu bar que reusa todas las acciones del toolbar legacy.
         Una vez construido, las QToolBars se ocultan por default."""
         mb = self.menuBar()
-        # estilo plano consistente con el resto del editor
+        # estilo plano consistente con el resto del editor — se re-aplica
+        # en _on_theme_changed
         try:
-            from block_inspector import TOK as _T
-            mb.setStyleSheet(
-                f"QMenuBar {{ background:{_T['bg_elev']}; color:{_T['ink']}; "
-                f"border-bottom:1px solid {_T['line']}; }} "
-                f"QMenuBar::item {{ padding:5px 10px; background:transparent; }} "
-                f"QMenuBar::item:selected {{ background:{_T['bg_mute']}; "
-                f"color:{_T['accent_deep']}; border-radius:4px; }} "
-                f"QMenu {{ background:{_T['bg_elev']}; color:{_T['ink']}; "
-                f"border:1px solid {_T['line']}; padding:4px 0; }} "
-                f"QMenu::item {{ padding:5px 22px 5px 14px; }} "
-                f"QMenu::item:selected {{ background:{_T['accent_tint']}; "
-                f"color:{_T['accent_deep']}; }}"
-            )
+            mb.setStyleSheet(self._menubar_qss())
         except Exception:
             pass
-
-        _mk = getattr(self, "_mk_icon", None) or (lambda *a, **k: None)
-        ic_color = getattr(self, "_icon_color", "#3a3a3a")
 
         def _ac(label, slot, shortcut=None, icon_id=None):
             act = QAction(label, self)
             act.triggered.connect(slot)
             if shortcut: act.setShortcut(shortcut)
-            if icon_id and _mk:
-                ic = _mk(icon_id, color=ic_color, size=16)
-                if ic is not None:
-                    act.setIcon(ic)
+            if icon_id and getattr(self, "_mk_icon", None):
+                self._set_themed_icon(act, icon_id, 16)
             return act
 
         # ── Archivo ──
@@ -6041,6 +6115,20 @@ class FlowsheetMainWindow(QMainWindow):
                                   "Ctrl+Shift+E", "file-export"))
         m_export.addAction(_ac("PNG (alta resolución)…", self.action_export_png,
                                   None, "file-export"))
+        m_export.addSeparator()
+        # Decisión 2b: el export es documento de ingeniería → SIEMPRE
+        # papel claro, salvo que el usuario active esto (captura de
+        # pantalla / presentación en dark).  Apagado por defecto.
+        as_seen = QAction("Exportar como se ve (tema activo)", self)
+        as_seen.setCheckable(True)
+        as_seen.setChecked(False)
+        as_seen.setToolTip("Por defecto el PDF/SVG/PNG sale en papel "
+                           "claro (tinta sobre papel, imprimible). "
+                           "Activá esto para exportar con el tema activo.")
+        as_seen.toggled.connect(
+            lambda on: setattr(self, "_export_as_seen", bool(on)))
+        self._export_as_seen = False
+        m_export.addAction(as_seen)
         m_file.addSeparator()
         m_file.addAction(_ac("Salir", self.close, QKeySequence.Quit))
 
@@ -6400,6 +6488,134 @@ class FlowsheetMainWindow(QMainWindow):
             self.editor_topbar.set_solver_state(state, iter_, dt)
 
     # ---------------------------------------------------
+    # TEMA — re-tinte en vivo (artboard 2b del ciclo 2)
+    # ---------------------------------------------------
+
+    def _set_themed_icon(self, action, icon_id: str, size: int = 20):
+        """Setea el ícono de una QAction y lo registra para regenerarlo
+        al cambiar tema (make_qicon hornea el color en el bitmap)."""
+        if not hasattr(self, "_themed_icons"):
+            self._themed_icons = []
+        ic = self._mk_icon(icon_id, color=_tokens.TOK["ink_mute"], size=size)
+        if ic is not None:
+            action.setIcon(ic)
+        self._themed_icons.append((action, icon_id, size))
+
+    def _retint_icons(self):
+        """Regenera todos los íconos registrados con la tinta del tema
+        activo (cierra el backlog C de la auditoría 2)."""
+        self._icon_color = _tokens.TOK["ink_mute"]
+        for action, icon_id, size in getattr(self, "_themed_icons", []):
+            ic = self._mk_icon(icon_id, color=self._icon_color, size=size)
+            if ic is not None:
+                action.setIcon(ic)
+
+    def _window_qss(self) -> str:
+        """QSS de la ventana: status bar, scrollbars y títulos de dock —
+        las últimas superficies que quedaban fuera del tema."""
+        T = _tokens.TOK
+        return (
+            f"QStatusBar {{ background:{T['bg_elev']}; color:{T['ink_mute']}; "
+            f"border-top:1px solid {T['line']}; }} "
+            f"QDockWidget {{ color:{T['ink']}; }} "
+            f"QDockWidget::title {{ background:{T['bg_mute']}; "
+            f"padding:4px 8px; }} "
+            f"QScrollBar:vertical {{ background:{T['bg_mute']}; width:12px; "
+            f"margin:0; }} "
+            f"QScrollBar::handle:vertical {{ background:{T['line_strong']}; "
+            f"border-radius:5px; min-height:30px; }} "
+            f"QScrollBar:horizontal {{ background:{T['bg_mute']}; height:12px; "
+            f"margin:0; }} "
+            f"QScrollBar::handle:horizontal {{ background:{T['line_strong']}; "
+            f"border-radius:5px; min-width:30px; }} "
+            f"QScrollBar::add-line, QScrollBar::sub-line "
+            f"{{ width:0; height:0; }} "
+            f"QScrollBar::add-page, QScrollBar::sub-page "
+            f"{{ background:transparent; }}"
+        )
+
+    def _menubar_qss(self) -> str:
+        T = _tokens.TOK
+        return (
+            f"QMenuBar {{ background:{T['bg_elev']}; color:{T['ink']}; "
+            f"border-bottom:1px solid {T['line']}; }} "
+            f"QMenuBar::item {{ padding:5px 10px; background:transparent; }} "
+            f"QMenuBar::item:selected {{ background:{T['bg_mute']}; "
+            f"color:{T['accent_deep']}; border-radius:4px; }} "
+            f"QMenu {{ background:{T['bg_elev']}; color:{T['ink']}; "
+            f"border:1px solid {T['line']}; padding:4px 0; }} "
+            f"QMenu::item {{ padding:5px 22px 5px 14px; }} "
+            f"QMenu::item:selected {{ background:{T['accent_tint']}; "
+            f"color:{T['accent_deep']}; }}"
+        )
+
+    def _rebuild_scene_keep_status(self):
+        """_rebuild_scene preservando el semáforo del solver (los status
+        viven en los items, no en el modelo)."""
+        blk_st = {bid: getattr(it, "_status", None)
+                  for bid, it in self.scene.block_items.items()}
+        stm_st = {sid: getattr(it, "_status", None)
+                  for sid, it in self.scene.stream_items.items()}
+        self._rebuild_scene()
+        for bid, st in blk_st.items():
+            it = self.scene.block_items.get(bid)
+            if it is not None and st:
+                it.set_status(st)
+        for sid, st in stm_st.items():
+            it = self.scene.stream_items.get(sid)
+            if it is not None and st:
+                it.set_status(st)
+
+    def _apply_active_palette(self):
+        """Reconstruye la capa canvas con la paleta del tema activo."""
+        _refresh_canvas_palette()
+        self.scene.retint()
+        self._rebuild_scene_keep_status()
+
+    def _on_theme_changed(self):
+        """Único punto de re-tinte del editor: al cambiar tema, la capa
+        canvas se reconstruye con la paleta nueva y el chrome re-aplica
+        sus QSS.  Antes NADA del editor escuchaba themeChanged (el
+        diálogo de Preferencias admitía 'al reiniciar')."""
+        self._apply_active_palette()
+        self._retint_icons()
+        try:
+            self.menuBar().setStyleSheet(self._menubar_qss())
+            self.setStyleSheet(self._window_qss())
+        except Exception:
+            pass
+        for w in (getattr(self, "editor_topbar", None),
+                  getattr(self, "_palette_widget", None),
+                  getattr(self, "_zoom_widget", None)):
+            if w is not None and hasattr(w, "restyle"):
+                w.restyle()
+        self._update_status()
+
+    def _export_palette_ctx(self):
+        """Context manager: fuerza papel claro durante un export si el
+        tema activo es oscuro y 'Exportar como se ve' está apagado
+        (decisión 2b: el PFD exportado es documento de ingeniería —
+        tinta sobre papel).  Cambia TOK a light SOLO para el render,
+        sin emitir themeChanged (los paneles no se enteran)."""
+        from contextlib import contextmanager
+
+        @contextmanager
+        def _ctx():
+            force_light = (_tokens.current_prefs()["theme"] == "dark"
+                           and not getattr(self, "_export_as_seen", False))
+            if not force_light:
+                yield
+                return
+            _tokens.apply_preferences(theme="light")
+            self._apply_active_palette()
+            try:
+                yield
+            finally:
+                _tokens.apply_preferences(theme="dark")
+                self._apply_active_palette()
+        return _ctx()
+
+    # ---------------------------------------------------
     # WIDGETS
     # ---------------------------------------------------
 
@@ -6423,11 +6639,11 @@ class FlowsheetMainWindow(QMainWindow):
         # del topbar pero vivían en la toolbar oculta)
         self.undo_action = self.undo_stack.createUndoAction(self, "Deshacer")
         self.undo_action.setShortcut(QKeySequence.Undo)
-        self.undo_action.setIcon(_mk("edit-undo", color=_ICON_COLOR, size=20))
+        self._set_themed_icon(self.undo_action, "edit-undo", 20)
         self.addAction(self.undo_action)
         self.redo_action = self.undo_stack.createRedoAction(self, "Rehacer")
         self.redo_action.setShortcut(QKeySequence.Redo)
-        self.redo_action.setIcon(_mk("edit-redo", color=_ICON_COLOR, size=20))
+        self._set_themed_icon(self.redo_action, "edit-redo", 20)
         self.addAction(self.redo_action)
 
         # Tabla de corrientes — acción robusta (muestra + frente + altura)
@@ -6437,7 +6653,7 @@ class FlowsheetMainWindow(QMainWindow):
             act.setCheckable(True)
             act.setChecked(self.streams_dock.isVisible())
             act.setShortcut("Ctrl+T")
-            act.setIcon(_mk("wb-table", color=_ICON_COLOR, size=20))
+            self._set_themed_icon(act, "wb-table", 20)
             act.triggered.connect(self._toggle_streams_table)
             self._streams_table_action = act
             try:
@@ -6453,7 +6669,7 @@ class FlowsheetMainWindow(QMainWindow):
         paper_act.setToolTip("Marco PFD — papel, leyenda y cuadro de "
                              "título (Ctrl+M)")
         paper_act.triggered.connect(self.action_toggle_paper)
-        paper_act.setIcon(_mk("act-frame-pfd", color=_ICON_COLOR, size=20))
+        self._set_themed_icon(paper_act, "act-frame-pfd", 20)
         self._paper_action = paper_act
 
         # Animación de flujo — ÚNICA acción (antes existían dos QActions
@@ -6463,7 +6679,7 @@ class FlowsheetMainWindow(QMainWindow):
         anim_act.setChecked(True)
         anim_act.setToolTip("Activar/desactivar animación de flechas "
                             "direccionales en los streams.")
-        anim_act.setIcon(_mk("sim-active", color=_ICON_COLOR, size=20))
+        self._set_themed_icon(anim_act, "sim-active", 20)
         anim_act.triggered.connect(self.toggle_animation)
         self._anim_action = anim_act
 
@@ -7463,7 +7679,12 @@ class FlowsheetMainWindow(QMainWindow):
             target_w = int(bbox.width()  * scale)
             target_h = int(bbox.height() * scale)
             img = QImage(target_w, target_h, QImage.Format_ARGB32)
-            img.fill(QColor("#ffffff"))
+            # Papel del export: claro por defecto (decisión 2b); el del
+            # tema activo si 'Exportar como se ve' está activado.
+            bg = (_tokens.TOK["canvas_bg"]
+                  if getattr(self, "_export_as_seen", False)
+                  else _tokens.THEME_LIGHT["canvas_bg"])
+            img.fill(QColor(bg))
 
             painter = QPainter(img)
             painter.setRenderHint(QPainter.Antialiasing, True)
@@ -7483,23 +7704,29 @@ class FlowsheetMainWindow(QMainWindow):
 
         Para que el export no incluya las líneas de la grilla,
         ocultamos temporalmente los items grid antes de render().
+
+        Paleta (decisión 2b): con tema oscuro activo el render se hace
+        en papel claro (documento de ingeniería) salvo que el usuario
+        haya activado 'Exportar como se ve' — ver _export_palette_ctx.
         """
         from PySide6.QtCore import QRectF
-        # ocultar grilla
-        grid_items = [it for it in self.scene.items()
-                      if isinstance(it, QGraphicsLineItem) and it.zValue() <= -100]
-        for g in grid_items:
-            g.setVisible(False)
-        try:
-            self.scene.render(
-                painter,
-                target=QRectF(target_rect),
-                source=QRectF(source_rect),
-                aspectRatioMode=Qt.KeepAspectRatio,
-            )
-        finally:
+        with self._export_palette_ctx():
+            # ocultar grilla
+            grid_items = [it for it in self.scene.items()
+                          if isinstance(it, QGraphicsLineItem)
+                          and it.zValue() <= -100]
             for g in grid_items:
-                g.setVisible(True)
+                g.setVisible(False)
+            try:
+                self.scene.render(
+                    painter,
+                    target=QRectF(target_rect),
+                    source=QRectF(source_rect),
+                    aspectRatioMode=Qt.KeepAspectRatio,
+                )
+            finally:
+                for g in grid_items:
+                    g.setVisible(True)
 
     # ---------------------------------------------------
     # API pública para BlockItem / StreamItem
