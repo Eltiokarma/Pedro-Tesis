@@ -643,23 +643,27 @@ class BlockGlyph:
 # ════════════════════════════════════════════════════════
 
 class EditorTopbar(QFrame):
-    """Barra superior 52px, fondo blanco con borde inferior, tipografía
-    IBM Plex Sans.  Tres regiones:
+    """Barra superior 52px por ZONAS DE TAREA (artboard 1c):
 
-      izquierda: logo (◆) + nombre del proyecto + sub
-      centro:    undo / redo (divider) auto-arrange / grid
-      derecha:   chip de solver + "Validar DOF" + "▶ Resolver"
+      izquierda: identidad — logo (◆) + nombre del proyecto + estado de
+                 guardado real (set_saved_state)
+      centro:    edición del lienzo — undo/redo | Marco PFD · Flujo
+      derecha:   workflow de simulación, en orden pedagógico —
+                 chip solver → "Validar DOF" → "▶ Resolver" → "Economía"
+
+    Los botones del centro se enlazan a las QActions COMPARTIDAS de la
+    ventana via bind_history_actions / bind_canvas_actions
+    (QToolButton.setDefaultAction): una sola acción por concepto, con
+    shortcut real y check nunca desincronizado — el patrón que ya usaba
+    "Tabla de corrientes".
 
     El topbar es REACTIVE: actualiza el chip cuando la ventana llama
     a `set_solver_state(state, iter, dt)`.
     """
 
-    undoRequested        = Signal()
-    redoRequested        = Signal()
-    autoArrangeRequested = Signal()
-    gridToggled          = Signal()
     validateRequested    = Signal()
     solveRequested       = Signal()
+    economicsRequested   = Signal()
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -691,7 +695,7 @@ class EditorTopbar(QFrame):
         self._project = QLabel("(sin nombre)", self)
         self._project.setFont(QFont(pfd_fonts.MONO, 10, QFont.Medium))
         self._project.setStyleSheet(f"color:{TOK['ink']};")
-        self._sub = QLabel("v0.4 · sin guardar", self)
+        self._sub = QLabel("sin guardar", self)
         sf = QFont(pfd_fonts.SANS, 8); self._sub.setFont(sf)
         self._sub.setStyleSheet(f"color:{TOK['ink_soft']};")
         proj.addWidget(self._project); proj.addWidget(self._sub)
@@ -699,23 +703,14 @@ class EditorTopbar(QFrame):
 
         lay.addStretch(1)
 
-        # ── CENTRO: undo / redo / auto-arrange / grid ──
-        mid = QHBoxLayout(); mid.setSpacing(2)
-        self._btn_undo = self._mk_icon_btn("↶", "Deshacer (⌘Z)")
-        self._btn_undo.clicked.connect(self.undoRequested.emit)
-        mid.addWidget(self._btn_undo)
-        self._btn_redo = self._mk_icon_btn("↷", "Rehacer (⌘⇧Z)")
-        self._btn_redo.clicked.connect(self.redoRequested.emit)
-        mid.addWidget(self._btn_redo)
-        mid.addWidget(self._mk_vdivider())
-        self._btn_arrange = self._mk_icon_btn("✦", "Auto-arrange")
-        self._btn_arrange.clicked.connect(self.autoArrangeRequested.emit)
-        mid.addWidget(self._btn_arrange)
-        self._btn_grid = self._mk_icon_btn("▦", "Toggle grid")
-        self._btn_grid.setCheckable(True); self._btn_grid.setChecked(True)
-        self._btn_grid.clicked.connect(self.gridToggled.emit)
-        mid.addWidget(self._btn_grid)
-        lay.addLayout(mid)
+        # ── CENTRO: edición del lienzo ──
+        # Se puebla en bind_history_actions / bind_canvas_actions con las
+        # QActions compartidas de la ventana.  (El botón ✦ Auto-arrange,
+        # que no tenía handler, se eliminó; ▦ "Toggle grid" — que en
+        # realidad alternaba el Marco PFD — es ahora la propia acción
+        # "Marco PFD", bien nombrada y sincronizada.)
+        self._mid = QHBoxLayout(); self._mid.setSpacing(2)
+        lay.addLayout(self._mid)
 
         lay.addStretch(1)
 
@@ -743,8 +738,16 @@ class EditorTopbar(QFrame):
         lay.addWidget(self._btn_validate)
 
         self._btn_solve = self._mk_primary_btn("▶  Resolver")
+        self._btn_solve.setToolTip("Resolver balances (F5)")
         self._btn_solve.clicked.connect(self.solveRequested.emit)
         lay.addWidget(self._btn_solve)
+
+        # Paso final del workflow, por fin visible en la barra (1c):
+        # estado → Validar DOF → Resolver → Economía.
+        self._btn_economics = self._mk_ghost_btn("Economía")
+        self._btn_economics.setToolTip("Análisis económico del flowsheet")
+        self._btn_economics.clicked.connect(self.economicsRequested.emit)
+        lay.addWidget(self._btn_economics)
 
     # ── helpers UI ─────────────────────────────────────
     def _mk_icon_btn(self, glyph: str, tooltip: str) -> QToolButton:
@@ -845,9 +848,41 @@ class EditorTopbar(QFrame):
             f"#solverChip {{ background:{bg}; border-radius:14px; }}"
         )
 
-    def set_undo_enabled(self, can_undo: bool, can_redo: bool):
-        self._btn_undo.setEnabled(can_undo)
-        self._btn_redo.setEnabled(can_redo)
+    def set_saved_state(self, text: str):
+        """Estado de guardado real bajo el nombre del proyecto
+        ('sin guardar' / 'cambios sin guardar' / 'guardado 14:32')."""
+        self._sub.setText(text or "")
+
+    def _mk_action_btn(self, action) -> QToolButton:
+        """QToolButton 32×32 enlazado a una QAction compartida
+        (icono, tooltip, shortcut, check — todo del action)."""
+        b = QToolButton(self)
+        b.setDefaultAction(action)
+        b.setToolButtonStyle(Qt.ToolButtonIconOnly)
+        b.setFixedSize(32, 32)
+        b.setCursor(Qt.PointingHandCursor)
+        b.setStyleSheet(
+            f"QToolButton {{ background: transparent; color: {TOK['ink_mute']}; "
+            f"border: 0; border-radius: 6px; }} "
+            f"QToolButton:hover {{ background: {TOK['bg_mute']}; color: {TOK['ink']}; }} "
+            f"QToolButton:checked {{ background: {TOK['accent_tint']}; color: {TOK['accent_deep']}; }} "
+            f"QToolButton:disabled {{ color: {TOK['ink_ghost']}; }}"
+        )
+        return b
+
+    def bind_history_actions(self, undo_action, redo_action):
+        """Enlaza undo/redo (QActions del QUndoStack, con shortcuts
+        reales) a la zona central."""
+        self._mid.addWidget(self._mk_action_btn(undo_action))
+        self._mid.addWidget(self._mk_action_btn(redo_action))
+
+    def bind_canvas_actions(self, *actions):
+        """Enlaza los toggles del lienzo (Marco PFD, Animación de flujo)
+        tras un divider — misma QAction que el menú Vista."""
+        self._mid.addWidget(self._mk_vdivider())
+        for act in actions:
+            if act is not None:
+                self._mid.addWidget(self._mk_action_btn(act))
 
 
 # ════════════════════════════════════════════════════════
