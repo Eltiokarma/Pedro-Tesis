@@ -615,6 +615,13 @@ class _InspectorHeader(QFrame):
             f"padding:1px 7px; border-radius:4px; letter-spacing:1px;"
         )
         sub_row.addWidget(self._chip)
+        # Chip "átomos" (artboard 2f.3): auditoría elemental C/H/O por
+        # bloque — color + símbolo (✓/✗/–), daltónico-safe.
+        self._atoms = QLabel(self)
+        af = qfont(FONT_HINT); af.setBold(True)
+        self._atoms.setFont(af)
+        self._atoms.setVisible(False)
+        sub_row.addWidget(self._atoms)
         dot = QLabel("·", self); dot.setStyleSheet(f"color:{TOK['ink_soft']};")
         sub_row.addWidget(dot)
         self._desc = QLabel(self)
@@ -649,6 +656,22 @@ class _InspectorHeader(QFrame):
         self._chip.setText(type_short)
         self._desc.setText(description)
         self._icon.setText(icon_letter)
+
+    def set_atoms(self, state: str, detail: str = ""):
+        """Chip de balance elemental: 'ok' | 'bad' | 'na' | '' (oculto)."""
+        if not state:
+            self._atoms.setVisible(False)
+            return
+        text, ink, bg = {
+            "ok":  ("átomos ✓", TOK["green"],    TOK["green_bg"]),
+            "bad": ("átomos ✗", TOK["danger"],   TOK["danger_bg"]),
+        }.get(state, ("átomos –", TOK["ink_soft"], TOK["bg_mute"]))
+        self._atoms.setText(text)
+        self._atoms.setStyleSheet(
+            f"background:{bg}; color:{ink}; "
+            f"padding:1px 7px; border-radius:4px;")
+        self._atoms.setToolTip(detail or "Auditoría elemental C/H/O")
+        self._atoms.setVisible(True)
 
     def tag(self) -> str:
         return self._tag.text().strip()
@@ -1096,6 +1119,14 @@ class BlockInspectorPanel(QWidget):
             description=eq_type,
             icon_letter=icon_letter,
         )
+        # Chip "átomos ✓" (artboard 2f.3) — backend ya existente de la
+        # auditoría elemental, por fin visible por bloque.
+        try:
+            import inspector_evidence as _ev_atoms
+            st, detail = _ev_atoms.atom_balance_chip(block, flowsheet)
+            self._header.set_atoms(st, detail)
+        except Exception:
+            self._header.set_atoms("")
 
         # streams strip — proyección read-only desde el flowsheet
         self._streams.populate(
@@ -2217,6 +2248,10 @@ class BlockInspectorPanel(QWidget):
                                        lambda: _ev.splitter_text(b)),
             ("Tanque",                 lambda: _ev.tank_metrics(b, fs),
                                        lambda: _ev.tank_text(b, fs)),
+            ("Columna — Cargas térmicas", lambda: _ev.column_duties_metrics(b),
+                                       lambda: _ev.column_duties_text(b)),
+            ("Columna — Diseño FUG / MESH", lambda: None,
+                                       lambda: _ev.column_design_text(b, fs)),
             ("Columna — McCabe",       lambda: _ev.mccabe_metrics(b, fs),
                                        lambda: _ev.mccabe_text(b, fs)),
             ("Columna — Perfil",       lambda: _ev.profile_metrics(b, fs),
