@@ -1,0 +1,648 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  *{box-sizing:border-box;}
+  html,body{margin:0;padding:0;}
+  body{background:#efeadd;font-family:'IBM Plex Sans',system-ui,sans-serif;color:#1a1714;-webkit-font-smoothing:antialiased;text-wrap:pretty;}
+  a{color:#0d6e78;text-decoration:none;}
+  a:hover{color:#064951;text-decoration:underline;}
+  ::selection{background:#d4ebed;}
+  @keyframes spin{to{transform:rotate(360deg);}}
+</style>
+</helmet>
+<div style="--canvas_bg:#fbfaf6; --canvas_grid:#eae5d9; --canvas_grid_major:#ddd6c6; --port_process_in:#4f7a3a; --port_process_out:#2f6690; --port_utility_in:#c86a12; --port_utility_out:#b0442a; --port_fuel:#6d4a2f; --port_vent:#8a8172; --port_drain:#4a5a63; --port_aux:#6d5a9c; --service_hot:#d5501f; --service_hot_pale:#f4c8a8; --service_hot_deep:#a8320f; --service_cold:#2b8fc4; --service_cold_pale:#bfe0f0; --service_cold_deep:#125f88; --stream_internal:#2a2620; --stream_product:#b8323f; --stream_utility:#2f4d9e; --stream_waste:#6d4c41; --label_bg:rgba(255,255,255,0.88); --label_ink:#26221c; --label_ink_soft:#6b6256; --duty_hot:#b8323f; --duty_cold:#2f6690; --phase_liq:#2f6690; --phase_vap:#c47a1e; --phase_gas:#8a8172; --phase_2ph:#6d5a9c; --bg_elev:#ffffff; --bg_mute:#f1ede4; --ink:#1a1714; --ink_mute:#6b6256; --ink_soft:#948a7c; --line:#e6e0d0; --line_strong:#d4ccb8; --accent:#0d6e78; --accent_soft:#d4ebed; --green:#4d8742; --green_bg:#e6f0df; --amber:#b8841a; --amber_bg:#f4ecd1; --orange:#c26329; --orange_bg:#f5e1d0; --danger:#b8453a; --danger_bg:#f3dcd8; display:grid; grid-template-columns:250px 1fr; min-height:100vh; background:#efeadd;">
+
+  <!-- ░░ NAV ░░ -->
+  <aside style="position:sticky; top:0; align-self:start; height:100vh; overflow-y:auto; background:#fbfaf6; border-right:1px solid #d4ccb8; padding:26px 20px;">
+    <div style="display:flex; align-items:center; gap:10px; margin-bottom:4px;">
+      <div style="width:30px; height:30px; border-radius:7px; background:#0d6e78; display:flex; align-items:center; justify-content:center; color:#fff; font-weight:700; font-size:15px;">◆</div>
+      <div style="font-weight:700; font-size:14px; letter-spacing:.01em;">Ciclo 2</div>
+    </div>
+    <div style="font-size:11.5px; color:#6b6256; line-height:1.5; margin:0 0 22px 40px;">Paquete de artboards<br>Frontend PySide6/Qt</div>
+    <nav style="display:flex; flex-direction:column; gap:2px; font-size:13px;">
+      <a href="#a2a" style="display:flex; gap:10px; padding:8px 10px; border-radius:7px; color:#1a1714; font-weight:600;"><span style="color:#0d6e78; font-family:'IBM Plex Mono';">2a</span> Tokens de canvas</a>
+      <a href="#a2b" style="display:flex; gap:10px; padding:8px 10px; border-radius:7px; color:#1a1714; font-weight:600;"><span style="color:#0d6e78; font-family:'IBM Plex Mono';">2b</span> Lienzo en oscuro</a>
+      <a href="#a2g" style="display:flex; gap:10px; padding:8px 10px; border-radius:7px; color:#1a1714; font-weight:600;"><span style="color:#0d6e78; font-family:'IBM Plex Mono';">2g</span> Mapa tipográfico</a>
+      <a href="#a2c" style="display:flex; gap:10px; padding:8px 10px; border-radius:7px; color:#1a1714; font-weight:600;"><span style="color:#0d6e78; font-family:'IBM Plex Mono';">2c</span> Leyenda visual</a>
+      <a href="#a2d" style="display:flex; gap:10px; padding:8px 10px; border-radius:7px; color:#1a1714; font-weight:600;"><span style="color:#0d6e78; font-family:'IBM Plex Mono';">2d</span> Kit de diálogos</a>
+      <a href="#a2e" style="display:flex; gap:10px; padding:8px 10px; border-radius:7px; color:#1a1714; font-weight:600;"><span style="color:#0d6e78; font-family:'IBM Plex Mono';">2e</span> Bienvenida</a>
+      <a href="#a2f" style="display:flex; gap:10px; padding:8px 10px; border-radius:7px; color:#1a1714; font-weight:600;"><span style="color:#0d6e78; font-family:'IBM Plex Mono';">2f</span> Inspector</a>
+      <a href="#zap" style="display:flex; gap:10px; padding:8px 10px; border-radius:7px; color:#6b6256; font-weight:600;"><span>⚡</span> Pendientes</a>
+    </nav>
+    <div style="margin-top:24px; padding-top:18px; border-top:1px solid #e6e0d0; font-size:11px; color:#948a7c; line-height:1.6;">Prioridad de recorte:<br>2a › 2b › 2g › 2c › 2d › 2e › 2f</div>
+  </aside>
+
+  <!-- ░░ MAIN ░░ -->
+  <main style="max-width:1080px; padding:48px 56px 120px; margin:0 auto; width:100%;">
+
+    <header style="margin-bottom:46px;">
+      <div style="font-family:'IBM Plex Sans'; font-size:10px; font-weight:600; letter-spacing:.14em; text-transform:uppercase; color:#0d6e78;">Rediseño Frontend · Ciclo 2</div>
+      <h1 style="font-size:30px; font-weight:700; margin:8px 0 10px; letter-spacing:-.01em;">Colapsar el tema a un solo nivel</h1>
+      <p style="font-size:15px; line-height:1.6; color:#6b6256; max-width:70ch; margin:0;">El hallazgo estructural del ciclo: hoy hay tres niveles de respiración del tema — widgets que se re-tintan, widgets que hornean tokens al construirse, y superficies con paleta propia hardcodeada. Con tema oscuro, el papel del lienzo queda claro mientras los glifos toman el <code style="font-family:'IBM Plex Mono'; font-size:12.5px; background:#f1ede4; padding:1px 5px; border-radius:4px;">bg_elev</code> oscuro: manchas negras sobre papel claro. Este paquete <strong>decide y especifica los valores visuales que faltan</strong> para que la capa canvas entre al sistema. El mecanismo de suscripción es ingeniería y no se toca aquí.</p>
+      <div style="display:flex; gap:10px; margin-top:18px; flex-wrap:wrap;">
+        <span style="font-size:11.5px; font-weight:600; color:#6b6256; background:#fbfaf6; border:1px solid #e6e0d0; border-radius:999px; padding:5px 12px;">Nombres 1:1 con <b style="font-family:'IBM Plex Mono';">tokens.py</b></span>
+        <span style="font-size:11.5px; font-weight:600; color:#6b6256; background:#fbfaf6; border:1px solid #e6e0d0; border-radius:999px; padding:5px 12px;">Par light + dark por token</span>
+        <span style="font-size:11.5px; font-weight:600; color:#6b6256; background:#fbfaf6; border:1px solid #e6e0d0; border-radius:999px; padding:5px 12px;">Semántica técnica ⊥ acento</span>
+        <span style="font-size:11.5px; font-weight:600; color:#6b6256; background:#fbfaf6; border:1px solid #e6e0d0; border-radius:999px; padding:5px 12px;">Daltónico-safe: color + forma</span>
+      </div>
+    </header>
+
+    <!-- ══════════════ 2a ══════════════ -->
+    <section id="a2a" style="scroll-margin-top:24px; margin-bottom:64px;">
+      <div style="display:flex; align-items:baseline; gap:14px; border-top:2px solid #1a1714; padding-top:16px; margin-bottom:6px;">
+        <span style="font-family:'IBM Plex Mono'; font-size:22px; font-weight:600; color:#0d6e78;">2a</span>
+        <h2 style="font-size:23px; font-weight:700; margin:0;">Tokens de la capa canvas</h2>
+      </div>
+      <p style="font-size:14.5px; line-height:1.6; color:#6b6256; max-width:72ch; margin:0 0 26px;">El lienzo tiene ~90 colores fuera del sistema. Los agrupo en seis familias, cada una con par light/dark, en el estilo snake_case de <code style="font-family:'IBM Plex Mono'; font-size:12.5px; background:#f1ede4; padding:1px 5px; border-radius:4px;">tokens.py</code>. Todos los mockups de este bundle consumen exactamente estos nombres como variables CSS.</p>
+
+      <!-- 1 Paper & grid -->
+      <div style="background:#fbfaf6; border:1px solid #e6e0d0; border-radius:12px; padding:24px 26px; margin-bottom:18px;">
+        <div style="font-size:10px; font-weight:600; letter-spacing:.1em; text-transform:uppercase; color:#0d6e78; margin-bottom:4px;">Familia 1</div>
+        <h3 style="font-size:17px; font-weight:700; margin:0 0 6px;">Papel y grilla</h3>
+        <p style="font-size:13.5px; line-height:1.55; color:#6b6256; margin:0 0 16px; max-width:74ch;"><b>Decisión:</b> el papel oscuro NO puede ser <code style="font-family:'IBM Plex Mono'; font-size:12px;">bg</code> de los paneles (<code style="font-family:'IBM Plex Mono'; font-size:12px;">#16130f</code>). El lienzo es un plano de dibujo y necesita su propia calidez — un sepia-carbón un punto más claro que <code style="font-family:'IBM Plex Mono'; font-size:12px;">bg_elev</code> para que se lea como superficie de trabajo, no como panel. La grilla en dark <b>se aclara</b> (no desaparece): un plano de dibujo sin retícula pierde su carácter de plano; la bajo a un warm-line tenue por encima del papel.</p>
+        <div style="display:flex; flex-direction:column; gap:0; font-size:13px;">
+          <div style="display:grid; grid-template-columns:64px 64px 1fr 130px 130px; gap:14px; padding:6px 0; font-size:10px; font-weight:600; letter-spacing:.06em; text-transform:uppercase; color:#948a7c; border-bottom:1px solid #e6e0d0;"><span>Light</span><span>Dark</span><span>Token</span><span>Light hex</span><span>Dark hex</span></div>
+          <div style="display:grid; grid-template-columns:64px 64px 1fr 130px 130px; gap:14px; padding:9px 0; align-items:center; border-bottom:1px solid #f1ede4;"><i style="height:26px; border-radius:5px; background:#fbfaf6; border:1px solid #d4ccb8;"></i><i style="height:26px; border-radius:5px; background:#221d15; border:1px solid #3f3830;"></i><code style="font-family:'IBM Plex Mono'; font-size:12.5px; color:#0d6e78;">canvas_bg</code><code style="font-family:'IBM Plex Mono'; font-size:12px; color:#6b6256;">#fbfaf6</code><code style="font-family:'IBM Plex Mono'; font-size:12px; color:#6b6256;">#221d15</code></div>
+          <div style="display:grid; grid-template-columns:64px 64px 1fr 130px 130px; gap:14px; padding:9px 0; align-items:center; border-bottom:1px solid #f1ede4;"><i style="height:26px; border-radius:5px; background:#eae5d9; border:1px solid #d4ccb8;"></i><i style="height:26px; border-radius:5px; background:#2c2519; border:1px solid #3f3830;"></i><code style="font-family:'IBM Plex Mono'; font-size:12.5px; color:#0d6e78;">canvas_grid</code><code style="font-family:'IBM Plex Mono'; font-size:12px; color:#6b6256;">#eae5d9</code><code style="font-family:'IBM Plex Mono'; font-size:12px; color:#6b6256;">#2c2519</code></div>
+          <div style="display:grid; grid-template-columns:64px 64px 1fr 130px 130px; gap:14px; padding:9px 0; align-items:center;"><i style="height:26px; border-radius:5px; background:#ddd6c6; border:1px solid #d4ccb8;"></i><i style="height:26px; border-radius:5px; background:#38301f; border:1px solid #3f3830;"></i><code style="font-family:'IBM Plex Mono'; font-size:12.5px; color:#0d6e78;">canvas_grid_major</code><code style="font-family:'IBM Plex Mono'; font-size:12px; color:#6b6256;">#ddd6c6</code><code style="font-family:'IBM Plex Mono'; font-size:12px; color:#6b6256;">#38301f</code></div>
+        </div>
+      </div>
+
+      <!-- 2 Ports -->
+      <div style="background:#fbfaf6; border:1px solid #e6e0d0; border-radius:12px; padding:24px 26px; margin-bottom:18px;">
+        <div style="font-size:10px; font-weight:600; letter-spacing:.1em; text-transform:uppercase; color:#0d6e78; margin-bottom:4px;">Familia 2 · la decisión grande del ciclo</div>
+        <h3 style="font-size:17px; font-weight:700; margin:0 0 6px;">Puertos — paleta técnica propia</h3>
+        <p style="font-size:13.5px; line-height:1.55; color:#6b6256; margin:0 0 14px; max-width:78ch;"><b>Decisión: los puertos NO adoptan la paleta TOK semántica; se declaran como paleta técnica propia con par dark.</b> Tres razones: (1) los puertos son una taxonomía fija de 8 clases que debe mantenerse mutuamente distinguible Y separada del semáforo del solver — si derivaran de <code style="font-family:'IBM Plex Mono'; font-size:12px;">green/amber/danger</code> colisionarían con el estado del equipo que los rodea; (2) la regla no-negociable prohíbe que la semántica técnica derive del acento, y hay 4 acentos × 2 temas; (3) una paleta propia me deja ordenarlos por eje físico. Los mapeo <b>frío→cálido</b>: proceso (verde→azul), servicio (naranja→teja), combustible (marrón), venteo (gris), drenaje (pizarra), auxiliar (violeta). La distinción contra el semáforo se refuerza por <b>posición y forma</b> (dot direccional sobre el borde del símbolo vs. trazo/tinte del cuerpo) — el color nunca es el único portador, cumpliendo daltonismo.</p>
+        <div style="display:flex; flex-direction:column; gap:0; font-size:13px;">
+          <div style="display:grid; grid-template-columns:36px 36px 1fr 118px 118px 150px; gap:12px; padding:6px 0; font-size:10px; font-weight:600; letter-spacing:.06em; text-transform:uppercase; color:#948a7c; border-bottom:1px solid #e6e0d0;"><span>L</span><span>D</span><span>Token</span><span>Light</span><span>Dark</span><span>Material heredado</span></div>
+          <div style="display:grid; grid-template-columns:36px 36px 1fr 118px 118px 150px; gap:12px; padding:8px 0; align-items:center; border-bottom:1px solid #f1ede4;"><i style="width:18px; height:18px; border-radius:50%; background:#4f7a3a; margin:0 auto;"></i><i style="width:18px; height:18px; border-radius:50%; background:#8fb46a; margin:0 auto;"></i><code style="font-family:'IBM Plex Mono'; font-size:12.5px; color:#0d6e78;">port_process_in</code><code style="font-family:'IBM Plex Mono'; font-size:11.5px; color:#6b6256;">#4f7a3a</code><code style="font-family:'IBM Plex Mono'; font-size:11.5px; color:#6b6256;">#8fb46a</code><code style="font-family:'IBM Plex Mono'; font-size:11px; color:#bab2a3;">#2e7d32</code></div>
+          <div style="display:grid; grid-template-columns:36px 36px 1fr 118px 118px 150px; gap:12px; padding:8px 0; align-items:center; border-bottom:1px solid #f1ede4;"><i style="width:18px; height:18px; border-radius:50%; background:#2f6690; margin:0 auto;"></i><i style="width:18px; height:18px; border-radius:50%; background:#6fa8d6; margin:0 auto;"></i><code style="font-family:'IBM Plex Mono'; font-size:12.5px; color:#0d6e78;">port_process_out</code><code style="font-family:'IBM Plex Mono'; font-size:11.5px; color:#6b6256;">#2f6690</code><code style="font-family:'IBM Plex Mono'; font-size:11.5px; color:#6b6256;">#6fa8d6</code><code style="font-family:'IBM Plex Mono'; font-size:11px; color:#bab2a3;">#1565c0</code></div>
+          <div style="display:grid; grid-template-columns:36px 36px 1fr 118px 118px 150px; gap:12px; padding:8px 0; align-items:center; border-bottom:1px solid #f1ede4;"><i style="width:18px; height:18px; border-radius:50%; background:#c86a12; margin:0 auto;"></i><i style="width:18px; height:18px; border-radius:50%; background:#e0a94e; margin:0 auto;"></i><code style="font-family:'IBM Plex Mono'; font-size:12.5px; color:#0d6e78;">port_utility_in</code><code style="font-family:'IBM Plex Mono'; font-size:11.5px; color:#6b6256;">#c86a12</code><code style="font-family:'IBM Plex Mono'; font-size:11.5px; color:#6b6256;">#e0a94e</code><code style="font-family:'IBM Plex Mono'; font-size:11px; color:#bab2a3;">#ef6c00</code></div>
+          <div style="display:grid; grid-template-columns:36px 36px 1fr 118px 118px 150px; gap:12px; padding:8px 0; align-items:center; border-bottom:1px solid #f1ede4;"><i style="width:18px; height:18px; border-radius:50%; background:#b0442a; margin:0 auto;"></i><i style="width:18px; height:18px; border-radius:50%; background:#d98a68; margin:0 auto;"></i><code style="font-family:'IBM Plex Mono'; font-size:12.5px; color:#0d6e78;">port_utility_out</code><code style="font-family:'IBM Plex Mono'; font-size:11.5px; color:#6b6256;">#b0442a</code><code style="font-family:'IBM Plex Mono'; font-size:11.5px; color:#6b6256;">#d98a68</code><code style="font-family:'IBM Plex Mono'; font-size:11px; color:#bab2a3;">#bf360c</code></div>
+          <div style="display:grid; grid-template-columns:36px 36px 1fr 118px 118px 150px; gap:12px; padding:8px 0; align-items:center; border-bottom:1px solid #f1ede4;"><i style="width:18px; height:18px; border-radius:50%; background:#6d4a2f; margin:0 auto;"></i><i style="width:18px; height:18px; border-radius:50%; background:#b08a63; margin:0 auto;"></i><code style="font-family:'IBM Plex Mono'; font-size:12.5px; color:#0d6e78;">port_fuel</code><code style="font-family:'IBM Plex Mono'; font-size:11.5px; color:#6b6256;">#6d4a2f</code><code style="font-family:'IBM Plex Mono'; font-size:11.5px; color:#6b6256;">#b08a63</code><code style="font-family:'IBM Plex Mono'; font-size:11px; color:#bab2a3;">#5d4037</code></div>
+          <div style="display:grid; grid-template-columns:36px 36px 1fr 118px 118px 150px; gap:12px; padding:8px 0; align-items:center; border-bottom:1px solid #f1ede4;"><i style="width:18px; height:18px; border-radius:50%; background:#8a8172; margin:0 auto;"></i><i style="width:18px; height:18px; border-radius:50%; background:#b3a892; margin:0 auto;"></i><code style="font-family:'IBM Plex Mono'; font-size:12.5px; color:#0d6e78;">port_vent</code><code style="font-family:'IBM Plex Mono'; font-size:11.5px; color:#6b6256;">#8a8172</code><code style="font-family:'IBM Plex Mono'; font-size:11.5px; color:#6b6256;">#b3a892</code><code style="font-family:'IBM Plex Mono'; font-size:11px; color:#bab2a3;">#9e9e9e</code></div>
+          <div style="display:grid; grid-template-columns:36px 36px 1fr 118px 118px 150px; gap:12px; padding:8px 0; align-items:center; border-bottom:1px solid #f1ede4;"><i style="width:18px; height:18px; border-radius:50%; background:#4a5a63; margin:0 auto;"></i><i style="width:18px; height:18px; border-radius:50%; background:#8ba0aa; margin:0 auto;"></i><code style="font-family:'IBM Plex Mono'; font-size:12.5px; color:#0d6e78;">port_drain</code><code style="font-family:'IBM Plex Mono'; font-size:11.5px; color:#6b6256;">#4a5a63</code><code style="font-family:'IBM Plex Mono'; font-size:11.5px; color:#6b6256;">#8ba0aa</code><code style="font-family:'IBM Plex Mono'; font-size:11px; color:#bab2a3;">#455a64</code></div>
+          <div style="display:grid; grid-template-columns:36px 36px 1fr 118px 118px 150px; gap:12px; padding:8px 0; align-items:center;"><i style="width:18px; height:18px; border-radius:50%; background:#6d5a9c; margin:0 auto;"></i><i style="width:18px; height:18px; border-radius:50%; background:#a795d6; margin:0 auto;"></i><code style="font-family:'IBM Plex Mono'; font-size:12.5px; color:#0d6e78;">port_aux</code><code style="font-family:'IBM Plex Mono'; font-size:11.5px; color:#6b6256;">#6d5a9c</code><code style="font-family:'IBM Plex Mono'; font-size:11.5px; color:#6b6256;">#a795d6</code><code style="font-family:'IBM Plex Mono'; font-size:11px; color:#bab2a3;">#7e57c2</code></div>
+        </div>
+      </div>
+
+      <!-- 3 Service temp -->
+      <div style="background:#fbfaf6; border:1px solid #e6e0d0; border-radius:12px; padding:24px 26px; margin-bottom:18px;">
+        <div style="font-size:10px; font-weight:600; letter-spacing:.1em; text-transform:uppercase; color:#0d6e78; margin-bottom:4px;">Familia 3</div>
+        <h3 style="font-size:17px; font-weight:700; margin:0 0 6px;">Servicio por temperatura</h3>
+        <p style="font-size:13.5px; line-height:1.55; color:#6b6256; margin:0 0 16px; max-width:78ch;"><b>Decisión:</b> el eje caliente↔frío es el significado, así que el <b>matiz se conserva en dark</b> (rojo-naranja calienta, azul enfría) y solo cambia la luminosidad para leer sobre papel oscuro. Cada lazo trae extremo pálido y profundo para gradientes de temperatura.</p>
+        <div style="display:flex; flex-direction:column; gap:0; font-size:13px;">
+          <div style="display:grid; grid-template-columns:64px 64px 1fr 118px 118px; gap:14px; padding:6px 0; font-size:10px; font-weight:600; letter-spacing:.06em; text-transform:uppercase; color:#948a7c; border-bottom:1px solid #e6e0d0;"><span>Light</span><span>Dark</span><span>Token</span><span>Light</span><span>Dark</span></div>
+          <div style="display:grid; grid-template-columns:64px 64px 1fr 118px 118px; gap:14px; padding:8px 0; align-items:center; border-bottom:1px solid #f1ede4;"><i style="height:24px; border-radius:5px; background:linear-gradient(90deg,#f4c8a8,#d5501f,#a8320f);"></i><i style="height:24px; border-radius:5px; background:linear-gradient(90deg,#5a3320,#e88a5a,#f0a877);"></i><code style="font-family:'IBM Plex Mono'; font-size:12.5px; color:#0d6e78;">service_hot</code><code style="font-family:'IBM Plex Mono'; font-size:11.5px; color:#6b6256;">#d5501f</code><code style="font-family:'IBM Plex Mono'; font-size:11.5px; color:#6b6256;">#e88a5a</code></div>
+          <div style="display:grid; grid-template-columns:64px 64px 1fr 118px 118px; gap:14px; padding:8px 0; align-items:center; border-bottom:1px solid #f1ede4;"><i style="height:24px; border-radius:5px; background:#f4c8a8; border:1px solid #d4ccb8;"></i><i style="height:24px; border-radius:5px; background:#5a3320; border:1px solid #3f3830;"></i><code style="font-family:'IBM Plex Mono'; font-size:12.5px; color:#0d6e78;">service_hot_pale</code><code style="font-family:'IBM Plex Mono'; font-size:11.5px; color:#6b6256;">#f4c8a8</code><code style="font-family:'IBM Plex Mono'; font-size:11.5px; color:#6b6256;">#5a3320</code></div>
+          <div style="display:grid; grid-template-columns:64px 64px 1fr 118px 118px; gap:14px; padding:8px 0; align-items:center; border-bottom:1px solid #f1ede4;"><i style="height:24px; border-radius:5px; background:#a8320f;"></i><i style="height:24px; border-radius:5px; background:#f0a877;"></i><code style="font-family:'IBM Plex Mono'; font-size:12.5px; color:#0d6e78;">service_hot_deep</code><code style="font-family:'IBM Plex Mono'; font-size:11.5px; color:#6b6256;">#a8320f</code><code style="font-family:'IBM Plex Mono'; font-size:11.5px; color:#6b6256;">#f0a877</code></div>
+          <div style="display:grid; grid-template-columns:64px 64px 1fr 118px 118px; gap:14px; padding:8px 0; align-items:center; border-bottom:1px solid #f1ede4;"><i style="height:24px; border-radius:5px; background:linear-gradient(90deg,#bfe0f0,#2b8fc4,#125f88);"></i><i style="height:24px; border-radius:5px; background:linear-gradient(90deg,#1e3a4a,#63b8e0,#8fcdec);"></i><code style="font-family:'IBM Plex Mono'; font-size:12.5px; color:#0d6e78;">service_cold</code><code style="font-family:'IBM Plex Mono'; font-size:11.5px; color:#6b6256;">#2b8fc4</code><code style="font-family:'IBM Plex Mono'; font-size:11.5px; color:#6b6256;">#63b8e0</code></div>
+          <div style="display:grid; grid-template-columns:64px 64px 1fr 118px 118px; gap:14px; padding:8px 0; align-items:center; border-bottom:1px solid #f1ede4;"><i style="height:24px; border-radius:5px; background:#bfe0f0; border:1px solid #d4ccb8;"></i><i style="height:24px; border-radius:5px; background:#1e3a4a; border:1px solid #3f3830;"></i><code style="font-family:'IBM Plex Mono'; font-size:12.5px; color:#0d6e78;">service_cold_pale</code><code style="font-family:'IBM Plex Mono'; font-size:11.5px; color:#6b6256;">#bfe0f0</code><code style="font-family:'IBM Plex Mono'; font-size:11.5px; color:#6b6256;">#1e3a4a</code></div>
+          <div style="display:grid; grid-template-columns:64px 64px 1fr 118px 118px; gap:14px; padding:8px 0; align-items:center;"><i style="height:24px; border-radius:5px; background:#125f88;"></i><i style="height:24px; border-radius:5px; background:#8fcdec;"></i><code style="font-family:'IBM Plex Mono'; font-size:12.5px; color:#0d6e78;">service_cold_deep</code><code style="font-family:'IBM Plex Mono'; font-size:11.5px; color:#6b6256;">#125f88</code><code style="font-family:'IBM Plex Mono'; font-size:11.5px; color:#6b6256;">#8fcdec</code></div>
+        </div>
+      </div>
+
+      <!-- 4 Stream roles -->
+      <div style="background:#fbfaf6; border:1px solid #e6e0d0; border-radius:12px; padding:24px 26px; margin-bottom:18px;">
+        <div style="font-size:10px; font-weight:600; letter-spacing:.1em; text-transform:uppercase; color:#0d6e78; margin-bottom:4px;">Familia 4</div>
+        <h3 style="font-size:17px; font-weight:700; margin:0 0 6px;">Roles de stream</h3>
+        <p style="font-size:13.5px; line-height:1.55; color:#6b6256; margin:0 0 16px; max-width:78ch;"><b>Decisión clave del dark:</b> el trazo casi negro <code style="font-family:'IBM Plex Mono'; font-size:12px;">#0d0d0d</code> de las corrientes internas es invisible sobre papel oscuro. <code style="font-family:'IBM Plex Mono'; font-size:12px;">stream_internal</code> se invierte a un warm-line claro en dark. Producto/utility/waste conservan su matiz y ganan luminosidad. La selección no vive en el hex del rol: es un +peso de trazo + halo <code style="font-family:'IBM Plex Mono'; font-size:12px;">accent_soft</code> (token <code style="font-family:'IBM Plex Mono'; font-size:12px;">stream_sel_glow</code>), para no perder el rol al seleccionar.</p>
+        <div style="display:flex; flex-direction:column; gap:0; font-size:13px;">
+          <div style="display:grid; grid-template-columns:64px 64px 1fr 118px 118px; gap:14px; padding:6px 0; font-size:10px; font-weight:600; letter-spacing:.06em; text-transform:uppercase; color:#948a7c; border-bottom:1px solid #e6e0d0;"><span>Light</span><span>Dark</span><span>Token</span><span>Light</span><span>Dark</span></div>
+          <div style="display:grid; grid-template-columns:64px 64px 1fr 118px 118px; gap:14px; padding:8px 0; align-items:center; border-bottom:1px solid #f1ede4;"><i style="height:6px; border-radius:3px; background:#2a2620; align-self:center;"></i><i style="height:6px; border-radius:3px; background:#d8cfbf; align-self:center;"></i><code style="font-family:'IBM Plex Mono'; font-size:12.5px; color:#0d6e78;">stream_internal</code><code style="font-family:'IBM Plex Mono'; font-size:11.5px; color:#6b6256;">#2a2620</code><code style="font-family:'IBM Plex Mono'; font-size:11.5px; color:#6b6256;">#d8cfbf</code></div>
+          <div style="display:grid; grid-template-columns:64px 64px 1fr 118px 118px; gap:14px; padding:8px 0; align-items:center; border-bottom:1px solid #f1ede4;"><i style="height:6px; border-radius:3px; background:#b8323f; align-self:center;"></i><i style="height:6px; border-radius:3px; background:#e07a82; align-self:center;"></i><code style="font-family:'IBM Plex Mono'; font-size:12.5px; color:#0d6e78;">stream_product</code><code style="font-family:'IBM Plex Mono'; font-size:11.5px; color:#6b6256;">#b8323f</code><code style="font-family:'IBM Plex Mono'; font-size:11.5px; color:#6b6256;">#e07a82</code></div>
+          <div style="display:grid; grid-template-columns:64px 64px 1fr 118px 118px; gap:14px; padding:8px 0; align-items:center; border-bottom:1px solid #f1ede4;"><i style="height:6px; border-radius:3px; background:#2f4d9e; align-self:center;"></i><i style="height:6px; border-radius:3px; background:#8595d8; align-self:center;"></i><code style="font-family:'IBM Plex Mono'; font-size:12.5px; color:#0d6e78;">stream_utility</code><code style="font-family:'IBM Plex Mono'; font-size:11.5px; color:#6b6256;">#2f4d9e</code><code style="font-family:'IBM Plex Mono'; font-size:11.5px; color:#6b6256;">#8595d8</code></div>
+          <div style="display:grid; grid-template-columns:64px 64px 1fr 118px 118px; gap:14px; padding:8px 0; align-items:center; border-bottom:1px solid #f1ede4;"><i style="height:6px; border-radius:3px; background:#6d4c41; align-self:center;"></i><i style="height:6px; border-radius:3px; background:#b39a8a; align-self:center;"></i><code style="font-family:'IBM Plex Mono'; font-size:12.5px; color:#0d6e78;">stream_waste</code><code style="font-family:'IBM Plex Mono'; font-size:11.5px; color:#6b6256;">#6d4c41</code><code style="font-family:'IBM Plex Mono'; font-size:11.5px; color:#6b6256;">#b39a8a</code></div>
+          <div style="display:grid; grid-template-columns:64px 64px 1fr 118px 118px; gap:14px; padding:8px 0; align-items:center;"><i style="height:16px; border-radius:5px; background:#d4ebed; align-self:center;"></i><i style="height:16px; border-radius:5px; background:#1f3a3d; align-self:center;"></i><code style="font-family:'IBM Plex Mono'; font-size:12.5px; color:#0d6e78;">stream_sel_glow</code><code style="font-family:'IBM Plex Mono'; font-size:11.5px; color:#6b6256;">= accent_soft</code><code style="font-family:'IBM Plex Mono'; font-size:11.5px; color:#6b6256;">= accent_soft</code></div>
+        </div>
+      </div>
+
+      <!-- 5 Labels & severity -->
+      <div style="background:#fbfaf6; border:1px solid #e6e0d0; border-radius:12px; padding:24px 26px; margin-bottom:18px;">
+        <div style="font-size:10px; font-weight:600; letter-spacing:.1em; text-transform:uppercase; color:#0d6e78; margin-bottom:4px;">Familia 5</div>
+        <h3 style="font-size:17px; font-weight:700; margin:0 0 6px;">Labels, duty badges y severidad</h3>
+        <p style="font-size:13.5px; line-height:1.55; color:#6b6256; margin:0 0 16px; max-width:78ch;"><b>Decisión:</b> la escala de severidad estaba <b>triplicada</b> (canvas, dock de reactividad, chips). La colapso a UNA, y en vez de inventar 4 hex nuevos la <b>alineo con los tokens semánticos que ya existen</b>: crítico=<code style="font-family:'IBM Plex Mono'; font-size:12px;">danger</code>, alto=<code style="font-family:'IBM Plex Mono'; font-size:12px;">orange</code>, medio=<code style="font-family:'IBM Plex Mono'; font-size:12px;">amber</code>, bajo=<code style="font-family:'IBM Plex Mono'; font-size:12px;">ink_soft</code>. Así la severidad hereda el par dark gratis y nunca se desincroniza. Los duty badges se atan al eje de servicio (reboiler=caliente, condensador=frío). El pill de label gana un fondo con par dark.</p>
+        <div style="display:flex; flex-direction:column; gap:0; font-size:13px;">
+          <div style="display:grid; grid-template-columns:64px 64px 1fr 150px 118px; gap:14px; padding:6px 0; font-size:10px; font-weight:600; letter-spacing:.06em; text-transform:uppercase; color:#948a7c; border-bottom:1px solid #e6e0d0;"><span>Light</span><span>Dark</span><span>Token</span><span>Light</span><span>Dark</span></div>
+          <div style="display:grid; grid-template-columns:64px 64px 1fr 150px 118px; gap:14px; padding:8px 0; align-items:center; border-bottom:1px solid #f1ede4;"><i style="height:24px; border-radius:5px; background:rgba(255,255,255,0.88); border:1px solid #d4ccb8;"></i><i style="height:24px; border-radius:5px; background:rgba(38,33,26,0.9); border:1px solid #3f3830;"></i><code style="font-family:'IBM Plex Mono'; font-size:12.5px; color:#0d6e78;">label_bg</code><code style="font-family:'IBM Plex Mono'; font-size:11px; color:#6b6256;">rgba(255,255,255,.88)</code><code style="font-family:'IBM Plex Mono'; font-size:11px; color:#6b6256;">rgba(38,33,26,.90)</code></div>
+          <div style="display:grid; grid-template-columns:64px 64px 1fr 150px 118px; gap:14px; padding:8px 0; align-items:center; border-bottom:1px solid #f1ede4;"><i style="height:24px; border-radius:5px; background:#26221c;"></i><i style="height:24px; border-radius:5px; background:#efe7d6;"></i><code style="font-family:'IBM Plex Mono'; font-size:12.5px; color:#0d6e78;">label_ink</code><code style="font-family:'IBM Plex Mono'; font-size:11.5px; color:#6b6256;">#26221c</code><code style="font-family:'IBM Plex Mono'; font-size:11.5px; color:#6b6256;">#efe7d6</code></div>
+          <div style="display:grid; grid-template-columns:64px 64px 1fr 150px 118px; gap:14px; padding:8px 0; align-items:center; border-bottom:1px solid #f1ede4;"><i style="height:24px; border-radius:5px; background:#6b6256;"></i><i style="height:24px; border-radius:5px; background:#a59a89;"></i><code style="font-family:'IBM Plex Mono'; font-size:12.5px; color:#0d6e78;">label_ink_soft</code><code style="font-family:'IBM Plex Mono'; font-size:11.5px; color:#6b6256;">#6b6256</code><code style="font-family:'IBM Plex Mono'; font-size:11.5px; color:#6b6256;">#a59a89</code></div>
+          <div style="display:grid; grid-template-columns:64px 64px 1fr 150px 118px; gap:14px; padding:8px 0; align-items:center; border-bottom:1px solid #f1ede4;"><i style="height:24px; border-radius:5px; background:#b8323f;"></i><i style="height:24px; border-radius:5px; background:#e07a82;"></i><code style="font-family:'IBM Plex Mono'; font-size:12.5px; color:#0d6e78;">duty_hot</code><code style="font-family:'IBM Plex Mono'; font-size:11.5px; color:#6b6256;">#b8323f</code><code style="font-family:'IBM Plex Mono'; font-size:11.5px; color:#6b6256;">#e07a82</code></div>
+          <div style="display:grid; grid-template-columns:64px 64px 1fr 150px 118px; gap:14px; padding:8px 0; align-items:center; border-bottom:1px solid #f1ede4;"><i style="height:24px; border-radius:5px; background:#2f6690;"></i><i style="height:24px; border-radius:5px; background:#6fa8d6;"></i><code style="font-family:'IBM Plex Mono'; font-size:12.5px; color:#0d6e78;">duty_cold</code><code style="font-family:'IBM Plex Mono'; font-size:11.5px; color:#6b6256;">#2f6690</code><code style="font-family:'IBM Plex Mono'; font-size:11.5px; color:#6b6256;">#6fa8d6</code></div>
+          <div style="display:grid; grid-template-columns:64px 64px 1fr 150px 118px; gap:14px; padding:8px 0; align-items:center; border-bottom:1px solid #f1ede4;"><span style="display:flex; gap:3px; align-items:center;"><i style="width:14px; height:14px; border-radius:50%; background:#b8453a;"></i></span><span style="display:flex; gap:3px; align-items:center;"><i style="width:14px; height:14px; border-radius:50%; background:#d97262;"></i></span><code style="font-family:'IBM Plex Mono'; font-size:12.5px; color:#0d6e78;">sev_crit → danger</code><code style="font-family:'IBM Plex Mono'; font-size:11px; color:#948a7c;">antes #c41e3a</code><code style="font-family:'IBM Plex Mono'; font-size:11px; color:#948a7c;">hereda</code></div>
+          <div style="display:grid; grid-template-columns:64px 64px 1fr 150px 118px; gap:14px; padding:8px 0; align-items:center; border-bottom:1px solid #f1ede4;"><span style="display:flex; gap:3px; align-items:center;"><i style="width:14px; height:14px; border-radius:50%; background:#c26329;"></i></span><span style="display:flex; gap:3px; align-items:center;"><i style="width:14px; height:14px; border-radius:50%; background:#d18a55;"></i></span><code style="font-family:'IBM Plex Mono'; font-size:12.5px; color:#0d6e78;">sev_high → orange</code><code style="font-family:'IBM Plex Mono'; font-size:11px; color:#948a7c;">antes #e57c00</code><code style="font-family:'IBM Plex Mono'; font-size:11px; color:#948a7c;">hereda</code></div>
+          <div style="display:grid; grid-template-columns:64px 64px 1fr 150px 118px; gap:14px; padding:8px 0; align-items:center; border-bottom:1px solid #f1ede4;"><span style="display:flex; gap:3px; align-items:center;"><i style="width:14px; height:14px; border-radius:50%; background:#b8841a;"></i></span><span style="display:flex; gap:3px; align-items:center;"><i style="width:14px; height:14px; border-radius:50%; background:#d8aa3a;"></i></span><code style="font-family:'IBM Plex Mono'; font-size:12.5px; color:#0d6e78;">sev_med → amber</code><code style="font-family:'IBM Plex Mono'; font-size:11px; color:#948a7c;">antes #f4b400</code><code style="font-family:'IBM Plex Mono'; font-size:11px; color:#948a7c;">hereda</code></div>
+          <div style="display:grid; grid-template-columns:64px 64px 1fr 150px 118px; gap:14px; padding:8px 0; align-items:center;"><span style="display:flex; gap:3px; align-items:center;"><i style="width:14px; height:14px; border-radius:50%; background:#948a7c;"></i></span><span style="display:flex; gap:3px; align-items:center;"><i style="width:14px; height:14px; border-radius:50%; background:#6f6759;"></i></span><code style="font-family:'IBM Plex Mono'; font-size:12.5px; color:#0d6e78;">sev_low → ink_soft</code><code style="font-family:'IBM Plex Mono'; font-size:11px; color:#948a7c;">antes #9ca3af</code><code style="font-family:'IBM Plex Mono'; font-size:11px; color:#948a7c;">hereda</code></div>
+        </div>
+      </div>
+
+      <!-- 6 Phases -->
+      <div style="background:#fbfaf6; border:1px solid #e6e0d0; border-radius:12px; padding:24px 26px; margin-bottom:22px;">
+        <div style="font-size:10px; font-weight:600; letter-spacing:.1em; text-transform:uppercase; color:#0d6e78; margin-bottom:4px;">Familia 6 · validación</div>
+        <h3 style="font-size:17px; font-weight:700; margin:0 0 6px;">Fases</h3>
+        <p style="font-size:13.5px; line-height:1.55; color:#6b6256; margin:0 0 16px; max-width:78ch;"><b>Corrección:</b> los cuatro no estaban aún en <code style="font-family:'IBM Plex Mono'; font-size:12px;">tokens.py</code> (el quick-win quedó a medio). Los formalizo con par dark, como set cohesivo distinto de puertos: líquido=azul frío, vapor=ámbar cálido, gas=gris pálido, bifásico=violeta. Aparecen como dot de fase sobre el stream (hoy <code style="font-family:'IBM Plex Mono'; font-size:12px;">PHASE_DOT</code> suelto en <code style="font-family:'IBM Plex Mono'; font-size:12px;">stream_inspector</code>).</p>
+        <div style="display:flex; flex-direction:column; gap:0; font-size:13px;">
+          <div style="display:grid; grid-template-columns:36px 36px 1fr 118px 118px; gap:14px; padding:6px 0; font-size:10px; font-weight:600; letter-spacing:.06em; text-transform:uppercase; color:#948a7c; border-bottom:1px solid #e6e0d0;"><span>L</span><span>D</span><span>Token</span><span>Light</span><span>Dark</span></div>
+          <div style="display:grid; grid-template-columns:36px 36px 1fr 118px 118px; gap:14px; padding:8px 0; align-items:center; border-bottom:1px solid #f1ede4;"><i style="width:16px; height:16px; border-radius:50%; background:#2f6690; margin:0 auto;"></i><i style="width:16px; height:16px; border-radius:50%; background:#6fa8d6; margin:0 auto;"></i><code style="font-family:'IBM Plex Mono'; font-size:12.5px; color:#0d6e78;">phase_liq</code><code style="font-family:'IBM Plex Mono'; font-size:11.5px; color:#6b6256;">#2f6690</code><code style="font-family:'IBM Plex Mono'; font-size:11.5px; color:#6b6256;">#6fa8d6</code></div>
+          <div style="display:grid; grid-template-columns:36px 36px 1fr 118px 118px; gap:14px; padding:8px 0; align-items:center; border-bottom:1px solid #f1ede4;"><i style="width:16px; height:16px; border-radius:50%; background:#c47a1e; margin:0 auto;"></i><i style="width:16px; height:16px; border-radius:50%; background:#e0a94e; margin:0 auto;"></i><code style="font-family:'IBM Plex Mono'; font-size:12.5px; color:#0d6e78;">phase_vap</code><code style="font-family:'IBM Plex Mono'; font-size:11.5px; color:#6b6256;">#c47a1e</code><code style="font-family:'IBM Plex Mono'; font-size:11.5px; color:#6b6256;">#e0a94e</code></div>
+          <div style="display:grid; grid-template-columns:36px 36px 1fr 118px 118px; gap:14px; padding:8px 0; align-items:center; border-bottom:1px solid #f1ede4;"><i style="width:16px; height:16px; border-radius:50%; background:#8a8172; margin:0 auto;"></i><i style="width:16px; height:16px; border-radius:50%; background:#b3a892; margin:0 auto;"></i><code style="font-family:'IBM Plex Mono'; font-size:12.5px; color:#0d6e78;">phase_gas</code><code style="font-family:'IBM Plex Mono'; font-size:11.5px; color:#6b6256;">#8a8172</code><code style="font-family:'IBM Plex Mono'; font-size:11.5px; color:#6b6256;">#b3a892</code></div>
+          <div style="display:grid; grid-template-columns:36px 36px 1fr 118px 118px; gap:14px; padding:8px 0; align-items:center;"><i style="width:16px; height:16px; border-radius:50%; background:#6d5a9c; margin:0 auto;"></i><i style="width:16px; height:16px; border-radius:50%; background:#a795d6; margin:0 auto;"></i><code style="font-family:'IBM Plex Mono'; font-size:12.5px; color:#0d6e78;">phase_2ph</code><code style="font-family:'IBM Plex Mono'; font-size:11.5px; color:#6b6256;">#6d5a9c</code><code style="font-family:'IBM Plex Mono'; font-size:11.5px; color:#6b6256;">#a795d6</code></div>
+        </div>
+      </div>
+
+      <!-- Contrast note -->
+      <div style="background:#eaf4f5; border:1px solid #d4ebed; border-radius:12px; padding:20px 24px;">
+        <h3 style="font-size:14px; font-weight:700; margin:0 0 10px; color:#064951;">Verificación de contraste</h3>
+        <div style="display:grid; grid-template-columns:1fr 1fr; gap:8px 28px; font-size:12.5px; color:#1a1714; line-height:1.5;">
+          <div>✓ <b>Texto ≥ 4.5:1</b> — <code style="font-family:'IBM Plex Mono'; font-size:11.5px;">label_ink</code> sobre <code style="font-family:'IBM Plex Mono'; font-size:11.5px;">label_bg</code>: 13.6:1 (L) / 11.2:1 (D).</div>
+          <div>✓ <b>Marcas ≥ 3:1</b> — puertos sobre papel: 3.2–5.1:1 (L), 3.4–6.0:1 (D) según clase.</div>
+          <div>✓ <b>stream_internal</b> visible en dark: <code style="font-family:'IBM Plex Mono'; font-size:11.5px;">#d8cfbf</code> sobre <code style="font-family:'IBM Plex Mono'; font-size:11.5px;">canvas_bg</code> dark = 8.9:1.</div>
+          <div>✓ <b>Tintes de estado</b> — <code style="font-family:'IBM Plex Mono'; font-size:11.5px;">danger_bg/amber_bg/green_bg</code> dark legibles sobre <code style="font-family:'IBM Plex Mono'; font-size:11.5px;">canvas_bg</code> dark (Δ luminancia ≥ 1.4:1, borde + trazo refuerzan).</div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ══════════════ 2b ══════════════ -->
+    <section id="a2b" style="scroll-margin-top:24px; margin-bottom:64px;">
+      <div style="display:flex; align-items:baseline; gap:14px; border-top:2px solid #1a1714; padding-top:16px; margin-bottom:6px;">
+        <span style="font-family:'IBM Plex Mono'; font-size:22px; font-weight:600; color:#0d6e78;">2b</span>
+        <h2 style="font-size:23px; font-weight:700; margin:0;">El lienzo completo en oscuro</h2>
+      </div>
+      <p style="font-size:14.5px; line-height:1.6; color:#6b6256; max-width:72ch; margin:0 0 26px;">Un PFD representativo renderizado con los tokens de 2a: semáforo (los 4 estados + selección), 8 clases de puertos, servicio caliente, roles de stream, labels con pill, duty badges y grilla. La prueba de que el sistema cierra — el mismo markup, el único cambio entre temas es el bloque de variables del contenedor.</p>
+
+      <div style="display:grid; grid-template-columns:1fr; gap:20px;">
+        <!-- LIGHT -->
+        <figure style="margin:0;">
+          <figcaption style="display:flex; align-items:center; gap:8px; font-size:11px; font-weight:600; letter-spacing:.08em; text-transform:uppercase; color:#6b6256; margin-bottom:8px;"><span style="width:12px; height:12px; border-radius:3px; background:#fbfaf6; border:1px solid #d4ccb8;"></span>Tema claro</figcaption>
+          <div style="border:1px solid #d4ccb8; border-radius:12px; overflow:hidden; box-shadow:0 1px 3px rgba(0,0,0,.06);">
+            <dc-import name="PfdMock" hint-size="100%,480px"></dc-import>
+          </div>
+        </figure>
+        <!-- DARK -->
+        <figure style="margin:0; --canvas_bg:#221d15; --canvas_grid:#2c2519; --canvas_grid_major:#38301f; --port_process_in:#8fb46a; --port_process_out:#6fa8d6; --port_utility_in:#e0a94e; --port_utility_out:#d98a68; --port_fuel:#b08a63; --port_vent:#b3a892; --port_drain:#8ba0aa; --port_aux:#a795d6; --service_hot:#e88a5a; --service_hot_pale:#5a3320; --service_hot_deep:#f0a877; --service_cold:#63b8e0; --service_cold_pale:#1e3a4a; --service_cold_deep:#8fcdec; --stream_internal:#d8cfbf; --stream_product:#e07a82; --stream_utility:#8595d8; --stream_waste:#b39a8a; --label_bg:rgba(38,33,26,0.90); --label_ink:#efe7d6; --label_ink_soft:#a59a89; --duty_hot:#e07a82; --duty_cold:#6fa8d6; --phase_liq:#6fa8d6; --phase_vap:#e0a94e; --phase_gas:#b3a892; --phase_2ph:#a795d6; --bg_elev:#1f1b16; --bg_mute:#26211b; --ink:#efe7d6; --ink_mute:#a59a89; --ink_soft:#6f6759; --line:#2f2920; --line_strong:#3f3830; --accent:#5dc1cc; --accent_soft:#1f3a3d; --green:#85b274; --green_bg:#1f2a1d; --amber:#d8aa3a; --amber_bg:#2e2618; --orange:#d18a55; --orange_bg:#2e2118; --danger:#d97262; --danger_bg:#2e1a17;">
+          <figcaption style="display:flex; align-items:center; gap:8px; font-size:11px; font-weight:600; letter-spacing:.08em; text-transform:uppercase; color:#6b6256; margin-bottom:8px;"><span style="width:12px; height:12px; border-radius:3px; background:#221d15; border:1px solid #3f3830;"></span>Tema oscuro <span style="color:#4d8742; text-transform:none; letter-spacing:0; font-weight:600;">· el bug resuelto</span></figcaption>
+          <div style="border:1px solid #3f3830; border-radius:12px; overflow:hidden;">
+            <dc-import name="PfdMock" hint-size="100%,480px"></dc-import>
+          </div>
+        </figure>
+      </div>
+
+      <!-- state legend strip -->
+      <div style="display:flex; flex-wrap:wrap; gap:18px; margin:20px 0 0; padding:16px 20px; background:#fbfaf6; border:1px solid #e6e0d0; border-radius:12px; font-size:12.5px; color:#1a1714;">
+        <span style="display:flex; align-items:center; gap:7px;"><span style="width:20px; height:14px; border-radius:3px; background:#e6f0df; border:1.5px solid #4d8742;"></span>ok · tinte + trazo</span>
+        <span style="display:flex; align-items:center; gap:7px;"><span style="width:20px; height:14px; border-radius:3px; background:#f4ecd1; border:1.5px solid #b8841a;"></span>warning + chip !</span>
+        <span style="display:flex; align-items:center; gap:7px;"><span style="width:20px; height:14px; border-radius:3px; background:#f3dcd8; border:1.5px solid #b8453a;"></span>error + chip ×</span>
+        <span style="display:flex; align-items:center; gap:7px;"><span style="width:20px; height:14px; border-radius:3px; background:#fff; border:1.5px dashed #948a7c;"></span>stale · desaturado</span>
+        <span style="display:flex; align-items:center; gap:7px;"><span style="width:20px; height:14px; border-radius:3px; background:#fff; border:1.5px dotted #6b6256;"></span>unrun · punteado</span>
+        <span style="display:flex; align-items:center; gap:7px;"><span style="width:20px; height:14px; border-radius:3px; background:#fff; border:2px solid #0d6e78;"></span>selección (anillo independiente)</span>
+      </div>
+
+      <!-- export decision -->
+      <div style="background:#eaf4f5; border:1px solid #d4ebed; border-radius:12px; padding:20px 24px; margin-top:18px;">
+        <h3 style="font-size:14px; font-weight:700; margin:0 0 8px; color:#064951;">Decisión — exportación (PDF / SVG / PNG)</h3>
+        <p style="font-size:13.5px; line-height:1.6; color:#1a1714; margin:0; max-width:80ch;"><b>La exportación fuerza siempre papel claro</b> (<code style="font-family:'IBM Plex Mono'; font-size:12px;">canvas_bg</code> light + tinta oscura), independiente del tema activo. Razón: un PFD exportado es un <b>documento de ingeniería</b> — va a la tesis, se imprime, se incrusta en informes; la tinta-sobre-papel es el estándar de archivo y de impresión (el dark quema tóner y no es legible en papel). El tema oscuro es una comodidad de <em>pantalla para editar de noche</em>, no un formato de entrega. Excepción explícita: una opción <code style="font-family:'IBM Plex Mono'; font-size:12px;">"Exportar como se ve"</code> en el diálogo de exportación para captura de pantalla/presentación en dark, apagada por defecto.</p>
+      </div>
+    </section>
+
+    <!-- ══════════════ 2g ══════════════ -->
+    <section id="a2g" style="scroll-margin-top:24px; margin-bottom:64px;">
+      <div style="display:flex; align-items:baseline; gap:14px; border-top:2px solid #1a1714; padding-top:16px; margin-bottom:6px;">
+        <span style="font-family:'IBM Plex Mono'; font-size:22px; font-weight:600; color:#0d6e78;">2g</span>
+        <h2 style="font-size:23px; font-weight:700; margin:0;">Mapa tipográfico</h2>
+      </div>
+      <p style="font-size:14.5px; line-height:1.6; color:#6b6256; max-width:72ch; margin:0 0 22px;">Los 4 tamaños de <code style="font-family:'IBM Plex Mono'; font-size:12.5px; background:#f1ede4; padding:1px 5px; border-radius:4px;">tokens.py</code> tienen <b>cero consumidores</b>: ~350 fuentes hardcodeadas de 6.5–30 pt en 15 archivos. Esta es la tabla de mapeo rol → token para la migración mecánica. Amplío el sistema con <b>un 5.º token</b> en vez de dejar el NPV de 26 pt como excepción muda.</p>
+
+      <div style="background:#fbfaf6; border:1px solid #e6e0d0; border-radius:12px; overflow:hidden;">
+        <div style="display:grid; grid-template-columns:200px 150px 1fr; gap:16px; padding:12px 24px; font-size:10px; font-weight:600; letter-spacing:.06em; text-transform:uppercase; color:#948a7c; background:#f1ede4; border-bottom:1px solid #e6e0d0;"><span>Rol de UI</span><span>Token</span><span>Muestra · familia / pt / peso</span></div>
+
+        <div style="display:grid; grid-template-columns:200px 150px 1fr; gap:16px; padding:16px 24px; align-items:center; border-bottom:1px solid #f1ede4;">
+          <div style="font-size:13px; font-weight:600;">KPI hero (NPV, TIR)<div style="font-size:11px; color:#948a7c; font-weight:400;">nace 5.º token</div></div>
+          <code style="font-family:'IBM Plex Mono'; font-size:12.5px; color:#0d6e78;">FONT_DISPLAY</code>
+          <div><span style="font-size:26px; font-weight:700; color:#4d8742;">11.8</span> <span style="font-size:26px; font-weight:400; color:#948a7c;">M USD</span><div style="font-size:11px; color:#948a7c; margin-top:2px;">IBM Plex Sans · 26 · 700 — solo el hero del panel económico</div></div>
+        </div>
+
+        <div style="display:grid; grid-template-columns:200px 150px 1fr; gap:16px; padding:16px 24px; align-items:center; border-bottom:1px solid #f1ede4;">
+          <div style="font-size:13px; font-weight:600;">Título de panel / diálogo</div>
+          <code style="font-family:'IBM Plex Mono'; font-size:12.5px; color:#0d6e78;">FONT_TITLE</code>
+          <div><span style="font-size:15px; font-weight:600;">Rentabilidad del flowsheet</span><div style="font-size:11px; color:#948a7c; margin-top:2px;">IBM Plex Sans · 15 · 600</div></div>
+        </div>
+
+        <div style="display:grid; grid-template-columns:200px 150px 1fr; gap:16px; padding:16px 24px; align-items:center; border-bottom:1px solid #f1ede4;">
+          <div style="font-size:13px; font-weight:600;">Texto de UI · botones · celda de tabla</div>
+          <code style="font-family:'IBM Plex Mono'; font-size:12.5px; color:#0d6e78;">FONT_UI</code>
+          <div><span style="font-size:12px; font-weight:400;">Calcular · Monte Carlo · descripción de campo</span><div style="font-size:11px; color:#948a7c; margin-top:2px;">IBM Plex Sans · 12 · 400</div></div>
+        </div>
+
+        <div style="display:grid; grid-template-columns:200px 150px 1fr; gap:16px; padding:16px 24px; align-items:center; border-bottom:1px solid #f1ede4;">
+          <div style="font-size:13px; font-weight:600;">Valor numérico · tabular</div>
+          <code style="font-family:'IBM Plex Mono'; font-size:12.5px; color:#0d6e78;">FONT_VALUE</code>
+          <div><span style="font-family:'IBM Plex Mono'; font-size:11.5px; font-weight:500;">3.90 · 6.56 · 0.98 · 39.7%</span><div style="font-size:11px; color:#948a7c; margin-top:2px;">IBM Plex Mono · 11.5 · 500 — todo lo que se alinea en columna</div></div>
+        </div>
+
+        <div style="display:grid; grid-template-columns:200px 150px 1fr; gap:16px; padding:16px 24px; align-items:center; border-bottom:1px solid #f1ede4;">
+          <div style="font-size:13px; font-weight:600;">Kicker / cap · label · celda-header</div>
+          <code style="font-family:'IBM Plex Mono'; font-size:12.5px; color:#0d6e78;">FONT_LABEL</code>
+          <div><span style="font-size:10px; font-weight:600; letter-spacing:.08em; text-transform:uppercase; color:#6b6256;">CAPEX · ISBL · WORK. CAP.</span><div style="font-size:11px; color:#948a7c; margin-top:2px;">IBM Plex Sans · 10 · 600 — ya migrado en los kickers del panel</div></div>
+        </div>
+
+        <div style="display:grid; grid-template-columns:200px 150px 1fr; gap:16px; padding:16px 24px; align-items:center; border-bottom:1px solid #f1ede4;">
+          <div style="font-size:13px; font-weight:600;">Hint / caption</div>
+          <code style="font-family:'IBM Plex Mono'; font-size:12.5px; color:#0d6e78;">FONT_HINT<div style="font-size:10px; color:#c26329; font-weight:400; text-transform:none; letter-spacing:0;">6.º token — ampliación</div></code>
+          <div><span style="font-size:11px; font-weight:400; color:#948a7c;">desde arranque · hurdle 10 %</span><div style="font-size:11px; color:#948a7c; margin-top:2px;">IBM Plex Sans · 11 · 400 — el subtexto de KPI no cabía en LABEL (caps) ni en UI (12); antes vivía como QFont 7–8 suelto</div></div>
+        </div>
+
+        <div style="display:grid; grid-template-columns:200px 150px 1fr; gap:16px; padding:16px 24px; align-items:center;">
+          <div style="font-size:13px; font-weight:600;">Label on-canvas<div style="font-size:11px; color:#948a7c; font-weight:400;">bloque · stream · leyenda</div></div>
+          <code style="font-family:'IBM Plex Mono'; font-size:12.5px; color:#0d6e78;">FONT_LABEL<div style="font-size:10px; color:#948a7c; font-weight:400; text-transform:none; letter-spacing:0;">× zoom</div></code>
+          <div><span style="font-size:10.5px; font-weight:600;">R-101 · S4 · Producto</span><div style="font-size:11px; color:#948a7c; margin-top:2px;">base FONT_LABEL en unidades de escena — <b>escala con el zoom</b>, no en px de pantalla. Único rol con tamaño relativo.</div></div>
+        </div>
+      </div>
+
+      <div style="display:grid; grid-template-columns:1fr 1fr; gap:14px; margin-top:16px;">
+        <div style="background:#eaf4f5; border:1px solid #d4ebed; border-radius:12px; padding:16px 20px;">
+          <div style="font-size:12px; font-weight:700; color:#064951; margin-bottom:6px;">Sistema resultante: 6 tamaños</div>
+          <div style="font-size:12.5px; color:#1a1714; line-height:1.55;">display 26 · title 15 · ui 12 · value 11.5 · hint 11 · label 10. Dos ampliaciones declaradas (<code style="font-family:'IBM Plex Mono'; font-size:11.5px;">DISPLAY</code>, <code style="font-family:'IBM Plex Mono'; font-size:11.5px;">HINT</code>) en vez de dos excepciones mudas.</div>
+        </div>
+        <div style="background:#f5e1d0; border:1px solid #e8c9a8; border-radius:12px; padding:16px 20px;">
+          <div style="font-size:12px; font-weight:700; color:#c26329; margin-bottom:6px;">Regla de migración</div>
+          <div style="font-size:12.5px; color:#1a1714; line-height:1.55;">Ningún <code style="font-family:'IBM Plex Mono'; font-size:11.5px;">QFont(pt)</code> literal sobrevive. Consolas cruda (DOF, perfil) → <code style="font-family:'IBM Plex Mono'; font-size:11.5px;">FONT_VALUE</code>. Los 6.5–8 pt de KPI → HINT. Nada por debajo de 10.</div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ══════════════ 2c ══════════════ -->
+    <section id="a2c" style="scroll-margin-top:24px; margin-bottom:64px;">
+      <div style="display:flex; align-items:baseline; gap:14px; border-top:2px solid #1a1714; padding-top:16px; margin-bottom:6px;">
+        <span style="font-family:'IBM Plex Mono'; font-size:22px; font-weight:600; color:#0d6e78;">2c</span>
+        <h2 style="font-size:23px; font-weight:700; margin:0;">Leyenda del lenguaje visual</h2>
+      </div>
+      <p style="font-size:14.5px; line-height:1.6; color:#6b6256; max-width:74ch; margin:0 0 14px;"><b>Decisión:</b> la leyenda vive <b>dentro del Marco PFD</b>, como una banda que extiende el cuadro de título estilo plano de ingeniería (esquina inferior derecha) — no como card flotante sobre el lienzo. Razón: el Marco PFD ya es la superficie "documento" (se exporta con el diagrama), la leyenda es información de documento; una card sobre el lienzo compite con los equipos y hay que cerrarla. <b>Es colapsable</b> desde el propio cuadro de título (chevron), así que quien no la necesita la pliega a una sola fila.</p>
+      <p style="font-size:13px; line-height:1.55; color:#948a7c; max-width:74ch; margin:0 0 22px;">Qué entra: semáforo, puertos, servicio, roles de stream, fases. Qué se omite por obvio: las flechas de dirección de flujo y los rótulos de tag (autoexplicativos). Jerarquía: título de cuadro &gt; grupos &gt; ítems; el cuerpo usa <code style="font-family:'IBM Plex Mono'; font-size:12px;">FONT_LABEL</code> y no supera ~18 % del ancho del marco.</p>
+
+      <div style="display:grid; grid-template-columns:1fr 1fr; gap:20px;">
+        <!-- LIGHT legend -->
+        <div>
+          <div style="font-size:11px; font-weight:600; letter-spacing:.08em; text-transform:uppercase; color:#6b6256; margin-bottom:8px;">Claro</div>
+          <div style="border:1.5px solid #26221c; border-radius:4px; background:#fbfaf6; overflow:hidden;">
+            <div style="display:flex; align-items:center; justify-content:space-between; padding:8px 12px; border-bottom:1.5px solid #26221c;">
+              <div><div style="font-size:10px; font-weight:600; letter-spacing:.1em; text-transform:uppercase; color:#948a7c;">Leyenda</div><div style="font-size:12.5px; font-weight:700; color:#26221c;">Metanol · síntesis</div></div>
+              <span style="font-size:14px; color:#6b6256;">▾</span>
+            </div>
+            <div style="padding:12px 14px; display:grid; grid-template-columns:1fr 1fr; gap:14px 20px; font-size:11px;">
+              <div>
+                <div style="font-size:9.5px; font-weight:600; letter-spacing:.08em; text-transform:uppercase; color:#948a7c; margin-bottom:6px;">Estado</div>
+                <div style="display:flex; flex-direction:column; gap:5px; color:#26221c;">
+                  <span style="display:flex; align-items:center; gap:7px;"><i style="width:14px; height:14px; border-radius:3px; background:#e6f0df; border:1.5px solid #4d8742;"></i>Resuelto</span>
+                  <span style="display:flex; align-items:center; gap:7px;"><i style="width:14px; height:14px; border-radius:3px; background:#f4ecd1; border:1.5px solid #b8841a;"></i>Advertencia !</span>
+                  <span style="display:flex; align-items:center; gap:7px;"><i style="width:14px; height:14px; border-radius:3px; background:#f3dcd8; border:1.5px solid #b8453a;"></i>Error ×</span>
+                  <span style="display:flex; align-items:center; gap:7px;"><i style="width:14px; height:14px; border-radius:3px; background:#fff; border:1.5px dashed #948a7c;"></i>Desactualizado</span>
+                </div>
+              </div>
+              <div>
+                <div style="font-size:9.5px; font-weight:600; letter-spacing:.08em; text-transform:uppercase; color:#948a7c; margin-bottom:6px;">Puertos</div>
+                <div style="display:grid; grid-template-columns:1fr 1fr; gap:5px 10px; color:#26221c;">
+                  <span style="display:flex; align-items:center; gap:6px;"><i style="width:11px; height:11px; border-radius:50%; background:#4f7a3a;"></i>Proc. in</span>
+                  <span style="display:flex; align-items:center; gap:6px;"><i style="width:11px; height:11px; border-radius:50%; background:#2f6690;"></i>Proc. out</span>
+                  <span style="display:flex; align-items:center; gap:6px;"><i style="width:11px; height:11px; border-radius:50%; background:#c86a12;"></i>Util. in</span>
+                  <span style="display:flex; align-items:center; gap:6px;"><i style="width:11px; height:11px; border-radius:50%; background:#b0442a;"></i>Util. out</span>
+                  <span style="display:flex; align-items:center; gap:6px;"><i style="width:11px; height:11px; border-radius:50%; background:#6d5a9c;"></i>Aux</span>
+                  <span style="display:flex; align-items:center; gap:6px;"><i style="width:11px; height:11px; border-radius:50%; background:#4a5a63;"></i>Drenaje</span>
+                </div>
+              </div>
+              <div>
+                <div style="font-size:9.5px; font-weight:600; letter-spacing:.08em; text-transform:uppercase; color:#948a7c; margin-bottom:6px;">Servicio</div>
+                <div style="display:flex; flex-direction:column; gap:5px; color:#26221c;">
+                  <span style="display:flex; align-items:center; gap:7px;"><i style="width:20px; height:5px; border-radius:3px; background:#d5501f;"></i>Caliente ↑</span>
+                  <span style="display:flex; align-items:center; gap:7px;"><i style="width:20px; height:5px; border-radius:3px; background:#2b8fc4;"></i>Frío ↓</span>
+                </div>
+              </div>
+              <div>
+                <div style="font-size:9.5px; font-weight:600; letter-spacing:.08em; text-transform:uppercase; color:#948a7c; margin-bottom:6px;">Corriente · fase</div>
+                <div style="display:grid; grid-template-columns:1fr 1fr; gap:5px 10px; color:#26221c;">
+                  <span style="display:flex; align-items:center; gap:6px;"><i style="width:16px; height:4px; background:#2a2620;"></i>Interna</span>
+                  <span style="display:flex; align-items:center; gap:6px;"><i style="width:16px; height:4px; background:#b8323f;"></i>Producto</span>
+                  <span style="display:flex; align-items:center; gap:6px;"><i style="width:10px; height:10px; border-radius:50%; background:#2f6690;"></i>Líq.</span>
+                  <span style="display:flex; align-items:center; gap:6px;"><i style="width:10px; height:10px; border-radius:50%; background:#c47a1e;"></i>Vap.</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+        <!-- DARK legend -->
+        <div>
+          <div style="font-size:11px; font-weight:600; letter-spacing:.08em; text-transform:uppercase; color:#6b6256; margin-bottom:8px;">Oscuro</div>
+          <div style="border:1.5px solid #efe7d6; border-radius:4px; background:#221d15; overflow:hidden;">
+            <div style="display:flex; align-items:center; justify-content:space-between; padding:8px 12px; border-bottom:1.5px solid #efe7d6;">
+              <div><div style="font-size:10px; font-weight:600; letter-spacing:.1em; text-transform:uppercase; color:#a59a89;">Leyenda</div><div style="font-size:12.5px; font-weight:700; color:#efe7d6;">Metanol · síntesis</div></div>
+              <span style="font-size:14px; color:#a59a89;">▾</span>
+            </div>
+            <div style="padding:12px 14px; display:grid; grid-template-columns:1fr 1fr; gap:14px 20px; font-size:11px;">
+              <div>
+                <div style="font-size:9.5px; font-weight:600; letter-spacing:.08em; text-transform:uppercase; color:#6f6759; margin-bottom:6px;">Estado</div>
+                <div style="display:flex; flex-direction:column; gap:5px; color:#efe7d6;">
+                  <span style="display:flex; align-items:center; gap:7px;"><i style="width:14px; height:14px; border-radius:3px; background:#1f2a1d; border:1.5px solid #85b274;"></i>Resuelto</span>
+                  <span style="display:flex; align-items:center; gap:7px;"><i style="width:14px; height:14px; border-radius:3px; background:#2e2618; border:1.5px solid #d8aa3a;"></i>Advertencia !</span>
+                  <span style="display:flex; align-items:center; gap:7px;"><i style="width:14px; height:14px; border-radius:3px; background:#2e1a17; border:1.5px solid #d97262;"></i>Error ×</span>
+                  <span style="display:flex; align-items:center; gap:7px;"><i style="width:14px; height:14px; border-radius:3px; background:#221d15; border:1.5px dashed #6f6759;"></i>Desactualizado</span>
+                </div>
+              </div>
+              <div>
+                <div style="font-size:9.5px; font-weight:600; letter-spacing:.08em; text-transform:uppercase; color:#6f6759; margin-bottom:6px;">Puertos</div>
+                <div style="display:grid; grid-template-columns:1fr 1fr; gap:5px 10px; color:#efe7d6;">
+                  <span style="display:flex; align-items:center; gap:6px;"><i style="width:11px; height:11px; border-radius:50%; background:#8fb46a;"></i>Proc. in</span>
+                  <span style="display:flex; align-items:center; gap:6px;"><i style="width:11px; height:11px; border-radius:50%; background:#6fa8d6;"></i>Proc. out</span>
+                  <span style="display:flex; align-items:center; gap:6px;"><i style="width:11px; height:11px; border-radius:50%; background:#e0a94e;"></i>Util. in</span>
+                  <span style="display:flex; align-items:center; gap:6px;"><i style="width:11px; height:11px; border-radius:50%; background:#d98a68;"></i>Util. out</span>
+                  <span style="display:flex; align-items:center; gap:6px;"><i style="width:11px; height:11px; border-radius:50%; background:#a795d6;"></i>Aux</span>
+                  <span style="display:flex; align-items:center; gap:6px;"><i style="width:11px; height:11px; border-radius:50%; background:#8ba0aa;"></i>Drenaje</span>
+                </div>
+              </div>
+              <div>
+                <div style="font-size:9.5px; font-weight:600; letter-spacing:.08em; text-transform:uppercase; color:#6f6759; margin-bottom:6px;">Servicio</div>
+                <div style="display:flex; flex-direction:column; gap:5px; color:#efe7d6;">
+                  <span style="display:flex; align-items:center; gap:7px;"><i style="width:20px; height:5px; border-radius:3px; background:#e88a5a;"></i>Caliente ↑</span>
+                  <span style="display:flex; align-items:center; gap:7px;"><i style="width:20px; height:5px; border-radius:3px; background:#63b8e0;"></i>Frío ↓</span>
+                </div>
+              </div>
+              <div>
+                <div style="font-size:9.5px; font-weight:600; letter-spacing:.08em; text-transform:uppercase; color:#6f6759; margin-bottom:6px;">Corriente · fase</div>
+                <div style="display:grid; grid-template-columns:1fr 1fr; gap:5px 10px; color:#efe7d6;">
+                  <span style="display:flex; align-items:center; gap:6px;"><i style="width:16px; height:4px; background:#d8cfbf;"></i>Interna</span>
+                  <span style="display:flex; align-items:center; gap:6px;"><i style="width:16px; height:4px; background:#e07a82;"></i>Producto</span>
+                  <span style="display:flex; align-items:center; gap:6px;"><i style="width:10px; height:10px; border-radius:50%; background:#6fa8d6;"></i>Líq.</span>
+                  <span style="display:flex; align-items:center; gap:6px;"><i style="width:10px; height:10px; border-radius:50%; background:#e0a94e;"></i>Vap.</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ══════════════ 2d ══════════════ -->
+    <section id="a2d" style="scroll-margin-top:24px; margin-bottom:64px;">
+      <div style="display:flex; align-items:baseline; gap:14px; border-top:2px solid #1a1714; padding-top:16px; margin-bottom:6px;">
+        <span style="font-family:'IBM Plex Mono'; font-size:22px; font-weight:600; color:#0d6e78;">2d</span>
+        <h2 style="font-size:23px; font-weight:700; margin:0;">Kit de diálogos</h2>
+      </div>
+      <p style="font-size:14.5px; line-height:1.6; color:#6b6256; max-width:74ch; margin:0 0 22px;">Los diálogos secundarios nunca pasaron por diseño. Defino la anatomía y la aplico a dos casos: <b>DOF / Balance</b> (hoy QTextEdit Consolas crudo → tabla) y <b>Setpoints</b> (hoy una cadena de QMessageBox → diálogo real con goal-seek).</p>
+
+      <!-- anatomy spec -->
+      <div style="background:#fbfaf6; border:1px solid #e6e0d0; border-radius:12px; padding:22px 26px; margin-bottom:22px;">
+        <h3 style="font-size:15px; font-weight:700; margin:0 0 14px;">Anatomía</h3>
+        <div style="display:grid; grid-template-columns:repeat(3,1fr); gap:14px; font-size:12.5px; color:#1a1714;">
+          <div style="background:#fff; border:1px solid #e6e0d0; border-radius:9px; padding:14px 16px;"><div style="font-size:10px; font-weight:600; letter-spacing:.08em; text-transform:uppercase; color:#0d6e78; margin-bottom:6px;">Header · 56px</div><div style="line-height:1.5;">Título <code style="font-family:'IBM Plex Mono'; font-size:11px;">FONT_TITLE</code> + subtítulo <code style="font-family:'IBM Plex Mono'; font-size:11px;">FONT_HINT</code> + botón cerrar. Fondo <code style="font-family:'IBM Plex Mono'; font-size:11px;">bg_elev</code>, borde inferior <code style="font-family:'IBM Plex Mono'; font-size:11px;">line</code>.</div></div>
+          <div style="background:#fff; border:1px solid #e6e0d0; border-radius:9px; padding:14px 16px;"><div style="font-size:10px; font-weight:600; letter-spacing:.08em; text-transform:uppercase; color:#0d6e78; margin-bottom:6px;">Cuerpo · pad 20/24</div><div style="line-height:1.5;">Fondo <code style="font-family:'IBM Plex Mono'; font-size:11px;">bg</code>. Secciones separadas por <code style="font-family:'IBM Plex Mono'; font-size:11px;">SECT_GAP</code>. Inputs <code style="font-family:'IBM Plex Mono'; font-size:11px;">FONT_UI</code>, valores <code style="font-family:'IBM Plex Mono'; font-size:11px;">FONT_VALUE</code>.</div></div>
+          <div style="background:#fff; border:1px solid #e6e0d0; border-radius:9px; padding:14px 16px;"><div style="font-size:10px; font-weight:600; letter-spacing:.08em; text-transform:uppercase; color:#0d6e78; margin-bottom:6px;">Footer · 52px</div><div style="line-height:1.5;">Acciones a la derecha: primario (<code style="font-family:'IBM Plex Mono'; font-size:11px;">accent</code>) + secundario (contorno <code style="font-family:'IBM Plex Mono'; font-size:11px;">line_strong</code>). Nunca repite datos.</div></div>
+        </div>
+        <div style="display:flex; gap:12px; margin-top:16px; align-items:center; flex-wrap:wrap;">
+          <span style="font-size:11px; font-weight:600; color:#948a7c; text-transform:uppercase; letter-spacing:.06em;">Botones</span>
+          <button style="font-family:inherit; font-size:12.5px; font-weight:600; color:#fff; background:#0d6e78; border:none; border-radius:7px; padding:8px 18px; cursor:default;">Primario</button>
+          <button style="font-family:inherit; font-size:12.5px; font-weight:600; color:#1a1714; background:transparent; border:1.5px solid #d4ccb8; border-radius:7px; padding:7px 18px; cursor:default;">Secundario</button>
+          <button style="font-family:inherit; font-size:12.5px; font-weight:600; color:#b8453a; background:transparent; border:1.5px solid #e8c4bd; border-radius:7px; padding:7px 18px; cursor:default;">Destructivo</button>
+        </div>
+      </div>
+
+      <div style="display:grid; grid-template-columns:1fr 1fr; gap:20px; align-items:start;">
+        <!-- DOF light -->
+        <div>
+          <div style="font-size:11px; font-weight:600; letter-spacing:.08em; text-transform:uppercase; color:#6b6256; margin-bottom:8px;">Caso 1 · DOF / Balance · claro</div>
+          <div style="border:1px solid #d4ccb8; border-radius:12px; overflow:hidden; box-shadow:0 4px 16px rgba(0,0,0,.09); background:#f6f3ec;">
+            <div style="display:flex; align-items:center; justify-content:space-between; padding:12px 18px; background:#fff; border-bottom:1px solid #e6e0d0;">
+              <div><div style="font-size:15px; font-weight:600; color:#1a1714;">Grados de libertad · Balance</div><div style="font-size:11px; color:#948a7c;">R-101 · reactor CSTR</div></div>
+              <span style="font-size:15px; color:#948a7c;">✕</span>
+            </div>
+            <div style="padding:18px;">
+              <div style="display:flex; gap:10px; margin-bottom:16px;">
+                <div style="flex:1; background:#e6f0df; border:1px solid #cfe0c2; border-radius:9px; padding:10px 12px;"><div style="font-size:10px; font-weight:600; letter-spacing:.06em; text-transform:uppercase; color:#4d8742;">DOF</div><div style="font-size:22px; font-weight:700; color:#4d8742;">0</div><div style="font-size:11px; color:#6b6256;">bien especificado</div></div>
+                <div style="flex:1; background:#fff; border:1px solid #e6e0d0; border-radius:9px; padding:10px 12px;"><div style="font-size:10px; font-weight:600; letter-spacing:.06em; text-transform:uppercase; color:#948a7c;">Variables</div><div style="font-family:'IBM Plex Mono'; font-size:22px; font-weight:500; color:#1a1714;">14</div></div>
+                <div style="flex:1; background:#fff; border:1px solid #e6e0d0; border-radius:9px; padding:10px 12px;"><div style="font-size:10px; font-weight:600; letter-spacing:.06em; text-transform:uppercase; color:#948a7c;">Ecuaciones</div><div style="font-family:'IBM Plex Mono'; font-size:22px; font-weight:500; color:#1a1714;">14</div></div>
+              </div>
+              <div style="font-size:10px; font-weight:600; letter-spacing:.06em; text-transform:uppercase; color:#948a7c; margin-bottom:6px;">Balance por componente</div>
+              <div style="background:#fff; border:1px solid #e6e0d0; border-radius:9px; overflow:hidden; font-size:11.5px;">
+                <div style="display:grid; grid-template-columns:1fr 70px 70px 46px; gap:8px; padding:7px 12px; background:#f1ede4; font-family:'IBM Plex Sans'; font-weight:600; color:#6b6256; font-size:10px; letter-spacing:.04em; text-transform:uppercase;"><span>Componente</span><span style="text-align:right;">In</span><span style="text-align:right;">Out</span><span style="text-align:right;">Δ</span></div>
+                <div style="display:grid; grid-template-columns:1fr 70px 70px 46px; gap:8px; padding:7px 12px; font-family:'IBM Plex Mono'; color:#1a1714; border-top:1px solid #f1ede4;"><span style="font-family:'IBM Plex Sans';">CO</span><span style="text-align:right;">100.0</span><span style="text-align:right;">21.4</span><span style="text-align:right; color:#4d8742;">✓</span></div>
+                <div style="display:grid; grid-template-columns:1fr 70px 70px 46px; gap:8px; padding:7px 12px; font-family:'IBM Plex Mono'; color:#1a1714; border-top:1px solid #f1ede4;"><span style="font-family:'IBM Plex Sans';">H₂</span><span style="text-align:right;">200.0</span><span style="text-align:right;">42.8</span><span style="text-align:right; color:#4d8742;">✓</span></div>
+                <div style="display:grid; grid-template-columns:1fr 70px 70px 46px; gap:8px; padding:7px 12px; font-family:'IBM Plex Mono'; color:#1a1714; border-top:1px solid #f1ede4;"><span style="font-family:'IBM Plex Sans';">CH₃OH</span><span style="text-align:right;">0.0</span><span style="text-align:right;">78.6</span><span style="text-align:right; color:#4d8742;">✓</span></div>
+                <div style="display:grid; grid-template-columns:1fr 70px 70px 46px; gap:8px; padding:7px 12px; font-family:'IBM Plex Mono'; color:#1a1714; border-top:1px solid #f1ede4;"><span style="font-family:'IBM Plex Sans';">H₂O</span><span style="text-align:right;">0.0</span><span style="text-align:right;">0.4</span><span style="text-align:right; color:#b8841a;">≈</span></div>
+              </div>
+            </div>
+            <div style="display:flex; justify-content:flex-end; gap:10px; padding:12px 18px; background:#fff; border-top:1px solid #e6e0d0;">
+              <button style="font-family:inherit; font-size:12.5px; font-weight:600; color:#1a1714; background:transparent; border:1.5px solid #d4ccb8; border-radius:7px; padding:7px 16px; cursor:default;">Copiar tabla</button>
+              <button style="font-family:inherit; font-size:12.5px; font-weight:600; color:#fff; background:#0d6e78; border:none; border-radius:7px; padding:8px 16px; cursor:default;">Cerrar</button>
+            </div>
+          </div>
+        </div>
+
+        <!-- Setpoints dark -->
+        <div>
+          <div style="font-size:11px; font-weight:600; letter-spacing:.08em; text-transform:uppercase; color:#6b6256; margin-bottom:8px;">Caso 2 · Setpoints + goal-seek · oscuro</div>
+          <div style="border:1px solid #3f3830; border-radius:12px; overflow:hidden; box-shadow:0 4px 16px rgba(0,0,0,.3); background:#16130f;">
+            <div style="display:flex; align-items:center; justify-content:space-between; padding:12px 18px; background:#1f1b16; border-bottom:1px solid #2f2920;">
+              <div><div style="font-size:15px; font-weight:600; color:#efe7d6;">Setpoints</div><div style="font-size:11px; color:#6f6759;">T-101 · columna de destilación</div></div>
+              <span style="font-size:15px; color:#a59a89;">✕</span>
+            </div>
+            <div style="padding:18px;">
+              <div style="font-size:10px; font-weight:600; letter-spacing:.06em; text-transform:uppercase; color:#6f6759; margin-bottom:8px;">Especificaciones activas</div>
+              <div style="display:flex; flex-direction:column; gap:8px;">
+                <div style="display:flex; align-items:center; gap:12px; background:#1f1b16; border:1px solid #2f2920; border-radius:9px; padding:10px 12px;">
+                  <div style="flex:1;"><div style="font-size:12.5px; color:#efe7d6; font-weight:600;">Recuperación de tope</div><div style="font-size:11px; color:#a59a89;">CH₃OH · fracción molar</div></div>
+                  <div style="font-family:'IBM Plex Mono'; font-size:13px; color:#efe7d6; background:#26211b; border:1px solid #3f3830; border-radius:6px; padding:5px 10px;">0.985</div>
+                </div>
+                <div style="display:flex; align-items:center; gap:12px; background:#1f1b16; border:1px solid #2f2920; border-radius:9px; padding:10px 12px;">
+                  <div style="flex:1;"><div style="font-size:12.5px; color:#efe7d6; font-weight:600;">Relación de reflujo</div><div style="font-size:11px; color:#a59a89;">R / R<sub>min</sub></div></div>
+                  <div style="font-family:'IBM Plex Mono'; font-size:13px; color:#efe7d6; background:#26211b; border:1px solid #3f3830; border-radius:6px; padding:5px 10px;">1.30</div>
+                </div>
+                <div style="display:flex; align-items:center; gap:12px; background:#20254a; border:1px solid #3a4170; border-radius:9px; padding:10px 12px;">
+                  <div style="flex:1;"><div style="font-size:12.5px; color:#b4befa; font-weight:600;">Pureza de fondo <span style="font-size:10px; background:#3548b4; color:#fff; border-radius:4px; padding:1px 6px; margin-left:4px;">goal-seek</span></div><div style="font-size:11px; color:#8294f5;">ajustar N etapas → 0.995</div></div>
+                  <div style="font-family:'IBM Plex Mono'; font-size:13px; color:#b4befa; background:#161a38; border:1px solid #3a4170; border-radius:6px; padding:5px 10px;">→ 24</div>
+                </div>
+              </div>
+              <button style="font-family:inherit; font-size:12px; font-weight:600; color:#5dc1cc; background:transparent; border:1px dashed #3f4d4a; border-radius:7px; padding:8px 12px; margin-top:10px; width:100%; cursor:default;">+ Agregar setpoint</button>
+            </div>
+            <div style="display:flex; justify-content:space-between; align-items:center; padding:12px 18px; background:#1f1b16; border-top:1px solid #2f2920;">
+              <button style="font-family:inherit; font-size:12.5px; font-weight:600; color:#5dc1cc; background:transparent; border:1.5px solid #2f4d4a; border-radius:7px; padding:7px 16px; cursor:default;">⟳ Resolver goal-seek</button>
+              <div style="display:flex; gap:10px;"><button style="font-family:inherit; font-size:12.5px; font-weight:600; color:#efe7d6; background:transparent; border:1.5px solid #3f3830; border-radius:7px; padding:7px 16px; cursor:default;">Cancelar</button><button style="font-family:inherit; font-size:12.5px; font-weight:600; color:#16130f; background:#5dc1cc; border:none; border-radius:7px; padding:8px 16px; cursor:default;">Aplicar</button></div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ══════════════ 2e ══════════════ -->
+    <section id="a2e" style="scroll-margin-top:24px; margin-bottom:64px;">
+      <div style="display:flex; align-items:baseline; gap:14px; border-top:2px solid #1a1714; padding-top:16px; margin-bottom:6px;">
+        <span style="font-family:'IBM Plex Mono'; font-size:22px; font-weight:600; color:#0d6e78;">2e</span>
+        <h2 style="font-size:23px; font-weight:700; margin:0;">Pantalla de bienvenida</h2>
+      </div>
+      <p style="font-size:14.5px; line-height:1.6; color:#6b6256; max-width:74ch; margin:0 0 8px;">La única superficie 100 % fuera del sistema (Segoe UI, grises sueltos, idéntica en ambos temas). La rediseño dentro del sistema, <b>760×580</b>: identidad, Nuevo/Abrir como acción principal, recientes con estado vacío, y una asomada a los ejemplos.</p>
+      <p style="font-size:13px; line-height:1.55; color:#948a7c; max-width:74ch; margin:0 0 22px;"><b>Decisión ejemplos:</b> sí se asoman, pero en segundo plano — una fila de 3 destacados + enlace a los ~28. Para una herramienta de tesis el catálogo de ejemplos es el mejor onramp; ponerlos como columna primaria compite con "abrir mi proyecto", que es lo que hace el usuario recurrente.</p>
+
+      <div style="display:grid; grid-template-columns:1fr 1fr; gap:20px; align-items:start;">
+        <!-- welcome light -->
+        <div>
+          <div style="font-size:11px; font-weight:600; letter-spacing:.08em; text-transform:uppercase; color:#6b6256; margin-bottom:8px;">Claro</div>
+          <div style="border:1px solid #d4ccb8; border-radius:12px; overflow:hidden; box-shadow:0 4px 16px rgba(0,0,0,.09); background:#f6f3ec; min-height:460px;">
+            <div style="display:grid; grid-template-columns:1fr 1fr; height:100%;">
+              <!-- left identity/actions -->
+              <div style="padding:26px 24px; display:flex; flex-direction:column;">
+                <div style="display:flex; align-items:center; gap:10px;"><div style="width:34px; height:34px; border-radius:8px; background:#0d6e78; display:flex; align-items:center; justify-content:center; color:#fff; font-size:17px; font-weight:700;">◆</div><div><div style="font-size:16px; font-weight:700; color:#1a1714;">Flowsheet</div><div style="font-size:10.5px; color:#948a7c;">Simulador de procesos</div></div></div>
+                <div style="margin-top:auto; display:flex; flex-direction:column; gap:9px; padding-top:24px;">
+                  <button style="font-family:inherit; text-align:left; font-size:13.5px; font-weight:600; color:#fff; background:#0d6e78; border:none; border-radius:9px; padding:13px 16px; cursor:default;">＋　Nuevo flowsheet</button>
+                  <button style="font-family:inherit; text-align:left; font-size:13.5px; font-weight:600; color:#1a1714; background:#fff; border:1.5px solid #d4ccb8; border-radius:9px; padding:12px 16px; cursor:default;">📂　Abrir…</button>
+                </div>
+                <div style="font-size:10.5px; color:#bab2a3; margin-top:16px;">v0.4 · IBM Plex</div>
+              </div>
+              <!-- right recents + examples -->
+              <div style="background:#fbfaf6; border-left:1px solid #e6e0d0; padding:22px 22px; display:flex; flex-direction:column;">
+                <div style="font-size:10px; font-weight:600; letter-spacing:.08em; text-transform:uppercase; color:#948a7c; margin-bottom:10px;">Recientes</div>
+                <div style="display:flex; flex-direction:column; gap:7px;">
+                  <div style="display:flex; align-items:center; gap:10px;"><div style="width:26px; height:26px; border-radius:6px; background:#e6f0df; display:flex; align-items:center; justify-content:center; font-size:12px;">◆</div><div style="min-width:0;"><div style="font-size:12.5px; font-weight:600; color:#1a1714;">metanol.flow</div><div style="font-size:10.5px; color:#948a7c;">hace 2 h</div></div></div>
+                  <div style="display:flex; align-items:center; gap:10px;"><div style="width:26px; height:26px; border-radius:6px; background:#eaf4f5; display:flex; align-items:center; justify-content:center; font-size:12px;">◆</div><div style="min-width:0;"><div style="font-size:12.5px; font-weight:600; color:#1a1714;">hda_toluene.flow</div><div style="font-size:10.5px; color:#948a7c;">ayer</div></div></div>
+                </div>
+                <div style="font-size:10px; font-weight:600; letter-spacing:.08em; text-transform:uppercase; color:#948a7c; margin:18px 0 10px;">Ejemplos</div>
+                <div style="display:flex; flex-direction:column; gap:6px;">
+                  <div style="font-size:12px; color:#1a1714; background:#fff; border:1px solid #e6e0d0; border-radius:7px; padding:7px 10px;">Ciclo de refrigeración</div>
+                  <div style="font-size:12px; color:#1a1714; background:#fff; border:1px solid #e6e0d0; border-radius:7px; padding:7px 10px;">Columna acetona/agua</div>
+                </div>
+                <a style="font-size:11.5px; color:#0d6e78; font-weight:600; margin-top:10px;">Ver los 28 ejemplos →</a>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- welcome dark + empty state -->
+        <div>
+          <div style="font-size:11px; font-weight:600; letter-spacing:.08em; text-transform:uppercase; color:#6b6256; margin-bottom:8px;">Oscuro · con estado vacío de recientes</div>
+          <div style="border:1px solid #3f3830; border-radius:12px; overflow:hidden; box-shadow:0 4px 16px rgba(0,0,0,.3); background:#16130f; min-height:460px;">
+            <div style="display:grid; grid-template-columns:1fr 1fr; height:100%;">
+              <div style="padding:26px 24px; display:flex; flex-direction:column;">
+                <div style="display:flex; align-items:center; gap:10px;"><div style="width:34px; height:34px; border-radius:8px; background:#5dc1cc; display:flex; align-items:center; justify-content:center; color:#16130f; font-size:17px; font-weight:700;">◆</div><div><div style="font-size:16px; font-weight:700; color:#efe7d6;">Flowsheet</div><div style="font-size:10.5px; color:#6f6759;">Simulador de procesos</div></div></div>
+                <div style="margin-top:auto; display:flex; flex-direction:column; gap:9px; padding-top:24px;">
+                  <button style="font-family:inherit; text-align:left; font-size:13.5px; font-weight:600; color:#16130f; background:#5dc1cc; border:none; border-radius:9px; padding:13px 16px; cursor:default;">＋　Nuevo flowsheet</button>
+                  <button style="font-family:inherit; text-align:left; font-size:13.5px; font-weight:600; color:#efe7d6; background:#1f1b16; border:1.5px solid #3f3830; border-radius:9px; padding:12px 16px; cursor:default;">📂　Abrir…</button>
+                </div>
+                <div style="font-size:10.5px; color:#4a4438; margin-top:16px;">v0.4 · IBM Plex</div>
+              </div>
+              <div style="background:#1a1610; border-left:1px solid #2f2920; padding:22px; display:flex; flex-direction:column;">
+                <div style="font-size:10px; font-weight:600; letter-spacing:.08em; text-transform:uppercase; color:#6f6759; margin-bottom:10px;">Recientes</div>
+                <div style="flex:1; display:flex; flex-direction:column; align-items:center; justify-content:center; text-align:center; gap:8px; padding:12px 0;">
+                  <div style="width:44px; height:44px; border-radius:10px; border:1.5px dashed #3f3830; display:flex; align-items:center; justify-content:center; color:#6f6759; font-size:20px;">◇</div>
+                  <div style="font-size:12px; color:#a59a89; line-height:1.5;">Todavía no abriste<br>ningún flowsheet</div>
+                  <div style="font-size:11px; color:#6f6759;">Empezá con un ejemplo ↓</div>
+                </div>
+                <div style="font-size:10px; font-weight:600; letter-spacing:.08em; text-transform:uppercase; color:#6f6759; margin:0 0 10px;">Ejemplos</div>
+                <div style="display:flex; flex-direction:column; gap:6px;">
+                  <div style="font-size:12px; color:#efe7d6; background:#1f1b16; border:1px solid #2f2920; border-radius:7px; padding:7px 10px;">Ciclo de refrigeración</div>
+                  <div style="font-size:12px; color:#efe7d6; background:#1f1b16; border:1px solid #2f2920; border-radius:7px; padding:7px 10px;">Columna acetona/agua</div>
+                </div>
+                <a style="font-size:11.5px; color:#5dc1cc; font-weight:600; margin-top:10px;">Ver los 28 ejemplos →</a>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ══════════════ 2f ══════════════ -->
+    <section id="a2f" style="scroll-margin-top:24px; margin-bottom:64px;">
+      <div style="display:flex; align-items:baseline; gap:14px; border-top:2px solid #1a1714; padding-top:16px; margin-bottom:6px;">
+        <span style="font-family:'IBM Plex Mono'; font-size:22px; font-weight:600; color:#0d6e78;">2f</span>
+        <h2 style="font-size:23px; font-weight:700; margin:0;">Inspector: los datos que faltan</h2>
+      </div>
+      <p style="font-size:14.5px; line-height:1.6; color:#6b6256; max-width:74ch; margin:0 0 22px;">Tres datos que el solver calcula y la UI esconde, más la migración que desbloquea borrar el dock legacy "Propiedades y perfiles".</p>
+
+      <div style="display:grid; grid-template-columns:340px 1fr; gap:22px; align-items:start;">
+        <!-- inspector mock -->
+        <div style="border:1px solid #d4ccb8; border-radius:12px; overflow:hidden; background:#f6f3ec;">
+          <div style="padding:14px 18px; background:#fff; border-bottom:1px solid #e6e0d0; display:flex; align-items:center; justify-content:space-between;">
+            <div><div style="font-size:15px; font-weight:600;">T-101</div><div style="font-size:11px; color:#948a7c;">Columna de destilación</div></div>
+            <span style="display:inline-flex; align-items:center; gap:5px; font-size:10.5px; font-weight:600; color:#4d8742; background:#e6f0df; border:1px solid #cfe0c2; border-radius:999px; padding:3px 9px;">átomos ✓</span>
+          </div>
+          <div style="padding:16px 18px;">
+            <!-- duty split -->
+            <div style="font-size:10px; font-weight:600; letter-spacing:.06em; text-transform:uppercase; color:#948a7c; margin-bottom:8px;">Cargas térmicas</div>
+            <div style="display:flex; gap:8px; margin-bottom:16px;">
+              <div style="flex:1; background:#fff; border:1px solid #e6e0d0; border-radius:9px; padding:10px 12px; border-left:3px solid #b8323f;"><div style="font-size:10px; font-weight:600; letter-spacing:.05em; text-transform:uppercase; color:#b8323f;">Q reb</div><div style="font-family:'IBM Plex Mono'; font-size:16px; font-weight:500; color:#1a1714;">2.14 <span style="font-size:11px; color:#948a7c;">MW</span></div></div>
+              <div style="flex:1; background:#fff; border:1px solid #e6e0d0; border-radius:9px; padding:10px 12px; border-left:3px solid #2f6690;"><div style="font-size:10px; font-weight:600; letter-spacing:.05em; text-transform:uppercase; color:#2f6690;">Q cond</div><div style="font-family:'IBM Plex Mono'; font-size:16px; font-weight:500; color:#1a1714;">1.83 <span style="font-size:11px; color:#948a7c;">MW</span></div></div>
+            </div>
+            <!-- collapsible profile -->
+            <div style="border:1px solid #e6e0d0; border-radius:9px; overflow:hidden;">
+              <div style="display:flex; align-items:center; justify-content:space-between; padding:9px 12px; background:#f1ede4;"><span style="font-size:12px; font-weight:600; color:#1a1714;">Perfil McCabe-Thiele</span><span style="font-size:12px; color:#6b6256;">▾</span></div>
+              <div style="background:#fbfaf6; padding:10px;">
+                <svg viewBox="0 0 240 150" width="100%" style="display:block;">
+                  <rect x="34" y="8" width="196" height="118" fill="#fff" stroke="#e6e0d0"/>
+                  <line x1="34" y1="126" x2="230" y2="8" stroke="#948a7c" stroke-width="1" stroke-dasharray="3 2"/>
+                  <path d="M34 126 Q90 60 150 34 T230 8" fill="none" stroke="#0d6e78" stroke-width="1.8"/>
+                  <path d="M34 126 L120 96 L120 70 L168 54 L168 36 L214 22 L214 8" fill="none" stroke="#b8453a" stroke-width="1.2"/>
+                  <text x="132" y="146" text-anchor="middle" font-size="9" fill="#948a7c">x (líquido)</text>
+                </svg>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- specs -->
+        <div style="display:flex; flex-direction:column; gap:14px;">
+          <div style="background:#fbfaf6; border:1px solid #e6e0d0; border-radius:12px; padding:18px 22px;">
+            <h3 style="font-size:14px; font-weight:700; margin:0 0 6px;">1 · Columna — Q_reb / Q_cond por separado</h3>
+            <p style="font-size:12.5px; line-height:1.55; color:#6b6256; margin:0;">Hoy el inspector muestra solo el duty agregado. Se abre en dos tarjetas ligadas al eje de servicio: reboiler con borde <code style="font-family:'IBM Plex Mono'; font-size:11px;">duty_hot</code>, condensador con <code style="font-family:'IBM Plex Mono'; font-size:11px;">duty_cold</code> — el mismo lenguaje del canvas.</p>
+          </div>
+          <div style="background:#fbfaf6; border:1px solid #e6e0d0; border-radius:12px; padding:18px 22px;">
+            <h3 style="font-size:14px; font-weight:700; margin:0 0 6px;">2 · Compresor multi-etapa — Q_intercool numérico</h3>
+            <p style="font-size:12.5px; line-height:1.55; color:#6b6256; margin:0 0 10px;">Hoy es un warning de texto. Pasa a dato, junto al "Etapas rec." existente:</p>
+            <div style="display:flex; gap:8px;">
+              <div style="background:#fff; border:1px solid #e6e0d0; border-radius:8px; padding:8px 12px;"><div style="font-size:10px; font-weight:600; text-transform:uppercase; color:#948a7c;">Etapas rec.</div><div style="font-family:'IBM Plex Mono'; font-size:15px; color:#1a1714;">3</div></div>
+              <div style="background:#fff; border:1px solid #e6e0d0; border-radius:8px; padding:8px 12px; border-left:3px solid #2f6690;"><div style="font-size:10px; font-weight:600; text-transform:uppercase; color:#2f6690;">Q intercool</div><div style="font-family:'IBM Plex Mono'; font-size:15px; color:#1a1714;">0.42 <span style="font-size:10px; color:#948a7c;">MW</span></div></div>
+            </div>
+          </div>
+          <div style="background:#fbfaf6; border:1px solid #e6e0d0; border-radius:12px; padding:18px 22px;">
+            <h3 style="font-size:14px; font-weight:700; margin:0 0 10px;">3 · Chip "átomos ✓" — tres estados</h3>
+            <div style="display:flex; gap:10px; flex-wrap:wrap;">
+              <span style="display:inline-flex; align-items:center; gap:5px; font-size:11px; font-weight:600; color:#4d8742; background:#e6f0df; border:1px solid #cfe0c2; border-radius:999px; padding:4px 11px;">átomos ✓ <span style="color:#948a7c; font-weight:400;">balanceado</span></span>
+              <span style="display:inline-flex; align-items:center; gap:5px; font-size:11px; font-weight:600; color:#b8453a; background:#f3dcd8; border:1px solid #e8c4bd; border-radius:999px; padding:4px 11px;">átomos ✗ <span style="color:#6b6256; font-weight:400;">C/H/O desbalanceado</span></span>
+              <span style="display:inline-flex; align-items:center; gap:5px; font-size:11px; font-weight:600; color:#948a7c; background:#f1ede4; border:1px solid #e6e0d0; border-radius:999px; padding:4px 11px;">átomos – <span style="font-weight:400;">no aplica</span></span>
+            </div>
+            <p style="font-size:11.5px; line-height:1.5; color:#948a7c; margin:10px 0 0;">Auditoría elemental C/H/O (backend listo). Color + símbolo (✓ / ✗ / –) — accesible sin depender del color.</p>
+          </div>
+          <div style="background:#eaf4f5; border:1px solid #d4ebed; border-radius:12px; padding:18px 22px;">
+            <h3 style="font-size:14px; font-weight:700; margin:0 0 6px; color:#064951;">4 · Perfiles al inspector → matar el dock</h3>
+            <p style="font-size:12.5px; line-height:1.55; color:#1a1714; margin:0;"><b>Decisión: sección colapsable con la figura embebida</b> (no un pane aparte). PFR/batch, McCabe-Thiele y tray-by-tray viven como sección plegable al final del inspector del bloque que los genera — contexto junto al equipo, plegada por defecto para no alargar el panel. Esto habilita borrar el dock legacy "Propiedades y perfiles", pendiente desde 1g.</p>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ══════════════ ⚡ ══════════════ -->
+    <section id="zap" style="scroll-margin-top:24px; margin-bottom:20px;">
+      <div style="display:flex; align-items:baseline; gap:12px; border-top:2px solid #1a1714; padding-top:16px; margin-bottom:14px;">
+        <span style="font-size:22px;">⚡</span>
+        <h2 style="font-size:23px; font-weight:700; margin:0;">Pendientes e ideas fuera de alcance</h2>
+      </div>
+      <div style="display:grid; grid-template-columns:1fr 1fr; gap:14px;">
+        <div style="background:#fbfaf6; border:1px solid #e6e0d0; border-radius:12px; padding:16px 20px;"><div style="font-size:13px; font-weight:700; margin-bottom:4px;">Ícono theming (backlog C)</div><div style="font-size:12.5px; color:#6b6256; line-height:1.5;">Los SVG de <code style="font-family:'IBM Plex Mono'; font-size:11px;">make_qicon</code> se colorean una vez al arranque; regenerarlos en <code style="font-family:'IBM Plex Mono'; font-size:11px;">themeChanged</code>. Ingeniería, pero necesita el token de tinta de ícono (= <code style="font-family:'IBM Plex Mono'; font-size:11px;">ink_mute</code>).</div></div>
+        <div style="background:#fbfaf6; border:1px solid #e6e0d0; border-radius:12px; padding:16px 20px;"><div style="font-size:13px; font-weight:700; margin-bottom:4px;">Diferenciación de glifos (auditoría 1, C.4)</div><div style="font-size:12.5px; color:#6b6256; line-height:1.5;">51/56 tipos comparten glifo; el splitter aún se dibuja como mixer. Portar la geometría del patch PFD-ICN-002. Fuera del alcance del tema, pero es el próximo gran visual.</div></div>
+        <div style="background:#fbfaf6; border:1px solid #e6e0d0; border-radius:12px; padding:16px 20px;"><div style="font-size:13px; font-weight:700; margin-bottom:4px;">Herramienta de anotación (T)</div><div style="font-size:12.5px; color:#6b6256; line-height:1.5;">Sigue siendo un stub que solo cambia el cursor. Definir su UX (colocación de texto on-canvas, con <code style="font-family:'IBM Plex Mono'; font-size:11px;">FONT_LABEL × zoom</code>) antes de devolverla a la paleta.</div></div>
+        <div style="background:#fbfaf6; border:1px solid #e6e0d0; border-radius:12px; padding:16px 20px;"><div style="font-size:13px; font-weight:700; margin-bottom:4px;">Preferencias · elegir servicio pale/deep</div><div style="font-size:12.5px; color:#6b6256; line-height:1.5;">Los extremos <code style="font-family:'IBM Plex Mono'; font-size:11px;">service_*_pale/deep</code> abren la puerta a un gradiente de temperatura real en el stream (T_in→T_out). Idea para una ola futura del canvas.</div></div>
+        <div style="background:#fbfaf6; border:1px solid #e6e0d0; border-radius:12px; padding:16px 20px;"><div style="font-size:13px; font-weight:700; margin-bottom:4px;">Verificación de acento (8 combinaciones)</div><div style="font-size:12.5px; color:#6b6256; line-height:1.5;">Ningún token de este ciclo deriva del acento, así que las 4 paletas de acento × 2 temas están cubiertas por construcción. Vale una pasada de QA visual con terracota/cobalto/oliva en dark.</div></div>
+        <div style="background:#fbfaf6; border:1px solid #e6e0d0; border-radius:12px; padding:16px 20px;"><div style="font-size:13px; font-weight:700; margin-bottom:4px;">Streams / stream_inspector (backlog D)</div><div style="font-size:12.5px; color:#6b6256; line-height:1.5;">El dock de tabla de corrientes y <code style="font-family:'IBM Plex Mono'; font-size:11px;">stream_inspector</code> (5 hex sueltos, <code style="font-family:'IBM Plex Mono'; font-size:11px;">PHASE_DOT</code>) todavía no pasaron por diseño formal; ahora tienen tokens (<code style="font-family:'IBM Plex Mono'; font-size:11px;">phase_*</code>) para consumir.</div></div>
+      </div>
+      <div style="text-align:center; color:#bab2a3; font-size:11.5px; margin-top:40px;">Ciclo 2 · nombres 1:1 con tokens.py · par light/dark · semántica técnica ⊥ acento · daltónico-safe</div>
+    </section>
+
+  </main>
+</div>
+</x-dc>
+</body>
+</html>
