@@ -19,7 +19,7 @@ ESTADO DE LA MIGRACIÓN
     ✓ StreamItem (polyline ortogonal + label con fondo)
     ✓ Zoom Ctrl+wheel, pan middle-drag, scrollbars automáticas
     ✓ Drag bloques con snap a grid
-    ✓ Library tree (QTreeWidget) + 'Add to canvas'
+    ✓ Paleta flotante de equipos (catálogo completo + variantes + drag)
     ✓ Toolbar: New / Open / Save / Examples / Solve / Calcular
     ✓ Property panel con info del item seleccionado
     ✓ Reusa equipment_costs, equipment_ports, flowsheet_solver
@@ -71,6 +71,7 @@ from PySide6.QtWidgets import (
 )
 from PySide6.QtGui import QUndoStack, QUndoCommand
 
+import tokens as _tokens
 import equipment_costs as eq
 import equipment_ports as ep
 import equipment_icons as eicon
@@ -219,7 +220,9 @@ COLOR_CANVAS_BG     = QColor("#fbfaf6")   # papel de dibujo (warm off-white)
 COLOR_GRID          = QColor(13, 13, 13, 18)   # negro alpha=18/255 (~7%)
 COLOR_BLOCK_FILL    = QColor("#ffffff")
 COLOR_BLOCK_BORDER  = QColor("#5c6bc0")
-COLOR_BLOCK_BORDER_SEL = QColor("#283593")
+# Selección: anillo en el acento del tema (tokens 1a) — leído en caliente.
+def _selection_qcolor() -> QColor:
+    return QColor(_tokens.TOK["accent"])
 COLOR_BLOCK_TEXT    = QColor("#1a1a1a")
 COLOR_BLOCK_SUB     = QColor("#6c6c70")
 COLOR_PORT_FREE     = QColor("#bbbbbb")
@@ -258,14 +261,12 @@ PORT_KIND_COLORS = {
 COLOR_LABEL_BG      = QColor(255, 255, 255, 220)
 
 # ---- Status visual (semáforo del solver) ----
-# Cuatro estados que pinta cada bloque/stream según el último solve.
+# Un solo semáforo para toda la app: los colores viven en tokens.py
+# (STATUS_TOKEN) y se leen en caliente para respirar el tema activo.
 # Coordinado con SolverResult.{block_status, stream_status, overall_status}.
-COLOR_STATUS_OK      = QColor("#2e7d32")   # verde — balance OK
-COLOR_STATUS_WARN    = QColor("#f9a825")   # ámbar — warnings
-COLOR_STATUS_ERROR   = QColor("#c62828")   # rojo — error / desbalance
-COLOR_STATUS_UNRUN   = QColor("#1976d2")   # azul — no ejecutado / stale
-COLOR_STATUS_DIRTY   = QColor("#7b1fa2")   # violeta — flowsheet editado
-                                            # post-solve (datos stale)
+def status_qcolor(status: str) -> QColor:
+    """QColor del semáforo para un status del solver (tokens 1a)."""
+    return QColor(_tokens.status_hex(status))
 
 # Corrientes de SERVICIO (utility): color por temperatura para que el user
 # distinga de un vistazo el servicio CALIENTE (vapor / aceite térmico) del
@@ -291,16 +292,6 @@ def _lerp_color(c0, c1, t):
         int(round(c0.green() + (c1.green() - c0.green()) * t)),
         int(round(c0.blue()  + (c1.blue()  - c0.blue())  * t)),
     )
-
-# Mapeo status string → color
-STATUS_COLORS = {
-    "ok":      COLOR_STATUS_OK,
-    "warning": COLOR_STATUS_WARN,
-    "error":   COLOR_STATUS_ERROR,
-    "unrun":   COLOR_STATUS_UNRUN,
-    "stale":   COLOR_STATUS_DIRTY,
-    "empty":   COLOR_STATUS_UNRUN,
-}
 
 # Iconos texto para indicar status global en la barra
 STATUS_ICONS = {
@@ -2305,28 +2296,6 @@ class _RoundedRectBody(QGraphicsRectItem):
         painter.drawRoundedRect(self.rect(), self.RADIUS, self.RADIUS)
 
 
-class _StatusHaloItem(QGraphicsRectItem):
-    """Halo decorativo NO-HITTABLE.
-
-    Como BlockItem es un QGraphicsItemGroup con handlesChildEvents=True,
-    los clicks en el área de cualquier hijo (incluyendo el halo
-    extendido 6px) van al group entero.  Resultado: si un endpoint
-    handle del stream queda sobre la zona extendida del halo, el click
-    activa el bloque (movable) en vez del handle.
-
-    Solución: shape() vacío y NoButton para que este item NO contribuya
-    al hit region del group.  Sigue pintando normal."""
-
-    def shape(self):
-        return QPainterPath()        # path vacío = no hit area
-
-    def paint(self, painter, option, widget=None):
-        painter.setRenderHint(QPainter.Antialiasing)
-        painter.setBrush(self.brush())
-        painter.setPen(self.pen())
-        painter.drawRoundedRect(self.rect(), 4, 4)
-
-
 class _StreamHandle(QGraphicsEllipseItem):
     """Handle circular azul para arrastrar un waypoint de stream.
     Se renderiza solo cuando el stream está seleccionado.  Al moverlo,
@@ -3406,26 +3375,11 @@ class BlockItem(QGraphicsItemGroup):
         except Exception:
             self.W, self.H = pfd.block_dims(block.eq_type)
 
-        # --- halo de status (semáforo solver) ---
-        # Rectángulo redondeado AFUERA del símbolo, con borde coloreado
-        # según el último solve (verde/azul/amarillo/rojo).  Se pinta
-        # ANTES del símbolo (z menor) para que el SVG quede por encima.
-        # Default: azul stale (sin solve todavía).
+        # --- status del solver (artboard 1b) ---
+        # El estado se muestra en el CUERPO del símbolo (trazo + tinte,
+        # IsaGlyphItem.set_status) — el halo-caja _StatusHaloItem que
+        # rodeaba al equipo se eliminó en el rediseño.
         self._status: str = "stale"
-        halo_pad = 6
-        # NOTA: usamos _StatusHaloItem (no QGraphicsRectItem) para que
-        # el halo NO contribuya al hit region del bloque.  Sino el
-        # área extendida 6px tapa los endpoint handles de los streams
-        # que se conectan a este bloque y los clicks van al bloque
-        # (movable) en vez de los handles.
-        self.status_halo = _StatusHaloItem(
-            -halo_pad, -halo_pad,
-            self.W + 2*halo_pad, self.H + 2*halo_pad,
-            parent=self)
-        self.status_halo.setBrush(Qt.NoBrush)
-        self.status_halo.setPen(QPen(COLOR_STATUS_UNRUN, 1.5, Qt.SolidLine))
-        self.status_halo.setZValue(-1.0)   # debajo del símbolo
-        self.status_halo.setAcceptedMouseButtons(Qt.NoButton)
 
         # --- rect base (invisible, solo hit-target) ---
         # El símbolo PFD ES el bloque visible; el rect cumple rol de
@@ -3545,7 +3499,7 @@ class BlockItem(QGraphicsItemGroup):
             isa.setPos(0, 0)
             isa.setZValue(0)
             # estado inicial sync con _status del solver
-            isa.set_state(self._isa_state_for_status(self._status))
+            isa.set_status(self._status)
             self.decoration_items.append(isa)
             self._isa_item = isa
             self._svg_mode = True
@@ -3577,18 +3531,6 @@ class BlockItem(QGraphicsItemGroup):
             self._svg_mode = True
         except Exception:
             pass
-
-    @staticmethod
-    def _isa_state_for_status(status: str) -> str:
-        """Mapea el `_status` del solver al estado visual del ISA glyph."""
-        return {
-            "ok":      "idle",      # el halo verde ya está en status_halo
-            "warning": "warning",
-            "error":   "error",
-            "unrun":   "idle",
-            "stale":   "idle",
-            "empty":   "idle",
-        }.get(status, "idle")
 
     def _render_ports(self):
         r = self.PORT_RADIUS
@@ -3739,14 +3681,16 @@ class BlockItem(QGraphicsItemGroup):
         self.setToolTip("<br>".join(lines))
 
     def set_selected_visual(self, selected: bool):
-        if selected:
-            # halo de selección: borde índigo punteado alrededor del
-            # bloque, sólo visible al estar seleccionado.
-            self.rect.setPen(QPen(COLOR_BLOCK_BORDER_SEL, 1.5, Qt.DashLine))
+        """Anillo de selección: lo dibuja el propio glifo (accent dashed,
+        IsaGlyphItem) y convive con cualquier estado del solver — un solo
+        marco, nunca cajas anidadas (artboard 1b)."""
+        if getattr(self, "_isa_item", None) is not None:
+            self._isa_item.set_state("selected" if selected else "idle")
         else:
-            # sin selección el rect queda invisible — el símbolo SVG
-            # es la representación visual del bloque, no la caja.
-            self.rect.setPen(Qt.NoPen)
+            # fallback SVG legacy (sin editor_chrome): borde punteado
+            pen = (QPen(_selection_qcolor(), 1.5, Qt.DashLine)
+                   if selected else Qt.NoPen)
+            self.rect.setPen(pen)
 
     def _update_duty_badge(self):
         """Actualiza el badge '↑Q +X kW' al lado del bloque.
@@ -3773,29 +3717,13 @@ class BlockItem(QGraphicsItemGroup):
         self.duty_badge.setBrush(QBrush(color))
 
     def set_status(self, status: str):
-        """Aplica color de status (ok / warning / error / unrun / stale)
-        al halo de status del bloque.  Default 'stale' = azul (sin
-        solve corrido o flowsheet editado posteriormente)."""
+        """Aplica el status del solver (ok / warning / error / unrun /
+        stale) al CUERPO del símbolo (IsaGlyphItem: trazo + tinte + chip
+        o dot).  La selección es un anillo independiente que nunca pisa
+        este color (artboard 1b)."""
         self._status = status or "stale"
-        color = STATUS_COLORS.get(self._status, COLOR_STATUS_UNRUN)
-        # Línea más gruesa para error, sólida para ok, punteada para stale
-        if self._status == "error":
-            pen = QPen(color, 2.5, Qt.SolidLine)
-        elif self._status == "warning":
-            pen = QPen(color, 2.0, Qt.SolidLine)
-        elif self._status == "ok":
-            pen = QPen(color, 1.2, Qt.SolidLine)
-        else:    # stale / unrun
-            pen = QPen(color, 1.2, Qt.DashLine)
-        self.status_halo.setPen(pen)
-        # Sync IsaGlyphItem (silueta ISA) — el halo da el verde/amarillo/rojo
-        # pero la propia silueta también colorea el stroke en warning/error.
         if getattr(self, "_isa_item", None) is not None:
-            # Si el bloque está seleccionado, conservar 'selected' visual.
-            if self.isSelected():
-                self._isa_item.set_state("selected")
-            else:
-                self._isa_item.set_state(self._isa_state_for_status(self._status))
+            self._isa_item.set_status(self._status)
 
     # ── Geometría del grupo ─────────────────────────────
     # QGraphicsItemGroup calcula su boundingRect SOLO con los hijos
@@ -3862,13 +3790,11 @@ class BlockItem(QGraphicsItemGroup):
                 finally:
                     self._in_group_drag = False
         elif change == QGraphicsItem.ItemSelectedHasChanged:
-            # sync visual del IsaGlyphItem con selección Qt
+            # sync visual del IsaGlyphItem con selección Qt (anillo
+            # independiente — el status del cuerpo no se toca)
             if getattr(self, "_isa_item", None) is not None:
-                if bool(value):
-                    self._isa_item.set_state("selected")
-                else:
-                    self._isa_item.set_state(
-                        self._isa_state_for_status(self._status))
+                self._isa_item.set_state(
+                    "selected" if bool(value) else "idle")
         return super().itemChange(change, value)
 
     def mouseDoubleClickEvent(self, event):
@@ -3917,7 +3843,7 @@ class BlockItem(QGraphicsItemGroup):
     def hoverLeaveEvent(self, event):
         isa = getattr(self, "_isa_item", None)
         if isa is not None and not self.isSelected():
-            isa.set_state(self._isa_state_for_status(self._status))
+            isa.set_state("idle")
         super().hoverLeaveEvent(event)
 
     def mouseReleaseEvent(self, event):
@@ -4213,9 +4139,9 @@ class StreamItem(QGraphicsPathItem):
         # prioridad para no ocultar un desbalance.
         if role == "utility":
             if self._status == "error":
-                return COLOR_STATUS_ERROR
+                return status_qcolor("error")
             if self._status == "warning":
-                return COLOR_STATUS_WARN
+                return status_qcolor("warning")
             is_hot, tmin, tmax = self._utility_loop_info()
             T = float(getattr(self.model, "temperature", 25.0) or 25.0)
             frac = (T - tmin) / (tmax - tmin) if (tmax - tmin) > 1e-6 else 0.5
@@ -4232,9 +4158,9 @@ class StreamItem(QGraphicsPathItem):
         # Status crítico sobreescribe el color por role (error o warning
         # vienen del último solve y son los más informativos para el user).
         if self._status == "error":
-            return COLOR_STATUS_ERROR
+            return status_qcolor("error")
         if self._status == "warning":
-            return COLOR_STATUS_WARN
+            return status_qcolor("warning")
         if self._status in ("stale", "unrun"):
             # gris-azul tenue para indicar "no resuelto / sin verificar"
             return QColor("#9aa5b1")
@@ -5609,40 +5535,6 @@ class FlowsheetScene(QGraphicsScene):
 # VIEW — zoom + pan
 # ======================================================
 
-class _LibraryTree(QTreeWidget):
-    """QTreeWidget custom que soporta drag&drop hacia el canvas.
-    Cuando se arrastra un ítem hijo (eq_type), genera mimeData con
-    el eq_type en el formato 'application/x-pfd-eqtype'."""
-
-    def __init__(self, parent=None):
-        super().__init__(parent)
-        self.setDragEnabled(True)
-        self.setDragDropMode(QTreeWidget.DragOnly)
-
-    def startDrag(self, supportedActions):
-        item = self.currentItem()
-        if item is None:
-            return
-        eq_type = item.data(0, Qt.UserRole)
-        if not eq_type:
-            return  # categoría, no equipo
-        from PySide6.QtCore import QMimeData, QByteArray
-        from PySide6.QtGui import QDrag
-        mime = QMimeData()
-        # Distinguir entre equipo y stream según prefijo
-        if eq_type.startswith("__STREAM__"):
-            # Corriente: el payload es 'mass' o 'energy'
-            kind = eq_type.replace("__STREAM__", "")
-            mime.setData("application/x-pfd-stream",
-                           QByteArray(kind.encode("utf-8")))
-        else:
-            mime.setData("application/x-pfd-eqtype",
-                           QByteArray(str(eq_type).encode("utf-8")))
-        drag = QDrag(self)
-        drag.setMimeData(mime)
-        drag.exec(Qt.CopyAction)
-
-
 class FlowsheetView(QGraphicsView):
     """QGraphicsView con zoom anclado al cursor y pan con middle-drag."""
 
@@ -5895,25 +5787,19 @@ class FlowsheetMainWindow(QMainWindow):
         # False fuera de un drag → comportamiento idéntico al previo.
         self._rigid_drag_active = False
 
-        # Docks se construyen ANTES del toolbar para que éste pueda
-        # tomar sus toggleViewAction() y mostrarlos como botones.
-        self._build_library_dock()
+        # Docks se construyen ANTES de las acciones/menú para que éstos
+        # puedan tomar sus toggleViewAction().
+        # (La "Biblioteca de equipos" vieja se eliminó en el rediseño 1c:
+        # la paleta flotante cubre catálogo completo, variantes y drag.)
         self._build_properties_dock()
         self._build_streams_dock()
-        self._build_toolbar()
+        self._build_shared_actions()
         self._build_statusbar()
         self._build_menubar()
         self._wire_editor_chrome()
-        # Por default ocultar los toolbars legacy: el EditorTopbar + el
-        # menubar nuevo cubren todas las acciones.  Vista > Toolbars
-        # legacy permite re-mostrarlos.
-        self._set_legacy_toolbars_visible(False)
-        # Ocultar también los docks legacy (biblioteca, propiedades,
-        # tabla de corrientes, predictor de reactividad) — la nueva UI
-        # los cubre con la paleta + Inspector + burbujas.  El usuario
-        # puede re-mostrarlos desde el menú Vista si los necesita.
-        for _dock_attr in ("lib_dock", "props_dock", "streams_dock",
-                            "reactivity_dock"):
+        # Ocultar los docks secundarios al arrancar — la UI principal es
+        # paleta + Inspector + burbujas.  Se re-muestran desde Vista.
+        for _dock_attr in ("props_dock", "streams_dock", "reactivity_dock"):
             _d = getattr(self, _dock_attr, None)
             if _d is not None:
                 _d.hide()
@@ -6127,11 +6013,8 @@ class FlowsheetMainWindow(QMainWindow):
             m_view.addAction(self._paper_action)
         else:
             m_view.addAction(_ac("Marco PFD", self.action_toggle_paper, "Ctrl+M"))
-        # Animación
-        anim_act = QAction("Animación de flujo", self)
-        anim_act.setCheckable(True); anim_act.setChecked(True)
-        anim_act.triggered.connect(self.toggle_animation)
-        m_view.addAction(anim_act)
+        # Animación — la MISMA QAction compartida que el topbar (1c)
+        m_view.addAction(self._anim_action)
         m_view.addSeparator()
         # Paleta vertical de equipos (toggle visibilidad)
         self._palette_visibility_action = QAction("Paleta de equipos", self)
@@ -6157,13 +6040,10 @@ class FlowsheetMainWindow(QMainWindow):
         # Inspector dock (slide-out de la nueva UI)
         if hasattr(self, "_inspector_dock") and self._inspector_dock is not None:
             m_view.addAction(self._inspector_dock.toggleViewAction())
-        # Docks legacy (biblioteca, propiedades, tabla, predictor de
-        # reactividad) — agrupados en un sub-menú "Docks legacy" para
-        # mantenerlos accesibles sin ensuciar el menú principal.
-        m_legacy = m_view.addMenu("Docks legacy")
+        # Docks secundarios — entradas directas, sin sub-menú "legacy".
+        # (La Biblioteca vieja se eliminó: la paleta cubre el catálogo.)
         for attr, label in (
-            ("lib_dock",        "Biblioteca de equipos (vieja)"),
-            ("props_dock",      "Propiedades (viejo)"),
+            ("props_dock",      "Propiedades y perfiles"),
             ("reactivity_dock", "Predictor de reactividad"),
         ):
             d = getattr(self, attr, None)
@@ -6171,7 +6051,7 @@ class FlowsheetMainWindow(QMainWindow):
                 continue
             act = d.toggleViewAction()
             act.setText(label)
-            m_legacy.addAction(act)
+            m_view.addAction(act)
         m_view.addSeparator()
         # ── Sistema de unidades global (afecta UI + exportación) ──
         m_units = m_view.addMenu("&Unidades")
@@ -6193,14 +6073,6 @@ class FlowsheetMainWindow(QMainWindow):
         m_view.addSeparator()
         # Preferencias (tema, densidad, acento)
         m_view.addAction(_ac("&Preferencias…", self._open_preferences, "Ctrl+,"))
-        m_view.addSeparator()
-        # Toggle de toolbars legacy
-        self._legacy_tb_action = QAction("Toolbars legacy", self)
-        self._legacy_tb_action.setCheckable(True)
-        self._legacy_tb_action.setChecked(False)
-        self._legacy_tb_action.triggered.connect(
-            lambda v: self._set_legacy_toolbars_visible(v))
-        m_view.addAction(self._legacy_tb_action)
 
         # ── Simulación ──
         m_sim = mb.addMenu("&Simulación")
@@ -6219,18 +6091,11 @@ class FlowsheetMainWindow(QMainWindow):
                               None, "act-money"))
         m_sim.addSeparator()
         m_sim.addAction(_ac("Perfil económico…", self.action_econ_profile,
-                              None, "act-money"))
+                              None, "cfg-settings"))
         m_sim.addAction(_ac("Análisis económico →", self.action_launch_analysis,
                               None, "an-case-study"))
         m_sim.addAction(_ac("Exportar a Excel…", self.action_export_xlsx,
-                              None, "act-money"))
-
-    def _set_legacy_toolbars_visible(self, visible: bool):
-        """Muestra/oculta las QToolBars legacy.  Usado en __init__ para
-        esconderlas por default (el EditorTopbar + menubar cubren todo)
-        y desde el menú Vista > Toolbars legacy para re-mostrarlas."""
-        for tb in self.findChildren(QToolBar):
-            tb.setVisible(bool(visible))
+                              None, "wb-spreadsheet"))
 
     def _set_unit_system(self, name):
         """Aplica el sistema de unidades global (Vista > Unidades) y refresca
@@ -6386,32 +6251,14 @@ class FlowsheetMainWindow(QMainWindow):
         """Conecta las señales del EditorTopbar / EditorPalette /
         EditorZoom a las acciones existentes de la ventana."""
         tb = self.editor_topbar
-        # Undo/redo — reutilizar el undo_stack
-        tb.undoRequested.connect(self.undo_stack.undo)
-        tb.redoRequested.connect(self.undo_stack.redo)
-        # Estado inicial de undo/redo y observador del stack.
-        # Guard contra RuntimeError al cerrar la app: cuando QUndoStack
-        # se destruye el signal puede dispararse una vez más con el
-        # objeto C++ ya muerto.
-        def _refresh_undo_buttons():
-            try:
-                tb.set_undo_enabled(self.undo_stack.canUndo(),
-                                    self.undo_stack.canRedo())
-            except RuntimeError:
-                pass   # objeto C++ ya destruido (shutdown)
-        self.undo_stack.canUndoChanged.connect(lambda _: _refresh_undo_buttons())
-        self.undo_stack.canRedoChanged.connect(lambda _: _refresh_undo_buttons())
-        _refresh_undo_buttons()
-        # Grid toggle — refresh paper grid
-        tb.gridToggled.connect(self._on_topbar_grid_toggle)
-        # Auto-arrange (action existente si la hay; si no, no-op visual)
-        if hasattr(self, "action_auto_arrange"):
-            tb.autoArrangeRequested.connect(self.action_auto_arrange)
-        elif hasattr(self, "action_autoarrange"):
-            tb.autoArrangeRequested.connect(self.action_autoarrange)
-        # Validar DOF + Resolver
+        # Centro — QActions compartidas: undo/redo (shortcuts reales,
+        # enabled automático vía QUndoStack) + Marco PFD + Animación.
+        tb.bind_history_actions(self.undo_action, self.redo_action)
+        tb.bind_canvas_actions(self._paper_action, self._anim_action)
+        # Derecha — workflow: Validar DOF → Resolver → Economía
         tb.validateRequested.connect(self.action_dof)
         tb.solveRequested.connect(self.action_solve)
+        tb.economicsRequested.connect(self.action_launch_analysis)
         # Nombre del proyecto inicial
         tb.set_project(self._current_project_name(), "sin guardar")
 
@@ -6422,7 +6269,6 @@ class FlowsheetMainWindow(QMainWindow):
         pal.blockTypeRequested.connect(self._on_palette_eq_type_requested)
         # Tools: el primer slice solo activa el modo de selección/pan/connect.
         pal.toolSelected.connect(self._on_palette_tool_selected)
-        pal.moreRequested.connect(self._on_palette_more_requested)
         # Corrientes flotantes (masa / energía) desde la paleta nueva.
         pal.streamRequested.connect(self._add_floating_stream)
 
@@ -6458,11 +6304,6 @@ class FlowsheetMainWindow(QMainWindow):
             t = ""
         return t.split("—")[0].strip() or "(sin nombre)"
 
-    def _on_topbar_grid_toggle(self):
-        """Toggle de visibilidad del marco PFD (cuando existe)."""
-        if hasattr(self, "_paper_action"):
-            self._paper_action.trigger()
-
     def _on_palette_block_requested(self, palette_id: str):
         """Crear un bloque del tipo seleccionado en la paleta (default
         canónico). Usado por drag-from-palette."""
@@ -6496,17 +6337,7 @@ class FlowsheetMainWindow(QMainWindow):
             v.setDragMode(QGraphicsView.NoDrag)
             v.viewport().setCursor(Qt.CrossCursor)
             return
-        elif tool_id == "text":
-            v.setDragMode(QGraphicsView.NoDrag)
-            v.viewport().setCursor(Qt.IBeamCursor)
-            return
         v.viewport().setCursor(Qt.ArrowCursor)
-
-    def _on_palette_more_requested(self):
-        """Mostrar el dock de biblioteca para acceder a tipos secundarios."""
-        if hasattr(self, "lib_dock"):
-            self.lib_dock.show()
-            self.lib_dock.raise_()
 
     def update_solver_chip(self, state: str, iter_: int = 0, dt: float = 0.0):
         """API pública — el solver llama acá tras finalizar para
@@ -6518,104 +6349,35 @@ class FlowsheetMainWindow(QMainWindow):
     # WIDGETS
     # ---------------------------------------------------
 
-    def _build_toolbar(self):
-        # Dos toolbars apiladas vertical (siempre visibles, sin overflow).
-        # Top:   archivo / ejemplos / edición / zoom / vista
-        # Bottom: análisis / solve / exportar
-        tb = self.addToolBar("Workflow — Archivo y edición")
-        tb.setMovable(False)
-        # break para forzar la segunda toolbar abajo en una NUEVA línea
-        from PySide6.QtCore import QSize
-        tb.setIconSize(QSize(20, 20))
-        tb.setToolButtonStyle(Qt.ToolButtonTextBesideIcon)
+    def _build_shared_actions(self):
+        """QActions compartidas — UNA por concepto, consumidas por el
+        menú y por el EditorTopbar (artboard 1c).
 
-        # Helper para crear QIcon desde el set HYSYS — color del texto
-        # primario del estilo para que combine con el resto de la UI.
+        Reemplaza a las dos QToolBars legacy ("Archivo y edición" /
+        "Cálculo y análisis"), que vivían ocultas desde la NUEVA_UI: el
+        menú ya era superset de ambas.  El patrón de acción compartida
+        (el que ya usaba "Tabla de corrientes") garantiza que un toggle
+        nunca desincronice su check entre superficies.
+        """
         from icons import make_qicon as _mk
-        _ICON_COLOR = "#3a3a3a"
-        # Guardamos el helper como atributo de la ventana para usarlo
-        # en otros lugares (menús contextuales, dialogs).
+        # Color de íconos desde tokens (antes: #3a3a3a hardcodeado).
+        _ICON_COLOR = _tokens.TOK["ink_mute"]
         self._mk_icon = _mk
         self._icon_color = _ICON_COLOR
 
-        def add_btn(text, slot, icon_id=None, sep=False, toolbar=None):
-            tb_target = toolbar if toolbar is not None else tb
-            act = QAction(text, self)
-            act.triggered.connect(slot)
-            if icon_id is not None:
-                ic = _mk(icon_id, color=_ICON_COLOR, size=20)
-                if ic is not None:
-                    act.setIcon(ic)
-            tb_target.addAction(act)
-            if sep:
-                tb_target.addSeparator()
-
-        add_btn("Nuevo",     self.action_new,  "file-new")
-        add_btn("Abrir…",    self.action_open, "file-open")
-        add_btn("Guardar…",  self.action_save, "file-save")
-
-        # menú de ejemplos
-        examples_act = QAction("Ejemplos ▾", self)
-        examples_menu = QMenu(self)
-        def make_loader(key):
-            return lambda: self.action_load_example(key)
-        # Ícono compartido para todos los ejemplos (equipo genérico)
-        _ic_ex = _mk("act-examples", color=_ICON_COLOR, size=18) or QIcon()
-
-        # Mismo catálogo agrupado por categoría que el menubar (single
-        # source of truth: EXAMPLE_CATEGORIES).
-        for _cat, _items in EXAMPLE_CATEGORIES:
-            _sub = examples_menu.addMenu(_cat)
-            for _key, _label in _items:
-                _sub.addAction(_ic_ex, _label, make_loader(_key))
-        # Ícono del menú Ejemplos (templates)
-        examples_act.setIcon(_mk("act-examples", color=_ICON_COLOR, size=20))
-        examples_act.setMenu(examples_menu)
-        tb.addAction(examples_act)
-        # workaround: QAction con menu necesita un QToolButton para mostrar el dropdown
-        btn = tb.widgetForAction(examples_act)
-        if btn is not None and hasattr(btn, "setPopupMode"):
-            from PySide6.QtWidgets import QToolButton
-            btn.setPopupMode(QToolButton.InstantPopup)
-        tb.addSeparator()
-
-        add_btn("Borrar selección", self.action_delete, "edit-delete")
-        # undo/redo
-        self.undo_action = self.undo_stack.createUndoAction(self, "↶ Deshacer")
+        # undo/redo — shortcuts REALES (antes los anunciaba el tooltip
+        # del topbar pero vivían en la toolbar oculta)
+        self.undo_action = self.undo_stack.createUndoAction(self, "Deshacer")
         self.undo_action.setShortcut(QKeySequence.Undo)
         self.undo_action.setIcon(_mk("edit-undo", color=_ICON_COLOR, size=20))
-        tb.addAction(self.undo_action)
-        self.redo_action = self.undo_stack.createRedoAction(self, "↷ Rehacer")
+        self.addAction(self.undo_action)
+        self.redo_action = self.undo_stack.createRedoAction(self, "Rehacer")
         self.redo_action.setShortcut(QKeySequence.Redo)
         self.redo_action.setIcon(_mk("edit-redo", color=_ICON_COLOR, size=20))
-        tb.addAction(self.redo_action)
-        tb.addSeparator()
+        self.addAction(self.redo_action)
 
-        add_btn("Zoom −",     self.view.zoom_out,   "zoom-out")
-        add_btn("100 %",      self.view.zoom_reset, "zoom-100")
-        add_btn("Zoom +",     self.view.zoom_in,    "zoom-in")
-        add_btn("Ajustar",    self.view.zoom_fit,   "zoom-fit")
-
-        # ---- SEGUNDA FILA ----
-        # addToolBarBreak fuerza que la siguiente toolbar se renderice
-        # debajo, no a la derecha.  Ambas filas son siempre visibles.
-        self.addToolBarBreak()
-        tb2 = self.addToolBar("Workflow — Cálculo y análisis")
-        tb2.setMovable(False)
-        tb2.setIconSize(QSize(20, 20))
-        tb2.setToolButtonStyle(Qt.ToolButtonTextBesideIcon)
-
-        add_btn("OPEX extras…",    self.action_opex_extras, "act-money",     toolbar=tb2)
-        add_btn("Solve balances",  self.action_solve,       "sim-run",       toolbar=tb2)
-        add_btn("Setpoints…",      self.action_setpoints,   "act-setpoint",  toolbar=tb2)
-        add_btn("DOF / Balance…",  self.action_dof,         "act-dof",       toolbar=tb2)
-        add_btn("Auto-size S",     self.action_autosize,    "act-sizing",    toolbar=tb2)
-        # Re-bind tb a tb2 para el resto de los add que vienen abajo
-        tb = tb2
-        # toggle del dock de tabla de corrientes — acción propia (robusta):
-        # toggleViewAction() a veces re-muestra el dock con altura 0 o detrás
-        # del layout; _toggle_streams_table() lo muestra, lo trae al frente y
-        # le da una altura visible.
+        # Tabla de corrientes — acción robusta (muestra + frente + altura)
+        self._streams_table_action = None
         if hasattr(self, "streams_dock") and self.streams_dock is not None:
             act = QAction("Tabla de corrientes", self)
             act.setCheckable(True)
@@ -6623,107 +6385,33 @@ class FlowsheetMainWindow(QMainWindow):
             act.setShortcut("Ctrl+T")
             act.setIcon(_mk("wb-table", color=_ICON_COLOR, size=20))
             act.triggered.connect(self._toggle_streams_table)
-            tb.addAction(act)
             self._streams_table_action = act
-            # mantener el check sincronizado si el dock cambia por otra vía
             try:
                 self.streams_dock.visibilityChanged.connect(
                     lambda vis: self._streams_table_action.setChecked(bool(vis)))
             except Exception:
                 pass
-        # toggle del papel de dibujo PFD (marco + leyenda + cuadro de título)
+
+        # Marco PFD (papel de dibujo: marco + leyenda + cuadro de título)
         paper_act = QAction("Marco PFD", self)
         paper_act.setCheckable(True)
         paper_act.setShortcut("Ctrl+M")
+        paper_act.setToolTip("Marco PFD — papel, leyenda y cuadro de "
+                             "título (Ctrl+M)")
         paper_act.triggered.connect(self.action_toggle_paper)
         paper_act.setIcon(_mk("act-frame-pfd", color=_ICON_COLOR, size=20))
-        tb.addAction(paper_act)
         self._paper_action = paper_act
-        # toggle de animación de flujo (chevrons que avanzan)
-        anim_act = QAction("Anim. flujo", self)
+
+        # Animación de flujo — ÚNICA acción (antes existían dos QActions
+        # independientes, toolbar y menú, con checks desincronizables)
+        anim_act = QAction("Animación de flujo", self)
         anim_act.setCheckable(True)
         anim_act.setChecked(True)
-        anim_act.setToolTip("Activar/desactivar animación de flechas\n"
-                              "direccionales en los streams.")
+        anim_act.setToolTip("Activar/desactivar animación de flechas "
+                            "direccionales en los streams.")
         anim_act.setIcon(_mk("sim-active", color=_ICON_COLOR, size=20))
         anim_act.triggered.connect(self.toggle_animation)
-        tb.addAction(anim_act)
-        add_btn("Calcular",        self.action_compute,           "sim-refresh")
-        add_btn("Perfil econ.…",         self.action_econ_profile,    "act-money")
-        add_btn("Análisis económico →", self.action_launch_analysis, "an-case-study")
-        add_btn("Exportar a Excel…", self.action_export_xlsx, "act-money")
-        tb.addSeparator()
-
-        # menú Exportar
-        export_act = QAction("Exportar ▾", self)
-        export_act.setIcon(_mk("file-export", color=_ICON_COLOR, size=20))
-        export_menu = QMenu(self)
-        export_menu.addAction(_mk("file-print", color=_ICON_COLOR, size=18) or QIcon(),
-                                "PDF…", self.action_export_pdf)
-        export_menu.addAction(_mk("file-export", color=_ICON_COLOR, size=18) or QIcon(),
-                                "SVG (vectorial)…", self.action_export_svg)
-        export_menu.addAction(_mk("file-export", color=_ICON_COLOR, size=18) or QIcon(),
-                                "PNG (alta resolución)…", self.action_export_png)
-        export_act.setMenu(export_menu)
-        tb.addAction(export_act)
-        ebtn = tb.widgetForAction(export_act)
-        if ebtn is not None and hasattr(ebtn, "setPopupMode"):
-            ebtn.setPopupMode(QToolButton.InstantPopup)
-
-    def _build_library_dock(self):
-        dock = QDockWidget(" Biblioteca de equipos ", self)
-        dock.setAllowedAreas(Qt.LeftDockWidgetArea | Qt.RightDockWidgetArea)
-        widget = QWidget()
-        layout = QVBoxLayout(widget)
-        layout.setContentsMargins(6, 6, 6, 6)
-
-        info = QLabel(
-            "Arrastrá un equipo al lienzo, o doble-click para agregarlo "
-            "al centro de la vista.  Doble-click en un bloque del lienzo → editar."
-        )
-        info.setStyleSheet("color:#666; font-size:9pt;")
-        info.setWordWrap(True)
-        layout.addWidget(info)
-
-        self.lib_tree = _LibraryTree(self)
-        self.lib_tree.setHeaderHidden(True)
-        # Categoría especial "Corrientes" — primero del árbol, con
-        # dos ítems para drag&drop de streams flotantes.
-        streams_cat = QTreeWidgetItem(["Corrientes"])
-        s_mass = QTreeWidgetItem(["→  Corriente de masa"])
-        s_mass.setData(0, Qt.UserRole, "__STREAM__mass")
-        s_mass.setToolTip(0, "Arrastrá al lienzo: aparece una flecha "
-                               "suelta.\nArrastrá los endpoints a un puerto "
-                               "para conectar.")
-        s_energy = QTreeWidgetItem(["⚡  Corriente de energía (kW)"])
-        s_energy.setData(0, Qt.UserRole, "__STREAM__energy")
-        s_energy.setToolTip(0, "Arrastrá al lienzo: aparece una flecha "
-                                 "de calor suelta.\nAl conectar dos bloques, "
-                                 "el solver acopla sus duties por energy_kW.")
-        streams_cat.addChild(s_mass)
-        streams_cat.addChild(s_energy)
-        streams_cat.setExpanded(True)
-        self.lib_tree.addTopLevelItem(streams_cat)
-        # Categorías de equipos (catálogo)
-        cats = eq.por_categoria()
-        for cat, names in cats.items():
-            parent = QTreeWidgetItem([cat])
-            for n in names:
-                child = QTreeWidgetItem([n])
-                child.setData(0, Qt.UserRole, n)
-                parent.addChild(child)
-            parent.setExpanded(True)
-            self.lib_tree.addTopLevelItem(parent)
-        self.lib_tree.itemDoubleClicked.connect(self._on_lib_double_click)
-        layout.addWidget(self.lib_tree)
-
-        add_btn = QPushButton("+ Agregar al diagrama")
-        add_btn.clicked.connect(self._add_selected_from_lib)
-        layout.addWidget(add_btn)
-
-        dock.setWidget(widget)
-        self.addDockWidget(Qt.LeftDockWidgetArea, dock)
-        self.lib_dock = dock   # ref para toggle desde Vista
+        self._anim_action = anim_act
 
     def _build_properties_dock(self):
         dock = QDockWidget(" Propiedades ", self)
@@ -6884,11 +6572,11 @@ class FlowsheetMainWindow(QMainWindow):
                 # Datos stale: violeta + label específica
                 icon = STATUS_ICONS["stale"]
                 label = STATUS_LABELS["stale"]
-                color = COLOR_STATUS_DIRTY
+                color = status_qcolor("stale")
             else:
                 icon = STATUS_ICONS.get(st, "")
                 label = STATUS_LABELS.get(st, "")
-                color = STATUS_COLORS.get(st, COLOR_STATUS_UNRUN)
+                color = status_qcolor(st)
             # Wrappear el chip con color via HTML (statusbar acepta richtext)
             chip = (f'<span style="color:{color.name()}; '
                      f'font-weight:bold;">{icon} {label}</span>  ·  ')
@@ -6953,6 +6641,9 @@ class FlowsheetMainWindow(QMainWindow):
             # chip del EditorTopbar
             if hasattr(self, "editor_topbar"):
                 self.editor_topbar.set_solver_state("stale")
+        # estado de guardado real (1c) — cualquier edición lo marca
+        if hasattr(self, "editor_topbar"):
+            self.editor_topbar.set_saved_state("cambios sin guardar")
 
     # ---------------------------------------------------
     # ACCIONES — File
@@ -6997,6 +6688,8 @@ class FlowsheetMainWindow(QMainWindow):
         self.view.zoom_reset()
         self._center_view_on_blocks()
         self._update_status()
+        if hasattr(self, "editor_topbar"):
+            self.editor_topbar.set_project(os.path.basename(path), "abierto")
 
     def action_save(self):
         path, _ = QFileDialog.getSaveFileName(
@@ -7014,6 +6707,12 @@ class FlowsheetMainWindow(QMainWindow):
                                   f"{type(e).__name__}: {e}")
             return
         QMessageBox.information(self, "Guardado", f"Diagrama guardado en:\n{path}")
+        # estado de guardado real en el topbar (1c)
+        if hasattr(self, "editor_topbar"):
+            from datetime import datetime as _dt
+            self.editor_topbar.set_project(
+                os.path.basename(path),
+                f"guardado {_dt.now():%H:%M}")
 
     # ---------------------------------------------------
     # ACCIONES — Examples (reusa builders del editor Tk)
@@ -9236,28 +8935,8 @@ class FlowsheetMainWindow(QMainWindow):
         self._pfr_canvas.draw()
 
     # ---------------------------------------------------
-    # LIBRARY → CANVAS
+    # PALETTE → CANVAS
     # ---------------------------------------------------
-
-    def _on_lib_double_click(self, item, _col):
-        data = item.data(0, Qt.UserRole)
-        if not data:
-            return
-        if data.startswith("__STREAM__"):
-            kind = data.replace("__STREAM__", "")
-            self._add_floating_stream(kind=kind)
-        else:
-            self._add_block_of_type(data)
-
-    def _add_selected_from_lib(self):
-        sel = self.lib_tree.currentItem()
-        if sel is None or not sel.data(0, Qt.UserRole):
-            return
-        data = sel.data(0, Qt.UserRole)
-        if data.startswith("__STREAM__"):
-            self._add_floating_stream(kind=data.replace("__STREAM__", ""))
-        else:
-            self._add_block_of_type(data)
 
     def _add_block_of_type(self, eq_type, x=None, y=None):
         """Agrega un bloque del tipo dado al flowsheet.  Si x/y no se

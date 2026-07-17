@@ -10,7 +10,7 @@ Tres figuras, cada una *_figure(...) -> (Figure | None, meta):
     upside green), ordenadas por swing desc.
 
 Devuelven (None, None) si matplotlib no está o si faltan datos (montecarlo y
-tornado son OPCIONALES). Color desde TOK (block_inspector) — mismo sistema que
+tornado son OPCIONALES). Color desde tokens.TOK leído en runtime — mismo sistema que
 las figuras del Inspector.
 
 IMPORTANTE (offset confirmado en Fase 0): el vector de cash flow contiene SOLO
@@ -22,13 +22,12 @@ from __future__ import annotations
 from typing import Optional, Tuple
 
 
-def _tok(name, fallback="#000000"):
-    """Color de TOK en caliente (mismo dict que el resto del panel)."""
-    try:
-        import block_inspector as _bi
-        return _bi.TOK.get(name, _bi.TOK.get(fallback, fallback))
-    except Exception:
-        return fallback
+def _tok(name):
+    """Color de TOK en caliente — tokens.py es la fuente canónica (1a).
+    Sin fallbacks hex: si el token no existe es un bug de nombre, no un
+    caso a silenciar con un color que deriva del tema."""
+    from tokens import TOK
+    return TOK[name]
 
 
 def _new_fig(w=4.6, h=3.0):
@@ -36,16 +35,16 @@ def _new_fig(w=4.6, h=3.0):
     matplotlib.use("Agg")
     from matplotlib.figure import Figure
     fig = Figure(figsize=(w, h), dpi=96)
-    fig.patch.set_facecolor(_tok("bg_elev", "#ffffff"))
+    fig.patch.set_facecolor(_tok("bg_elev"))
     return fig
 
 
 def _style_ax(ax):
-    ink = _tok("ink", "#1a1714"); soft = _tok("ink_soft", "#948a7c")
-    grid = _tok("line_soft", "#efeadd")
-    ax.set_facecolor(_tok("bg_elev", "#ffffff"))
+    ink = _tok("ink"); soft = _tok("ink_soft")
+    grid = _tok("line_soft")
+    ax.set_facecolor(_tok("bg_elev"))
     for sp in ax.spines.values():
-        sp.set_color(_tok("line", "#e6e0d0"))
+        sp.set_color(_tok("line"))
     ax.tick_params(colors=soft, labelsize=7)
     ax.xaxis.label.set_color(ink); ax.yaxis.label.set_color(ink)
     ax.title.set_color(ink)
@@ -66,17 +65,17 @@ def cashflow_figure(cashflow, payback_year=None) -> Tuple[Optional[object], Opti
         ax = fig.add_subplot(111)
         _style_ax(ax)
         phase_color = {
-            "constr": _tok("danger", "#b8453a"),
-            "ramp":   _tok("amber",  "#b8841a"),
-            "op":     _tok("green",  "#4d8742"),
+            "constr": _tok("danger"),
+            "ramp":   _tok("amber"),
+            "op":     _tok("green"),
         }
         years = [r["year"] for r in cashflow]
         cfs   = [r["cf"] / 1e6 for r in cashflow]
         cols  = [phase_color.get(r.get("phase", "op"), phase_color["op"])
                  for r in cashflow]
         ax.bar(years, cfs, color=cols, width=0.7,
-               edgecolor=_tok("line", "#e6e0d0"), linewidth=0.5)
-        ax.axhline(0, color=_tok("ink_mute", "#6b6256"), lw=0.8)
+               edgecolor=_tok("line"), linewidth=0.5)
+        ax.axhline(0, color=_tok("ink_mute"), lw=0.8)
         # marcador de payback: payback_year son años de OPERACIÓN; el eje x es
         # el 'year' de cada fila (= índice+1). Ubicar el marcador en el año
         # cuyo acumulado cruza cero — coincide con payback_year del motor.
@@ -91,12 +90,12 @@ def cashflow_figure(cashflow, payback_year=None) -> Tuple[Optional[object], Opti
             # de esa fila es el marcador.
             idx = min(int(math.floor(payback_year)), len(op_rows) - 1)
             marker_x = op_rows[idx]["year"] - 1 + (payback_year - int(payback_year))
-            ax.axvline(marker_x, color=_tok("spec", "#3548b4"), lw=1.4,
+            ax.axvline(marker_x, color=_tok("spec"), lw=1.4,
                        ls="--")
             ax.annotate(f"payback ≈ {payback_year:.1f}",
                         xy=(marker_x, 0),
                         xytext=(4, 6), textcoords="offset points",
-                        fontsize=7, color=_tok("spec", "#3548b4"))
+                        fontsize=7, color=_tok("spec"))
         ax.set_xlabel("Año de operación", fontsize=8)
         ax.set_ylabel("Cash flow (M USD)", fontsize=8)
         ax.set_title("Perfil de cash flow", fontsize=9)
@@ -125,24 +124,24 @@ def npv_density_figure(montecarlo) -> Tuple[Optional[object], Optional[dict]]:
         _style_ax(ax)
         # histograma normalizado como densidad
         n, bins, patches = ax.hist(xs, bins=40, density=True,
-                                   color=_tok("accent_soft", "#d9e3c2"),
-                                   edgecolor=_tok("accent", "#5f7a30"),
+                                   color=_tok("accent_soft"),
+                                   edgecolor=_tok("accent"),
                                    linewidth=0.5)
         # cola P(NPV<0) sombreada en danger
         for patch, left in zip(patches, bins[:-1]):
             if left < 0:
-                patch.set_facecolor(_tok("danger_bg", "#f3dcd8"))
-                patch.set_edgecolor(_tok("danger", "#b8453a"))
-        ax.axvline(0, color=_tok("danger", "#b8453a"), lw=1.0, ls="-")
+                patch.set_facecolor(_tok("danger_bg"))
+                patch.set_edgecolor(_tok("danger"))
+        ax.axvline(0, color=_tok("danger"), lw=1.0, ls="-")
         # percentiles
         for key, lab in (("p10", "P10"), ("p50", "P50"), ("p90", "P90")):
             v = montecarlo.get(key)
             if v is not None:
                 vx = v / 1e6
-                ax.axvline(vx, color=_tok("ink_mute", "#6b6256"), lw=0.9,
+                ax.axvline(vx, color=_tok("ink_mute"), lw=0.9,
                            ls=":")
                 ax.annotate(lab, xy=(vx, ax.get_ylim()[1] * 0.9),
-                            fontsize=6.5, color=_tok("ink_mute", "#6b6256"),
+                            fontsize=6.5, color=_tok("ink_mute"),
                             ha="center")
         p_neg = montecarlo.get("p_neg")
         title = "Distribución de NPV"
@@ -179,7 +178,7 @@ def tornado_figure(tornado, base=None) -> Tuple[Optional[object], Optional[dict]
         ax = fig.add_subplot(111)
         _style_ax(ax)
         b = base / 1e6
-        green = _tok("green", "#4d8742"); danger = _tok("danger", "#b8453a")
+        green = _tok("green"); danger = _tok("danger")
         names = []
         for i, r in enumerate(rows):
             lo = (r.get("lo", base) or base) / 1e6
@@ -189,16 +188,16 @@ def tornado_figure(tornado, base=None) -> Tuple[Optional[object], Optional[dict]
             lo_d, hi_d = min(lo, hi), max(lo, hi)
             if lo_d < b:
                 ax.barh(i, lo_d - b, left=b, color=danger, height=0.6,
-                        edgecolor=_tok("line", "#e6e0d0"), linewidth=0.4)
+                        edgecolor=_tok("line"), linewidth=0.4)
             if hi_d > b:
                 ax.barh(i, hi_d - b, left=b, color=green, height=0.6,
-                        edgecolor=_tok("line", "#e6e0d0"), linewidth=0.4)
-        ax.axvline(b, color=_tok("ink", "#1a1714"), lw=1.0)
+                        edgecolor=_tok("line"), linewidth=0.4)
+        ax.axvline(b, color=_tok("ink"), lw=1.0)
         ax.set_yticks(range(len(rows)))
         ax.set_yticklabels(names, fontsize=7)
         ax.set_xlabel("NPV (M USD)", fontsize=8)
         ax.set_title("Tornado de sensibilidad", fontsize=9)
-        ax.grid(True, axis="x", color=_tok("line_soft", "#efeadd"), lw=0.6)
+        ax.grid(True, axis="x", color=_tok("line_soft"), lw=0.6)
         ax.grid(False, axis="y")
         fig.tight_layout()
         return fig, {"n_vars": len(rows), "base_musd": b}

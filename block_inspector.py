@@ -41,251 +41,32 @@ from PySide6.QtWidgets import (
 import pfd_fonts
 import equipment_costs as eq
 
-# ════════════════════════════════════════════════════════
-#  TOKENS — paleta y dimensiones (claro)
-# ════════════════════════════════════════════════════════
-# Los nombres replican los del CSS del bundle de diseño para que la
-# correspondencia con los mockups sea 1:1.
-
-TOK = {
-    # superficies
-    "bg":           "#f6f3ec",
-    "bg_elev":      "#ffffff",
-    "bg_mute":      "#f1ede4",
-    "bg_sunk":      "#ece6d8",
-    # líneas
-    "line":         "#e6e0d0",
-    "line_strong":  "#d4ccb8",
-    "line_soft":    "#efeadd",
-    # tinta
-    "ink":          "#1a1714",
-    "ink_mute":     "#6b6256",
-    "ink_soft":     "#948a7c",
-    "ink_ghost":    "#bab2a3",
-    # acento
-    "accent":       "#0d6e78",
-    "accent_deep":  "#064951",
-    "accent_soft":  "#d4ebed",
-    "accent_tint":  "#eaf4f5",
-    # spec field
-    "spec":         "#3548b4",
-    "spec_ink":     "#2a3a9a",
-    "spec_bg":      "#eef1ff",
-    "spec_ribbon":  "#4a5dcc",
-    # auto field
-    "auto_bg":      "#f3efe5",
-    "auto_ink":     "#918878",
-    "auto_ribbon":  "#c9c0ad",
-    # semánticos
-    "green":        "#4d8742",
-    "green_bg":     "#e6f0df",
-    "amber":        "#b8841a",
-    "amber_bg":     "#f4ecd1",
-    "orange":       "#c26329",
-    "orange_bg":    "#f5e1d0",
-    "danger":       "#b8453a",
-    "danger_bg":    "#f3dcd8",
-    # chip de tipo
-    "tag_bg":       "#ede7d6",
-    "tag_ink":      "#6b6253",
-    # catálogo Sinnott (extensión HX riguroso)
-    "sinnott":        "#6e3aa6",
-    "sinnott_ink":    "#4a2873",
-    "sinnott_bg":     "#efebf7",
-    "sinnott_ribbon": "#8a5cc0",
-    "turton_ink":     "#3548b4",
-    "status_fallback":"#5f7bd6",
-}
-
-ROW_PAD   = 12   # cozy
-SECT_GAP  = 22   # cozy
-PANEL_W   = 520
-
 
 # ════════════════════════════════════════════════════════
-#  PREFERENCIAS — temas, densidades, acentos
+#  TOKENS — promovidos a tokens.py (artboard 1a del rediseño)
 # ════════════════════════════════════════════════════════
-# Estos diccionarios definen alternativas que el usuario puede elegir
-# desde Vista > Preferencias…  Al cambiar, mutamos TOK / ROW_PAD /
-# SECT_GAP in-place y emitimos un signal global para que widgets
-# vivos se re-construyan.
+# La paleta TOK, los temas/acentos/densidades, el bus de preferencias y
+# su persistencia viven ahora en tokens.py — fuente canónica del sistema
+# de diseño.  Este módulo re-exporta los mismos objetos por
+# compatibilidad con los imports históricos (`from block_inspector
+# import TOK, _PrefsBus, ...`).
 
-THEME_LIGHT = {
-    "bg": "#f6f3ec", "bg_elev": "#ffffff", "bg_mute": "#f1ede4",
-    "bg_sunk": "#ece6d8",
-    "line": "#e6e0d0", "line_strong": "#d4ccb8", "line_soft": "#efeadd",
-    "ink": "#1a1714", "ink_mute": "#6b6256",
-    "ink_soft": "#948a7c", "ink_ghost": "#bab2a3",
-    "spec_bg": "#eef1ff", "spec": "#3548b4",
-    "spec_ink": "#2a3a9a", "spec_ribbon": "#4a5dcc",
-    "auto_bg": "#f3efe5", "auto_ink": "#918878", "auto_ribbon": "#c9c0ad",
-    "green": "#4d8742", "green_bg": "#e6f0df",
-    "amber": "#b8841a", "amber_bg": "#f4ecd1",
-    "orange": "#c26329", "orange_bg": "#f5e1d0",
-    "danger": "#b8453a", "danger_bg": "#f3dcd8",
-    "tag_bg": "#ede7d6", "tag_ink": "#6b6253",
-    "sinnott": "#6e3aa6", "sinnott_ink": "#4a2873", "sinnott_bg": "#efebf7",
-    "sinnott_ribbon": "#8a5cc0", "turton_ink": "#3548b4",
-    "status_fallback": "#5f7bd6",
-}
-
-THEME_DARK = {
-    "bg": "#16130f", "bg_elev": "#1f1b16", "bg_mute": "#26211b",
-    "bg_sunk": "#110e0a",
-    "line": "#2f2920", "line_strong": "#3f3830", "line_soft": "#251f18",
-    "ink": "#efe7d6", "ink_mute": "#a59a89",
-    "ink_soft": "#6f6759", "ink_ghost": "#4a4438",
-    "spec_bg": "#20254a", "spec": "#92a0ef",
-    "spec_ink": "#b4befa", "spec_ribbon": "#8294f5",
-    "auto_bg": "#221d16", "auto_ink": "#8a8170", "auto_ribbon": "#463f33",
-    "green": "#85b274", "green_bg": "#1f2a1d",
-    "amber": "#d8aa3a", "amber_bg": "#2e2618",
-    "orange": "#d18a55", "orange_bg": "#2e2118",
-    "danger": "#d97262", "danger_bg": "#2e1a17",
-    "tag_bg": "#2a241d", "tag_ink": "#a59a89",
-    "sinnott": "#b598e0", "sinnott_ink": "#d3befa", "sinnott_bg": "#2a2535",
-    "sinnott_ribbon": "#9978c9", "turton_ink": "#b4befa",
-    "status_fallback": "#9aaef0",
-}
-
-# Acentos: 4 presets que sobrescriben los 4 tokens de accent.
-ACCENTS = {
-    "teal": {     # default — teal profundo
-        "accent": "#0d6e78", "accent_deep": "#064951",
-        "accent_soft": "#d4ebed", "accent_tint": "#eaf4f5",
-    },
-    "terracota": {
-        "accent": "#a44a2b", "accent_deep": "#7a341c",
-        "accent_soft": "#f0d3c5", "accent_tint": "#f7e7df",
-    },
-    "cobalto": {
-        "accent": "#3548b4", "accent_deep": "#1f2e8c",
-        "accent_soft": "#cfd5f0", "accent_tint": "#e5e8f7",
-    },
-    "oliva": {
-        "accent": "#5f7a30", "accent_deep": "#3f5520",
-        "accent_soft": "#d9e3c2", "accent_tint": "#ecf0dc",
-    },
-}
-
-# Dark-mode tiene su propio juego de accents (matiza más suave)
-ACCENTS_DARK = {
-    "teal":      {"accent": "#5dc1cc", "accent_deep": "#92dde4",
-                  "accent_soft": "#1f3a3d", "accent_tint": "#1a2b2d"},
-    "terracota": {"accent": "#d18a6a", "accent_deep": "#ecae8c",
-                  "accent_soft": "#3a221a", "accent_tint": "#2a1812"},
-    "cobalto":   {"accent": "#8a98ed", "accent_deep": "#aab5f4",
-                  "accent_soft": "#23295a", "accent_tint": "#1a1f40"},
-    "oliva":     {"accent": "#9cb56a", "accent_deep": "#bccf8d",
-                  "accent_soft": "#2c3520", "accent_tint": "#1f2618"},
-}
-
-# Densidades: (row_pad, sect_gap)
-DENSITIES = {
-    "compact": (8,  14),
-    "cozy":    (12, 22),
-    "comfy":   (16, 30),
-}
-
-# Estado global de preferencias
-_PREFS = {
-    "theme":   "light",
-    "density": "cozy",
-    "accent":  "teal",
-}
+import tokens as _tokens
+from tokens import (
+    TOK, PANEL_W,
+    THEME_LIGHT, THEME_DARK, ACCENTS, ACCENTS_DARK, DENSITIES,
+    current_prefs, apply_preferences, _PrefsBus, _PREFS, _PREFS_PATH,
+    load_prefs_from_disk, save_prefs_to_disk,
+)
 
 
-def current_prefs() -> dict:
-    return dict(_PREFS)
+def __getattr__(name):
+    # ROW_PAD / SECT_GAP se re-vinculan en tokens.apply_preferences;
+    # delegamos el acceso para que block_inspector.ROW_PAD siga fresco.
+    if name in ("ROW_PAD", "SECT_GAP"):
+        return getattr(_tokens, name)
+    raise AttributeError(f"module 'block_inspector' has no attribute {name!r}")
 
-
-def apply_preferences(theme: str = None, density: str = None,
-                      accent: str = None) -> bool:
-    """Muta TOK / ROW_PAD / SECT_GAP in-place según el tema / densidad /
-    acento elegidos.  Devuelve True si algo cambió.
-
-    Llamar al inicio de la app (cargando prefs.json) y desde el diálogo
-    de preferencias.  Widgets ya construidos NO se actualizan
-    automáticamente — el caller debe reconstruirlos (signal
-    PreferencesChanged emitido).
-    """
-    global ROW_PAD, SECT_GAP
-    changed = False
-    if theme and theme in ("light", "dark") and theme != _PREFS["theme"]:
-        _PREFS["theme"] = theme
-        changed = True
-    if density and density in DENSITIES and density != _PREFS["density"]:
-        _PREFS["density"] = density
-        changed = True
-    if accent and accent in ACCENTS and accent != _PREFS["accent"]:
-        _PREFS["accent"] = accent
-        changed = True
-
-    # Reconstruir TOK
-    base = THEME_DARK if _PREFS["theme"] == "dark" else THEME_LIGHT
-    acc_set = ACCENTS_DARK if _PREFS["theme"] == "dark" else ACCENTS
-    acc = acc_set.get(_PREFS["accent"], acc_set["teal"])
-
-    TOK.clear()
-    TOK.update(base)
-    TOK.update(acc)
-
-    # Densidad
-    ROW_PAD, SECT_GAP = DENSITIES.get(_PREFS["density"], (12, 22))
-    return changed
-
-
-# Inicializa TOK con los defaults para que importar el módulo no rompa
-apply_preferences()
-
-
-# Signal global de cambios — los widgets vivos se suscriben y rebuilen.
-# Lo expone via un QObject helper porque las Signal de Qt necesitan
-# un instancia.
-
-class _PrefsBus:
-    """Bus de eventos para cambios de preferencias.  Lazy-init para
-    no requerir un QApplication al importar el módulo."""
-    _instance = None
-    _obj = None
-
-    @classmethod
-    def signal(cls):
-        if cls._obj is None:
-            from PySide6.QtCore import QObject, Signal as _Sig
-            class _Bus(QObject):
-                themeChanged = _Sig()
-            cls._obj = _Bus()
-        return cls._obj.themeChanged
-
-    @classmethod
-    def emit(cls):
-        sig = cls.signal()
-        sig.emit()
-
-
-# Persistencia: ~/.flowsheet_prefs.json
-import os, json
-_PREFS_PATH = os.path.expanduser("~/.flowsheet_prefs.json")
-
-
-def load_prefs_from_disk():
-    try:
-        with open(_PREFS_PATH) as f:
-            d = json.load(f)
-        apply_preferences(d.get("theme"), d.get("density"), d.get("accent"))
-    except FileNotFoundError:
-        pass
-    except Exception as e:
-        print(f"[prefs] no se pudo cargar {_PREFS_PATH}: {e}")
-
-
-def save_prefs_to_disk():
-    try:
-        with open(_PREFS_PATH, "w") as f:
-            json.dump(_PREFS, f, indent=2)
-    except Exception as e:
-        print(f"[prefs] no se pudo guardar {_PREFS_PATH}: {e}")
 
 
 # ════════════════════════════════════════════════════════
@@ -1180,7 +961,7 @@ class BlockInspectorPanel(QWidget):
         self._content.setStyleSheet(f"background:{TOK['bg_elev']};")
         self._content_lay = QVBoxLayout(self._content)
         self._content_lay.setContentsMargins(20, 18, 20, 18)
-        self._content_lay.setSpacing(SECT_GAP)
+        self._content_lay.setSpacing(_tokens.SECT_GAP)
         self._content_lay.addStretch(1)
         self._content_scroll.setWidget(self._content)
         body_lay.addWidget(self._content_scroll, 1)
@@ -1428,7 +1209,7 @@ class BlockInspectorPanel(QWidget):
             f"border-bottom: 1px solid {TOK['line_soft']}; }}"
         )
         # add padding via fixed margin in layout instead of stylesheet padding
-        lay.setContentsMargins(0, ROW_PAD//2, 0, ROW_PAD//2)
+        lay.setContentsMargins(0, _tokens.ROW_PAD//2, 0, _tokens.ROW_PAD//2)
         return r
 
     def _spec_field(self, key: str, value, unit: str = "",
@@ -2214,7 +1995,7 @@ class BlockInspectorPanel(QWidget):
     def _combo_row(self, label: str, combo) -> QFrame:
         """Row con label + combo (usado en lugar de _row + SpecField)."""
         r = QFrame()
-        lay = QHBoxLayout(r); lay.setContentsMargins(0, ROW_PAD//2, 0, ROW_PAD//2)
+        lay = QHBoxLayout(r); lay.setContentsMargins(0, _tokens.ROW_PAD//2, 0, _tokens.ROW_PAD//2)
         lay.setSpacing(12)
         l = QLabel(label)
         l.setFont(QFont(pfd_fonts.SANS, 9))

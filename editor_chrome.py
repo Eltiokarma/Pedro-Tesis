@@ -82,6 +82,17 @@ BLOCK_DIMS: Dict[str, Tuple[int, int]] = {
     "hx_aircooler":  (70, 52),
     "hx_placa":      (56, 50),
     "cristalizador": (52, 76),
+    # Rediseño 1d: seis parejas que compartían glifo e invertían o
+    # borraban semántica.  Geometría de referencia: patch PFD-ICN-002
+    # de pfd_symbols (splitter-flow-divider, reactor-pfr-coiled,
+    # compressor-reciprocating, whb steam drum, packing-random,
+    # cooling-tower-natural).
+    "splitter":        (56, 44),
+    "reactor_pfr":     (76, 46),
+    "compresor_recip": (64, 48),
+    "hx_whb":          (84, 56),
+    "empaque":         (48, 64),
+    "torre_nat":       (56, 64),
 }
 
 # Mapeo del tipo del mockup → eq_type canónico del catálogo
@@ -111,14 +122,15 @@ PALETTE_LABELS: Dict[str, str] = {
 # bajo el botón temáticamente más cercano para que TODO el catálogo
 # siga siendo alcanzable desde los menús de variantes (long-press).
 PALETTE_GROUPS: Dict[str, Tuple[str, ...]] = {
-    "reactor":   ("reactor",),
-    "mezclador": ("mezclador", "valvula"),
+    "reactor":   ("reactor", "reactor_pfr"),
+    "mezclador": ("mezclador", "splitter", "valvula"),
     "separador": ("separador", "tambor", "ciclon", "centrifuga",
                   "filtro", "secador", "cristalizador"),
-    "columna":   ("columna", "platos", "torre_enf"),
-    "hx":        ("hx", "hx_kettle", "hx_aircooler", "hx_placa",
-                  "horno", "caldera"),
-    "bomba":     ("bomba", "compresor", "ventilador"),
+    "columna":   ("columna", "platos", "empaque", "torre_enf",
+                  "torre_nat"),
+    "hx":        ("hx", "hx_kettle", "hx_whb", "hx_aircooler",
+                  "hx_placa", "horno", "caldera"),
+    "bomba":     ("bomba", "compresor", "compresor_recip", "ventilador"),
     "tanque":    ("tanque", "ambient"),
 }
 
@@ -135,10 +147,13 @@ class BlockGlyph:
     @staticmethod
     def draw(p: QPainter, type_: str, w: int, h: int,
              stroke: QColor, fill: QColor = None,
-             stroke_width: float = 1.6):
+             stroke_width: float = 1.6, dashed: bool = False):
         pen = QPen(stroke, stroke_width)
         pen.setCapStyle(Qt.RoundCap)
         pen.setJoinStyle(Qt.RoundJoin)
+        if dashed:
+            # contorno punteado — estado "unrun" en el propio glifo (1b)
+            pen.setStyle(Qt.DashLine)
         p.setPen(pen)
         if fill is None:
             fill_brush = QBrush(QColor(TOK["bg_elev"]))
@@ -197,6 +212,142 @@ class BlockGlyph:
         # junction circle
         p.setBrush(fill_brush)
         p.drawEllipse(QPointF(w/2-1, h/2), 4.0, 4.0)
+
+    @staticmethod
+    def _draw_splitter(p, w, h, stroke, fill_brush, sw):
+        # divisor de flujo 1→2 — espejo del mixer (rediseño 1d: antes el
+        # splitter se dibujaba como mixer y la semántica quedaba invertida)
+        p.setBrush(Qt.NoBrush)
+        path = QPainterPath()
+        path.moveTo(6, h/2); path.lineTo(w/2+2, h/2)
+        p.drawPath(path)
+        path2 = QPainterPath()
+        path2.moveTo(w/2+2, h/2); path2.lineTo(w-6, 6)
+        p.drawPath(path2)
+        path3 = QPainterPath()
+        path3.moveTo(w/2+2, h/2); path3.lineTo(w-6, h-6)
+        p.drawPath(path3)
+        # flechitas de salida (semántica divergente explícita)
+        ghost = QColor(stroke); ghost.setAlphaF(0.7)
+        p.setPen(QPen(ghost, 1.0))
+        p.drawLine(QPointF(w-11, 6), QPointF(w-6, 6))
+        p.drawLine(QPointF(w-6, 6), QPointF(w-9, 10))
+        p.drawLine(QPointF(w-11, h-6), QPointF(w-6, h-6))
+        p.drawLine(QPointF(w-6, h-6), QPointF(w-9, h-10))
+        # nodo de división
+        p.setPen(QPen(stroke, sw))
+        p.setBrush(fill_brush)
+        p.drawEllipse(QPointF(w/2+1, h/2), 4.0, 4.0)
+
+    @staticmethod
+    def _draw_reactor_pfr(p, w, h, stroke, fill_brush, sw):
+        # PFR tubular — carcasa horizontal + serpentín (ref
+        # reactor-pfr-coiled): distinto del CSTR agitado
+        p.drawRoundedRect(QRectF(6, h/2-14, w-12, 28), 6, 6)
+        # serpentín: 4 lazos
+        coil = QColor(stroke); coil.setAlphaF(0.75)
+        p.setPen(QPen(coil, 1.0)); p.setBrush(Qt.NoBrush)
+        n = 4
+        x0, x1 = 14.0, w - 14.0
+        span = (x1 - x0) / n
+        path = QPainterPath()
+        path.moveTo(x0, h/2)
+        for i in range(n):
+            cx = x0 + span * (i + 0.5)
+            path.quadTo(cx, h/2 - 22, x0 + span * (i + 1), h/2)
+            path.quadTo(cx, h/2 + 22, x0 + span * (i + 0.55), h/2)
+        p.drawPath(path)
+        # flechita de flujo
+        p.setPen(QPen(stroke, 1.2))
+        p.drawLine(QPointF(x1 - 2, h/2), QPointF(x1 + 4, h/2))
+
+    @staticmethod
+    def _draw_compresor_recip(p, w, h, stroke, fill_brush, sw):
+        # compresor recíproco — cilindro + pistón + biela y cigüeñal
+        # (antes los 4 tipos de compresor compartían el glifo centrífugo)
+        p.drawRect(QRectF(6, h/2-11, w*0.52, 22))
+        # pistón dentro del cilindro
+        ghost = QColor(stroke); ghost.setAlphaF(0.6)
+        p.setPen(QPen(ghost, 1.2)); p.setBrush(Qt.NoBrush)
+        px_ = 6 + w*0.52*0.45
+        p.drawLine(QPointF(px_, h/2-8), QPointF(px_, h/2+8))
+        # biela
+        p.setPen(QPen(stroke, 1.2))
+        crank_x = w - 13
+        p.drawLine(QPointF(px_, h/2), QPointF(crank_x - 4, h/2))
+        # cigüeñal (círculo)
+        p.setBrush(fill_brush)
+        p.drawEllipse(QPointF(crank_x, h/2), 7.0, 7.0)
+        p.setBrush(stroke); p.setPen(Qt.NoPen)
+        p.drawEllipse(QPointF(crank_x - 3, h/2 - 3), 1.6, 1.6)
+        # base
+        p.setPen(QPen(stroke, 1.2))
+        p.drawLine(QPointF(10, h-4), QPointF(w-10, h-4))
+
+    @staticmethod
+    def _draw_hx_whb(p, w, h, stroke, fill_brush, sw):
+        # waste-heat boiler — carcasa kettle + STEAM DRUM superior con
+        # salida de vapor (ref whb steam drum): distinto del kettle
+        drum_h = 12.0
+        # carcasa principal (gases calientes)
+        p.drawRoundedRect(QRectF(6, drum_h + 8, w-12, h - drum_h - 16), 6, 6)
+        # steam drum arriba
+        p.drawRoundedRect(QRectF(w/2-16, 2, 32, drum_h), 6, 6)
+        # bajantes drum↔shell
+        ghost = QColor(stroke); ghost.setAlphaF(0.6)
+        p.setPen(QPen(ghost, 1.0)); p.setBrush(Qt.NoBrush)
+        p.drawLine(QPointF(w/2-9, drum_h + 2), QPointF(w/2-9, drum_h + 8))
+        p.drawLine(QPointF(w/2+9, drum_h + 2), QPointF(w/2+9, drum_h + 8))
+        # tubos de gas (2 líneas)
+        p.drawLine(QPointF(12, h/2 + 4), QPointF(w-12, h/2 + 4))
+        p.drawLine(QPointF(12, h/2 + 9), QPointF(w-12, h/2 + 9))
+        # salida de vapor del drum
+        p.setPen(QPen(stroke, 1.2))
+        p.drawLine(QPointF(w/2, 2), QPointF(w/2, -3))
+        # nivel de agua en el drum
+        lvl = QColor(stroke); lvl.setAlphaF(0.4)
+        p.setPen(QPen(lvl, 1.0))
+        p.drawLine(QPointF(w/2-13, drum_h - 3), QPointF(w/2+13, drum_h - 3))
+
+    @staticmethod
+    def _draw_empaque(p, w, h, stroke, fill_brush, sw):
+        # sección de columna EMPACADA — hatch diagonal (ref
+        # packing-random/structured): distinto de la de platos
+        p.drawRoundedRect(QRectF(w/2-12, 6, 24, h-12), 2, 2)
+        ghost = QColor(stroke); ghost.setAlphaF(0.55)
+        p.setPen(QPen(ghost, 0.9)); p.setBrush(Qt.NoBrush)
+        # hatch ↘ dentro del cuerpo (entre y=14 y h-14)
+        y0, y1 = 14.0, h - 14.0
+        step = (y1 - y0) / 4
+        for i in range(5):
+            y = y0 + i * step
+            p.drawLine(QPointF(w/2-9, y), QPointF(w/2+9, y + step*0.7))
+        # límites del lecho
+        p.setPen(QPen(ghost, 1.1))
+        p.drawLine(QPointF(w/2-11, y0), QPointF(w/2+11, y0))
+        p.drawLine(QPointF(w/2-11, y1 + step*0.7), QPointF(w/2+11, y1 + step*0.7))
+
+    @staticmethod
+    def _draw_torre_nat(p, w, h, stroke, fill_brush, sw):
+        # torre de enfriamiento de TIRO NATURAL — hiperboloide (ref
+        # cooling-tower-natural): distinta de la inducida con ventilador
+        p.setBrush(fill_brush)
+        path = QPainterPath()
+        path.moveTo(w/2-18, h-6)
+        path.cubicTo(w/2-8, h*0.55, w/2-8, h*0.35, w/2-12, 8)
+        path.lineTo(w/2+12, 8)
+        path.cubicTo(w/2+8, h*0.35, w/2+8, h*0.55, w/2+18, h-6)
+        path.closeSubpath()
+        p.drawPath(path)
+        # pluma de vapor
+        ghost = QColor(stroke); ghost.setAlphaF(0.5)
+        p.setPen(QPen(ghost, 1.0)); p.setBrush(Qt.NoBrush)
+        wisp = QPainterPath()
+        wisp.moveTo(w/2-6, 6)
+        wisp.quadTo(w/2-2, 1, w/2+3, 4)
+        p.drawPath(wisp)
+        # agua en la base
+        p.drawLine(QPointF(w/2-14, h-9), QPointF(w/2+14, h-9))
 
     @staticmethod
     def _draw_separador(p, w, h, stroke, fill_brush, sw):
@@ -640,23 +791,27 @@ class BlockGlyph:
 # ════════════════════════════════════════════════════════
 
 class EditorTopbar(QFrame):
-    """Barra superior 52px, fondo blanco con borde inferior, tipografía
-    IBM Plex Sans.  Tres regiones:
+    """Barra superior 52px por ZONAS DE TAREA (artboard 1c):
 
-      izquierda: logo (◆) + nombre del proyecto + sub
-      centro:    undo / redo (divider) auto-arrange / grid
-      derecha:   chip de solver + "Validar DOF" + "▶ Resolver"
+      izquierda: identidad — logo (◆) + nombre del proyecto + estado de
+                 guardado real (set_saved_state)
+      centro:    edición del lienzo — undo/redo | Marco PFD · Flujo
+      derecha:   workflow de simulación, en orden pedagógico —
+                 chip solver → "Validar DOF" → "▶ Resolver" → "Economía"
+
+    Los botones del centro se enlazan a las QActions COMPARTIDAS de la
+    ventana via bind_history_actions / bind_canvas_actions
+    (QToolButton.setDefaultAction): una sola acción por concepto, con
+    shortcut real y check nunca desincronizado — el patrón que ya usaba
+    "Tabla de corrientes".
 
     El topbar es REACTIVE: actualiza el chip cuando la ventana llama
     a `set_solver_state(state, iter, dt)`.
     """
 
-    undoRequested        = Signal()
-    redoRequested        = Signal()
-    autoArrangeRequested = Signal()
-    gridToggled          = Signal()
     validateRequested    = Signal()
     solveRequested       = Signal()
+    economicsRequested   = Signal()
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -688,7 +843,7 @@ class EditorTopbar(QFrame):
         self._project = QLabel("(sin nombre)", self)
         self._project.setFont(QFont(pfd_fonts.MONO, 10, QFont.Medium))
         self._project.setStyleSheet(f"color:{TOK['ink']};")
-        self._sub = QLabel("v0.4 · sin guardar", self)
+        self._sub = QLabel("sin guardar", self)
         sf = QFont(pfd_fonts.SANS, 8); self._sub.setFont(sf)
         self._sub.setStyleSheet(f"color:{TOK['ink_soft']};")
         proj.addWidget(self._project); proj.addWidget(self._sub)
@@ -696,23 +851,14 @@ class EditorTopbar(QFrame):
 
         lay.addStretch(1)
 
-        # ── CENTRO: undo / redo / auto-arrange / grid ──
-        mid = QHBoxLayout(); mid.setSpacing(2)
-        self._btn_undo = self._mk_icon_btn("↶", "Deshacer (⌘Z)")
-        self._btn_undo.clicked.connect(self.undoRequested.emit)
-        mid.addWidget(self._btn_undo)
-        self._btn_redo = self._mk_icon_btn("↷", "Rehacer (⌘⇧Z)")
-        self._btn_redo.clicked.connect(self.redoRequested.emit)
-        mid.addWidget(self._btn_redo)
-        mid.addWidget(self._mk_vdivider())
-        self._btn_arrange = self._mk_icon_btn("✦", "Auto-arrange")
-        self._btn_arrange.clicked.connect(self.autoArrangeRequested.emit)
-        mid.addWidget(self._btn_arrange)
-        self._btn_grid = self._mk_icon_btn("▦", "Toggle grid")
-        self._btn_grid.setCheckable(True); self._btn_grid.setChecked(True)
-        self._btn_grid.clicked.connect(self.gridToggled.emit)
-        mid.addWidget(self._btn_grid)
-        lay.addLayout(mid)
+        # ── CENTRO: edición del lienzo ──
+        # Se puebla en bind_history_actions / bind_canvas_actions con las
+        # QActions compartidas de la ventana.  (El botón ✦ Auto-arrange,
+        # que no tenía handler, se eliminó; ▦ "Toggle grid" — que en
+        # realidad alternaba el Marco PFD — es ahora la propia acción
+        # "Marco PFD", bien nombrada y sincronizada.)
+        self._mid = QHBoxLayout(); self._mid.setSpacing(2)
+        lay.addLayout(self._mid)
 
         lay.addStretch(1)
 
@@ -740,8 +886,16 @@ class EditorTopbar(QFrame):
         lay.addWidget(self._btn_validate)
 
         self._btn_solve = self._mk_primary_btn("▶  Resolver")
+        self._btn_solve.setToolTip("Resolver balances (F5)")
         self._btn_solve.clicked.connect(self.solveRequested.emit)
         lay.addWidget(self._btn_solve)
+
+        # Paso final del workflow, por fin visible en la barra (1c):
+        # estado → Validar DOF → Resolver → Economía.
+        self._btn_economics = self._mk_ghost_btn("Economía")
+        self._btn_economics.setToolTip("Análisis económico del flowsheet")
+        self._btn_economics.clicked.connect(self.economicsRequested.emit)
+        lay.addWidget(self._btn_economics)
 
     # ── helpers UI ─────────────────────────────────────
     def _mk_icon_btn(self, glyph: str, tooltip: str) -> QToolButton:
@@ -842,9 +996,41 @@ class EditorTopbar(QFrame):
             f"#solverChip {{ background:{bg}; border-radius:14px; }}"
         )
 
-    def set_undo_enabled(self, can_undo: bool, can_redo: bool):
-        self._btn_undo.setEnabled(can_undo)
-        self._btn_redo.setEnabled(can_redo)
+    def set_saved_state(self, text: str):
+        """Estado de guardado real bajo el nombre del proyecto
+        ('sin guardar' / 'cambios sin guardar' / 'guardado 14:32')."""
+        self._sub.setText(text or "")
+
+    def _mk_action_btn(self, action) -> QToolButton:
+        """QToolButton 32×32 enlazado a una QAction compartida
+        (icono, tooltip, shortcut, check — todo del action)."""
+        b = QToolButton(self)
+        b.setDefaultAction(action)
+        b.setToolButtonStyle(Qt.ToolButtonIconOnly)
+        b.setFixedSize(32, 32)
+        b.setCursor(Qt.PointingHandCursor)
+        b.setStyleSheet(
+            f"QToolButton {{ background: transparent; color: {TOK['ink_mute']}; "
+            f"border: 0; border-radius: 6px; }} "
+            f"QToolButton:hover {{ background: {TOK['bg_mute']}; color: {TOK['ink']}; }} "
+            f"QToolButton:checked {{ background: {TOK['accent_tint']}; color: {TOK['accent_deep']}; }} "
+            f"QToolButton:disabled {{ color: {TOK['ink_ghost']}; }}"
+        )
+        return b
+
+    def bind_history_actions(self, undo_action, redo_action):
+        """Enlaza undo/redo (QActions del QUndoStack, con shortcuts
+        reales) a la zona central."""
+        self._mid.addWidget(self._mk_action_btn(undo_action))
+        self._mid.addWidget(self._mk_action_btn(redo_action))
+
+    def bind_canvas_actions(self, *actions):
+        """Enlaza los toggles del lienzo (Marco PFD, Animación de flujo)
+        tras un divider — misma QAction que el menú Vista."""
+        self._mid.addWidget(self._mk_vdivider())
+        for act in actions:
+            if act is not None:
+                self._mid.addWidget(self._mk_action_btn(act))
 
 
 # ════════════════════════════════════════════════════════
@@ -974,11 +1160,10 @@ class _ToolButton(QToolButton):
             p.setFont(QFont(pfd_fonts.SANS, 14, QFont.Medium))
             glyph = {
                 "select":  "↖",
-                "pan":     "✋",
+                "pan":     "✥",
                 "connect": "⟶",
-                "text":    "T",
                 "mass":    "→",
-                "energy":  "⚡",
+                "energy":  "↯",
             }.get(self._id, "?")
             p.drawText(self.rect(), Qt.AlignCenter, glyph)
 
@@ -1007,11 +1192,13 @@ class EditorPalette(QFrame):
     moreRequested        = Signal()
     streamRequested      = Signal(str)        # 'mass' | 'energy'
 
+    # ("text", "Anotación") se quitó del set: era un stub que solo
+    # cambiaba el cursor.  Se re-agrega cuando exista la colocación de
+    # texto real (rediseño 1g).
     TOOLS = [
         ("select",  "Seleccionar (V)"),
         ("pan",     "Pan (espacio)"),
         ("connect", "Conectar stream (C)"),
-        ("text",    "Anotación (T)"),
     ]
     # Corrientes flotantes: click → crea la flecha en el centro de la
     # vista; el usuario arrastra los extremos hasta un puerto para
@@ -1488,10 +1675,10 @@ EQ_TYPE_TO_ISA: Dict[str, str] = {
     "Centrifuge — disc stack": "centrifuga",
     "Compressor — axial": "compresor",
     "Compressor — centrifugal": "compresor",
-    "Compressor — reciprocating": "compresor",
+    "Compressor — reciprocating": "compresor_recip",
     "Compressor — rotary": "compresor",
     "Cooling tower — induced draft": "torre_enf",
-    "Cooling tower — natural draft": "torre_enf",
+    "Cooling tower — natural draft": "torre_nat",
     "Crystallizer": "cristalizador",
     "Cyclone — gas/solid": "ciclon",
     "Decanter — gravity": "tambor",
@@ -1503,8 +1690,8 @@ EQ_TYPE_TO_ISA: Dict[str, str] = {
     "Fired heater — non-reformer": "horno",
     "Fired heater — reformer": "horno",
     "Heat exch. — U-tube": "hx",
-    "Heat exch. — WHB field erected": "hx_kettle",
-    "Heat exch. — WHB packaged": "hx_kettle",
+    "Heat exch. — WHB field erected": "hx_whb",
+    "Heat exch. — WHB packaged": "hx_whb",
     "Heat exch. — air cooler": "hx_aircooler",
     "Heat exch. — condenser air-cooled": "hx_aircooler",
     "Heat exch. — condenser shell-tube": "hx",
@@ -1517,17 +1704,17 @@ EQ_TYPE_TO_ISA: Dict[str, str] = {
     "Heat exch. — spiral plate": "hx_placa",
     "Mixer — inline": "mezclador",
     "Mixer — static": "mezclador",
-    "Packing — random": "platos",
-    "Packing — structured": "platos",
+    "Packing — random": "empaque",
+    "Packing — structured": "empaque",
     "Pump — centrifugal": "bomba",
     "Pump — positive displacement": "bomba",
     "Pump — reciprocating": "bomba",
     "Reactor — CSTR (agitado)": "reactor",
-    "Reactor — PFR (tubular)": "reactor",
+    "Reactor — PFR (tubular)": "reactor_pfr",
     "Reactor — autoclave": "reactor",
     "Reactor — jacketed agitated": "reactor",
     "Reactor — jacketed non-agit.": "reactor",
-    "Splitter — flow divider": "mezclador",
+    "Splitter — flow divider": "splitter",
     "Storage tank — cone roof": "tanque",
     "Storage tank — floating roof": "tanque",
     "Tower (column shell)": "columna",
@@ -1633,21 +1820,25 @@ def _isa_heuristic(eq_type: str) -> Optional[str]:
 #  IsaGlyphItem — QGraphicsItem on-canvas
 # ════════════════════════════════════════════════════════
 
-# Estados visuales para BlockItem on-canvas:
-#   idle      → stroke ink_mute, sin extras
-#   hover     → stroke accent, halo accent_tint
-#   selected  → stroke accent gruesa + dashed ring offset
-#   solving   → stroke ink_soft, halo circular dashed accent
-#   warning   → stroke amber, chip "!" arriba-derecha
-#   error     → stroke danger, chip "!" arriba-derecha
-ISA_STATE_PEN = {
-    "idle":     (TOK["ink_mute"], 1.5),
-    "hover":    (TOK["accent"],   1.5),
-    "selected": (TOK["accent"],   2.0),
-    "solving":  (TOK["ink_soft"], 1.5),
-    "warning":  (TOK["amber"],    1.5),
-    "error":    (TOK["danger"],   1.5),
-}
+# Modelo visual del glifo (artboard 1b del rediseño) — DOS ejes
+# independientes que conviven sin pisarse:
+#
+#   · STATUS del solver (ok/warning/error/stale/unrun/empty) → colorea el
+#     CUERPO del símbolo: trazo + tinte de relleno, leídos en caliente de
+#     tokens.STATUS_TOKEN / STATUS_FILL_TOKEN.  Reemplaza al halo-caja
+#     _StatusHaloItem que dibujaba un rectángulo alrededor del equipo.
+#       ok      → trazo neutro + dot verde (el éxito no grita)
+#       warning → trazo amber + fill amber_bg + chip "!"
+#       error   → trazo danger + fill danger_bg + chip "!" (color + símbolo)
+#       stale   → trazo ink_soft, glifo atenuado ("esto ya no vale")
+#       unrun   → trazo ink_mute PUNTEADO en el propio glifo
+#
+#   · ESTADO de interacción (idle/hover/selected/solving) → anillos y
+#     halos ALREDEDOR del símbolo, nunca el color del cuerpo:
+#       hover    → halo accent_tint
+#       selected → anillo dashed accent offset 6px (NO pisa el status)
+#       solving  → ring circular dashed pulsante
+ISA_INTERACTION_STATES = ("idle", "hover", "selected", "solving")
 
 
 class IsaGlyphItem(QGraphicsItem):
@@ -1660,9 +1851,10 @@ class IsaGlyphItem(QGraphicsItem):
     permite que BlockItem use cualquier W×H (las del catálogo
     pfd_symbols, las que ya tiene cableadas con port_coords).
 
-    El estado visual se cambia via `set_state(name)`. Acepta los 6
-    estados del README: idle, hover, selected, solving, warning,
-    error. La selección dibuja un anillo dashed offset 6px.
+    El status del solver se fija via `set_status(status)` (colorea el
+    cuerpo del símbolo); el estado de interacción via `set_state(name)`
+    con idle/hover/selected/solving (anillos alrededor).  Son ejes
+    independientes: la selección nunca pisa el color de estado (1b).
     """
 
     def __init__(self, eq_type: str, w: float, h: float, parent=None):
@@ -1671,19 +1863,33 @@ class IsaGlyphItem(QGraphicsItem):
         self._isa = isa_type_for_eq(eq_type)
         self._w = float(w)
         self._h = float(h)
-        self._state = "idle"
+        self._state = "idle"      # interacción: idle/hover/selected/solving
+        self._status = "stale"    # solver: ok/warning/error/stale/unrun/empty
         self._warning = False
         self.setAcceptedMouseButtons(Qt.NoButton)  # no captura clicks
         self.setZValue(0.0)
 
     # ── API ───────────────────────────────────────────
     def set_state(self, state: str):
-        """state ∈ {idle, hover, selected, solving, warning, error}."""
-        if state not in ISA_STATE_PEN:
+        """Estado de interacción ∈ {idle, hover, selected, solving}.
+        (Compat: 'warning'/'error' llegados por la API vieja se derivan
+        a set_status.)"""
+        if state in ("warning", "error"):
+            self.set_status(state)
+            return
+        if state not in ISA_INTERACTION_STATES:
             state = "idle"
         if state == self._state:
             return
         self._state = state
+        self.update()
+
+    def set_status(self, status: str):
+        """Status del solver ∈ {ok, warning, error, stale, unrun, empty}."""
+        status = status or "stale"
+        if status == self._status:
+            return
+        self._status = status
         self.update()
 
     def set_warning(self, on: bool):
@@ -1727,12 +1933,24 @@ class IsaGlyphItem(QGraphicsItem):
         return QRectF(-8, -10, self._w + 16, self._h + 18)
 
     def paint(self, p: QPainter, option, widget=None):
-        stroke_color_str, stroke_w = ISA_STATE_PEN.get(
-            self._state, ISA_STATE_PEN["idle"])
-        # warning/error override del estado de status si aplica
-        if self._warning and self._state not in ("error", "warning", "selected"):
-            stroke_color_str, stroke_w = ISA_STATE_PEN["warning"]
-        stroke = QColor(stroke_color_str)
+        import tokens as _tokens
+        status = self._status
+        if self._warning and status not in ("error", "warning"):
+            status = "warning"
+
+        # Cuerpo del símbolo según STATUS (1b): trazo + tinte de relleno.
+        # ok usa trazo neutro (el éxito no grita — lo señala el dot);
+        # solving atenúa el trazo mientras el solver corre.
+        if status == "ok":
+            stroke = QColor(TOK["ink_mute"])
+        else:
+            stroke = QColor(_tokens.status_hex(status))
+        if self._state == "solving":
+            stroke = QColor(TOK["ink_soft"])
+        stroke_w = _tokens.STROKE_OUTLINE
+        dashed_body = (status in ("unrun", "empty"))
+        fill_hex = _tokens.status_fill_hex(status)
+        fill = QColor(fill_hex) if fill_hex else QColor(TOK["bg_elev"])
 
         p.setRenderHint(QPainter.Antialiasing, True)
 
@@ -1766,11 +1984,15 @@ class IsaGlyphItem(QGraphicsItem):
             ox = (self._w - native_w * scale) / 2.0
             oy = (self._h - native_h * scale) / 2.0
             p.save()
+            if status == "stale":
+                # desaturado — "esto ya no vale"
+                p.setOpacity(0.72)
             p.translate(ox, oy)
             p.scale(scale, scale)
             BlockGlyph.draw(p, self._isa, native_w, native_h, stroke,
-                            fill=QColor(TOK["bg_elev"]),
-                            stroke_width=stroke_w / max(scale, 0.1))
+                            fill=fill,
+                            stroke_width=stroke_w / max(scale, 0.1),
+                            dashed=dashed_body)
             p.restore()
         else:
             # Fallback honesto para eq_types sin silueta nativa:
@@ -1782,12 +2004,16 @@ class IsaGlyphItem(QGraphicsItem):
                 p.drawPixmap(
                     QRectF(0, 0, self._w, self._h).toRect(), pm)
             else:
-                p.setPen(QPen(stroke, stroke_w))
-                p.setBrush(QBrush(QColor(TOK["bg_elev"])))
+                pen = QPen(stroke, stroke_w)
+                if dashed_body:
+                    pen.setStyle(Qt.DashLine)
+                p.setPen(pen)
+                p.setBrush(QBrush(fill))
                 p.drawRoundedRect(
                     QRectF(2, 2, self._w - 4, self._h - 4), 6, 6)
 
-        # Selection dashed ring (offset 6px)
+        # Anillo de selección dashed (offset 6px) — accent, separado del
+        # color de estado: convive con ok/warning/error sin pisarlos.
         if self._state == "selected":
             pen = QPen(QColor(TOK["accent"]), 1.0)
             pen.setStyle(Qt.DashLine); pen.setDashPattern([3, 3])
@@ -1796,12 +2022,17 @@ class IsaGlyphItem(QGraphicsItem):
             p.drawRoundedRect(QRectF(-6, -6, self._w + 12, self._h + 12), 10, 10)
             p.setOpacity(1.0)
 
-        # Warning/error chip "!" esquina sup-derecha
-        if self._warning or self._state in ("warning", "error"):
-            chip_color = TOK["danger"] if self._state == "error" else TOK["amber"]
+        # Chip "!" esquina sup-derecha (warning/error) — color + símbolo,
+        # legible también para daltonismo.
+        if status in ("warning", "error"):
+            chip_color = TOK["danger"] if status == "error" else TOK["amber"]
             cx = self._w - 2; cy = -2
             p.setBrush(QBrush(QColor(chip_color))); p.setPen(Qt.NoPen)
             p.drawEllipse(QPointF(cx, cy), 7.5, 7.5)
             p.setPen(QPen(QColor("white"), 1.2))
             p.setFont(QFont(pfd_fonts.SANS, 8, QFont.Bold))
             p.drawText(QRectF(cx-7, cy-7, 14, 14), Qt.AlignCenter, "!")
+        elif status == "ok":
+            # dot verde discreto — balance OK sin gritar
+            p.setBrush(QBrush(QColor(TOK["green"]))); p.setPen(Qt.NoPen)
+            p.drawEllipse(QPointF(self._w - 2, -2), 4.0, 4.0)

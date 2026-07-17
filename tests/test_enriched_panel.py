@@ -5,7 +5,7 @@ GATE 3 — enriquecimiento expuesto en panel + Monte Carlo.
     parsean y fluyen a simulate(); el NPV del panel == simulate(econ_inputs)
     (el panel es solo presentación del mismo motor → build_cash_flow).
   · Default (campos vacíos) → caso simple (NPV == simulate sin enriquecer).
-  · MonteCarloPanel hereda el enriquecimiento vía econ_inputs.
+  · El Monte Carlo embebido hereda el enriquecimiento vía econ_inputs.
 """
 import os
 import unittest
@@ -16,7 +16,7 @@ from PySide6.QtWidgets import QApplication
 
 import examples_registry as reg
 import simulate_engine as se
-from economics_panel import EconomicsPanel, MonteCarloPanel, _parse_csv
+from economics_panel import EconomicsPanel, MonteCarloPane, _parse_csv
 
 _app = QApplication.instance() or QApplication([])
 

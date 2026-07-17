@@ -459,6 +459,10 @@ ICONS.update(EXTRA_EQUIP_ICONS)
 # ──────────────────────────────────────────────────────────────────
 EQ_TYPE_TO_ICON.update({
     # Heat exchangers
+    # WHB = waste-heat boiler: badge de caldera (antes caían al fallback
+    # eq-mixer — una caldera de recuperación con ícono de mezclador)
+    "Heat exch. — WHB packaged":         "eq-boiler",
+    "Heat exch. — WHB field erected":    "eq-boiler",
     "Heat exch. — double pipe":          "eq-hx-double-pipe",
     "Heat exch. — multiple pipe":        "eq-hx-double-pipe",
     "Heat exch. — condenser shell-tube": "eq-condenser",

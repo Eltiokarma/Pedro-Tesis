@@ -1,6 +1,6 @@
 """GATE 2 — átomos del Panel Económico (econ_widgets), render headless-safe.
 
-Cada átomo nuevo (NpvHero, EconTabs, ConfigPanel, FinancialTable) instancia y
+Cada átomo (EconTabs, ConfigPanel, FinancialTable) instancia y
 pinta offscreen sin crashear, en un barrido 2 temas × 4 acentos × 3 densidades,
 re-pinta al emitir _PrefsBus, y reusa _tok (TOK en caliente). Default del panel:
 light·oliva·cozy. Qt puro — no depende de matplotlib.
@@ -28,8 +28,6 @@ def _render(w, sz=(300, 120)):
 
 def _make_all():
     return [
-        ew.NpvHero(value=11.8e6, sub="rentable"),
-        ew.NpvHero(value=-1.8e6),
         ew.EconTabs(),
         ew.ConfigPanel({"project_life": 10, "tax_rate": 0.30,
                         "discount_rate": 0.10, "dep_method": "straight_line"}),
@@ -45,12 +43,6 @@ def _make_all():
 def test_atoms_instantiate_and_render():
     for w in _make_all():
         assert not _render(w).isNull()
-
-
-def test_npvhero_sign_color_renders():
-    # ambos signos deben pintar sin crashear (verde / danger por ribbon)
-    for v in (-5e6, 0.0, 12e6):
-        assert not _render(ew.NpvHero(value=v)).isNull()
 
 
 def test_econtabs_switch_emits_and_restyles():
