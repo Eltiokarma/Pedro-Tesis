@@ -2296,28 +2296,6 @@ class _RoundedRectBody(QGraphicsRectItem):
         painter.drawRoundedRect(self.rect(), self.RADIUS, self.RADIUS)
 
 
-class _StatusHaloItem(QGraphicsRectItem):
-    """Halo decorativo NO-HITTABLE.
-
-    Como BlockItem es un QGraphicsItemGroup con handlesChildEvents=True,
-    los clicks en el área de cualquier hijo (incluyendo el halo
-    extendido 6px) van al group entero.  Resultado: si un endpoint
-    handle del stream queda sobre la zona extendida del halo, el click
-    activa el bloque (movable) en vez del handle.
-
-    Solución: shape() vacío y NoButton para que este item NO contribuya
-    al hit region del group.  Sigue pintando normal."""
-
-    def shape(self):
-        return QPainterPath()        # path vacío = no hit area
-
-    def paint(self, painter, option, widget=None):
-        painter.setRenderHint(QPainter.Antialiasing)
-        painter.setBrush(self.brush())
-        painter.setPen(self.pen())
-        painter.drawRoundedRect(self.rect(), 4, 4)
-
-
 class _StreamHandle(QGraphicsEllipseItem):
     """Handle circular azul para arrastrar un waypoint de stream.
     Se renderiza solo cuando el stream está seleccionado.  Al moverlo,
@@ -3397,26 +3375,11 @@ class BlockItem(QGraphicsItemGroup):
         except Exception:
             self.W, self.H = pfd.block_dims(block.eq_type)
 
-        # --- halo de status (semáforo solver) ---
-        # Rectángulo redondeado AFUERA del símbolo, con borde coloreado
-        # según el último solve (verde/azul/amarillo/rojo).  Se pinta
-        # ANTES del símbolo (z menor) para que el SVG quede por encima.
-        # Default: azul stale (sin solve todavía).
+        # --- status del solver (artboard 1b) ---
+        # El estado se muestra en el CUERPO del símbolo (trazo + tinte,
+        # IsaGlyphItem.set_status) — el halo-caja _StatusHaloItem que
+        # rodeaba al equipo se eliminó en el rediseño.
         self._status: str = "stale"
-        halo_pad = 6
-        # NOTA: usamos _StatusHaloItem (no QGraphicsRectItem) para que
-        # el halo NO contribuya al hit region del bloque.  Sino el
-        # área extendida 6px tapa los endpoint handles de los streams
-        # que se conectan a este bloque y los clicks van al bloque
-        # (movable) en vez de los handles.
-        self.status_halo = _StatusHaloItem(
-            -halo_pad, -halo_pad,
-            self.W + 2*halo_pad, self.H + 2*halo_pad,
-            parent=self)
-        self.status_halo.setBrush(Qt.NoBrush)
-        self.status_halo.setPen(QPen(status_qcolor("unrun"), 1.5, Qt.SolidLine))
-        self.status_halo.setZValue(-1.0)   # debajo del símbolo
-        self.status_halo.setAcceptedMouseButtons(Qt.NoButton)
 
         # --- rect base (invisible, solo hit-target) ---
         # El símbolo PFD ES el bloque visible; el rect cumple rol de
@@ -3536,7 +3499,7 @@ class BlockItem(QGraphicsItemGroup):
             isa.setPos(0, 0)
             isa.setZValue(0)
             # estado inicial sync con _status del solver
-            isa.set_state(self._isa_state_for_status(self._status))
+            isa.set_status(self._status)
             self.decoration_items.append(isa)
             self._isa_item = isa
             self._svg_mode = True
@@ -3568,18 +3531,6 @@ class BlockItem(QGraphicsItemGroup):
             self._svg_mode = True
         except Exception:
             pass
-
-    @staticmethod
-    def _isa_state_for_status(status: str) -> str:
-        """Mapea el `_status` del solver al estado visual del ISA glyph."""
-        return {
-            "ok":      "idle",      # el halo verde ya está en status_halo
-            "warning": "warning",
-            "error":   "error",
-            "unrun":   "idle",
-            "stale":   "idle",
-            "empty":   "idle",
-        }.get(status, "idle")
 
     def _render_ports(self):
         r = self.PORT_RADIUS
@@ -3730,14 +3681,16 @@ class BlockItem(QGraphicsItemGroup):
         self.setToolTip("<br>".join(lines))
 
     def set_selected_visual(self, selected: bool):
-        if selected:
-            # halo de selección: borde índigo punteado alrededor del
-            # bloque, sólo visible al estar seleccionado.
-            self.rect.setPen(QPen(_selection_qcolor(), 1.5, Qt.DashLine))
+        """Anillo de selección: lo dibuja el propio glifo (accent dashed,
+        IsaGlyphItem) y convive con cualquier estado del solver — un solo
+        marco, nunca cajas anidadas (artboard 1b)."""
+        if getattr(self, "_isa_item", None) is not None:
+            self._isa_item.set_state("selected" if selected else "idle")
         else:
-            # sin selección el rect queda invisible — el símbolo SVG
-            # es la representación visual del bloque, no la caja.
-            self.rect.setPen(Qt.NoPen)
+            # fallback SVG legacy (sin editor_chrome): borde punteado
+            pen = (QPen(_selection_qcolor(), 1.5, Qt.DashLine)
+                   if selected else Qt.NoPen)
+            self.rect.setPen(pen)
 
     def _update_duty_badge(self):
         """Actualiza el badge '↑Q +X kW' al lado del bloque.
@@ -3764,29 +3717,13 @@ class BlockItem(QGraphicsItemGroup):
         self.duty_badge.setBrush(QBrush(color))
 
     def set_status(self, status: str):
-        """Aplica color de status (ok / warning / error / unrun / stale)
-        al halo de status del bloque.  Default 'stale' = azul (sin
-        solve corrido o flowsheet editado posteriormente)."""
+        """Aplica el status del solver (ok / warning / error / unrun /
+        stale) al CUERPO del símbolo (IsaGlyphItem: trazo + tinte + chip
+        o dot).  La selección es un anillo independiente que nunca pisa
+        este color (artboard 1b)."""
         self._status = status or "stale"
-        color = status_qcolor(self._status)
-        # Línea más gruesa para error, sólida para ok, punteada para stale
-        if self._status == "error":
-            pen = QPen(color, 2.5, Qt.SolidLine)
-        elif self._status == "warning":
-            pen = QPen(color, 2.0, Qt.SolidLine)
-        elif self._status == "ok":
-            pen = QPen(color, 1.2, Qt.SolidLine)
-        else:    # stale / unrun
-            pen = QPen(color, 1.2, Qt.DashLine)
-        self.status_halo.setPen(pen)
-        # Sync IsaGlyphItem (silueta ISA) — el halo da el verde/amarillo/rojo
-        # pero la propia silueta también colorea el stroke en warning/error.
         if getattr(self, "_isa_item", None) is not None:
-            # Si el bloque está seleccionado, conservar 'selected' visual.
-            if self.isSelected():
-                self._isa_item.set_state("selected")
-            else:
-                self._isa_item.set_state(self._isa_state_for_status(self._status))
+            self._isa_item.set_status(self._status)
 
     # ── Geometría del grupo ─────────────────────────────
     # QGraphicsItemGroup calcula su boundingRect SOLO con los hijos
@@ -3853,13 +3790,11 @@ class BlockItem(QGraphicsItemGroup):
                 finally:
                     self._in_group_drag = False
         elif change == QGraphicsItem.ItemSelectedHasChanged:
-            # sync visual del IsaGlyphItem con selección Qt
+            # sync visual del IsaGlyphItem con selección Qt (anillo
+            # independiente — el status del cuerpo no se toca)
             if getattr(self, "_isa_item", None) is not None:
-                if bool(value):
-                    self._isa_item.set_state("selected")
-                else:
-                    self._isa_item.set_state(
-                        self._isa_state_for_status(self._status))
+                self._isa_item.set_state(
+                    "selected" if bool(value) else "idle")
         return super().itemChange(change, value)
 
     def mouseDoubleClickEvent(self, event):
@@ -3908,7 +3843,7 @@ class BlockItem(QGraphicsItemGroup):
     def hoverLeaveEvent(self, event):
         isa = getattr(self, "_isa_item", None)
         if isa is not None and not self.isSelected():
-            isa.set_state(self._isa_state_for_status(self._status))
+            isa.set_state("idle")
         super().hoverLeaveEvent(event)
 
     def mouseReleaseEvent(self, event):

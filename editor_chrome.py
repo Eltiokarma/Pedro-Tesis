@@ -135,10 +135,13 @@ class BlockGlyph:
     @staticmethod
     def draw(p: QPainter, type_: str, w: int, h: int,
              stroke: QColor, fill: QColor = None,
-             stroke_width: float = 1.6):
+             stroke_width: float = 1.6, dashed: bool = False):
         pen = QPen(stroke, stroke_width)
         pen.setCapStyle(Qt.RoundCap)
         pen.setJoinStyle(Qt.RoundJoin)
+        if dashed:
+            # contorno punteado — estado "unrun" en el propio glifo (1b)
+            pen.setStyle(Qt.DashLine)
         p.setPen(pen)
         if fill is None:
             fill_brush = QBrush(QColor(TOK["bg_elev"]))
@@ -1633,21 +1636,25 @@ def _isa_heuristic(eq_type: str) -> Optional[str]:
 #  IsaGlyphItem — QGraphicsItem on-canvas
 # ════════════════════════════════════════════════════════
 
-# Estados visuales para BlockItem on-canvas:
-#   idle      → stroke ink_mute, sin extras
-#   hover     → stroke accent, halo accent_tint
-#   selected  → stroke accent gruesa + dashed ring offset
-#   solving   → stroke ink_soft, halo circular dashed accent
-#   warning   → stroke amber, chip "!" arriba-derecha
-#   error     → stroke danger, chip "!" arriba-derecha
-ISA_STATE_PEN = {
-    "idle":     (TOK["ink_mute"], 1.5),
-    "hover":    (TOK["accent"],   1.5),
-    "selected": (TOK["accent"],   2.0),
-    "solving":  (TOK["ink_soft"], 1.5),
-    "warning":  (TOK["amber"],    1.5),
-    "error":    (TOK["danger"],   1.5),
-}
+# Modelo visual del glifo (artboard 1b del rediseño) — DOS ejes
+# independientes que conviven sin pisarse:
+#
+#   · STATUS del solver (ok/warning/error/stale/unrun/empty) → colorea el
+#     CUERPO del símbolo: trazo + tinte de relleno, leídos en caliente de
+#     tokens.STATUS_TOKEN / STATUS_FILL_TOKEN.  Reemplaza al halo-caja
+#     _StatusHaloItem que dibujaba un rectángulo alrededor del equipo.
+#       ok      → trazo neutro + dot verde (el éxito no grita)
+#       warning → trazo amber + fill amber_bg + chip "!"
+#       error   → trazo danger + fill danger_bg + chip "!" (color + símbolo)
+#       stale   → trazo ink_soft, glifo atenuado ("esto ya no vale")
+#       unrun   → trazo ink_mute PUNTEADO en el propio glifo
+#
+#   · ESTADO de interacción (idle/hover/selected/solving) → anillos y
+#     halos ALREDEDOR del símbolo, nunca el color del cuerpo:
+#       hover    → halo accent_tint
+#       selected → anillo dashed accent offset 6px (NO pisa el status)
+#       solving  → ring circular dashed pulsante
+ISA_INTERACTION_STATES = ("idle", "hover", "selected", "solving")
 
 
 class IsaGlyphItem(QGraphicsItem):
@@ -1660,9 +1667,10 @@ class IsaGlyphItem(QGraphicsItem):
     permite que BlockItem use cualquier W×H (las del catálogo
     pfd_symbols, las que ya tiene cableadas con port_coords).
 
-    El estado visual se cambia via `set_state(name)`. Acepta los 6
-    estados del README: idle, hover, selected, solving, warning,
-    error. La selección dibuja un anillo dashed offset 6px.
+    El status del solver se fija via `set_status(status)` (colorea el
+    cuerpo del símbolo); el estado de interacción via `set_state(name)`
+    con idle/hover/selected/solving (anillos alrededor).  Son ejes
+    independientes: la selección nunca pisa el color de estado (1b).
     """
 
     def __init__(self, eq_type: str, w: float, h: float, parent=None):
@@ -1671,19 +1679,33 @@ class IsaGlyphItem(QGraphicsItem):
         self._isa = isa_type_for_eq(eq_type)
         self._w = float(w)
         self._h = float(h)
-        self._state = "idle"
+        self._state = "idle"      # interacción: idle/hover/selected/solving
+        self._status = "stale"    # solver: ok/warning/error/stale/unrun/empty
         self._warning = False
         self.setAcceptedMouseButtons(Qt.NoButton)  # no captura clicks
         self.setZValue(0.0)
 
     # ── API ───────────────────────────────────────────
     def set_state(self, state: str):
-        """state ∈ {idle, hover, selected, solving, warning, error}."""
-        if state not in ISA_STATE_PEN:
+        """Estado de interacción ∈ {idle, hover, selected, solving}.
+        (Compat: 'warning'/'error' llegados por la API vieja se derivan
+        a set_status.)"""
+        if state in ("warning", "error"):
+            self.set_status(state)
+            return
+        if state not in ISA_INTERACTION_STATES:
             state = "idle"
         if state == self._state:
             return
         self._state = state
+        self.update()
+
+    def set_status(self, status: str):
+        """Status del solver ∈ {ok, warning, error, stale, unrun, empty}."""
+        status = status or "stale"
+        if status == self._status:
+            return
+        self._status = status
         self.update()
 
     def set_warning(self, on: bool):
@@ -1727,12 +1749,24 @@ class IsaGlyphItem(QGraphicsItem):
         return QRectF(-8, -10, self._w + 16, self._h + 18)
 
     def paint(self, p: QPainter, option, widget=None):
-        stroke_color_str, stroke_w = ISA_STATE_PEN.get(
-            self._state, ISA_STATE_PEN["idle"])
-        # warning/error override del estado de status si aplica
-        if self._warning and self._state not in ("error", "warning", "selected"):
-            stroke_color_str, stroke_w = ISA_STATE_PEN["warning"]
-        stroke = QColor(stroke_color_str)
+        import tokens as _tokens
+        status = self._status
+        if self._warning and status not in ("error", "warning"):
+            status = "warning"
+
+        # Cuerpo del símbolo según STATUS (1b): trazo + tinte de relleno.
+        # ok usa trazo neutro (el éxito no grita — lo señala el dot);
+        # solving atenúa el trazo mientras el solver corre.
+        if status == "ok":
+            stroke = QColor(TOK["ink_mute"])
+        else:
+            stroke = QColor(_tokens.status_hex(status))
+        if self._state == "solving":
+            stroke = QColor(TOK["ink_soft"])
+        stroke_w = _tokens.STROKE_OUTLINE
+        dashed_body = (status in ("unrun", "empty"))
+        fill_hex = _tokens.status_fill_hex(status)
+        fill = QColor(fill_hex) if fill_hex else QColor(TOK["bg_elev"])
 
         p.setRenderHint(QPainter.Antialiasing, True)
 
@@ -1766,11 +1800,15 @@ class IsaGlyphItem(QGraphicsItem):
             ox = (self._w - native_w * scale) / 2.0
             oy = (self._h - native_h * scale) / 2.0
             p.save()
+            if status == "stale":
+                # desaturado — "esto ya no vale"
+                p.setOpacity(0.72)
             p.translate(ox, oy)
             p.scale(scale, scale)
             BlockGlyph.draw(p, self._isa, native_w, native_h, stroke,
-                            fill=QColor(TOK["bg_elev"]),
-                            stroke_width=stroke_w / max(scale, 0.1))
+                            fill=fill,
+                            stroke_width=stroke_w / max(scale, 0.1),
+                            dashed=dashed_body)
             p.restore()
         else:
             # Fallback honesto para eq_types sin silueta nativa:
@@ -1782,12 +1820,16 @@ class IsaGlyphItem(QGraphicsItem):
                 p.drawPixmap(
                     QRectF(0, 0, self._w, self._h).toRect(), pm)
             else:
-                p.setPen(QPen(stroke, stroke_w))
-                p.setBrush(QBrush(QColor(TOK["bg_elev"])))
+                pen = QPen(stroke, stroke_w)
+                if dashed_body:
+                    pen.setStyle(Qt.DashLine)
+                p.setPen(pen)
+                p.setBrush(QBrush(fill))
                 p.drawRoundedRect(
                     QRectF(2, 2, self._w - 4, self._h - 4), 6, 6)
 
-        # Selection dashed ring (offset 6px)
+        # Anillo de selección dashed (offset 6px) — accent, separado del
+        # color de estado: convive con ok/warning/error sin pisarlos.
         if self._state == "selected":
             pen = QPen(QColor(TOK["accent"]), 1.0)
             pen.setStyle(Qt.DashLine); pen.setDashPattern([3, 3])
@@ -1796,12 +1838,17 @@ class IsaGlyphItem(QGraphicsItem):
             p.drawRoundedRect(QRectF(-6, -6, self._w + 12, self._h + 12), 10, 10)
             p.setOpacity(1.0)
 
-        # Warning/error chip "!" esquina sup-derecha
-        if self._warning or self._state in ("warning", "error"):
-            chip_color = TOK["danger"] if self._state == "error" else TOK["amber"]
+        # Chip "!" esquina sup-derecha (warning/error) — color + símbolo,
+        # legible también para daltonismo.
+        if status in ("warning", "error"):
+            chip_color = TOK["danger"] if status == "error" else TOK["amber"]
             cx = self._w - 2; cy = -2
             p.setBrush(QBrush(QColor(chip_color))); p.setPen(Qt.NoPen)
             p.drawEllipse(QPointF(cx, cy), 7.5, 7.5)
             p.setPen(QPen(QColor("white"), 1.2))
             p.setFont(QFont(pfd_fonts.SANS, 8, QFont.Bold))
             p.drawText(QRectF(cx-7, cy-7, 14, 14), Qt.AlignCenter, "!")
+        elif status == "ok":
+            # dot verde discreto — balance OK sin gritar
+            p.setBrush(QBrush(QColor(TOK["green"]))); p.setPen(Qt.NoPen)
+            p.drawEllipse(QPointF(self._w - 2, -2), 4.0, 4.0)
