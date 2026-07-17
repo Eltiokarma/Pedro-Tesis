@@ -16,7 +16,7 @@ Gaps conocidos vs handoff §2 (dict real de simulate, auditados en Fase 0):
     índice i = año de operación i+1; NO incluye años de construcción cuando
     construction_schedule es None — caso default → waterfall monocromo 'op')
   · montecarlo / tornado → NO existen en el dict → None (el tab MC usa el
-    MonteCarloPanel vivo, que llama run_monte_carlo/run_tornado aparte)
+    MonteCarloPane embebido, que llama run_monte_carlo/run_tornado aparte)
   · income_statement → NO existe → se DERIVA un P&L por aritmética de presentación
     sobre valores reales (Revenue − COM_d = EBT − tax = neto + dep = flujo op),
     cada celda trazable a su origen.

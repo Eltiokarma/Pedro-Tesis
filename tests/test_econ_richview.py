@@ -1,9 +1,10 @@
-"""GATE — EconRichView (ensamblado fiel al mockup), render headless-safe.
+"""GATE — EconRichView (única UI del panel económico, rediseño 1e).
 
-El layout completo (header + hero strip + sidebar + tabs + footer) instancia y
-pinta offscreen sin crashear, en el barrido temas×acentos×densidades (default
-light·oliva·cozy), reusa econ_metrics como fuente, y las señales close/rerun/
-sidebar funcionan.
+El layout completo (header + hero + sidebar de 7 panes + footer de acciones)
+instancia y pinta offscreen sin crashear, en el barrido temas×acentos×
+densidades, reusa econ_metrics como fuente, el sidebar navega 1:1 a los panes
+(sin segmented duplicado) y las señales close/rerun funcionan.  Acepta m=None
+(estado vacío pre-cálculo).
 """
 import os
 
@@ -49,25 +50,30 @@ def test_richview_has_all_zones():
     assert len(rv.findChildren(_Footer)) == 1
 
 
-def test_sidebar_switches_tab():
+def test_sidebar_switches_pane_one_to_one():
+    """7 ítems → 7 panes reales, mapeo identidad (antes 4 de 7 ítems
+    colapsaban al mismo tab)."""
     rv = EconRichView(_metrics())
-    # Monte Carlo (índice 4 del sidebar) → tab 1
-    rv._side._on_item(4)
-    assert rv._tabs.currentIndex() == 1
-    # Contabilidad (índice 5) → tab 2
-    rv._side._on_item(5)
-    assert rv._tabs.currentIndex() == 2
-    # CAPEX (índice 1) → tab 0 (Resultados)
-    rv._side._on_item(1)
-    assert rv._tabs.currentIndex() == 0
+    assert rv._tabs.count() == 7
+    for k in range(7):
+        rv._side._on_item(k)
+        assert rv._tabs.currentIndex() == k
+
+
+def test_empty_state():
+    """m=None → estado vacío: placeholders, hero en '—', arranca en
+    Parámetros."""
+    rv = EconRichView(None)
+    assert rv._tabs.count() == 7
+    assert rv._tabs.currentIndex() == 6
+    assert not _render(rv).isNull()
 
 
 def test_signals_fire():
     rv = EconRichView(_metrics())
-    closed = []; reran = []; mc = []
+    closed = []; reran = []
     rv.closeClicked.connect(lambda: closed.append(1))
     rv.rerun.connect(lambda: reran.append(1))
-    rv2 = EconRichView(_metrics(), on_montecarlo=lambda: mc.append(1))
     # header close
     rv.findChildren(_PanelHeader)[0].closeClicked.emit()
     assert closed == [1]
@@ -97,42 +103,9 @@ def test_negative_npv_renders():
     assert not _render(rv).isNull()
 
 
-def test_tab_sync_segmented_sidebar_stack():
-    """Regresión: los 3 controles (segmented EconTabs + Sidebar + stack) se
-    sincronizan. Antes, click en sidebar movía el stack pero dejaba el segmento
-    marcando el tab viejo (y viceversa)."""
+def test_no_duplicate_navigation():
+    """La segmented-tab bar duplicada murió: el sidebar es LA navegación
+    (no queda ningún EconTabs dentro del rich view)."""
+    from econ_widgets import EconTabs
     rv = EconRichView(_metrics())
-
-    def state():
-        return (rv._tabs.currentIndex(), rv._econtabs.current_index())
-
-    # segmento → Contabilidad: los tres en 2
-    rv._econtabs._buttons[2].click()
-    assert state() == (2, 2)
-    assert rv._side._active == 5            # Contabilidad en sidebar
-    # sidebar → Monte Carlo: el segmento DEBE seguir a 1 (era el bug)
-    rv._side._on_item(4)
-    assert state() == (1, 1)
-    assert rv._side._active == 4
-    # sidebar → Resumen: vuelve a 0 en los tres
-    rv._side._on_item(0)
-    assert state() == (0, 0)
-    # sidebar → CAPEX (mismo tab 0) resalta el item clickeado, segmento en 0
-    rv._side._on_item(1)
-    assert state() == (0, 0)
-    assert rv._side._active == 1
-    # segmento → Monte Carlo: sidebar resalta MC(4)
-    rv._econtabs._buttons[1].click()
-    assert state() == (1, 1)
-    assert rv._side._active == 4
-
-
-def test_sidebar_parametros_emits_editparams():
-    """El item Parámetros (6) NO es un tab: emite editParams, no mueve el stack."""
-    rv = EconRichView(_metrics())
-    fired = []
-    rv.editParams.connect(lambda: fired.append(1))
-    before = rv._tabs.currentIndex()
-    rv._side._on_item(6)
-    assert fired == [1]
-    assert rv._tabs.currentIndex() == before   # no cambió el stack
+    assert len(rv.findChildren(EconTabs)) == 0

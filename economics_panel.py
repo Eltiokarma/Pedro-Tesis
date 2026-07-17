@@ -1,58 +1,31 @@
 """
 economics_panel.py — Panel económico IN-PROCESS de la GUI viva.
 
-Reemplaza el bridge legacy (xlsx temporal + subproceso ana_qt.py) por un
-QDialog que corre simulate_engine.simulate(run_economics=True) sobre el
-flowsheet actual y muestra NPV/IRR/Payback/ROI/COM ahí mismo, sin disco ni
-subproceso.
+UNA sola UI (rediseño 1e/1f): el diálogo monta EconRichView desde el
+arranque — header + hero de KPIs (una sola vez) + sidebar de 7 panes
+reales + footer de acciones.  Los parámetros viven en el pane
+«⚙ Parámetros» (este módulo construye el formulario) y Monte Carlo corre
+EMBEBIDO en su pane con las figuras de econ_figures (densidad de NPV +
+tornado).  El dump ASCII de resultados, la tab bar exterior duplicada,
+el renderer legacy y la ventana Monte Carlo aparte murieron con el
+rediseño.
 
-NO reimplementa el motor económico: orquesta simulate() y presenta el dict.
-NO importa ana_qt / montecarlo / flujoflujoclass — solo simulate_engine y
-econ_defaults.  Respeta el perfil económico activo (econ_defaults: perfil
-regional + HI factor + Turton γ), que simulate() ya aplica por dentro.
-
-El diseño visual es responsabilidad de una fase Design posterior; acá se
-prioriza correcto y funcional, con widgets nombrados y estructura limpia.
+NO reimplementa el motor económico: orquesta simulate() y presenta el
+dict.  NO importa ana_qt / montecarlo / flujoflujoclass — solo
+simulate_engine, econ_defaults y montecarlo_headless (lazy).  Respeta el
+perfil económico activo (econ_defaults: perfil regional + HI factor +
+Turton γ), que simulate() ya aplica por dentro.
 """
 from PySide6.QtWidgets import (
     QDialog, QVBoxLayout, QHBoxLayout, QFormLayout, QGroupBox, QLabel,
-    QDoubleSpinBox, QSpinBox, QCheckBox, QComboBox, QPushButton, QTextEdit,
-    QDialogButtonBox, QLineEdit, QStackedWidget, QScrollArea, QWidget,
+    QDoubleSpinBox, QSpinBox, QCheckBox, QComboBox, QPushButton,
+    QLineEdit, QWidget,
 )
-from PySide6.QtGui import QFont
 from PySide6.QtCore import Qt
 
 import econ_defaults as ed
 import simulate_engine as se
-from tokens import TOK
-
-
-def _fmt_usd(x):
-    """USD con separador de miles; '—' si None."""
-    if x is None:
-        return "—"
-    try:
-        return f"$ {float(x):,.0f}"
-    except (TypeError, ValueError):
-        return str(x)
-
-
-def _fmt_musd(x):
-    if x is None:
-        return "—"
-    try:
-        return f"$ {float(x) / 1e6:,.2f} MM"
-    except (TypeError, ValueError):
-        return str(x)
-
-
-def _fmt_pct(x):
-    if x is None or isinstance(x, str):
-        return x if isinstance(x, str) else "—"
-    try:
-        return f"{float(x):.1f} %"
-    except (TypeError, ValueError):
-        return str(x)
+from tokens import TOK, fmt_pct
 
 
 def _parse_csv(text):
@@ -72,52 +45,47 @@ def _parse_csv(text):
     return out
 
 
-def _fmt_yr(x):
-    if x is None or isinstance(x, str):
-        return x if isinstance(x, str) else "—"
-    try:
-        return f"{float(x):.2f} años"
-    except (TypeError, ValueError):
-        return str(x)
+def _wrap(layout):
+    """Envuelve un layout en un QWidget (para QFormLayout.addRow)."""
+    w = QWidget(); w.setLayout(layout)
+    return w
 
 
 class EconomicsPanel(QDialog):
-    """Diálogo económico in-process.  Toma un Flowsheet, recolecta inputs
-    económicos (prellenados con econ_defaults), corre simulate() al apretar
-    "Calcular" y muestra el resultado."""
+    """Diálogo económico in-process.  Toma un Flowsheet, monta la
+    EconRichView (única UI), recolecta inputs económicos en el pane
+    Parámetros (prellenados con econ_defaults), corre simulate() al
+    apretar «Calcular» y puebla los panes con el resultado."""
 
     def __init__(self, fs, parent=None):
         super().__init__(parent)
         self.fs = fs
         self.last_result = None        # último dict de simulate() (para tests)
-        self.setWindowTitle("Análisis económico (in-process)")
-        # Alto inicial modesto + mínimo bajo: en laptops chicas el contenido
-        # hace SCROLL en vez de desbordar fuera de pantalla.
-        self.resize(580, 640)
-        self.setMinimumSize(420, 360)
+        self._main_window = parent
+        self.setWindowTitle("Análisis económico")
+        # Tamaño apto para laptops chicas: los panes scrollean por dentro.
+        self.resize(760, 700)
+        self.setMinimumSize(560, 400)
         self._build_ui()
 
     # ── construcción de UI ───────────────────────────────────────────
     def _build_ui(self):
-        # Layout externo del diálogo: [ scroll con todo el contenido ] + [ Cerrar fijo ]
         outer = QVBoxLayout(self)
         outer.setContentsMargins(0, 0, 0, 0)
-        scroll = QScrollArea()
-        scroll.setWidgetResizable(True)
-        scroll.setFrameShape(QScrollArea.NoFrame)
-        content = QWidget()
-        scroll.setWidget(content)
-        outer.addWidget(scroll, stretch=1)
-        root = QVBoxLayout(content)
+        # Widgets huésped de la rich view — se construyen UNA vez y se
+        # re-enganchan en cada _mount_rich (detach_hosted).
+        self._params_widget = self._build_params_widget()
+        self._mc_pane = MonteCarloPane(
+            get_flowsheet_dict=lambda: self.fs.to_dict(),
+            get_econ_inputs=self.collect_econ_inputs)
+        self._rich = None
+        self._rich_lay = outer
+        self._mount_rich(None)          # estado vacío → pane Parámetros
 
-        # Todos los inputs (perfil + financieros + depreciación + cashflow +
-        # botón Calcular) van en un contenedor único que se OCULTA cuando
-        # aparece la vista rica → la ventana queda como el mockup. El sidebar
-        # "Parámetros" del rich view lo re-muestra.
-        self._inputs_host = QWidget()
-        root.addWidget(self._inputs_host)
-        _inp_root = root            # guardamos el root real
-        root = QVBoxLayout(self._inputs_host)
+    def _build_params_widget(self):
+        """Formulario de parámetros (pane ⚙ de la rich view)."""
+        w = QWidget()
+        root = QVBoxLayout(w)
         root.setContentsMargins(0, 0, 0, 0)
 
         # Perfil activo (read-only — se edita en "Perfil económico…")
@@ -176,7 +144,7 @@ class EconomicsPanel(QDialog):
         self.spin_year.setRange(1990, 2100)
         self.spin_year.setValue(2024)
         self.spin_year.setToolTip("Año base CEPCI para el costing de capital.")
-        form.addRow("Año CEPCI (year_target):", self.spin_year)
+        form.addRow("Año CEPCI:", self.spin_year)
 
         # ISBL override opcional (en MMUSD).  Vacío → derivado de los bloques.
         row_isbl = QHBoxLayout()
@@ -245,80 +213,38 @@ class EconomicsPanel(QDialog):
         cf_form.addRow(self.chk_taxlag)
         root.addWidget(cf_box)
 
-        # Botón Calcular
+        # Estado + botón Calcular
+        self.lbl_status = QLabel("Configurá y presioná «Calcular».")
+        self.lbl_status.setWordWrap(True)
+        root.addWidget(self.lbl_status)
         self.btn_calc = QPushButton("Calcular")
         self.btn_calc.clicked.connect(self._run)
         root.addWidget(self.btn_calc)
+        root.addStretch(1)
+        return w
 
-        # Botón Monte Carlo (panel hermano, in-process sobre simulate())
-        self.btn_mc = QPushButton("Monte Carlo…")
-        self.btn_mc.clicked.connect(self._open_montecarlo)
-        root.addWidget(self.btn_mc)
-
-        # ── fin de inputs_host: el resto va al root REAL del content ──────
-        root = _inp_root
-
-        # Resultados (host de la vista rica; fuera del inputs_host)
-        res_box = QGroupBox("Resultados")
-        res_box.setFlat(True)
-        self._res_box = res_box
-        res_layout = QVBoxLayout(res_box)
-        self.lbl_status = QLabel("Presioná «Calcular».")
-        self.lbl_status.setWordWrap(True)
-        res_layout.addWidget(self.lbl_status)
-
-        # Vista rica (Fase 4): tabs Resultados | Monte Carlo | Contabilidad.
-        # Aditiva — si falla, _render cae al texto plano (txt_results abajo).
-        self._has_rich = False
-        try:
-            from econ_widgets import EconTabs
-            self._tabs = EconTabs(("Resultados", "Monte Carlo", "Contabilidad"))
-            self._stack = QStackedWidget()
-            self._stack.setMinimumHeight(280)   # área de tabs usable dentro del scroll
-            # pane 0: Resultados (host rico, poblado en _render_econ)
-            self._pane_res = QScrollArea(); self._pane_res.setWidgetResizable(True)
-            self._pane_res_host = QWidget()
-            self._pane_res_lay = QVBoxLayout(self._pane_res_host)
-            self._pane_res_lay.setContentsMargins(0, 0, 0, 0)
-            self._pane_res.setWidget(self._pane_res_host)
-            # pane 1: Monte Carlo (reusa el MonteCarloPanel vivo)
-            self._pane_mc = QWidget()
-            mcl = QVBoxLayout(self._pane_mc)
-            mc_lbl = QLabel("Análisis de incertidumbre (distribución de NPV + "
-                            "tornado de sensibilidad).")
-            mc_lbl.setWordWrap(True)
-            mcl.addWidget(mc_lbl)
-            btn_mc2 = QPushButton("Abrir Monte Carlo…")
-            btn_mc2.clicked.connect(self._open_montecarlo)
-            mcl.addWidget(btn_mc2)
-            mcl.addStretch(1)
-            # pane 2: Contabilidad (host de tablas, poblado en _render_econ)
-            self._pane_acc = QScrollArea(); self._pane_acc.setWidgetResizable(True)
-            self._pane_acc_host = QWidget()
-            self._pane_acc_lay = QVBoxLayout(self._pane_acc_host)
-            self._pane_acc_lay.setContentsMargins(0, 0, 0, 0)
-            self._pane_acc.setWidget(self._pane_acc_host)
-            for pane in (self._pane_res, self._pane_mc, self._pane_acc):
-                self._stack.addWidget(pane)
-            self._tabs.changed.connect(self._stack.setCurrentIndex)
-            res_layout.addWidget(self._tabs)
-            res_layout.addWidget(self._stack, stretch=1)
-            self._has_rich = True
-        except Exception:
-            self._has_rich = False
-
-        self.txt_results = QTextEdit()
-        self.txt_results.setReadOnly(True)
-        self.txt_results.setFont(QFont("Consolas", 10))
-        res_layout.addWidget(self.txt_results)
-        root.addWidget(res_box, stretch=1)
-
-        # Cerrar — FUERA del scroll (barra fija abajo, siempre visible).
-        btns = QDialogButtonBox(QDialogButtonBox.Close)
-        btns.rejected.connect(self.reject)
-        btns.accepted.connect(self.accept)
-        btns.setContentsMargins(8, 6, 8, 8)
-        outer.addWidget(btns)
+    def _mount_rich(self, m):
+        """(Re)monta la EconRichView con las métricas m (None = estado
+        vacío pre-cálculo).  Los widgets huésped (parámetros y Monte
+        Carlo) sobreviven al re-montaje."""
+        from econ_richview import EconRichView
+        if self._rich is not None:
+            self._rich.detach_hosted()
+            self._rich.setParent(None)
+            self._rich.deleteLater()
+        proj = getattr(self.fs, "name", "") or "flowsheet"
+        desc = f"{proj} · CEPCI {self.spin_year.value()}"
+        export_cb = getattr(self._main_window, "action_export_xlsx", None)
+        rv = EconRichView(m, project=desc,
+                          params_widget=self._params_widget,
+                          mc_widget=self._mc_pane,
+                          show_export=callable(export_cb))
+        rv.rerun.connect(self._run)
+        rv.closeClicked.connect(self.reject)
+        if callable(export_cb):
+            rv.exportExcel.connect(export_cb)
+        self._rich_lay.addWidget(rv, stretch=1)
+        self._rich = rv
 
     # ── recolección de inputs ────────────────────────────────────────
     def collect_econ_inputs(self):
@@ -351,20 +277,9 @@ class EconomicsPanel(QDialog):
         inputs["tax_lag"] = bool(self.chk_taxlag.isChecked())
         return inputs
 
-    def _open_montecarlo(self):
-        """Abre el panel Monte Carlo in-process sobre el flowsheet actual,
-        usando los mismos econ_inputs que este panel."""
-        try:
-            MonteCarloPanel(self.fs.to_dict(), self.collect_econ_inputs(),
-                            self).exec()
-        except Exception as e:                       # pragma: no cover
-            self.lbl_status.setText(
-                f"<b style='color:{TOK['danger']}'>Monte Carlo falló:</b> "
-                f"{type(e).__name__}: {e}")
-
     # ── ejecución ────────────────────────────────────────────────────
     def _run(self):
-        """Corre simulate(run_economics=True) IN-PROCESS y renderiza."""
+        """Corre simulate(run_economics=True) IN-PROCESS y puebla la UI."""
         try:
             out = se.simulate(
                 self.fs.to_dict(),
@@ -376,260 +291,88 @@ class EconomicsPanel(QDialog):
             self.lbl_status.setText(
                 f"<b style='color:{TOK['danger']}'>Error al calcular:</b> "
                 f"{type(e).__name__}: {e}")
-            self.txt_results.clear()
+            if self._rich is not None:
+                self._rich.set_pane(6)
             return
         self.last_result = out
         self._render(out)
 
     def _render(self, out):
-        """Pinta el dict de simulate().  Si el flowsheet no resolvió
-        (status error/empty), muestra mensaje claro en vez de números."""
+        """Puebla la rich view con el dict de simulate().  Si el
+        flowsheet no resolvió (status error/empty), muestra el detalle
+        en el pane Parámetros en vez de números engañosos."""
         status = out.get("summary", {}).get("overall_status", "error")
         if status in ("error", "empty"):
             solver = out.get("solver", {})
             errs = (solver.get("mass_balance_errors", [])
                     + solver.get("energy_balance_errors", [])
                     + solver.get("consistency_errors", []))
-            detail = "\n".join(f"   · {m}" for m in errs[:12]) or "   (sin detalle)"
+            detail = "<br>".join(f"· {m}" for m in errs[:12]) or "(sin detalle)"
             self.lbl_status.setText(
                 f"<b style='color:{TOK['danger']}'>El flowsheet no resolvió "
                 f"(status: {status}).</b><br>No se muestran indicadores "
-                f"económicos para evitar números engañosos.")
-            self.txt_results.setPlainText(
-                f"Estado del solver: {status}\n\nProblemas:\n{detail}")
+                f"económicos para evitar números engañosos.<br>{detail}")
+            if self._rich is not None:
+                self._rich.set_pane(6)
             return
 
         econ = out.get("economics", {})
-        cap = econ.get("capex", {})
-        com = econ.get("com", {})
-        opex = econ.get("opex_usd_yr", {})
-
         warn = ""
         if status == "warning":
-            warn = (f"  <span style='color:{TOK['amber']}'>(solver con warnings — "
-                    "revisar balances)</span>")
+            warn = (f"  <span style='color:{TOK['amber']}'>(solver con "
+                    "warnings — revisar balances)</span>")
+        irr = econ.get("IRR_pct")
         self.lbl_status.setText(
             f"<b>Veredicto:</b> {econ.get('veredicto', '—')}"
+            f"   ·   TIR {fmt_pct(irr) if irr is not None else '—'}"
             f"   ·   status: {status}{warn}")
 
-        depinfo = econ.get("depreciation", {})
-        _dm = depinfo.get("method", "straight_line")
-        dep_label = ("Lineal" if _dm == "straight_line"
-                     else f"MACRS {depinfo.get('macrs_class')} años")
-        lines = []
-        lines.append(f"Depreciación: {dep_label}")
-        lines.append("")
-        lines.append("INDICADORES DE RENTABILIDAD")
-        lines.append("─" * 46)
-        lines.append(f"  NPV                 {_fmt_usd(econ.get('NPV_usd'))}")
-        lines.append(f"  IRR                 {_fmt_pct(econ.get('IRR_pct'))}")
-        lines.append(f"  Payback (simple)    {_fmt_yr(econ.get('payback_yr'))}")
-        lines.append(f"  ROI                 {_fmt_pct(econ.get('ROI_pct'))}")
-        lines.append("")
-        lines.append("CAPITAL")
-        lines.append("─" * 46)
-        lines.append(f"  ISBL                {_fmt_musd(cap.get('isbl_usd'))}")
-        lines.append(f"  FCI (grass roots)   {_fmt_musd(cap.get('fci_grass_roots_usd'))}")
-        lines.append(f"  Working capital     {_fmt_musd(cap.get('working_capital_usd'))}")
-        lines.append("")
-        lines.append("COSTO DE MANUFACTURA (Turton Eq 8.2)")
-        lines.append("─" * 46)
-        lines.append(f"  COM_d (con dep.)    {_fmt_usd(com.get('COM_d_usd_yr'))} /año")
-        lines.append(f"  COM (sin dep.)      {_fmt_usd(com.get('COM_usd_yr'))} /año")
-        lines.append("")
-        lines.append("FLUJOS ANUALES")
-        lines.append("─" * 46)
-        lines.append(f"  Revenue             {_fmt_usd(opex.get('revenue'))} /año")
-        lines.append(f"  CRM (materias prim) {_fmt_usd(opex.get('crm'))} /año")
-        lines.append(f"  CUT (utilities)     {_fmt_usd(opex.get('cut'))} /año")
-        lines.append(f"  CWT (tratamiento)   {_fmt_usd(opex.get('cwt'))} /año")
-        lines.append(f"  COL (labor)         {_fmt_usd(opex.get('col'))} /año")
-        lines.append(f"  Cash flow           {_fmt_usd(econ.get('cash_flow_usd_yr'))} /año")
-        self.txt_results.setPlainText("\n".join(lines))
-        # Vista rica (Fase 4) — aditiva; si falla, queda el texto de arriba.
-        if getattr(self, "_has_rich", False):
-            try:
-                self._render_econ(econ, out.get("costing"))
-            except Exception:
-                pass
-
-    def _show_inputs(self):
-        """Sidebar 'Parámetros' → vuelve a mostrar el formulario de inputs
-        (oculta la vista rica para editar y re-calcular)."""
-        if hasattr(self, "_inputs_host"):
-            self._inputs_host.setVisible(True)
-        self.lbl_status.setVisible(True)
-        # limpiar la vista rica del pane para que no quede flotando
-        if hasattr(self, "_pane_res_lay"):
-            self._clear_layout(self._pane_res_lay)
-
-    @staticmethod
-    def _clear_layout(lay):
-        while lay.count():
-            it = lay.takeAt(0)
-            w = it.widget()
-            if w is not None:
-                w.setParent(None)
-
-    def _render_econ(self, econ, costing=None):
-        """Monta la vista rica fiel al mockup (EconRichView: header + hero
-        strip + sidebar + tabs + footer) en el pane Resultados. Reusa
-        econ_metrics. Headless-safe: si falla, queda el texto plano de arriba.
-        """
         from econ_evidence import econ_metrics
-        from econ_richview import EconRichView
-        m = econ_metrics(econ, costing)
+        m = econ_metrics(econ, out.get("costing"))
         if not m:
+            self.lbl_status.setText(
+                f"<b style='color:{TOK['danger']}'>El cálculo no devolvió "
+                f"métricas económicas.</b>")
+            if self._rich is not None:
+                self._rich.set_pane(6)
             return
-        # El EconRichView trae header/hero/sidebar/tabs/footer propios →
-        # ocultamos TODO el chrome plano (inputs + tabs externas + texto):
-        # la ventana queda como el mockup. El sidebar "Parámetros" del rich
-        # view re-muestra el formulario de inputs.
-        if hasattr(self, "_inputs_host"):
-            self._inputs_host.setVisible(False)
-        if hasattr(self, "_res_box"):
-            self._res_box.setTitle("")
-        if hasattr(self, "_tabs"):
-            self._tabs.setVisible(False)
-        self.txt_results.setVisible(False)
-        self.lbl_status.setVisible(False)
-        # Montar el rich view como contenido único del pane Resultados.
-        self._clear_layout(self._pane_res_lay)
-        proj = getattr(self.fs, "name", "") or ""
-        rv = EconRichView(m, project=f"{proj} · run_economics=True"
-                          if proj else "run_economics=True",
-                          on_montecarlo=self._open_montecarlo)
-        rv.rerun.connect(self._run)
-        rv.closeClicked.connect(self.reject)
-        rv.editParams.connect(self._show_inputs)
-        self._pane_res_lay.addWidget(rv)
-        # asegurar que el stack externo muestre el pane Resultados (rich view)
-        if hasattr(self, "_stack"):
-            self._stack.setCurrentIndex(0)
-        return
-
-    def _render_econ_legacy(self, econ):
-        """[fallback de cards sueltas — preservado por si EconRichView falla]"""
-        from econ_evidence import econ_metrics
-        from econ_widgets import NpvHero, FinancialTable
-        from inspector_widgets import MetricCard, MetricGrid, StatusBadge, GaugePill
-        m = econ_metrics(econ)
-        if not m:
-            return
-
-        # ── pane Resultados ────────────────────────────────────────────
-        self._clear_layout(self._pane_res_lay)
-        v = m["verdict"]
-        self._pane_res_lay.addWidget(StatusBadge(v["text"], v["kind"], lg=True))
-        npv = m["heroes"]["npv"]
-        self._pane_res_lay.addWidget(
-            NpvHero(value=npv["value"], sub=f"Veredicto: {v['text']}"))
-        irr = m["heroes"]["irr"]
-        if irr["value"] is not None:
-            scale = 50.0
-            self._pane_res_lay.addWidget(GaugePill(
-                key="irr", label="TIR",
-                value=max(0.0, min(1.0, irr["value"] / scale)),
-                text=f"{irr['value']:.1f}", suffix="%",
-                marker=(irr["hurdle"] / scale if irr["hurdle"] else None),
-                color="green"))
-        grid = MetricGrid()
-        cap = m["capex"]
-        for key, lab, val in (
-                ("isbl", "ISBL", cap.get("isbl")),
-                ("fci", "FCI grass-roots", cap.get("fci_grass_roots")),
-                ("wc", "Working capital", cap.get("working_capital")),
-                ("capex", "CAPEX total", cap.get("capex_total"))):
-            if val is not None:
-                grid.add(MetricCard(key=key, label=lab,
-                                    value=f"{val/1e6:,.2f}", unit="M USD",
-                                    state="spec"))
-        h = m["heroes"]
-        if h.get("payback") is not None:
-            grid.add(MetricCard(key="pb", label="Payback",
-                                value=f"{h['payback']:.1f}", unit="años",
-                                state="auto"))
-        if h.get("roi") is not None:
-            grid.add(MetricCard(key="roi", label="ROI",
-                                value=f"{h['roi']:.1f}", unit="%",
-                                state="ok" if h["roi"] > 0 else "danger"))
-        self._pane_res_lay.addWidget(grid)
-        try:
-            from econ_figures import cashflow_figure
-            fig, _meta = cashflow_figure(m["cashflow"], m["payback_year"])
-            if fig is not None:
-                from matplotlib.backends.backend_qtagg import FigureCanvas
-                canvas = FigureCanvas(fig)
-                canvas.setMinimumHeight(220)
-                self._pane_res_lay.addWidget(canvas)
-        except Exception:
-            pass
-        self._pane_res_lay.addStretch(1)
-
-        # ── pane Contabilidad ──────────────────────────────────────────
-        self._clear_layout(self._pane_acc_lay)
-        inc = m.get("income_statement")
-        if inc:
-            def mm(x):
-                return f"{x/1e6:,.2f}" if x is not None else "—"
-            rows = [
-                {"cells": ["Revenue", mm(inc["revenue"])]},
-                {"cells": ["− COM_d", mm(-(inc["com_d"] or 0))], "pos_neg": True},
-                {"cells": ["EBT", mm(inc["ebt"])], "kind": "total",
-                 "pos_neg": True},
-                {"cells": [f"− Tax ({(inc['tax_rate'] or 0)*100:.0f}%)",
-                           mm(-(inc["tax"] or 0))], "pos_neg": True},
-                {"cells": ["Net profit", mm(inc["net"])], "kind": "total",
-                 "pos_neg": True},
-                {"cells": ["+ Depreciación", mm(inc["depreciation"])]},
-                {"cells": ["Flujo operativo", mm(inc["operating_cash_flow"])],
-                 "kind": "total", "pos_neg": True},
-            ]
-            self._pane_acc_lay.addWidget(QLabel("Estado de Resultados (M USD)"))
-            self._pane_acc_lay.addWidget(
-                FinancialTable(headers=["Concepto", "M USD"], rows=rows))
-        cf = m.get("cashflow") or []
-        if cf:
-            cf_rows = [{"cells": [f"Año {r['year']} ({r['phase']})",
-                                  f"{r['cf']/1e6:,.2f}"], "pos_neg": True}
-                       for r in cf]
-            self._pane_acc_lay.addWidget(QLabel("Cash flow año-por-año (nominal)"))
-            self._pane_acc_lay.addWidget(
-                FinancialTable(headers=["Año", "M USD"], rows=cf_rows))
-        self._pane_acc_lay.addStretch(1)
+        self._mount_rich(m)
 
 
-class MonteCarloPanel(QDialog):
-    """Panel Monte Carlo IN-PROCESS sobre montecarlo_headless (→ simulate()).
+class MonteCarloPane(QWidget):
+    """Pane Monte Carlo EMBEBIDO en la rich view (rediseño 1f).
 
-    Selecciona variables inciertas (precios de productos / materias primas /
-    ISBL), distribución y rango ±% por variable, n_runs, seed y correlación
-    opcional.  Muestra stats (P10/P50/P90, P(NPV<0)) + tornado.
+    Reemplaza a la ventana ASCII aparte: mismas variables inciertas
+    (precios de productos / materias primas / ISBL), distribución y
+    rango ±% por variable, n_runs, seed y correlación opcional — pero el
+    resultado se presenta con las figuras reales de econ_figures
+    (densidad de NPV con P10/P50/P90 y cola P(NPV<0) + tornado), que
+    estaban implementadas y nunca cableadas.
 
-    NO importa ana_qt / montecarlo / flujoflujoclass (solo montecarlo_headless,
-    lazy).  Visual feo-pero-correcto; embellecimiento = fase Design posterior.
+    Motor: montecarlo_headless (lazy) → simulate() repetido.
     """
 
-    def __init__(self, flowsheet_dict, econ_inputs, parent=None):
+    def __init__(self, get_flowsheet_dict, get_econ_inputs, parent=None):
         super().__init__(parent)
-        self.flowsheet_dict = flowsheet_dict
-        self.econ_inputs = dict(econ_inputs or {})
+        self._get_fs = get_flowsheet_dict
+        self._get_inputs = get_econ_inputs
         self.last_result = None
         self.last_tornado = None
-        self.setWindowTitle("Monte Carlo (in-process)")
-        self.resize(620, 760)
-        self._rows = []          # [(target_dict, kind, chk, combo, spin_pct)]
+        self._rows = []          # [{kind, indice, nombre, base, chk, combo, spin}]
         self._build_ui()
 
     def _build_ui(self):
         import montecarlo_headless as mh
         root = QVBoxLayout(self)
-        root.addWidget(QLabel(
-            "Variables inciertas: marcá las que querés samplear y su rango ±%.\n"
-            "El motor es simulate() repetido (no el ANA viejo)."))
+        root.setContentsMargins(0, 0, 0, 0)
+        intro = QLabel(
+            "Variables inciertas: marcá las que querés samplear y su rango "
+            "±%.  El motor es simulate() repetido.")
+        intro.setWordWrap(True)
+        root.addWidget(intro)
 
         try:
-            targets = mh.list_uncertain_targets(self.flowsheet_dict)
+            targets = mh.list_uncertain_targets(self._get_fs())
         except Exception as e:                       # pragma: no cover
             root.addWidget(QLabel(f"No se pudieron leer targets: {e}"))
             targets = {"products": [], "raw_materials": [], "isbl": {}}
@@ -647,7 +390,6 @@ class MonteCarloPanel(QDialog):
             spin.setRange(1.0, 90.0); spin.setValue(20.0); spin.setSuffix(" %")
             row_w = QHBoxLayout()
             row_w.addWidget(combo); row_w.addWidget(spin)
-            cont = QLabel()
             form.addRow(chk, _wrap(row_w))
             self._rows.append({"kind": kind, "indice": idx, "nombre": name,
                                "base": base, "chk": chk, "combo": combo,
@@ -670,10 +412,10 @@ class MonteCarloPanel(QDialog):
         pform = QFormLayout(pbox)
         self.spin_runs = QSpinBox(); self.spin_runs.setRange(10, 100000)
         self.spin_runs.setValue(2000)
-        pform.addRow("n_runs:", self.spin_runs)
+        pform.addRow("Corridas (n):", self.spin_runs)
         self.spin_seed = QSpinBox(); self.spin_seed.setRange(0, 2_000_000_000)
         self.spin_seed.setValue(42)
-        pform.addRow("seed:", self.spin_seed)
+        pform.addRow("Seed:", self.spin_seed)
         self.chk_corr = QCheckBox("Correlacionar variables (ρ común)")
         self.spin_rho = QDoubleSpinBox()
         self.spin_rho.setRange(-0.95, 0.95); self.spin_rho.setSingleStep(0.05)
@@ -691,13 +433,14 @@ class MonteCarloPanel(QDialog):
         self.lbl = QLabel("Configurá y corré.")
         self.lbl.setWordWrap(True)
         root.addWidget(self.lbl)
-        self.txt = QTextEdit(); self.txt.setReadOnly(True)
-        self.txt.setFont(QFont("Consolas", 10))
-        root.addWidget(self.txt, stretch=1)
 
-        btns = QDialogButtonBox(QDialogButtonBox.Close)
-        btns.rejected.connect(self.reject)
-        root.addWidget(btns)
+        # Figuras (densidad de NPV + tornado) — pobladas tras la corrida
+        self._figs_host = QWidget()
+        self._figs_lay = QVBoxLayout(self._figs_host)
+        self._figs_lay.setContentsMargins(0, 0, 0, 0)
+        self._figs_lay.setSpacing(10)
+        root.addWidget(self._figs_host)
+        root.addStretch(1)
 
     def _build_variables(self):
         import montecarlo_headless as mh
@@ -726,12 +469,14 @@ class MonteCarloPanel(QDialog):
             correlacion = {(i, j): rho
                            for i in range(len(variables))
                            for j in range(i + 1, len(variables))}
+        fs_dict = self._get_fs()
+        econ_inputs = self._get_inputs()
         try:
             res = mh.run_monte_carlo(
-                self.flowsheet_dict, variables, self.econ_inputs,
+                fs_dict, variables, econ_inputs,
                 n_runs=int(self.spin_runs.value()),
                 seed=int(self.spin_seed.value()), correlacion=correlacion)
-            tor = mh.run_tornado(self.flowsheet_dict, variables, self.econ_inputs)
+            tor = mh.run_tornado(fs_dict, variables, econ_inputs)
         except Exception as e:
             self.lbl.setText(
                 f"<b style='color:{TOK['danger']}'>Monte Carlo falló:</b> "
@@ -742,37 +487,61 @@ class MonteCarloPanel(QDialog):
         self._render(res, tor)
 
     def _render(self, res, tor):
+        """Resumen + figuras (nada de ASCII)."""
         s = res["stats"]
 
         def f(x):
             return "—" if x is None else f"{x:,.2f}"
 
+        neg_pct = s["p_npv_neg"] * 100.0
+        neg_col = TOK["danger"] if neg_pct > 10 else TOK["ink_mute"]
         self.lbl.setText(
-            f"<b>n={s['n']}</b>  ·  NPV medio {f(s['npv_mean'])} MUSD  ·  "
-            f"P(NPV&lt;0) = {s['p_npv_neg']*100:.1f} %")
-        lines = ["DISTRIBUCIÓN DE NPV (MUSD)", "─" * 46,
-                 f"  P10   {f(s['npv_p10'])}",
-                 f"  P50   {f(s['npv_p50'])}",
-                 f"  P90   {f(s['npv_p90'])}",
-                 f"  min   {f(s['npv_min'])}",
-                 f"  max   {f(s['npv_max'])}",
-                 f"  mean  {f(s['npv_mean'])}   std {f(s['npv_std'])}",
-                 f"  P(NPV<0)  {s['p_npv_neg']*100:.1f} %",
-                 "",
-                 "IRR (fracción)", "─" * 46,
-                 f"  P10/P50/P90  {f(s['irr_p10'])} / {f(s['irr_p50'])} / "
-                 f"{f(s['irr_p90'])}   (válidas: {s['irr_n_valid']})",
-                 "",
-                 "TORNADO (swing |ΔNPV| MUSD, desc)", "─" * 46]
-        for t in tor:
-            lines.append(
-                f"  {t['nombre'][:24]:26} swing={t['swing']:8.2f}  "
-                f"low={t['npv_low']:8.2f}  high={t['npv_high']:8.2f}")
-        self.txt.setPlainText("\n".join(lines))
+            f"<b>n = {s['n']:,}</b> · seed {int(self.spin_seed.value())}"
+            f"  ·  NPV P10/P50/P90 = {f(s['npv_p10'])} / {f(s['npv_p50'])} / "
+            f"{f(s['npv_p90'])} M USD"
+            f"  ·  <span style='color:{neg_col}'>P(NPV&lt;0) = "
+            f"{neg_pct:.1f} %</span>")
 
+        # limpiar figuras previas
+        while self._figs_lay.count():
+            it = self._figs_lay.takeAt(0)
+            w = it.widget()
+            if w is not None:
+                w.setParent(None)
+                w.deleteLater()
 
-def _wrap(layout):
-    """Envuelve un layout en un QWidget (para QFormLayout.addRow)."""
-    from PySide6.QtWidgets import QWidget
-    w = QWidget(); w.setLayout(layout)
-    return w
+        try:
+            from matplotlib.backends.backend_qtagg import FigureCanvas
+            from econ_figures import npv_density_figure, tornado_figure
+        except Exception:                            # pragma: no cover
+            return
+
+        # densidad de NPV — npvs del motor vienen en M USD; las figuras
+        # esperan USD
+        import math
+        samples_usd = [x * 1e6 for x in res.get("npvs", [])
+                       if isinstance(x, (int, float)) and math.isfinite(x)]
+        mc_dict = {
+            "samples": samples_usd,
+            "p10": (s["npv_p10"] or 0) * 1e6,
+            "p50": (s["npv_p50"] or 0) * 1e6,
+            "p90": (s["npv_p90"] or 0) * 1e6,
+            "p_neg": s["p_npv_neg"],
+            "n_runs": s["n"],
+        }
+        fig, _meta = npv_density_figure(mc_dict)
+        if fig is not None:
+            c = FigureCanvas(fig); c.setMinimumHeight(220)
+            self._figs_lay.addWidget(c)
+
+        # tornado — npv_low/high en M USD → USD; base = P50
+        rows = [{"name": t.get("nombre", f"var{i}"),
+                 "lo": (t.get("npv_low") or 0) * 1e6,
+                 "hi": (t.get("npv_high") or 0) * 1e6}
+                for i, t in enumerate(tor or [])]
+        if rows:
+            fig2, _m2 = tornado_figure(rows,
+                                       base=(s["npv_p50"] or 0) * 1e6)
+            if fig2 is not None:
+                c2 = FigureCanvas(fig2); c2.setMinimumHeight(200)
+                self._figs_lay.addWidget(c2)

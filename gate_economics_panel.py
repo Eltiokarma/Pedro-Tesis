@@ -80,10 +80,12 @@ def gate_equivalence_and_smoke():
             if abs(irr_panel - irr_ref) > _TOL:
                 fails.append((clave, f"panel IRR={irr_panel} != Save {irr_ref}"))
 
-        # (c) smoke render: el texto muestra algo y status no quedó en error
-        txt = panel.txt_results.toPlainText()
-        if "NPV" not in txt:
-            fails.append((clave, "render sin 'NPV' en el texto"))
+        # (c) smoke render: la rich view quedó montada con métricas (el
+        # dump de texto plano murió con el rediseño 1e)
+        from econ_richview import EconRichView
+        rvs = panel.findChildren(EconRichView)
+        if len(rvs) != 1 or rvs[0]._empty:
+            fails.append((clave, "EconRichView no montada con métricas"))
 
         # (d) MACRS: panel == simulate(macrs).  Seteamos el combo a MACRS 7.
         panel.combo_dep.setCurrentIndex(panel.combo_dep.findText("MACRS 7 años"))
