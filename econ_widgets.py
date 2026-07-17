@@ -4,7 +4,6 @@ Solo los componentes que el handoff marca como nuevos de economía; los del
 Inspector (MetricCard/MetricGrid/StatusBadge/GaugePill/DeltaBar) se IMPORTAN de
 inspector_widgets, no se duplican.
 
-  · NpvHero      — NPV grande con signo, ribbon 4px verde/danger, valor mono ~40px.
   · EconTabs     — segmented Resultados|Monte Carlo|Contabilidad (QPushButton
                    checkable en QButtonGroup), emite changed(index).
   · ConfigPanel  — QGroupBox colapsable: resumen .rchip (colapsado) / formulario
@@ -42,85 +41,6 @@ def _fmt_musd(x):
         return f"{float(x) / 1e6:+,.2f}"
     except (TypeError, ValueError):
         return str(x)
-
-
-# ─────────────────────────────────────────────────────────────────────
-#  NpvHero
-# ─────────────────────────────────────────────────────────────────────
-class NpvHero(QFrame):
-    """El número grande de NPV con signo y color. Ribbon de 4px (green si
-    NPV>=0, danger si <0), valor mono ~40px, kicker arriba, sub abajo."""
-
-    def __init__(self, value=0.0, unit="M USD", kicker="VALOR PRESENTE NETO",
-                 sub=None, parent=None):
-        super().__init__(parent)
-        self._value = value          # USD (se muestra en M)
-        self._unit = unit
-        self._kicker = kicker
-        self._sub = sub
-        self.setMinimumHeight(96)
-        self.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Minimum)
-        _PrefsBus.signal().connect(self.update)
-
-    def set_value(self, v):
-        self._value = v
-        self.update()
-
-    def _neg(self):
-        try:
-            return float(self._value) < 0
-        except (TypeError, ValueError):
-            return False
-
-    def sizeHint(self):
-        from PySide6.QtCore import QSize
-        return QSize(260, 100)
-
-    def paintEvent(self, ev):
-        p = QPainter(self)
-        p.setRenderHint(QPainter.Antialiasing, True)
-        w, h = self.width(), self.height()
-        if w < 8 or h < 8:
-            return
-        ink_tok = "danger" if self._neg() else "green"
-        r = 10.0
-        path = QPainterPath()
-        path.addRoundedRect(QRectF(0.5, 0.5, w - 1, h - 1), r, r)
-        p.fillPath(path, QBrush(QColor(_tok("bg_elev"))))
-        p.setPen(QPen(QColor(_tok("line")), 1))
-        p.drawPath(path)
-        # ribbon 4px
-        p.save(); p.setClipPath(path)
-        p.fillRect(QRectF(0, 0, 4, h), QBrush(QColor(_tok(ink_tok))))
-        p.restore()
-        pad_l = 16
-        text_w = max(0, w - pad_l - 10)
-        # kicker
-        p.setPen(QColor(_tok("ink_soft")))
-        fk = QFont(pfd_fonts.SANS, 8, QFont.Bold)
-        fk.setLetterSpacing(QFont.AbsoluteSpacing, 0.6)
-        p.setFont(fk)
-        p.drawText(QRectF(pad_l, 10, text_w, 14),
-                   Qt.AlignLeft | Qt.AlignVCenter, self._kicker.upper())
-        # valor grande (M USD) + unidad
-        val_txt = _fmt_musd(self._value)
-        p.setPen(QColor(_tok(ink_tok)))
-        fv = QFont(pfd_fonts.MONO, 30, QFont.DemiBold)
-        p.setFont(fv)
-        fm = p.fontMetrics()
-        vw = fm.horizontalAdvance(val_txt)
-        p.drawText(QRectF(pad_l, 26, text_w, 46),
-                   Qt.AlignLeft | Qt.AlignVCenter, val_txt)
-        p.setPen(QColor(_tok("ink_soft")))
-        p.setFont(QFont(pfd_fonts.MONO, 12))
-        p.drawText(QRectF(pad_l + vw + 8, 26, max(0, text_w - vw - 8), 46),
-                   Qt.AlignLeft | Qt.AlignVCenter, self._unit)
-        # sub
-        if self._sub:
-            p.setPen(QColor(_tok("ink_mute")))
-            p.setFont(QFont(pfd_fonts.SANS, 8))
-            p.drawText(QRectF(pad_l, h - 20, text_w, 16),
-                       Qt.AlignLeft | Qt.AlignVCenter, str(self._sub))
 
 
 # ─────────────────────────────────────────────────────────────────────
@@ -233,8 +153,8 @@ class ConfigPanel(QGroupBox):
             w.setFont(QFont(pfd_fonts.MONO, 9))
             w.editingFinished.connect(self.paramsChanged.emit)
         fl.addRow("Vida (años):", self.in_life)
-        fl.addRow("Tax rate:", self.in_tax)
-        fl.addRow("Discount:", self.in_disc)
+        fl.addRow("Impuestos:", self.in_tax)
+        fl.addRow("Descuento:", self.in_disc)
         # segmented depreciación
         self._dep = EconTabs(("Lineal", "MACRS 5", "MACRS 7", "MACRS 15"))
         self._dep.changed.connect(lambda _i: self.paramsChanged.emit())
@@ -251,7 +171,8 @@ class ConfigPanel(QGroupBox):
             ("Vida", f"{p.get('project_life', '—')}a"),
             ("Tax", f"{p.get('tax_rate', '—')}"),
             ("Disc", f"{p.get('discount_rate', '—')}"),
-            ("Dep", f"{p.get('dep_method', '—')}"),
+            ("Dep", {"straight_line": "lineal", "macrs": "MACRS"}.get(
+                p.get("dep_method"), p.get("dep_method", "—"))),
         ]
 
     def toggle(self):
@@ -345,4 +266,4 @@ class FinancialTable(QTableView):
             f"border-bottom:1px solid {_tok('line')}; padding:4px 8px; }}")
 
 
-__all__ = ["NpvHero", "EconTabs", "ConfigPanel", "FinancialTable"]
+__all__ = ["EconTabs", "ConfigPanel", "FinancialTable"]
