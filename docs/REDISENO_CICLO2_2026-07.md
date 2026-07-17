@@ -119,14 +119,33 @@ nuevas. Evidencia visual por artboard en `outputs/design2*_*.png`.
   visual, fuera del alcance del tema).
 - Herramienta de anotación (T): definir su UX antes de devolverla a la
   paleta (sigue retirada limpiamente).
-- Gradiente de temperatura real T_in→T_out en streams de servicio
-  (los extremos pale/deep ya existen como tokens).
+- ✅ Gradiente de temperatura real T_in→T_out en streams de servicio —
+  RESUELTO (sesión 2026-07 post-merge): QLinearGradient a lo largo del
+  path, del color de la T propia al de la T de la siguiente corriente
+  del lazo (extremos pale/deep del 2a); la flecha hereda el color de
+  llegada y el semáforo error/warning conserva prioridad.  Evidencia:
+  `outputs/design_gradient_{light,dark}.png`.
 - QA visual de las 8 combinaciones acento×tema (cubiertas por
   construcción: ningún token técnico deriva del acento).
 - `streams_table`/`stream_inspector`: pasada formal de diseño propia
   (ya consumen tokens de fase).
-- `solver_report.py` aún duplica una paleta light-only propia (§G.5 de
-  la auditoría) — unificar con tokens.
-- `hx_edu.py` (SVG educativo) y las curvas matplotlib de
-  `inspector_evidence` (~45 hex) quedan para una ola de tokenización
-  posterior.
+- ✅ `solver_report.py` duplicaba una paleta light-only propia (§G.5) —
+  RESUELTO (misma sesión): TOK importado de tokens (muere el fallback
+  duplicado), severidad resuelta en caliente al construir el diálogo,
+  botones del kit y px residuales → FONT_UI/FONT_HINT.
+- ✅ Curvas matplotlib de `inspector_evidence` (~45 hex) — RESUELTO
+  (misma sesión): `_tok()` + `_style_fig()` (patrón econ_figures) en
+  las 8 figuras, mapeo semántico de series (equilibrio→phase_liq,
+  caliente/frío→service_*, operación→orange, azeótropos→danger…) y
+  leyendas con caja/labels de tokens.  Evidencia:
+  `outputs/evidence_figs_{light,dark}.png`.  `hx_edu.py` ya estaba
+  limpio (usa `var(--ink)`; los "hex" del escaneo eran entidades HTML).
+  De paso murieron los 2 defaults `#000` de `hx_icons` y el fallback
+  gris del dock de reactividad.
+
+### Hallazgo colateral (no-UI, preexistente)
+
+`validate_ui` reporta en el desglose ΔP: `penicillin/P-101: items
+suman 0.600, bomba dice 1.637` — verificado presente también en el
+merge del ciclo 2 (48b2871), no es regresión de esta sesión.  Queda
+para una sesión de hidráulica.
