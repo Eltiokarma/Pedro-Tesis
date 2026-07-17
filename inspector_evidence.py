@@ -343,13 +343,16 @@ def pump_figure(block, fs):
 
         fig = Figure(figsize=(4.6, 3.2), dpi=100)
         ax = fig.add_subplot(111)
-        ax.plot(q * Q_op, H, lw=2.0, color="#1f6feb", label="H–Q típica")
-        ax.plot(Q_op, H_op, "o", ms=8, color="#d29922", zorder=5,
+        _style_fig(fig, ax)
+        ax.plot(q * Q_op, H, lw=2.0, color=_tok("phase_liq"),
+                label="H–Q típica")
+        ax.plot(Q_op, H_op, "o", ms=8, color=_tok("amber"), zorder=5,
                 label="punto de operación (≈BEP)")
         ax2 = ax.twinx()
-        ax2.plot(q * Q_op, eta * 100, lw=1.4, ls="--", color="#3fb950",
+        _style_fig(fig, ax2)
+        ax2.plot(q * Q_op, eta * 100, lw=1.4, ls="--", color=_tok("green"),
                  label="η típica")
-        ax2.set_ylabel("η [%]", fontsize=8, color="#3fb950")
+        ax2.set_ylabel("η [%]", fontsize=8, color=_tok("green"))
         ax2.set_ylim(0, 100)
         ax.set_xlabel("Q [m³/h]", fontsize=8)
         ax.set_ylabel("Head [m]", fontsize=8)
@@ -357,14 +360,18 @@ def pump_figure(block, fs):
         ax.grid(alpha=0.25)
         ax.annotate(f"Q={Q_op:.1f} m³/h\nH={H_op:.1f} m\nη_BEP≈{eta_bep:.2f}",
                     xy=(Q_op, H_op), xytext=(8, -10),
-                    textcoords="offset points", fontsize=7.5)
+                    textcoords="offset points", fontsize=7.5,
+                    color=_tok("ink"))
         fig.text(0.5, 0.005,
                  "curva TÍPICA de centrífuga radial (no de fabricante), "
                  "anclada al punto de operación calculado",
-                 ha="center", fontsize=6.6, style="italic", color="#8b949e")
+                 ha="center", fontsize=6.6, style="italic",
+                 color=_tok("ink_mute"))
         h1, l1 = ax.get_legend_handles_labels()
         h2, l2 = ax2.get_legend_handles_labels()
-        ax.legend(h1 + h2, l1 + l2, fontsize=7, loc="lower left")
+        ax.legend(h1 + h2, l1 + l2, fontsize=7, loc="lower left",
+                  labelcolor=_tok("ink"),
+                  facecolor=_tok("bg_elev"), edgecolor=_tok("line"))
         fig.tight_layout(rect=(0, 0.03, 1, 1))
         return fig, {"Q_m3_h": Q_op, "head_m": H_op, "eta_bep": eta_bep,
                      "typical_curve": True}
@@ -690,6 +697,32 @@ def _no_fig(reason: str):
     return None, {"reason": reason}
 
 
+def _tok(name):
+    """Color de TOK en caliente — mismo patrón que econ_figures._tok.
+    Sin fallbacks hex: si el token no existe es un bug de nombre, no un
+    caso a silenciar con un color que no deriva del tema."""
+    from tokens import TOK
+    return TOK[name]
+
+
+def _style_fig(fig, *axes):
+    """Estilo base de las figuras de evidencia, leído de TOK al momento
+    de construir (papel bg_elev, spines line, ticks ink_soft, labels y
+    título ink) — la figura nace en el tema activo, como los diálogos
+    del kit.  Llamar apenas creados los ejes; los colores explícitos
+    posteriores (p.ej. labelcolor por eje) pisan a estos defaults."""
+    ink = _tok("ink")
+    fig.patch.set_facecolor(_tok("bg_elev"))
+    for ax in axes:
+        ax.set_facecolor(_tok("bg_elev"))
+        for sp in ax.spines.values():
+            sp.set_color(_tok("line"))
+        ax.tick_params(colors=_tok("ink_soft"))
+        ax.xaxis.label.set_color(ink)
+        ax.yaxis.label.set_color(ink)
+        ax.title.set_color(ink)
+
+
 def _column_feed(block, fs):
     """Feed con composición de una columna/flash (o None)."""
     ins = [s for s in fs.streams.values()
@@ -729,30 +762,33 @@ def mccabe_figure(block, fs):
                            f"ese par")
         fig = Figure(figsize=(3.4, 3.2), dpi=90)
         ax = fig.add_subplot(111)
+        _style_fig(fig, ax)
         xs, ys = d["equilibrium"]
-        ax.plot([0, 1], [0, 1], color="#b8b0a0", lw=0.8)
-        ax.plot(xs, ys, color="#1f6feb", lw=1.4)
+        ax.plot([0, 1], [0, 1], color=_tok("line_strong"), lw=0.8)
+        ax.plot(xs, ys, color=_tok("phase_liq"), lw=1.4)
         if not d.get("feasible", True):
             for a in d.get("azeotropes", []):
-                ax.plot([a], [a], "o", color="#d11", ms=6)
-                ax.axvline(a, color="#d11", lw=0.7, ls="--")
-            for xv, c in ((d["x_D"], "#2a9d4a"), (d["x_B"], "#9d2a8a")):
+                ax.plot([a], [a], "o", color=_tok("danger"), ms=6)
+                ax.axvline(a, color=_tok("danger"), lw=0.7, ls="--")
+            for xv, c in ((d["x_D"], _tok("green")),
+                          (d["x_B"], _tok("phase_2ph"))):
                 ax.axvline(xv, color=c, lw=0.5, ls=":")
         else:
             sx = [p[0] for p in d["stages"]]
             sy = [p[1] for p in d["stages"]]
-            ax.plot(sx, sy, color="#d4691e", lw=1.0)
+            ax.plot(sx, sy, color=_tok("orange"), lw=1.0)
             rs, ri = d["rect"]; ss, si = d["strip"]
             xfp = d["feed_point"][0]
             ax.plot([xfp, d["x_D"]], [rs*xfp+ri, rs*d["x_D"]+ri],
-                    color="#2a9d4a", lw=1.1)
+                    color=_tok("green"), lw=1.1)
             ax.plot([d["x_B"], xfp], [ss*d["x_B"]+si, ss*xfp+si],
-                    color="#9d2a8a", lw=1.1)
-            for xv, c in ((d["x_D"], "#2a9d4a"), (d["z_F"], "#888"),
-                          (d["x_B"], "#9d2a8a")):
+                    color=_tok("phase_2ph"), lw=1.1)
+            for xv, c in ((d["x_D"], _tok("green")),
+                          (d["z_F"], _tok("ink_soft")),
+                          (d["x_B"], _tok("phase_2ph"))):
                 ax.axvline(xv, color=c, lw=0.5, ls=":")
             for a in d.get("azeotropes", []):
-                ax.axvline(a, color="#d11", lw=0.6, ls="--")
+                ax.axvline(a, color=_tok("danger"), lw=0.6, ls="--")
         ax.set_xlim(0, 1); ax.set_ylim(0, 1)
         ax.set_xlabel(f"x ({d['LK']})", fontsize=8)
         ax.set_ylabel(f"y ({d['LK']})", fontsize=8)
@@ -787,33 +823,35 @@ def profile_figure(block, fs):
                            "el solver primero")
         fig = Figure(figsize=(3.4, 2.8), dpi=90)
         ax = fig.add_subplot(111)
+        _style_fig(fig, ax)
         stages = p["stages"]
         if not stages:
             ax.text(0.5, 0.5, "⚠ " + (p.get("message") or "perfil truncado"),
                     ha="center", va="center", fontsize=8,
-                    transform=ax.transAxes, wrap=True)
+                    transform=ax.transAxes, wrap=True, color=_tok("ink"))
             ax.set_xticks([]); ax.set_yticks([])
             fig.tight_layout()
             return fig, p
         xs = [s["stage"] for s in stages]
         Ts = [s["T_C"] for s in stages]
         xL = [s["x_LK"] for s in stages]
-        ax.plot(xs, Ts, color="#d23", marker="o", ms=3, lw=1.0)
+        ax.plot(xs, Ts, color=_tok("service_hot"), marker="o", ms=3, lw=1.0)
         ax.set_xlabel("etapa  (1 = tope)", fontsize=8)
-        ax.set_ylabel("T (°C)", color="#d23", fontsize=8)
-        ax.tick_params(axis="y", labelcolor="#d23", labelsize=7)
+        ax.set_ylabel("T (°C)", color=_tok("service_hot"), fontsize=8)
+        ax.tick_params(axis="y", labelcolor=_tok("service_hot"), labelsize=7)
         ax.tick_params(axis="x", labelsize=7)
         ax2 = ax.twinx()
-        ax2.plot(xs, xL, color="#1f6feb", marker="s", ms=3, lw=1.0)
-        ax2.set_ylabel(f"x ({p['LK']})", color="#1f6feb", fontsize=8)
-        ax2.tick_params(axis="y", labelcolor="#1f6feb", labelsize=7)
+        _style_fig(fig, ax2)
+        ax2.plot(xs, xL, color=_tok("phase_liq"), marker="s", ms=3, lw=1.0)
+        ax2.set_ylabel(f"x ({p['LK']})", color=_tok("phase_liq"), fontsize=8)
+        ax2.tick_params(axis="y", labelcolor=_tok("phase_liq"), labelsize=7)
         ax2.set_ylim(0, 1)
         for _name, vals in (p.get("other_traces") or {}).items():
             if len(vals) == len(xs):
-                ax2.plot(xs, vals, color="#888", ls=":", lw=0.8)
+                ax2.plot(xs, vals, color=_tok("ink_soft"), ls=":", lw=0.8)
         n_feed = int(p.get("n_feed") or 0)
         if 1 <= n_feed <= len(stages):
-            ax.axvline(n_feed, color="#888", ls="--", lw=0.7)
+            ax.axvline(n_feed, color=_tok("ink_soft"), ls="--", lw=0.7)
         fig.tight_layout()
         return fig, p
     except Exception as exc:
@@ -846,6 +884,7 @@ def reactor_figure(block, fs):
             pts = prof["points"]
             fig = Figure(figsize=(3.4, 2.8), dpi=90)
             ax = fig.add_subplot(111)
+            _style_fig(fig, ax)
             xs = [p["L_frac"] for p in pts]
             species = sorted({sp for p in pts for sp in (p.get("X") or {})})
             any_curve = False
@@ -864,7 +903,9 @@ def reactor_figure(block, fs):
             ax.set_title(f"Perfil PFR — {block.name}", fontsize=9, fontweight="bold")
             ax.tick_params(labelsize=7)
             ax.grid(True, alpha=0.3, linestyle="--")
-            ax.legend(fontsize=6, loc="best", ncol=2)
+            ax.legend(fontsize=6, loc="best", ncol=2,
+                      labelcolor=_tok("ink"),
+                  facecolor=_tok("bg_elev"), edgecolor=_tok("line"))
             for s in ("top", "right"): ax.spines[s].set_visible(False)
             fig.tight_layout()
             return fig, prof
@@ -877,6 +918,7 @@ def reactor_figure(block, fs):
             pts = prof["points"]
             fig = Figure(figsize=(3.4, 2.8), dpi=90)
             ax = fig.add_subplot(111)
+            _style_fig(fig, ax)
             xs = [p["t_s"] for p in pts]
             species = sorted({sp for p in pts for sp in (p.get("X") or {})})
             any_curve = False
@@ -897,7 +939,9 @@ def reactor_figure(block, fs):
                          fontsize=9, fontweight="bold")
             ax.tick_params(labelsize=7)
             ax.grid(True, alpha=0.3, linestyle="--")
-            ax.legend(fontsize=6, loc="best", ncol=2)
+            ax.legend(fontsize=6, loc="best", ncol=2,
+                      labelcolor=_tok("ink"),
+                  facecolor=_tok("bg_elev"), edgecolor=_tok("line"))
             for s in ("top", "right"): ax.spines[s].set_visible(False)
             fig.tight_layout()
             return fig, prof
@@ -927,19 +971,21 @@ def reactor_figure(block, fs):
                                "especies — agregá composición al feed")
             fig = Figure(figsize=(3.4, 2.8), dpi=90)
             ax = fig.add_subplot(111)
+            _style_fig(fig, ax)
             x = list(range(len(species))); w = 0.38
             ax.bar([xi - w/2 for xi in x],
                    [cin.get(s, 0.0) * 100 for s in species], w,
-                   label="Entrada", color="#5c6bc0")
+                   label="Entrada", color=_tok("spec"))
             ax.bar([xi + w/2 for xi in x],
                    [cout.get(s, 0.0) * 100 for s in species], w,
-                   label="Salida", color="#ef6c00")
+                   label="Salida", color=_tok("orange"))
             ax.set_xticks(x)
             ax.set_xticklabels(species, fontsize=6, rotation=40, ha="right")
             ax.set_ylabel("% másico", fontsize=8)
             ax.tick_params(labelsize=7)
             ax.grid(True, axis="y", alpha=0.3, linestyle="--")
-            ax.legend(fontsize=7, loc="best")
+            ax.legend(fontsize=7, loc="best", labelcolor=_tok("ink"),
+                  facecolor=_tok("bg_elev"), edgecolor=_tok("line"))
             ttl = f"{(mode or 'reactor').upper()} — {block.name}"
             ax.set_title(ttl, fontsize=9, fontweight="bold")
             for s in ("top", "right"): ax.spines[s].set_visible(False)
@@ -988,12 +1034,15 @@ def hx_tq_figure(block, fs):
                            "no hay diagrama T-Q (revisá las T de proceso)")
         fig = Figure(figsize=(3.4, 2.8), dpi=90)
         ax = fig.add_subplot(111)
+        _style_fig(fig, ax)
         # caliente: cede duty Q (cae de Thi a Tho mientras Q acumula)
         # frío:     recibe duty Q (sube de Tci a Tco)
         # Counter-current: en x=0 está el extremo de salida del cold (Tco)
         # y entrada del hot (Thi); en x=Q el extremo opuesto.
-        ax.plot([0, duty], [Thi, Tho], color="#d23",  lw=1.6, label="Caliente")
-        ax.plot([0, duty], [Tco, Tci], color="#1f6feb", lw=1.6, label="Frío")
+        ax.plot([0, duty], [Thi, Tho], color=_tok("service_hot"), lw=1.6,
+                label="Caliente")
+        ax.plot([0, duty], [Tco, Tci], color=_tok("service_cold"), lw=1.6,
+                label="Frío")
         # marcar approach mínimo
         approach = hxd.get("approach")
         if approach is not None:
@@ -1008,13 +1057,15 @@ def hx_tq_figure(block, fs):
             ax.annotate(f"ΔT_min = {approach:.1f} °C",
                         xy=(x_app, (T_h_app + T_c_app)/2),
                         xytext=(0.5 * duty, max(Thi, Tco) + 5),
-                        fontsize=7, ha="center", color="#444",
-                        arrowprops=dict(arrowstyle="->", color="#888", lw=0.7))
+                        fontsize=7, ha="center", color=_tok("ink"),
+                        arrowprops=dict(arrowstyle="->",
+                                        color=_tok("ink_soft"), lw=0.7))
         ax.set_xlabel("Q acumulado (kW)", fontsize=8)
         ax.set_ylabel("T (°C)", fontsize=8)
         ax.tick_params(labelsize=7)
         ax.grid(True, alpha=0.3, linestyle="--")
-        ax.legend(fontsize=7, loc="best")
+        ax.legend(fontsize=7, loc="best", labelcolor=_tok("ink"),
+                  facecolor=_tok("bg_elev"), edgecolor=_tok("line"))
         ax.set_title(f"T-Q — {block.name}  (duty={duty:.1f} kW)",
                      fontsize=9, fontweight="bold")
         for s in ("top", "right"): ax.spines[s].set_visible(False)
@@ -1097,23 +1148,27 @@ def compressor_figure(block, fs):
         rs = [1.0 + (ratio - 1.0) * i / 39 for i in range(40)]
         fig = Figure(figsize=(3.6, 3.2), dpi=90)
         ax = fig.add_subplot(111)
+        _style_fig(fig, ax)
         ax.plot(rs, [T_in_K * r ** m_s - 273.15 for r in rs],
-                color="#1f6feb", lw=1.4,
+                color=_tok("service_cold"), lw=1.4,
                 label=f"isentrópico (W={cs['W_isen_kW']:.1f} kW)")
         ax.plot(rs, [T_in_K * r ** m_r - 273.15 for r in rs],
-                color="#d4691e", lw=1.4,
+                color=_tok("service_hot"), lw=1.4,
                 label=f"real η={eta:.2f} (W={cs['W_act_kW']:.1f} kW)")
-        ax.plot([ratio], [T_isen_K - 273.15], "o", color="#1f6feb", ms=5)
-        ax.plot([ratio], [T_real_K - 273.15], "o", color="#d4691e", ms=5)
+        ax.plot([ratio], [T_isen_K - 273.15], "o",
+                color=_tok("service_cold"), ms=5)
+        ax.plot([ratio], [T_real_K - 273.15], "o",
+                color=_tok("service_hot"), ms=5)
         ax.annotate(f"ΔT pérdidas = "
                     f"{T_real_K - T_isen_K:.1f} °C",
                     xy=(ratio, (T_real_K + T_isen_K) / 2 - 273.15),
-                    fontsize=6.5, ha="right", color="#555")
+                    fontsize=6.5, ha="right", color=_tok("ink_mute"))
         ax.set_xlabel("r = P / P_in", fontsize=8)
         ax.set_ylabel("T (°C)", fontsize=8)
         ax.tick_params(labelsize=7)
         ax.grid(True, alpha=0.3, linestyle="--")
-        ax.legend(fontsize=6.5, loc="best")
+        ax.legend(fontsize=6.5, loc="best", labelcolor=_tok("ink"),
+                  facecolor=_tok("bg_elev"), edgecolor=_tok("line"))
         ax.set_title(f"Compresión — {block.name}  "
                      f"(r={ratio:.2f}, {cs['n_stages_rec']} etapa(s))",
                      fontsize=9, fontweight="bold")
@@ -1125,7 +1180,7 @@ def compressor_figure(block, fs):
                  "k/η de equipment_design (k heurístico por composición, "
                  "η = block.efficiency).  Ejes T-r: el repo no modela "
                  "entropía — no se fabrica un T-s.",
-                 fontsize=5.0, color="#555", wrap=True)
+                 fontsize=5.0, color=_tok("ink_mute"), wrap=True)
         fig.tight_layout(rect=(0, 0.07, 1, 1))
         data = dict(cs)
         data.update({"T_isen_C": T_isen_K - 273.15,
@@ -1277,10 +1332,11 @@ def equilibrium_figure(block, fs):
 
         fig = Figure(figsize=(3.6, 3.4), dpi=90)
         ax = fig.add_subplot(111)
-        ax.plot(Ts, Xs, color="#1f6feb", lw=1.5,
+        _style_fig(fig, ax)
+        ax.plot(Ts, Xs, color=_tok("phase_liq"), lw=1.5,
                 label=f"X_eq({limitante})")
         if X_ach is not None:
-            ax.plot([T_op_K - 273.15], [X_ach], "o", color="#d4691e",
+            ax.plot([T_op_K - 273.15], [X_ach], "o", color=_tok("orange"),
                     ms=7, label=f"operación ({T_op_K - 273.15:.0f} °C, "
                                 f"X={X_ach:.2f})")
         adiab_note = ""
@@ -1288,7 +1344,7 @@ def equilibrium_figure(block, fs):
         if adiabatic and T_fin_K > 0 and X_ach is not None:
             # dos hechos del solver: (T_in, 0) → (T_final, X_alcanzada)
             ax.plot([T_in_C, T_fin_K - 273.15], [0.0, X_ach],
-                    color="#2a9d4a", lw=1.1, ls="--",
+                    color=_tok("green"), lw=1.1, ls="--",
                     label="línea adiabática (solver)")
         elif adiabatic:
             adiab_note = ("  ·  línea adiabática omitida (el solver no "
@@ -1298,7 +1354,8 @@ def equilibrium_figure(block, fs):
         ax.set_ylim(-0.02, 1.02)
         ax.tick_params(labelsize=7)
         ax.grid(True, alpha=0.3, linestyle="--")
-        ax.legend(fontsize=6, loc="best")
+        ax.legend(fontsize=6, loc="best", labelcolor=_tok("ink"),
+                  facecolor=_tok("bg_elev"), edgecolor=_tok("line"))
         ax.set_title(f"X_eq vs T — {block.name}", fontsize=9,
                      fontweight="bold")
         srcs = "; ".join(
@@ -1314,8 +1371,8 @@ def equilibrium_figure(block, fs):
         caption = f"K(T) van't Hoff — reactions_db: {srcs}{adiab_note}"
         if sin_kt:
             caption += f"  ·  sin K(T): {', '.join(sin_kt)}"
-        fig.text(0.02, 0.005, caption, fontsize=5.2, color="#555",
-                 wrap=True)
+        fig.text(0.02, 0.005, caption, fontsize=5.2,
+                 color=_tok("ink_mute"), wrap=True)
         fig.tight_layout(rect=(0, 0.06, 1, 1))
         data = {"T_C": Ts, "X_eq": Xs, "limitante": limitante,
                 "T_op_C": T_op_K - 273.15, "X_achieved": X_ach,
@@ -1352,13 +1409,14 @@ def flash_figure(block, fs):
                            "(revisá thermo_db)")
         fig = Figure(figsize=(3.4, 3.2), dpi=90)
         ax = fig.add_subplot(111)
+        _style_fig(fig, ax)
         xs, ys = f["equilibrium"]
-        ax.plot([0, 1], [0, 1], color="#b8b0a0", lw=0.8)
-        ax.plot(xs, ys, color="#1f6feb", lw=1.4)
+        ax.plot([0, 1], [0, 1], color=_tok("line_strong"), lw=0.8)
+        ax.plot(xs, ys, color=_tok("phase_liq"), lw=1.4)
         ax.plot([f["x_LK"], f["y_LK"]], [f["x_LK"], f["y_LK"]],
-                color="#d4691e", lw=0.8, ls="--")
-        ax.plot([f["x_LK"]], [f["y_LK"]], "o", color="#d4691e", ms=6)
-        ax.axvline(f["z_F"], color="#888", lw=0.6, ls=":")
+                color=_tok("orange"), lw=0.8, ls="--")
+        ax.plot([f["x_LK"]], [f["y_LK"]], "o", color=_tok("orange"), ms=6)
+        ax.axvline(f["z_F"], color=_tok("ink_soft"), lw=0.6, ls=":")
         ax.set_xlim(0, 1); ax.set_ylim(0, 1)
         ax.set_xlabel(f"x ({f['LK']})", fontsize=8)
         ax.set_ylabel(f"y ({f['LK']})", fontsize=8)
