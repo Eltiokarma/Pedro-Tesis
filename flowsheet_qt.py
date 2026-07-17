@@ -7260,23 +7260,63 @@ class FlowsheetMainWindow(QMainWindow):
             QMessageBox.information(self, "DOF", "El diagrama está vacío.")
             return
         import dof_audit as _da
+        from dialog_kit import KitDialog, stat_card, kit_table, kicker
         report = _da.analyze_flowsheet(self.fs)
-        text = _da.format_report(report)
 
-        from PySide6.QtWidgets import QDialog, QVBoxLayout, QTextEdit, QDialogButtonBox
-        dlg = QDialog(self)
-        dlg.setWindowTitle("Análisis estructural — DOF")
-        dlg.resize(820, 540)
-        v = QVBoxLayout(dlg)
-        txt = QTextEdit()
-        txt.setReadOnly(True)
-        txt.setStyleSheet(f"font-family: '{pfd_fonts.MONO}'; "
-            f"font-size: {_tokens.FONT_VALUE[1]}pt;")
-        txt.setPlainText(text)
-        v.addWidget(txt)
-        btns = QDialogButtonBox(QDialogButtonBox.Close)
-        btns.rejected.connect(dlg.reject)
-        v.addWidget(btns)
+        # Diálogo del kit (artboard 2d, caso 1): hero de stats + tabla
+        # por bloque — muere el QTextEdit mono con el dump ASCII.
+        dof = report.total_dof
+        tone = "ok" if dof == 0 else ("warn" if dof > 0 else "bad")
+        estado = ("bien especificado" if dof == 0
+                  else "sub-especificado" if dof > 0
+                  else "sobre-especificado")
+        dlg = KitDialog("Grados de libertad · Balance",
+                        f"{report.n_blocks} bloques · {report.n_streams} "
+                        f"corrientes · {report.n_components} componentes",
+                        parent=self, size=(760, 560))
+        hero = QHBoxLayout(); hero.setSpacing(10)
+        hero.addWidget(stat_card("DOF", str(dof), estado, tone))
+        hero.addWidget(stat_card("Bloques OK",
+                                 f"{report.n_ok}/{report.n_blocks}",
+                                 tone="ok" if report.n_ok == report.n_blocks
+                                 else "warn"))
+        hero.addWidget(stat_card("Sub / sobre",
+                                 f"{report.n_under} / {report.n_over}",
+                                 tone="" if not (report.n_under or
+                                                 report.n_over) else "bad"))
+        dlg.body.addLayout(hero)
+
+        dlg.body.addWidget(kicker("DOF por bloque (masa · energía · comp.)"))
+        rows = []
+        for b in report.blocks:
+            mark = ("✓", "ok") if b.overall == "ok" else \
+                   (("⚠", "warn") if b.overall != "over" else ("✗", "bad"))
+            nota = "; ".join(b.notes) if b.notes else ""
+            rows.append([b.name, (b.eq_type, "mute"),
+                         str(b.mass_dof), str(b.energy_dof),
+                         str(b.comp_dof), mark,
+                         (nota, "mute")])
+        dlg.body.addWidget(kit_table(
+            ["Bloque", "Tipo", "M", "E", "C", "", "Notas"],
+            rows, aligns=["l", "l", "r", "r", "r", "c", "l"]))
+
+        if report.suggestions:
+            dlg.body.addWidget(kicker("Sugerencias"))
+            for s in report.suggestions:
+                lbl = QLabel("·  " + str(s))
+                lbl.setWordWrap(True)
+                lbl.setFont(_tokens.qfont(_tokens.FONT_UI))
+                lbl.setStyleSheet(f"color:{_tokens.TOK['ink_mute']};")
+                dlg.body.addWidget(lbl)
+        dlg.body.addStretch(1)
+
+        dlg.add_footer_note(report.summary)
+        btn_copy = dlg.add_button("Copiar reporte")
+        def _copy():
+            QApplication.clipboard().setText(_da.format_report(report))
+        btn_copy.clicked.disconnect()
+        btn_copy.clicked.connect(_copy)
+        dlg.add_button("Cerrar", role="primary", slot=dlg.accept)
         dlg.exec()
 
     def action_autosize(self):
@@ -7338,63 +7378,94 @@ class FlowsheetMainWindow(QMainWindow):
         if not self.fs.blocks:
             QMessageBox.information(self, "Setpoints", "El diagrama está vacío.")
             return
+        from dialog_kit import KitDialog, kit_table, kicker
         results = fsolv.verify_setpoints(self.fs)
+
+        # Diálogo real del kit (artboard 2d, caso 2) — muere la cadena
+        # de QMessageBox.
+        dlg = KitDialog("Setpoints",
+                        "objetivos declarados sobre corrientes",
+                        parent=self, size=(680, 480))
         if not results:
-            QMessageBox.information(
-                self, "Setpoints",
+            hint = QLabel(
                 "No hay setpoints declarados.\n\n"
-                "Para agregar un setpoint:\n"
-                "1. Doble-click sobre un stream\n"
-                "2. Marcá la casilla 'Setpoint T' y poné la T objetivo\n"
-                "3. Volvé a este menú y resolvé"
+                "Para agregar uno: doble-click sobre una corriente, "
+                "marcá «Setpoint T» con la temperatura objetivo y volvé "
+                "a este diálogo para resolver."
             )
+            hint.setWordWrap(True)
+            hint.setFont(_tokens.qfont(_tokens.FONT_UI))
+            hint.setStyleSheet(f"color:{_tokens.TOK['ink_mute']};")
+            dlg.body.addWidget(hint)
+            dlg.body.addStretch(1)
+            dlg.add_button("Cerrar", role="primary", slot=dlg.accept)
+            dlg.exec()
             return
-        lines = ["Setpoints declarados:\n"]
-        any_off = False
+
+        any_off = any(not r["within_tol"] for r in results)
+        rows = []
         for r in results:
-            mark = "✓" if r["within_tol"] else "✗"
+            mark = ("✓", "ok") if r["within_tol"] else ("✗", "bad")
             if r["kind"] == "T":
-                lines.append(
-                    f"  {mark} {r['stream_name']}: T objetivo={r['target']:g}°C  "
-                    f"actual={r['actual']:.1f}°C  Δ={r['deviation']:+.1f}°C"
-                )
+                rows.append([r["stream_name"], ("T", "mute"),
+                             f"{r['target']:g} °C",
+                             f"{r['actual']:.1f} °C",
+                             (f"{r['deviation']:+.1f} °C",
+                              "" if r["within_tol"] else "bad"), mark])
             else:
-                lines.append(
-                    f"  {mark} {r['stream_name']}: pureza {r['component']} "
-                    f"objetivo={r['target']:.3f}  actual={r['actual']:.3f}"
-                )
-            if not r["within_tol"]:
-                any_off = True
-        msg = "\n".join(lines)
+                rows.append([r["stream_name"],
+                             (f"pureza {r['component']}", "mute"),
+                             f"{r['target']:.3f}", f"{r['actual']:.3f}",
+                             ("—", "mute"), mark])
+        dlg.body.addWidget(kicker("Especificaciones activas"))
+        dlg.body.addWidget(kit_table(
+            ["Corriente", "Tipo", "Objetivo", "Actual", "Δ", ""],
+            rows, aligns=["l", "l", "r", "r", "r", "c"]))
+        dlg.body.addStretch(1)
+
+        def _run_goal_seek():
+            gs_results = fsolv.solve_setpoints_all(self.fs)
+            # refrescar streams en escena (orden por id — TF §6)
+            for sid, sit in sorted(self.scene.stream_items.items(),
+                                   key=lambda kv: kv[1].model.id):
+                sit.update_path()
+            # El goal-seek mutó duties fuera de action_solve: el
+            # semáforo y el chip quedaron desactualizados → honesto.
+            self._dirty_after_solve = True
+            self.update_solver_chip("idle")
+            self._update_status()
+            dlg.accept()
+            # resultado en un segundo diálogo del kit
+            res = KitDialog("Goal-seek · resultado",
+                            "duty ajustado en el bloque upstream",
+                            parent=self, size=(680, 420))
+            rrows = []
+            for r in gs_results:
+                mark = ("✓", "ok") if r["success"] else ("✗", "bad")
+                duty_s = (f"{r['duty_found']:+.1f} kW"
+                          if r["duty_found"] is not None else "—")
+                rrows.append([r["stream_name"], (r["block_name"], "mute"),
+                              duty_s, f"{r['t_final']:.1f} °C",
+                              (r["message"], "mute"), mark])
+            res.body.addWidget(kit_table(
+                ["Corriente", "Bloque", "Duty", "T final", "Estado", ""],
+                rrows, aligns=["l", "l", "r", "r", "l", "c"]))
+            res.body.addStretch(1)
+            res.add_footer_note("Re-ejecutá Resolver (F5) para "
+                                "actualizar el semáforo")
+            res.add_button("Cerrar", role="primary", slot=res.accept)
+            res.exec()
+
+        if any_off:
+            dlg.add_footer_note("hay setpoints fuera de tolerancia")
+        dlg.add_button("Cancelar")
+        btn_gs = dlg.add_button("⟳  Resolver goal-seek", role="primary",
+                                slot=_run_goal_seek)
+        btn_gs.setEnabled(any_off)
         if not any_off:
-            QMessageBox.information(self, "Setpoints — todo OK", msg)
-            return
-        # Ofrecer resolver los desviados
-        msg += ("\n\n¿Resolver setpoints de T por goal-seek? "
-                "(ajusta duty del bloque upstream de cada stream)")
-        ans = QMessageBox.question(self, "Resolver setpoints", msg)
-        if ans != QMessageBox.Yes:
-            return
-        gs_results = fsolv.solve_setpoints_all(self.fs)
-        report = []
-        for r in gs_results:
-            tag = "✓" if r["success"] else "✗"
-            duty_s = f"{r['duty_found']:+.1f} kW" if r["duty_found"] is not None else "—"
-            report.append(
-                f"  {tag} {r['stream_name']} (block {r['block_name']}): "
-                f"duty={duty_s}, T_final={r['t_final']:.1f}°C  [{r['message']}]"
-            )
-        # refrescar streams en escena (orden por id — TF §6)
-        for sid, sit in sorted(self.scene.stream_items.items(),
-                               key=lambda kv: kv[1].model.id):
-            sit.update_path()
-        # El goal-seek mutó duties fuera de action_solve: el semáforo y
-        # el chip del topbar quedaron desactualizados → estado honesto.
-        self._dirty_after_solve = True
-        self.update_solver_chip("idle")
-        self._update_status()
-        QMessageBox.information(self, "Goal-seek resultado",
-                                  "\n".join(report))
+            btn_gs.setToolTip("Todos los setpoints están dentro de "
+                              "tolerancia.")
+        dlg.exec()
 
     def action_solve(self):
         if not self.fs.blocks:
