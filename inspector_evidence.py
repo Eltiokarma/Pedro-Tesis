@@ -1741,6 +1741,218 @@ def pump_metrics(block, fs) -> Optional[dict]:
         return None
 
 
+def atom_balance_chip(block, fs):
+    """('ok'|'bad'|'na', detalle) para el chip 'átomos' del header del
+    inspector (artboard 2f.3).  Reusa la auditoría elemental C/H/O de
+    audit_examples_components; 'na' cuando el bloque no es evaluable
+    (sin in/out, sin composición o fórmula no parseable)."""
+    try:
+        import audit_examples_components as _ax
+        ins = [s for s in fs.streams.values()
+               if s.dst == block.id and s.src != -1 and s.mass_flow > 0]
+        outs = [s for s in fs.streams.values()
+                if s.src == block.id and s.dst != -1 and s.mass_flow > 0]
+        if not ins or not outs or getattr(block, "auto_aux", False):
+            return ("na", "sin corrientes de proceso a ambos lados")
+        comp_in, comp_out = {}, {}
+        for s in ins:
+            for c, m in _ax._stream_component_mass(s).items():
+                comp_in[c] = comp_in.get(c, 0.0) + m
+        for s in outs:
+            for c, m in _ax._stream_component_mass(s).items():
+                comp_out[c] = comp_out.get(c, 0.0) + m
+        if not comp_in or not comp_out:
+            return ("na", "sin composición a ambos lados")
+        block_flow = max(sum(comp_in.values()), sum(comp_out.values()))
+        if block_flow <= 0:
+            return ("na", "sin flujo")
+        if (_ax._element_masses(comp_in, block_flow) is None
+                or _ax._element_masses(comp_out, block_flow) is None):
+            return ("na", "componente sin fórmula parseable")
+        findings = _ax.audit_block_elements(fs, block)
+        if findings:
+            worst = max(findings, key=lambda f: f.get("rel_pct", 0.0))
+            return ("bad", f"Desbalance de {worst.get('component', '?')}: "
+                           f"Δ {worst.get('rel_pct', 0):.1f} % "
+                           f"({worst.get('in', 0):g} → "
+                           f"{worst.get('out', 0):g} tm/año)")
+        return ("ok", "C/H/O conservados a través del bloque")
+    except Exception:
+        return ("na", "")
+
+
+def column_duties_metrics(block) -> Optional[dict]:
+    """Q_reb / Q_cond por separado (artboard 2f.1).  El solver los
+    calcula (b._Q_reb_kW / b._Q_cond_kW, flowsheet_solver) y el
+    inspector mostraba solo el duty agregado.  Ligados al eje de
+    servicio: reboiler=caliente (orange), condensador=frío (info)."""
+    try:
+        qr = getattr(block, "_Q_reb_kW", None)
+        qc = getattr(block, "_Q_cond_kW", None)
+        if qr is None and qc is None:
+            return None
+        metrics = []
+        if qr is not None:
+            metrics.append({"key": "qreb", "label": "Q reb",
+                            "value": f"{float(qr):+,.1f}", "unit": "kW",
+                            "state": "alert",
+                            "sub": "reboiler · calienta"})
+        if qc is not None:
+            metrics.append({"key": "qcond", "label": "Q cond",
+                            "value": f"{float(qc):+,.1f}", "unit": "kW",
+                            "state": "info",
+                            "sub": "condensador · enfría"})
+        if not metrics:
+            return None
+        status = []
+        N = getattr(block, "_column_N", None)
+        R = getattr(block, "_column_R", None)
+        if N:
+            status.append({"text": f"N = {N}", "kind": "info"})
+        if R:
+            status.append({"text": f"R = {float(R):.2f}", "kind": "info"})
+        return {"status": status, "metrics": metrics, "figure": None,
+                "warnings": []}
+    except Exception:
+        return None
+
+
+def column_design_text(block, fs) -> Optional[str]:
+    """Reporte de diseño FUG (NRTL) + Wang-Henke (MESH) de una columna.
+
+    Portado VERBATIM del dock legacy 'Propiedades y perfiles' cuando
+    murió (artboard 2f.4) — misma fuente (distillation_fug.design_column
+    + b._wh_result), ahora como evidencia del Inspector.  Formato de
+    planilla técnica: texto plano monoespaciado, sin HTML ni emoji."""
+    try:
+        eq_lower = (block.eq_type or "").lower()
+        if not ("tower" in eq_lower or "column" in eq_lower
+                or "destil" in eq_lower):
+            return None
+        ins = [s for s in fs.streams.values() if s.dst == block.id]
+        outs = [s for s in fs.streams.values() if s.src == block.id]
+        if not ins or not outs:
+            return None
+        feed = ins[0]
+        if not (feed.composition and len(feed.composition) >= 2
+                and len(outs) >= 2):
+            return None
+        dist_out = max(outs, key=lambda s: (s.composition or {}).get(
+            max((feed.composition or {}).items(),
+                key=lambda kv: kv[1])[0], 0.0))
+        bot_out = next((s for s in outs if s is not dist_out), None)
+        if not (bot_out and dist_out.composition and bot_out.composition):
+            return None
+        d_top = max(dist_out.composition.items(), key=lambda kv: kv[1])
+        b_top = max(bot_out.composition.items(), key=lambda kv: kv[1])
+        LK, HK = d_top[0], b_top[0]
+        if LK == HK or LK not in feed.composition \
+                or HK not in feed.composition:
+            return None
+        import distillation_fug as fug
+        import flowsheet_solver as _fsv
+        T_feed_K = feed.temperature + 273.15
+        q_feed = _fsv._column_feed_q(feed, T_feed_K, 1.013)
+        res = fug.design_column(
+            feed_composition=feed.composition,
+            F=feed.mass_flow,
+            T_K=T_feed_K,
+            P_bar=1.013,
+            light_key=LK, heavy_key=HK,
+            x_D_LK=dist_out.composition.get(LK, 0.9),
+            x_B_LK=bot_out.composition.get(LK, 0.05),
+            R_factor=1.3,
+            q=q_feed,
+            T_top_K=dist_out.temperature + 273.15,
+            T_bot_K=bot_out.temperature + 273.15,
+        )
+        if not res:
+            return None
+        txt = "─ DISEÑO FUG (NRTL) ─"
+        txt += f"\nLK / HK    {LK} / {HK}"
+        txt += f"\nα tope     {res.get('alpha_top', 0):.2f}"
+        txt += f"\nα fondo    {res.get('alpha_bot', 0):.2f}"
+        txt += f"\nα promedio {res.get('alpha_avg', 0):.2f}"
+        _q = res.get("q", 1.0)
+        if abs(_q - 1.0) < 0.02:   _fase = "líq sat"
+        elif abs(_q) < 0.02:       _fase = "vap sat"
+        elif 0.0 < _q < 1.0:       _fase = "bifásico"
+        elif _q > 1.0:             _fase = "líq subenfr"
+        else:                      _fase = "vap sobrecalentado"
+        txt += f"\nq feed     {_q:.2f}  ({_fase})"
+        _ncomp = res.get("n_signif_comps", 0)
+        if _ncomp >= 3:
+            txt += f"\nMulticomp  {_ncomp} comp · Underwood real"
+            if res.get("underwood_fallback"):
+                txt += "\n⚠ Underwood mc no convergió, usado binario"
+        if res.get("N_min") is not None:
+            txt += f"\nN_min      {res['N_min']:.1f}  (Fenske)"
+        if res.get("R_min") is not None:
+            txt += f"\nR_min      {res['R_min']:.2f}  (Underwood)"
+        if res.get("R") is not None:
+            txt += f"\nR (1.3×min){res['R']:.2f}"
+        if res.get("N") is not None:
+            txt += f"\nN real     {res['N']:.1f}  (Gilliland)"
+        if res.get("N_feed") is not None:
+            txt += f"\nN_feed     {res['N_feed']:.1f}  (Kirkbride)"
+        if res.get("Q_cond_kW") is not None:
+            txt += f"\nQ_cond     {res['Q_cond_kW']:+.1f} kW"
+        if res.get("Q_reb_kW") is not None:
+            txt += f"\nQ_reb      {res['Q_reb_kW']:+.1f} kW"
+        for w in res.get("warnings", [])[:2]:
+            txt += f"\n{w[:120]}"
+
+        # ── Bloque WANG-HENKE (MESH) ──
+        wh_res = getattr(block, "_wh_result", None)
+        if (getattr(block, "column_method", "fug") == "wanghenke"
+                and wh_res is not None):
+            Twh = wh_res.get("T_profile") or []
+            Vwh = wh_res.get("V_profile") or []
+            conv = wh_res.get("converged", False)
+            txt += "\n\n─ WANG-HENKE (MESH) ─"
+            txt += f"\nN etapas   {len(Twh)}"
+            txt += f"\nEtapa feed {wh_res.get('feed_stage', '-')}"
+            txt += (f"\nConvergió  {'sí' if conv else 'NO'}"
+                    f" en {wh_res.get('iterations', 0)} iter")
+            if Twh:
+                txt += f"\nT tope     {Twh[0]-273.15:.1f} °C"
+                txt += f"\nT fondo    {Twh[-1]-273.15:.1f} °C"
+            if len(Vwh) >= 2:
+                txt += f"\nV tope     {Vwh[1]:.2f} mol/s"
+                txt += f"\nV fondo    {Vwh[-1]:.2f} mol/s"
+            txt += (f"\nΔV/V_avg   {wh_res.get('V_var', 0.0)*100:.1f}%"
+                    f"  (0% = MES; >5% = MESH activo)")
+            if wh_res.get("Q_cond_kW") is not None:
+                txt += f"\nQ_cond     {wh_res['Q_cond_kW']:+.1f} kW"
+            if wh_res.get("Q_reb_kW") is not None:
+                txt += f"\nQ_reb      {wh_res['Q_reb_kW']:+.1f} kW"
+            be = wh_res.get("balance_err")
+            if be is not None:
+                txt += f"\nBalance E  {be*100:.1f}%  (cierre global)"
+            if not conv:
+                txt += ("\n✗ NO CONVERGIÓ — revisar N, R_factor, o "
+                        "pureza objetivo")
+            for w in wh_res.get("warnings", []):
+                wu = w.upper()
+                if "AZEOTROPO" in wu or "INALCANZABLE" in wu:
+                    txt += f"\n✗ {w[:80]}"
+        return txt
+    except Exception:
+        return None
+
+
+def column_duties_text(block) -> Optional[str]:
+    """Fallback texto de column_duties_metrics."""
+    m = column_duties_metrics(block)
+    if not m:
+        return None
+    lines = ["Cargas térmicas de la columna:"]
+    for it in m["metrics"]:
+        lines.append(f"  {it['label']}: {it['value']} {it.get('unit','')}"
+                     f"  ({it.get('sub','')})")
+    return "\n".join(lines)
+
+
 def compressor_metrics(block, fs) -> Optional[dict]:
     """Estructurado de compressor_text(). Misma fuente (equipment_design)."""
     try:
@@ -1770,6 +1982,14 @@ def compressor_metrics(block, fs) -> Optional[dict]:
              "value": f"{cs['W_act_kW']:.1f}", "unit": "kW", "state": "orange",
              "sub": f"η={cs['eta_total']:.2f}"},
         ]
+        # Q_intercool como dato numérico (artboard 2f.2 — antes vivía
+        # solo en un warning de texto)
+        if cs.get("n_stages_rec", 1) > 1:
+            metrics.insert(2, {
+                "key": "qic", "label": "Q intercool",
+                "value": f"{cs.get('Q_intercool_kW', 0.0):,.1f}",
+                "unit": "kW", "state": "info",
+                "sub": f"entre {cs['n_stages_rec']} etapas"})
         status = []
         if cs['n_stages_rec'] > 1:
             status.append({"text": f"Multietapa ×{cs['n_stages_rec']}",

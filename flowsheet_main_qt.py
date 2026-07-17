@@ -45,16 +45,29 @@ def main():
     if "--no-welcome" in sys.argv:
         skip_welcome = True
 
+    initial_example = None
     if not skip_welcome:
         import welcome_qt as wq
         action, payload = wq.show_and_get_action()
         if action is None:
             return 0           # user cerró sin elegir
-        # action == "qt"
-        initial_path = payload
+        if action == "example":
+            initial_example = payload      # clave del registry
+        else:                               # action == "qt"
+            initial_path = payload
 
     # ---- abrir editor Qt ----
     win = fq.FlowsheetMainWindow()
+    if initial_example:
+        # Ejemplo elegido desde la welcome (artboard 2e) — mismo camino
+        # que el menú Ejemplos (diagrama vacío → sin confirmación).
+        try:
+            win.action_load_example(initial_example)
+        except Exception as e:
+            QMessageBox.critical(
+                win, "No se pudo cargar el ejemplo",
+                f"{type(e).__name__}: {e}",
+            )
     if initial_path:
         import json
         try:

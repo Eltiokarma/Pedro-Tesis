@@ -96,7 +96,6 @@ import flowsheet_validation as fval
 import flowsheet_units as funits
 from flowsheet_model import (
     Block, Stream, Flowsheet,
-    STREAM_ROLE_COLORS, STREAM_ROLE_COLORS_SEL,
     BLOCK_W, BLOCK_H, GRID_STEP, ROUTING_GAP,
 )
 
@@ -213,34 +212,18 @@ def _get_svg_pixmap(eq_type, width, height, svg_str=None):
 
 
 # ======================================================
-# COLORES (paleta Material lite)
+# COLORES — capa canvas tokenizada (artboard 2a del ciclo 2)
 # ======================================================
+# Todo el lienzo deriva de tokens.TOK.  Los QColor module-level son
+# snapshots del tema activo: _refresh_canvas_palette() los recalcula al
+# importar y en cada themeChanged (los items del canvas se reconstruyen
+# vía _rebuild_scene, así que un snapshot alcanza).
 
-COLOR_CANVAS_BG     = QColor("#fbfaf6")   # papel de dibujo (warm off-white)
-COLOR_GRID          = QColor(13, 13, 13, 18)   # negro alpha=18/255 (~7%)
-COLOR_BLOCK_FILL    = QColor("#ffffff")
-COLOR_BLOCK_BORDER  = QColor("#5c6bc0")
 # Selección: anillo en el acento del tema (tokens 1a) — leído en caliente.
 def _selection_qcolor() -> QColor:
     return QColor(_tokens.TOK["accent"])
-COLOR_BLOCK_TEXT    = QColor("#1a1a1a")
-COLOR_BLOCK_SUB     = QColor("#6c6c70")
-COLOR_PORT_FREE     = QColor("#bbbbbb")
-COLOR_PORT_CONN     = QColor("#1565c0")
-# Paleta por tipo de puerto — se usa cuando el puerto está libre para
-# guiar visualmente al user (qué clase de stream se espera).  Cuando el
-# puerto se conecta, el color del puerto se satura (relleno sólido).
-# Conjunto compatible con daltonismo (verde ≠ rojo + diferencias de tono):
-COLOR_PORT_IN       = QColor("#2e7d32")   # verde — proceso entra
-COLOR_PORT_OUT      = QColor("#1565c0")   # azul — proceso sale
-COLOR_PORT_UTIL_IN  = QColor("#ef6c00")   # naranja — utility entra (CW/steam)
-COLOR_PORT_UTIL_OUT = QColor("#bf360c")   # naranja oscuro — utility sale
-COLOR_PORT_FUEL     = QColor("#5d4037")   # marrón — combustible
-COLOR_PORT_VENT     = QColor("#9e9e9e")   # gris — venteo / atmósfera
-COLOR_PORT_DRAIN    = QColor("#455a64")   # gris azulado — drenaje
-COLOR_PORT_AUX      = QColor("#7e57c2")   # violeta — auxiliar genérico
-# Tinte claro = puerto libre (con su color tenue como hint)
-# Color saturado = puerto conectado (mismo hue, alpha pleno)
+
+
 def _port_tint(color: QColor) -> QColor:
     """Devuelve una versión clara del color (alpha 60%, mismo hue)
     para puertos libres — el user ve el HINT del tipo pero no
@@ -248,17 +231,54 @@ def _port_tint(color: QColor) -> QColor:
     c = QColor(color)
     c.setAlpha(110)
     return c
-PORT_KIND_COLORS = {
-    "process_in":  COLOR_PORT_IN,
-    "process_out": COLOR_PORT_OUT,
-    "utility_in":  COLOR_PORT_UTIL_IN,
-    "utility_out": COLOR_PORT_UTIL_OUT,
-    "fuel":        COLOR_PORT_FUEL,
-    "vent":        COLOR_PORT_VENT,
-    "drain":       COLOR_PORT_DRAIN,
-    "aux":         COLOR_PORT_AUX,
-}
-COLOR_LABEL_BG      = QColor(255, 255, 255, 220)
+
+
+def _refresh_canvas_palette():
+    """Recalcula la paleta del canvas desde tokens.TOK (tema activo).
+
+    Los puertos son la paleta técnica propia del artboard 2a (8 clases,
+    frío→cálido, independiente del acento y del semáforo — la clase se
+    refuerza por posición/forma, daltónico-safe)."""
+    global COLOR_CANVAS_BG, COLOR_GRID, COLOR_GRID_MAJOR
+    global COLOR_BLOCK_FILL, COLOR_BLOCK_BORDER
+    global COLOR_BLOCK_TEXT, COLOR_BLOCK_SUB
+    global COLOR_PORT_FREE, COLOR_PORT_CONN, PORT_KIND_COLORS
+    global COLOR_LABEL_BG
+    global COLOR_UTIL_HOT, COLOR_UTIL_HOT_SEL
+    global COLOR_UTIL_COLD, COLOR_UTIL_COLD_SEL
+    global COLOR_UTIL_HOT_PALE, COLOR_UTIL_HOT_DEEP
+    global COLOR_UTIL_COLD_PALE, COLOR_UTIL_COLD_DEEP
+    T = _tokens.TOK
+    COLOR_CANVAS_BG   = QColor(T["canvas_bg"])
+    COLOR_GRID        = QColor(T["canvas_grid"])
+    COLOR_GRID_MAJOR  = QColor(T["canvas_grid_major"])
+    COLOR_BLOCK_FILL  = QColor(T["bg_elev"])
+    COLOR_BLOCK_BORDER = QColor(T["ink_mute"])
+    COLOR_BLOCK_TEXT  = QColor(T["label_ink"])
+    COLOR_BLOCK_SUB   = QColor(T["label_ink_soft"])
+    COLOR_PORT_FREE   = QColor(T["ink_ghost"])
+    COLOR_PORT_CONN   = QColor(T["port_process_out"])
+    PORT_KIND_COLORS = {
+        "process_in":  QColor(T["port_process_in"]),
+        "process_out": QColor(T["port_process_out"]),
+        "utility_in":  QColor(T["port_utility_in"]),
+        "utility_out": QColor(T["port_utility_out"]),
+        "fuel":        QColor(T["port_fuel"]),
+        "vent":        QColor(T["port_vent"]),
+        "drain":       QColor(T["port_drain"]),
+        "aux":         QColor(T["port_aux"]),
+    }
+    COLOR_LABEL_BG = QColor(T["label_bg"])
+    # Servicio por temperatura (familia 3 del 2a): el matiz ES el
+    # significado — caliente/frío se conservan en ambos temas.
+    COLOR_UTIL_HOT       = T["service_hot"]
+    COLOR_UTIL_HOT_SEL   = T["service_hot_deep"]
+    COLOR_UTIL_COLD      = T["service_cold"]
+    COLOR_UTIL_COLD_SEL  = T["service_cold_deep"]
+    COLOR_UTIL_HOT_PALE  = T["service_hot_pale"]
+    COLOR_UTIL_HOT_DEEP  = T["service_hot_deep"]
+    COLOR_UTIL_COLD_PALE = T["service_cold_pale"]
+    COLOR_UTIL_COLD_DEEP = T["service_cold_deep"]
 
 # ---- Status visual (semáforo del solver) ----
 # Un solo semáforo para toda la app: los colores viven en tokens.py
@@ -271,18 +291,12 @@ def status_qcolor(status: str) -> QColor:
 # Corrientes de SERVICIO (utility): color por temperatura para que el user
 # distinga de un vistazo el servicio CALIENTE (vapor / aceite térmico) del
 # FRÍO (agua de enfriamiento).  Umbral en °C: por encima = caliente.
+# Los colores viven en tokens (service_*) y los asigna
+# _refresh_canvas_palette() — acá solo el umbral físico.
 UTILITY_HOT_T_C       = 60.0
-COLOR_UTIL_HOT        = "#ef6c2b"   # naranja — servicio caliente
-COLOR_UTIL_HOT_SEL    = "#c4541d"
-COLOR_UTIL_COLD       = "#3fa9dd"   # celeste — servicio frío
-COLOR_UTIL_COLD_SEL   = "#2b80ab"
-# Degradado DENTRO del lazo: el family lo fija el servicio (calienta/enfría),
-# pero el TONO se modula por la temperatura de cada corriente, de la más
-# caliente (tono profundo/saturado) a la más fría (tono pálido).
-COLOR_UTIL_HOT_PALE   = "#f9bd7c"   # naranja claro — extremo frío del lazo caliente
-COLOR_UTIL_HOT_DEEP   = "#c4361a"   # rojo-naranja — extremo caliente
-COLOR_UTIL_COLD_PALE  = "#bfe3f5"   # celeste pálido — extremo frío del lazo
-COLOR_UTIL_COLD_DEEP  = "#1773aa"   # azul intenso — extremo más caliente del lazo
+
+# Inicializa los snapshots de paleta con el tema activo al importar.
+_refresh_canvas_palette()
 
 
 def _lerp_color(c0, c1, t):
@@ -394,7 +408,7 @@ class BlockEditDialog(QDialog):
 
         # info read-only
         lbl_type = QLabel(block.eq_type)
-        lbl_type.setStyleSheet("color: #555;")
+        lbl_type.setStyleSheet(f"color: {_tokens.TOK['ink_mute']};")
         layout.addRow("Tipo de equipo:", lbl_type)
 
         # nombre
@@ -415,7 +429,8 @@ class BlockEditDialog(QDialog):
         smax = spec.get("S_max")
         if smin is not None and smax is not None:
             hint = QLabel(f"Rango válido Turton: [{smin:g} – {smax:g}] {spec.get('S_unit','')}")
-            hint.setStyleSheet("color: #888; font-size: 8pt;")
+            hint.setStyleSheet(f"color: {_tokens.TOK['ink_soft']}; "
+                            f"font-size: {_tokens.FONT_HINT[1]}pt;")
             layout.addRow("", hint)
 
         # n
@@ -449,7 +464,8 @@ class BlockEditDialog(QDialog):
             "<0 extrae calor (cooler, condenser)\n"
             "=0 adiabático o no declarado"
         )
-        hint_duty.setStyleSheet("color: #888; font-size: 8pt;")
+        hint_duty.setStyleSheet(f"color: {_tokens.TOK['ink_soft']}; "
+                            f"font-size: {_tokens.FONT_HINT[1]}pt;")
         gb_layout.addRow("", hint_duty)
 
         # heat source
@@ -476,7 +492,8 @@ class BlockEditDialog(QDialog):
             ">0 endotérmica · <0 exotérmica · =0 sin reacción\n"
             "Ejemplo Methanol: CO+2H₂→CH₃OH, -200 kJ/kg input syngas"
         )
-        hint_hor.setStyleSheet("color: #888; font-size: 8pt;")
+        hint_hor.setStyleSheet(f"color: {_tokens.TOK['ink_soft']}; "
+                            f"font-size: {_tokens.FONT_HINT[1]}pt;")
         gb_layout.addRow("", hint_hor)
         # ocultar si NO es reactor
         is_reactor = "Reactor" in block.eq_type
@@ -514,7 +531,8 @@ class BlockEditDialog(QDialog):
             "de tabla (U_TYPICAL / DTLM_TYPICAL).  Útil para condensación\n"
             "de vapor puro (U~1500), aceite térmico (U~200), close-approach."
         )
-        hint_uov.setStyleSheet("color: #888; font-size: 8pt;")
+        hint_uov.setStyleSheet(f"color: {_tokens.TOK['ink_soft']}; "
+                            f"font-size: {_tokens.FONT_HINT[1]}pt;")
         gb_layout.addRow("", hint_uov)
         for _w in (self.u_over_label, self.u_over_edit,
                     self.dtlm_over_label, self.dtlm_over_edit, hint_uov):
@@ -573,7 +591,8 @@ class BlockEditDialog(QDialog):
             "Defaults: tray_spacing 0.6m (24\"), K=0.06, head 3m,\n"
             "tray_eff 1.0, HETP 0.5m.  Para empaque estructurado HETP~0.3m."
         )
-        hint_col.setStyleSheet("color: #888; font-size: 8pt;")
+        hint_col.setStyleSheet(f"color: {_tokens.TOK['ink_soft']}; "
+                            f"font-size: {_tokens.FONT_HINT[1]}pt;")
         col_layout.addRow("", hint_col)
         layout.addRow(self.gb_col_phys)
 
@@ -604,7 +623,8 @@ class BlockEditDialog(QDialog):
             "• cstr: tanque agitado, robusto para cinéticas stiff (requiere V > 0)\n"
             "• batch: RK4 dN/dt, V cte, P emergente (requiere V > 0 + tiempo de tanda)"
         )
-        hint_mode.setStyleSheet("color: #888; font-size: 8pt;")
+        hint_mode.setStyleSheet(f"color: {_tokens.TOK['ink_soft']}; "
+                            f"font-size: {_tokens.FONT_HINT[1]}pt;")
         eq_layout.addRow("", hint_mode)
 
         # T_op
@@ -616,7 +636,8 @@ class BlockEditDialog(QDialog):
         self.t_op_edit.setValue(getattr(block, "T_op_K", 0.0))
         eq_layout.addRow("T operación:", self.t_op_edit)
         hint_t = QLabel("0 = usa T promedio del input.")
-        hint_t.setStyleSheet("color: #888; font-size: 8pt;")
+        hint_t.setStyleSheet(f"color: {_tokens.TOK['ink_soft']}; "
+                            f"font-size: {_tokens.FONT_HINT[1]}pt;")
         eq_layout.addRow("", hint_t)
 
         # P_op
@@ -641,7 +662,8 @@ class BlockEditDialog(QDialog):
             "Volumen interno del reactor en litros.\n"
             "Solo aplica en modo PFR o CSTR (ignorado en equilibrium)."
         )
-        hint_vol.setStyleSheet("color: #888; font-size: 8pt;")
+        hint_vol.setStyleSheet(f"color: {_tokens.TOK['ink_soft']}; "
+                            f"font-size: {_tokens.FONT_HINT[1]}pt;")
         eq_layout.addRow("", hint_vol)
         self._vol_hint_widget = hint_vol
 
@@ -705,7 +727,8 @@ class BlockEditDialog(QDialog):
             "y heat_of_reaction automáticamente (oculta el manual\n"
             "de arriba). Si vacío: modo manual con kJ/kg declarado."
         )
-        hint_rxn.setStyleSheet("color: #888; font-size: 8pt;")
+        hint_rxn.setStyleSheet(f"color: {_tokens.TOK['ink_soft']}; "
+                            f"font-size: {_tokens.FONT_HINT[1]}pt;")
         eq_layout.addRow("", hint_rxn)
 
         # ---- Reacciones CUSTOM in-memory (Hallazgo 1) ----
@@ -731,7 +754,8 @@ class BlockEditDialog(QDialog):
             "2-parámetros).  Válida cerca de 298 K; el error crece a T\n"
             "lejana.  Para química validada usá el catálogo de arriba."
         )
-        hint_custom.setStyleSheet("color: #888; font-size: 8pt;")
+        hint_custom.setStyleSheet(f"color: {_tokens.TOK['ink_soft']}; "
+                            f"font-size: {_tokens.FONT_HINT[1]}pt;")
         eq_layout.addRow("", hint_custom)
 
         layout.addRow(self.gb_eq)
@@ -802,7 +826,8 @@ class BlockEditDialog(QDialog):
             "Para multicomp (>2 keys), aplica Fenske-Hengstebeck.\n"
             "Detecta azeotropos via NRTL (Capa 6)."
         )
-        hint_col.setStyleSheet("color: #888; font-size: 8pt;")
+        hint_col.setStyleSheet(f"color: {_tokens.TOK['ink_soft']}; "
+                            f"font-size: {_tokens.FONT_HINT[1]}pt;")
         col_layout.addRow("", hint_col)
         layout.addRow(self.gb_col)
 
@@ -841,7 +866,8 @@ class BlockEditDialog(QDialog):
             "Asignación por puerto: 'vapor' → vapor output, 'liquido'\n"
             "→ liquid output (sino, primer/segundo output)."
         )
-        hint_flash.setStyleSheet("color: #888; font-size: 8pt;")
+        hint_flash.setStyleSheet(f"color: {_tokens.TOK['ink_soft']}; "
+                            f"font-size: {_tokens.FONT_HINT[1]}pt;")
         flash_layout.addRow("", hint_flash)
         layout.addRow(self.gb_flash)
 
@@ -1019,7 +1045,8 @@ class BlockEditDialog(QDialog):
             "η_motor adicional: 0.95 (eléctrico AC)<br>"
             "W_elec = m·ΔP / (ρ·η_hyd·η_motor)"
         )
-        hint_rot.setStyleSheet("color: #888; font-size: 8pt;")
+        hint_rot.setStyleSheet(f"color: {_tokens.TOK['ink_soft']}; "
+                            f"font-size: {_tokens.FONT_HINT[1]}pt;")
         hint_rot.setTextFormat(Qt.RichText)
         rot_layout.addRow("", hint_rot)
         layout.addRow(self.gb_rot)
@@ -1088,7 +1115,8 @@ class BlockEditDialog(QDialog):
             "Marcá las reacciones que querés incluir en el balance.\n"
             "🟢 ALTA · 🟡 MEDIA · 🟠 BAJA · ⚫ no aplicable (fuera de rango T)"
         )
-        rxhint.setStyleSheet("color: #888; font-size: 8pt;")
+        rxhint.setStyleSheet(f"color: {_tokens.TOK['ink_soft']}; "
+                            f"font-size: {_tokens.FONT_HINT[1]}pt;")
         rxlay.addWidget(rxhint)
 
         layout.addRow(self.gb_reactivity)
@@ -1190,7 +1218,8 @@ class BlockEditDialog(QDialog):
             gbl.addWidget(self._species_tbl_in)
         else:
             lbl = QLabel("(sin streams conectados a la entrada)")
-            lbl.setStyleSheet("color: #888; font-style: italic;")
+            lbl.setStyleSheet(f"color: {_tokens.TOK['ink_soft']}; "
+                              f"font-style: italic;")
             gbl.addWidget(lbl)
 
         gbl.addWidget(QLabel("<b>▶ Salidas</b>"))
@@ -1200,14 +1229,16 @@ class BlockEditDialog(QDialog):
             gbl.addWidget(self._species_tbl_out)
         else:
             lbl = QLabel("(sin streams conectados a la salida)")
-            lbl.setStyleSheet("color: #888; font-style: italic;")
+            lbl.setStyleSheet(f"color: {_tokens.TOK['ink_soft']}; "
+                              f"font-style: italic;")
             gbl.addWidget(lbl)
 
         hint = QLabel(
             "ℹ Doble-click sobre un stream para editar sus valores. "
             "Las especies viven en las corrientes, no en el equipo."
         )
-        hint.setStyleSheet("color: #888; font-size: 8pt;")
+        hint.setStyleSheet(f"color: {_tokens.TOK['ink_soft']}; "
+                            f"font-size: {_tokens.FONT_HINT[1]}pt;")
         hint.setWordWrap(True)
         gbl.addWidget(hint)
 
@@ -1483,7 +1514,8 @@ class CustomReactionDialog(QDialog):
         hint = QLabel(
             "Elegí reactivos y productos. Los coeficientes, el balance "
             "atómico y el ΔH se calculan automáticamente.")
-        hint.setStyleSheet("color: #666; font-size: 9pt;")
+        hint.setStyleSheet(f"color: {_tokens.TOK['ink_soft']}; "
+                    f"font-size: {_tokens.FONT_HINT[1]}pt;")
         hint.setWordWrap(True)
         outer.addWidget(hint)
 
@@ -1627,15 +1659,16 @@ class CustomReactionDialog(QDialog):
     def _section_label(self, text):
         l = QLabel(text)
         l.setStyleSheet(
-            "font-size: 10pt; font-weight: 600; color: #555; "
-            "padding-top: 6px;")
+            f"font-size: {_tokens.FONT_LABEL[1]}pt; "
+            f"font-weight: {_tokens.FONT_LABEL[2]}; "
+            f"color: {_tokens.TOK['ink_mute']}; padding-top: 6px;")
         return l
 
     def _make_chip_container(self):
         fr = QFrame()
         fr.setStyleSheet(
-            "QFrame { background: #f5f5f7; border-radius: 10px; "
-            "padding: 6px; }")
+            f"QFrame {{ background: {_tokens.TOK['bg_mute']}; "
+            f"border-radius: 10px; padding: 6px; }}")
         fr.setMinimumHeight(54)
         lay = QHBoxLayout(fr)
         lay.setContentsMargins(8, 6, 8, 6)
@@ -1643,14 +1676,14 @@ class CustomReactionDialog(QDialog):
         return fr, lay
 
     def _badge_style(self, kind):
+        T = _tokens.TOK
+        base = (f"padding: 5px 14px; border-radius: 12px; "
+                f"font-size: {_tokens.FONT_HINT[1]}pt; font-weight: 500; ")
         if kind == "ok":
-            return ("padding: 5px 14px; border-radius: 12px; font-size: 9pt; "
-                    "font-weight: 500; color: #16632c; background: #d4ecd4;")
+            return base + f"color: {T['green']}; background: {T['green_bg']};"
         if kind == "bad":
-            return ("padding: 5px 14px; border-radius: 12px; font-size: 9pt; "
-                    "font-weight: 500; color: #8b0000; background: #fbd0d0;")
-        return ("padding: 5px 14px; border-radius: 12px; font-size: 9pt; "
-                "color: #666; background: #e8e8e8;")
+            return base + f"color: {T['danger']}; background: {T['danger_bg']};"
+        return base + f"color: {T['ink_mute']}; background: {T['bg_sunk']};"
 
     def _refresh_chips(self):
         """Limpia y reconstruye los layouts de chips desde reactant_chips
@@ -1699,9 +1732,10 @@ class CustomReactionDialog(QDialog):
         prefix = (f"{nu_abs} " if nu_abs > 1 else "")
         nm = ch.get("name") or ch.get("formula") or "?"
         phase = ch.get("phase", "g")
+        _c = _tokens.TOK["ink_soft"]
         lbl = QLabel(
             f"<b>{prefix}{nm}</b>"
-            f"&nbsp;&nbsp;<span style='color:#888; font-size:8pt;'>({phase})</span>"
+            f"&nbsp;&nbsp;<span style='color:{_c}; font-size:8pt;'>({phase})</span>"
         )
         h.addWidget(lbl)
         btn_x = QPushButton("×")
@@ -2099,8 +2133,17 @@ class CustomReactionDialog(QDialog):
 class OpexExtraRowDialog(QDialog):
     """Editor de UNA fila opex_extras."""
 
+    # Claves internas (persisten en el JSON del flowsheet y las consume
+    # el motor económico) → etiqueta visible en español.
     CATEGORIES = ["Raw Materials", "Utilities", "Consumables",
                   "Waste Treatment", "Other"]
+    CATEGORY_LABELS = {
+        "Raw Materials":   "Materias primas",
+        "Utilities":       "Servicios (utilities)",
+        "Consumables":     "Consumibles",
+        "Waste Treatment": "Tratamiento de residuos",
+        "Other":           "Otros",
+    }
 
     def __init__(self, parent, row=None):
         super().__init__(parent)
@@ -2120,9 +2163,10 @@ class OpexExtraRowDialog(QDialog):
         layout.addRow("Nombre:", self.name_edit)
 
         self.cat_combo = QComboBox()
-        self.cat_combo.addItems(self.CATEGORIES)
+        for key in self.CATEGORIES:
+            self.cat_combo.addItem(self.CATEGORY_LABELS.get(key, key), key)
         cur = row.get("stream", "Utilities")
-        idx = self.cat_combo.findText(cur)
+        idx = self.cat_combo.findData(cur)
         if idx >= 0:
             self.cat_combo.setCurrentIndex(idx)
         layout.addRow("Categoría:", self.cat_combo)
@@ -2150,7 +2194,8 @@ class OpexExtraRowDialog(QDialog):
             "Electric    4M kWh × $0.08\n"
             "Catalizador Pt   0.5 tm × $25000"
         )
-        hint.setStyleSheet("color: #888; font-size: 8pt;")
+        hint.setStyleSheet(f"color: {_tokens.TOK['ink_soft']}; "
+                            f"font-size: {_tokens.FONT_HINT[1]}pt;")
         layout.addRow("", hint)
 
         buttons = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
@@ -2169,7 +2214,7 @@ class OpexExtraRowDialog(QDialog):
             "time_basis":         "year",
             "flowrate":           float(self.flow_edit.value()),
             "price_usd_per_unit": float(self.price_edit.value()),
-            "stream":             self.cat_combo.currentText(),
+            "stream":             self.cat_combo.currentData(),
         }
         self.accept()
 
@@ -2191,7 +2236,7 @@ class OpexExtrasDialog(QDialog):
             "lanzar el análisis económico.  Las utilities derivadas de "
             "duties (heaters/coolers) se calculan aparte y NO aparecen acá."
         )
-        info.setStyleSheet("color: #555;")
+        info.setStyleSheet(f"color: {_tokens.TOK['ink_mute']};")
         info.setWordWrap(True)
         layout.addWidget(info)
 
@@ -2229,7 +2274,8 @@ class OpexExtrasDialog(QDialog):
             total += annual
             vals = [
                 ex.get("name", ""),
-                ex.get("stream", ""),
+                OpexExtraRowDialog.CATEGORY_LABELS.get(
+                    ex.get("stream", ""), ex.get("stream", "")),
                 ex.get("units", ""),
                 f"{ex.get('flowrate', 0):g}",
                 f"{ex.get('price_usd_per_unit', 0):g}",
@@ -2328,8 +2374,8 @@ class _StreamHandle(QGraphicsEllipseItem):
         self.setFlag(QGraphicsItem.ItemIsMovable, True)
         self.setFlag(QGraphicsItem.ItemIsSelectable, True)
         self.setFlag(QGraphicsItem.ItemSendsGeometryChanges, True)
-        self.setBrush(QBrush(QColor("#1f6feb")))
-        self.setPen(QPen(QColor("#ffffff"), 1.2))
+        self.setBrush(QBrush(QColor(_tokens.TOK["accent"])))
+        self.setPen(QPen(QColor(_tokens.TOK["bg_elev"]), 1.2))
         self.setZValue(20)        # por encima de BlockItem (z=10) — evita
                                    # que el bloque tape el handle si están
                                    # encimados
@@ -2960,8 +3006,9 @@ class _GhostStreamHandle(QGraphicsEllipseItem):
         r = self.RADIUS
         super().__init__(-r, -r, 2*r, 2*r)
         self._stream_item = stream_item
-        self.setBrush(QBrush(QColor(31, 111, 235, 130)))
-        self.setPen(QPen(QColor("#ffffff"), 1.0))
+        _mid = QColor(_tokens.TOK["accent"]); _mid.setAlpha(130)
+        self.setBrush(QBrush(_mid))
+        self.setPen(QPen(QColor(_tokens.TOK["bg_elev"]), 1.0))
         self.setZValue(19)        # encima de BlockItem (z=10)
         self.setCursor(Qt.PointingHandCursor)
         self.setToolTip("Click para hacer este bend editable, luego arrastrá")
@@ -3030,10 +3077,10 @@ class _EndpointHandle(QGraphicsEllipseItem):
         self.setFlag(QGraphicsItem.ItemIsMovable, True)
         self.setFlag(QGraphicsItem.ItemIsSelectable, True)
         self.setFlag(QGraphicsItem.ItemSendsGeometryChanges, True)
-        # estilo: doble anillo (afuera blanco, dentro naranja) para
-        # distinguir endpoints de waypoints regulares (azules)
-        self.setBrush(QBrush(QColor("#ffffff")))
-        self.setPen(QPen(QColor("#ef6c00"), 2.0))   # naranja
+        # estilo: doble anillo (fondo claro, aro naranja token) para
+        # distinguir endpoints de waypoints regulares (acento)
+        self.setBrush(QBrush(QColor(_tokens.TOK["bg_elev"])))
+        self.setPen(QPen(QColor(_tokens.TOK["orange"]), 2.0))
         # zValue alto para asegurar que esté POR ENCIMA del BlockItem
         # (z=10) — sino el bloque al que el stream se conecta tapa el
         # handle y los clicks van al bloque, no al handle.
@@ -3120,8 +3167,9 @@ class _EndpointHandle(QGraphicsEllipseItem):
         from PySide6.QtWidgets import QGraphicsEllipseItem as _E
         if self._snap_marker is None:
             self._snap_marker = _E(-10, -10, 20, 20)
-            self._snap_marker.setBrush(QBrush(QColor(46, 125, 50, 80)))
-            self._snap_marker.setPen(QPen(QColor("#2e7d32"), 2.0))
+            _halo = QColor(_tokens.TOK["green"]); _halo.setAlpha(80)
+            self._snap_marker.setBrush(QBrush(_halo))
+            self._snap_marker.setPen(QPen(QColor(_tokens.TOK["green"]), 2.0))
             self._snap_marker.setZValue(22)        # por encima del handle
             self._snap_marker.setAcceptedMouseButtons(Qt.NoButton)
             if self.scene():
@@ -3344,13 +3392,15 @@ class _EndpointHandle(QGraphicsEllipseItem):
 # sin intervención del user (P propagada, ΔP auto-dimensionado, duty auto,
 # T/fase inferidas).  Spec del user → estilo normal; calculado → este badge.
 def _auto_badge(text="AUTO"):
-    return ("<span style='background:#5b6f8f; color:#eef; "
+    return (f"<span style='background:{_tokens.TOK['auto_ribbon']}; "
+            f"color:{_tokens.TOK['bg_elev']}; "
             "border-radius:3px; padding:0 3px; font-size:7pt;'>"
             f"{text}</span>")
 
 
 def _spec_tag():
-    return "<span style='color:#888; font-size:7pt;'>[spec]</span>"
+    return (f"<span style='color:{_tokens.TOK['ink_soft']}; "
+            "font-size:7pt;'>[spec]</span>")
 
 
 def _pressure_origin_is_auto(s):
@@ -3434,7 +3484,9 @@ class BlockItem(QGraphicsItemGroup):
         # --- textos (IBM Plex si está disponible, fallback al sistema) ---
         sans = pfd_fonts.SANS if pfd_fonts.available() else "Segoe UI"
         mono = pfd_fonts.MONO if pfd_fonts.available() else "Consolas"
-        f_title = QFont(sans, 9, QFont.Bold)
+        # On-canvas en unidades de escena (escala con el zoom): base
+        # FONT_LABEL — el único rol con tamaño relativo (artboard 2g).
+        f_title = QFont(sans, _tokens.FONT_LABEL[1], QFont.Bold)
 
         # Tag: AFUERA del bloque, encima, centrado (estilo PFD industrial).
         # La spec (S = … m²) NO se muestra en el bloque para reducir clutter
@@ -3456,6 +3508,7 @@ class BlockItem(QGraphicsItemGroup):
         # golpe los requerimientos energéticos sin abrir tooltips.
         # Icono: ↑Q heating, ↓Q cooling.
         self.duty_badge = QGraphicsSimpleTextItem("", parent=self)
+        # escala de densidad del plano, no UI (excepción 2g)
         self.duty_badge.setFont(QFont(mono, 8, QFont.Bold))
         self.duty_badge.setPos(self.W + 6, self.H / 2 - 7)
         self.duty_badge.setZValue(3)
@@ -3471,9 +3524,9 @@ class BlockItem(QGraphicsItemGroup):
             from icons import icon_for_eq_type, make_qicon
             from PySide6.QtWidgets import QGraphicsPixmapItem
             icon_id = icon_for_eq_type(block.eq_type)
-            # Color teal del nuevo tema + más grande (18px) + opacity 0.95
+            # Color de acento del tema + más grande (18px) + opacity 0.95
             # para que sean realmente visibles sobre la silueta ISA.
-            ic = make_qicon(icon_id, color="#0d6e78", size=20)
+            ic = make_qicon(icon_id, color=_tokens.TOK["accent"], size=20)
             if ic is not None:
                 self.type_badge = QGraphicsPixmapItem(
                     ic.pixmap(18, 18), parent=self)
@@ -3586,11 +3639,11 @@ class BlockItem(QGraphicsItemGroup):
                     cx, cy, cx + ux * stub_len, cy + uy * stub_len,
                     parent=self,
                 )
-                stub.setPen(QPen(QColor("#0d0d0d"), 1.6))
+                stub.setPen(QPen(QColor(_tokens.TOK["stream_internal"]), 1.6))
                 stub.setZValue(0.5)   # encima del rect, debajo del puerto
                 self.decoration_items.append(stub)
             kind = ep.get_port_kind(self.model.eq_type, pname)
-            base_color = PORT_KIND_COLORS.get(kind, COLOR_PORT_AUX)
+            base_color = PORT_KIND_COLORS.get(kind, PORT_KIND_COLORS["aux"])
             ell = QGraphicsEllipseItem(cx - r, cy - r, 2*r, 2*r, parent=self)
             ell.setBrush(QBrush(_port_tint(base_color)))
             ell.setPen(QPen(base_color, 1.2))
@@ -3610,7 +3663,7 @@ class BlockItem(QGraphicsItemGroup):
         """
         for pname, ell in self.port_items.items():
             kind = ell.data(1) or "aux"
-            base_color = PORT_KIND_COLORS.get(kind, COLOR_PORT_AUX)
+            base_color = PORT_KIND_COLORS.get(kind, PORT_KIND_COLORS["aux"])
             if pname in used_ports:
                 ell.setBrush(QBrush(base_color))           # saturado
             else:
@@ -3623,11 +3676,9 @@ class BlockItem(QGraphicsItemGroup):
         Llamar despues de chemfx.analyze_flowsheet(fs) para refrescar
         todos los bloques. Es no-op si el bloque no tiene warnings.
 
-        Color por severity (max del bloque):
-          critical → rojo (#c41e3a)
-          high     → naranja (#e57c00)
-          medium   → amarillo (#f4b400)
-          (sin warnings → badge oculto)
+        Color por severity (max del bloque) — escala única del sistema
+        (tokens.severity_hex: critical→danger, high→orange, medium→amber;
+        sin warnings → badge oculto).
         """
         warns = getattr(self.model, "reaction_warnings", None) or []
         # Maximo de severidad en este bloque
@@ -3646,7 +3697,8 @@ class BlockItem(QGraphicsItemGroup):
         if not hasattr(self, "_warning_badge") or self._warning_badge is None:
             from PySide6.QtWidgets import QGraphicsEllipseItem
             self._warning_badge = QGraphicsEllipseItem(-7, -7, 14, 14)
-            self._warning_badge.setPen(QPen(QColor("#ffffff"), 1.5))
+            self._warning_badge.setPen(
+                QPen(QColor(_tokens.TOK["canvas_bg"]), 1.5))
             self._warning_badge.setZValue(20)   # encima del bloque
             self._warning_badge.setAcceptedMouseButtons(Qt.NoButton)
             self.addToGroup(self._warning_badge)
@@ -3654,13 +3706,8 @@ class BlockItem(QGraphicsItemGroup):
         if not warns:
             self._warning_badge.setVisible(False)
             return
-        color_map = {
-            "critical": "#c41e3a",
-            "high":     "#e57c00",
-            "medium":   "#f4b400",
-        }
-        color = color_map.get(max_sev, "#9ca3af")
-        self._warning_badge.setBrush(QBrush(QColor(color)))
+        self._warning_badge.setBrush(
+            QBrush(QColor(_tokens.severity_hex(max_sev))))
         self._warning_badge.setVisible(True)
         # Posicion: esquina superior derecha del bloque
         try:
@@ -3688,7 +3735,8 @@ class BlockItem(QGraphicsItemGroup):
         port_list = ", ".join(ports.keys()) if ports else "(sin puertos)"
         lines = [
             f"<b>{b.name}</b>",
-            f"<span style='color:#666;'>{b.eq_type}</span>",
+            f"<span style='color:{_tokens.TOK['ink_mute']};'>"
+            f"{b.eq_type}</span>",
             f"S = {b.S:g} {spec.get('S_unit','')}",
         ]
         if b.n > 1:
@@ -3712,7 +3760,8 @@ class BlockItem(QGraphicsItemGroup):
             lines.append(f"P_op = {b.P_op_bar:g} bar")
         if b.heat_source:
             lines.append(f"Utility: {b.heat_source}")
-        lines.append(f"<span style='color:#888; font-size:8pt;'>"
+        lines.append(f"<span style='color:{_tokens.TOK['ink_soft']}; "
+                     f"font-size:8pt;'>"
                      f"Puertos: {port_list}</span>")
         self.setToolTip("<br>".join(lines))
 
@@ -3741,7 +3790,10 @@ class BlockItem(QGraphicsItemGroup):
             self.duty_badge.setText("")
             return
         arrow = "↑Q" if q > 0 else "↓Q"
-        color = QColor("#c41e3a") if q > 0 else QColor("#1565c0")
+        # Atado al eje de servicio (2a familia 5): calienta=duty_hot,
+        # enfría=duty_cold.
+        color = QColor(_tokens.TOK["duty_hot"] if q > 0
+                       else _tokens.TOK["duty_cold"])
         # Formato compacto: kW si <1000, MW si mayor
         if abs(q) >= 1000:
             val = f"{q/1000:+.2f} MW"
@@ -3973,10 +4025,11 @@ class BlockItem(QGraphicsItemGroup):
         menu.addSeparator()
         # Íconos del set HYSYS (color text-primary)
         mk = getattr(self.editor, "_mk_icon", None)
-        icol = getattr(self.editor, "_icon_color", "#3a3a3a")
+        icol = _tokens.TOK["ink_mute"]
         ic_connect = mk("act-connect", color=icol, size=16) if mk else QIcon()
         ic_edit    = mk("act-edit",    color=icol, size=16) if mk else QIcon()
-        ic_delete  = mk("edit-delete", color="#c41e3a", size=16) if mk else QIcon()
+        ic_delete  = mk("edit-delete", color=_tokens.TOK["danger"],
+                        size=16) if mk else QIcon()
         menu.addAction(ic_connect or QIcon(), "Conectar desde acá…",
                        lambda: self.editor.start_connection(self.model.id))
         menu.addAction(ic_edit or QIcon(), "Editar propiedades… (doble-click)",
@@ -4061,20 +4114,21 @@ class StreamItem(QGraphicsPathItem):
         # borde del color del stream) + nombre + flujo en mono.
         self.label_bg = _RoundedRectBody(0, 0, 10, 10)
         self.label_bg.RADIUS = 3
-        self.label_bg.setBrush(QBrush(QColor("#ffffff")))
+        self.label_bg.setBrush(QBrush(COLOR_LABEL_BG))
         self.label_bg.setPen(QPen(Qt.NoPen))    # se setea en update_path con el color
         self.label_bg.setZValue(6)
         self.label_bg.setAcceptedMouseButtons(Qt.NoButton)
 
         mono = pfd_fonts.MONO if pfd_fonts.available() else "Consolas"
         self.label_name = QGraphicsSimpleTextItem()
-        self.label_name.setFont(QFont(mono, 7, QFont.Medium))
+        # pill de stream: escala de densidad del plano (excepción 2g)
+        self.label_name.setFont(QFont(mono, 8, QFont.Medium))
         self.label_name.setZValue(7)
         self.label_name.setAcceptedMouseButtons(Qt.NoButton)
 
         self.label_flow = QGraphicsSimpleTextItem()
-        self.label_flow.setFont(QFont(mono, 7))
-        self.label_flow.setBrush(QBrush(QColor("#6b7280")))   # gris suave
+        self.label_flow.setFont(QFont(mono, 8))
+        self.label_flow.setBrush(QBrush(QColor(_tokens.TOK["label_ink_soft"])))
         self.label_flow.setZValue(7)
         self.label_flow.setAcceptedMouseButtons(Qt.NoButton)
 
@@ -4166,9 +4220,19 @@ class StreamItem(QGraphicsPathItem):
             is_hot = tmax >= UTILITY_HOT_T_C
         return is_hot, tmin, tmax
 
+    # Rol de corriente → token (artboard 2a familia 4).  La selección ya
+    # NO cambia el hex del rol: es +peso de trazo + halo accent_soft
+    # (ver update_path) — así el rol nunca se pierde al seleccionar.
+    _ROLE_TOKEN = {
+        "internal": "stream_internal",
+        "feed":     "stream_internal",
+        "product":  "stream_product",
+        "utility":  "stream_utility",
+        "waste":    "stream_waste",
+    }
+
     def _color(self):
         role = self.model.role
-        sel = self.isSelected()
         # UTILITY: family por INTERCAMBIADOR (naranja=calienta, celeste=enfría)
         # + degradado de TONO por temperatura DENTRO del lazo (de la corriente
         # más caliente a la más fría).  El status crítico (error/warn) tiene
@@ -4184,13 +4248,7 @@ class StreamItem(QGraphicsPathItem):
             frac = 0.0 if frac < 0.0 else (1.0 if frac > 1.0 else frac)
             pale = QColor(COLOR_UTIL_HOT_PALE if is_hot else COLOR_UTIL_COLD_PALE)
             deep = QColor(COLOR_UTIL_HOT_DEEP if is_hot else COLOR_UTIL_COLD_DEEP)
-            col = _lerp_color(pale, deep, frac)
-            if sel:
-                col = col.darker(118)
-            return col
-        # Selección siempre tiene prioridad para feedback inmediato.
-        if sel:
-            return QColor(STREAM_ROLE_COLORS_SEL.get(role, "#c62828"))
+            return _lerp_color(pale, deep, frac)
         # Status crítico sobreescribe el color por role (error o warning
         # vienen del último solve y son los más informativos para el user).
         if self._status == "error":
@@ -4198,10 +4256,11 @@ class StreamItem(QGraphicsPathItem):
         if self._status == "warning":
             return status_qcolor("warning")
         if self._status in ("stale", "unrun"):
-            # gris-azul tenue para indicar "no resuelto / sin verificar"
-            return QColor("#9aa5b1")
+            # tenue para indicar "no resuelto / sin verificar"
+            return QColor(_tokens.TOK["ink_soft"])
         # status == "ok" o cualquier otro: color normal por role
-        return QColor(STREAM_ROLE_COLORS.get(role, "#37474f"))
+        return QColor(_tokens.TOK[self._ROLE_TOKEN.get(role,
+                                                        "stream_internal")])
 
     def hoverEnterEvent(self, event):
         """Engrosa la línea al hover para feedback visual."""
@@ -4456,11 +4515,13 @@ class StreamItem(QGraphicsPathItem):
                 if f is not None:
                     d = f.data or {}
                     if "expected" in d:
-                        phase_txt = (f"{s.phase} ⚠ <span style='color:#b8860b;'>"
+                        phase_txt = (f"{s.phase} ⚠ <span style='color:"
+                                     f"{_tokens.TOK['amber']};'>"
                                      f"(flash da {d['expected']}, "
                                      f"V={d.get('V_frac', 0):.2f})</span>")
                     elif d.get("reason") == "melt":
-                        phase_txt = (f"{s.phase} <span style='color:#888;'>"
+                        phase_txt = (f"{s.phase} <span style='color:"
+                                     f"{_tokens.TOK['ink_soft']};'>"
                                      f"(fundido, fuera de VLE)</span>")
         # ── T con badge AUTO si fue inferida (no locked) ──
         t_txt = f"{s.temperature:g} °C"
@@ -4471,7 +4532,8 @@ class StreamItem(QGraphicsPathItem):
         p_tag = _auto_badge() if _pressure_origin_is_auto(s) else _spec_tag()
         lines = [
             f"<b>{s.name}</b>",
-            f"<span style='color:#666;'>{src_label} → {dst_label}</span>",
+            f"<span style='color:{_tokens.TOK['ink_mute']};'>"
+            f"{src_label} → {dst_label}</span>",
             f"Rol: {s.role}  ·  Fase: {phase_txt}",
             f"Flujo: <b>{s.mass_flow:g}</b> tm/año",
             f"T = {t_txt}",
@@ -4487,8 +4549,9 @@ class StreamItem(QGraphicsPathItem):
             for k, v in sorted(comp.items(), key=lambda kv: -kv[1]):
                 if v < 0.001:
                     continue
-                # Color de barra: gris si tiny, naranja si principal
-                color = "#c41e3a" if v > 0.5 else "#3a3a3a"
+                # Color de barra: tinta si tiny, danger si principal
+                color = (_tokens.TOK["danger"] if v > 0.5
+                         else _tokens.TOK["ink"])
                 pct = v * 100
                 rows.append(f"<span style='color:{color};'>"
                              f"&nbsp;&nbsp;{k}: {pct:.1f}%</span>")
@@ -4658,6 +4721,11 @@ class StreamItem(QGraphicsPathItem):
         role = self.model.role
         width = {"feed": 2.4, "internal": 2.4, "product": 2.4,
                  "waste": 1.6, "utility": 1.4}.get(role, 2.0)
+        # Selección (artboard 2a familia 4): el hex del rol no cambia —
+        # +peso de trazo + halo accent_soft debajo del path.
+        sel = self.isSelected()
+        if sel:
+            width += 1.2
         # Hover: engrosar línea +50% para feedback visual
         if self._hovered:
             width *= 1.5
@@ -4670,6 +4738,21 @@ class StreamItem(QGraphicsPathItem):
         elif role == "waste":
             pen.setDashPattern([3.0, 3.0])
         self.setPen(pen)
+        # Halo de selección (child item, debajo del trazo del rol)
+        if sel:
+            if getattr(self, "_sel_glow", None) is None:
+                from PySide6.QtWidgets import QGraphicsPathItem as _GPI
+                self._sel_glow = _GPI(self)
+                self._sel_glow.setZValue(-1)
+                self._sel_glow.setAcceptedMouseButtons(Qt.NoButton)
+            gpen = QPen(QColor(_tokens.TOK["accent_soft"]), width + 4.0)
+            gpen.setCapStyle(Qt.FlatCap)
+            gpen.setJoinStyle(Qt.MiterJoin)
+            self._sel_glow.setPen(gpen)
+            self._sel_glow.setPath(path)
+            self._sel_glow.setVisible(True)
+        elif getattr(self, "_sel_glow", None) is not None:
+            self._sel_glow.setVisible(False)
         self._draw_arrow(path, pts[-2], pts[-1], pts[-4], pts[-3])
         # Direction arrows intermedios (chevrons cada ~130 px)
         self._draw_direction_arrows(pts)
@@ -4808,7 +4891,9 @@ class StreamItem(QGraphicsPathItem):
 
     def itemChange(self, change, value):
         if change == QGraphicsItem.ItemSelectedHasChanged:
-            self._rebuild_handles()
+            # update_path refresca pen (peso) + halo de selección y
+            # reconstruye handles (rebuild_handles=True por default).
+            self.update_path()
         return super().itemChange(change, value)
 
     def contextMenuEvent(self, event):
@@ -4819,11 +4904,12 @@ class StreamItem(QGraphicsPathItem):
         # Íconos del set HYSYS
         ed = getattr(self, "editor", None)
         mk = getattr(ed, "_mk_icon", None) if ed else None
-        icol = getattr(ed, "_icon_color", "#3a3a3a") if ed else "#3a3a3a"
+        icol = _tokens.TOK["ink_mute"]
         ic_wp     = mk("act-waypoint", color=icol, size=16) if mk else QIcon()
         ic_reset  = mk("sim-reset",    color=icol, size=16) if mk else QIcon()
         ic_edit   = mk("act-edit",     color=icol, size=16) if mk else QIcon()
-        ic_delete = mk("edit-delete",  color="#c41e3a", size=16) if mk else QIcon()
+        ic_delete = mk("edit-delete",  color=_tokens.TOK["danger"],
+                       size=16) if mk else QIcon()
         a_edit = menu.addAction(ic_edit or QIcon(),
                                   "Editar propiedades… (doble-click)")
         menu.addSeparator()
@@ -5357,15 +5443,20 @@ class _PaperFrame(QGraphicsItemGroup):
     PAPER_H = 960
 
     def __init__(self, project_title="PFD", area="100",
-                 drawing_no="PFD-100-001", rev="A", date=None):
+                 drawing_no="PFD-100-001", rev="A", date=None,
+                 legend_collapsed=False):
         super().__init__()
         self.setZValue(-100)
-        # decorativo puro: no participa del hit-testing (rubber band)
+        # decorativo puro: no participa del hit-testing (rubber band);
+        # el chevron de la leyenda se maneja por hit-test en la escena
+        # (legend_chevron_rect).
         self.setAcceptedMouseButtons(Qt.NoButton)
         self._project_title = project_title
         self._area          = area
         self._drawing_no    = drawing_no
         self._rev           = rev
+        self._legend_collapsed = bool(legend_collapsed)
+        self.legend_chevron_rect = None   # QRectF en coords de escena
         if date is None:
             import datetime
             date = datetime.date.today().isoformat()
@@ -5373,8 +5464,11 @@ class _PaperFrame(QGraphicsItemGroup):
 
         self._sans = pfd_fonts.SANS if pfd_fonts.available() else "Segoe UI"
         self._mono = pfd_fonts.MONO if pfd_fonts.available() else "Consolas"
-        self._BLACK = QColor("#0d0d0d")
-        self._SOFT  = QColor("#6b7280")
+        # Tinta de documento (tokens 2a) — el marco se reconstruye al
+        # cambiar tema (FlowsheetScene.retint), así que el snapshot vale.
+        self._BLACK = QColor(_tokens.TOK["label_ink"])
+        self._SOFT  = QColor(_tokens.TOK["label_ink_soft"])
+        self._PAPER = QColor(_tokens.TOK["canvas_bg"])
 
         self._build_frame()
         self._build_legend()
@@ -5414,40 +5508,114 @@ class _PaperFrame(QGraphicsItemGroup):
             self._add_line(20,  H*t, 40,  H*t, 0.6)
             self._add_line(W-40, H*t, W-20, H*t, 0.6)
 
+    def _legend_dot(self, x, y, color, r=3.4):
+        d = QGraphicsEllipseItem(x, y, 2*r, 2*r, self)
+        d.setBrush(QBrush(QColor(color)))
+        d.setPen(QPen(Qt.NoPen))
+        d.setAcceptedMouseButtons(Qt.NoButton)
+        return d
+
     def _build_legend(self):
+        """Leyenda del lenguaje visual (artboard 2c): banda que extiende
+        el cuadro de título (esquina inferior derecha), colapsable desde
+        el chevron.  Cubre semáforo, puertos, servicio, roles y fases —
+        el stub anterior solo tenía 3 entradas del lenguaje viejo."""
         BLACK = self._BLACK
         SOFT  = self._SOFT
-        RED   = QColor("#c41e3a")
-        BLUE  = QColor("#1e3a8a")
+        T = _tokens.TOK
+        W, H  = self.PAPER_W, self.PAPER_H
 
-        # top-right corner
-        x0 = self.PAPER_W - 360
-        y0 = 60
-        gx, gy = x0, y0
-        self._add_rect(gx, gy, 320, 88, stroke_w=0.8,
-                       fill=QColor("#ffffff"))
-        f_title = QFont(self._sans, 9, QFont.Bold)
-        f_title.setLetterSpacing(QFont.AbsoluteSpacing, 1.2)
-        f_body  = QFont(self._mono, 8)
-        self._add_text(gx + 12, gy + 6,  "LEYENDA", f_title)
-        self._add_line(gx + 12, gy + 26, gx + 308, gy + 26, 0.4)
-        # process line
-        self._add_line(gx + 14, gy + 42, gx + 42, gy + 42, 2.2, BLACK)
-        self._add_text(gx + 50, gy + 36, "Línea de proceso", f_body)
-        # product
-        self._add_line(gx + 14, gy + 58, gx + 42, gy + 58, 2.2, RED)
-        self._add_text(gx + 50, gy + 52, "Producto",         f_body)
-        # utility
-        self._add_line(gx + 14, gy + 74, gx + 42, gy + 74, 2.2, BLUE)
-        self._add_text(gx + 50, gy + 68, "Agua / utility",   f_body)
+        bw = 460
+        bx = W - 500                      # alineada con el cuadro de título
+        collapsed = self._legend_collapsed
+        bh = 26 if collapsed else 118
+        by = H - 160 - bh - 6
 
-        # port sample
-        ell = QGraphicsEllipseItem(gx + 196, gy + 38, 7.2, 7.2, self)
-        ell.setBrush(QBrush(QColor("#ffffff")))
-        ell.setPen(QPen(BLACK, 1.6))
-        self._add_text(gx + 212, gy + 36, "Conexión",  f_body)
-        self._add_text(gx + 196, gy + 52, "tm/año",    QFont(self._mono, 8), color=SOFT)
-        self._add_text(gx + 196, gy + 68, "S = m², V = m³", QFont(self._mono, 8), color=SOFT)
+        # tipografía de documento — escala de plano (excepción 2g)
+        f_head = QFont(self._sans, 9, QFont.Bold)
+        f_head.setLetterSpacing(QFont.AbsoluteSpacing, 1.2)
+        f_sub  = QFont(self._sans, 7)
+        f_grp  = QFont(self._sans, 7, QFont.Bold)
+        f_item = QFont(self._mono, 7)
+
+        self._add_rect(bx, by, bw, bh, stroke_w=0.8, fill=self._PAPER)
+        self._add_text(bx + 12, by + 6, "LEYENDA", f_head)
+        self._add_text(bx + 106, by + 8, self._project_title, f_sub,
+                       color=SOFT)
+        chev = self._add_text(bx + bw - 24, by + 5,
+                              "▸" if collapsed else "▾",
+                              QFont(self._sans, 9), color=SOFT)
+        # hit-área generosa alrededor del chevron (coords de escena; el
+        # grupo vive en (0,0) — FlowsheetScene.mousePressEvent la testea)
+        from PySide6.QtCore import QRectF
+        self.legend_chevron_rect = QRectF(bx + bw - 34, by, 34, 24)
+        if collapsed:
+            return
+        self._add_line(bx + 12, by + 24, bx + bw - 12, by + 24, 0.4)
+
+        rows = (by + 46, by + 64, by + 82, by + 100)
+
+        # ── Estado (semáforo del solver) ──
+        x0 = bx + 12
+        self._add_text(x0, by + 28, "ESTADO", f_grp, color=SOFT)
+        estados = (
+            ("ok",      "Resuelto"),
+            ("warning", "Advertencia !"),
+            ("error",   "Error ×"),
+            ("stale",   "Desactualizado"),
+        )
+        for (st, lbl), ry in zip(estados, rows):
+            sq = QGraphicsRectItem(x0, ry - 8, 11, 11, self)
+            fill = _tokens.status_fill_hex(st)
+            sq.setBrush(QBrush(QColor(fill)) if fill
+                        else QBrush(self._PAPER))
+            pen = QPen(QColor(_tokens.status_hex(st)), 1.3)
+            if st == "stale":
+                pen.setStyle(Qt.DashLine)
+            sq.setPen(pen)
+            sq.setAcceptedMouseButtons(Qt.NoButton)
+            self._add_text(x0 + 17, ry - 8, lbl, f_item)
+
+        # ── Puertos (paleta técnica, 2 columnas de 3) ──
+        x1 = bx + 128
+        self._add_text(x1, by + 28, "PUERTOS", f_grp, color=SOFT)
+        puertos = (
+            ("port_process_in",  "Proc. in"),
+            ("port_process_out", "Proc. out"),
+            ("port_utility_in",  "Util. in"),
+            ("port_utility_out", "Util. out"),
+            ("port_aux",         "Aux"),
+            ("port_drain",       "Drenaje"),
+        )
+        for i, (tok, lbl) in enumerate(puertos):
+            cx = x1 + (0 if i < 3 else 70)
+            ry = rows[i % 3]
+            self._legend_dot(cx, ry - 6, T[tok])
+            self._add_text(cx + 12, ry - 8, lbl, f_item)
+
+        # ── Servicio (por temperatura) ──
+        x2 = bx + 264
+        self._add_text(x2, by + 28, "SERVICIO", f_grp, color=SOFT)
+        self._add_line(x2, rows[0] - 2, x2 + 24, rows[0] - 2, 2.0,
+                       QColor(T["service_hot"]))
+        self._add_text(x2 + 30, rows[0] - 8, "Caliente ↑", f_item)
+        self._add_line(x2, rows[1] - 2, x2 + 24, rows[1] - 2, 2.0,
+                       QColor(T["service_cold"]))
+        self._add_text(x2 + 30, rows[1] - 8, "Frío ↓", f_item)
+
+        # ── Corriente · fase ──
+        x3 = bx + 352
+        self._add_text(x3, by + 28, "CORRIENTE · FASE", f_grp, color=SOFT)
+        self._add_line(x3, rows[0] - 2, x3 + 24, rows[0] - 2, 2.2,
+                       QColor(T["stream_internal"]))
+        self._add_text(x3 + 30, rows[0] - 8, "Interna", f_item)
+        self._add_line(x3, rows[1] - 2, x3 + 24, rows[1] - 2, 2.2,
+                       QColor(T["stream_product"]))
+        self._add_text(x3 + 30, rows[1] - 8, "Producto", f_item)
+        self._legend_dot(x3, rows[2] - 6, T["phase_liq"])
+        self._add_text(x3 + 12, rows[2] - 8, "Líq.", f_item)
+        self._legend_dot(x3 + 52, rows[2] - 6, T["phase_vap"])
+        self._add_text(x3 + 64, rows[2] - 8, "Vap.", f_item)
 
     def _build_title_block(self):
         BLACK = self._BLACK
@@ -5457,7 +5625,7 @@ class _PaperFrame(QGraphicsItemGroup):
         # bottom-right
         bx = W - 500
         by = H - 160
-        self._add_rect(bx, by, 460, 120, stroke_w=1.4, fill=QColor("#ffffff"))
+        self._add_rect(bx, by, 460, 120, stroke_w=1.4, fill=self._PAPER)
         # internal grid
         self._add_line(bx,        by + 30,  bx + 460, by + 30,  0.8)
         self._add_line(bx,        by + 70,  bx + 460, by + 70,  0.8)
@@ -5522,6 +5690,8 @@ class FlowsheetScene(QGraphicsScene):
                 self.paper_frame = _PaperFrame(
                     project_title=project_title,
                     area=area, drawing_no=drawing_no,
+                    legend_collapsed=getattr(
+                        self, "_legend_collapsed", False),
                 )
                 self.paper_frame.setPos(0, 0)
                 self.addItem(self.paper_frame)
@@ -5530,8 +5700,40 @@ class FlowsheetScene(QGraphicsScene):
             if self.paper_frame is not None:
                 self.paper_frame.setVisible(False)
 
+    def toggle_legend_collapsed(self):
+        """Pliega/despliega la leyenda del Marco PFD (artboard 2c) —
+        reconstruye el marco conservando su metadata."""
+        self._legend_collapsed = not getattr(self, "_legend_collapsed",
+                                             False)
+        pf = self.paper_frame
+        if pf is None:
+            return
+        title, area, dwg = pf._project_title, pf._area, pf._drawing_no
+        visible = pf.isVisible()
+        self.removeItem(pf)
+        self.paper_frame = None
+        if visible:
+            self.set_paper_visible(True, project_title=title,
+                                   area=area, drawing_no=dwg)
+
+    def mousePressEvent(self, event):
+        # Chevron de la leyenda del Marco PFD (el marco es decorativo y
+        # no acepta mouse — el hit-test vive acá).
+        pf = self.paper_frame
+        if (pf is not None and pf.isVisible()
+                and pf.legend_chevron_rect is not None
+                and pf.legend_chevron_rect.contains(event.scenePos())):
+            self.toggle_legend_collapsed()
+            event.accept()
+            return
+        super().mousePressEvent(event)
+
+    # Cada cuántos pasos de grilla va una línea mayor (canvas_grid_major)
+    GRID_MAJOR_EVERY = 5
+
     def _draw_grid(self):
-        pen = QPen(COLOR_GRID, 0)
+        pen       = QPen(COLOR_GRID, 0)
+        pen_major = QPen(COLOR_GRID_MAJOR, 0)
         rect = self.sceneRect()
         x0 = int(rect.left())
         y0 = int(rect.top())
@@ -5541,20 +5743,49 @@ class FlowsheetScene(QGraphicsScene):
         # alinear al múltiplo de step
         x0 = (x0 // step) * step
         y0 = (y0 // step) * step
+        # Se guardan las líneas (con flag de mayor) para poder re-tintar
+        # al cambiar tema sin reconstruir la escena entera.
+        self._grid_lines: list = []
+        major_span = step * self.GRID_MAJOR_EVERY
         for x in range(x0, x1 + step, step):
+            major = (x % major_span == 0)
             line = QGraphicsLineItem(x, y0, x, y1)
-            line.setPen(pen)
+            line.setPen(pen_major if major else pen)
             line.setZValue(-100)
             # decorativa: nunca participa del hit-testing (el press en
             # zona vacía debe iniciar el rubber band, no morir aquí)
             line.setAcceptedMouseButtons(Qt.NoButton)
             self.addItem(line)
+            self._grid_lines.append((line, major))
         for y in range(y0, y1 + step, step):
+            major = (y % major_span == 0)
             line = QGraphicsLineItem(x0, y, x1, y)
-            line.setPen(pen)
+            line.setPen(pen_major if major else pen)
             line.setZValue(-100)
             line.setAcceptedMouseButtons(Qt.NoButton)
             self.addItem(line)
+            self._grid_lines.append((line, major))
+
+    def retint(self):
+        """Re-tinta papel y grilla con la paleta del tema activo (los
+        snapshots module-level ya deben estar refrescados vía
+        _refresh_canvas_palette).  Los demás items se reconstruyen."""
+        self.setBackgroundBrush(QBrush(COLOR_CANVAS_BG))
+        pen       = QPen(COLOR_GRID, 0)
+        pen_major = QPen(COLOR_GRID_MAJOR, 0)
+        for line, major in getattr(self, "_grid_lines", []):
+            line.setPen(pen_major if major else pen)
+        # El marco PFD hornea la tinta de documento al construirse →
+        # reconstruirlo con la misma metadata.
+        if self.paper_frame is not None:
+            pf = self.paper_frame
+            visible = pf.isVisible()
+            title, area, dwg = pf._project_title, pf._area, pf._drawing_no
+            self.removeItem(pf)
+            self.paper_frame = None
+            if visible:
+                self.set_paper_visible(True, project_title=title,
+                                       area=area, drawing_no=dwg)
 
     def clear_flowsheet(self):
         # Borra los items conocidos via mapping
@@ -5832,7 +6063,6 @@ class FlowsheetMainWindow(QMainWindow):
         # puedan tomar sus toggleViewAction().
         # (La "Biblioteca de equipos" vieja se eliminó en el rediseño 1c:
         # la paleta flotante cubre catálogo completo, variantes y drag.)
-        self._build_properties_dock()
         self._build_streams_dock()
         self._build_shared_actions()
         self._build_statusbar()
@@ -5840,13 +6070,22 @@ class FlowsheetMainWindow(QMainWindow):
         self._wire_editor_chrome()
         # Ocultar los docks secundarios al arrancar — la UI principal es
         # paleta + Inspector + burbujas.  Se re-muestran desde Vista.
-        for _dock_attr in ("props_dock", "streams_dock", "reactivity_dock"):
+        for _dock_attr in ("streams_dock", "reactivity_dock"):
             _d = getattr(self, _dock_attr, None)
             if _d is not None:
                 _d.hide()
 
         # selección
         self.scene.selectionChanged.connect(self._on_selection_changed)
+
+        # ── Tema en vivo (artboard 2b): el editor entero escucha
+        # themeChanged — antes solo los inspectores/economía respiraban
+        # y el canvas quedaba claro con glifos oscuros.
+        try:
+            _tokens._PrefsBus.signal().connect(self._on_theme_changed)
+        except Exception:
+            pass
+        self.setStyleSheet(self._window_qss())
 
         # Esc cancela conexión pendiente
         self._setup_shortcuts()
@@ -5972,35 +6211,19 @@ class FlowsheetMainWindow(QMainWindow):
         """Menu bar que reusa todas las acciones del toolbar legacy.
         Una vez construido, las QToolBars se ocultan por default."""
         mb = self.menuBar()
-        # estilo plano consistente con el resto del editor
+        # estilo plano consistente con el resto del editor — se re-aplica
+        # en _on_theme_changed
         try:
-            from block_inspector import TOK as _T
-            mb.setStyleSheet(
-                f"QMenuBar {{ background:{_T['bg_elev']}; color:{_T['ink']}; "
-                f"border-bottom:1px solid {_T['line']}; }} "
-                f"QMenuBar::item {{ padding:5px 10px; background:transparent; }} "
-                f"QMenuBar::item:selected {{ background:{_T['bg_mute']}; "
-                f"color:{_T['accent_deep']}; border-radius:4px; }} "
-                f"QMenu {{ background:{_T['bg_elev']}; color:{_T['ink']}; "
-                f"border:1px solid {_T['line']}; padding:4px 0; }} "
-                f"QMenu::item {{ padding:5px 22px 5px 14px; }} "
-                f"QMenu::item:selected {{ background:{_T['accent_tint']}; "
-                f"color:{_T['accent_deep']}; }}"
-            )
+            mb.setStyleSheet(self._menubar_qss())
         except Exception:
             pass
-
-        _mk = getattr(self, "_mk_icon", None) or (lambda *a, **k: None)
-        ic_color = getattr(self, "_icon_color", "#3a3a3a")
 
         def _ac(label, slot, shortcut=None, icon_id=None):
             act = QAction(label, self)
             act.triggered.connect(slot)
             if shortcut: act.setShortcut(shortcut)
-            if icon_id and _mk:
-                ic = _mk(icon_id, color=ic_color, size=16)
-                if ic is not None:
-                    act.setIcon(ic)
+            if icon_id and getattr(self, "_mk_icon", None):
+                self._set_themed_icon(act, icon_id, 16)
             return act
 
         # ── Archivo ──
@@ -6028,6 +6251,20 @@ class FlowsheetMainWindow(QMainWindow):
                                   "Ctrl+Shift+E", "file-export"))
         m_export.addAction(_ac("PNG (alta resolución)…", self.action_export_png,
                                   None, "file-export"))
+        m_export.addSeparator()
+        # Decisión 2b: el export es documento de ingeniería → SIEMPRE
+        # papel claro, salvo que el usuario active esto (captura de
+        # pantalla / presentación en dark).  Apagado por defecto.
+        as_seen = QAction("Exportar como se ve (tema activo)", self)
+        as_seen.setCheckable(True)
+        as_seen.setChecked(False)
+        as_seen.setToolTip("Por defecto el PDF/SVG/PNG sale en papel "
+                           "claro (tinta sobre papel, imprimible). "
+                           "Activá esto para exportar con el tema activo.")
+        as_seen.toggled.connect(
+            lambda on: setattr(self, "_export_as_seen", bool(on)))
+        self._export_as_seen = False
+        m_export.addAction(as_seen)
         m_file.addSeparator()
         m_file.addAction(_ac("Salir", self.close, QKeySequence.Quit))
 
@@ -6084,7 +6321,6 @@ class FlowsheetMainWindow(QMainWindow):
         # Docks secundarios — entradas directas, sin sub-menú "legacy".
         # (La Biblioteca vieja se eliminó: la paleta cubre el catálogo.)
         for attr, label in (
-            ("props_dock",      "Propiedades y perfiles"),
             ("reactivity_dock", "Predictor de reactividad"),
         ):
             d = getattr(self, attr, None)
@@ -6387,6 +6623,138 @@ class FlowsheetMainWindow(QMainWindow):
             self.editor_topbar.set_solver_state(state, iter_, dt)
 
     # ---------------------------------------------------
+    # TEMA — re-tinte en vivo (artboard 2b del ciclo 2)
+    # ---------------------------------------------------
+
+    def _set_themed_icon(self, action, icon_id: str, size: int = 20):
+        """Setea el ícono de una QAction y lo registra para regenerarlo
+        al cambiar tema (make_qicon hornea el color en el bitmap)."""
+        if not hasattr(self, "_themed_icons"):
+            self._themed_icons = []
+        ic = self._mk_icon(icon_id, color=_tokens.TOK["ink_mute"], size=size)
+        if ic is not None:
+            action.setIcon(ic)
+        self._themed_icons.append((action, icon_id, size))
+
+    def _retint_icons(self):
+        """Regenera todos los íconos registrados con la tinta del tema
+        activo (cierra el backlog C de la auditoría 2)."""
+        self._icon_color = _tokens.TOK["ink_mute"]
+        for action, icon_id, size in getattr(self, "_themed_icons", []):
+            ic = self._mk_icon(icon_id, color=self._icon_color, size=size)
+            if ic is not None:
+                action.setIcon(ic)
+
+    def _window_qss(self) -> str:
+        """QSS de la ventana: status bar, scrollbars y títulos de dock —
+        las últimas superficies que quedaban fuera del tema."""
+        T = _tokens.TOK
+        return (
+            f"QStatusBar {{ background:{T['bg_elev']}; color:{T['ink_mute']}; "
+            f"border-top:1px solid {T['line']}; }} "
+            f"QDockWidget {{ color:{T['ink']}; }} "
+            f"QDockWidget::title {{ background:{T['bg_mute']}; "
+            f"padding:4px 8px; }} "
+            f"QScrollBar:vertical {{ background:{T['bg_mute']}; width:12px; "
+            f"margin:0; }} "
+            f"QScrollBar::handle:vertical {{ background:{T['line_strong']}; "
+            f"border-radius:5px; min-height:30px; }} "
+            f"QScrollBar:horizontal {{ background:{T['bg_mute']}; height:12px; "
+            f"margin:0; }} "
+            f"QScrollBar::handle:horizontal {{ background:{T['line_strong']}; "
+            f"border-radius:5px; min-width:30px; }} "
+            f"QScrollBar::add-line, QScrollBar::sub-line "
+            f"{{ width:0; height:0; }} "
+            f"QScrollBar::add-page, QScrollBar::sub-page "
+            f"{{ background:transparent; }}"
+        )
+
+    def _menubar_qss(self) -> str:
+        T = _tokens.TOK
+        return (
+            f"QMenuBar {{ background:{T['bg_elev']}; color:{T['ink']}; "
+            f"border-bottom:1px solid {T['line']}; }} "
+            f"QMenuBar::item {{ padding:5px 10px; background:transparent; }} "
+            f"QMenuBar::item:selected {{ background:{T['bg_mute']}; "
+            f"color:{T['accent_deep']}; border-radius:4px; }} "
+            f"QMenu {{ background:{T['bg_elev']}; color:{T['ink']}; "
+            f"border:1px solid {T['line']}; padding:4px 0; }} "
+            f"QMenu::item {{ padding:5px 22px 5px 14px; }} "
+            f"QMenu::item:selected {{ background:{T['accent_tint']}; "
+            f"color:{T['accent_deep']}; }}"
+        )
+
+    def _rebuild_scene_keep_status(self):
+        """_rebuild_scene preservando el semáforo del solver (los status
+        viven en los items, no en el modelo)."""
+        blk_st = {bid: getattr(it, "_status", None)
+                  for bid, it in self.scene.block_items.items()}
+        stm_st = {sid: getattr(it, "_status", None)
+                  for sid, it in self.scene.stream_items.items()}
+        self._rebuild_scene()
+        for bid, st in blk_st.items():
+            it = self.scene.block_items.get(bid)
+            if it is not None and st:
+                it.set_status(st)
+        for sid, st in stm_st.items():
+            it = self.scene.stream_items.get(sid)
+            if it is not None and st:
+                it.set_status(st)
+
+    def _apply_active_palette(self):
+        """Reconstruye la capa canvas con la paleta del tema activo.
+
+        Orden importante: primero los items (clear_flowsheet poda TODO
+        lo que tenga z>-100, incluidos los HIJOS del marco PFD), después
+        retint() que re-tinta papel/grilla y reconstruye el marco."""
+        _refresh_canvas_palette()
+        self._rebuild_scene_keep_status()
+        self.scene.retint()
+
+    def _on_theme_changed(self):
+        """Único punto de re-tinte del editor: al cambiar tema, la capa
+        canvas se reconstruye con la paleta nueva y el chrome re-aplica
+        sus QSS.  Antes NADA del editor escuchaba themeChanged (el
+        diálogo de Preferencias admitía 'al reiniciar')."""
+        self._apply_active_palette()
+        self._retint_icons()
+        try:
+            self.menuBar().setStyleSheet(self._menubar_qss())
+            self.setStyleSheet(self._window_qss())
+        except Exception:
+            pass
+        for w in (getattr(self, "editor_topbar", None),
+                  getattr(self, "_palette_widget", None),
+                  getattr(self, "_zoom_widget", None)):
+            if w is not None and hasattr(w, "restyle"):
+                w.restyle()
+        self._update_status()
+
+    def _export_palette_ctx(self):
+        """Context manager: fuerza papel claro durante un export si el
+        tema activo es oscuro y 'Exportar como se ve' está apagado
+        (decisión 2b: el PFD exportado es documento de ingeniería —
+        tinta sobre papel).  Cambia TOK a light SOLO para el render,
+        sin emitir themeChanged (los paneles no se enteran)."""
+        from contextlib import contextmanager
+
+        @contextmanager
+        def _ctx():
+            force_light = (_tokens.current_prefs()["theme"] == "dark"
+                           and not getattr(self, "_export_as_seen", False))
+            if not force_light:
+                yield
+                return
+            _tokens.apply_preferences(theme="light")
+            self._apply_active_palette()
+            try:
+                yield
+            finally:
+                _tokens.apply_preferences(theme="dark")
+                self._apply_active_palette()
+        return _ctx()
+
+    # ---------------------------------------------------
     # WIDGETS
     # ---------------------------------------------------
 
@@ -6410,11 +6778,11 @@ class FlowsheetMainWindow(QMainWindow):
         # del topbar pero vivían en la toolbar oculta)
         self.undo_action = self.undo_stack.createUndoAction(self, "Deshacer")
         self.undo_action.setShortcut(QKeySequence.Undo)
-        self.undo_action.setIcon(_mk("edit-undo", color=_ICON_COLOR, size=20))
+        self._set_themed_icon(self.undo_action, "edit-undo", 20)
         self.addAction(self.undo_action)
         self.redo_action = self.undo_stack.createRedoAction(self, "Rehacer")
         self.redo_action.setShortcut(QKeySequence.Redo)
-        self.redo_action.setIcon(_mk("edit-redo", color=_ICON_COLOR, size=20))
+        self._set_themed_icon(self.redo_action, "edit-redo", 20)
         self.addAction(self.redo_action)
 
         # Tabla de corrientes — acción robusta (muestra + frente + altura)
@@ -6424,7 +6792,7 @@ class FlowsheetMainWindow(QMainWindow):
             act.setCheckable(True)
             act.setChecked(self.streams_dock.isVisible())
             act.setShortcut("Ctrl+T")
-            act.setIcon(_mk("wb-table", color=_ICON_COLOR, size=20))
+            self._set_themed_icon(act, "wb-table", 20)
             act.triggered.connect(self._toggle_streams_table)
             self._streams_table_action = act
             try:
@@ -6440,7 +6808,7 @@ class FlowsheetMainWindow(QMainWindow):
         paper_act.setToolTip("Marco PFD — papel, leyenda y cuadro de "
                              "título (Ctrl+M)")
         paper_act.triggered.connect(self.action_toggle_paper)
-        paper_act.setIcon(_mk("act-frame-pfd", color=_ICON_COLOR, size=20))
+        self._set_themed_icon(paper_act, "act-frame-pfd", 20)
         self._paper_action = paper_act
 
         # Animación de flujo — ÚNICA acción (antes existían dos QActions
@@ -6450,142 +6818,9 @@ class FlowsheetMainWindow(QMainWindow):
         anim_act.setChecked(True)
         anim_act.setToolTip("Activar/desactivar animación de flechas "
                             "direccionales en los streams.")
-        anim_act.setIcon(_mk("sim-active", color=_ICON_COLOR, size=20))
+        self._set_themed_icon(anim_act, "sim-active", 20)
         anim_act.triggered.connect(self.toggle_animation)
         self._anim_action = anim_act
-
-    def _build_properties_dock(self):
-        dock = QDockWidget(" Propiedades ", self)
-        widget = QWidget()
-        layout = QVBoxLayout(widget)
-        layout.setContentsMargins(6, 6, 6, 6)
-        self.prop_label = QLabel("(nada seleccionado)")
-        self.prop_label.setStyleSheet(
-            "font-family: Consolas, monospace; font-size: 9pt;"
-        )
-        self.prop_label.setWordWrap(True)
-        self.prop_label.setAlignment(Qt.AlignTop | Qt.AlignLeft)
-        layout.addWidget(self.prop_label)
-
-        # ---- Perfil de reactor PFR / batch / barras CSTR (oculto hasta
-        #      seleccionar un reactor con solve corrido) ----
-        self.pfr_panel = QWidget()
-        pfr_lay = QVBoxLayout(self.pfr_panel)
-        pfr_lay.setContentsMargins(0, 4, 0, 0)
-        # toggles
-        from PySide6.QtWidgets import QButtonGroup, QRadioButton
-        toggles = QHBoxLayout()
-        self.pfr_y_conv = QRadioButton("Conversión %")
-        self.pfr_y_flow = QRadioButton("Flujo mol/s")
-        self.pfr_y_conv.setChecked(True)
-        gy = QButtonGroup(self.pfr_panel)
-        gy.addButton(self.pfr_y_conv); gy.addButton(self.pfr_y_flow)
-        self.pfr_x_vol = QRadioButton("vs Volumen")
-        self.pfr_x_len = QRadioButton("vs Longitud")
-        self.pfr_x_len.setChecked(True)
-        gx = QButtonGroup(self.pfr_panel)
-        gx.addButton(self.pfr_x_vol); gx.addButton(self.pfr_x_len)
-        for w in (self.pfr_y_conv, self.pfr_y_flow):
-            w.setStyleSheet("font-size: 8pt;")
-            toggles.addWidget(w)
-        toggles.addSpacing(8)
-        for w in (self.pfr_x_len, self.pfr_x_vol):
-            w.setStyleSheet("font-size: 8pt;")
-            toggles.addWidget(w)
-        toggles.addStretch(1)
-        pfr_lay.addLayout(toggles)
-        if _MPL_OK:
-            self._pfr_fig = Figure(figsize=(3.4, 2.6), dpi=90)
-            self._pfr_canvas = _MplCanvas(self._pfr_fig)
-            self._pfr_canvas.setMinimumHeight(220)
-            pfr_lay.addWidget(self._pfr_canvas)
-            for w in (self.pfr_y_conv, self.pfr_y_flow,
-                      self.pfr_x_vol, self.pfr_x_len):
-                w.toggled.connect(self._redraw_pfr_profile)
-        else:
-            pfr_lay.addWidget(QLabel(
-                "matplotlib no disponible — perfil no se puede graficar.\n"
-                "pip install matplotlib"
-            ))
-            self._pfr_canvas = None
-        self.pfr_panel.setVisible(False)
-        layout.addWidget(self.pfr_panel)
-        self._pfr_current_block = None
-
-        # ---- Diagrama McCabe-Thiele (oculto hasta seleccionar una columna) ----
-        # Recomienda la columna (etapas, etapa de feed, R_min) desde el modelo.
-        self.mccabe_panel = QWidget()
-        mcc_lay = QVBoxLayout(self.mccabe_panel)
-        mcc_lay.setContentsMargins(0, 4, 0, 0)
-        self._mccabe_caption = QLabel("")
-        self._mccabe_caption.setWordWrap(True)
-        self._mccabe_caption.setStyleSheet("font-size: 8pt;")
-        mcc_lay.addWidget(self._mccabe_caption)
-        if _MPL_OK:
-            self._mccabe_fig = Figure(figsize=(3.4, 3.2), dpi=90)
-            self._mccabe_canvas = _MplCanvas(self._mccabe_fig)
-            self._mccabe_canvas.setMinimumHeight(260)
-            mcc_lay.addWidget(self._mccabe_canvas)
-        else:
-            mcc_lay.addWidget(QLabel(
-                "matplotlib no disponible — McCabe-Thiele no se grafica."))
-            self._mccabe_canvas = None
-        self.mccabe_panel.setVisible(False)
-        layout.addWidget(self.mccabe_panel)
-
-        # ---- Perfil tray-by-tray (oculto hasta seleccionar una columna) ----
-        # 9º método del widget: T y composición por etapa.  Fuente:
-        # Wang-Henke MESH si existe, fallback al McCabe-Thiele (CMO binario).
-        # NUNCA etiqueta uno como el otro: el badge es explícito.
-        self.profile_panel = QWidget()
-        prof_lay = QVBoxLayout(self.profile_panel)
-        prof_lay.setContentsMargins(0, 4, 0, 0)
-        self._profile_caption = QLabel("")
-        self._profile_caption.setWordWrap(True)
-        self._profile_caption.setStyleSheet("font-size: 8pt;")
-        prof_lay.addWidget(self._profile_caption)
-        if _MPL_OK:
-            self._profile_fig = Figure(figsize=(3.4, 2.8), dpi=90)
-            self._profile_canvas = _MplCanvas(self._profile_fig)
-            self._profile_canvas.setMinimumHeight(240)
-            prof_lay.addWidget(self._profile_canvas)
-        else:
-            prof_lay.addWidget(QLabel(
-                "matplotlib no disponible — perfil no se grafica."))
-            self._profile_canvas = None
-        self.profile_panel.setVisible(False)
-        layout.addWidget(self.profile_panel)
-
-        layout.addStretch(1)
-
-        self.results_box = QTextEdit()
-        self.results_box.setReadOnly(True)
-        self.results_box.setStyleSheet(
-            "font-family: Consolas, monospace; font-size: 9pt; color: #1565c0;"
-        )
-        self.results_box.setMaximumHeight(280)
-        self.results_box.setPlainText("(apretá Calcular para estimar el ISBL)")
-        layout.addWidget(self.results_box)
-
-        dock.setWidget(widget)
-        self.addDockWidget(Qt.RightDockWidgetArea, dock)
-        self.props_dock = dock   # ref para toggle desde Vista
-
-        # ─── Dock de Reactividad (Fase 8 — predictor de reacciones) ───
-        # Aparece al lado del dock de propiedades. Si chemfx no esta
-        # instalado o falta alguna dep, simplemente no se crea (no rompe
-        # la UI principal).
-        try:
-            from chemfx.ui.reactivity_dock_qt import ReactivityDock
-            self.reactivity_dock = ReactivityDock(self, editor=self)
-            self.addDockWidget(Qt.RightDockWidgetArea, self.reactivity_dock)
-            # Tab-ifica si ya hay otro dock derecho
-            self.tabifyDockWidget(dock, self.reactivity_dock)
-            # Por default mostramos el dock de propiedades primero
-            dock.raise_()
-        except Exception:
-            # chemfx no disponible o PySide6 incompatible — silenciar.
-            self.reactivity_dock = None
 
     def _build_streams_dock(self):
         """Tabla de corrientes hi-fi (rediseño parche P2).  Custom
@@ -6701,8 +6936,6 @@ class FlowsheetMainWindow(QMainWindow):
         self.fs = Flowsheet()
         self.scene.clear_flowsheet()
         self._update_status()
-        self.prop_label.setText("(nada seleccionado)")
-        self.results_box.setPlainText("(apretá Calcular para estimar el ISBL)")
         # Burbujas: limpiar todas (no hay streams)
         if getattr(self, "_bubble_manager", None) is not None:
             self._bubble_manager.refresh_all()
@@ -6805,6 +7038,10 @@ class FlowsheetMainWindow(QMainWindow):
 
         self.view.zoom_reset()
         self._center_view_on_blocks()
+        # El chip del topbar conservaba el estado del diagrama anterior
+        # ("convergido" de otro flowsheet) — el ejemplo recién cargado
+        # todavía no se resolvió.
+        self.update_solver_chip("idle")
         self._update_status()
         self.end_action(f"Cargar ejemplo: {key}", before)
 
@@ -6883,22 +7120,63 @@ class FlowsheetMainWindow(QMainWindow):
             QMessageBox.information(self, "DOF", "El diagrama está vacío.")
             return
         import dof_audit as _da
+        from dialog_kit import KitDialog, stat_card, kit_table, kicker
         report = _da.analyze_flowsheet(self.fs)
-        text = _da.format_report(report)
 
-        from PySide6.QtWidgets import QDialog, QVBoxLayout, QTextEdit, QDialogButtonBox
-        dlg = QDialog(self)
-        dlg.setWindowTitle("Análisis estructural — DOF")
-        dlg.resize(820, 540)
-        v = QVBoxLayout(dlg)
-        txt = QTextEdit()
-        txt.setReadOnly(True)
-        txt.setStyleSheet("font-family: Consolas, monospace; font-size: 9pt;")
-        txt.setPlainText(text)
-        v.addWidget(txt)
-        btns = QDialogButtonBox(QDialogButtonBox.Close)
-        btns.rejected.connect(dlg.reject)
-        v.addWidget(btns)
+        # Diálogo del kit (artboard 2d, caso 1): hero de stats + tabla
+        # por bloque — muere el QTextEdit mono con el dump ASCII.
+        dof = report.total_dof
+        tone = "ok" if dof == 0 else ("warn" if dof > 0 else "bad")
+        estado = ("bien especificado" if dof == 0
+                  else "sub-especificado" if dof > 0
+                  else "sobre-especificado")
+        dlg = KitDialog("Grados de libertad · Balance",
+                        f"{report.n_blocks} bloques · {report.n_streams} "
+                        f"corrientes · {report.n_components} componentes",
+                        parent=self, size=(760, 560))
+        hero = QHBoxLayout(); hero.setSpacing(10)
+        hero.addWidget(stat_card("DOF", str(dof), estado, tone))
+        hero.addWidget(stat_card("Bloques OK",
+                                 f"{report.n_ok}/{report.n_blocks}",
+                                 tone="ok" if report.n_ok == report.n_blocks
+                                 else "warn"))
+        hero.addWidget(stat_card("Sub / sobre",
+                                 f"{report.n_under} / {report.n_over}",
+                                 tone="" if not (report.n_under or
+                                                 report.n_over) else "bad"))
+        dlg.body.addLayout(hero)
+
+        dlg.body.addWidget(kicker("DOF por bloque (masa · energía · comp.)"))
+        rows = []
+        for b in report.blocks:
+            mark = ("✓", "ok") if b.overall == "ok" else \
+                   (("⚠", "warn") if b.overall != "over" else ("✗", "bad"))
+            nota = "; ".join(b.notes) if b.notes else ""
+            rows.append([b.name, (b.eq_type, "mute"),
+                         str(b.mass_dof), str(b.energy_dof),
+                         str(b.comp_dof), mark,
+                         (nota, "mute")])
+        dlg.body.addWidget(kit_table(
+            ["Bloque", "Tipo", "M", "E", "C", "", "Notas"],
+            rows, aligns=["l", "l", "r", "r", "r", "c", "l"]))
+
+        if report.suggestions:
+            dlg.body.addWidget(kicker("Sugerencias"))
+            for s in report.suggestions:
+                lbl = QLabel("·  " + str(s))
+                lbl.setWordWrap(True)
+                lbl.setFont(_tokens.qfont(_tokens.FONT_UI))
+                lbl.setStyleSheet(f"color:{_tokens.TOK['ink_mute']};")
+                dlg.body.addWidget(lbl)
+        dlg.body.addStretch(1)
+
+        dlg.add_footer_note(report.summary)
+        btn_copy = dlg.add_button("Copiar reporte")
+        def _copy():
+            QApplication.clipboard().setText(_da.format_report(report))
+        btn_copy.clicked.disconnect()
+        btn_copy.clicked.connect(_copy)
+        dlg.add_button("Cerrar", role="primary", slot=dlg.accept)
         dlg.exec()
 
     def action_autosize(self):
@@ -6945,7 +7223,8 @@ class FlowsheetMainWindow(QMainWindow):
         v = QVBoxLayout(dlg)
         txt = QTextEdit()
         txt.setReadOnly(True)
-        txt.setStyleSheet("font-family: Consolas, monospace; font-size: 9pt;")
+        txt.setStyleSheet(f"font-family: '{pfd_fonts.MONO}'; "
+            f"font-size: {_tokens.FONT_VALUE[1]}pt;")
         txt.setPlainText(text)
         v.addWidget(txt)
         btns = QDialogButtonBox(QDialogButtonBox.Close)
@@ -6959,58 +7238,94 @@ class FlowsheetMainWindow(QMainWindow):
         if not self.fs.blocks:
             QMessageBox.information(self, "Setpoints", "El diagrama está vacío.")
             return
+        from dialog_kit import KitDialog, kit_table, kicker
         results = fsolv.verify_setpoints(self.fs)
+
+        # Diálogo real del kit (artboard 2d, caso 2) — muere la cadena
+        # de QMessageBox.
+        dlg = KitDialog("Setpoints",
+                        "objetivos declarados sobre corrientes",
+                        parent=self, size=(680, 480))
         if not results:
-            QMessageBox.information(
-                self, "Setpoints",
+            hint = QLabel(
                 "No hay setpoints declarados.\n\n"
-                "Para agregar un setpoint:\n"
-                "1. Doble-click sobre un stream\n"
-                "2. Marcá la casilla 'Setpoint T' y poné la T objetivo\n"
-                "3. Volvé a este menú y resolvé"
+                "Para agregar uno: doble-click sobre una corriente, "
+                "marcá «Setpoint T» con la temperatura objetivo y volvé "
+                "a este diálogo para resolver."
             )
+            hint.setWordWrap(True)
+            hint.setFont(_tokens.qfont(_tokens.FONT_UI))
+            hint.setStyleSheet(f"color:{_tokens.TOK['ink_mute']};")
+            dlg.body.addWidget(hint)
+            dlg.body.addStretch(1)
+            dlg.add_button("Cerrar", role="primary", slot=dlg.accept)
+            dlg.exec()
             return
-        lines = ["Setpoints declarados:\n"]
-        any_off = False
+
+        any_off = any(not r["within_tol"] for r in results)
+        rows = []
         for r in results:
-            mark = "✓" if r["within_tol"] else "✗"
+            mark = ("✓", "ok") if r["within_tol"] else ("✗", "bad")
             if r["kind"] == "T":
-                lines.append(
-                    f"  {mark} {r['stream_name']}: T objetivo={r['target']:g}°C  "
-                    f"actual={r['actual']:.1f}°C  Δ={r['deviation']:+.1f}°C"
-                )
+                rows.append([r["stream_name"], ("T", "mute"),
+                             f"{r['target']:g} °C",
+                             f"{r['actual']:.1f} °C",
+                             (f"{r['deviation']:+.1f} °C",
+                              "" if r["within_tol"] else "bad"), mark])
             else:
-                lines.append(
-                    f"  {mark} {r['stream_name']}: pureza {r['component']} "
-                    f"objetivo={r['target']:.3f}  actual={r['actual']:.3f}"
-                )
-            if not r["within_tol"]:
-                any_off = True
-        msg = "\n".join(lines)
+                rows.append([r["stream_name"],
+                             (f"pureza {r['component']}", "mute"),
+                             f"{r['target']:.3f}", f"{r['actual']:.3f}",
+                             ("—", "mute"), mark])
+        dlg.body.addWidget(kicker("Especificaciones activas"))
+        dlg.body.addWidget(kit_table(
+            ["Corriente", "Tipo", "Objetivo", "Actual", "Δ", ""],
+            rows, aligns=["l", "l", "r", "r", "r", "c"]))
+        dlg.body.addStretch(1)
+
+        def _run_goal_seek():
+            gs_results = fsolv.solve_setpoints_all(self.fs)
+            # refrescar streams en escena (orden por id — TF §6)
+            for sid, sit in sorted(self.scene.stream_items.items(),
+                                   key=lambda kv: kv[1].model.id):
+                sit.update_path()
+            # El goal-seek mutó duties fuera de action_solve: el
+            # semáforo y el chip quedaron desactualizados → honesto.
+            self._dirty_after_solve = True
+            self.update_solver_chip("idle")
+            self._update_status()
+            dlg.accept()
+            # resultado en un segundo diálogo del kit
+            res = KitDialog("Goal-seek · resultado",
+                            "duty ajustado en el bloque upstream",
+                            parent=self, size=(680, 420))
+            rrows = []
+            for r in gs_results:
+                mark = ("✓", "ok") if r["success"] else ("✗", "bad")
+                duty_s = (f"{r['duty_found']:+.1f} kW"
+                          if r["duty_found"] is not None else "—")
+                rrows.append([r["stream_name"], (r["block_name"], "mute"),
+                              duty_s, f"{r['t_final']:.1f} °C",
+                              (r["message"], "mute"), mark])
+            res.body.addWidget(kit_table(
+                ["Corriente", "Bloque", "Duty", "T final", "Estado", ""],
+                rrows, aligns=["l", "l", "r", "r", "l", "c"]))
+            res.body.addStretch(1)
+            res.add_footer_note("Re-ejecutá Resolver (F5) para "
+                                "actualizar el semáforo")
+            res.add_button("Cerrar", role="primary", slot=res.accept)
+            res.exec()
+
+        if any_off:
+            dlg.add_footer_note("hay setpoints fuera de tolerancia")
+        dlg.add_button("Cancelar")
+        btn_gs = dlg.add_button("⟳  Resolver goal-seek", role="primary",
+                                slot=_run_goal_seek)
+        btn_gs.setEnabled(any_off)
         if not any_off:
-            QMessageBox.information(self, "Setpoints — todo OK", msg)
-            return
-        # Ofrecer resolver los desviados
-        msg += ("\n\n¿Resolver setpoints de T por goal-seek? "
-                "(ajusta duty del bloque upstream de cada stream)")
-        ans = QMessageBox.question(self, "Resolver setpoints", msg)
-        if ans != QMessageBox.Yes:
-            return
-        gs_results = fsolv.solve_setpoints_all(self.fs)
-        report = []
-        for r in gs_results:
-            tag = "✓" if r["success"] else "✗"
-            duty_s = f"{r['duty_found']:+.1f} kW" if r["duty_found"] is not None else "—"
-            report.append(
-                f"  {tag} {r['stream_name']} (block {r['block_name']}): "
-                f"duty={duty_s}, T_final={r['t_final']:.1f}°C  [{r['message']}]"
-            )
-        # refrescar streams en escena (orden por id — TF §6)
-        for sid, sit in sorted(self.scene.stream_items.items(),
-                               key=lambda kv: kv[1].model.id):
-            sit.update_path()
-        QMessageBox.information(self, "Goal-seek resultado",
-                                  "\n".join(report))
+            btn_gs.setToolTip("Todos los setpoints están dentro de "
+                              "tolerancia.")
+        dlg.exec()
 
     def action_solve(self):
         if not self.fs.blocks:
@@ -7132,24 +7447,33 @@ class FlowsheetMainWindow(QMainWindow):
             product_total = sum(s.mass_flow for s in products)
             revenue = sum(s.mass_flow * s.price_usd_per_tm for s in products)
             raw_mp  = sum(s.mass_flow * s.price_usd_per_tm for s in feeds)
-            lines = [
-                f"Plant type:   Fluid processing",
-                f"Lang factor:  {res['lang_factor']:.2f}",
-                f"Σ Cp°:        $ {res['sum_Cp']:>14,.0f}",
-                f"FCI:          {res['FCI_MMUSD']:>10.2f} MM USD",
-                f"ISBL:         {isbl_mm:>10.2f} MM USD",
-                "",
-                f"Producción:   {product_total:g} tm/año",
-                f"Alimentación: {feed_total:g} tm/año",
-                f"Ingresos:     $ {revenue:>14,.0f}",
-                f"Materia prima:$ {raw_mp:>14,.0f}",
+            # Reporte en diálogo del kit (2f.4 — antes iba al results_box
+            # del dock legacy).
+            from dialog_kit import KitDialog, kit_table
+            dlg = KitDialog("Costos de capital · Lang",
+                            "estimación rápida ISBL/FCI (F9)",
+                            parent=self, size=(560, 470))
+            rows = [
+                ["Plant type", ("Fluid processing", "mute")],
+                ["Lang factor", f"{res['lang_factor']:.2f}"],
+                ["Σ Cp°", f"$ {res['sum_Cp']:,.0f}"],
+                ["FCI", f"{res['FCI_MMUSD']:.2f} MM USD"],
+                ["ISBL", f"{isbl_mm:.2f} MM USD"],
+                ["Producción", f"{product_total:g} tm/año"],
+                ["Alimentación", f"{feed_total:g} tm/año"],
+                ["Ingresos", f"$ {revenue:,.0f}/año"],
+                ["Materia prima", f"$ {raw_mp:,.0f}/año"],
             ]
+            dlg.body.addWidget(kit_table(["Concepto", "Valor"], rows,
+                                         aligns=["l", "r"]))
+            dlg.body.addStretch(1)
             warn_msgs = self._dedup_costing_warnings(caught)
             if warn_msgs:
-                lines += ["", f"⚠ {len(warn_msgs)} advertencia(s) de costeo "
-                              "(ver diálogo)."]
-            self.results_box.setPlainText("\n".join(lines))
+                dlg.add_footer_note(
+                    f"⚠ {len(warn_msgs)} advertencia(s) de costeo")
+            dlg.add_button("Cerrar", role="primary", slot=dlg.accept)
             self._show_costing_warnings(caught, "el cálculo de costos")
+            dlg.exec()
         except Exception as e:
             QMessageBox.critical(self, "Error",
                                   f"{type(e).__name__}: {e}")
@@ -7216,30 +7540,30 @@ class FlowsheetMainWindow(QMainWindow):
 
         preview = QTextEdit()
         preview.setReadOnly(True)
-        preview.setStyleSheet("font-family: Consolas, monospace; "
-                                "font-size: 9pt;")
+        preview.setStyleSheet(f"font-family: '{pfd_fonts.MONO}'; "
+                        f"font-size: {_tokens.FONT_VALUE[1]}pt;")
 
         def _refresh_preview(*_args):
             name = combo.currentText()
             p = ed.load_profile(name)
             lines = [f"PERFIL: {name}\n" + "─" * 50,
-                      "\nLABOR"]
+                      "\nMANO DE OBRA"]
             for k, val in p["labor"].items():
                 lines.append(f"  {k:32} = {val}")
-            lines.append("\nFINANCIAL")
+            lines.append("\nFINANCIERO")
             for k, val in p["financial"].items():
                 lines.append(f"  {k:32} = {val}")
-            lines.append("\nUTILITY PRICES")
+            lines.append("\nPRECIOS DE SERVICIOS")
             for k, vd in p["utility_prices"].items():
                 lines.append(f"  {k:14} = {vd['price']:>10} {vd.get('unit','')}/u")
-            lines.append("\nCAPITAL FRACTIONS")
+            lines.append("\nFRACCIONES DE CAPITAL")
             for k, val in p["capital_fracs"].items():
                 lines.append(f"  {k:32} = {val*100:>5.1f} %")
-            lines.append("\nCOM COEFFICIENTS (Turton Eq 8.2)")
-            lines.append(f"  α  (FCI con dep)  = 0.180")
-            lines.append(f"  β  (Labor coef)   = 2.73")
-            lines.append(f"  γ  (overhead)     = {spin_gamma.value():.2f} ← editable")
-            lines.append(f"\nHEAT INTEGRATION  = {spin_hi.value():.2f}  ← editable")
+            lines.append("\nCOEFICIENTES COM (Turton Ec. 8.2)")
+            lines.append(f"  α  (FCI con dep)     = 0.180")
+            lines.append(f"  β  (coef. mano obra) = 2.73")
+            lines.append(f"  γ  (overhead)        = {spin_gamma.value():.2f} ← editable")
+            lines.append(f"\nINTEGRACIÓN DE CALOR  = {spin_hi.value():.2f}  ← editable")
             preview.setPlainText("\n".join(lines))
 
         _refresh_preview()
@@ -7441,7 +7765,12 @@ class FlowsheetMainWindow(QMainWindow):
             target_w = int(bbox.width()  * scale)
             target_h = int(bbox.height() * scale)
             img = QImage(target_w, target_h, QImage.Format_ARGB32)
-            img.fill(QColor("#ffffff"))
+            # Papel del export: claro por defecto (decisión 2b); el del
+            # tema activo si 'Exportar como se ve' está activado.
+            bg = (_tokens.TOK["canvas_bg"]
+                  if getattr(self, "_export_as_seen", False)
+                  else _tokens.THEME_LIGHT["canvas_bg"])
+            img.fill(QColor(bg))
 
             painter = QPainter(img)
             painter.setRenderHint(QPainter.Antialiasing, True)
@@ -7461,23 +7790,29 @@ class FlowsheetMainWindow(QMainWindow):
 
         Para que el export no incluya las líneas de la grilla,
         ocultamos temporalmente los items grid antes de render().
+
+        Paleta (decisión 2b): con tema oscuro activo el render se hace
+        en papel claro (documento de ingeniería) salvo que el usuario
+        haya activado 'Exportar como se ve' — ver _export_palette_ctx.
         """
         from PySide6.QtCore import QRectF
-        # ocultar grilla
-        grid_items = [it for it in self.scene.items()
-                      if isinstance(it, QGraphicsLineItem) and it.zValue() <= -100]
-        for g in grid_items:
-            g.setVisible(False)
-        try:
-            self.scene.render(
-                painter,
-                target=QRectF(target_rect),
-                source=QRectF(source_rect),
-                aspectRatioMode=Qt.KeepAspectRatio,
-            )
-        finally:
+        with self._export_palette_ctx():
+            # ocultar grilla
+            grid_items = [it for it in self.scene.items()
+                          if isinstance(it, QGraphicsLineItem)
+                          and it.zValue() <= -100]
             for g in grid_items:
-                g.setVisible(True)
+                g.setVisible(False)
+            try:
+                self.scene.render(
+                    painter,
+                    target=QRectF(target_rect),
+                    source=QRectF(source_rect),
+                    aspectRatioMode=Qt.KeepAspectRatio,
+                )
+            finally:
+                for g in grid_items:
+                    g.setVisible(True)
 
     # ---------------------------------------------------
     # API pública para BlockItem / StreamItem
@@ -8025,959 +8360,23 @@ class FlowsheetMainWindow(QMainWindow):
     # ---------------------------------------------------
 
     def _on_selection_changed(self):
+        """Selección: solo visuales (anillo de bloque).  El detalle vive
+        en los inspectores (doble-click) — el dock legacy 'Propiedades y
+        perfiles' murió en el ciclo 2 (artboard 2f.4): sus perfiles
+        PFR/McCabe/tray ya están embebidos en el Inspector de bloque y
+        'Calcular costos' reporta en un diálogo del kit."""
         sel = self.scene.selectedItems()
         if not sel:
-            self.prop_label.setText("(nada seleccionado)")
-            self._pfr_current_block = None
-            if hasattr(self, "pfr_panel"):
-                self.pfr_panel.setVisible(False)
             return
-
-        # mostrar info del primer item seleccionado
         it = sel[0]
         if isinstance(it, BlockItem):
             it.set_selected_visual(True)
             for other in self.scene.block_items.values():
                 if other is not it:
                     other.set_selected_visual(False)
-            b = it.model
-            spec = eq.EQUIPMENT_DATA.get(b.eq_type, {})
-            ins  = [s for s in self.fs.streams.values() if s.dst == b.id]
-            outs = [s for s in self.fs.streams.values() if s.src == b.id]
-            in_t  = sum(s.mass_flow for s in ins)
-            out_t = sum(s.mass_flow for s in outs)
-            txt = (
-                f"EQUIPO    {b.name}\n"
-                f"Tipo      {b.eq_type}\n"
-                f"Cat.      {spec.get('categoria', '?')}\n"
-                f"S         {b.S:g} {spec.get('S_unit', '?')}\n"
-                f"n         {b.n}\n"
-                f"Duty      {('+' if b.duty > 0 else '')}{funits.fmt_energy(b.duty)}\n"
-                f"Utility   {b.heat_source or '(auto)'}\n\n"
-                f"Entradas:  {len(ins)}  ({in_t:g} tm/año)\n"
-                f"Salidas:   {len(outs)} ({out_t:g} tm/año)"
-            )
-            # ---- ΔH térmico a través del bloque (in→out) ----
-            # Σ(ṁ·h)_salida − Σ(ṁ·h)_entrada [kW]; para un HX ≈ duty.
-            if ins and outs:
-                try:
-                    import stream_enthalpy as _se
-                    dH = _se.block_delta_h_kW(ins, outs)
-                    if dH is None:
-                        txt += "\nΔH (in→out) n/d  (térmico)"
-                    else:
-                        txt += (f"\nΔH (in→out) {('+' if dH > 0 else '')}"
-                                f"{funits.fmt_energy(dH)}  (térmico)")
-                except Exception:
-                    pass
-            # ---- Diseño FUG automático para columnas ----
-            # Si el bloque es tipo Tower (column) y tiene streams in/out
-            # multicomponentes, llama a distillation_fug.design_column
-            # para mostrar N, R, duties estimados.
-            eq_lower = b.eq_type.lower()
-            is_column = ("tower" in eq_lower or "column" in eq_lower
-                          or "destil" in eq_lower)
-            if is_column and ins and outs:
-                feed = ins[0]
-                # Buscar dos productos con composición distinta para
-                # identificar el destilado y el fondo.
-                if (feed.composition and len(feed.composition) >= 2
-                        and len(outs) >= 2):
-                    dist_out = max(outs, key=lambda s: (s.composition or {}).get(
-                        max((feed.composition or {}).items(),
-                             key=lambda kv: kv[1])[0], 0.0))
-                    bot_out = next((s for s in outs if s is not dist_out), None)
-                    if bot_out and dist_out.composition and bot_out.composition:
-                        # Identificar LK (mayor en distillate) y HK (mayor en
-                        # bottom)
-                        d_top = max(dist_out.composition.items(),
-                                     key=lambda kv: kv[1])
-                        b_top = max(bot_out.composition.items(),
-                                     key=lambda kv: kv[1])
-                        LK = d_top[0]
-                        HK = b_top[0]
-                        if LK != HK and LK in feed.composition and HK in feed.composition:
-                            try:
-                                import distillation_fug as fug
-                                import flowsheet_solver as _fsv
-                                T_feed_K = feed.temperature + 273.15
-                                q_feed = _fsv._column_feed_q(feed, T_feed_K, 1.013)
-                                res = fug.design_column(
-                                    feed_composition=feed.composition,
-                                    F=feed.mass_flow,
-                                    T_K=T_feed_K,
-                                    P_bar=1.013,
-                                    light_key=LK, heavy_key=HK,
-                                    x_D_LK=dist_out.composition.get(LK, 0.9),
-                                    x_B_LK=bot_out.composition.get(LK, 0.05),
-                                    R_factor=1.3,
-                                    q=q_feed,
-                                    T_top_K=dist_out.temperature + 273.15,
-                                    T_bot_K=bot_out.temperature + 273.15,
-                                )
-                                if res:
-                                    txt += "\n\n─ DISEÑO FUG (NRTL) ─"
-                                    txt += f"\nLK / HK    {LK} / {HK}"
-                                    txt += f"\nα tope     {res.get('alpha_top',0):.2f}"
-                                    txt += f"\nα fondo    {res.get('alpha_bot',0):.2f}"
-                                    txt += f"\nα promedio {res.get('alpha_avg',0):.2f}"
-                                    _q = res.get("q", 1.0)
-                                    if abs(_q - 1.0) < 0.02:   _fase = "líq sat"
-                                    elif abs(_q) < 0.02:       _fase = "vap sat"
-                                    elif 0.0 < _q < 1.0:       _fase = "bifásico"
-                                    elif _q > 1.0:             _fase = "líq subenfr"
-                                    else:                      _fase = "vap sobrecalentado"
-                                    txt += f"\nq feed     {_q:.2f}  ({_fase})"
-                                    _ncomp = res.get("n_signif_comps", 0)
-                                    if _ncomp >= 3:
-                                        txt += f"\nMulticomp  {_ncomp} comp · Underwood real"
-                                        if res.get("underwood_fallback"):
-                                            txt += "\n⚠ Underwood mc no convergió, usado binario"
-                                    if res.get("N_min") is not None:
-                                        txt += f"\nN_min      {res['N_min']:.1f}  (Fenske)"
-                                    if res.get("R_min") is not None:
-                                        txt += f"\nR_min      {res['R_min']:.2f}  (Underwood)"
-                                    if res.get("R") is not None:
-                                        txt += f"\nR (1.3×min){res['R']:.2f}"
-                                    if res.get("N") is not None:
-                                        txt += f"\nN real     {res['N']:.1f}  (Gilliland)"
-                                    if res.get("N_feed") is not None:
-                                        txt += f"\nN_feed     {res['N_feed']:.1f}  (Kirkbride)"
-                                    if res.get("Q_cond_kW") is not None:
-                                        txt += f"\nQ_cond     {res['Q_cond_kW']:+.1f} kW"
-                                    if res.get("Q_reb_kW") is not None:
-                                        txt += f"\nQ_reb      {res['Q_reb_kW']:+.1f} kW"
-                                    for w in res.get("warnings", [])[:2]:
-                                        txt += f"\n{w[:120]}"
-
-                                    # ── Bloque WANG-HENKE (MESH) ──
-                                    wh_res = getattr(b, "_wh_result", None)
-                                    if (getattr(b, "column_method", "fug") == "wanghenke"
-                                            and wh_res is not None):
-                                        Twh = wh_res.get("T_profile") or []
-                                        Vwh = wh_res.get("V_profile") or []
-                                        conv = wh_res.get("converged", False)
-                                        txt += "\n\n─ WANG-HENKE (MESH) ─"
-                                        txt += f"\nN etapas   {len(Twh)}"
-                                        txt += f"\nEtapa feed {wh_res.get('feed_stage', '-')}"
-                                        txt += (f"\nConvergió  {'sí' if conv else 'NO'}"
-                                                f" en {wh_res.get('iterations', 0)} iter")
-                                        if Twh:
-                                            txt += f"\nT tope     {Twh[0]-273.15:.1f} °C"
-                                            txt += f"\nT fondo    {Twh[-1]-273.15:.1f} °C"
-                                        if len(Vwh) >= 2:
-                                            txt += f"\nV tope     {Vwh[1]:.2f} mol/s"
-                                            txt += f"\nV fondo    {Vwh[-1]:.2f} mol/s"
-                                        txt += (f"\nΔV/V_avg   {wh_res.get('V_var',0.0)*100:.1f}%"
-                                                f"  (0% = MES; >5% = MESH activo)")
-                                        if wh_res.get("Q_cond_kW") is not None:
-                                            txt += f"\nQ_cond     {wh_res['Q_cond_kW']:+.1f} kW"
-                                        if wh_res.get("Q_reb_kW") is not None:
-                                            txt += f"\nQ_reb      {wh_res['Q_reb_kW']:+.1f} kW"
-                                        be = wh_res.get("balance_err")
-                                        if be is not None:
-                                            txt += f"\nBalance E  {be*100:.1f}%  (cierre global)"
-                                        if not conv:
-                                            txt += "\n✗ NO CONVERGIÓ — revisar N, R_factor, o pureza objetivo"
-                                        for w in wh_res.get("warnings", []):
-                                            wu = w.upper()
-                                            if "AZEOTROPO" in wu or "INALCANZABLE" in wu:
-                                                txt += f"\n✗ {w[:80]}"
-                            except Exception:
-                                pass
-
-            # ---- Dimensionamiento de BOMBA / COMPRESOR ----
-            eq_lower2 = b.eq_type.lower()
-            is_pump = ("pump" in eq_lower2 or "bomba" in eq_lower2)
-            is_compr = ("compressor" in eq_lower2 or "fan" in eq_lower2)
-            if is_pump or is_compr:
-                try:
-                    import equipment_design as _ed
-                    if is_pump:
-                        ps = _ed.design_pump_for_block(b, self.fs)
-                        if ps is not None:
-                            txt += "\n\n─ Dimensionamiento BOMBA ─"
-                            txt += f"\nQ          {ps['Q_m3_h']:.2f} m³/h"
-                            txt += f"\nHead       {ps['head_m']:.1f} m"
-                            txt += f"\nW_hyd      {ps['W_hyd_kW']:.2f} kW"
-                            txt += f"\nW_shaft    {ps['W_shaft_kW']:.2f} kW  (η_h={b.efficiency:.2f})"
-                            txt += f"\nW_elec     {ps['W_elec_kW']:.2f} kW  (η_motor=0.95)"
-                            txt += f"\nNPSHa      {ps['NPSHa_m']:.2f} m"
-                            txt += f"\nNPSHr est. {ps['NPSHr_m_est']:.2f} m"
-                            margin = ps['cavitation_margin_m']
-                            if margin < 1.0:
-                                txt += f"\n⚠ Margen cavitación: {margin:.2f} m (<1 m, riesgo!)"
-                            else:
-                                txt += f"\nMargen cav. {margin:.2f} m  ✓"
-                    elif is_compr:
-                        cs = _ed.design_compressor_for_block(b, self.fs)
-                        if cs is not None:
-                            txt += "\n\n─ Dimensionamiento COMPRESOR ─"
-                            txt += f"\nRatio P_out/P_in: {cs['ratio']:.2f}"
-                            txt += f"\nEtapas rec.:      {cs['n_stages_rec']}"
-                            txt += f"\nQ_in (succión):   {cs['Q_in_m3_h']:.1f} m³/h"
-                            txt += f"\nHead específico:  {cs['head_kJ_kg']:.1f} kJ/kg"
-                            txt += f"\nT descarga:       {cs['T_out_C']:.1f} °C"
-                            txt += f"\nW_isen:           {cs['W_isen_kW']:.1f} kW"
-                            txt += f"\nW_actual:         {cs['W_act_kW']:.1f} kW  (η={cs['eta_total']:.2f})"
-                            if cs['n_stages_rec'] > 1:
-                                txt += f"\n⚠ Ratio {cs['ratio']:.1f} > 4: recomendar {cs['n_stages_rec']} etapas + intercoolers"
-                            if cs['T_out_C'] > 200:
-                                txt += f"\n⚠ T descarga {cs['T_out_C']:.0f}°C > 200°C: necesita enfriamiento intermedio"
-                except Exception:
-                    pass
-
-                # ---- Desglose ΔP itemizado: de dónde viene la ΔP ----
-                try:
-                    bd = fsolv._trace_downstream_itemized(self.fs, b.id)
-                    if bd is not None and bd["items"]:
-                        txt += "\n\n─ Desglose hidráulico ─"
-                        txt += (f"\nOrigen:  {bd['origin_stream_name']} @ "
-                                f"{bd['origin_P_bar']:.3f} bar 🔒")
-                        txt += (f"\nDestino: {bd['target_stream_name']} @ "
-                                f"{bd['target_P_bar']:.3f} bar 🔒")
-                        txt += f"\nΔP total: {bd['total_dp_bar']:.3f} bar"
-                        txt += "\n\nAporte por elemento:"
-                        total = bd["total_dp_bar"]
-                        for it in sorted(bd["items"],
-                                         key=lambda x: -x["dp_bar"]):
-                            pct = (100 * it["dp_bar"] / total
-                                   if total > 0 else 0.0)
-                            bar_len = (max(1, int(32 * it["dp_bar"] / total))
-                                       if (total > 0 and it["dp_bar"] > 0)
-                                       else 0)
-                            bar = "█" * bar_len + "·" * (32 - bar_len)
-                            txt += (f"\n  {bar} {it['dp_bar']:6.3f} bar "
-                                    f"({pct:5.1f}%) {it['detail'][:40]}")
-                        txt += f"\n  Suma: {total:.3f} bar  ✓ cierra"
-                    elif is_pump and bd is None:
-                        txt += ("\n\n─ Desglose hidráulico ─"
-                                "\nSin anchor downstream — ΔP no resoluble "
-                                "automáticamente. Declará pressure_locked en "
-                                "algún stream downstream para activar el "
-                                "auto-sizing.")
-                except Exception:
-                    pass
-
-            # ---- Resumen del REACTOR (modo, reacciones, conversión, calor)
-            # Hace visible LO QUE EL SOLVER COMPUTÓ: hasta acá sólo se veía
-            # 'Tipo', 'Duty' y 'ΔH', sin evidencia de la química o las specs.
-            try:
-                rxs = list(getattr(b, "reactions", None) or [])
-                cust = list(getattr(b, "custom_reactions", None) or [])
-                mode = getattr(b, "reactor_mode", "") or ""
-                if rxs or cust or mode in ("pfr", "cstr", "batch", "stoich"):
-                    txt += "\n\n── Reactor ──"
-                    if mode:
-                        txt += f"\nModo        {mode}"
-                    if rxs:
-                        txt += f"\nReacciones  {', '.join(rxs)}"
-                    if cust:
-                        txt += f"\nCustom      {len(cust)} reacción(es) ad-hoc"
-                    if (mode == "stoich"
-                            and getattr(b, "reactor_conversion", None) is not None):
-                        txt += (f"\nConversión  "
-                                f"{b.reactor_conversion * 100:.1f} % del "
-                                f"reactivo limitante (declarado)")
-                    if getattr(b, "T_op_K", 0) and b.T_op_K > 0:
-                        txt += f"\nT_op        {b.T_op_K - 273.15:.1f} °C"
-                    if getattr(b, "P_op_bar", 0) and b.P_op_bar > 0:
-                        txt += f"\nP_op        {b.P_op_bar:.2f} bar"
-                    if mode in ("pfr", "cstr", "batch") and \
-                            getattr(b, "reactor_volume_L", 0) > 0:
-                        txt += f"\nVolumen     {b.reactor_volume_L:.1f} L"
-                    if mode == "batch" and getattr(b, "batch_time_s", 0) > 0:
-                        txt += f"\nt_batch     {b.batch_time_s:.0f} s"
-                    hor = getattr(b, "heat_of_reaction", None)
-                    if hor is not None and abs(hor) > 1e-9:
-                        sign = ("exotérmica" if hor < 0
-                                else "endotérmica")
-                        txt += (f"\nCalor rx    {hor:+.2f} kJ/kg input "
-                                f"({sign})")
-            except Exception:
-                pass
-
-            # ---- Evidencia textual por tipo de equipo (HX, flash, mech_sep,
-            # splitter, tanque, horno) — mismo patrón que la sección Reactor:
-            # mostrar LO QUE EL SOLVER ya computó, no info genérica.
-            try:
-                eq_lower = (b.eq_type or "").lower()
-                # ── Intercambiador / Fired heater: _hx_diagnostics ──
-                hxd = getattr(b, "_hx_diagnostics", None)
-                if hxd and isinstance(hxd, dict):
-                    txt += "\n\n── Intercambiador ──"
-                    Th_i = hxd.get("T_h_in"); Th_o = hxd.get("T_h_out")
-                    Tc_i = hxd.get("T_c_in"); Tc_o = hxd.get("T_c_out")
-                    if Th_i is not None and Th_o is not None:
-                        txt += f"\nCaliente    {Th_i:.1f} → {Th_o:.1f} °C"
-                    if Tc_i is not None and Tc_o is not None:
-                        txt += f"\nFrío        {Tc_i:.1f} → {Tc_o:.1f} °C"
-                    if hxd.get("dTlm") is not None:
-                        txt += f"\nΔT_LMTD     {hxd['dTlm']:.1f} °C"
-                    if hxd.get("approach") is not None:
-                        txt += (f"\nApproach    {hxd['approach']:.1f} °C"
-                                f"  (ΔT_min={hxd.get('dT_min', 0):.0f} °C)")
-                    if hxd.get("U_used"):
-                        txt += f"\nU usado     {hxd['U_used']:.0f} W/m²·K"
-                    if hxd.get("F") is not None:
-                        txt += f"\nF correc.   {hxd['F']:.2f}"
-                    if hxd.get("service"):
-                        txt += f"\nServicio    {hxd['service']}"
-                    elif hxd.get("cross_check"):
-                        txt += f"\nServicio    {hxd['cross_check']}"
-                    for w in (hxd.get("warnings") or [])[:3]:
-                        txt += f"\n⚠ {w}"
-                elif "fired" in eq_lower and abs(b.duty) > 1e-9:
-                    # Fired heater sin _hx_diagnostics: al menos duty + combustible inferido
-                    txt += "\n\n── Horno ──"
-                    txt += f"\nDuty        {b.duty:+.1f} kW (calor al proceso)"
-                    txt += f"\nT_proceso   ver streams in/out arriba"
-
-                # ── Flash drum (Vessel con flash_active) ──
-                if getattr(b, "flash_active", False):
-                    txt += "\n\n── Flash drum ──"
-                    if b.flash_T_K > 0:
-                        txt += f"\nT_op        {b.flash_T_K - 273.15:.1f} °C"
-                    if b.flash_P_bar > 0:
-                        txt += f"\nP_op        {b.flash_P_bar:.2f} bar"
-                    txt += ("\nDivide la corriente de entrada en vapor "
-                            "(volátiles) y líquido por VLE isotérmico NRTL.")
-
-                # ── Separador mecánico (mech_sep_active) ──
-                if getattr(b, "mech_sep_active", False):
-                    txt += "\n\n── Separador mecánico ──"
-                    tgt = getattr(b, "mech_sep_target_phase", "solid") or "solid"
-                    eff = getattr(b, "mech_sep_efficiency", None)
-                    is_decanter = "decanter" in eq_lower
-                    if is_decanter:
-                        txt += "\nTipo        Decanter L-L por densidad"
-                    elif "cyclone" in eq_lower:
-                        txt += "\nTipo        Ciclón"
-                    elif "centrifuge" in eq_lower:
-                        txt += "\nTipo        Centrífuga"
-                    else:
-                        txt += "\nTipo        Filtro / knockout genérico"
-                    # 'Fase obj.' sólo tiene sentido cuando el solver separa
-                    # POR FASE; en decanters opera por DENSIDAD, no por fase.
-                    if not is_decanter:
-                        txt += f"\nFase obj.   {tgt}"
-                    if eff is not None:
-                        txt += f"\nη recup.    {eff * 100:.1f} %"
-                    if b.T_op_K > 0:
-                        txt += f"\nT_op        {b.T_op_K - 273.15:.1f} °C"
-                    if b.P_op_bar > 0:
-                        txt += f"\nP_op        {b.P_op_bar:.2f} bar"
-
-                # ── Splitter (mass splitter por fracciones declaradas) ──
-                if getattr(b, "splitter_active", False):
-                    fracs = list(getattr(b, "splitter_fractions", []) or [])
-                    if fracs:
-                        txt += "\n\n── Splitter ──"
-                        for i, f in enumerate(fracs):
-                            txt += f"\nSalida {i+1}    {f * 100:.1f} %"
-                        s = sum(fracs)
-                        if abs(s - 1.0) > 1e-3:
-                            txt += f"\n⚠ fracciones suman {s:.3f} (≠ 1)"
-
-                # ── Storage tank ──
-                if "tank" in eq_lower or "storage" in eq_lower:
-                    if b.S > 0:
-                        # Para tanques, S es volumen en m³ (catálogo Turton).
-                        txt += "\n\n── Tanque ──"
-                        txt += f"\nCapacidad   {b.S:.1f} m³"
-                        # Estimar residencia si hay un stream principal
-                        in_ms = [s for s in self.fs.streams.values()
-                                  if s.dst == b.id and s.mass_flow > 0]
-                        out_ms = [s for s in self.fs.streams.values()
-                                  if s.src == b.id and s.mass_flow > 0]
-                        flow = max([s.mass_flow for s in (in_ms or out_ms)],
-                                    default=0)
-                        if flow > 0 and b.S > 0:
-                            # tm/año → m³/h con ρ≈1000 (estimación rápida);
-                            # solo para dar un orden de magnitud de residencia.
-                            m3_h = (flow * 1000.0 / 1000.0) / 8760.0  # ~m³/h
-                            if m3_h > 0:
-                                tau_h = b.S / m3_h
-                                if tau_h >= 48:
-                                    txt += (f"\nResidencia  ≈ {tau_h/24:.1f} días "
-                                            f"(tanque sobredim. p/ flujo actual)")
-                                else:
-                                    txt += (f"\nResidencia  ≈ {tau_h:.1f} h "
-                                            f"(estim. con ρ=1000)")
-            except Exception:
-                pass
-
-            self.prop_label.setText(txt)
-
-            # ---- Perfil PFR / batch / barras CSTR ----
-            mode = getattr(b, "reactor_mode", "") or ""
-            show = False
-            if mode == "pfr":
-                show = bool(getattr(b, "_pfr_profile", None)
-                            and b._pfr_profile.get("points"))
-            elif mode == "batch":
-                show = bool(getattr(b, "_batch_profile", None)
-                            and b._batch_profile.get("points"))
-            elif mode == "cstr":
-                # CSTR: mostrar barras si hay streams con composición
-                show = any((s.composition for s in self.fs.streams.values()
-                            if s.src == b.id or s.dst == b.id))
-            if show:
-                self._pfr_current_block = b
-                self.pfr_panel.setVisible(True)
-                # toggles X (vol/len) no aplican a batch/cstr → deshabilitar
-                en_x = (mode == "pfr")
-                self.pfr_x_vol.setEnabled(en_x)
-                self.pfr_x_len.setEnabled(en_x)
-                self._redraw_pfr_profile()
-            else:
-                self._pfr_current_block = None
-                self.pfr_panel.setVisible(False)
-                if mode in ("pfr", "batch", "cstr"):
-                    self.prop_label.setText(
-                        self.prop_label.text()
-                        + f"\n\n(Reactor {mode}: corré Solve con "
-                          "reactor_volume_L > 0 para ver el gráfico)"
-                    )
-            # Columna: recomendar y dibujar el McCabe-Thiele desde el modelo.
-            self._draw_mccabe_for_block(b)
-            # Perfil tray-by-tray (9º método): T y x_LK por etapa.
-            self._draw_profile_for_block(b)
         elif isinstance(it, StreamItem):
             for other in self.scene.block_items.values():
                 other.set_selected_visual(False)
-            # Ocultar paneles de perfil al seleccionar streams
-            self._pfr_current_block = None
-            if hasattr(self, "pfr_panel"):
-                self.pfr_panel.setVisible(False)
-            if hasattr(self, "mccabe_panel"):
-                self.mccabe_panel.setVisible(False)
-            if hasattr(self, "profile_panel"):
-                self.profile_panel.setVisible(False)
-            s = it.model
-            # defensa: si los bloques referenciados ya no existen
-            # (stream huérfano por inconsistencia de modelo), mostrar
-            # info parcial sin crash.
-            src_b = self.fs.blocks.get(s.src)
-            dst_b = self.fs.blocks.get(s.dst)
-            b_src = src_b.name if src_b else "(borrado)"
-            b_dst = dst_b.name if dst_b else "(borrado)"
-            sp = s.src_port or "(auto)"
-            dp = s.dst_port or "(auto)"
-            txt = (
-                f"CORRIENTE  {s.name}\n"
-                f"Desde      {b_src}  ({sp})\n"
-                f"Hacia      {b_dst}  ({dp})\n"
-                f"Rol        {s.role}\n"
-                f"Fase       {s.phase or '—'}\n"
-                f"Flujo      {s.mass_flow:g} tm/año\n"
-                f"T          {s.temperature:g} °C"
-            )
-            if s.cp > 0:
-                txt += f"\nCp         {s.cp:g} kJ/kg·K (manual)"
-            # Composición — siempre visible, ANTES no se mostraba.
-            comp = s.composition or {}
-            if not comp and s.main_component:
-                comp = {s.main_component: 1.0}
-            if comp:
-                txt += "\n\nComposición (% masa):"
-                for k, v in sorted(comp.items(), key=lambda kv: -kv[1]):
-                    if v < 0.0005:
-                        continue
-                    # Calcular caudal másico individual del componente
-                    m_i = v * s.mass_flow
-                    txt += f"\n  {k:14s} {v*100:6.2f}%   ({m_i:>10.1f} tm/año)"
-            else:
-                txt += "\n\nComposición: no declarada"
-            if s.role in ("feed", "product"):
-                txt += f"\n\nPrecio     {s.price_usd_per_tm:g} USD/tm"
-                if s.mass_flow > 0 and s.price_usd_per_tm > 0:
-                    total = s.mass_flow * s.price_usd_per_tm
-                    lbl = "Ingreso" if s.role == "product" else "Costo"
-                    txt += f"\n{lbl}    $ {total:,.0f}/año"
-
-            # ---- Análisis NRTL (Capa 6) si hay >=2 componentes con
-            # parámetros y la fase es líquido o two-phase ----
-            comp_clean = {k: v for k, v in (s.composition or {}).items() if v > 0.005}
-            if (len(comp_clean) >= 2 and
-                s.phase in ("liquid", "two_phase", "vapor", "gas", "")):
-                top = sorted(comp_clean.items(), key=lambda kv: -kv[1])
-                # Tomar los 2 componentes mayores
-                n1, _ = top[0]
-                n2, _ = top[1]
-                try:
-                    import nrtl
-                    if nrtl.has_params(n1, n2):
-                        T_K = s.temperature + 273.15
-                        nrtl_txt = ["\n─ Análisis NRTL (par dominante) ─"]
-                        nrtl_txt.append(f"Par:       {n1} / {n2}")
-                        # Convertir a binario normalizado
-                        x1 = top[0][1] / (top[0][1] + top[1][1])
-                        g = nrtl.activity_coeff_binary([n1, n2], x1, T_K)
-                        if g:
-                            nrtl_txt.append(f"γ {n1}: {g[0]:.3f}")
-                            nrtl_txt.append(f"γ {n2}: {g[1]:.3f}")
-                        # T_bub binario a 1 atm
-                        bp = nrtl.bubble_point([n1, n2], [x1, 1-x1], 1.013)
-                        if bp:
-                            T_bub_C = bp[0] - 273.15
-                            y1 = bp[1][0]
-                            nrtl_txt.append(
-                                f"T_bub @1atm: {T_bub_C:.1f}°C  "
-                                f"(y_{n1}={y1*100:.1f}%)")
-                        # Azeotropo si existe
-                        az = nrtl.find_azeotrope([n1, n2], 1.013)
-                        if az:
-                            T_az_C = az["T_az_K"] - 273.15
-                            kind_label = ("min-boiling" if az["kind"] == "positive"
-                                            else "max-boiling")
-                            nrtl_txt.append(
-                                f"⚠ AZEOTROPO {kind_label} @1atm:")
-                            nrtl_txt.append(
-                                f"   x_{n1} = {az['x_az']:.3f}  "
-                                f"T = {T_az_C:.1f}°C")
-                            # Advertencia si la composición está cerca
-                            if abs(x1 - az["x_az"]) < 0.05:
-                                nrtl_txt.append(
-                                    "   ⚠ stream está CERCA del azeo —")
-                                nrtl_txt.append(
-                                    "     destilación simple no puede pasar.")
-                        txt += "\n" + "\n".join(nrtl_txt)
-                except Exception as e:
-                    pass    # falta thermo_db / Antoine → skip silencioso
-
-            # ---- Pérdida de carga (Darcy-Weisbach) ----
-            if s.mass_flow > 0 and (comp_clean or s.main_component):
-                try:
-                    import pressure_drop as _pd
-                    dp_res = _pd.stream_pressure_drop(s)
-                    if dp_res is not None:
-                        txt += "\n\n─ Pérdida de carga (Darcy-Weisbach) ─"
-                        L = s.pipe_length_m or 10.0
-                        D = s.pipe_diameter_m or 0.050
-                        K = getattr(s, "pipe_K_local", 0) or 0
-                        txt += f"\nL          {L:.1f} m"
-                        txt += f"\nD          {D*1000:.0f} mm  ({D*39.37:.1f}\")"
-                        if K > 0:
-                            txt += f"\nK_local    {K:.2f}  (accesorios)"
-                        txt += f"\nv          {dp_res['velocity_m_s']:.2f} m/s"
-                        txt += f"\nRe         {dp_res['Re']:.0f}  ({dp_res['regime']})"
-                        txt += f"\nf_Darcy    {dp_res['f_Darcy']:.4f}"
-                        dp_fric = dp_res.get('delta_P_fric_Pa', dp_res['delta_P_Pa']) / 1000
-                        dp_local = dp_res.get('delta_P_local_Pa', 0) / 1000
-                        if dp_local > 0:
-                            txt += f"\nΔP fric    {dp_fric:.2f} kPa"
-                            txt += f"\nΔP local   {dp_local:.2f} kPa"
-                        txt += f"\nΔP total   {dp_res['delta_P_bar']:.3f} bar  ({dp_res['delta_P_Pa']/1000:.1f} kPa)"
-                        if s.pressure_bar > 0 and s.pressure_bar != 1.013:
-                            txt += f"\nP corriente {s.pressure_bar:.3f} bar"
-                            if s.pressure_locked:
-                                txt += "  🔒"
-                except Exception:
-                    pass
-
-            self.prop_label.setText(txt)
-
-    def _draw_profile_for_block(self, b):
-        """Perfil tray-by-tray (T y x_LK por etapa) de una columna activa.
-        Fuente: Wang-Henke si está convergido en _wh_result, fallback al
-        McCabe-Thiele que ya construyó el panel del medio.  Multicomp WH
-        agrega trazas adicionales; McCabe muestra solo el LK + nota CMO.
-        El badge de procedencia es EXPLÍCITO — nunca se confunden fuentes."""
-        panel = getattr(self, "profile_panel", None)
-        if panel is None:
-            return
-        if not getattr(b, "column_active", False):
-            panel.setVisible(False)
-            return
-        try:
-            import tray_profile as _tp
-            p = _tp.build_stage_profile(b, self.fs)
-        except Exception:
-            p = None
-        if p is None:
-            panel.setVisible(False)
-            return
-        # CAPTION (siempre — evidencia textual del perfil).  Para columnas
-        # binarias casi-ideales, ya cubre los extremos: x y T del tope, fondo
-        # y etapa de feed, más el badge de procedencia explícito.
-        stages = p["stages"]
-        if not stages:
-            cap = ("⚠ " + (p.get("message") or "perfil truncado")
-                   + f"  ·  {p['badge']}")
-        else:
-            top = stages[0]
-            bot = stages[-1]
-            n_feed = int(p.get("n_feed") or 0)
-            feed_stage = stages[n_feed - 1] if 1 <= n_feed <= len(stages) else None
-            cap = (f"Perfil de la columna — {p['badge']}:  "
-                   f"N = {p['n_stages']} etapas, feed = {p['n_feed']}, "
-                   f"{p['LK']}/{p['HK']}\n"
-                   f"  tope (etapa 1): x_{p['LK']}={top['x_LK']:.3f},  "
-                   f"T={top['T_C']:.1f}°C   ·   "
-                   f"fondo (etapa {p['n_stages']}): x_{p['LK']}={bot['x_LK']:.3f},  "
-                   f"T={bot['T_C']:.1f}°C")
-            if feed_stage:
-                cap += (f"\n  feed (etapa {p['n_feed']}): "
-                        f"x_{p['LK']}={feed_stage['x_LK']:.3f},  "
-                        f"T={feed_stage['T_C']:.1f}°C")
-            if p["source"] == "mccabe":
-                cap += ("\n  T por etapa = bubble point del binario "
-                        "(líquido saturado, CMO).  Multicomp riguroso "
-                        "requiere column_method='wanghenke'.")
-            if p.get("truncated"):
-                cap = "⚠ " + cap
-        self._profile_caption.setText(cap)
-        # CANVAS (opcional — solo si matplotlib-Qt está disponible).
-        if self._profile_canvas is not None:
-            try:
-                self._draw_profile_canvas(p)
-            except Exception:
-                pass
-        panel.setVisible(True)
-
-    def _draw_profile_canvas(self, p):
-        """Dibuja la figura del perfil tray-by-tray (T y x_LK por etapa) en
-        el canvas.  Separado del caption para que la evidencia textual
-        siempre llegue al panel aunque el canvas falle."""
-        fig = self._profile_fig
-        fig.clear()
-        ax = fig.add_subplot(111)
-        stages = p["stages"]
-        if not stages:
-            ax.text(0.5, 0.5, "⚠ " + (p.get("message") or "perfil truncado"),
-                    ha="center", va="center", fontsize=8,
-                    transform=ax.transAxes, wrap=True)
-            ax.set_xticks([]); ax.set_yticks([])
-            fig.tight_layout()
-            self._profile_canvas.draw_idle()
-            return
-        xs = [s["stage"] for s in stages]
-        Ts = [s["T_C"] for s in stages]
-        xL = [s["x_LK"] for s in stages]
-        ax.plot(xs, Ts, color="#d23", marker="o", ms=3, lw=1.0,
-                label="T (°C)")
-        ax.set_xlabel("etapa  (1 = tope)", fontsize=8)
-        ax.set_ylabel("T (°C)", color="#d23", fontsize=8)
-        ax.tick_params(axis="y", labelcolor="#d23", labelsize=7)
-        ax.tick_params(axis="x", labelsize=7)
-        ax2 = ax.twinx()
-        ax2.plot(xs, xL, color="#1f6feb", marker="s", ms=3, lw=1.0,
-                 label=f"x_{p['LK']}")
-        ax2.set_ylabel(f"x ({p['LK']})", color="#1f6feb", fontsize=8)
-        ax2.tick_params(axis="y", labelcolor="#1f6feb", labelsize=7)
-        ax2.set_ylim(0, 1)
-        for _name, vals in (p.get("other_traces") or {}).items():
-            if len(vals) == len(xs):
-                ax2.plot(xs, vals, color="#888", ls=":", lw=0.8)
-        n_feed = int(p.get("n_feed") or 0)
-        if 1 <= n_feed <= len(stages):
-            ax.axvline(n_feed, color="#888", ls="--", lw=0.7)
-            ax.annotate("feed", xy=(n_feed, Ts[n_feed - 1]),
-                        xytext=(3, 3), textcoords="offset points",
-                        fontsize=7, color="#555")
-        ax.annotate("cond.", xy=(xs[0], Ts[0]),
-                    xytext=(3, -10), textcoords="offset points",
-                    fontsize=7, color="#555")
-        ax.annotate("reb.", xy=(xs[-1], Ts[-1]),
-                    xytext=(-22, -10), textcoords="offset points",
-                    fontsize=7, color="#555")
-        fig.tight_layout()
-        self._profile_canvas.draw_idle()
-
-    def _draw_flash_for_block(self, b):
-        """Para un Vessel con flash_active ~binario: dibuja el flash en el
-        diagrama x-y (curva de equilibrio + punto de operación z_F + las
-        composiciones de las fases x/y) calculado desde el modelo."""
-        panel = getattr(self, "mccabe_panel", None)
-        if panel is None:
-            return
-        try:
-            import distillation_simple as _ds
-            f = _ds.flash_from_block(b, self.fs)
-        except Exception:
-            f = None
-        if f is None:
-            panel.setVisible(False)
-            return
-        # CAPTION (siempre — evidencia textual del cálculo).
-        self._mccabe_caption.setText(
-            f"Flash binario {f['LK']}/{f['HK']} @ {f['T_K']-273.15:.0f}°C, "
-            f"{f['P_bar']:.2f} bar — del modelo:  V/F = {f['V_frac']:.2f},  "
-            f"x({f['LK']})={f['x_LK']:.3f} (líq) / y={f['y_LK']:.3f} (vap),  "
-            f"z_F={f['z_F']:.2f}")
-        # CANVAS (solo si matplotlib-Qt está disponible).
-        if self._mccabe_canvas is not None:
-            try:
-                fig = self._mccabe_fig
-                fig.clear()
-                ax = fig.add_subplot(111)
-                xs, ys = f["equilibrium"]
-                ax.plot([0, 1], [0, 1], color="#b8b0a0", lw=0.8)
-                ax.plot(xs, ys, color="#1f6feb", lw=1.4)
-                ax.plot([f["x_LK"], f["y_LK"]], [f["x_LK"], f["y_LK"]],
-                        color="#d4691e", lw=0.8, ls="--")
-                ax.plot([f["x_LK"]], [f["y_LK"]], "o", color="#d4691e", ms=6)
-                ax.axvline(f["z_F"], color="#888", lw=0.6, ls=":")
-                ax.set_xlim(0, 1)
-                ax.set_ylim(0, 1)
-                ax.set_xlabel(f"x ({f['LK']})", fontsize=8)
-                ax.set_ylabel(f"y ({f['LK']})", fontsize=8)
-                ax.tick_params(labelsize=7)
-                ax.set_aspect("equal", adjustable="box")
-                fig.tight_layout()
-                self._mccabe_canvas.draw_idle()
-            except Exception:
-                pass
-        panel.setVisible(True)
-
-    def _draw_mccabe_for_block(self, b):
-        """Si b es una columna binaria resoluble, recomienda y dibuja su
-        diagrama McCabe-Thiele (curva de equilibrio + rectas de operación +
-        q-line + escalera de etapas) calculado desde el modelo.  Si no,
-        oculta el panel."""
-        panel = getattr(self, "mccabe_panel", None)
-        if panel is None:
-            return
-        if not getattr(b, "column_active", False):
-            if getattr(b, "flash_active", False):
-                self._draw_flash_for_block(b)
-            else:
-                panel.setVisible(False)
-            return
-        try:
-            import mccabe_thiele as _mt
-            d = _mt.design_from_block(b, self.fs)
-        except Exception:
-            d = None
-        if d is None:
-            panel.setVisible(False)
-            return
-        # CAPTION (siempre — texto es la evidencia del cálculo aunque
-        # matplotlib-Qt no esté disponible y el canvas no se pueda dibujar).
-        if not d.get("feasible", True):
-            cap = "⚠ " + (d.get("message", "") or "Specs no escalonables.")
-        else:
-            rmin = d["R_min"]
-            cap = (
-                f"McCabe-Thiele {d['LK']}/{d['HK']} — recomendado del modelo:  "
-                f"N = {d['N_stages']} etapas teóricas (feed en {d['feed_stage']}),  "
-                f"R = {d['R']:.2f}"
-                + (f"  (R_min {rmin:.2f})" if rmin else "")
-                + f",  z_F={d['z_F']:.2f} → x_D={d['x_D']:.2f}/x_B={d['x_B']:.2f}")
-            sz = d.get("sizing") or {}
-            if sz.get("N_real"):
-                cap += (f"\nEtapas reales ≈ {sz['N_real']} "
-                        f"(E_o={sz['E_o']:.2f} O'Connell, α={sz['alpha_avg']:.2f})")
-            if sz.get("diameter_m"):
-                cap += (f"   ·   Ø columna ≈ {sz['diameter_m']:.2f} m "
-                        f"(Souders-Brown, plato perforado, 70% inundación)")
-            pk = d.get("packing") or {}
-            if pk.get("Z_packed_m"):
-                cap += (f"\nAlternativa relleno (Pall rings): NTU ≈ "
-                        f"{pk['NTU']:.1f}, altura ≈ {pk['Z_packed_m']:.1f} m "
-                        f"(N·HETP, HETP={pk['HETP_m']:.2f} m)")
-        self._mccabe_caption.setText(cap)
-        # CANVAS (opcional — solo si matplotlib-Qt está disponible).
-        if self._mccabe_canvas is not None:
-            try:
-                self._draw_mccabe_canvas(d)
-            except Exception:
-                pass
-        panel.setVisible(True)
-
-    def _draw_mccabe_canvas(self, d):
-        """Dibuja la figura McCabe-Thiele (rama factible + rama infactible
-        con sólo equilibrio y marcas).  Separado del caption para que la
-        evidencia textual siempre llegue al panel aunque el canvas falle."""
-        fig = self._mccabe_fig
-        fig.clear()
-        ax = fig.add_subplot(111)
-        xs, ys = d["equilibrium"]
-        ax.plot([0, 1], [0, 1], color="#b8b0a0", lw=0.8)
-        ax.plot(xs, ys, color="#1f6feb", lw=1.4)
-        if not d.get("feasible", True):
-            for a in d.get("azeotropes", []):
-                ax.plot([a], [a], "o", color="#d11", ms=6)
-                ax.axvline(a, color="#d11", lw=0.7, ls="--")
-            for xv, c in ((d["x_D"], "#2a9d4a"), (d["x_B"], "#9d2a8a")):
-                ax.axvline(xv, color=c, lw=0.5, ls=":")
-        else:
-            sx = [p[0] for p in d["stages"]]
-            sy = [p[1] for p in d["stages"]]
-            ax.plot(sx, sy, color="#d4691e", lw=1.0)
-            rs, ri = d["rect"]; ss, si = d["strip"]
-            xfp = d["feed_point"][0]
-            ax.plot([xfp, d["x_D"]], [rs * xfp + ri, rs * d["x_D"] + ri],
-                    color="#2a9d4a", lw=1.1)
-            ax.plot([d["x_B"], xfp], [ss * d["x_B"] + si, ss * xfp + si],
-                    color="#9d2a8a", lw=1.1)
-            for xv, c in ((d["x_D"], "#2a9d4a"), (d["z_F"], "#888"),
-                          (d["x_B"], "#9d2a8a")):
-                ax.axvline(xv, color=c, lw=0.5, ls=":")
-            for a in d.get("azeotropes", []):
-                ax.axvline(a, color="#d11", lw=0.6, ls="--")
-        ax.set_xlim(0, 1); ax.set_ylim(0, 1)
-        ax.set_xlabel(f"x ({d['LK']})", fontsize=8)
-        ax.set_ylabel(f"y ({d['LK']})", fontsize=8)
-        ax.tick_params(labelsize=7)
-        ax.set_aspect("equal", adjustable="box")
-        fig.tight_layout()
-        self._mccabe_canvas.draw_idle()
-
-    def _redraw_pfr_profile(self):
-        """Dibuja el visual del reactor actual según su modo:
-          · pfr   → perfil espacial (curva vs V/L)
-          · batch → curva de especies vs tiempo
-          · cstr  → barras entrada→salida (sin curva: mezcla perfecta)
-        No-op si falta matplotlib o no hay reactor seleccionado."""
-        if not _MPL_OK or self._pfr_canvas is None:
-            return
-        b = self._pfr_current_block
-        if b is None:
-            self._pfr_fig.clear()
-            self._pfr_canvas.draw()
-            return
-        mode = getattr(b, "reactor_mode", "") or ""
-        if mode == "pfr":
-            self._draw_pfr_curve(b)
-        elif mode == "batch":
-            self._draw_batch_curve(b)
-        elif mode == "cstr":
-            self._draw_cstr_bars(b)
-        else:
-            self._pfr_fig.clear()
-            self._pfr_canvas.draw()
-
-    def _draw_pfr_curve(self, b):
-        """Perfil espacial PFR (curva vs V o L_frac)."""
-        prof = getattr(b, "_pfr_profile", None)
-        self._pfr_fig.clear()
-        if not prof or not prof.get("points"):
-            self._pfr_canvas.draw()
-            return
-        pts = prof["points"]
-        use_len = self.pfr_x_len.isChecked()
-        use_conv = self.pfr_y_conv.isChecked()
-        xs = [p["L_frac"] if use_len else p["V_m3"] for p in pts]
-        ax = self._pfr_fig.add_subplot(111)
-        all_species = set()
-        for p in pts:
-            all_species.update((p["X"] if use_conv else p["F"]).keys())
-        species = sorted(all_species)
-        for sp in species:
-            if use_conv:
-                ys = [p["X"].get(sp, 0.0) * 100.0 for p in pts]
-                if max(ys) < 1e-6:
-                    continue
-            else:
-                ys = [p["F"].get(sp, 0.0) for p in pts]
-            ax.plot(xs, ys, linewidth=1.4, label=sp)
-        ax.set_xlabel("L / L_total" if use_len else "Volumen acumulado (m³)",
-                       fontsize=8)
-        ax.set_ylabel("Conversión (%)" if use_conv else "Flujo molar (mol/s)",
-                       fontsize=8)
-        ax.tick_params(labelsize=7)
-        ax.grid(True, alpha=0.3, linestyle="--")
-        ax.legend(fontsize=6, loc="best", ncol=2)
-        ax.set_title(f"Perfil PFR — {b.name}", fontsize=9, fontweight="bold")
-        for spine in ("top", "right"):
-            ax.spines[spine].set_visible(False)
-        self._pfr_fig.tight_layout()
-        self._pfr_canvas.draw()
-
-    def _draw_batch_curve(self, b):
-        """Curva de especies vs tiempo para reactor batch."""
-        prof = getattr(b, "_batch_profile", None)
-        self._pfr_fig.clear()
-        if not prof or not prof.get("points"):
-            self._pfr_canvas.draw()
-            return
-        pts = prof["points"]
-        use_conv = self.pfr_y_conv.isChecked()
-        # eje X del batch SIEMPRE es tiempo (no hay "longitud").
-        xs = [p["t_s"] for p in pts]
-        ax = self._pfr_fig.add_subplot(111)
-        species = sorted({s for p in pts
-                          for s in (p["X"] if use_conv else p["N"])})
-        for sp in species:
-            if use_conv:
-                ys = [p["X"].get(sp, 0.0)*100.0 for p in pts]
-                if max(ys) < 1e-6:
-                    continue
-            else:
-                ys = [p["N"].get(sp, 0.0) for p in pts]
-            ax.plot(xs, ys, linewidth=1.4, label=sp)
-        ax.set_xlabel("Tiempo de tanda (s)", fontsize=8)
-        ax.set_ylabel("Conversión (%)" if use_conv else "Moles (mol)",
-                      fontsize=8)
-        ax.tick_params(labelsize=7)
-        ax.grid(True, alpha=0.3, linestyle="--")
-        ax.legend(fontsize=6, loc="best", ncol=2)
-        ax.set_title(f"Batch — {b.name}  (t={prof['t_total_s']:.0f}s)",
-                     fontsize=9, fontweight="bold")
-        for s in ("top", "right"):
-            ax.spines[s].set_visible(False)
-        self._pfr_fig.tight_layout()
-        self._pfr_canvas.draw()
-
-    def _draw_cstr_bars(self, b):
-        """Barras entrada→salida por especie. CSTR es mezcla perfecta,
-        físicamente NO tiene perfil espacial ni temporal en steady-state."""
-        self._pfr_fig.clear()
-        ins = [s for s in self.fs.streams.values() if s.dst == b.id]
-        outs = [s for s in self.fs.streams.values() if s.src == b.id]
-
-        def _agg(streams):
-            tot = {}
-            mtot = 0.0
-            for s in streams:
-                comp = s.composition or {}
-                m = s.mass_flow or 0.0
-                mtot += m
-                for k, v in comp.items():
-                    tot[k] = tot.get(k, 0.0) + v*m
-            if mtot > 0:
-                return {k: v/mtot for k, v in tot.items()}
-            return {}
-
-        cin = _agg(ins)
-        cout = _agg(outs)
-        if not cin and not cout:
-            ax = self._pfr_fig.add_subplot(111)
-            ax.text(0.5, 0.5, "Sin datos — corré Solve",
-                    ha="center", va="center", fontsize=9)
-            ax.axis("off")
-            self._pfr_canvas.draw()
-            return
-        species = sorted(set(cin) | set(cout))
-        import numpy as _np
-        x = _np.arange(len(species))
-        w = 0.38
-        ax = self._pfr_fig.add_subplot(111)
-        ax.bar(x - w/2, [cin.get(s, 0.0)*100 for s in species],  w,
-               label="Entrada", color="#5c6bc0")
-        ax.bar(x + w/2, [cout.get(s, 0.0)*100 for s in species], w,
-               label="Salida",  color="#ef6c00")
-        ax.set_xticks(x)
-        ax.set_xticklabels(species, fontsize=6, rotation=40, ha="right")
-        ax.set_ylabel("% másico", fontsize=8)
-        ax.tick_params(labelsize=7)
-        ax.grid(True, axis="y", alpha=0.3, linestyle="--")
-        ax.legend(fontsize=7, loc="best")
-        tau = getattr(b, "tau_s", None) or getattr(b, "_tau_s", None)
-        ttl = f"CSTR — {b.name}"
-        if tau:
-            ttl += f"  (τ={tau:.1f}s)"
-        ax.set_title(ttl, fontsize=9, fontweight="bold")
-        for s in ("top", "right"):
-            ax.spines[s].set_visible(False)
-        self._pfr_fig.tight_layout()
-        self._pfr_canvas.draw()
-
-    # ---------------------------------------------------
-    # PALETTE → CANVAS
-    # ---------------------------------------------------
 
     def _add_block_of_type(self, eq_type, x=None, y=None):
         """Agrega un bloque del tipo dado al flowsheet.  Si x/y no se

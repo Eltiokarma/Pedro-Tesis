@@ -38,6 +38,8 @@ from PySide6.QtWidgets import (
 
 import pfd_fonts
 import flowsheet_units as funits
+from tokens import (qfont, FONT_DISPLAY, FONT_TITLE, FONT_UI,
+                    FONT_VALUE, FONT_HINT, FONT_LABEL)
 from block_inspector import TOK, _PrefsBus
 from stream_inspector import PHASE_DOT, PHASE_LABEL, role_style
 
@@ -66,7 +68,7 @@ class _NumberPill(QFrame):
         p.drawEllipse(0, 0, 31, 31)
         # número
         p.setPen(QPen(fg))
-        p.setFont(QFont(pfd_fonts.MONO, 11, QFont.Bold))
+        p.setFont(qfont(FONT_VALUE))
         p.drawText(self.rect(), Qt.AlignCenter, str(self._n) if self._n > 0 else "?")
         # dot de fase abajo-derecha
         if self._phase:
@@ -83,7 +85,7 @@ class _PhaseChip(QLabel):
         label = PHASE_LABEL.get(phase, "—")
         color = PHASE_DOT.get(phase, TOK["ink_ghost"])
         self.setText(f"●  {label}")
-        self.setFont(QFont(pfd_fonts.SANS, 8, QFont.Bold))
+        self.setFont(qfont(FONT_LABEL))
         self.setStyleSheet(
             f"background:{TOK['bg_sunk']}; color:{TOK['ink_mute']}; "
             f"padding:2px 8px; border-radius:4px; letter-spacing:0.5px;"
@@ -102,7 +104,7 @@ class _RoleChip(QLabel):
         super().__init__(parent)
         bg, fg, label = role_style(role)
         self.setText(label)
-        self.setFont(QFont(pfd_fonts.SANS, 7, QFont.Bold))
+        self.setFont(qfont(FONT_LABEL))
         self.setAlignment(Qt.AlignCenter)
         self.setStyleSheet(
             f"background:{bg}; color:{fg}; "
@@ -180,6 +182,7 @@ class _CompositionStrip(QFrame):
             chip.setTextFormat(Qt.RichText)
             chip.setText(
                 f'<span style="color:{color};">●</span>'
+                # micro-tipografía de chip de datos (px): escala de densidad, no tipografía (excepción 2g)
                 f' <span style="color:{TOK["ink_mute"]};font-family:\'{pfd_fonts.MONO}\';font-size:8pt;">{name}</span>'
                 f' <span style="color:{TOK["ink_soft"]};font-family:\'{pfd_fonts.MONO}\';font-size:8pt;">{frac*100:.1f}%</span>'
             )
@@ -251,7 +254,7 @@ class _StreamRow(QFrame):
         # ── columna 2: tag + role chip + status dot ──
         col_tag = QVBoxLayout(); col_tag.setSpacing(4); col_tag.setContentsMargins(0,0,0,0)
         tag = QLabel(stream.name or "?")
-        tag.setFont(QFont(pfd_fonts.MONO, 10, QFont.DemiBold))
+        tag.setFont(qfont(FONT_VALUE))
         tag.setStyleSheet(f"color:{TOK['ink']};")
         col_tag.addWidget(tag)
         chip_row = QHBoxLayout(); chip_row.setSpacing(5); chip_row.setContentsMargins(0,0,0,0)
@@ -272,11 +275,14 @@ class _StreamRow(QFrame):
                      if b_dst else "(boundary)")
         path_wrap = QFrame()
         path_lay = QHBoxLayout(path_wrap); path_lay.setContentsMargins(0,0,0,0); path_lay.setSpacing(6)
+        # path: micro-tipografía de densidad — a 11.5pt el tag se recorta
+        # en el ancho de columna (excepción 2g)
         from_lbl = QLabel(src_label)
         from_lbl.setFont(QFont(pfd_fonts.MONO, 9))
         from_lbl.setStyleSheet(f"color:{TOK['ink_mute']};")
         from_lbl.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
         arrow = QLabel("→")
+        # glifo-ícono: tamaño geométrico, no tipografía (excepción 2g)
         arrow.setStyleSheet(f"color:{TOK['ink_soft']}; font-size:10pt;")
         to_lbl = QLabel(dst_label)
         to_lbl.setFont(QFont(pfd_fonts.MONO, 9))
@@ -311,18 +317,18 @@ class _StreamRow(QFrame):
             num_txt = f"{mass:,.0f}".replace(",", " ")
             unit_txt = unit
         val = QLabel(num_txt)
-        val.setFont(QFont(pfd_fonts.MONO, 11, QFont.Bold))
+        val.setFont(qfont(FONT_VALUE))
         val.setStyleSheet(
             f"color:{TOK['ink'] if locked else TOK['ink_soft']};"
         )
         flow_text_row.addWidget(val)
         unit_lbl = QLabel(unit_txt)
-        unit_lbl.setFont(QFont(pfd_fonts.SANS, 8))
+        unit_lbl.setFont(qfont(FONT_HINT))
         unit_lbl.setStyleSheet(f"color:{TOK['ink_soft']};")
         flow_text_row.addWidget(unit_lbl)
         if not locked:
             auto_chip = QLabel("auto")
-            auto_chip.setFont(QFont(pfd_fonts.SANS, 7, QFont.Bold))
+            auto_chip.setFont(qfont(FONT_LABEL))
             auto_chip.setStyleSheet(
                 f"color:{TOK['auto_ink']}; font-style:italic;"
             )
@@ -347,7 +353,7 @@ class _StreamRow(QFrame):
             lay.addWidget(cs, 2)
         else:
             empty = QLabel("(sin composición)")
-            empty.setFont(QFont(pfd_fonts.SANS, 9))
+            empty.setFont(qfont(FONT_HINT))
             empty.setStyleSheet(f"color:{TOK['ink_ghost']}; font-style:italic;")
             lay.addWidget(empty, 2)
 
@@ -356,22 +362,24 @@ class _StreamRow(QFrame):
         tp.setAlignment(Qt.AlignRight)
         T = float(getattr(stream, "temperature", 25.0) or 25.0)
         T_locked = bool(getattr(stream, "temperature_locked", False))
+        t_unit = funits.active_unit("temp")
         t_html = (
             f'<span style="color:{TOK["ink"] if T_locked else TOK["ink_soft"]};'
             f' font-family:\'{pfd_fonts.MONO}\'; font-size:10pt; font-weight:600;">'
-            f'{T:.1f}</span>'
-            f'<span style="color:{TOK["ink_soft"]}; font-size:8pt;"> °C</span>'
+            f'{funits.conv_temp(T, t_unit):.1f}</span>'
+            f'<span style="color:{TOK["ink_soft"]}; font-size:8pt;"> {t_unit}</span>'
         )
         t_lbl = QLabel(); t_lbl.setTextFormat(Qt.RichText); t_lbl.setText(t_html)
         t_lbl.setAlignment(Qt.AlignRight)
         tp.addWidget(t_lbl)
         P = float(getattr(stream, "pressure_bar", 1.013) or 1.013)
         P_locked = bool(getattr(stream, "pressure_locked", False))
+        p_unit = funits.active_unit("pressure")
         p_html = (
             f'<span style="color:{TOK["ink"] if P_locked else TOK["ink_soft"]};'
             f' font-family:\'{pfd_fonts.MONO}\'; font-size:10pt; font-weight:500;">'
-            f'{P:.2f}</span>'
-            f'<span style="color:{TOK["ink_soft"]}; font-size:8pt;"> bar</span>'
+            f'{funits.conv_pressure(P, p_unit):.2f}</span>'
+            f'<span style="color:{TOK["ink_soft"]}; font-size:8pt;"> {p_unit}</span>'
         )
         p_lbl = QLabel(); p_lbl.setTextFormat(Qt.RichText); p_lbl.setText(p_html)
         p_lbl.setAlignment(Qt.AlignRight)
@@ -417,7 +425,7 @@ class _TotalChip(QFrame):
         super().__init__(parent)
         lay = QVBoxLayout(self); lay.setContentsMargins(0,0,0,0); lay.setSpacing(0)
         l = QLabel(label)
-        l.setFont(QFont(pfd_fonts.SANS, 7, QFont.Bold))
+        l.setFont(qfont(FONT_LABEL))
         l.setStyleSheet(f"color:{TOK['ink_soft']}; letter-spacing:1.1px;")
         lay.addWidget(l)
         # value row
@@ -431,7 +439,7 @@ class _TotalChip(QFrame):
         except Exception:
             txt = f"{value:,.0f}".replace(",", " ") + f" {unit}"
         v = QLabel(txt)
-        v.setFont(QFont(pfd_fonts.MONO, 10, QFont.Bold))
+        v.setFont(qfont(FONT_VALUE))
         v.setStyleSheet(f"color:{TOK['ink']};")
         row.addWidget(v)
         row_wrap = QFrame(); row_wrap.setLayout(row); lay.addWidget(row_wrap)
@@ -443,7 +451,7 @@ class _TotalChip(QFrame):
 
 def _hdr_cell(text: str, align=Qt.AlignLeft, min_w: int = 0) -> QLabel:
     lbl = QLabel(text)
-    lbl.setFont(QFont(pfd_fonts.SANS, 7, QFont.Bold))
+    lbl.setFont(qfont(FONT_LABEL))
     lbl.setStyleSheet(f"color:{TOK['ink_soft']}; letter-spacing:1.4px;")
     lbl.setAlignment(align)
     if min_w: lbl.setMinimumWidth(min_w)
@@ -518,11 +526,11 @@ class StreamsTableDock(QDockWidget):
 
         # ── Title ──
         title = QLabel("Corrientes")
-        title.setFont(QFont(pfd_fonts.SANS, 11, QFont.Bold))
+        title.setFont(qfont(FONT_LABEL))
         title.setStyleSheet(f"color:{TOK['ink']};")
         lay.addWidget(title)
         self._count_lbl = QLabel("0")
-        self._count_lbl.setFont(QFont(pfd_fonts.MONO, 9))
+        self._count_lbl.setFont(qfont(FONT_VALUE))
         self._count_lbl.setStyleSheet(f"color:{TOK['ink_soft']};")
         lay.addWidget(self._count_lbl)
 
@@ -543,7 +551,7 @@ class StreamsTableDock(QDockWidget):
             btn = QPushButton(u)
             btn.setCheckable(True)
             btn.setCursor(Qt.PointingHandCursor)
-            btn.setFont(QFont(pfd_fonts.MONO, 8, QFont.DemiBold))
+            btn.setFont(qfont(FONT_VALUE))
             btn.setStyleSheet(self._unit_btn_style(False))
             btn.clicked.connect(lambda _=False, u=u: self._on_unit_pick(u))
             self._unit_buttons[u] = btn
@@ -579,7 +587,7 @@ class StreamsTableDock(QDockWidget):
         self._search.setStyleSheet(
             "QLineEdit { background:transparent; border:0; outline:0; }"
         )
-        self._search.setFont(QFont(pfd_fonts.SANS, 9))
+        self._search.setFont(qfont(FONT_HINT))
         self._search.textChanged.connect(self._on_search_change)
         self._search.setMinimumWidth(220)
         sl.addWidget(self._search)
@@ -588,7 +596,7 @@ class StreamsTableDock(QDockWidget):
         # ── Export ──
         exp_btn = QPushButton("⇣  Export")
         exp_btn.setCursor(Qt.PointingHandCursor)
-        exp_btn.setFont(QFont(pfd_fonts.SANS, 9, QFont.DemiBold))
+        exp_btn.setFont(qfont(FONT_LABEL))
         exp_btn.setStyleSheet(
             f"QPushButton {{ background:transparent; color:{TOK['ink_mute']}; "
             f"border:1px solid {TOK['line']}; border-radius:6px; "

@@ -29,13 +29,14 @@ except ImportError:
     PYSIDE_AVAILABLE = False
 
 
-# Esquema de colores por severidad (matching los bocetos)
-_SEVERITY_COLOR = {
-    "critical": "#c41e3a",   # rojo
-    "high":     "#e57c00",   # naranja
-    "medium":   "#f4b400",   # amarillo
-    "low":      "#9ca3af",   # gris
-}
+# Severidad → color: escala ÚNICA del sistema (tokens.severity_hex,
+# artboard 2a familia 5) — antes este dock tenía su propia copia.
+def _severity_color(sev: str) -> str:
+    try:
+        import tokens as _tokens
+        return _tokens.severity_hex(sev)
+    except Exception:
+        return "#9ca3af"
 
 _SEVERITY_ICON = {
     "critical": "🔴",
@@ -205,7 +206,7 @@ class ReactivityDock(QDockWidget):
         for r, w in enumerate(warns):
             sev = w.get("severity", "medium")
             icon = _SEVERITY_ICON.get(sev, "•")
-            color_hex = _SEVERITY_COLOR.get(sev, "#9ca3af")
+            color_hex = _severity_color(sev)
 
             it0 = QTableWidgetItem(icon)
             it0.setData(Qt.UserRole, w)

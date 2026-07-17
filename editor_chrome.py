@@ -43,6 +43,8 @@ from PySide6.QtWidgets import (
 )
 
 import pfd_fonts
+from tokens import (qfont, FONT_TITLE, FONT_UI, FONT_VALUE, FONT_HINT,
+                    FONT_LABEL)
 from block_inspector import TOK
 
 
@@ -817,10 +819,7 @@ class EditorTopbar(QFrame):
         super().__init__(parent)
         self.setObjectName("edTopbar")
         self.setFixedHeight(52)
-        self.setStyleSheet(
-            f"#edTopbar {{ background: {TOK['bg_elev']}; "
-            f"border-bottom: 1px solid {TOK['line']}; }}"
-        )
+        self.setStyleSheet(self._qss_topbar())
 
         lay = QHBoxLayout(self)
         lay.setContentsMargins(14, 6, 12, 6)
@@ -830,21 +829,18 @@ class EditorTopbar(QFrame):
         self._logo = QLabel(self)
         self._logo.setFixedSize(28, 28)
         self._logo.setAlignment(Qt.AlignCenter)
-        f = QFont(pfd_fonts.SANS, 14, QFont.Bold)
+        f = QFont(pfd_fonts.SANS, 14, QFont.Bold)  # glifo-ícono: tamaño geométrico, no tipografía (excepción 2g)
         self._logo.setFont(f)
         self._logo.setText("◆")
-        self._logo.setStyleSheet(
-            f"color:{TOK['accent']}; background:{TOK['accent_tint']}; "
-            f"border-radius:8px; border:1px solid {TOK['accent_soft']};"
-        )
+        self._logo.setStyleSheet(self._qss_logo())
         lay.addWidget(self._logo)
 
         proj = QVBoxLayout(); proj.setContentsMargins(0,0,0,0); proj.setSpacing(0)
         self._project = QLabel("(sin nombre)", self)
-        self._project.setFont(QFont(pfd_fonts.MONO, 10, QFont.Medium))
+        self._project.setFont(qfont(FONT_VALUE))
         self._project.setStyleSheet(f"color:{TOK['ink']};")
         self._sub = QLabel("sin guardar", self)
-        sf = QFont(pfd_fonts.SANS, 8); self._sub.setFont(sf)
+        self._sub.setFont(qfont(FONT_HINT))
         self._sub.setStyleSheet(f"color:{TOK['ink_soft']};")
         proj.addWidget(self._project); proj.addWidget(self._sub)
         lay.addLayout(proj)
@@ -870,10 +866,10 @@ class EditorTopbar(QFrame):
         self._solver_dot.setFixedSize(8, 8)
         sc_lay.addWidget(self._solver_dot)
         self._solver_label = QLabel("en espera", self._solver_chip)
-        self._solver_label.setFont(QFont(pfd_fonts.SANS, 9, QFont.Medium))
+        self._solver_label.setFont(qfont(FONT_LABEL))
         sc_lay.addWidget(self._solver_label)
         self._solver_meta = QLabel("", self._solver_chip)
-        self._solver_meta.setFont(QFont(pfd_fonts.MONO, 8))
+        self._solver_meta.setFont(qfont(FONT_VALUE))
         self._solver_meta.setStyleSheet(f"color:{TOK['ink_soft']};")
         sc_lay.addWidget(self._solver_meta)
         lay.addWidget(self._solver_chip)
@@ -897,6 +893,69 @@ class EditorTopbar(QFrame):
         self._btn_economics.clicked.connect(self.economicsRequested.emit)
         lay.addWidget(self._btn_economics)
 
+    # ── QSS (extraídos para poder re-aplicarlos en restyle) ────
+    @staticmethod
+    def _qss_topbar() -> str:
+        return (f"#edTopbar {{ background: {TOK['bg_elev']}; "
+                f"border-bottom: 1px solid {TOK['line']}; }}")
+
+    @staticmethod
+    def _qss_logo() -> str:
+        return (f"color:{TOK['accent']}; background:{TOK['accent_tint']}; "
+                f"border-radius:8px; border:1px solid {TOK['accent_soft']};")
+
+    @staticmethod
+    def _qss_toolbutton() -> str:
+        return (
+            f"QToolButton {{ background: transparent; color: {TOK['ink_mute']}; "
+            f"border: 0; border-radius: 6px; }} "
+            f"QToolButton:hover {{ background: {TOK['bg_mute']}; color: {TOK['ink']}; }} "
+            f"QToolButton:checked {{ background: {TOK['accent_tint']}; color: {TOK['accent_deep']}; }} "
+            f"QToolButton:disabled {{ color: {TOK['ink_ghost']}; }}"
+        )
+
+    @staticmethod
+    def _qss_divider() -> str:
+        return f"color:{TOK['line']}; background:{TOK['line']};"
+
+    @staticmethod
+    def _qss_ghost() -> str:
+        return (
+            f"QPushButton {{ background: transparent; color: {TOK['ink_mute']}; "
+            f"border: 1px solid {TOK['line_strong']}; border-radius: 6px; "
+            f"padding: 6px 12px; }} "
+            f"QPushButton:hover {{ background: {TOK['bg_mute']}; "
+            f"color: {TOK['ink']}; border-color: {TOK['accent_soft']}; }}"
+        )
+
+    @staticmethod
+    def _qss_primary() -> str:
+        return (
+            f"QPushButton {{ background: {TOK['accent']}; color: {TOK['bg_elev']}; "
+            f"border: 0; border-radius: 6px; padding: 7px 14px; }} "
+            f"QPushButton:hover {{ background: {TOK['accent_deep']}; }}"
+        )
+
+    def restyle(self):
+        """Re-aplica todos los QSS con el TOK vivo — lo llama la ventana
+        en themeChanged (artboard 2b: un solo nivel de respiración)."""
+        self.setStyleSheet(self._qss_topbar())
+        self._logo.setStyleSheet(self._qss_logo())
+        self._project.setStyleSheet(f"color:{TOK['ink']};")
+        self._sub.setStyleSheet(f"color:{TOK['ink_soft']};")
+        self._solver_meta.setStyleSheet(f"color:{TOK['ink_soft']};")
+        for b in self.findChildren(QToolButton):
+            b.setStyleSheet(self._qss_toolbutton())
+        for d in self.findChildren(QFrame):
+            if isinstance(d, QFrame) and d.frameShape() == QFrame.VLine:
+                d.setStyleSheet(self._qss_divider())
+        self._btn_validate.setStyleSheet(self._qss_ghost())
+        self._btn_economics.setStyleSheet(self._qss_ghost())
+        self._btn_solve.setStyleSheet(self._qss_primary())
+        # chip: re-aplicar el último estado con los tokens nuevos
+        st, it_, dt = getattr(self, "_solver_last", ("idle", 0, 0.0))
+        self.set_solver_state(st, it_, dt)
+
     # ── helpers UI ─────────────────────────────────────
     def _mk_icon_btn(self, glyph: str, tooltip: str) -> QToolButton:
         b = QToolButton(self)
@@ -904,44 +963,28 @@ class EditorTopbar(QFrame):
         b.setToolTip(tooltip)
         b.setFixedSize(32, 32)
         b.setCursor(Qt.PointingHandCursor)
-        b.setFont(QFont(pfd_fonts.SANS, 14))
-        b.setStyleSheet(
-            f"QToolButton {{ background: transparent; color: {TOK['ink_mute']}; "
-            f"border: 0; border-radius: 6px; }} "
-            f"QToolButton:hover {{ background: {TOK['bg_mute']}; color: {TOK['ink']}; }} "
-            f"QToolButton:checked {{ background: {TOK['accent_tint']}; color: {TOK['accent_deep']}; }} "
-            f"QToolButton:disabled {{ color: {TOK['ink_ghost']}; }}"
-        )
+        b.setFont(QFont(pfd_fonts.SANS, 14))  # glifo-ícono: tamaño geométrico, no tipografía (excepción 2g)
+        b.setStyleSheet(self._qss_toolbutton())
         return b
 
     def _mk_vdivider(self) -> QFrame:
         d = QFrame(self); d.setFrameShape(QFrame.VLine)
         d.setFixedWidth(1); d.setFixedHeight(24)
-        d.setStyleSheet(f"color:{TOK['line']}; background:{TOK['line']};")
+        d.setStyleSheet(self._qss_divider())
         return d
 
     def _mk_ghost_btn(self, text: str) -> QPushButton:
         b = QPushButton(text, self)
         b.setCursor(Qt.PointingHandCursor)
-        b.setFont(QFont(pfd_fonts.SANS, 9, QFont.Medium))
-        b.setStyleSheet(
-            f"QPushButton {{ background: transparent; color: {TOK['ink_mute']}; "
-            f"border: 1px solid {TOK['line_strong']}; border-radius: 6px; "
-            f"padding: 6px 12px; }} "
-            f"QPushButton:hover {{ background: {TOK['bg_mute']}; "
-            f"color: {TOK['ink']}; border-color: {TOK['accent_soft']}; }}"
-        )
+        b.setFont(qfont(FONT_UI))
+        b.setStyleSheet(self._qss_ghost())
         return b
 
     def _mk_primary_btn(self, text: str) -> QPushButton:
         b = QPushButton(text, self)
         b.setCursor(Qt.PointingHandCursor)
-        b.setFont(QFont(pfd_fonts.SANS, 9, QFont.Bold))
-        b.setStyleSheet(
-            f"QPushButton {{ background: {TOK['accent']}; color: white; "
-            f"border: 0; border-radius: 6px; padding: 7px 14px; }} "
-            f"QPushButton:hover {{ background: {TOK['accent_deep']}; }}"
-        )
+        b.setFont(qfont(FONT_UI))
+        b.setStyleSheet(self._qss_primary())
         return b
 
     # ── API pública ────────────────────────────────────
@@ -952,6 +995,7 @@ class EditorTopbar(QFrame):
 
     def set_solver_state(self, state: str, iter_: int = 0, dt: float = 0.0):
         """state ∈ {'idle', 'running', 'converged', 'warning', 'failed', 'stale'}."""
+        self._solver_last = (state, iter_, dt)   # para restyle()
         color_map = {
             "idle":      TOK["ink_soft"],
             "running":   TOK["amber"],
@@ -1009,13 +1053,7 @@ class EditorTopbar(QFrame):
         b.setToolButtonStyle(Qt.ToolButtonIconOnly)
         b.setFixedSize(32, 32)
         b.setCursor(Qt.PointingHandCursor)
-        b.setStyleSheet(
-            f"QToolButton {{ background: transparent; color: {TOK['ink_mute']}; "
-            f"border: 0; border-radius: 6px; }} "
-            f"QToolButton:hover {{ background: {TOK['bg_mute']}; color: {TOK['ink']}; }} "
-            f"QToolButton:checked {{ background: {TOK['accent_tint']}; color: {TOK['accent_deep']}; }} "
-            f"QToolButton:disabled {{ color: {TOK['ink_ghost']}; }}"
-        )
+        b.setStyleSheet(self._qss_toolbutton())
         return b
 
     def bind_history_actions(self, undo_action, redo_action):
@@ -1157,7 +1195,7 @@ class _ToolButton(QToolButton):
         else:
             # tool icon — usar glyphs unicode minimalistas
             p.setPen(QPen(self._stroke, 1.6))
-            p.setFont(QFont(pfd_fonts.SANS, 14, QFont.Medium))
+            p.setFont(QFont(pfd_fonts.SANS, 14, QFont.Medium))  # glifo-ícono: tamaño geométrico, no tipografía (excepción 2g)
             glyph = {
                 "select":  "↖",
                 "pan":     "✥",
@@ -1225,14 +1263,39 @@ class EditorPalette(QFrame):
         "Solids / sep.":      "separador",
     }
 
+    @staticmethod
+    def _qss_palette() -> str:
+        return (f"#edPalette {{ background: {TOK['bg_elev']}; "
+                f"border: 1px solid {TOK['line']}; border-radius: 12px; }}")
+
+    @staticmethod
+    def _qss_plus() -> str:
+        return (
+            f"QToolButton {{ background: transparent; color: {TOK['ink_mute']}; "
+            f"border: 0; border-radius: 6px; }} "
+            f"QToolButton:hover {{ background: {TOK['bg_mute']}; color: {TOK['ink']}; }}"
+        )
+
+    def restyle(self):
+        """Re-aplica los QSS con el TOK vivo (themeChanged)."""
+        self.setStyleSheet(self._qss_palette())
+        self._drag_handle.setStyleSheet(
+            f"color: {TOK['ink_ghost']}; letter-spacing: -2px;")
+        for d in getattr(self, "_dividers", []):
+            d.setStyleSheet(f"background:{TOK['line']};")
+        if getattr(self, "_plus", None) is not None:
+            self._plus.setStyleSheet(self._qss_plus())
+        for btns in (self._tool_btns, self._stream_btns, self._block_btns):
+            for b in btns.values():
+                b._apply_style()
+                b.update()
+
     def __init__(self, parent=None):
         super().__init__(parent)
         self.setObjectName("edPalette")
         self.setFixedWidth(50)
-        self.setStyleSheet(
-            f"#edPalette {{ background: {TOK['bg_elev']}; "
-            f"border: 1px solid {TOK['line']}; border-radius: 12px; }}"
-        )
+        self._dividers: list = []
+        self.setStyleSheet(self._qss_palette())
         # Shadow effect
         try:
             from PySide6.QtWidgets import QGraphicsDropShadowEffect
@@ -1254,7 +1317,7 @@ class EditorPalette(QFrame):
         self._drag_handle.setFixedSize(40, 14)
         self._drag_handle.setAlignment(Qt.AlignCenter)
         self._drag_handle.setCursor(Qt.SizeAllCursor)
-        self._drag_handle.setFont(QFont(pfd_fonts.SANS, 9, QFont.Bold))
+        self._drag_handle.setFont(QFont(pfd_fonts.SANS, 9, QFont.Bold))  # glifo-ícono: tamaño geométrico, no tipografía (excepción 2g)
         self._drag_handle.setStyleSheet(
             f"color: {TOK['ink_ghost']}; letter-spacing: -2px;"
         )
@@ -1299,13 +1362,10 @@ class EditorPalette(QFrame):
         plus = QToolButton(self)
         plus.setText("+"); plus.setFixedSize(40, 32)
         plus.setCursor(Qt.PointingHandCursor)
-        plus.setFont(QFont(pfd_fonts.SANS, 16, QFont.Bold))
+        plus.setFont(QFont(pfd_fonts.SANS, 16, QFont.Bold))  # glifo-ícono: tamaño geométrico, no tipografía (excepción 2g)
         plus.setToolTip("Catálogo completo de equipos")
-        plus.setStyleSheet(
-            f"QToolButton {{ background: transparent; color: {TOK['ink_mute']}; "
-            f"border: 0; border-radius: 6px; }} "
-            f"QToolButton:hover {{ background: {TOK['bg_mute']}; color: {TOK['ink']}; }}"
-        )
+        plus.setStyleSheet(self._qss_plus())
+        self._plus = plus
         plus.clicked.connect(lambda: self._show_full_catalog_menu(plus))
         lay.addWidget(plus, alignment=Qt.AlignHCenter)
 
@@ -1351,6 +1411,7 @@ class EditorPalette(QFrame):
     def _mk_divider(self) -> QFrame:
         d = QFrame(self); d.setFixedHeight(1)
         d.setStyleSheet(f"background:{TOK['line']};")
+        self._dividers.append(d)
         return d
 
     def _on_tool_click(self, tool_id: str):
@@ -1501,7 +1562,8 @@ class EditorPalette(QFrame):
         menu.setStyleSheet(
             f"QMenu {{ background: {TOK['bg_elev']}; color: {TOK['ink']}; "
             f"border: 1px solid {TOK['line']}; padding: 4px 0; "
-            f"font-family: '{pfd_fonts.SANS}'; font-size: 9pt; }} "
+            f"font-family: '{pfd_fonts.SANS}'; "
+            f"font-size: {FONT_HINT[1]}pt; }} "
             f"QMenu::item {{ padding: 6px 22px 6px 14px; }} "
             f"QMenu::item:selected {{ background: {TOK['accent_tint']}; "
             f"color: {TOK['accent_deep']}; }} "
@@ -1522,13 +1584,41 @@ class EditorZoom(QFrame):
     zoomResetRequested = Signal()
     zoomFitRequested = Signal()
 
+    @staticmethod
+    def _qss_zoom() -> str:
+        return (f"#edZoom {{ background: {TOK['bg_elev']}; "
+                f"border: 1px solid {TOK['line']}; border-radius: 10px; }}")
+
+    @staticmethod
+    def _qss_btn() -> str:
+        return (
+            f"QToolButton {{ background: transparent; color: {TOK['ink_mute']}; "
+            f"border: 0; border-radius: 6px; }} "
+            f"QToolButton:hover {{ background: {TOK['bg_mute']}; color: {TOK['ink']}; }}"
+        )
+
+    @staticmethod
+    def _qss_pct() -> str:
+        return (
+            f"QToolButton {{ background: transparent; color: {TOK['ink']}; "
+            f"border: 0; }} "
+            f"QToolButton:hover {{ background: {TOK['bg_mute']}; "
+            f"border-radius:6px; }}"
+        )
+
+    def restyle(self):
+        """Re-aplica los QSS con el TOK vivo (themeChanged)."""
+        self.setStyleSheet(self._qss_zoom())
+        for b in (self._btn_minus, self._btn_plus, self._btn_fit):
+            b.setStyleSheet(self._qss_btn())
+        self._lbl_pct.setStyleSheet(self._qss_pct())
+        if getattr(self, "_divider", None) is not None:
+            self._divider.setStyleSheet(f"background:{TOK['line']};")
+
     def __init__(self, parent=None):
         super().__init__(parent)
         self.setObjectName("edZoom")
-        self.setStyleSheet(
-            f"#edZoom {{ background: {TOK['bg_elev']}; "
-            f"border: 1px solid {TOK['line']}; border-radius: 10px; }}"
-        )
+        self.setStyleSheet(self._qss_zoom())
         try:
             from PySide6.QtWidgets import QGraphicsDropShadowEffect
             sh = QGraphicsDropShadowEffect(self)
@@ -1549,14 +1639,9 @@ class EditorZoom(QFrame):
         self._lbl_pct.setText("100%")
         self._lbl_pct.setFixedSize(54, 28)
         self._lbl_pct.setCursor(Qt.PointingHandCursor)
-        self._lbl_pct.setFont(QFont(pfd_fonts.MONO, 9, QFont.Medium))
+        self._lbl_pct.setFont(qfont(FONT_VALUE))
         self._lbl_pct.setToolTip("Click → 100% (⌘0)")
-        self._lbl_pct.setStyleSheet(
-            f"QToolButton {{ background: transparent; color: {TOK['ink']}; "
-            f"border: 0; }} "
-            f"QToolButton:hover {{ background: {TOK['bg_mute']}; "
-            f"border-radius:6px; }}"
-        )
+        self._lbl_pct.setStyleSheet(self._qss_pct())
         self._lbl_pct.clicked.connect(self.zoomResetRequested.emit)
         lay.addWidget(self._lbl_pct)
 
@@ -1567,6 +1652,7 @@ class EditorZoom(QFrame):
         # divider
         d = QFrame(self); d.setFixedWidth(1); d.setFixedHeight(20)
         d.setStyleSheet(f"background:{TOK['line']};")
+        self._divider = d
         lay.addSpacing(4); lay.addWidget(d); lay.addSpacing(4)
 
         self._btn_fit = self._mk_btn("⤢", "Ajustar a vista (F)")
@@ -1581,12 +1667,8 @@ class EditorZoom(QFrame):
         b.setText(glyph); b.setToolTip(tip)
         b.setFixedSize(28, 28)
         b.setCursor(Qt.PointingHandCursor)
-        b.setFont(QFont(pfd_fonts.SANS, 13, QFont.Medium))
-        b.setStyleSheet(
-            f"QToolButton {{ background: transparent; color: {TOK['ink_mute']}; "
-            f"border: 0; border-radius: 6px; }} "
-            f"QToolButton:hover {{ background: {TOK['bg_mute']}; color: {TOK['ink']}; }}"
-        )
+        b.setFont(QFont(pfd_fonts.SANS, 13, QFont.Medium))  # glifo-ícono: tamaño geométrico, no tipografía (excepción 2g)
+        b.setStyleSheet(self._qss_btn())
         return b
 
     def set_zoom(self, factor: float):
@@ -2028,7 +2110,7 @@ class IsaGlyphItem(QGraphicsItem):
             p.setBrush(QBrush(QColor(chip_color))); p.setPen(Qt.NoPen)
             p.drawEllipse(QPointF(cx, cy), 7.5, 7.5)
             p.setPen(QPen(QColor("white"), 1.2))
-            p.setFont(QFont(pfd_fonts.SANS, 8, QFont.Bold))
+            p.setFont(QFont(pfd_fonts.SANS, 8, QFont.Bold))  # glifo-ícono: tamaño geométrico, no tipografía (excepción 2g)
             p.drawText(QRectF(cx-7, cy-7, 14, 14), Qt.AlignCenter, "!")
         elif status == "ok":
             # dot verde discreto — balance OK sin gritar
