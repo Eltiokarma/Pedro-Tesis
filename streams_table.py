@@ -356,22 +356,24 @@ class _StreamRow(QFrame):
         tp.setAlignment(Qt.AlignRight)
         T = float(getattr(stream, "temperature", 25.0) or 25.0)
         T_locked = bool(getattr(stream, "temperature_locked", False))
+        t_unit = funits.active_unit("temp")
         t_html = (
             f'<span style="color:{TOK["ink"] if T_locked else TOK["ink_soft"]};'
             f' font-family:\'{pfd_fonts.MONO}\'; font-size:10pt; font-weight:600;">'
-            f'{T:.1f}</span>'
-            f'<span style="color:{TOK["ink_soft"]}; font-size:8pt;"> °C</span>'
+            f'{funits.conv_temp(T, t_unit):.1f}</span>'
+            f'<span style="color:{TOK["ink_soft"]}; font-size:8pt;"> {t_unit}</span>'
         )
         t_lbl = QLabel(); t_lbl.setTextFormat(Qt.RichText); t_lbl.setText(t_html)
         t_lbl.setAlignment(Qt.AlignRight)
         tp.addWidget(t_lbl)
         P = float(getattr(stream, "pressure_bar", 1.013) or 1.013)
         P_locked = bool(getattr(stream, "pressure_locked", False))
+        p_unit = funits.active_unit("pressure")
         p_html = (
             f'<span style="color:{TOK["ink"] if P_locked else TOK["ink_soft"]};'
             f' font-family:\'{pfd_fonts.MONO}\'; font-size:10pt; font-weight:500;">'
-            f'{P:.2f}</span>'
-            f'<span style="color:{TOK["ink_soft"]}; font-size:8pt;"> bar</span>'
+            f'{funits.conv_pressure(P, p_unit):.2f}</span>'
+            f'<span style="color:{TOK["ink_soft"]}; font-size:8pt;"> {p_unit}</span>'
         )
         p_lbl = QLabel(); p_lbl.setTextFormat(Qt.RichText); p_lbl.setText(p_html)
         p_lbl.setAlignment(Qt.AlignRight)

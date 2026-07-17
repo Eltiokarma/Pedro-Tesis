@@ -2099,8 +2099,17 @@ class CustomReactionDialog(QDialog):
 class OpexExtraRowDialog(QDialog):
     """Editor de UNA fila opex_extras."""
 
+    # Claves internas (persisten en el JSON del flowsheet y las consume
+    # el motor económico) → etiqueta visible en español.
     CATEGORIES = ["Raw Materials", "Utilities", "Consumables",
                   "Waste Treatment", "Other"]
+    CATEGORY_LABELS = {
+        "Raw Materials":   "Materias primas",
+        "Utilities":       "Servicios (utilities)",
+        "Consumables":     "Consumibles",
+        "Waste Treatment": "Tratamiento de residuos",
+        "Other":           "Otros",
+    }
 
     def __init__(self, parent, row=None):
         super().__init__(parent)
@@ -2120,9 +2129,10 @@ class OpexExtraRowDialog(QDialog):
         layout.addRow("Nombre:", self.name_edit)
 
         self.cat_combo = QComboBox()
-        self.cat_combo.addItems(self.CATEGORIES)
+        for key in self.CATEGORIES:
+            self.cat_combo.addItem(self.CATEGORY_LABELS.get(key, key), key)
         cur = row.get("stream", "Utilities")
-        idx = self.cat_combo.findText(cur)
+        idx = self.cat_combo.findData(cur)
         if idx >= 0:
             self.cat_combo.setCurrentIndex(idx)
         layout.addRow("Categoría:", self.cat_combo)
@@ -2169,7 +2179,7 @@ class OpexExtraRowDialog(QDialog):
             "time_basis":         "year",
             "flowrate":           float(self.flow_edit.value()),
             "price_usd_per_unit": float(self.price_edit.value()),
-            "stream":             self.cat_combo.currentText(),
+            "stream":             self.cat_combo.currentData(),
         }
         self.accept()
 
@@ -2229,7 +2239,8 @@ class OpexExtrasDialog(QDialog):
             total += annual
             vals = [
                 ex.get("name", ""),
-                ex.get("stream", ""),
+                OpexExtraRowDialog.CATEGORY_LABELS.get(
+                    ex.get("stream", ""), ex.get("stream", "")),
                 ex.get("units", ""),
                 f"{ex.get('flowrate', 0):g}",
                 f"{ex.get('price_usd_per_unit', 0):g}",
@@ -3471,9 +3482,9 @@ class BlockItem(QGraphicsItemGroup):
             from icons import icon_for_eq_type, make_qicon
             from PySide6.QtWidgets import QGraphicsPixmapItem
             icon_id = icon_for_eq_type(block.eq_type)
-            # Color teal del nuevo tema + más grande (18px) + opacity 0.95
+            # Color de acento del tema + más grande (18px) + opacity 0.95
             # para que sean realmente visibles sobre la silueta ISA.
-            ic = make_qicon(icon_id, color="#0d6e78", size=20)
+            ic = make_qicon(icon_id, color=_tokens.TOK["accent"], size=20)
             if ic is not None:
                 self.type_badge = QGraphicsPixmapItem(
                     ic.pixmap(18, 18), parent=self)
@@ -3973,10 +3984,11 @@ class BlockItem(QGraphicsItemGroup):
         menu.addSeparator()
         # Íconos del set HYSYS (color text-primary)
         mk = getattr(self.editor, "_mk_icon", None)
-        icol = getattr(self.editor, "_icon_color", "#3a3a3a")
+        icol = _tokens.TOK["ink_mute"]
         ic_connect = mk("act-connect", color=icol, size=16) if mk else QIcon()
         ic_edit    = mk("act-edit",    color=icol, size=16) if mk else QIcon()
-        ic_delete  = mk("edit-delete", color="#c41e3a", size=16) if mk else QIcon()
+        ic_delete  = mk("edit-delete", color=_tokens.TOK["danger"],
+                        size=16) if mk else QIcon()
         menu.addAction(ic_connect or QIcon(), "Conectar desde acá…",
                        lambda: self.editor.start_connection(self.model.id))
         menu.addAction(ic_edit or QIcon(), "Editar propiedades… (doble-click)",
@@ -4819,11 +4831,12 @@ class StreamItem(QGraphicsPathItem):
         # Íconos del set HYSYS
         ed = getattr(self, "editor", None)
         mk = getattr(ed, "_mk_icon", None) if ed else None
-        icol = getattr(ed, "_icon_color", "#3a3a3a") if ed else "#3a3a3a"
+        icol = _tokens.TOK["ink_mute"]
         ic_wp     = mk("act-waypoint", color=icol, size=16) if mk else QIcon()
         ic_reset  = mk("sim-reset",    color=icol, size=16) if mk else QIcon()
         ic_edit   = mk("act-edit",     color=icol, size=16) if mk else QIcon()
-        ic_delete = mk("edit-delete",  color="#c41e3a", size=16) if mk else QIcon()
+        ic_delete = mk("edit-delete",  color=_tokens.TOK["danger"],
+                       size=16) if mk else QIcon()
         a_edit = menu.addAction(ic_edit or QIcon(),
                                   "Editar propiedades… (doble-click)")
         menu.addSeparator()
@@ -6805,6 +6818,10 @@ class FlowsheetMainWindow(QMainWindow):
 
         self.view.zoom_reset()
         self._center_view_on_blocks()
+        # El chip del topbar conservaba el estado del diagrama anterior
+        # ("convergido" de otro flowsheet) — el ejemplo recién cargado
+        # todavía no se resolvió.
+        self.update_solver_chip("idle")
         self._update_status()
         self.end_action(f"Cargar ejemplo: {key}", before)
 
@@ -7009,6 +7026,11 @@ class FlowsheetMainWindow(QMainWindow):
         for sid, sit in sorted(self.scene.stream_items.items(),
                                key=lambda kv: kv[1].model.id):
             sit.update_path()
+        # El goal-seek mutó duties fuera de action_solve: el semáforo y
+        # el chip del topbar quedaron desactualizados → estado honesto.
+        self._dirty_after_solve = True
+        self.update_solver_chip("idle")
+        self._update_status()
         QMessageBox.information(self, "Goal-seek resultado",
                                   "\n".join(report))
 
@@ -7223,23 +7245,23 @@ class FlowsheetMainWindow(QMainWindow):
             name = combo.currentText()
             p = ed.load_profile(name)
             lines = [f"PERFIL: {name}\n" + "─" * 50,
-                      "\nLABOR"]
+                      "\nMANO DE OBRA"]
             for k, val in p["labor"].items():
                 lines.append(f"  {k:32} = {val}")
-            lines.append("\nFINANCIAL")
+            lines.append("\nFINANCIERO")
             for k, val in p["financial"].items():
                 lines.append(f"  {k:32} = {val}")
-            lines.append("\nUTILITY PRICES")
+            lines.append("\nPRECIOS DE SERVICIOS")
             for k, vd in p["utility_prices"].items():
                 lines.append(f"  {k:14} = {vd['price']:>10} {vd.get('unit','')}/u")
-            lines.append("\nCAPITAL FRACTIONS")
+            lines.append("\nFRACCIONES DE CAPITAL")
             for k, val in p["capital_fracs"].items():
                 lines.append(f"  {k:32} = {val*100:>5.1f} %")
-            lines.append("\nCOM COEFFICIENTS (Turton Eq 8.2)")
-            lines.append(f"  α  (FCI con dep)  = 0.180")
-            lines.append(f"  β  (Labor coef)   = 2.73")
-            lines.append(f"  γ  (overhead)     = {spin_gamma.value():.2f} ← editable")
-            lines.append(f"\nHEAT INTEGRATION  = {spin_hi.value():.2f}  ← editable")
+            lines.append("\nCOEFICIENTES COM (Turton Ec. 8.2)")
+            lines.append(f"  α  (FCI con dep)     = 0.180")
+            lines.append(f"  β  (coef. mano obra) = 2.73")
+            lines.append(f"  γ  (overhead)        = {spin_gamma.value():.2f} ← editable")
+            lines.append(f"\nINTEGRACIÓN DE CALOR  = {spin_hi.value():.2f}  ← editable")
             preview.setPlainText("\n".join(lines))
 
         _refresh_preview()

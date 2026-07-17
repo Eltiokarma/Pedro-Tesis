@@ -66,6 +66,12 @@ TOK = {
     # chip de tipo
     "tag_bg":       "#ede7d6",
     "tag_ink":      "#6b6253",
+    # fases (dots LIQ/VAP/GAS/2-φ — antes PHASE_DOT hardcodeado en
+    # stream_inspector; fijos, no siguen al acento elegible)
+    "phase_liq":    "#3548b4",
+    "phase_vap":    "#c26329",
+    "phase_gas":    "#b8841a",
+    "phase_2ph":    "#0d6e78",
     # catálogo Sinnott (extensión HX riguroso)
     "sinnott":        "#6e3aa6",
     "sinnott_ink":    "#4a2873",
@@ -135,6 +141,30 @@ FONT_VALUE = ("IBM Plex Mono", 11.5, 500) # valores numéricos · tabular
 FONT_LABEL = ("IBM Plex Sans", 10, 600)   # labels/kickers · caps
 
 
+def qfont(spec):
+    """QFont desde un token de tipografía (familia, pt, peso 100-900).
+
+    Único constructor de fuentes del frontend: resuelve la familia vía
+    pfd_fonts (fallback si los Plex no están embebidos) y usa la escala
+    de pesos CSS que Qt6 adopta nativamente.  Import lazy de Qt para
+    mantener el módulo headless-safe.
+    """
+    from PySide6.QtGui import QFont
+    fam, pt, weight = spec
+    try:
+        import pfd_fonts
+        if "Mono" in fam:
+            fam = pfd_fonts.MONO
+        elif "Sans" in fam:
+            fam = pfd_fonts.SANS
+    except Exception:
+        pass
+    f = QFont(fam)
+    f.setPointSizeF(float(pt))
+    f.setWeight(QFont.Weight(int(weight)))
+    return f
+
+
 # ════════════════════════════════════════════════════════
 #  STROKES — 2 pesos (artboard 1a)
 # ════════════════════════════════════════════════════════
@@ -194,6 +224,8 @@ THEME_LIGHT = {
     "orange": "#c26329", "orange_bg": "#f5e1d0",
     "danger": "#b8453a", "danger_bg": "#f3dcd8",
     "tag_bg": "#ede7d6", "tag_ink": "#6b6253",
+    "phase_liq": "#3548b4", "phase_vap": "#c26329",
+    "phase_gas": "#b8841a", "phase_2ph": "#0d6e78",
     "sinnott": "#6e3aa6", "sinnott_ink": "#4a2873", "sinnott_bg": "#efebf7",
     "sinnott_ribbon": "#8a5cc0", "turton_ink": "#3548b4",
     "status_fallback": "#5f7bd6",
@@ -213,6 +245,8 @@ THEME_DARK = {
     "orange": "#d18a55", "orange_bg": "#2e2118",
     "danger": "#d97262", "danger_bg": "#2e1a17",
     "tag_bg": "#2a241d", "tag_ink": "#a59a89",
+    "phase_liq": "#92a0ef", "phase_vap": "#d18a55",
+    "phase_gas": "#d8aa3a", "phase_2ph": "#5dc1cc",
     "sinnott": "#b598e0", "sinnott_ink": "#d3befa", "sinnott_bg": "#2a2535",
     "sinnott_ribbon": "#9978c9", "turton_ink": "#b4befa",
     "status_fallback": "#9aaef0",

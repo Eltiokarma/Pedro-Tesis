@@ -36,6 +36,7 @@ from PySide6.QtWidgets import (
 )
 
 import pfd_fonts
+import flowsheet_units as funits
 from block_inspector import (
     TOK, ROW_PAD, SECT_GAP, PANEL_W,
     SpecField, _PrefsBus,
@@ -46,13 +47,26 @@ from block_inspector import (
 #  CONSTANTES VISUALES — phases + roles (replica del jsx)
 # ════════════════════════════════════════════════════════
 
-PHASE_DOT = {
-    "liquid":    "#3548b4",   # azul cobalto
-    "vapor":     "#c26329",   # naranja
-    "gas":       "#b8841a",   # ámbar
-    "two_phase": "#0d6e78",   # teal
-    "":          "#bab2a3",   # ghost
-}
+class _PhaseDot(dict):
+    """Dot de fase → token de TOK, leído en caliente (respeta tema).
+    Mantiene la API dict que ya consumen este módulo y streams_table."""
+    _MAP = {
+        "liquid":    "phase_liq",
+        "vapor":     "phase_vap",
+        "gas":       "phase_gas",
+        "two_phase": "phase_2ph",
+        "":          "ink_ghost",
+    }
+
+    def __getitem__(self, key):
+        return TOK[self._MAP[key]]
+
+    def get(self, key, default=None):
+        tok = self._MAP.get(key)
+        return TOK[tok] if tok else default
+
+
+PHASE_DOT = _PhaseDot()
 PHASE_LABEL = {
     "liquid": "LIQ", "vapor": "VAP", "gas": "GAS",
     "two_phase": "2-φ", "": "—",
@@ -120,7 +134,7 @@ class _StreamHeader(QFrame):
 
         sub_row = QHBoxLayout()
         sub_row.setContentsMargins(4, 0, 0, 0); sub_row.setSpacing(6)
-        self._chip = QLabel("STREAM")
+        self._chip = QLabel("CORRIENTE")
         cf = QFont(pfd_fonts.SANS, 8); cf.setBold(True)
         self._chip.setFont(cf)
         self._chip.setStyleSheet(
@@ -210,9 +224,8 @@ class _PathStrip(QFrame):
             f"border-radius:26px;"
         )
         mid.addWidget(bubble, alignment=Qt.AlignCenter)
-        # mass flow text
-        mf_txt = f"{mass_flow:,.0f}".replace(",", " ")
-        mf = QLabel(f"{mf_txt}  tm/yr")
+        # mass flow text — formateador único (respeta sistema de unidades)
+        mf = QLabel(funits.format_flow(mass_flow, funits.active_unit("flow")))
         mf.setFont(QFont(pfd_fonts.MONO, 9))
         mf.setStyleSheet(f"color:{TOK['ink_mute']};")
         mf.setAlignment(Qt.AlignCenter)
@@ -1638,7 +1651,7 @@ class StreamInspectorDock(QDockWidget):
     una sola vez en FlowsheetMainWindow y se reusa via show_for()."""
 
     def __init__(self, parent=None):
-        super().__init__("Stream Inspector", parent)
+        super().__init__("Inspector de corriente", parent)
         self.setObjectName("StreamInspectorDock")
         self.setAllowedAreas(Qt.RightDockWidgetArea | Qt.LeftDockWidgetArea)
         self.setFeatures(

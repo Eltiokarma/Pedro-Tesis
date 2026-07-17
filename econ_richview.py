@@ -33,7 +33,7 @@ from PySide6.QtWidgets import (
 )
 
 import pfd_fonts
-from tokens import _PrefsBus, fmt_pct, fmt_years
+from tokens import _PrefsBus, fmt_pct, fmt_years, qfont, FONT_LABEL
 from inspector_widgets import _tok, MetricCard, MetricGrid, StatusBadge
 from econ_widgets import FinancialTable
 
@@ -94,7 +94,7 @@ class _PanelHeader(QFrame):
         # bloque texto
         txt = QVBoxLayout(); txt.setSpacing(1); txt.setContentsMargins(0, 0, 0, 0)
         self._lab_tag = QLabel(tag)
-        self._lab_tag.setFont(QFont(pfd_fonts.SANS, 7, QFont.Bold))
+        self._lab_tag.setFont(qfont(FONT_LABEL))
         self._lab_title = QLabel(title)
         self._lab_title.setFont(QFont(pfd_fonts.MONO, 12))
         self._lab_desc = QLabel(desc)
@@ -139,7 +139,7 @@ class _Kpi(QFrame):
         super().__init__(parent)
         self._tone = tone
         v = QVBoxLayout(self); v.setContentsMargins(0, 0, 0, 0); v.setSpacing(1)
-        self._k = QLabel(kicker.upper()); self._k.setFont(QFont(pfd_fonts.SANS, 7, QFont.Bold))
+        self._k = QLabel(kicker.upper()); self._k.setFont(qfont(FONT_LABEL))
         self._v = QLabel(value); self._v.setFont(QFont(pfd_fonts.MONO, 16, QFont.DemiBold))
         self._s = QLabel(sub); self._s.setFont(QFont(pfd_fonts.SANS, 8))
         v.addWidget(self._k); v.addWidget(self._v); v.addWidget(self._s)
@@ -166,7 +166,7 @@ class _HeroStrip(QFrame):
         # NPV grande (1.5fr)
         npv_box = QVBoxLayout(); npv_box.setSpacing(2); npv_box.setContentsMargins(0, 0, 0, 0)
         self._npv_k = QLabel(f"NPV · @ {hurdle:.0f} %" if hurdle else "NPV")
-        self._npv_k.setFont(QFont(pfd_fonts.SANS, 7, QFont.Bold))
+        self._npv_k.setFont(qfont(FONT_LABEL))
         row = QHBoxLayout(); row.setSpacing(5); row.setContentsMargins(0, 0, 0, 0)
         neg = (npv or 0) < 0
         self._npv_value = npv
