@@ -2805,6 +2805,42 @@ def _avoid_obstacles(pts, obstacles, padding=12, max_iter=24):
     return _dedupe_pts(pts)
 
 
+def _orthogonalize(pts):
+    """Red de seguridad de la REGLA ORTOGONAL de los streams.
+
+    Los pases de routing (_avoid_obstacles, _apply_lane_offset) mueven
+    extremos de segmentos y en algunos casos dejaban un tramo diagonal
+    (movían un solo extremo); _compute_polyline además tenía atajos
+    "casi alineado → línea directa" con tolerancia <2px que producían
+    segmentos levemente inclinados.  Acá cualquier segmento diagonal se
+    reemplaza por un codo H→V o V→H, continuando la dirección del
+    segmento anterior para mantener la alternancia (los stubs de <2px
+    que esto introduce son invisibles y _simplify_orthogonal colapsa
+    los tramos colineales resultantes)."""
+    if len(pts) < 4:
+        return pts
+    out = [pts[0], pts[1]]
+    for i in range(2, len(pts), 2):
+        x0, y0 = out[-2], out[-1]
+        x1, y1 = pts[i], pts[i + 1]
+        if abs(x1 - x0) > 0.5 and abs(y1 - y0) > 0.5:
+            prev_horizontal = (len(out) >= 4
+                               and abs(out[-1] - out[-3]) <= 0.5)
+            prev_vertical = (len(out) >= 4
+                             and abs(out[-2] - out[-4]) <= 0.5)
+            if prev_horizontal:
+                out += [x1, y0, x1, y1]          # sigue H, luego V
+            elif prev_vertical:
+                out += [x0, y1, x1, y1]          # sigue V, luego H
+            elif abs(x1 - x0) >= abs(y1 - y0):
+                out += [x1, y0, x1, y1]          # dominante H primero
+            else:
+                out += [x0, y1, x1, y1]          # dominante V primero
+        else:
+            out += [x1, y1]
+    return out
+
+
 def _simplify_orthogonal(pts, eps=0.5):
     """Limpia una polyline ortogonal eliminando puntos interiores que son
     colineales con sus vecinos.  Esto colapsa los tramos "de ida y vuelta
@@ -4554,6 +4590,11 @@ class StreamItem(QGraphicsPathItem):
             pts = [x1, y1, x2, y2]
         if not pts:
             return
+        # REGLA ORTOGONAL: los streams full-conectados nunca llevan tramos
+        # diagonales — red de seguridad sobre el resultado de todos los
+        # pases de routing (los flotantes sí dibujan la recta directa).
+        if b_src is not None and b_dst is not None:
+            pts = _orthogonalize(pts)
         # Sanear la polyline: quitar backtracks (tramos que van y vuelven
         # sobre la misma línea, p. ej. detours/lanes que dejan picos
         # colineales).  Preserva los extremos (puertos).
