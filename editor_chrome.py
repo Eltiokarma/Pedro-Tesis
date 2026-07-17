@@ -1827,7 +1827,7 @@ def _isa_heuristic(eq_type: str) -> Optional[str]:
 #     CUERPO del símbolo: trazo + tinte de relleno, leídos en caliente de
 #     tokens.STATUS_TOKEN / STATUS_FILL_TOKEN.  Reemplaza al halo-caja
 #     _StatusHaloItem que dibujaba un rectángulo alrededor del equipo.
-#       ok      → trazo neutro + dot verde (el éxito no grita)
+#       ok      → trazo verde + fill green_bg + dot verde
 #       warning → trazo amber + fill amber_bg + chip "!"
 #       error   → trazo danger + fill danger_bg + chip "!" (color + símbolo)
 #       stale   → trazo ink_soft, glifo atenuado ("esto ya no vale")
@@ -1938,13 +1938,11 @@ class IsaGlyphItem(QGraphicsItem):
         if self._warning and status not in ("error", "warning"):
             status = "warning"
 
-        # Cuerpo del símbolo según STATUS (1b): trazo + tinte de relleno.
-        # ok usa trazo neutro (el éxito no grita — lo señala el dot);
+        # Cuerpo del símbolo según STATUS (1b): trazo + tinte de relleno,
+        # también en ok — el equipo cambia de color al resolver (verde
+        # suave), no solo un dot que se pierde entre los puertos.
         # solving atenúa el trazo mientras el solver corre.
-        if status == "ok":
-            stroke = QColor(TOK["ink_mute"])
-        else:
-            stroke = QColor(_tokens.status_hex(status))
+        stroke = QColor(_tokens.status_hex(status))
         if self._state == "solving":
             stroke = QColor(TOK["ink_soft"])
         stroke_w = _tokens.STROKE_OUTLINE
