@@ -6337,10 +6337,6 @@ class FlowsheetMainWindow(QMainWindow):
             v.setDragMode(QGraphicsView.NoDrag)
             v.viewport().setCursor(Qt.CrossCursor)
             return
-        elif tool_id == "text":
-            v.setDragMode(QGraphicsView.NoDrag)
-            v.viewport().setCursor(Qt.IBeamCursor)
-            return
         v.viewport().setCursor(Qt.ArrowCursor)
 
     def update_solver_chip(self, state: str, iter_: int = 0, dt: float = 0.0):

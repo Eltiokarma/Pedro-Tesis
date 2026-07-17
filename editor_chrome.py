@@ -82,6 +82,17 @@ BLOCK_DIMS: Dict[str, Tuple[int, int]] = {
     "hx_aircooler":  (70, 52),
     "hx_placa":      (56, 50),
     "cristalizador": (52, 76),
+    # Rediseño 1d: seis parejas que compartían glifo e invertían o
+    # borraban semántica.  Geometría de referencia: patch PFD-ICN-002
+    # de pfd_symbols (splitter-flow-divider, reactor-pfr-coiled,
+    # compressor-reciprocating, whb steam drum, packing-random,
+    # cooling-tower-natural).
+    "splitter":        (56, 44),
+    "reactor_pfr":     (76, 46),
+    "compresor_recip": (64, 48),
+    "hx_whb":          (84, 56),
+    "empaque":         (48, 64),
+    "torre_nat":       (56, 64),
 }
 
 # Mapeo del tipo del mockup → eq_type canónico del catálogo
@@ -111,14 +122,15 @@ PALETTE_LABELS: Dict[str, str] = {
 # bajo el botón temáticamente más cercano para que TODO el catálogo
 # siga siendo alcanzable desde los menús de variantes (long-press).
 PALETTE_GROUPS: Dict[str, Tuple[str, ...]] = {
-    "reactor":   ("reactor",),
-    "mezclador": ("mezclador", "valvula"),
+    "reactor":   ("reactor", "reactor_pfr"),
+    "mezclador": ("mezclador", "splitter", "valvula"),
     "separador": ("separador", "tambor", "ciclon", "centrifuga",
                   "filtro", "secador", "cristalizador"),
-    "columna":   ("columna", "platos", "torre_enf"),
-    "hx":        ("hx", "hx_kettle", "hx_aircooler", "hx_placa",
-                  "horno", "caldera"),
-    "bomba":     ("bomba", "compresor", "ventilador"),
+    "columna":   ("columna", "platos", "empaque", "torre_enf",
+                  "torre_nat"),
+    "hx":        ("hx", "hx_kettle", "hx_whb", "hx_aircooler",
+                  "hx_placa", "horno", "caldera"),
+    "bomba":     ("bomba", "compresor", "compresor_recip", "ventilador"),
     "tanque":    ("tanque", "ambient"),
 }
 
@@ -200,6 +212,142 @@ class BlockGlyph:
         # junction circle
         p.setBrush(fill_brush)
         p.drawEllipse(QPointF(w/2-1, h/2), 4.0, 4.0)
+
+    @staticmethod
+    def _draw_splitter(p, w, h, stroke, fill_brush, sw):
+        # divisor de flujo 1→2 — espejo del mixer (rediseño 1d: antes el
+        # splitter se dibujaba como mixer y la semántica quedaba invertida)
+        p.setBrush(Qt.NoBrush)
+        path = QPainterPath()
+        path.moveTo(6, h/2); path.lineTo(w/2+2, h/2)
+        p.drawPath(path)
+        path2 = QPainterPath()
+        path2.moveTo(w/2+2, h/2); path2.lineTo(w-6, 6)
+        p.drawPath(path2)
+        path3 = QPainterPath()
+        path3.moveTo(w/2+2, h/2); path3.lineTo(w-6, h-6)
+        p.drawPath(path3)
+        # flechitas de salida (semántica divergente explícita)
+        ghost = QColor(stroke); ghost.setAlphaF(0.7)
+        p.setPen(QPen(ghost, 1.0))
+        p.drawLine(QPointF(w-11, 6), QPointF(w-6, 6))
+        p.drawLine(QPointF(w-6, 6), QPointF(w-9, 10))
+        p.drawLine(QPointF(w-11, h-6), QPointF(w-6, h-6))
+        p.drawLine(QPointF(w-6, h-6), QPointF(w-9, h-10))
+        # nodo de división
+        p.setPen(QPen(stroke, sw))
+        p.setBrush(fill_brush)
+        p.drawEllipse(QPointF(w/2+1, h/2), 4.0, 4.0)
+
+    @staticmethod
+    def _draw_reactor_pfr(p, w, h, stroke, fill_brush, sw):
+        # PFR tubular — carcasa horizontal + serpentín (ref
+        # reactor-pfr-coiled): distinto del CSTR agitado
+        p.drawRoundedRect(QRectF(6, h/2-14, w-12, 28), 6, 6)
+        # serpentín: 4 lazos
+        coil = QColor(stroke); coil.setAlphaF(0.75)
+        p.setPen(QPen(coil, 1.0)); p.setBrush(Qt.NoBrush)
+        n = 4
+        x0, x1 = 14.0, w - 14.0
+        span = (x1 - x0) / n
+        path = QPainterPath()
+        path.moveTo(x0, h/2)
+        for i in range(n):
+            cx = x0 + span * (i + 0.5)
+            path.quadTo(cx, h/2 - 22, x0 + span * (i + 1), h/2)
+            path.quadTo(cx, h/2 + 22, x0 + span * (i + 0.55), h/2)
+        p.drawPath(path)
+        # flechita de flujo
+        p.setPen(QPen(stroke, 1.2))
+        p.drawLine(QPointF(x1 - 2, h/2), QPointF(x1 + 4, h/2))
+
+    @staticmethod
+    def _draw_compresor_recip(p, w, h, stroke, fill_brush, sw):
+        # compresor recíproco — cilindro + pistón + biela y cigüeñal
+        # (antes los 4 tipos de compresor compartían el glifo centrífugo)
+        p.drawRect(QRectF(6, h/2-11, w*0.52, 22))
+        # pistón dentro del cilindro
+        ghost = QColor(stroke); ghost.setAlphaF(0.6)
+        p.setPen(QPen(ghost, 1.2)); p.setBrush(Qt.NoBrush)
+        px_ = 6 + w*0.52*0.45
+        p.drawLine(QPointF(px_, h/2-8), QPointF(px_, h/2+8))
+        # biela
+        p.setPen(QPen(stroke, 1.2))
+        crank_x = w - 13
+        p.drawLine(QPointF(px_, h/2), QPointF(crank_x - 4, h/2))
+        # cigüeñal (círculo)
+        p.setBrush(fill_brush)
+        p.drawEllipse(QPointF(crank_x, h/2), 7.0, 7.0)
+        p.setBrush(stroke); p.setPen(Qt.NoPen)
+        p.drawEllipse(QPointF(crank_x - 3, h/2 - 3), 1.6, 1.6)
+        # base
+        p.setPen(QPen(stroke, 1.2))
+        p.drawLine(QPointF(10, h-4), QPointF(w-10, h-4))
+
+    @staticmethod
+    def _draw_hx_whb(p, w, h, stroke, fill_brush, sw):
+        # waste-heat boiler — carcasa kettle + STEAM DRUM superior con
+        # salida de vapor (ref whb steam drum): distinto del kettle
+        drum_h = 12.0
+        # carcasa principal (gases calientes)
+        p.drawRoundedRect(QRectF(6, drum_h + 8, w-12, h - drum_h - 16), 6, 6)
+        # steam drum arriba
+        p.drawRoundedRect(QRectF(w/2-16, 2, 32, drum_h), 6, 6)
+        # bajantes drum↔shell
+        ghost = QColor(stroke); ghost.setAlphaF(0.6)
+        p.setPen(QPen(ghost, 1.0)); p.setBrush(Qt.NoBrush)
+        p.drawLine(QPointF(w/2-9, drum_h + 2), QPointF(w/2-9, drum_h + 8))
+        p.drawLine(QPointF(w/2+9, drum_h + 2), QPointF(w/2+9, drum_h + 8))
+        # tubos de gas (2 líneas)
+        p.drawLine(QPointF(12, h/2 + 4), QPointF(w-12, h/2 + 4))
+        p.drawLine(QPointF(12, h/2 + 9), QPointF(w-12, h/2 + 9))
+        # salida de vapor del drum
+        p.setPen(QPen(stroke, 1.2))
+        p.drawLine(QPointF(w/2, 2), QPointF(w/2, -3))
+        # nivel de agua en el drum
+        lvl = QColor(stroke); lvl.setAlphaF(0.4)
+        p.setPen(QPen(lvl, 1.0))
+        p.drawLine(QPointF(w/2-13, drum_h - 3), QPointF(w/2+13, drum_h - 3))
+
+    @staticmethod
+    def _draw_empaque(p, w, h, stroke, fill_brush, sw):
+        # sección de columna EMPACADA — hatch diagonal (ref
+        # packing-random/structured): distinto de la de platos
+        p.drawRoundedRect(QRectF(w/2-12, 6, 24, h-12), 2, 2)
+        ghost = QColor(stroke); ghost.setAlphaF(0.55)
+        p.setPen(QPen(ghost, 0.9)); p.setBrush(Qt.NoBrush)
+        # hatch ↘ dentro del cuerpo (entre y=14 y h-14)
+        y0, y1 = 14.0, h - 14.0
+        step = (y1 - y0) / 4
+        for i in range(5):
+            y = y0 + i * step
+            p.drawLine(QPointF(w/2-9, y), QPointF(w/2+9, y + step*0.7))
+        # límites del lecho
+        p.setPen(QPen(ghost, 1.1))
+        p.drawLine(QPointF(w/2-11, y0), QPointF(w/2+11, y0))
+        p.drawLine(QPointF(w/2-11, y1 + step*0.7), QPointF(w/2+11, y1 + step*0.7))
+
+    @staticmethod
+    def _draw_torre_nat(p, w, h, stroke, fill_brush, sw):
+        # torre de enfriamiento de TIRO NATURAL — hiperboloide (ref
+        # cooling-tower-natural): distinta de la inducida con ventilador
+        p.setBrush(fill_brush)
+        path = QPainterPath()
+        path.moveTo(w/2-18, h-6)
+        path.cubicTo(w/2-8, h*0.55, w/2-8, h*0.35, w/2-12, 8)
+        path.lineTo(w/2+12, 8)
+        path.cubicTo(w/2+8, h*0.35, w/2+8, h*0.55, w/2+18, h-6)
+        path.closeSubpath()
+        p.drawPath(path)
+        # pluma de vapor
+        ghost = QColor(stroke); ghost.setAlphaF(0.5)
+        p.setPen(QPen(ghost, 1.0)); p.setBrush(Qt.NoBrush)
+        wisp = QPainterPath()
+        wisp.moveTo(w/2-6, 6)
+        wisp.quadTo(w/2-2, 1, w/2+3, 4)
+        p.drawPath(wisp)
+        # agua en la base
+        p.drawLine(QPointF(w/2-14, h-9), QPointF(w/2+14, h-9))
 
     @staticmethod
     def _draw_separador(p, w, h, stroke, fill_brush, sw):
@@ -1012,11 +1160,10 @@ class _ToolButton(QToolButton):
             p.setFont(QFont(pfd_fonts.SANS, 14, QFont.Medium))
             glyph = {
                 "select":  "↖",
-                "pan":     "✋",
+                "pan":     "✥",
                 "connect": "⟶",
-                "text":    "T",
                 "mass":    "→",
-                "energy":  "⚡",
+                "energy":  "↯",
             }.get(self._id, "?")
             p.drawText(self.rect(), Qt.AlignCenter, glyph)
 
@@ -1045,11 +1192,13 @@ class EditorPalette(QFrame):
     moreRequested        = Signal()
     streamRequested      = Signal(str)        # 'mass' | 'energy'
 
+    # ("text", "Anotación") se quitó del set: era un stub que solo
+    # cambiaba el cursor.  Se re-agrega cuando exista la colocación de
+    # texto real (rediseño 1g).
     TOOLS = [
         ("select",  "Seleccionar (V)"),
         ("pan",     "Pan (espacio)"),
         ("connect", "Conectar stream (C)"),
-        ("text",    "Anotación (T)"),
     ]
     # Corrientes flotantes: click → crea la flecha en el centro de la
     # vista; el usuario arrastra los extremos hasta un puerto para
@@ -1526,10 +1675,10 @@ EQ_TYPE_TO_ISA: Dict[str, str] = {
     "Centrifuge — disc stack": "centrifuga",
     "Compressor — axial": "compresor",
     "Compressor — centrifugal": "compresor",
-    "Compressor — reciprocating": "compresor",
+    "Compressor — reciprocating": "compresor_recip",
     "Compressor — rotary": "compresor",
     "Cooling tower — induced draft": "torre_enf",
-    "Cooling tower — natural draft": "torre_enf",
+    "Cooling tower — natural draft": "torre_nat",
     "Crystallizer": "cristalizador",
     "Cyclone — gas/solid": "ciclon",
     "Decanter — gravity": "tambor",
@@ -1541,8 +1690,8 @@ EQ_TYPE_TO_ISA: Dict[str, str] = {
     "Fired heater — non-reformer": "horno",
     "Fired heater — reformer": "horno",
     "Heat exch. — U-tube": "hx",
-    "Heat exch. — WHB field erected": "hx_kettle",
-    "Heat exch. — WHB packaged": "hx_kettle",
+    "Heat exch. — WHB field erected": "hx_whb",
+    "Heat exch. — WHB packaged": "hx_whb",
     "Heat exch. — air cooler": "hx_aircooler",
     "Heat exch. — condenser air-cooled": "hx_aircooler",
     "Heat exch. — condenser shell-tube": "hx",
@@ -1555,17 +1704,17 @@ EQ_TYPE_TO_ISA: Dict[str, str] = {
     "Heat exch. — spiral plate": "hx_placa",
     "Mixer — inline": "mezclador",
     "Mixer — static": "mezclador",
-    "Packing — random": "platos",
-    "Packing — structured": "platos",
+    "Packing — random": "empaque",
+    "Packing — structured": "empaque",
     "Pump — centrifugal": "bomba",
     "Pump — positive displacement": "bomba",
     "Pump — reciprocating": "bomba",
     "Reactor — CSTR (agitado)": "reactor",
-    "Reactor — PFR (tubular)": "reactor",
+    "Reactor — PFR (tubular)": "reactor_pfr",
     "Reactor — autoclave": "reactor",
     "Reactor — jacketed agitated": "reactor",
     "Reactor — jacketed non-agit.": "reactor",
-    "Splitter — flow divider": "mezclador",
+    "Splitter — flow divider": "splitter",
     "Storage tank — cone roof": "tanque",
     "Storage tank — floating roof": "tanque",
     "Tower (column shell)": "columna",
