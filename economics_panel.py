@@ -24,6 +24,7 @@ from PySide6.QtCore import Qt
 
 import econ_defaults as ed
 import simulate_engine as se
+from tokens import TOK
 
 
 def _fmt_usd(x):
@@ -358,7 +359,7 @@ class EconomicsPanel(QDialog):
                             self).exec()
         except Exception as e:                       # pragma: no cover
             self.lbl_status.setText(
-                f"<b style='color:#c0392b'>Monte Carlo falló:</b> "
+                f"<b style='color:{TOK['danger']}'>Monte Carlo falló:</b> "
                 f"{type(e).__name__}: {e}")
 
     # ── ejecución ────────────────────────────────────────────────────
@@ -373,7 +374,7 @@ class EconomicsPanel(QDialog):
         except Exception as e:                       # pragma: no cover
             self.last_result = None
             self.lbl_status.setText(
-                f"<b style='color:#c0392b'>Error al calcular:</b> "
+                f"<b style='color:{TOK['danger']}'>Error al calcular:</b> "
                 f"{type(e).__name__}: {e}")
             self.txt_results.clear()
             return
@@ -391,7 +392,7 @@ class EconomicsPanel(QDialog):
                     + solver.get("consistency_errors", []))
             detail = "\n".join(f"   · {m}" for m in errs[:12]) or "   (sin detalle)"
             self.lbl_status.setText(
-                f"<b style='color:#c0392b'>El flowsheet no resolvió "
+                f"<b style='color:{TOK['danger']}'>El flowsheet no resolvió "
                 f"(status: {status}).</b><br>No se muestran indicadores "
                 f"económicos para evitar números engañosos.")
             self.txt_results.setPlainText(
@@ -405,7 +406,7 @@ class EconomicsPanel(QDialog):
 
         warn = ""
         if status == "warning":
-            warn = ("  <span style='color:#b9770e'>(solver con warnings — "
+            warn = (f"  <span style='color:{TOK['amber']}'>(solver con warnings — "
                     "revisar balances)</span>")
         self.lbl_status.setText(
             f"<b>Veredicto:</b> {econ.get('veredicto', '—')}"
@@ -733,7 +734,7 @@ class MonteCarloPanel(QDialog):
             tor = mh.run_tornado(self.flowsheet_dict, variables, self.econ_inputs)
         except Exception as e:
             self.lbl.setText(
-                f"<b style='color:#c0392b'>Monte Carlo falló:</b> "
+                f"<b style='color:{TOK['danger']}'>Monte Carlo falló:</b> "
                 f"{type(e).__name__}: {e}")
             return
         self.last_result = res

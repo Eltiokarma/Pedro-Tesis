@@ -71,6 +71,7 @@ from PySide6.QtWidgets import (
 )
 from PySide6.QtGui import QUndoStack, QUndoCommand
 
+import tokens as _tokens
 import equipment_costs as eq
 import equipment_ports as ep
 import equipment_icons as eicon
@@ -219,7 +220,9 @@ COLOR_CANVAS_BG     = QColor("#fbfaf6")   # papel de dibujo (warm off-white)
 COLOR_GRID          = QColor(13, 13, 13, 18)   # negro alpha=18/255 (~7%)
 COLOR_BLOCK_FILL    = QColor("#ffffff")
 COLOR_BLOCK_BORDER  = QColor("#5c6bc0")
-COLOR_BLOCK_BORDER_SEL = QColor("#283593")
+# Selección: anillo en el acento del tema (tokens 1a) — leído en caliente.
+def _selection_qcolor() -> QColor:
+    return QColor(_tokens.TOK["accent"])
 COLOR_BLOCK_TEXT    = QColor("#1a1a1a")
 COLOR_BLOCK_SUB     = QColor("#6c6c70")
 COLOR_PORT_FREE     = QColor("#bbbbbb")
@@ -258,14 +261,12 @@ PORT_KIND_COLORS = {
 COLOR_LABEL_BG      = QColor(255, 255, 255, 220)
 
 # ---- Status visual (semáforo del solver) ----
-# Cuatro estados que pinta cada bloque/stream según el último solve.
+# Un solo semáforo para toda la app: los colores viven en tokens.py
+# (STATUS_TOKEN) y se leen en caliente para respirar el tema activo.
 # Coordinado con SolverResult.{block_status, stream_status, overall_status}.
-COLOR_STATUS_OK      = QColor("#2e7d32")   # verde — balance OK
-COLOR_STATUS_WARN    = QColor("#f9a825")   # ámbar — warnings
-COLOR_STATUS_ERROR   = QColor("#c62828")   # rojo — error / desbalance
-COLOR_STATUS_UNRUN   = QColor("#1976d2")   # azul — no ejecutado / stale
-COLOR_STATUS_DIRTY   = QColor("#7b1fa2")   # violeta — flowsheet editado
-                                            # post-solve (datos stale)
+def status_qcolor(status: str) -> QColor:
+    """QColor del semáforo para un status del solver (tokens 1a)."""
+    return QColor(_tokens.status_hex(status))
 
 # Corrientes de SERVICIO (utility): color por temperatura para que el user
 # distinga de un vistazo el servicio CALIENTE (vapor / aceite térmico) del
@@ -291,16 +292,6 @@ def _lerp_color(c0, c1, t):
         int(round(c0.green() + (c1.green() - c0.green()) * t)),
         int(round(c0.blue()  + (c1.blue()  - c0.blue())  * t)),
     )
-
-# Mapeo status string → color
-STATUS_COLORS = {
-    "ok":      COLOR_STATUS_OK,
-    "warning": COLOR_STATUS_WARN,
-    "error":   COLOR_STATUS_ERROR,
-    "unrun":   COLOR_STATUS_UNRUN,
-    "stale":   COLOR_STATUS_DIRTY,
-    "empty":   COLOR_STATUS_UNRUN,
-}
 
 # Iconos texto para indicar status global en la barra
 STATUS_ICONS = {
@@ -3423,7 +3414,7 @@ class BlockItem(QGraphicsItemGroup):
             self.W + 2*halo_pad, self.H + 2*halo_pad,
             parent=self)
         self.status_halo.setBrush(Qt.NoBrush)
-        self.status_halo.setPen(QPen(COLOR_STATUS_UNRUN, 1.5, Qt.SolidLine))
+        self.status_halo.setPen(QPen(status_qcolor("unrun"), 1.5, Qt.SolidLine))
         self.status_halo.setZValue(-1.0)   # debajo del símbolo
         self.status_halo.setAcceptedMouseButtons(Qt.NoButton)
 
@@ -3742,7 +3733,7 @@ class BlockItem(QGraphicsItemGroup):
         if selected:
             # halo de selección: borde índigo punteado alrededor del
             # bloque, sólo visible al estar seleccionado.
-            self.rect.setPen(QPen(COLOR_BLOCK_BORDER_SEL, 1.5, Qt.DashLine))
+            self.rect.setPen(QPen(_selection_qcolor(), 1.5, Qt.DashLine))
         else:
             # sin selección el rect queda invisible — el símbolo SVG
             # es la representación visual del bloque, no la caja.
@@ -3777,7 +3768,7 @@ class BlockItem(QGraphicsItemGroup):
         al halo de status del bloque.  Default 'stale' = azul (sin
         solve corrido o flowsheet editado posteriormente)."""
         self._status = status or "stale"
-        color = STATUS_COLORS.get(self._status, COLOR_STATUS_UNRUN)
+        color = status_qcolor(self._status)
         # Línea más gruesa para error, sólida para ok, punteada para stale
         if self._status == "error":
             pen = QPen(color, 2.5, Qt.SolidLine)
@@ -4213,9 +4204,9 @@ class StreamItem(QGraphicsPathItem):
         # prioridad para no ocultar un desbalance.
         if role == "utility":
             if self._status == "error":
-                return COLOR_STATUS_ERROR
+                return status_qcolor("error")
             if self._status == "warning":
-                return COLOR_STATUS_WARN
+                return status_qcolor("warning")
             is_hot, tmin, tmax = self._utility_loop_info()
             T = float(getattr(self.model, "temperature", 25.0) or 25.0)
             frac = (T - tmin) / (tmax - tmin) if (tmax - tmin) > 1e-6 else 0.5
@@ -4232,9 +4223,9 @@ class StreamItem(QGraphicsPathItem):
         # Status crítico sobreescribe el color por role (error o warning
         # vienen del último solve y son los más informativos para el user).
         if self._status == "error":
-            return COLOR_STATUS_ERROR
+            return status_qcolor("error")
         if self._status == "warning":
-            return COLOR_STATUS_WARN
+            return status_qcolor("warning")
         if self._status in ("stale", "unrun"):
             # gris-azul tenue para indicar "no resuelto / sin verificar"
             return QColor("#9aa5b1")
@@ -6884,11 +6875,11 @@ class FlowsheetMainWindow(QMainWindow):
                 # Datos stale: violeta + label específica
                 icon = STATUS_ICONS["stale"]
                 label = STATUS_LABELS["stale"]
-                color = COLOR_STATUS_DIRTY
+                color = status_qcolor("stale")
             else:
                 icon = STATUS_ICONS.get(st, "")
                 label = STATUS_LABELS.get(st, "")
-                color = STATUS_COLORS.get(st, COLOR_STATUS_UNRUN)
+                color = status_qcolor(st)
             # Wrappear el chip con color via HTML (statusbar acepta richtext)
             chip = (f'<span style="color:{color.name()}; '
                      f'font-weight:bold;">{icon} {label}</span>  ·  ')
