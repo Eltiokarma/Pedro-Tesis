@@ -869,7 +869,7 @@
    "pipe_roughness_m": 4.5e-05,
    "pressure_bar": 1.013,
    "pressure_locked": true,
-   "price_usd_per_tm": 0.0,
+   "price_usd_per_tm": 180.0,
    "reaction_warnings": [],
    "residence_time_s": null,
    "role": "feed",
