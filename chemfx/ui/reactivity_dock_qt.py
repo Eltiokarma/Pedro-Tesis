@@ -31,12 +31,10 @@ except ImportError:
 
 # Severidad → color: escala ÚNICA del sistema (tokens.severity_hex,
 # artboard 2a familia 5) — antes este dock tenía su propia copia.
+# Sin fallback hex: tokens.py es headless-safe y siempre importable.
 def _severity_color(sev: str) -> str:
-    try:
-        import tokens as _tokens
-        return _tokens.severity_hex(sev)
-    except Exception:
-        return "#9ca3af"
+    import tokens as _tokens
+    return _tokens.severity_hex(sev)
 
 _SEVERITY_ICON = {
     "critical": "🔴",
@@ -75,7 +73,9 @@ class ReactivityDock(QDockWidget):
 
         # Status label
         self._status_label = QLabel("(corré Solve para activar el predictor)")
-        self._status_label.setStyleSheet("color: #6b7280; font-size: 8.5pt;")
+        from tokens import TOK as _TOK, FONT_HINT as _FH
+        self._status_label.setStyleSheet(
+            f"color: {_TOK['ink_mute']}; font-size: {_FH[1]}pt;")
         layout.addWidget(self._status_label)
 
         # Tabs
