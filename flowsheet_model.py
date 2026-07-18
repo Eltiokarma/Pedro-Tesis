@@ -641,6 +641,13 @@ class Flowsheet:
     opex_extras: List[Dict] = field(default_factory=list)
     # Overrides de Fixed Operating Costs por 'Concept' del template Turton
     fixed_overrides: Dict[str, float] = field(default_factory=dict)
+    # Overrides económicos a nivel de flowsheet (Turton 8.2).  Hoy soporta
+    # 'com_gamma' — el multiplicador de overhead sobre costos variables
+    # (γ; default econ_defaults=1.23 para química standalone).  Se baja a
+    # 1.05-1.10 para refinería integrada / commodity con offtake.  Lo
+    # consume simulate_engine._economics; econ_inputs del CLI tiene
+    # precedencia sobre este valor embebido en el flowsheet.
+    econ_overrides: Dict[str, float] = field(default_factory=dict)
 
     def new_id(self):
         v = self._next_id
@@ -659,6 +666,7 @@ class Flowsheet:
             "_next_id":        self._next_id,
             "opex_extras":     list(self.opex_extras),
             "fixed_overrides": dict(self.fixed_overrides),
+            "econ_overrides":  dict(self.econ_overrides),
         }
 
     @staticmethod
@@ -700,4 +708,5 @@ class Flowsheet:
         fs._next_id        = d.get("_next_id", 1)
         fs.opex_extras     = list(d.get("opex_extras", []))
         fs.fixed_overrides = dict(d.get("fixed_overrides", {}))
+        fs.econ_overrides  = dict(d.get("econ_overrides", {}))
         return fs
