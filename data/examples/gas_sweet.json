@@ -1831,5 +1831,8 @@
    "vapor_fraction": 0.0,
    "waypoints": []
   }
+ },
+ "econ_overrides": {
+  "com_gamma": 1.05
  }
 }
