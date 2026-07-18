@@ -1262,6 +1262,7 @@ class _ToolButton(QToolButton):
                 "select":  "↖",
                 "pan":     "✥",
                 "connect": "⟶",
+                "text":    "T",
                 "mass":    "→",
                 "energy":  "↯",
             }.get(self._id, "?")
@@ -1292,13 +1293,13 @@ class EditorPalette(QFrame):
     moreRequested        = Signal()
     streamRequested      = Signal(str)        # 'mass' | 'energy'
 
-    # ("text", "Anotación") se quitó del set: era un stub que solo
-    # cambiaba el cursor.  Se re-agrega cuando exista la colocación de
-    # texto real (rediseño 1g).
+    # ("text", "Anotación") volvió en el ciclo 3 (artboard 3c): ya no
+    # es un stub — un click coloca la nota y entra en edición directa.
     TOOLS = [
         ("select",  "Seleccionar (V)"),
         ("pan",     "Pan (espacio)"),
         ("connect", "Conectar stream (C)"),
+        ("text",    "Anotación (T) — click coloca una nota de plano"),
     ]
     # Corrientes flotantes: click → crea la flecha en el centro de la
     # vista; el usuario arrastra los extremos hasta un puerto para
