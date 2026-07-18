@@ -5723,6 +5723,164 @@ class _PaperFrame(QGraphicsItemGroup):
 
 # ======================================================
 
+# ─────────────────────────────────────────────────────────────────────
+#  ANOTACIONES DE PLANO (ciclo 3, artboard 3c)
+# ─────────────────────────────────────────────────────────────────────
+# Texto de PLANO (rótulos, notas de revisión), no post-it: solo la
+# escala del sistema, peso regular/600, Sans o Mono, y color
+# ink / ink_mute / «revisión» (danger).  Siempre visibles en el export.
+
+ANNOT_SIZE_TOKENS = {"micro": _tokens.FONT_LABEL,
+                     "rotulo": _tokens.FONT_UI,
+                     "titulo": _tokens.FONT_TITLE}
+ANNOT_COLOR_TOKENS = {"ink": "ink", "suave": "ink_mute",
+                      "revision": "danger"}
+
+
+class AnnotationItem(QGraphicsTextItem):
+    """Nota de plano sobre el canvas.  Capa por encima de bloques y
+    streams (z=40) pero sin capturar puertos ni ruteo (solo ocupa su
+    propio bbox).  Pill label_bg debajo para legibilidad; la tinta se
+    re-tinta con el tema en el rebuild."""
+
+    Z = 40
+
+    def __init__(self, editor, ann: dict):
+        super().__init__(ann.get("text", ""))
+        self.editor = editor
+        self.ann = ann
+        self.setZValue(self.Z)
+        self.setFlags(QGraphicsItem.ItemIsMovable
+                      | QGraphicsItem.ItemIsSelectable
+                      | QGraphicsItem.ItemIsFocusable)
+        self.setPos(float(ann.get("x", 0)), float(ann.get("y", 0)))
+        w = float(ann.get("w", 0) or 0)
+        self.setTextWidth(w if w > 0 else -1)
+        self._move_before = None
+        self._edit_before = None
+        self._apply_style()
+
+    # ── estilo desde el dict (solo escala del sistema) ──
+    def _apply_style(self):
+        fam, pt, wt = ANNOT_SIZE_TOKENS.get(
+            self.ann.get("size", "rotulo"), _tokens.FONT_UI)
+        if self.ann.get("mono"):
+            fam = "IBM Plex Mono"
+        if self.ann.get("bold"):
+            wt = 600
+        self.setFont(_tokens.qfont((fam, pt, wt)))
+        tok = ANNOT_COLOR_TOKENS.get(self.ann.get("color", "ink"), "ink")
+        self.setDefaultTextColor(QColor(_tokens.TOK[tok]))
+        self.update()
+
+    def paint(self, p, opt, widget=None):
+        r = self.boundingRect().adjusted(-4, -2, 4, 2)
+        p.setPen(Qt.NoPen)
+        p.setBrush(QBrush(QColor(_tokens.TOK["label_bg"])))
+        p.drawRoundedRect(r, 5, 5)
+        super().paint(p, opt, widget)
+
+    # ── edición directa (doble-click · Esc/click-fuera confirma) ──
+    def start_edit(self, before=None):
+        self._edit_before = (before if before is not None
+                             else self.editor.begin_action())
+        self.setTextInteractionFlags(Qt.TextEditorInteraction)
+        self.setFocus(Qt.MouseFocusReason)
+        cur = self.textCursor()
+        cur.movePosition(cur.MoveOperation.End)
+        self.setTextCursor(cur)
+
+    def mouseDoubleClickEvent(self, ev):
+        if not (self.textInteractionFlags() & Qt.TextEditorInteraction):
+            self.start_edit()
+            ev.accept()
+            return
+        super().mouseDoubleClickEvent(ev)
+
+    def keyPressEvent(self, ev):
+        if (ev.key() == Qt.Key_Escape
+                and self.textInteractionFlags() & Qt.TextEditorInteraction):
+            self.clearFocus()
+            ev.accept()
+            return
+        super().keyPressEvent(ev)
+
+    def focusOutEvent(self, ev):
+        if self.textInteractionFlags() & Qt.TextEditorInteraction:
+            self.setTextInteractionFlags(Qt.NoTextInteraction)
+            txt = self.toPlainText().strip()
+            before = self._edit_before
+            self._edit_before = None
+            if txt:
+                self.ann["text"] = txt
+                self.setPlainText(txt)
+            else:
+                # vacía → se descarta (end_action no-opea si el neto
+                # del snapshot no cambió, p.ej. crear-y-cancelar)
+                self.editor.remove_annotation_item(self.ann)
+            if before is not None:
+                self.editor.end_action("Anotación", before)
+        super().focusOutEvent(ev)
+
+    # ── mover con undo ──
+    def mousePressEvent(self, ev):
+        if (ev.button() == Qt.LeftButton and self._move_before is None
+                and not (self.textInteractionFlags()
+                         & Qt.TextEditorInteraction)):
+            self._move_before = self.editor.begin_action()
+        super().mousePressEvent(ev)
+
+    def mouseReleaseEvent(self, ev):
+        super().mouseReleaseEvent(ev)
+        if self._move_before is not None:
+            before = self._move_before
+            self._move_before = None
+            self.ann["x"], self.ann["y"] = self.pos().x(), self.pos().y()
+            self.editor.end_action("Mover anotación", before)
+
+    # ── menú contextual: escala del sistema, color, eliminar ──
+    def contextMenuEvent(self, ev):
+        menu = QMenu()
+
+        def _set(key, val):
+            before = self.editor.begin_action()
+            self.ann[key] = val
+            self._apply_style()
+            self.editor.end_action("Estilo de anotación", before)
+
+        m_size = menu.addMenu("Tamaño")
+        for key, lbl in (("micro", "Micro (10)"),
+                         ("rotulo", "Rótulo (12)"),
+                         ("titulo", "Título (15)")):
+            a = m_size.addAction(lbl)
+            a.setCheckable(True)
+            a.setChecked(self.ann.get("size", "rotulo") == key)
+            a.triggered.connect(lambda _=False, k=key: _set("size", k))
+        m_col = menu.addMenu("Color")
+        for key, lbl in (("ink", "Tinta"), ("suave", "Suave"),
+                         ("revision", "Revisión")):
+            a = m_col.addAction(lbl)
+            a.setCheckable(True)
+            a.setChecked(self.ann.get("color", "ink") == key)
+            a.triggered.connect(lambda _=False, k=key: _set("color", k))
+        a_b = menu.addAction("Peso 600")
+        a_b.setCheckable(True)
+        a_b.setChecked(bool(self.ann.get("bold")))
+        a_b.triggered.connect(
+            lambda _=False: _set("bold", not self.ann.get("bold")))
+        a_m = menu.addAction("Mono")
+        a_m.setCheckable(True)
+        a_m.setChecked(bool(self.ann.get("mono")))
+        a_m.triggered.connect(
+            lambda _=False: _set("mono", not self.ann.get("mono")))
+        menu.addSeparator()
+        a_del = menu.addAction("Eliminar")
+        a_del.triggered.connect(
+            lambda _=False: self.editor.delete_annotation(self.ann))
+        menu.exec(ev.screenPos())
+        ev.accept()
+
+
 class FlowsheetScene(QGraphicsScene):
     """QGraphicsScene con grid de fondo + items del flowsheet.
     Mantiene mappings model_id → QGraphicsItem."""
@@ -5733,6 +5891,8 @@ class FlowsheetScene(QGraphicsScene):
         self.setSceneRect(-200, -200, 5000, 4000)
         self.block_items:  dict = {}      # block_id  → BlockItem
         self.stream_items: dict = {}      # stream_id → StreamItem
+        self.annotation_items: dict = {}  # ann_id    → AnnotationItem
+        self.editor = parent              # FlowsheetMainWindow (o None)
         self.paper_frame: "_PaperFrame|None" = None
         self._draw_grid()
 
@@ -5773,6 +5933,14 @@ class FlowsheetScene(QGraphicsScene):
                                    area=area, drawing_no=dwg)
 
     def mousePressEvent(self, event):
+        # Herramienta de anotación (T, artboard 3c): un click coloca la
+        # nota y entra en edición directa.
+        ed = getattr(self, "editor", None)
+        if (event.button() == Qt.LeftButton and ed is not None
+                and getattr(ed, "_active_canvas_tool", "select") == "text"):
+            ed.add_annotation_at(event.scenePos())
+            event.accept()
+            return
         # Chevron de la leyenda del Marco PFD (el marco es decorativo y
         # no acepta mouse — el hit-test vive acá).
         pf = self.paper_frame
@@ -5851,6 +6019,7 @@ class FlowsheetScene(QGraphicsScene):
             item.remove_from_scene(self)
         self.block_items.clear()
         self.stream_items.clear()
+        self.annotation_items.clear()
         # Defensa: cualquier item no-grid que haya quedado huérfano
         # (renderizado incompleto, fallos previos) se borra ahora.
         for it in list(self.items()):
@@ -6367,6 +6536,15 @@ class FlowsheetMainWindow(QMainWindow):
         self._aux_visibility_action.setShortcut("Ctrl+U")
         self._aux_visibility_action.triggered.connect(self._toggle_aux_visibility)
         m_view.addAction(self._aux_visibility_action)
+        # Capa de anotaciones (3c): oculta en pantalla; el export las
+        # incluye siempre (son parte del documento de ingeniería).
+        self._annot_visibility_action = QAction("Mostrar anotaciones", self)
+        self._annot_visibility_action.setCheckable(True)
+        self._annot_visibility_action.setChecked(
+            getattr(self, "_show_annotations", True))
+        self._annot_visibility_action.triggered.connect(
+            self._toggle_annotations_visible)
+        m_view.addAction(self._annot_visibility_action)
         # Tabla de corrientes — acción de PRIMER NIVEL (antes solo vivía en
         # "Docks legacy").  Reusa la acción robusta del toolbar.
         if getattr(self, "_streams_table_action", None) is not None:
@@ -6796,18 +6974,24 @@ class FlowsheetMainWindow(QMainWindow):
 
         @contextmanager
         def _ctx():
+            # 3c: las anotaciones van SIEMPRE al export (documento de
+            # ingeniería) aunque la capa esté oculta en pantalla.
+            prev_show = getattr(self, "_show_annotations", True)
+            if not prev_show:
+                self._toggle_annotations_visible(True)
             force_light = (_tokens.current_prefs()["theme"] == "dark"
                            and not getattr(self, "_export_as_seen", False))
-            if not force_light:
-                yield
-                return
-            _tokens.apply_preferences(theme="light")
-            self._apply_active_palette()
+            if force_light:
+                _tokens.apply_preferences(theme="light")
+                self._apply_active_palette()
             try:
                 yield
             finally:
-                _tokens.apply_preferences(theme="dark")
-                self._apply_active_palette()
+                if force_light:
+                    _tokens.apply_preferences(theme="dark")
+                    self._apply_active_palette()
+                if not prev_show:
+                    self._toggle_annotations_visible(False)
         return _ctx()
 
     # ---------------------------------------------------
@@ -8225,6 +8409,8 @@ class FlowsheetMainWindow(QMainWindow):
             self._render_block(b)
         for s in self.fs.streams.values():
             self._render_stream(s)
+        for ann in self.fs.annotations:
+            self._render_annotation(ann)
         # FIX geometría stale + lanes: re-rutear TODOS los streams una vez que
         # bloques Y streams están en escena.  El _resolve_port ya ancla a los
         # puertos vivos en el primer render (toma editor.scene), pero el LANE
@@ -8248,6 +8434,60 @@ class FlowsheetMainWindow(QMainWindow):
         # ya está asentada (corrige el extremo COLA/src que en el GUI real
         # quedaba stale hasta el hover).
         self._schedule_stream_reanchor()
+
+    # ---------------------------------------------------
+    # ANOTACIONES DE PLANO (ciclo 3, artboard 3c)
+    # ---------------------------------------------------
+
+    def _render_annotation(self, ann):
+        if "id" not in ann:
+            ann["id"] = self.fs.new_id()
+        it = AnnotationItem(self, ann)
+        it.setVisible(getattr(self, "_show_annotations", True))
+        self.scene.addItem(it)
+        self.scene.annotation_items[ann["id"]] = it
+        return it
+
+    def add_annotation_at(self, scene_pos):
+        """Herramienta T: coloca una nota en scene_pos y entra en
+        edición directa.  Si el usuario la deja vacía se descarta (el
+        end_action del focus-out no-opea porque el neto no cambió)."""
+        before = self.begin_action()
+        ann = {"id": self.fs.new_id(), "text": "",
+               "x": float(scene_pos.x()), "y": float(scene_pos.y()),
+               "size": "rotulo", "color": "ink"}
+        self.fs.annotations.append(ann)
+        it = self._render_annotation(ann)
+        # la herramienta vuelve a select (colocar es puntual)
+        self._active_canvas_tool = "select"
+        pal = getattr(self, "_palette_widget", None)
+        if pal is not None and hasattr(pal, "set_active_tool"):
+            pal.set_active_tool("select")
+        it.start_edit(before=before)
+        return it
+
+    def remove_annotation_item(self, ann):
+        """Quita la nota del modelo y la escena SIN registrar undo
+        (el caller decide el end_action)."""
+        try:
+            self.fs.annotations.remove(ann)
+        except ValueError:
+            pass
+        it = self.scene.annotation_items.pop(ann.get("id"), None)
+        if it is not None and it.scene() is self.scene:
+            self.scene.removeItem(it)
+
+    def delete_annotation(self, ann):
+        before = self.begin_action()
+        self.remove_annotation_item(ann)
+        self.end_action("Eliminar anotación", before)
+
+    def _toggle_annotations_visible(self, show: bool):
+        """Vista ▸ Mostrar anotaciones — capa on/off en PANTALLA; el
+        export las incluye siempre (documento de ingeniería)."""
+        self._show_annotations = bool(show)
+        for it in self.scene.annotation_items.values():
+            it.setVisible(self._show_annotations)
 
     # ---------------------------------------------------
     # UNDO / REDO infrastructure
@@ -8433,6 +8673,13 @@ class FlowsheetMainWindow(QMainWindow):
         elif isinstance(it, StreamItem):
             for other in self.scene.block_items.values():
                 other.set_selected_visual(False)
+            # Sincronía canvas → tabla de corrientes (3b)
+            dock = getattr(self, "streams_dock", None)
+            if dock is not None and hasattr(dock, "highlight_stream"):
+                try:
+                    dock.highlight_stream(it.model.id)
+                except Exception:
+                    pass
 
     def _add_block_of_type(self, eq_type, x=None, y=None):
         """Agrega un bloque del tipo dado al flowsheet.  Si x/y no se

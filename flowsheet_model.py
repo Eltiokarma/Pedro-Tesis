@@ -641,6 +641,10 @@ class Flowsheet:
     opex_extras: List[Dict] = field(default_factory=list)
     # Overrides de Fixed Operating Costs por 'Concept' del template Turton
     fixed_overrides: Dict[str, float] = field(default_factory=dict)
+    # Anotaciones de plano (ciclo 3, artboard 3c): texto libre sobre el
+    # canvas — {id, text, x, y, size, color, bold, mono}.  Parte del
+    # documento de ingeniería: siempre se exportan.
+    annotations: List[Dict] = field(default_factory=list)
 
     def new_id(self):
         v = self._next_id
@@ -659,6 +663,7 @@ class Flowsheet:
             "_next_id":        self._next_id,
             "opex_extras":     list(self.opex_extras),
             "fixed_overrides": dict(self.fixed_overrides),
+            "annotations":     [dict(a) for a in self.annotations],
         }
 
     @staticmethod
@@ -700,4 +705,8 @@ class Flowsheet:
         fs._next_id        = d.get("_next_id", 1)
         fs.opex_extras     = list(d.get("opex_extras", []))
         fs.fixed_overrides = dict(d.get("fixed_overrides", {}))
+        fs.annotations     = [dict(a) for a in d.get("annotations", [])]
+        for a in fs.annotations:
+            if "id" not in a:
+                a["id"] = fs.new_id()
         return fs

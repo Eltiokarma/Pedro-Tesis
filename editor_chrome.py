@@ -46,6 +46,7 @@ import pfd_fonts
 from tokens import (qfont, FONT_TITLE, FONT_UI, FONT_VALUE, FONT_HINT,
                     FONT_LABEL)
 from block_inspector import TOK
+import glyph_specs
 
 
 # ════════════════════════════════════════════════════════
@@ -97,6 +98,15 @@ BLOCK_DIMS: Dict[str, Tuple[int, int]] = {
     "torre_nat":       (56, 64),
 }
 
+# Ciclo 3 (artboard 3a): el set completo de Design reemplaza las dims
+# de las siluetas que refresca y agrega las variantes nuevas.  Las
+# dims derivan del bbox del contenido (la escala interna del set ya
+# armoniza los tamaños relativos); las entradas legacy no cubiertas
+# (reactor/tanque/valvula base, ambient…) quedan como fallback de la
+# heurística.
+BLOCK_DIMS.update({name: glyph_specs.glyph_dims(name)
+                   for name in glyph_specs.GLYPHS})
+
 # Mapeo del tipo del mockup → eq_type canónico del catálogo
 # equipment_costs.EQUIPMENT_DATA.
 PALETTE_TO_EQ_TYPE: Dict[str, str] = {
@@ -108,6 +118,18 @@ PALETTE_TO_EQ_TYPE: Dict[str, str] = {
     "bomba":     "Pump — centrifugal",
     "tanque":    "Storage tank — cone roof",
 }
+
+def _palette_glyph_id(palette_id: str) -> str:
+    """Glifo que muestra un botón de la paleta: el del eq_type que
+    instancia (así el botón enseña el set del ciclo 3), con fallback
+    al id del botón para tools/ids sin eq_type."""
+    eq = PALETTE_TO_EQ_TYPE.get(palette_id)
+    if eq:
+        isa = isa_type_for_eq(eq)
+        if isa:
+            return isa
+    return palette_id
+
 
 PALETTE_LABELS: Dict[str, str] = {
     "reactor":   "Reactor",
@@ -124,16 +146,25 @@ PALETTE_LABELS: Dict[str, str] = {
 # bajo el botón temáticamente más cercano para que TODO el catálogo
 # siga siendo alcanzable desde los menús de variantes (long-press).
 PALETTE_GROUPS: Dict[str, Tuple[str, ...]] = {
-    "reactor":   ("reactor", "reactor_pfr"),
-    "mezclador": ("mezclador", "splitter", "valvula"),
+    "reactor":   ("reactor", "reactor_cstr", "reactor_jacket",
+                  "reactor_jacket_na", "reactor_autoclave",
+                  "reactor_pfr"),
+    "mezclador": ("mezclador", "splitter", "valvula", "valvula_globe",
+                  "valvula_3way", "valvula_relief"),
     "separador": ("separador", "tambor", "ciclon", "centrifuga",
-                  "filtro", "secador", "cristalizador"),
-    "columna":   ("columna", "platos", "empaque", "torre_enf",
-                  "torre_nat"),
+                  "centrifuga_decanter", "centrifuga_disc",
+                  "filtro", "secador", "cristalizador", "evaporador"),
+    "columna":   ("columna", "platos", "platos_sieve", "platos_valve",
+                  "empaque", "empaque_rand", "empaque_struct",
+                  "torre_enf", "torre_nat"),
     "hx":        ("hx", "hx_kettle", "hx_whb", "hx_aircooler",
-                  "hx_placa", "horno", "caldera"),
-    "bomba":     ("bomba", "compresor", "compresor_recip", "ventilador"),
-    "tanque":    ("tanque", "ambient"),
+                  "hx_cond_air", "hx_placa", "hx_espiral", "horno",
+                  "horno_reformer", "caldera", "caldera_fire",
+                  "caldera_water"),
+    "bomba":     ("bomba", "bomba_pd", "bomba_recip", "compresor",
+                  "compresor_axial", "compresor_rotary",
+                  "compresor_recip", "ventilador", "ventilador_rad"),
+    "tanque":    ("tanque", "tanque_cone", "tanque_float", "ambient"),
 }
 
 
@@ -790,6 +821,33 @@ class BlockGlyph:
             p.drawPolygon(QPolygonF([
                 QPointF(cx, cy - 3.5), QPointF(cx + 3.5, cy),
                 QPointF(cx, cy + 3.5), QPointF(cx - 3.5, cy)]))
+
+
+# Ciclo 3 (artboard 3a): los 48 glifos del set de Design se montan
+# como métodos _draw_* data-driven (glyph_specs), REEMPLAZANDO los
+# QPainter a mano de los nombres que refrescan y agregando las
+# variantes nuevas (valvula_globe/relief, reactor_cstr/jacket/…).  El
+# router de BlockGlyph.draw y el gate de cobertura los ven idénticos
+# a un _draw_ escrito a mano.  El estado unrun llega como pen
+# DashLine del caller (contrato de draw) y se propaga a los trazos
+# de contorno del spec.
+def _bind_design_glyphs():
+    from PySide6.QtCore import Qt as _Qt
+
+    def _mk(name):
+        def _drawer(p, w, h, stroke, fill_brush, sw):
+            dashed = p.pen().style() == _Qt.DashLine
+            glyph_specs.draw_glyph(p, name, w, h, stroke, fill_brush,
+                                   sw, dashed=dashed)
+        return staticmethod(_drawer)
+
+    for _name in glyph_specs.GLYPHS:
+        setattr(BlockGlyph, f"_draw_{_name}", _mk(_name))
+
+
+_bind_design_glyphs()
+
+
 # ════════════════════════════════════════════════════════
 
 class EditorTopbar(QFrame):
@@ -1146,8 +1204,9 @@ class _ToolButton(QToolButton):
         md.setData("application/x-pfd-eqtype",
                    QByteArray(eq_type.encode("utf-8")))
         drag.setMimeData(md)
-        # Pixmap preview = silueta ISA escalada
-        w_native, h_native = BLOCK_DIMS.get(self._id, (60, 60))
+        # Pixmap preview = silueta ISA escalada (glifo real, ciclo 3)
+        glyph_id = _palette_glyph_id(self._id)
+        w_native, h_native = BLOCK_DIMS.get(glyph_id, (60, 60))
         # render a 1.6x para que se vea generoso bajo el cursor
         target_w = int(w_native * 1.6); target_h = int(h_native * 1.6)
         px = QPixmap(target_w + 2, target_h + 2)
@@ -1156,7 +1215,7 @@ class _ToolButton(QToolButton):
         pp.setRenderHint(QPainter.Antialiasing, True)
         pp.translate(1, 1)
         pp.scale(1.6, 1.6)
-        BlockGlyph.draw(pp, self._id, w_native, h_native,
+        BlockGlyph.draw(pp, glyph_id, w_native, h_native,
                         QColor(TOK["accent"]),
                         fill=QColor(TOK["bg_elev"]),
                         stroke_width=1.5)
@@ -1177,8 +1236,11 @@ class _ToolButton(QToolButton):
             p.fillRect(QRect(0, 6, 3, self.height()-12), QColor(self._cinta))
 
         if self._kind == "block":
-            # silueta ISA
-            w, h = BLOCK_DIMS.get(self._id, (40, 30))
+            # silueta ISA — el botón resuelve al glifo REAL del eq_type
+            # que instancia (ciclo 3: el botón muestra el set nuevo,
+            # no la silueta base legacy)
+            glyph_id = _palette_glyph_id(self._id)
+            w, h = BLOCK_DIMS.get(glyph_id, (40, 30))
             # escalar a 30px max
             box_w, box_h = self.width()-12, self.height()-12
             scale = min(box_w / w, box_h / h, 0.5)  # cap a 0.5x para que entre cómodo
@@ -1188,7 +1250,7 @@ class _ToolButton(QToolButton):
             p.save()
             p.translate(ox, oy)
             p.scale(scale, scale)
-            BlockGlyph.draw(p, self._id, w, h, self._stroke,
+            BlockGlyph.draw(p, glyph_id, w, h, self._stroke,
                             fill=None if not self._active else QColor(0,0,0,0),
                             stroke_width=2.0)
             p.restore()
@@ -1200,6 +1262,7 @@ class _ToolButton(QToolButton):
                 "select":  "↖",
                 "pan":     "✥",
                 "connect": "⟶",
+                "text":    "T",
                 "mass":    "→",
                 "energy":  "↯",
             }.get(self._id, "?")
@@ -1230,13 +1293,13 @@ class EditorPalette(QFrame):
     moreRequested        = Signal()
     streamRequested      = Signal(str)        # 'mass' | 'energy'
 
-    # ("text", "Anotación") se quitó del set: era un stub que solo
-    # cambiaba el cursor.  Se re-agrega cuando exista la colocación de
-    # texto real (rediseño 1g).
+    # ("text", "Anotación") volvió en el ciclo 3 (artboard 3c): ya no
+    # es un stub — un click coloca la nota y entra en edición directa.
     TOOLS = [
         ("select",  "Seleccionar (V)"),
         ("pan",     "Pan (espacio)"),
         ("connect", "Conectar stream (C)"),
+        ("text",    "Anotación (T) — click coloca una nota de plano"),
     ]
     # Corrientes flotantes: click → crea la flecha en el centro de la
     # vista; el usuario arrastra los extremos hasta un puerto para
@@ -1750,32 +1813,37 @@ class _Overlay(QWidget):
 # EQUIPMENT_DATA).  La heurística _isa_heuristic() queda solo como
 # fallback para eq_types fuera de este dict (p.ej. equipos futuros:
 # steam trap, strainer, deaerator).
+# Ciclo 3 (3a): mapeo según la tabla eq_type → glifo de Design.  Los
+# ◇ compartidos-a-propósito (decisión escrita del artboard): hx ×6
+# (casco y tubo, TRABAJOS_FUTUROS §8), hx_whb ×2 (distinción de
+# suministro, no de geometría), mezclador ×2 (sinónimos de proceso) y
+# tambor ×2 (misma geometría horizontal).
 EQ_TYPE_TO_ISA: Dict[str, str] = {
-    "Boiler — fire tube": "caldera",
-    "Boiler — water tube": "caldera",
-    "Centrifuge — decanter": "centrifuga",
-    "Centrifuge — disc stack": "centrifuga",
-    "Compressor — axial": "compresor",
+    "Boiler — fire tube": "caldera_fire",
+    "Boiler — water tube": "caldera_water",
+    "Centrifuge — decanter": "centrifuga_decanter",
+    "Centrifuge — disc stack": "centrifuga_disc",
+    "Compressor — axial": "compresor_axial",
     "Compressor — centrifugal": "compresor",
     "Compressor — reciprocating": "compresor_recip",
-    "Compressor — rotary": "compresor",
+    "Compressor — rotary": "compresor_rotary",
     "Cooling tower — induced draft": "torre_enf",
     "Cooling tower — natural draft": "torre_nat",
     "Crystallizer": "cristalizador",
     "Cyclone — gas/solid": "ciclon",
     "Decanter — gravity": "tambor",
     "Dryer — drum": "secador",
-    "Evaporator — vertical": "separador",
+    "Evaporator — vertical": "evaporador",
     "Fan — axial": "ventilador",
-    "Fan — centrifugal radial": "ventilador",
+    "Fan — centrifugal radial": "ventilador_rad",
     "Filter — belt": "filtro",
     "Fired heater — non-reformer": "horno",
-    "Fired heater — reformer": "horno",
+    "Fired heater — reformer": "horno_reformer",
     "Heat exch. — U-tube": "hx",
     "Heat exch. — WHB field erected": "hx_whb",
     "Heat exch. — WHB packaged": "hx_whb",
     "Heat exch. — air cooler": "hx_aircooler",
-    "Heat exch. — condenser air-cooled": "hx_aircooler",
+    "Heat exch. — condenser air-cooled": "hx_cond_air",
     "Heat exch. — condenser shell-tube": "hx",
     "Heat exch. — double pipe": "hx",
     "Heat exch. — fixed tube": "hx",
@@ -1783,28 +1851,28 @@ EQ_TYPE_TO_ISA: Dict[str, str] = {
     "Heat exch. — floating head": "hx",
     "Heat exch. — kettle reboiler": "hx_kettle",
     "Heat exch. — multiple pipe": "hx",
-    "Heat exch. — spiral plate": "hx_placa",
+    "Heat exch. — spiral plate": "hx_espiral",
     "Mixer — inline": "mezclador",
     "Mixer — static": "mezclador",
-    "Packing — random": "empaque",
-    "Packing — structured": "empaque",
+    "Packing — random": "empaque_rand",
+    "Packing — structured": "empaque_struct",
     "Pump — centrifugal": "bomba",
-    "Pump — positive displacement": "bomba",
-    "Pump — reciprocating": "bomba",
-    "Reactor — CSTR (agitado)": "reactor",
+    "Pump — positive displacement": "bomba_pd",
+    "Pump — reciprocating": "bomba_recip",
+    "Reactor — CSTR (agitado)": "reactor_cstr",
     "Reactor — PFR (tubular)": "reactor_pfr",
-    "Reactor — autoclave": "reactor",
-    "Reactor — jacketed agitated": "reactor",
-    "Reactor — jacketed non-agit.": "reactor",
+    "Reactor — autoclave": "reactor_autoclave",
+    "Reactor — jacketed agitated": "reactor_jacket",
+    "Reactor — jacketed non-agit.": "reactor_jacket_na",
     "Splitter — flow divider": "splitter",
-    "Storage tank — cone roof": "tanque",
-    "Storage tank — floating roof": "tanque",
+    "Storage tank — cone roof": "tanque_cone",
+    "Storage tank — floating roof": "tanque_float",
     "Tower (column shell)": "columna",
-    "Tray — sieve": "platos",
-    "Tray — valve": "platos",
-    "Valve — 3-way": "valvula",
-    "Valve — control globe": "valvula",
-    "Valve — relief": "valvula",
+    "Tray — sieve": "platos_sieve",
+    "Tray — valve": "platos_valve",
+    "Valve — 3-way": "valvula_3way",
+    "Valve — control globe": "valvula_globe",
+    "Valve — relief": "valvula_relief",
     "Vessel — horizontal": "tambor",
     "Vessel — vertical": "separador",
 }

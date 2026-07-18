@@ -232,10 +232,12 @@ class _StreamRow(QFrame):
     # number, tag+role, path, phase, flow, comp, T/P
 
     def __init__(self, stream, fs, unit: str, max_mass: float,
-                 status: str = "ok", selected: bool = False, parent=None):
+                 status: str = "ok", selected: bool = False,
+                 show_comp: bool = True, parent=None):
         super().__init__(parent)
         self._sid = stream.id
         self._selected = selected
+        self._show_comp = show_comp
         self.setObjectName(f"streamRow_{stream.id}")
         self.setCursor(Qt.PointingHandCursor)
         self._apply_style()
@@ -318,8 +320,12 @@ class _StreamRow(QFrame):
             unit_txt = unit
         val = QLabel(num_txt)
         val.setFont(qfont(FONT_VALUE))
+        # spec = subrayado 2px spec (3b): el significado declarado no
+        # vive solo en el color de la tinta
         val.setStyleSheet(
-            f"color:{TOK['ink'] if locked else TOK['ink_soft']};"
+            f"color:{TOK['ink']}; border-bottom:2px solid {TOK['spec']}; "
+            f"padding-bottom:1px;" if locked
+            else f"color:{TOK['ink_soft']};"
         )
         flow_text_row.addWidget(val)
         unit_lbl = QLabel(unit_txt)
@@ -340,50 +346,59 @@ class _StreamRow(QFrame):
         flow_wrap.setMinimumWidth(160)
         lay.addWidget(flow_wrap, 2)
 
-        # ── columna 6: composition strip ──
-        comp = getattr(stream, "composition", None) or {}
-        if not comp:
-            mc = getattr(stream, "main_component", "")
-            if mc:
-                comp = {mc: 1.0}
-        comp_items = sorted(comp.items(), key=lambda kv: -kv[1])[:4]
-        if comp_items:
-            cs = _CompositionStrip(comp_items)
-            cs.setMinimumWidth(180)
-            lay.addWidget(cs, 2)
-        else:
-            empty = QLabel("(sin composición)")
-            empty.setFont(qfont(FONT_HINT))
-            empty.setStyleSheet(f"color:{TOK['ink_ghost']}; font-style:italic;")
-            lay.addWidget(empty, 2)
+        # ── columna 6: composition strip (colapsable, 3b) ──
+        if self._show_comp:
+            comp = getattr(stream, "composition", None) or {}
+            if not comp:
+                mc = getattr(stream, "main_component", "")
+                if mc:
+                    comp = {mc: 1.0}
+            comp_items = sorted(comp.items(), key=lambda kv: -kv[1])[:4]
+            if comp_items:
+                cs = _CompositionStrip(comp_items)
+                cs.setMinimumWidth(180)
+                lay.addWidget(cs, 2)
+            else:
+                empty = QLabel("(sin composición)")
+                empty.setFont(qfont(FONT_HINT))
+                empty.setStyleSheet(
+                    f"color:{TOK['ink_ghost']}; font-style:italic;")
+                lay.addWidget(empty, 2)
 
         # ── columna 7: T / P stacked ──
         tp = QVBoxLayout(); tp.setSpacing(2); tp.setContentsMargins(0,0,0,0)
         tp.setAlignment(Qt.AlignRight)
+        def _tp_row(num_txt: str, unit_txt: str, is_spec: bool):
+            """Valor + unidad; el valor spec lleva el subrayado 2px
+            spec (3b) — significado declarado no-solo-color."""
+            row = QHBoxLayout(); row.setSpacing(4)
+            row.setContentsMargins(0, 0, 0, 0)
+            row.addStretch(1)
+            v = QLabel(num_txt)
+            v.setFont(qfont(FONT_VALUE))
+            v.setStyleSheet(
+                f"color:{TOK['ink']}; "
+                f"border-bottom:2px solid {TOK['spec']}; "
+                f"padding-bottom:1px;" if is_spec
+                else f"color:{TOK['ink_soft']};")
+            row.addWidget(v)
+            u = QLabel(unit_txt)
+            u.setFont(qfont(FONT_HINT))
+            u.setStyleSheet(f"color:{TOK['ink_soft']};")
+            row.addWidget(u)
+            host = QFrame(); host.setLayout(row)
+            return host
+
         T = float(getattr(stream, "temperature", 25.0) or 25.0)
         T_locked = bool(getattr(stream, "temperature_locked", False))
         t_unit = funits.active_unit("temp")
-        t_html = (
-            f'<span style="color:{TOK["ink"] if T_locked else TOK["ink_soft"]};'
-            f' font-family:\'{pfd_fonts.MONO}\'; font-size:10pt; font-weight:600;">'
-            f'{funits.conv_temp(T, t_unit):.1f}</span>'
-            f'<span style="color:{TOK["ink_soft"]}; font-size:8pt;"> {t_unit}</span>'
-        )
-        t_lbl = QLabel(); t_lbl.setTextFormat(Qt.RichText); t_lbl.setText(t_html)
-        t_lbl.setAlignment(Qt.AlignRight)
-        tp.addWidget(t_lbl)
+        tp.addWidget(_tp_row(f"{funits.conv_temp(T, t_unit):.1f}",
+                             t_unit, T_locked))
         P = float(getattr(stream, "pressure_bar", 1.013) or 1.013)
         P_locked = bool(getattr(stream, "pressure_locked", False))
         p_unit = funits.active_unit("pressure")
-        p_html = (
-            f'<span style="color:{TOK["ink"] if P_locked else TOK["ink_soft"]};'
-            f' font-family:\'{pfd_fonts.MONO}\'; font-size:10pt; font-weight:500;">'
-            f'{funits.conv_pressure(P, p_unit):.2f}</span>'
-            f'<span style="color:{TOK["ink_soft"]}; font-size:8pt;"> {p_unit}</span>'
-        )
-        p_lbl = QLabel(); p_lbl.setTextFormat(Qt.RichText); p_lbl.setText(p_html)
-        p_lbl.setAlignment(Qt.AlignRight)
-        tp.addWidget(p_lbl)
+        tp.addWidget(_tp_row(f"{funits.conv_pressure(P, p_unit):.2f}",
+                             p_unit, P_locked))
         tpw = QFrame(); tpw.setLayout(tp); tpw.setMinimumWidth(80)
         lay.addWidget(tpw)
 
@@ -474,6 +489,7 @@ class StreamsTableDock(QDockWidget):
         self.editor = editor
         self._search_text = ""
         self._selected_sid: Optional[int] = None
+        self._show_comp = True
 
         self.setAllowedAreas(Qt.BottomDockWidgetArea)
         self.setFeatures(QDockWidget.DockWidgetMovable
@@ -606,7 +622,38 @@ class StreamsTableDock(QDockWidget):
         )
         exp_btn.clicked.connect(self._on_export)
         lay.addWidget(exp_btn)
+
+        # ── Toggle de composición (3b) ──
+        self._comp_btn = QPushButton()
+        self._comp_btn.setCursor(Qt.PointingHandCursor)
+        self._comp_btn.setFont(qfont(FONT_LABEL))
+        self._comp_btn.clicked.connect(self._toggle_comp)
+        self._style_comp_btn()
+        lay.insertWidget(lay.count() - 1, self._comp_btn)
         return tb
+
+    def _style_comp_btn(self):
+        on = self._show_comp
+        self._comp_btn.setText("▾ Composición" if on else "▸ Composición")
+        if on:
+            self._comp_btn.setStyleSheet(
+                f"QPushButton {{ background:{TOK['accent_tint']}; "
+                f"color:{TOK['accent_deep']}; border:1px solid "
+                f"{TOK['accent_soft']}; border-radius:6px; "
+                f"padding:5px 12px; }}")
+        else:
+            self._comp_btn.setStyleSheet(
+                f"QPushButton {{ background:{TOK['bg_elev']}; "
+                f"color:{TOK['ink_mute']}; border:1px solid "
+                f"{TOK['line_strong']}; border-radius:6px; "
+                f"padding:5px 12px; }} "
+                f"QPushButton:hover {{ color:{TOK['ink']}; }}")
+
+    def _toggle_comp(self):
+        self._show_comp = not self._show_comp
+        self._style_comp_btn()
+        self._rebuild_headers()
+        self.refresh()
 
     def _unit_btn_style(self, active: bool) -> str:
         if active:
@@ -718,9 +765,19 @@ class StreamsTableDock(QDockWidget):
         lay.addWidget(_hdr_cell("DESDE → HACIA", min_w=150), 2)
         lay.addWidget(_hdr_cell("FASE", min_w=80))
         lay.addWidget(_hdr_cell("FLUJO", min_w=160), 2)
-        lay.addWidget(_hdr_cell("COMPOSICIÓN (mass frac)", min_w=180), 2)
+        if self._show_comp:
+            lay.addWidget(_hdr_cell("COMPOSICIÓN (mass frac)",
+                                    min_w=180), 2)
         lay.addWidget(_hdr_cell("T · P", align=Qt.AlignRight, min_w=80))
         return hd
+
+    def _rebuild_headers(self):
+        """Reconstruye la fila de títulos (toggle de composición)."""
+        old = self._headers
+        self._headers = self._build_headers()
+        lay = self.widget().layout()
+        lay.replaceWidget(old, self._headers)
+        old.setParent(None); old.deleteLater()
 
     # ── API pública (compat con código existente) ─────
     def current_unit(self) -> str:
@@ -802,6 +859,7 @@ class StreamsTableDock(QDockWidget):
             row = _StreamRow(
                 s, fs, self._current_unit, max_mass,
                 status=status, selected=(s.id == self._selected_sid),
+                show_comp=self._show_comp,
             )
             row.clicked.connect(self._on_row_click)
             row.doubleClicked.connect(self._on_row_double_click)
@@ -819,6 +877,16 @@ class StreamsTableDock(QDockWidget):
                 item.setSelected(True)
             except Exception:
                 pass
+
+    def highlight_stream(self, sid: Optional[int]):
+        """Sincronía canvas → tabla (3b): resalta la fila del stream
+        seleccionado en la escena, sin re-disparar la selección (el
+        guard por sid evita el ciclo tabla↔escena)."""
+        if sid == self._selected_sid:
+            return
+        self._selected_sid = sid
+        if self.isVisible():
+            self.refresh()
 
     def _on_row_double_click(self, sid: int):
         stream = self.editor.fs.streams.get(sid)
