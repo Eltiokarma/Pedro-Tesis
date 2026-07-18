@@ -1,0 +1,937 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  :root{
+    /* superficies */
+    --bg:#f6f3ec; --bg_elev:#ffffff; --bg_mute:#f1ede4; --bg_sunk:#ece6d8;
+    --line:#e6e0d0; --line_strong:#d4ccb8; --line_soft:#efeadd;
+    --ink:#1a1714; --ink_mute:#6b6256; --ink_soft:#948a7c; --ink_ghost:#bab2a3;
+    --accent:#0d6e78; --accent_deep:#064951; --accent_soft:#d4ebed; --accent_tint:#eaf4f5;
+    --spec:#3548b4; --spec_ink:#2a3a9a; --spec_bg:#eef1ff; --spec_ribbon:#4a5dcc;
+    --auto_bg:#f3efe5; --auto_ink:#918878; --auto_ribbon:#c9c0ad;
+    --green:#4d8742; --green_bg:#e6f0df; --amber:#b8841a; --amber_bg:#f4ecd1;
+    --orange:#c26329; --orange_bg:#f5e1d0; --danger:#b8453a; --danger_bg:#f3dcd8;
+    --tag_bg:#ede7d6; --tag_ink:#6b6253;
+    --phase_liq:#2f6690; --phase_vap:#c47a1e; --phase_gas:#8a8172; --phase_2ph:#6d5a9c;
+    --canvas_bg:#fbfaf6; --canvas_grid:#eae5d9; --canvas_grid_major:#ddd6c6;
+    --stream_internal:#2a2620; --stream_product:#b8323f; --stream_utility:#2f4d9e; --stream_waste:#6d4c41;
+    --service_hot:#d5501f; --service_cold:#2b8fc4;
+    /* strokes de glifo (tokens.py) */
+    --sw-o:1.6; --sw-d:1.0;
+    /* roles de color del glifo (estado del solver, no identidad) */
+    --gl-ink:var(--ink);
+    --gl-detail:color-mix(in srgb, var(--ink) 52%, transparent);
+    --gl-fill:var(--bg_elev);
+    --gl-dash:0;
+    --shadow:0 1px 2px rgba(40,34,26,.05), 0 8px 30px rgba(40,34,26,.06);
+  }
+  [data-theme="dark"]{
+    --bg:#16130f; --bg_elev:#1f1b16; --bg_mute:#26211b; --bg_sunk:#110e0a;
+    --line:#2f2920; --line_strong:#3f3830; --line_soft:#251f18;
+    --ink:#efe7d6; --ink_mute:#a59a89; --ink_soft:#6f6759; --ink_ghost:#4a4438;
+    --accent:#5dc1cc; --accent_deep:#92dde4; --accent_soft:#1f3a3d; --accent_tint:#1a2b2d;
+    --spec:#92a0ef; --spec_ink:#b4befa; --spec_bg:#20254a; --spec_ribbon:#8294f5;
+    --auto_bg:#221d16; --auto_ink:#8a8170; --auto_ribbon:#463f33;
+    --green:#85b274; --green_bg:#1f2a1d; --amber:#d8aa3a; --amber_bg:#2e2618;
+    --orange:#d18a55; --orange_bg:#2e2118; --danger:#d97262; --danger_bg:#2e1a17;
+    --tag_bg:#2a241d; --tag_ink:#a59a89;
+    --phase_liq:#6fa8d6; --phase_vap:#e0a94e; --phase_gas:#b3a892; --phase_2ph:#a795d6;
+    --canvas_bg:#221d15; --canvas_grid:#2c2519; --canvas_grid_major:#38301f;
+    --stream_internal:#d8cfbf; --stream_product:#e07a82; --stream_utility:#8595d8; --stream_waste:#b39a8a;
+    --service_hot:#e88a5a; --service_cold:#63b8e0;
+    --shadow:0 1px 2px rgba(0,0,0,.3), 0 10px 34px rgba(0,0,0,.4);
+  }
+  [data-accent="terracota"]{ --accent:#a44a2b; --accent_deep:#7a341c; --accent_soft:#f0d3c5; --accent_tint:#f7e7df; }
+  [data-accent="cobalto"]{ --accent:#3548b4; --accent_deep:#1f2e8c; --accent_soft:#cfd5f0; --accent_tint:#e5e8f7; }
+  [data-accent="oliva"]{ --accent:#5f7a30; --accent_deep:#3f5520; --accent_soft:#d9e3c2; --accent_tint:#ecf0dc; }
+  [data-theme="dark"][data-accent="terracota"]{ --accent:#d18a6a; --accent_deep:#ecae8c; --accent_soft:#3a221a; --accent_tint:#2a1812; }
+  [data-theme="dark"][data-accent="cobalto"]{ --accent:#8a98ed; --accent_deep:#aab5f4; --accent_soft:#23295a; --accent_tint:#1a1f40; }
+  [data-theme="dark"][data-accent="oliva"]{ --accent:#9cb56a; --accent_deep:#bccf8d; --accent_soft:#2c3520; --accent_tint:#1f2618; }
+
+  *{box-sizing:border-box;}
+  body{margin:0;background:var(--bg);color:var(--ink);
+    font-family:"IBM Plex Sans",system-ui,sans-serif;font-size:15px;line-height:1.55;
+    -webkit-font-smoothing:antialiased;}
+  a{color:var(--accent);text-decoration:none;} a:hover{color:var(--accent_deep);text-decoration:underline;}
+  .mono{font-family:"IBM Plex Mono",ui-monospace,monospace;}
+
+  /* ── glifo (SVG symbol styling — no puede ser inline en <use>) ── */
+  .o{fill:none;stroke:var(--gl-ink);stroke-width:var(--sw-o);vector-effect:non-scaling-stroke;stroke-linecap:round;stroke-linejoin:round;}
+  .d{fill:none;stroke:var(--gl-detail);stroke-width:var(--sw-d);vector-effect:non-scaling-stroke;stroke-linecap:round;stroke-linejoin:round;}
+  .body{fill:var(--gl-fill);}
+  .dot{fill:var(--gl-detail);stroke:none;}
+  .unrun .o{stroke-dasharray:3 2.4;}
+  svg.glyph{display:block;overflow:visible;}
+  /* estados del solver aplicados a un contenedor de glifos */
+  [data-state="ok"]{ --gl-fill:var(--green_bg); }
+  [data-state="warning"]{ --gl-ink:var(--amber); --gl-fill:var(--amber_bg); }
+  [data-state="error"]{ --gl-ink:var(--danger); --gl-fill:var(--danger_bg); }
+  [data-state="stale"]{ --gl-ink:var(--ink_soft); --gl-detail:color-mix(in srgb, var(--ink_soft) 60%, transparent); --gl-fill:var(--bg_elev); }
+  [data-state="unrun"]{ --gl-ink:var(--ink_mute); --gl-fill:var(--bg_elev); }
+</style>
+</helmet>
+<div style="min-height:100vh;background:var(--bg);color:var(--ink)">
+
+<svg width="0" height="0" style="position:absolute" aria-hidden="true"><defs>
+  <!-- ══ BOMBAS ══ -->
+  <symbol id="g-bomba" viewBox="0 0 100 100"><circle class="body o" cx="50" cy="46" r="26"/><path class="d" d="M40 34 L66 46 L40 58 Z"/><circle class="dot" cx="50" cy="46" r="2.4"/><line class="o" x1="34" y1="82" x2="66" y2="82"/></symbol>
+  <symbol id="g-bomba-pd" viewBox="0 0 100 100"><circle class="body o" cx="50" cy="46" r="26"/><circle class="d" cx="42" cy="46" r="10"/><circle class="d" cx="58" cy="46" r="10"/><line class="o" x1="34" y1="82" x2="66" y2="82"/></symbol>
+  <symbol id="g-bomba-recip" viewBox="0 0 100 100"><rect class="body o" x="16" y="32" width="42" height="28" rx="3"/><line class="d" x1="38" y1="34" x2="38" y2="58"/><line class="d" x1="46" y1="34" x2="46" y2="58"/><line class="o" x1="46" y1="46" x2="72" y2="46"/><circle class="body o" cx="80" cy="46" r="9"/><circle class="dot" cx="77" cy="43" r="1.8"/><line class="o" x1="30" y1="82" x2="72" y2="82"/></symbol>
+  <!-- ══ COMPRESORES ══ -->
+  <symbol id="g-compresor" viewBox="0 0 100 100"><path class="body o" d="M22 24 L78 40 L78 60 L22 76 Z"/><path class="d" d="M32 50 H64 M56 44 L64 50 L56 56"/><line class="o" x1="36" y1="86" x2="64" y2="86"/></symbol>
+  <symbol id="g-compresor-axial" viewBox="0 0 100 100"><rect class="body o" x="20" y="34" width="60" height="32" rx="2"/><path class="d" d="M30 38 L38 62 M42 38 L50 62 M54 38 L62 62 M66 38 L74 62"/><line class="o" x1="34" y1="80" x2="66" y2="80"/></symbol>
+  <symbol id="g-compresor-rotary" viewBox="0 0 100 100"><circle class="body o" cx="50" cy="46" r="27"/><ellipse class="d" cx="43" cy="46" rx="8" ry="14"/><ellipse class="d" cx="57" cy="46" rx="8" ry="14"/><line class="o" x1="34" y1="82" x2="66" y2="82"/></symbol>
+  <symbol id="g-compresor-recip" viewBox="0 0 100 100"><rect class="body o" x="16" y="36" width="42" height="26" rx="3"/><circle class="body o" cx="37" cy="22" r="9"/><line class="d" x1="34" y1="38" x2="34" y2="60"/><line class="d" x1="42" y1="38" x2="42" y2="60"/><line class="o" x1="50" y1="49" x2="72" y2="49"/><circle class="body o" cx="80" cy="49" r="8"/><line class="o" x1="30" y1="82" x2="72" y2="82"/></symbol>
+  <!-- ══ VÁLVULAS ══ -->
+  <symbol id="g-valvula-globe" viewBox="0 0 100 100"><path class="body o" d="M18 46 L18 70 L50 58 Z"/><path class="body o" d="M82 46 L82 70 L50 58 Z"/><line class="d" x1="50" y1="58" x2="50" y2="32"/><path class="body o" d="M37 32 A13 13 0 0 1 63 32 Z"/><line class="d" x1="37" y1="32" x2="63" y2="32"/></symbol>
+  <symbol id="g-valvula-3way" viewBox="0 0 100 100"><path class="body o" d="M18 30 L18 54 L50 42 Z"/><path class="body o" d="M82 30 L82 54 L50 42 Z"/><path class="body o" d="M38 78 L62 78 L50 42 Z"/></symbol>
+  <symbol id="g-valvula-relief" viewBox="0 0 100 100"><path class="body o" d="M34 82 L58 82 L46 54 Z"/><line class="o" x1="46" y1="54" x2="78" y2="54"/><path class="d" d="M72 48 L80 54 L72 60"/><path class="d" d="M46 54 V44 M40 44 L52 40 L40 36 L52 32 L40 28 L52 24"/></symbol>
+  <!-- ══ REACTORES ══ -->
+  <symbol id="g-reactor-cstr" viewBox="0 0 100 100"><rect class="body o" x="24" y="20" width="52" height="52" rx="7"/><rect class="dot" x="45" y="6" width="10" height="7"/><line class="d" x1="50" y1="13" x2="50" y2="56"/><line class="o" x1="39" y1="56" x2="61" y2="56"/><line class="d" x1="43" y1="50" x2="57" y2="62"/><line class="d" x1="36" y1="72" x2="36" y2="80"/><line class="d" x1="64" y1="72" x2="64" y2="80"/></symbol>
+  <symbol id="g-reactor-jacket" viewBox="0 0 100 100"><rect class="body o" x="20" y="18" width="60" height="56" rx="7"/><rect class="d" x="27" y="24" width="46" height="44" rx="4"/><rect class="dot" x="45" y="4" width="10" height="7"/><line class="d" x1="50" y1="11" x2="50" y2="54"/><line class="o" x1="40" y1="54" x2="60" y2="54"/></symbol>
+  <symbol id="g-reactor-jacket-na" viewBox="0 0 100 100"><rect class="body o" x="20" y="18" width="60" height="56" rx="7"/><rect class="d" x="27" y="24" width="46" height="44" rx="4"/><line class="d" x1="35" y1="28" x2="35" y2="64" stroke-dasharray="2 3"/><line class="d" x1="43" y1="28" x2="43" y2="64" stroke-dasharray="2 3"/><line class="d" x1="50" y1="28" x2="50" y2="64" stroke-dasharray="2 3"/><line class="d" x1="57" y1="28" x2="57" y2="64" stroke-dasharray="2 3"/><line class="d" x1="65" y1="28" x2="65" y2="64" stroke-dasharray="2 3"/></symbol>
+  <symbol id="g-reactor-autoclave" viewBox="0 0 100 100"><rect class="body o" x="28" y="12" width="44" height="76" rx="21"/><rect class="d" x="35" y="19" width="30" height="62" rx="14"/></symbol>
+  <symbol id="g-reactor-pfr" viewBox="0 0 100 100"><rect class="body o" x="14" y="38" width="72" height="24" rx="11"/><path class="d" d="M22 50 Q30 30 38 50 Q46 70 54 50 Q62 30 70 50"/><path class="d" d="M74 50 H84"/></symbol>
+  <!-- ══ CALDERAS ══ -->
+  <symbol id="g-caldera-fire" viewBox="0 0 100 100"><rect class="body o" x="18" y="30" width="64" height="40" rx="15"/><line class="d" x1="28" y1="42" x2="72" y2="42"/><line class="d" x1="28" y1="50" x2="72" y2="50"/><line class="d" x1="28" y1="58" x2="72" y2="58"/><path class="d" d="M22 74 L26 66 L30 74"/></symbol>
+  <symbol id="g-caldera-water" viewBox="0 0 100 100"><rect class="body o" x="30" y="14" width="40" height="16" rx="8"/><rect class="body o" x="32" y="66" width="36" height="12" rx="6"/><line class="d" x1="38" y1="30" x2="38" y2="66"/><line class="d" x1="46" y1="30" x2="46" y2="66"/><line class="d" x1="54" y1="30" x2="54" y2="66"/><line class="d" x1="62" y1="30" x2="62" y2="66"/><line class="o" x1="50" y1="14" x2="50" y2="6"/><path class="d" d="M42 62 L46 54 L50 62 L54 52 L58 62"/></symbol>
+  <!-- ══ PLATOS / EMPAQUE ══ -->
+  <symbol id="g-platos-sieve" viewBox="0 0 100 100"><rect class="body o" x="36" y="12" width="28" height="76" rx="3"/><g class="dot"><circle cx="43" cy="28" r="1.3"/><circle cx="50" cy="28" r="1.3"/><circle cx="57" cy="28" r="1.3"/><circle cx="43" cy="44" r="1.3"/><circle cx="50" cy="44" r="1.3"/><circle cx="57" cy="44" r="1.3"/><circle cx="43" cy="60" r="1.3"/><circle cx="50" cy="60" r="1.3"/><circle cx="57" cy="60" r="1.3"/><circle cx="43" cy="76" r="1.3"/><circle cx="50" cy="76" r="1.3"/><circle cx="57" cy="76" r="1.3"/></g><line class="d" x1="40" y1="28" x2="60" y2="28"/><line class="d" x1="40" y1="44" x2="60" y2="44"/><line class="d" x1="40" y1="60" x2="60" y2="60"/><line class="d" x1="40" y1="76" x2="60" y2="76"/></symbol>
+  <symbol id="g-platos-valve" viewBox="0 0 100 100"><rect class="body o" x="36" y="12" width="28" height="76" rx="3"/><line class="d" x1="40" y1="30" x2="60" y2="30"/><line class="d" x1="40" y1="46" x2="60" y2="46"/><line class="d" x1="40" y1="62" x2="60" y2="62"/><line class="d" x1="40" y1="78" x2="60" y2="78"/><path class="d" d="M43 30 l3 -3.5 l3 3.5 M53 30 l3 -3.5 l3 3.5 M43 46 l3 -3.5 l3 3.5 M53 46 l3 -3.5 l3 3.5 M43 62 l3 -3.5 l3 3.5 M53 62 l3 -3.5 l3 3.5"/></symbol>
+  <symbol id="g-empaque-rand" viewBox="0 0 100 100"><rect class="body o" x="36" y="12" width="28" height="76" rx="3"/><g class="d"><circle cx="44" cy="26" r="3.2"/><circle cx="55" cy="32" r="3.2"/><circle cx="47" cy="42" r="3.2"/><circle cx="57" cy="48" r="3.2"/><circle cx="43" cy="55" r="3.2"/><circle cx="54" cy="63" r="3.2"/><circle cx="45" cy="72" r="3.2"/><circle cx="57" cy="78" r="3.2"/></g></symbol>
+  <symbol id="g-empaque-struct" viewBox="0 0 100 100"><rect class="body o" x="36" y="12" width="28" height="76" rx="3"/><path class="d" d="M40 22 L60 42 M40 42 L60 22 M40 42 L60 62 M40 62 L60 42 M40 62 L60 82 M40 82 L60 62"/></symbol>
+  <!-- ══ HORNOS ══ -->
+  <symbol id="g-horno" viewBox="0 0 100 100"><rect class="body o" x="20" y="34" width="60" height="46"/><path class="body o" d="M20 34 L44 18 L56 18 L80 34 Z"/><rect class="body o" x="44" y="6" width="12" height="12"/><path class="d" d="M28 46 H62 Q70 46 70 54 H38 Q30 54 30 62 H72"/><path class="d" d="M40 76 L44 66 L48 76 L52 64 L56 76"/></symbol>
+  <symbol id="g-horno-reformer" viewBox="0 0 100 100"><rect class="body o" x="20" y="34" width="60" height="46"/><path class="body o" d="M20 34 L44 18 L56 18 L80 34 Z"/><rect class="body o" x="44" y="6" width="12" height="12"/><line class="d" x1="32" y1="40" x2="32" y2="72"/><line class="d" x1="42" y1="40" x2="42" y2="72"/><line class="d" x1="52" y1="40" x2="52" y2="72"/><line class="d" x1="62" y1="40" x2="62" y2="72"/><line class="d" x1="72" y1="40" x2="72" y2="72"/></symbol>
+  <!-- ══ HX variantes ══ -->
+  <symbol id="g-hx" viewBox="0 0 100 100"><rect class="body o" x="16" y="38" width="68" height="24" rx="4"/><line class="d" x1="26" y1="38" x2="26" y2="62"/><line class="d" x1="74" y1="38" x2="74" y2="62"/><path class="d" d="M26 45 Q50 38 74 45 M26 50 Q50 44 74 50 M26 55 Q50 50 74 55"/><line class="o" x1="40" y1="38" x2="40" y2="32"/><line class="o" x1="60" y1="62" x2="60" y2="68"/></symbol>
+  <symbol id="g-hx-placa" viewBox="0 0 100 100"><rect class="body o" x="24" y="26" width="52" height="48"/><line class="d" x1="34" y1="30" x2="34" y2="70"/><line class="d" x1="42" y1="30" x2="42" y2="70"/><line class="d" x1="50" y1="30" x2="50" y2="70"/><line class="d" x1="58" y1="30" x2="58" y2="70"/><line class="d" x1="66" y1="30" x2="66" y2="70"/></symbol>
+  <symbol id="g-hx-espiral" viewBox="0 0 100 100"><circle class="body o" cx="50" cy="50" r="30"/><path class="d" d="M50 50 Q57 43 57 51 Q57 62 45 62 Q30 62 30 46 Q30 27 51 27 Q74 27 74 51"/></symbol>
+  <symbol id="g-hx-kettle" viewBox="0 0 100 100"><rect class="body o" x="16" y="42" width="68" height="34" rx="14"/><path class="body o" d="M38 42 A12 10 0 0 1 62 42 Z"/><path class="d" d="M24 56 H70 A6 6 0 0 1 70 64 H24"/><line class="d" x1="24" y1="70" x2="76" y2="70" stroke-dasharray="3 2"/></symbol>
+  <symbol id="g-hx-whb" viewBox="0 0 100 100"><rect class="body o" x="16" y="34" width="68" height="42" rx="8"/><rect class="body o" x="34" y="12" width="32" height="16" rx="8"/><line class="d" x1="42" y1="28" x2="42" y2="34"/><line class="d" x1="58" y1="28" x2="58" y2="34"/><line class="d" x1="24" y1="54" x2="76" y2="54"/><line class="d" x1="24" y1="60" x2="76" y2="60"/><line class="o" x1="50" y1="12" x2="50" y2="4"/></symbol>
+  <symbol id="g-hx-aircooler" viewBox="0 0 100 100"><rect class="body o" x="20" y="42" width="60" height="30"/><line class="d" x1="26" y1="50" x2="74" y2="50"/><line class="d" x1="26" y1="57" x2="74" y2="57"/><line class="d" x1="26" y1="64" x2="74" y2="64"/><circle class="body o" cx="50" cy="30" r="13"/><path class="d" d="M50 30 L50 19 M50 30 L59 36 M50 30 L41 36"/></symbol>
+  <symbol id="g-hx-cond-air" viewBox="0 0 100 100"><path class="body o" d="M22 66 L50 30 L78 66 Z"/><path class="d" d="M34 66 L50 46 M42 66 L58 46 M50 66 L66 66"/><circle class="body o" cx="50" cy="78" r="9"/><path class="d" d="M50 78 L50 71 M50 78 L56 82 M50 78 L44 82"/></symbol>
+  <!-- ══ CENTRÍFUGAS ══ -->
+  <symbol id="g-centrifuga-decanter" viewBox="0 0 100 100"><path class="body o" d="M16 38 H68 L84 50 L68 62 H16 Z"/><path class="d" d="M22 50 Q30 43 38 50 Q46 57 54 50 Q62 43 70 50"/></symbol>
+  <symbol id="g-centrifuga-disc" viewBox="0 0 100 100"><path class="body o" d="M28 28 H72 L64 76 H36 Z"/><rect class="dot" x="44" y="12" width="12" height="6"/><line class="d" x1="50" y1="18" x2="50" y2="28"/><path class="d" d="M38 40 L50 34 L62 40 M40 50 L50 45 L60 50 M42 60 L50 55 L58 60"/></symbol>
+  <!-- ══ TANQUES ══ -->
+  <symbol id="g-tanque-cone" viewBox="0 0 100 100"><path class="body o" d="M26 34 L50 16 L74 34 Z"/><rect class="body o" x="26" y="34" width="48" height="46"/><line class="d" x1="30" y1="56" x2="70" y2="56" stroke-dasharray="3 2"/></symbol>
+  <symbol id="g-tanque-float" viewBox="0 0 100 100"><rect class="body o" x="26" y="20" width="48" height="60"/><rect class="dot" x="30" y="28" width="40" height="3.4"/><line class="d" x1="30" y1="56" x2="70" y2="56" stroke-dasharray="3 2"/></symbol>
+  <!-- ══ COMPARTIDOS A PROPÓSITO ══ -->
+  <symbol id="g-tambor" viewBox="0 0 100 100"><rect class="body o" x="12" y="38" width="76" height="24" rx="12"/><line class="d" x1="20" y1="52" x2="80" y2="52" stroke-dasharray="3 2"/><line class="d" x1="34" y1="62" x2="34" y2="72"/><line class="d" x1="66" y1="62" x2="66" y2="72"/></symbol>
+  <symbol id="g-separador" viewBox="0 0 100 100"><rect class="body o" x="34" y="18" width="32" height="64"/><ellipse class="body o" cx="50" cy="18" rx="16" ry="6"/><ellipse class="body o" cx="50" cy="82" rx="16" ry="6"/><line class="d" x1="40" y1="30" x2="60" y2="30"/><line class="d" x1="40" y1="33" x2="60" y2="33"/><line class="d" x1="37" y1="64" x2="63" y2="64" stroke-dasharray="3 2"/></symbol>
+  <symbol id="g-evaporador" viewBox="0 0 100 100"><rect class="body o" x="34" y="20" width="32" height="62" rx="4"/><path class="d" d="M40 14 Q44 10 48 14 M54 14 Q58 10 62 14"/><line class="d" x1="40" y1="34" x2="40" y2="72"/><line class="d" x1="47" y1="34" x2="47" y2="72"/><line class="d" x1="54" y1="34" x2="54" y2="72"/><line class="d" x1="61" y1="34" x2="61" y2="72"/></symbol>
+  <symbol id="g-mezclador" viewBox="0 0 100 100"><path class="o" d="M18 24 L48 48 L18 76 M18 24 L82 48 M18 76 L82 48"/><circle class="body o" cx="50" cy="49" r="5"/></symbol>
+  <symbol id="g-splitter" viewBox="0 0 100 100"><path class="o" d="M18 50 H50 M50 50 L82 22 M50 50 L82 78"/><path class="d" d="M74 22 H82 M82 22 L78 30 M74 78 H82 M82 78 L78 70"/><circle class="body o" cx="50" cy="50" r="5"/></symbol>
+  <symbol id="g-columna" viewBox="0 0 100 100"><rect class="body o" x="38" y="10" width="24" height="80" rx="4"/><line class="d" x1="42" y1="22" x2="58" y2="22"/><line class="d" x1="42" y1="32" x2="58" y2="32"/><line class="d" x1="42" y1="42" x2="58" y2="42"/><line class="d" x1="42" y1="52" x2="58" y2="52"/><line class="d" x1="42" y1="62" x2="58" y2="62"/><line class="d" x1="42" y1="72" x2="58" y2="72"/><line class="o" x1="38" y1="50" x2="30" y2="50"/></symbol>
+  <symbol id="g-ciclon" viewBox="0 0 100 100"><path class="body o" d="M26 20 H74 V40 L56 82 H44 L26 40 Z"/><line class="d" x1="44" y1="8" x2="44" y2="24"/><line class="d" x1="56" y1="8" x2="56" y2="24"/><line class="d" x1="14" y1="26" x2="26" y2="26"/><path class="d" d="M62 38 Q34 48 60 58 Q34 68 52 78"/></symbol>
+  <symbol id="g-filtro" viewBox="0 0 100 100"><rect class="body o" x="20" y="18" width="60" height="60" rx="5"/><line class="d" x1="20" y1="42" x2="80" y2="42"/><line class="d" x1="20" y1="58" x2="80" y2="58"/><path class="d" d="M28 58 L34 42 M40 58 L46 42 M52 58 L58 42 M64 58 L70 42"/></symbol>
+  <symbol id="g-secador" viewBox="0 0 100 100"><rect class="body o" x="12" y="34" width="76" height="32" rx="16"/><path class="d" d="M32 62 L38 40 M48 62 L54 40 M64 62 L70 40"/><circle class="d" cx="30" cy="72" r="4"/><circle class="d" cx="70" cy="72" r="4"/></symbol>
+  <symbol id="g-cristalizador" viewBox="0 0 100 100"><path class="body o" d="M22 30 A28 20 0 0 1 78 30 L64 66 L50 84 L36 66 Z"/><rect class="dot" x="44" y="8" width="12" height="6"/><line class="d" x1="50" y1="14" x2="50" y2="52"/><line class="o" x1="40" y1="52" x2="60" y2="52"/><path class="d" d="M40 56 l3 -3 l3 3 l-3 3 Z M55 62 l3 -3 l3 3 l-3 3 Z"/></symbol>
+  <symbol id="g-torre-enf" viewBox="0 0 100 100"><path class="body o" d="M30 82 Q37 46 34 14 L66 14 Q63 46 70 82 Z"/><circle class="body o" cx="50" cy="14" r="10"/><path class="d" d="M50 14 L50 6 M50 14 L57 19 M50 14 L43 19"/><line class="d" x1="34" y1="70" x2="66" y2="70"/></symbol>
+  <symbol id="g-torre-nat" viewBox="0 0 100 100"><path class="body o" d="M28 84 Q40 48 34 12 L66 12 Q60 48 72 84 Z"/><path class="d" d="M44 12 Q48 6 54 10"/><line class="d" x1="34" y1="72" x2="66" y2="72"/></symbol>
+  <symbol id="g-ventilador" viewBox="0 0 100 100"><circle class="body o" cx="50" cy="50" r="30"/><path class="d" d="M50 50 Q56 30 44 24 M50 50 Q68 56 70 44 M50 50 Q40 70 56 72"/><circle class="dot" cx="50" cy="50" r="3"/></symbol>
+  <symbol id="g-ventilador-rad" viewBox="0 0 100 100"><path class="body o" d="M50 20 A30 30 0 1 0 80 50 L80 34 L64 34"/><circle class="dot" cx="47" cy="52" r="3"/><path class="d" d="M47 52 Q52 38 40 34 M47 52 Q60 56 60 46 M47 52 Q38 66 52 68"/></symbol>
+</defs></svg>
+
+
+  <header style="position:sticky;top:0;z-index:50;background:color-mix(in srgb,var(--bg_elev) 88%, transparent);backdrop-filter:blur(10px);border-bottom:1px solid var(--line);">
+    <div style="max-width:1180px;margin:0 auto;padding:11px 26px;display:flex;align-items:center;gap:16px;flex-wrap:wrap;">
+      <div style="display:flex;align-items:center;gap:10px;">
+        <div style="width:30px;height:30px;border-radius:8px;background:var(--accent_tint);border:1px solid var(--accent_soft);color:var(--accent);display:grid;place-items:center;font-size:15px;">◆</div>
+        <div style="line-height:1.15;">
+          <div class="mono" style="font-size:13.5px;font-weight:500;">Pedro-Tesis · <span style="color:var(--accent)">Ciclo 3</span></div>
+          <div style="font-size:11px;color:var(--ink_soft);letter-spacing:.4px;">Diseño · glifos, corrientes, anotación</div>
+        </div>
+      </div>
+      <nav style="display:flex;gap:2px;margin-left:8px;">
+        <a href="#3a" style="padding:6px 12px;border-radius:7px;font-size:13px;color:var(--ink_mute);">3a · Glifos</a>
+        <a href="#3b" style="padding:6px 12px;border-radius:7px;font-size:13px;color:var(--ink_mute);">3b · Corrientes</a>
+        <a href="#3c" style="padding:6px 12px;border-radius:7px;font-size:13px;color:var(--ink_mute);">3c · Anotación</a>
+        <a href="#pend" style="padding:6px 12px;border-radius:7px;font-size:13px;color:var(--ink_mute);">⚡ Pendientes</a>
+      </nav>
+      <div style="flex:1;"></div>
+      <div style="display:flex;align-items:center;gap:14px;">
+        <div style="display:flex;gap:3px;background:var(--bg_mute);border:1px solid var(--line);border-radius:8px;padding:3px;">
+          <button onClick="{{ setLight }}" style="{{ lightBtn }}">Claro</button>
+          <button onClick="{{ setDark }}" style="{{ darkBtn }}">Oscuro</button>
+        </div>
+        <div style="display:flex;gap:5px;align-items:center;">
+          <sc-for list="{{ accents }}" as="a" hint-placeholder-count="4">
+            <button onClick="{{ a.pick }}" title="{{ a.name }}" style="{{ a.style }}"></button>
+          </sc-for>
+        </div>
+      </div>
+    </div>
+  </header>
+
+  <main style="max-width:1180px;margin:0 auto;padding:34px 26px 120px;">
+
+    <section style="margin-bottom:14px;">
+      <div style="font-size:12px;letter-spacing:2px;color:var(--accent);font-weight:600;text-transform:uppercase;margin-bottom:8px;">Fase Design · Ciclo 3</div>
+      <h1 style="font-size:33px;line-height:1.12;margin:0 0 12px;font-weight:700;max-width:20ch;">Los tres pendientes que los ciclos 1 y 2 dejaron para diseño propio</h1>
+      <p style="font-size:16px;color:var(--ink_mute);max-width:74ch;margin:0 0 4px;text-wrap:pretty;">
+        Un solo bundle de artboards, con las variables de token vivas (tema claro/oscuro · 4 acentos, arriba a la derecha).
+        <strong style="color:var(--ink)">3a — diferenciación de glifos</strong> es el corazón: el hallazgo lo validó el propio usuario —
+        <em>«la barra para crear equipos tiene varios equipos, pero no tienen una miniatura que los diferencie — todos se parecen»</em>.
+        <strong style="color:var(--ink)">3b</strong> da la pasada formal de diseño a la tabla y el inspector de corriente; <strong style="color:var(--ink)">3c</strong> define la herramienta de anotación (T).
+      </p>
+    </section>
+
+    <!-- SISTEMA / reglas transversales -->
+    <section style="display:grid;grid-template-columns:repeat(auto-fit,minmax(250px,1fr));gap:14px;margin:26px 0 8px;">
+      <div style="background:var(--bg_elev);border:1px solid var(--line);border-radius:12px;padding:16px 18px;box-shadow:var(--shadow);">
+        <div style="font-size:11px;letter-spacing:1.4px;color:var(--ink_soft);text-transform:uppercase;font-weight:600;margin-bottom:9px;">Regla de trazo</div>
+        <div style="display:flex;gap:14px;align-items:center;">
+          <svg class="glyph" width="52" height="52" viewBox="0 0 100 100"><rect class="o" x="16" y="30" width="68" height="40" rx="6"/><line class="d" x1="24" y1="42" x2="76" y2="42"/><line class="d" x1="24" y1="52" x2="76" y2="52"/></svg>
+          <div style="font-size:13px;color:var(--ink_mute);line-height:1.45;">
+            <div><span class="mono" style="color:var(--ink)">STROKE_OUTLINE 1.6</span> — contorno</div>
+            <div><span class="mono" style="color:var(--ink)">STROKE_DETAIL 1.0</span> — detalle interno</div>
+            <div style="margin-top:4px;font-size:12px;">Fin de los 0.9–2.0 dispersos. Excepciones, declaradas.</div>
+          </div>
+        </div>
+      </div>
+      <div style="background:var(--bg_elev);border:1px solid var(--line);border-radius:12px;padding:16px 18px;box-shadow:var(--shadow);">
+        <div style="font-size:11px;letter-spacing:1.4px;color:var(--ink_soft);text-transform:uppercase;font-weight:600;margin-bottom:9px;">Color = estado, no identidad</div>
+        <div style="display:flex;gap:9px;flex-wrap:wrap;">
+          <sc-for list="{{ stateChips }}" as="s" hint-placeholder-count="6">
+            <span data-state="{{ s.state }}" style="display:inline-flex;align-items:center;gap:6px;font-size:12px;color:var(--ink_mute);border:1px solid var(--line);border-radius:20px;padding:3px 10px 3px 6px;">
+              <svg class="glyph {{ s.cls }}" width="20" height="20" viewBox="0 0 100 100"><rect class="body o" x="20" y="30" width="60" height="40" rx="6"/></svg>{{ s.label }}
+            </span>
+          </sc-for>
+        </div>
+        <div style="margin-top:9px;font-size:12px;color:var(--ink_soft);">El significado del equipo vive en la <strong style="color:var(--ink_mute)">forma</strong> (daltónico-safe). El color es el semáforo del solver — probalo cambiándolo abajo en 3a.</div>
+      </div>
+      <div style="background:var(--bg_elev);border:1px solid var(--line);border-radius:12px;padding:16px 18px;box-shadow:var(--shadow);">
+        <div style="font-size:11px;letter-spacing:1.4px;color:var(--ink_soft);text-transform:uppercase;font-weight:600;margin-bottom:9px;">Doble escala obligatoria</div>
+        <div style="display:flex;gap:16px;align-items:flex-end;">
+          <div style="text-align:center;"><svg class="glyph" width="60" height="60" viewBox="0 0 100 100"><use href="#g-bomba"/></svg><div style="font-size:11px;color:var(--ink_soft);margin-top:3px;">~60px · lienzo</div></div>
+          <div style="text-align:center;"><svg class="glyph" width="22" height="22" viewBox="0 0 100 100"><use href="#g-bomba"/></svg><div style="font-size:11px;color:var(--ink_soft);margin-top:3px;">22px · paleta</div></div>
+          <div style="font-size:12px;color:var(--ink_soft);line-height:1.4;">Si un rasgo desaparece a 22px, no diferencia. El distintivo es <strong style="color:var(--ink_mute)">macro-forma</strong>, no textura.</div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ══════════════════ 3a ══════════════════ -->
+    <section id="3a" style="scroll-margin-top:70px;margin-top:52px;">
+      <div style="display:flex;align-items:baseline;gap:14px;border-top:2px solid var(--ink);padding-top:16px;margin-bottom:6px;">
+        <div style="font-size:40px;font-weight:700;letter-spacing:-1px;">3a</div>
+        <div>
+          <h2 style="font-size:23px;margin:0;font-weight:600;">Diferenciación de glifos</h2>
+          <div style="color:var(--ink_soft);font-size:14px;">56 tipos · 29 siluetas hoy (11 únicas, 18 compartidas) — esto cierra la mitad restante, no arranca de cero.</div>
+        </div>
+      </div>
+
+      <!-- semáforo interactivo -->
+      <div style="background:var(--bg_elev);border:1px solid var(--line);border-radius:12px;padding:16px 18px;margin:18px 0 26px;box-shadow:var(--shadow);">
+        <div style="display:flex;justify-content:space-between;align-items:center;gap:16px;flex-wrap:wrap;margin-bottom:12px;">
+          <div>
+            <div style="font-size:11px;letter-spacing:1.4px;color:var(--ink_soft);text-transform:uppercase;font-weight:600;">El color es el estado del solver — la forma es la identidad</div>
+            <div style="font-size:13px;color:var(--ink_mute);margin-top:2px;">Los glifos se re-tintan en vivo (ciclo 2b). El spec define <em>geometría + roles</em> (ink / fill / detalle), nunca hex propios. Cambiá el estado:</div>
+          </div>
+          <div style="display:flex;gap:4px;flex-wrap:wrap;">
+            <sc-for list="{{ stateBtns }}" as="b" hint-placeholder-count="6">
+              <button onClick="{{ b.pick }}" style="{{ b.style }}">{{ b.label }}</button>
+            </sc-for>
+          </div>
+        </div>
+        <div data-state="{{ glyphState }}" class="{{ glyphStateCls }}" style="display:flex;gap:26px;align-items:center;flex-wrap:wrap;padding:12px 4px;background:var(--canvas_bg);border:1px solid var(--line_soft);border-radius:9px;background-image:radial-gradient(var(--canvas_grid) 1px, transparent 1px);background-size:16px 16px;">
+          <svg class="glyph" width="60" height="60" viewBox="0 0 100 100"><use href="#g-reactor-jacket"/></svg>
+          <svg class="glyph" width="60" height="60" viewBox="0 0 100 100"><use href="#g-columna"/></svg>
+          <svg class="glyph" width="60" height="60" viewBox="0 0 100 100"><use href="#g-hx"/></svg>
+          <svg class="glyph" width="60" height="60" viewBox="0 0 100 100"><use href="#g-bomba"/></svg>
+          <svg class="glyph" width="60" height="60" viewBox="0 0 100 100"><use href="#g-compresor"/></svg>
+          <span style="font-size:12.5px;color:var(--ink_soft);max-width:22ch;">ok = éxito silencioso (solo tinta el relleno) · unrun = contorno punteado · stale = desaturado.</span>
+        </div>
+      </div>
+
+      <!-- grupos -->
+      <sc-for list="{{ groups }}" as="grp" hint-placeholder-count="5">
+        <div style="background:var(--bg_elev);border:1px solid var(--line);border-radius:14px;padding:20px 22px;margin-bottom:20px;box-shadow:var(--shadow);">
+          <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:4px;">
+            <span style="{{ grp.rankStyle }}">{{ grp.rank }}</span>
+            <h3 style="font-size:18px;margin:0;font-weight:600;">{{ grp.title }}</h3>
+            <span class="mono" style="font-size:12px;color:var(--ink_soft);">{{ grp.count }}</span>
+          </div>
+          <p style="font-size:14px;color:var(--ink_mute);margin:0 0 4px;max-width:82ch;text-wrap:pretty;">{{ grp.summary }}</p>
+          <div style="font-size:12.5px;color:var(--ink_soft);margin-bottom:16px;"><span style="color:var(--danger)">▚</span> {{ grp.before }}</div>
+          <div style="display:flex;gap:14px;flex-wrap:wrap;">
+            <sc-for list="{{ grp.variants }}" as="v" hint-placeholder-count="3">
+              <div style="{{ v.tileStyle }}">
+                <div style="display:flex;align-items:flex-end;gap:14px;padding-bottom:10px;border-bottom:1px dashed var(--line);margin-bottom:9px;">
+                  <div class="{{ v.cls }}" style="display:flex;align-items:flex-end;gap:12px;">
+                    <svg class="glyph" width="58" height="58" viewBox="0 0 100 100"><use href="{{ v.href }}"/></svg>
+                    <div style="text-align:center;"><svg class="glyph" width="22" height="22" viewBox="0 0 100 100"><use href="{{ v.href }}"/></svg><div style="font-size:9px;color:var(--ink_ghost);margin-top:2px;">22px</div></div>
+                  </div>
+                  <sc-if value="{{ v.tag }}" hint-placeholder-val="{{ true }}"><span style="{{ v.tagStyle }}">{{ v.tag }}</span></sc-if>
+                </div>
+                <div style="font-size:14px;font-weight:600;line-height:1.2;">{{ v.name }}</div>
+                <div class="mono" style="font-size:11px;color:var(--ink_soft);margin:2px 0 7px;">{{ v.eq }}</div>
+                <div style="font-size:12.5px;color:var(--ink_mute);line-height:1.4;text-wrap:pretty;">{{ v.trait }}</div>
+              </div>
+            </sc-for>
+          </div>
+        </div>
+      </sc-for>
+
+      <!-- decisión cerrada HX×6 -->
+      <div style="background:var(--bg_mute);border:1px dashed var(--line_strong);border-radius:14px;padding:18px 22px;margin-bottom:20px;">
+        <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;">
+          <svg class="glyph" width="46" height="46" viewBox="0 0 100 100"><use href="#g-hx"/></svg>
+          <div style="flex:1;min-width:280px;">
+            <div style="font-size:15px;font-weight:600;">HX casco-y-tubo ×6 — compartido a propósito <span style="font-size:11px;color:var(--ink_soft);font-weight:400;">(decisión cerrada · TRABAJOS_FUTUROS §8)</span></div>
+            <p style="font-size:13px;color:var(--ink_mute);margin:4px 0 0;max-width:88ch;">fixed tube · U-tube · floating head · double pipe · multiple pipe · condenser shell-tube comparten <span class="mono">#g-hx</span>. Misma familia geométrica (carcasa + haz de tubos); diferenciarlas sería textura interna invisible a 22px y ruido a 60px. <strong style="color:var(--ink)">Default: no reabrir.</strong> El rol térmico y el ribbon Sinnott/Turton del inspector desambiguan.</p>
+          </div>
+        </div>
+      </div>
+
+      <!-- tabla de mapeo -->
+      <div style="background:var(--bg_elev);border:1px solid var(--line);border-radius:14px;padding:20px 22px;margin-bottom:8px;box-shadow:var(--shadow);">
+        <h3 style="font-size:16px;margin:0 0 3px;font-weight:600;">Tabla eq_type → glifo</h3>
+        <div style="font-size:12.5px;color:var(--ink_soft);margin-bottom:14px;">Catálogo completo. <span style="color:var(--accent);font-weight:600;">●</span> silueta nueva de este ciclo · <span style="color:var(--ink_soft);font-weight:600;">◇</span> compartido a propósito (decisión escrita).</div>
+        <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(310px,1fr));gap:3px 22px;">
+          <sc-for list="{{ mapping }}" as="m" hint-placeholder-count="12">
+            <div style="display:flex;align-items:center;gap:9px;padding:5px 0;border-bottom:1px solid var(--line_soft);font-size:12.5px;">
+              <svg class="glyph" width="26" height="22" viewBox="0 0 100 100" style="flex:none;"><use href="{{ m.href }}"/></svg>
+              <span class="mono" style="flex:1;color:var(--ink_mute);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">{{ m.eq }}</span>
+              <span style="{{ m.badgeStyle }}">{{ m.badge }}</span>
+            </div>
+          </sc-for>
+        </div>
+      </div>
+    </section>
+
+    <!-- ══════════════════ 3b ══════════════════ -->
+    <section id="3b" style="scroll-margin-top:70px;margin-top:56px;">
+      <div style="display:flex;align-items:baseline;gap:14px;border-top:2px solid var(--ink);padding-top:16px;margin-bottom:6px;">
+        <div style="font-size:40px;font-weight:700;letter-spacing:-1px;">3b</div>
+        <div>
+          <h2 style="font-size:23px;margin:0;font-weight:600;">Tabla de corrientes + inspector de corriente</h2>
+          <div style="color:var(--ink_soft);font-size:14px;">Ya consumen tokens y los 6 tamaños — esto es diseño: jerarquía, densidad, qué se muestra y qué sobra.</div>
+        </div>
+      </div>
+
+      <!-- decisiones -->
+      <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:12px;margin:18px 0 22px;">
+        <div style="background:var(--bg_elev);border:1px solid var(--line);border-radius:11px;padding:14px 16px;box-shadow:var(--shadow);">
+          <div style="font-size:11px;letter-spacing:1.3px;color:var(--ink_soft);text-transform:uppercase;font-weight:600;margin-bottom:6px;">Esencial vs bajo demanda</div>
+          <div style="font-size:13px;color:var(--ink_mute);line-height:1.5;">Siempre: <span style="color:var(--ink)">#, tag·rol, desde→hacia, fase, flujo, T·P</span>. Bajo demanda (menú «columnas»): <span style="color:var(--ink)">composición, Cp, ΔHvap, precio</span> — viven en el inspector; en la tabla solo si se piden.</div>
+        </div>
+        <div style="background:var(--bg_elev);border:1px solid var(--line);border-radius:11px;padding:14px 16px;box-shadow:var(--shadow);">
+          <div style="font-size:11px;letter-spacing:1.3px;color:var(--ink_soft);text-transform:uppercase;font-weight:600;margin-bottom:6px;">spec vs auto — mismo lenguaje que el bloque</div>
+          <div style="font-size:13px;color:var(--ink_mute);line-height:1.5;"><span style="border-bottom:2px solid var(--spec);color:var(--ink)">valor declarado</span> en tinta con cinta spec · <span style="color:var(--ink_soft);font-style:italic">auto deducido</span> desaturado + tag. Nada de dos rojos ni convenciones nuevas.</div>
+        </div>
+        <div style="background:var(--bg_elev);border:1px solid var(--line);border-radius:11px;padding:14px 16px;box-shadow:var(--shadow);">
+          <div style="font-size:11px;letter-spacing:1.3px;color:var(--ink_soft);text-transform:uppercase;font-weight:600;margin-bottom:6px;">Sincronía con el lienzo</div>
+          <div style="font-size:13px;color:var(--ink_mute);line-height:1.5;">Click en fila ↔ resalta el stream en el canvas (halo accent_soft + peso de trazo, nunca otro hex). Doble-click abre el inspector.</div>
+        </div>
+      </div>
+
+      <!-- toolbar de la tabla -->
+      <div style="border:1px solid var(--line);border-radius:12px 12px 0 0;overflow:hidden;box-shadow:var(--shadow);">
+        <div style="background:var(--bg_mute);border-bottom:1px solid var(--line);padding:10px 18px;display:flex;align-items:center;gap:14px;flex-wrap:wrap;">
+          <span style="font-size:11px;letter-spacing:1.4px;color:var(--ink);text-transform:uppercase;font-weight:600;">Corrientes</span>
+          <span class="mono" style="font-size:13px;color:var(--ink_soft);">{{ streamCount }}</span>
+          <div style="width:1px;height:20px;background:var(--line);"></div>
+          <div style="display:flex;background:var(--bg_elev);border:1px solid var(--line_strong);border-radius:7px;padding:2px;gap:1px;">
+            <sc-for list="{{ units }}" as="u" hint-placeholder-count="5">
+              <button onClick="{{ u.pick }}" style="{{ u.style }}">{{ u.label }}</button>
+            </sc-for>
+          </div>
+          <div style="display:flex;gap:16px;">
+            <div><div style="font-size:9.5px;letter-spacing:1px;color:var(--ink_soft);">Σ FEED</div><div class="mono" style="font-size:13px;"><span style="color:var(--green)">●</span> 46 940 <span style="font-size:10px;color:var(--ink_soft)">{{ unitLabel }}</span></div></div>
+            <div><div style="font-size:9.5px;letter-spacing:1px;color:var(--ink_soft);">Σ PRODUCT</div><div class="mono" style="font-size:13px;"><span style="color:var(--orange)">●</span> 21 280 <span style="font-size:10px;color:var(--ink_soft)">{{ unitLabel }}</span></div></div>
+          </div>
+          <div style="flex:1;"></div>
+          <button onClick="{{ toggleComp }}" style="{{ compBtnStyle }}">Composición {{ compToggleLabel }}</button>
+          <div style="display:flex;align-items:center;gap:6px;background:var(--bg_elev);border:1px solid var(--line_strong);border-radius:7px;padding:4px 10px;color:var(--ink_soft);font-size:12.5px;">⌕ Buscar…</div>
+        </div>
+        <!-- header row -->
+        <div style="display:grid;grid-template-columns:{{ gridCols }};gap:14px;align-items:center;background:var(--bg);border-bottom:1px solid var(--line);padding:8px 18px;font-size:10.5px;letter-spacing:1.3px;color:var(--ink_soft);font-weight:600;">
+          <div>#</div><div>TAG · ROL</div><div>DESDE → HACIA</div><div>FASE</div><div>FLUJO</div>
+          <sc-if value="{{ showComp }}" hint-placeholder-val="{{ true }}"><div>COMPOSICIÓN <span style="color:var(--ink_ghost);font-weight:400">bajo demanda</span></div></sc-if>
+          <div style="text-align:right;">T · P</div>
+        </div>
+        <!-- rows -->
+        <div style="background:var(--bg_elev);">
+          <sc-for list="{{ streams }}" as="s" hint-placeholder-count="5">
+            <div onClick="{{ s.pick }}" style="{{ s.rowStyle }}">
+              <div style="position:relative;width:34px;height:34px;">
+                <div style="width:34px;height:34px;border-radius:50%;border:1px solid {{ s.pillBorder }};background:{{ s.pillBg }};color:{{ s.pillInk }};display:grid;place-items:center;font:500 13px 'IBM Plex Mono',monospace;">{{ s.n }}</div>
+                <div style="position:absolute;right:-2px;bottom:-2px;width:12px;height:12px;border-radius:50%;background:{{ s.phaseColor }};border:2px solid var(--bg_elev);"></div>
+              </div>
+              <div>
+                <div class="mono" style="font-size:13px;color:var(--ink);">{{ s.tag }}</div>
+                <div style="display:flex;align-items:center;gap:6px;margin-top:3px;"><span style="{{ s.roleStyle }}">{{ s.role }}</span><span style="width:9px;height:9px;border-radius:50%;background:{{ s.statusColor }};"></span></div>
+              </div>
+              <div class="mono" style="font-size:11px;color:var(--ink_mute);display:flex;align-items:center;gap:5px;"><span style="text-align:right;flex:1;">{{ s.from }}</span><span style="color:var(--ink_soft);">→</span><span style="flex:1;">{{ s.to }}</span></div>
+              <div><span style="font-size:11px;letter-spacing:.5px;color:var(--ink_mute);background:var(--bg_sunk);border-radius:4px;padding:2px 8px;"><span style="color:{{ s.phaseColor }}">●</span> {{ s.phaseLabel }}</span></div>
+              <div>
+                <div style="display:flex;align-items:baseline;gap:5px;"><span class="mono" style="font-size:13px;{{ s.flowInk }}">{{ s.flow }}</span><span style="font-size:10px;color:var(--ink_soft);">{{ unitLabel }}</span><sc-if value="{{ s.auto }}" hint-placeholder-val="{{ true }}"><span style="font-size:10px;font-style:italic;color:var(--auto_ink);">auto</span></sc-if></div>
+                <div style="height:6px;border-radius:3px;background:var(--bg_sunk);margin-top:5px;overflow:hidden;"><div style="height:100%;width:{{ s.barPct }};background:{{ s.barColor }};border-radius:3px;"></div></div>
+              </div>
+              <sc-if value="{{ showComp }}" hint-placeholder-val="{{ true }}">
+                <div>
+                  <div style="height:8px;border-radius:3px;overflow:hidden;display:flex;border:1px solid var(--line);">
+                    <sc-for list="{{ s.comp }}" as="c" hint-placeholder-count="3"><div style="width:{{ c.pct }};background:{{ c.color }};"></div></sc-for>
+                  </div>
+                  <div class="mono" style="font-size:9px;color:var(--ink_soft);margin-top:4px;display:flex;gap:9px;">
+                    <sc-for list="{{ s.compLegend }}" as="c" hint-placeholder-count="2"><span><span style="color:{{ c.color }}">●</span> {{ c.name }} {{ c.pct }}</span></sc-for>
+                  </div>
+                </div>
+              </sc-if>
+              <div style="text-align:right;">
+                <div><span class="mono" style="font-size:11px;font-weight:600;{{ s.tInk }}">{{ s.T }}</span><span style="font-size:9px;color:var(--ink_soft);"> °C</span></div>
+                <div><span class="mono" style="font-size:11px;{{ s.pInk }}">{{ s.P }}</span><span style="font-size:9px;color:var(--ink_soft);"> bar</span></div>
+              </div>
+            </div>
+          </sc-for>
+        </div>
+      </div>
+      <div style="display:flex;gap:22px;flex-wrap:wrap;font-size:12px;color:var(--ink_soft);margin:9px 2px 26px;">
+        <span><span style="border-bottom:2px solid var(--spec);color:var(--ink_mute)">tinta + cinta spec</span> = declarado</span>
+        <span style="font-style:italic;">gris + «auto» = deducido por el solver</span>
+        <span><span style="color:var(--accent)">▌</span> fila con borde de acento = seleccionada ↔ resaltada en el lienzo</span>
+      </div>
+
+      <!-- estados vacío / stale -->
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:30px;">
+        <div style="background:var(--bg_elev);border:1px solid var(--line);border-radius:12px;padding:26px;text-align:center;box-shadow:var(--shadow);">
+          <svg class="glyph" width="40" height="40" viewBox="0 0 100 100" style="margin:0 auto 8px;opacity:.5;"><use href="#g-splitter"/></svg>
+          <div style="font-size:14px;font-weight:600;">Sin corrientes todavía</div>
+          <div style="font-size:12.5px;color:var(--ink_soft);margin-top:3px;max-width:34ch;margin-inline:auto;">Conectá dos bloques en el lienzo o arrastrá un equipo desde la paleta. La tabla se puebla sola.</div>
+        </div>
+        <div data-state="stale" style="background:var(--bg_elev);border:1px solid var(--spec_ribbon);border-radius:12px;padding:18px 22px;box-shadow:var(--shadow);">
+          <div style="display:flex;align-items:center;gap:8px;"><span style="width:9px;height:9px;border-radius:50%;background:var(--spec);"></span><span style="font-size:14px;font-weight:600;">Datos stale — re-ejecutar</span></div>
+          <div style="font-size:12.5px;color:var(--ink_soft);margin-top:5px;max-width:52ch;">Tras editar el flowsheet, los valores <span style="color:var(--ink_soft)">auto</span> se atenúan y aparece una cinta stale sobre la tabla; los <span style="color:var(--ink_mute)">declarados</span> siguen firmes. El semáforo del topbar pide «Resolver».</div>
+        </div>
+      </div>
+    </section>
+
+      <!-- inspector de corriente -->
+      <h3 style="font-size:17px;margin:0 0 3px;font-weight:600;">Inspector de corriente</h3>
+      <p style="font-size:13.5px;color:var(--ink_mute);margin:0 0 18px;max-width:80ch;">Se <strong style="color:var(--ink)">alinea</strong> a la anatomía del inspector de bloque (ciclo 2f): header con chips + path strip, secciones apiladas, filas SpecField, card de evidencia, footer live. No se inventa jerarquía propia — una corriente no merece anatomía distinta que un bloque.</p>
+      <div style="display:grid;grid-template-columns:452px 1fr;gap:26px;align-items:start;margin-bottom:14px;">
+        <!-- panel -->
+        <div style="background:var(--bg_elev);border:1px solid var(--line);border-radius:14px;overflow:hidden;box-shadow:var(--shadow);">
+          <!-- header -->
+          <div style="display:flex;align-items:center;gap:11px;padding:13px 14px;border-bottom:1px solid var(--line);">
+            <div style="width:38px;height:38px;border-radius:9px;background:var(--accent_tint);border:1px solid var(--accent_soft);color:var(--accent);display:grid;place-items:center;font:500 13px 'IBM Plex Mono',monospace;">S4</div>
+            <div style="flex:1;min-width:0;">
+              <div class="mono" style="font-size:15px;color:var(--ink);">S-crudo</div>
+              <div style="display:flex;align-items:center;gap:6px;margin-top:2px;"><span style="background:var(--orange_bg);color:var(--orange);font-size:9.5px;font-weight:700;letter-spacing:.7px;padding:1px 7px;border-radius:9px;">PRODUCT</span><span style="font-size:11.5px;color:var(--ink_soft);">metanol crudo 89 %</span></div>
+            </div>
+            <div style="width:28px;height:28px;border-radius:7px;border:1px solid var(--line);display:grid;place-items:center;color:var(--ink_soft);font-size:13px;">✕</div>
+          </div>
+          <!-- path strip -->
+          <div style="display:flex;align-items:center;justify-content:center;gap:10px;padding:11px;background:var(--bg_mute);border-bottom:1px solid var(--line);">
+            <span class="mono" style="font-size:11.5px;color:var(--ink_mute);">V-201<span style="color:var(--ink_soft)">.liq</span></span>
+            <span style="width:22px;height:22px;border-radius:50%;background:var(--accent);color:#fff;display:grid;place-items:center;font:500 10px 'IBM Plex Mono',monospace;">4</span>
+            <span style="color:var(--ink_soft);">→</span>
+            <span class="mono" style="font-size:11.5px;color:var(--ink_mute);">T-201<span style="color:var(--ink_soft)">.in</span></span>
+          </div>
+          <!-- section nav -->
+          <div style="display:flex;gap:2px;padding:9px 12px 0;border-bottom:1px solid var(--line);overflow-x:auto;">
+            <sc-for list="{{ inspSections }}" as="x" hint-placeholder-count="5"><span style="{{ x.style }}">{{ x.name }}</span></sc-for>
+          </div>
+          <!-- Termodinámica -->
+          <div style="padding:15px 16px;border-bottom:1px solid var(--line_soft);">
+            <div style="font-size:10.5px;letter-spacing:1.3px;color:var(--ink_soft);text-transform:uppercase;font-weight:600;margin-bottom:11px;">Termodinámica</div>
+            <div style="display:flex;flex-direction:column;gap:9px;">
+              <sc-for list="{{ specRows }}" as="r" hint-placeholder-count="4">
+                <div style="display:flex;align-items:center;gap:10px;">
+                  <div style="width:104px;font-size:12.5px;color:var(--ink_mute);">{{ r.label }}</div>
+                  <div style="flex:1;display:flex;align-items:center;border:1px solid {{ r.border }};border-left:3px solid {{ r.ribbon }};border-radius:7px;background:{{ r.bg }};padding:6px 10px;">
+                    <span class="mono" style="font-size:13px;{{ r.valInk }}">{{ r.val }}</span>
+                    <span style="font-size:11px;color:var(--ink_soft);margin-left:4px;">{{ r.unit }}</span>
+                    <span style="flex:1;"></span>
+                    <span style="{{ r.tagStyle }}">{{ r.tag }}</span>
+                  </div>
+                </div>
+              </sc-for>
+            </div>
+          </div>
+          <!-- Composición -->
+          <div style="padding:15px 16px;border-bottom:1px solid var(--line_soft);">
+            <div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:10px;">
+              <span style="font-size:10.5px;letter-spacing:1.3px;color:var(--ink_soft);text-transform:uppercase;font-weight:600;">Composición <span style="color:var(--ink_ghost)">mass frac</span></span>
+              <span class="mono" style="font-size:11px;color:var(--ink_soft);">Σ 1.000 ✓</span>
+            </div>
+            <sc-for list="{{ inspComp }}" as="c" hint-placeholder-count="3">
+              <div style="display:flex;align-items:center;gap:9px;margin-bottom:7px;">
+                <span class="mono" style="font-size:12px;width:52px;color:var(--ink);">{{ c.name }}</span>
+                <div style="flex:1;height:8px;border-radius:3px;background:var(--bg_sunk);overflow:hidden;"><div style="height:100%;width:{{ c.pct }};background:{{ c.color }};border-radius:3px;"></div></div>
+                <span class="mono" style="font-size:11.5px;color:var(--ink_mute);width:44px;text-align:right;">{{ c.pct }}</span>
+              </div>
+            </sc-for>
+          </div>
+          <!-- evidencia -->
+          <div style="padding:15px 16px;border-bottom:1px solid var(--line_soft);">
+            <div style="font-size:10.5px;letter-spacing:1.3px;color:var(--ink_soft);text-transform:uppercase;font-weight:600;margin-bottom:9px;">Evidencia</div>
+            <div style="border:1px solid var(--line);border-radius:9px;padding:11px;background:var(--bg_mute);">
+              <div style="font-size:11.5px;color:var(--ink_mute);margin-bottom:7px;">Envolvente de fases · punto de operación</div>
+              <svg width="100%" height="90" viewBox="0 0 340 90" preserveAspectRatio="none" style="display:block;">
+                <path d="M20 78 Q90 20 180 30 Q280 40 320 74" fill="none" stroke="var(--phase_2ph)" stroke-width="1.6"/>
+                <line x1="20" y1="78" x2="320" y2="78" stroke="var(--line_strong)" stroke-width="1"/>
+                <circle cx="150" cy="52" r="4.5" fill="var(--accent)"/>
+                <text x="160" y="50" font-size="10" font-family="IBM Plex Mono" fill="var(--ink_mute)">40 °C · 80 bar</text>
+              </svg>
+            </div>
+          </div>
+          <!-- footer live -->
+          <div style="display:flex;gap:18px;padding:12px 16px;background:var(--bg);">
+            <div><div style="font-size:9.5px;letter-spacing:1px;color:var(--ink_soft);">ṁ</div><div class="mono" style="font-size:13px;color:var(--ink);">21 840 <span style="font-size:10px;color:var(--ink_soft)">tm/año</span></div></div>
+            <div><div style="font-size:9.5px;letter-spacing:1px;color:var(--ink_soft);">Cp</div><div class="mono" style="font-size:13px;color:var(--ink_soft);">2.53 <span style="font-size:10px">kJ/kg·K</span></div></div>
+            <div><div style="font-size:9.5px;letter-spacing:1px;color:var(--ink_soft);">FASE</div><div class="mono" style="font-size:13px;"><span style="color:var(--phase_liq)">●</span> LIQ</div></div>
+          </div>
+        </div>
+        <!-- callouts -->
+        <div style="display:flex;flex-direction:column;gap:14px;">
+          <div style="background:var(--bg_elev);border:1px solid var(--line);border-radius:11px;padding:14px 16px;box-shadow:var(--shadow);">
+            <div style="font-size:13px;font-weight:600;margin-bottom:3px;">① Header + path strip idénticos al bloque</div>
+            <div style="font-size:12.5px;color:var(--ink_mute);line-height:1.5;">Chip <span class="mono" style="font-size:11px">S{n}</span> en accent_tint, tag mono editable, chip de rol, y el strip <span class="mono" style="font-size:11px">origen → n° → destino</span>. Un usuario que ya leyó un bloque lee esto sin recalibrar.</div>
+          </div>
+          <div style="background:var(--bg_elev);border:1px solid var(--line);border-radius:11px;padding:14px 16px;box-shadow:var(--shadow);">
+            <div style="font-size:13px;font-weight:600;margin-bottom:3px;">② SpecField spec / auto, no un lenguaje nuevo</div>
+            <div style="font-size:12.5px;color:var(--ink_mute);line-height:1.5;">Cada lock del sudoku mapea a un SpecField: <span style="color:var(--spec_ink)">cinta spec</span> = declarado por el usuario, <span style="color:var(--auto_ink)">cinta auto</span> = deducido por el solver. Mismo componente que el inspector de bloque.</div>
+          </div>
+          <div style="background:var(--bg_elev);border:1px solid var(--line);border-radius:11px;padding:14px 16px;box-shadow:var(--shadow);">
+            <div style="font-size:13px;font-weight:600;margin-bottom:3px;">③ Secciones contextuales</div>
+            <div style="font-size:12.5px;color:var(--ink_mute);line-height:1.5;">Identidad · Termodinámica · Composición · Hidráulica · Geometría. Hidráulica y Geometría son lo único propio de una corriente (is_pipe, alinear endpoints) — el resto es anatomía compartida.</div>
+          </div>
+          <div style="background:var(--bg_mute);border:1px dashed var(--line_strong);border-radius:11px;padding:14px 16px;">
+            <div style="font-size:12.5px;color:var(--ink_mute);line-height:1.5;"><strong style="color:var(--ink)">Recorte honesto:</strong> el inspector viejo replicaba al de bloque con jerarquía improvisada. Se conserva la anatomía 2f y se le da a la corriente sus dos secciones propias — nada más.</div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ══════════════════ 3c ══════════════════ -->
+    <section id="3c" style="scroll-margin-top:70px;margin-top:56px;">
+      <div style="display:flex;align-items:baseline;gap:14px;border-top:2px solid var(--ink);padding-top:16px;margin-bottom:6px;">
+        <div style="font-size:40px;font-weight:700;letter-spacing:-1px;">3c</div>
+        <div>
+          <h2 style="font-size:23px;margin:0;font-weight:600;">Herramienta de anotación (T)</h2>
+          <div style="color:var(--ink_soft);font-size:14px;">Se retiró de la paleta en ciclo 1 por no tener UX. Definida acá: es texto de <strong style="color:var(--ink_mute)">plano</strong>, no un post-it.</div>
+        </div>
+      </div>
+
+      <!-- mockup en contexto -->
+      <div style="display:grid;grid-template-columns:1fr 300px;gap:20px;margin:18px 0 22px;align-items:start;">
+        <div style="position:relative;border:1px solid var(--line);border-radius:12px;overflow:hidden;box-shadow:var(--shadow);background:var(--canvas_bg);background-image:linear-gradient(var(--canvas_grid) 1px,transparent 1px),linear-gradient(90deg,var(--canvas_grid) 1px,transparent 1px);background-size:22px 22px;min-height:340px;padding:24px;">
+          <!-- zona título (anotación) -->
+          <div style="font-size:15px;font-weight:600;letter-spacing:2px;color:var(--ink_mute);">SÍNTESIS DE METANOL</div>
+          <div style="font-size:10px;letter-spacing:1px;color:var(--ink_soft);margin-top:1px;">SECCIÓN 100 · REV. 2 — 2026-07-17</div>
+          <!-- equipos -->
+          <div style="position:absolute;left:80px;top:150px;"><svg class="glyph" width="60" height="64" viewBox="0 0 100 100"><use href="#g-reactor-jacket"/></svg></div>
+          <div style="position:absolute;left:340px;top:158px;"><svg class="glyph" width="80" height="48" viewBox="0 0 100 100"><use href="#g-hx"/></svg></div>
+          <svg style="position:absolute;left:0;top:0;width:100%;height:100%;pointer-events:none;overflow:visible;"><line x1="150" y1="182" x2="338" y2="182" stroke="var(--stream_internal)" stroke-width="2"/><polygon points="338,182 330,178 330,186" fill="var(--stream_internal)"/></svg>
+          <!-- rótulo pill sobre el reactor -->
+          <div style="position:absolute;left:70px;top:120px;font-family:'IBM Plex Mono',monospace;font-size:11px;color:var(--ink);background:color-mix(in srgb,var(--bg_elev) 88%,transparent);padding:2px 7px;border-radius:4px;">R-101 · CSTR encamisado 8 m³</div>
+          <!-- rótulo de línea -->
+          <div style="position:absolute;left:210px;top:150px;font-family:'IBM Plex Mono',monospace;font-size:10px;color:var(--ink_mute);background:color-mix(in srgb,var(--bg_elev) 88%,transparent);padding:1px 6px;border-radius:4px;">S-efluente · 250 °C</div>
+          <!-- nota de revisión con líder -->
+          <svg style="position:absolute;left:0;top:0;width:100%;height:100%;pointer-events:none;overflow:visible;"><path d="M300 250 L360 210 L400 205" fill="none" stroke="var(--ink_soft)" stroke-width="1" stroke-dasharray="3 2"/></svg>
+          <div style="position:absolute;left:300px;top:250px;max-width:210px;display:flex;gap:7px;align-items:flex-start;background:color-mix(in srgb,var(--bg_elev) 88%,transparent);border:1px solid var(--danger);border-radius:6px;padding:6px 9px;">
+            <span style="color:var(--danger);font-weight:700;font-size:12px;line-height:1.1;">△2</span>
+            <span style="font-size:11.5px;color:var(--ink);line-height:1.35;">Rev. 2 — P de reacción subió a 98 bar (nota de revisión, no post-it).</span>
+          </div>
+          <!-- caret de creación -->
+          <div style="position:absolute;left:150px;top:280px;display:flex;align-items:center;gap:6px;">
+            <span style="width:2px;height:18px;background:var(--accent);display:inline-block;animation:none;"></span>
+            <span style="font-size:12px;color:var(--ink_ghost);">escribí una nota…</span>
+          </div>
+        </div>
+        <!-- palette + style picker -->
+        <div style="display:flex;flex-direction:column;gap:14px;">
+          <div style="display:flex;gap:12px;align-items:flex-start;">
+            <div style="display:flex;flex-direction:column;gap:5px;background:var(--bg_elev);border:1px solid var(--line);border-radius:11px;padding:6px;box-shadow:var(--shadow);">
+              <div style="width:38px;height:38px;border-radius:8px;display:grid;place-items:center;color:var(--ink_soft);font-size:16px;">↖</div>
+              <div style="width:38px;height:38px;border-radius:8px;display:grid;place-items:center;color:var(--ink_soft);font-size:16px;">✥</div>
+              <div style="width:38px;height:38px;border-radius:8px;background:var(--accent);color:#fff;display:grid;place-items:center;font-size:17px;font-weight:600;position:relative;">T<span style="position:absolute;left:0;top:6px;bottom:6px;width:3px;background:var(--accent_deep);border-radius:2px;"></span></div>
+            </div>
+            <div style="flex:1;font-size:12px;color:var(--ink_mute);line-height:1.5;padding-top:4px;">La <strong style="color:var(--ink)">T</strong> vuelve a la paleta, con la misma silueta de botón que las tools de ciclo 1.</div>
+          </div>
+          <div style="background:var(--bg_elev);border:1px solid var(--line);border-radius:11px;padding:13px 15px;box-shadow:var(--shadow);">
+            <div style="font-size:10.5px;letter-spacing:1.2px;color:var(--ink_soft);text-transform:uppercase;font-weight:600;margin-bottom:9px;">Estilos permitidos</div>
+            <div style="font-size:11px;color:var(--ink_soft);margin-bottom:4px;">Tamaño — solo la escala del sistema</div>
+            <div style="display:flex;gap:4px;margin-bottom:11px;">
+              <span style="font-size:12px;padding:3px 9px;border-radius:6px;background:var(--accent);color:#fff;">Rótulo 12</span>
+              <span style="font-size:12px;padding:3px 9px;border-radius:6px;border:1px solid var(--line);color:var(--ink_mute);">Título 15</span>
+              <span style="font-size:12px;padding:3px 9px;border-radius:6px;border:1px solid var(--line);color:var(--ink_mute);">Micro 10</span>
+            </div>
+            <div style="font-size:11px;color:var(--ink_soft);margin-bottom:4px;">Tinta — ink / ink_mute / revisión (nada libre)</div>
+            <div style="display:flex;gap:8px;margin-bottom:11px;">
+              <span style="width:22px;height:22px;border-radius:50%;background:var(--ink);outline:2px solid var(--ink);outline-offset:2px;"></span>
+              <span style="width:22px;height:22px;border-radius:50%;background:var(--ink_mute);"></span>
+              <span style="width:22px;height:22px;border-radius:50%;background:var(--danger);"></span>
+            </div>
+            <div style="font-size:11px;color:var(--ink_soft);margin-bottom:4px;">Familia</div>
+            <div style="display:flex;gap:4px;">
+              <span style="font-size:12px;padding:3px 9px;border-radius:6px;border:1px solid var(--line);color:var(--ink_mute);">Sans</span>
+              <span class="mono" style="font-size:12px;padding:3px 9px;border-radius:6px;background:var(--bg_mute);color:var(--ink);">Mono</span>
+            </div>
+          </div>
+          <div style="background:var(--bg_mute);border:1px dashed var(--line_strong);border-radius:11px;padding:12px 14px;">
+            <div style="font-size:12px;color:var(--ink_mute);line-height:1.5;"><del style="color:var(--ink_ghost)">Fondo amarillo · sombra de nota adhesiva</del> — <strong style="color:var(--ink)">no.</strong> Pill de papel sutil (label_bg 88 %) + tinta. El estilo dice «plano», no «post-it».</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- decisiones 3c -->
+      <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(250px,1fr));gap:12px;">
+        <sc-for list="{{ annotDecisions }}" as="d" hint-placeholder-count="6">
+          <div style="background:var(--bg_elev);border:1px solid var(--line);border-radius:11px;padding:14px 16px;box-shadow:var(--shadow);">
+            <div style="font-size:13px;font-weight:600;margin-bottom:4px;">{{ d.t }}</div>
+            <div style="font-size:12.5px;color:var(--ink_mute);line-height:1.5;">{{ d.b }}</div>
+          </div>
+        </sc-for>
+      </div>
+    </section>
+
+    <!-- ══════════════════ PENDIENTES ══════════════════ -->
+    <section id="pend" style="scroll-margin-top:70px;margin-top:56px;">
+      <div style="display:flex;align-items:center;gap:12px;border-top:2px solid var(--ink);padding-top:16px;margin-bottom:14px;">
+        <div style="font-size:26px;">⚡</div>
+        <div>
+          <h2 style="font-size:21px;margin:0;font-weight:600;">Pendientes e ideas que exceden el alcance</h2>
+          <div style="color:var(--ink_soft);font-size:13.5px;">Para una fase futura — no bloquean este ciclo.</div>
+        </div>
+      </div>
+      <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:12px;">
+        <sc-for list="{{ pendientes }}" as="p" hint-placeholder-count="5">
+          <div style="background:var(--bg_elev);border:1px solid var(--line);border-radius:11px;padding:15px 17px;box-shadow:var(--shadow);">
+            <div style="display:flex;gap:8px;align-items:baseline;"><span class="mono" style="font-size:11px;color:var(--accent);font-weight:600;">{{ p.tag }}</span><span style="font-size:14px;font-weight:600;">{{ p.t }}</span></div>
+            <div style="font-size:12.5px;color:var(--ink_mute);line-height:1.5;margin-top:5px;">{{ p.b }}</div>
+          </div>
+        </sc-for>
+      </div>
+      <div style="margin-top:34px;padding-top:16px;border-top:1px solid var(--line);color:var(--ink_soft);font-size:12.5px;">
+        Prioridad de entrega: <strong style="color:var(--ink_mute)">3a &gt; 3b &gt; 3c</strong>. Glifos QPainter (nada de gradientes/filtros SVG), tokens 1:1 con <span class="mono">tokens.py</span> (par light + dark), significado en la forma (daltónico-safe), UI en español. No se rediseñó nada de 2a/2b/2c/2d/2e/2f — 3b reusa la anatomía del inspector, no la cambia.
+      </div>
+    </section>
+
+    <div id="afterB"></div>
+  </main>
+</div>
+
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;$preview&quot;:{&quot;width&quot;:1180,&quot;height&quot;:900}}">
+class Component extends DCLogic {
+  state = { theme: "light", accent: "teal", glyphState: "idle" };
+
+  renderVals() {
+    const theme = this.state.theme, accent = this.state.accent;
+    // aplica los data-attrs al <html> para que el CSS de tokens cascadee a todo
+    if (typeof document !== "undefined") {
+      document.documentElement.setAttribute("data-theme", theme);
+      document.documentElement.setAttribute("data-accent", accent);
+    }
+    const seg = (on) => `padding:5px 13px;border:0;border-radius:6px;cursor:pointer;font:500 13px 'IBM Plex Sans',sans-serif;`
+      + (on ? `background:var(--accent);color:#fff;` : `background:transparent;color:var(--ink_mute);`);
+    const accentHex = { teal:"#0d6e78", terracota:"#a44a2b", cobalto:"#3548b4", oliva:"#5f7a30" };
+    const accents = Object.keys(accentHex).map(name => ({
+      name,
+      pick: () => this.setState({ accent: name }),
+      style: `width:20px;height:20px;border-radius:50%;cursor:pointer;background:${accentHex[name]};`
+        + (accent === name ? `outline:2px solid var(--ink);outline-offset:2px;border:2px solid var(--bg_elev);`
+                            : `border:2px solid var(--bg_elev);box-shadow:0 0 0 1px var(--line_strong);`),
+    }));
+    const stateChips = [
+      { state:"ok", cls:"", label:"ok (éxito silencioso)" },
+      { state:"warning", cls:"", label:"warning" },
+      { state:"error", cls:"", label:"error" },
+      { state:"stale", cls:"", label:"stale" },
+      { state:"unrun", cls:"unrun", label:"unrun (punteado)" },
+    ];
+    // ── 3a: semáforo interactivo ──
+    const gs = this.state.glyphState;
+    const states = [
+      ["idle","idle"],["ok","ok"],["warning","warning"],
+      ["error","error"],["stale","stale"],["unrun","unrun"],
+    ];
+    const stateBtns = states.map(([id,label]) => ({
+      label,
+      pick: () => this.setState({ glyphState: id }),
+      style: `padding:4px 11px;border-radius:6px;cursor:pointer;font:500 12px 'IBM Plex Sans',sans-serif;border:1px solid var(--line);`
+        + (gs === id ? `background:var(--ink);color:var(--bg);border-color:var(--ink);`
+                     : `background:var(--bg);color:var(--ink_mute);`),
+    }));
+
+    // ── 3a: helpers de estilo ──
+    const rankStyle = (r) => {
+      const m = { ALTA:["var(--danger_bg)","var(--danger)"], MEDIA:["var(--amber_bg)","var(--amber)"], DECIDIDO:["var(--accent_tint)","var(--accent_deep)"] };
+      const [bg,fg] = m[r] || m.MEDIA;
+      return `background:${bg};color:${fg};font-size:10.5px;font-weight:700;letter-spacing:1px;padding:3px 9px;border-radius:20px;`;
+    };
+    const tile = (shared) => `flex:1;min-width:206px;max-width:264px;background:${shared?'var(--bg_mute)':'var(--bg)'};border:1px solid var(--line);border-radius:10px;padding:13px 14px;`;
+    const tagStyles = {
+      "ciclo 1":  `background:var(--accent_tint);color:var(--accent_deep);`,
+      "22px ⚠":   `background:var(--amber_bg);color:var(--amber);`,
+      "◇ compartido": `background:var(--bg_sunk);color:var(--ink_soft);`,
+      "evaluar":  `background:var(--spec_bg);color:var(--spec_ink);`,
+    };
+    const tg = (t) => t ? `font-size:10px;font-weight:600;letter-spacing:.4px;padding:2px 8px;border-radius:20px;margin-left:auto;white-space:nowrap;${tagStyles[t]||''}` : "";
+    const V = (name, eq, trait, href, tag, shared) => ({
+      name, eq, trait, href, tag: tag||"", tagStyle: tg(tag),
+      tileStyle: tile(shared), cls: (tag==="◇ compartido"||shared)?"":"",
+    });
+
+    const groups = [
+      {
+        rank:"ALTA", rankStyle:rankStyle("ALTA"), count:"×3",
+        title:"Válvulas", 
+        summary:"Una válvula de seguridad que se ve idéntica a una de control es un error semántico serio en un PFD — invierte la intención de la línea.",
+        before:"Antes: las 3 → una mariposa genérica «valvula».",
+        variants:[
+          V("Control (globo)","Valve — control globe","Mariposa simétrica + actuador de diafragma (domo) sobre el vástago.","#g-valvula-globe"),
+          V("3 vías","Valve — 3-way","Tercer puerto inferior — tres triángulos convergen al centro (cuerpo en T).","#g-valvula-3way"),
+          V("Alivio / seguridad","Valve — relief","Cuerpo en ángulo + resorte sobre el vástago (descarga por sobrepresión).","#g-valvula-relief"),
+        ],
+      },
+      {
+        rank:"ALTA", rankStyle:rankStyle("ALTA"), count:"×4",
+        title:"Reactores",
+        summary:"La distinción agitado / encamisado es EL contenido pedagógico de la lámina de reactores; hoy cuatro tipos se dibujan igual.",
+        before:"Antes: CSTR / autoclave / encamisado ×2 → «reactor». (PFR ya se separó en ciclo 1.)",
+        variants:[
+          V("CSTR agitado","Reactor — CSTR (agitado)","Pared simple + eje agitador con turbina Rushton.","#g-reactor-cstr"),
+          V("Encamisado agitado","Reactor — jacketed agitated","Doble pared (camisa de servicio) + agitador.","#g-reactor-jacket"),
+          V("Encamisado sin agitar","Reactor — jacketed non-agit.","Doble pared + lecho catalítico punteado, sin eje.","#g-reactor-jacket-na"),
+          V("Autoclave","Reactor — autoclave","Cápsula de pared gruesa, sin internos (alta presión, batch).","#g-reactor-autoclave"),
+          V("PFR tubular","Reactor — PFR (tubular)","Carcasa horizontal + serpentín. Ya diferenciado.","#g-reactor-pfr","ciclo 1"),
+        ],
+      },
+      {
+        rank:"ALTA", rankStyle:rankStyle("ALTA"), count:"×3 + ×3",
+        title:"Compresores y bombas — rotativa vs alternativa",
+        summary:"La familia debe leerse en la silueta: círculo/carcasa = rotodinámica-rotativa · cilindro+pistón = alternativa. Mismo principio para las dos familias.",
+        before:"Antes: compresores axial/centrífugo/rotativo → «compresor»; bombas centrífuga/PD/recíproca → «bomba».",
+        variants:[
+          V("Compresor centrífugo","Compressor — centrifugal","Trapecio (voluta que estrecha hacia la descarga) — rotodinámico.","#g-compresor"),
+          V("Compresor axial","Compressor — axial","Carcasa recta con álabes escalonados en fila — flujo axial.","#g-compresor-axial"),
+          V("Compresor rotativo","Compressor — rotary","Rotor circular con lóbulos intermeshing (roots / tornillo).","#g-compresor-rotary"),
+          V("Compresor recíproco","Compressor — reciprocating","Cilindro + pistón + cigüeñal + acumulador. Ya diferenciado.","#g-compresor-recip","ciclo 1"),
+          V("Bomba centrífuga","Pump — centrifugal","Círculo + flecha direccional (rotodinámica).","#g-bomba"),
+          V("Bomba desplaz. positivo","Pump — positive displacement","Dos rotores / engranajes dentro del círculo (PD rotativa).","#g-bomba-pd"),
+          V("Bomba recíproca","Pump — reciprocating","Cilindro + pistón + cigüeñal (alternativa).","#g-bomba-recip"),
+        ],
+      },
+      {
+        rank:"MEDIA", rankStyle:rankStyle("MEDIA"), count:"pares ×2",
+        title:"Pares de contenido de proceso",
+        summary:"Distinciones reales de proceso; en cada par el rasgo se pensó como macro-forma para sobrevivir a 22px.",
+        before:"Antes: cada par colapsaba en una silueta compartida.",
+        variants:[
+          V("Caldera pirotubular","Boiler — fire tube","Un solo casco horizontal, tubos de humo horizontales adentro.","#g-caldera-fire"),
+          V("Caldera acuotubular","Boiler — water tube","Domo de vapor + colector inferior + tubos de agua verticales + hogar.","#g-caldera-water"),
+          V("Plato perforado","Tray — sieve","Platos con perforaciones (puntos sobre el plato).","#g-platos-sieve"),
+          V("Plato de válvulas","Tray — valve","Platos con válvulas móviles (cápsulas ∧).","#g-platos-valve","22px ⚠"),
+          V("Empaque aleatorio","Packing — random","Anillos dispersos irregulares (Raschig / Pall).","#g-empaque-rand"),
+          V("Empaque estructurado","Packing — structured","Retícula regular ◇ (láminas corrugadas).","#g-empaque-struct"),
+          V("Horno no-reformador","Fired heater — non-reformer","Caja radiante + serpentín de proceso en S + chimenea.","#g-horno"),
+          V("Horno reformador","Fired heater — reformer","Filas de tubos catalíticos verticales en paralelo.","#g-horno-reformer"),
+          V("HX placa plana","Heat exch. — flat plate","Marco + pila de placas paralelas.","#g-hx-placa"),
+          V("HX espiral","Heat exch. — spiral plate","Canal en espiral (dos flujos en contracorriente).","#g-hx-espiral"),
+          V("Aerorrefrigerante","Heat exch. — air cooler","Caja de tubos plana + ventilador.","#g-hx-aircooler"),
+          V("Condensador de aire","Heat exch. — condenser air-cooled","Haz en A (techo a dos aguas) + ventilador.","#g-hx-cond-air"),
+          V("Centrífuga decanter","Centrifuge — decanter","Bol cónico horizontal + tornillo helicoidal.","#g-centrifuga-decanter"),
+          V("Centrífuga de discos","Centrifuge — disc stack","Bol vertical + pila de discos cónicos.","#g-centrifuga-disc"),
+        ],
+      },
+      {
+        rank:"DECIDIDO", rankStyle:rankStyle("DECIDIDO"), count:"diferenciar",
+        title:"Pares de forma — SÍ se diferencian",
+        summary:"Decisión escrita: estos pares tienen valor semántico y una macro-forma barata que lee a 22px.",
+        before:"Antes: cada uno compartía silueta con su vecino de familia.",
+        variants:[
+          V("Tanque techo cónico","Storage tank — cone roof","Techo cónico (triángulo).","#g-tanque-cone"),
+          V("Tanque techo flotante","Storage tank — floating roof","Techo plano + cubierta flotante interior.","#g-tanque-float"),
+          V("Ventilador axial","Fan — axial","Aspas dentro de un aro (flujo axial).","#g-ventilador"),
+          V("Ventilador centrífugo","Fan — centrifugal radial","Carcasa en voluta (scroll) con descarga lateral.","#g-ventilador-rad"),
+          V("Evaporador","Evaporator — vertical","Vaso vertical + haz calefactor + vapor: es unidad de transferencia, no un separador.","#g-evaporador","evaluar"),
+        ],
+      },
+      {
+        rank:"DECIDIDO", rankStyle:rankStyle("DECIDIDO"), count:"compartido",
+        title:"Pares de forma — se declaran COMPARTIDOS a propósito",
+        summary:"Decisión escrita: misma familia geométrica; el rol + rótulo + inspector desambiguan. Diferenciarlas sería ruido sin contenido.",
+        before:"La decisión queda escrita, no muda.",
+        variants:[
+          V("Tambor / vessel horiz. / decanter grav.","Vessel — horizontal · Decanter — gravity","Mismo cilindro horizontal. Geometría idéntica = menos ruido.","#g-tambor","◇ compartido",true),
+          V("Mezclador en línea / estático","Mixer — inline · Mixer — static","Un mezclador estático ES uno en línea; sinónimos de proceso.","#g-mezclador","◇ compartido",true),
+          V("WHB packaged / field erected","Heat exch. — WHB packaged · field","Misma caldera de recuperación; la distinción es de suministro/montaje (costeo), no de geometría.","#g-hx-whb","◇ compartido",true),
+        ],
+      },
+    ];
+
+    // ── 3a: tabla de mapeo eq_type → glifo ──
+    const NEW="nuevo", C1="ciclo 1", SH="◇ compartido", BASE="";
+    const mapRaw = [
+      ["Valve — control globe","#g-valvula-globe",NEW],["Valve — 3-way","#g-valvula-3way",NEW],["Valve — relief","#g-valvula-relief",NEW],
+      ["Reactor — CSTR (agitado)","#g-reactor-cstr",NEW],["Reactor — jacketed agitated","#g-reactor-jacket",NEW],["Reactor — jacketed non-agit.","#g-reactor-jacket-na",NEW],["Reactor — autoclave","#g-reactor-autoclave",NEW],["Reactor — PFR (tubular)","#g-reactor-pfr",C1],
+      ["Compressor — centrifugal","#g-compresor",BASE],["Compressor — axial","#g-compresor-axial",NEW],["Compressor — rotary","#g-compresor-rotary",NEW],["Compressor — reciprocating","#g-compresor-recip",C1],
+      ["Pump — centrifugal","#g-bomba",BASE],["Pump — positive displacement","#g-bomba-pd",NEW],["Pump — reciprocating","#g-bomba-recip",NEW],
+      ["Boiler — fire tube","#g-caldera-fire",NEW],["Boiler — water tube","#g-caldera-water",NEW],
+      ["Tray — sieve","#g-platos-sieve",NEW],["Tray — valve","#g-platos-valve",NEW],
+      ["Packing — random","#g-empaque-rand",NEW],["Packing — structured","#g-empaque-struct",NEW],
+      ["Fired heater — non-reformer","#g-horno",BASE],["Fired heater — reformer","#g-horno-reformer",NEW],
+      ["Heat exch. — flat plate","#g-hx-placa",BASE],["Heat exch. — spiral plate","#g-hx-espiral",NEW],
+      ["Heat exch. — air cooler","#g-hx-aircooler",BASE],["Heat exch. — condenser air-cooled","#g-hx-cond-air",NEW],
+      ["Centrifuge — decanter","#g-centrifuga-decanter",NEW],["Centrifuge — disc stack","#g-centrifuga-disc",NEW],
+      ["Storage tank — cone roof","#g-tanque-cone",NEW],["Storage tank — floating roof","#g-tanque-float",NEW],
+      ["Fan — axial","#g-ventilador",BASE],["Fan — centrifugal radial","#g-ventilador-rad",NEW],
+      ["Evaporator — vertical","#g-evaporador",NEW],["Vessel — vertical","#g-separador",BASE],
+      ["Tower (column shell)","#g-columna",BASE],["Splitter — flow divider","#g-splitter",C1],
+      ["Cyclone — gas/solid","#g-ciclon",BASE],["Filter — belt","#g-filtro",BASE],["Dryer — drum","#g-secador",BASE],["Crystallizer","#g-cristalizador",BASE],
+      ["Heat exch. — kettle reboiler","#g-hx-kettle",BASE],
+      ["Cooling tower — induced draft","#g-torre-enf",C1],["Cooling tower — natural draft","#g-torre-nat",C1],
+      ["Heat exch. — U-tube","#g-hx",SH],["Heat exch. — fixed tube","#g-hx",SH],["Heat exch. — floating head","#g-hx",SH],["Heat exch. — double pipe","#g-hx",SH],["Heat exch. — multiple pipe","#g-hx",SH],["Heat exch. — condenser shell-tube","#g-hx",SH],
+      ["Heat exch. — WHB packaged","#g-hx-whb",SH],["Heat exch. — WHB field erected","#g-hx-whb",SH],
+      ["Mixer — static","#g-mezclador",SH],["Mixer — inline","#g-mezclador",SH],
+      ["Vessel — horizontal","#g-tambor",SH],["Decanter — gravity","#g-tambor",SH],
+    ];
+    const badgeStyle = (b) => {
+      if (b===NEW) return `color:var(--accent);font-weight:600;font-size:11px;white-space:nowrap;`;
+      if (b===SH)  return `color:var(--ink_soft);font-size:11px;white-space:nowrap;`;
+      if (b===C1)  return `color:var(--ink_ghost);font-size:10.5px;white-space:nowrap;`;
+      return `color:var(--ink_ghost);font-size:11px;`;
+    };
+    const badgeText = (b) => b===NEW ? "● nuevo" : b===SH ? "◇ compartido" : b===C1 ? "ciclo 1" : "—";
+    const mapping = mapRaw.map(([eq,href,b]) => ({ eq, href, badge: badgeText(b), badgeStyle: badgeStyle(b) }));
+
+    // ── 3b: tabla de corrientes ──
+    const showComp = this.state.showComp !== false;
+    const curUnit = this.state.unit || "tm/año";
+    const sel = this.state.selStream == null ? 4 : this.state.selStream;
+    const unitList = ["tm/año","kg/h","kg/s","t/d","lb/h"];
+    const units = unitList.map(u => ({
+      label:u, pick:()=>this.setState({unit:u}),
+      style:`padding:3px 10px;border:0;border-radius:5px;cursor:pointer;font:500 12px 'IBM Plex Mono',monospace;`
+        + (curUnit===u ? `background:var(--accent);color:#fff;` : `background:transparent;color:var(--ink_mute);`),
+    }));
+    const gridCols = showComp ? "46px 1.5fr 1.5fr 78px 1.3fr 1.6fr 86px" : "46px 1.6fr 1.6fr 86px 1.5fr 92px";
+    const roleSt = (r)=>{
+      const m={FEED:["var(--green_bg)","var(--green)"],PRODUCT:["var(--orange_bg)","var(--orange)"],UTILITY:["var(--amber_bg)","var(--amber)"],WASTE:["var(--danger_bg)","var(--danger)"],INTERNAL:["var(--bg_sunk)","var(--ink_mute)"]};
+      const [bg,fg]=m[r]||m.INTERNAL;
+      return `background:${bg};color:${fg};font-size:9.5px;font-weight:700;letter-spacing:.7px;padding:1px 8px;border-radius:9px;`;
+    };
+    const phaseC={LIQ:"var(--phase_liq)",VAP:"var(--phase_vap)",GAS:"var(--phase_gas)","2-φ":"var(--phase_2ph)"};
+    const statusC={ok:"var(--green)",warning:"var(--amber)",error:"var(--danger)",stale:"var(--spec)"};
+    const maxFlow=250930;
+    const compColors=["var(--accent)","var(--orange)","var(--spec)","var(--amber)"];
+    const rawStreams=[
+      {n:1,tag:"S-alim-syngas",role:"FEED",phase:"GAS",from:"(límite)",to:"C-101.in",flow:25000,spec:true,T:"40.0",tspec:true,P:"80.00",pspec:true,status:"ok",comp:[["H₂",.68],["CO",.30],["CH₄",.02]]},
+      {n:2,tag:"S-gas-HP",role:"INTERNAL",phase:"GAS",from:"C-101.out",to:"R-101.in",flow:25000,spec:false,T:"221.4",tspec:false,P:"98.00",pspec:true,status:"ok",comp:[["H₂",.68],["CO",.30],["CH₄",.02]]},
+      {n:3,tag:"S-efluente",role:"INTERNAL",phase:"2-φ",from:"R-101.out",to:"V-201.in",flow:25000,spec:false,T:"250.0",tspec:false,P:"95.00",pspec:false,status:"warning",comp:[["MeOH",.42],["H₂",.40],["H₂O",.10]]},
+      {n:4,tag:"S-crudo",role:"PRODUCT",phase:"LIQ",from:"V-201.liq",to:"T-201.in",flow:21840,spec:false,T:"40.0",tspec:true,P:"80.00",pspec:true,status:"ok",comp:[["MeOH",.89],["H₂O",.08],["CO",.03]]},
+      {n:5,tag:"S-reciclo",role:"INTERNAL",phase:"GAS",from:"V-201.vap",to:"K-202.in",flow:250930,spec:false,T:"40.0",tspec:false,P:"79.00",pspec:false,status:"ok",comp:[["H₂",.83],["CO",.07],["MeOH",.06]]},
+    ];
+    const fmt=(x)=>x.toLocaleString("fr-FR").replace(/\u202f/g," ");
+    const streams=rawStreams.map((s,i)=>{
+      const isSel=i===sel;
+      const specInk=`color:var(--ink);border-bottom:2px solid var(--spec);padding-bottom:1px;`;
+      return {
+        n:s.n, tag:s.tag, role:s.role, from:s.from, to:s.to,
+        flow:fmt(s.flow), auto:!s.spec,
+        phaseLabel:s.phase, phaseColor:phaseC[s.phase]||"var(--ink_ghost)",
+        roleStyle:roleSt(s.role), statusColor:statusC[s.status]||"var(--ink_soft)",
+        flowInk: s.spec?specInk:`color:var(--ink_soft);`,
+        tInk: s.tspec?specInk:`color:var(--ink_soft);`,
+        pInk: s.pspec?specInk:`color:var(--ink_soft);`,
+        T:s.T, P:s.P,
+        barPct: Math.max(4, Math.round(s.flow/maxFlow*100))+"%",
+        barColor: s.spec?"var(--spec_ribbon)":"var(--auto_ribbon)",
+        pillBg: isSel?"var(--accent)":"var(--bg_elev)",
+        pillInk: isSel?"#fff":"var(--ink)",
+        pillBorder: isSel?"var(--accent)":"var(--line_strong)",
+        comp: s.comp.map((c,j)=>({pct:Math.round(c[1]*100)+"%",color:compColors[j%compColors.length]})),
+        compLegend: s.comp.slice(0,2).map((c,j)=>({name:c[0],pct:Math.round(c[1]*100)+"%",color:compColors[j%compColors.length]})),
+        pick:()=>this.setState({selStream:i}),
+        rowStyle:`display:grid;grid-template-columns:${gridCols};gap:14px;align-items:center;padding:11px 18px 11px 15px;cursor:pointer;border-bottom:1px solid var(--line_soft);`
+          + (isSel?`background:var(--bg);border-left:3px solid var(--accent);`:`border-left:3px solid transparent;`),
+      };
+    });
+    const compBtnStyle=`padding:5px 11px;border-radius:7px;cursor:pointer;font:500 12px 'IBM Plex Sans',sans-serif;border:1px solid var(--line_strong);`
+      + (showComp?`background:var(--accent_tint);color:var(--accent_deep);border-color:var(--accent_soft);`:`background:var(--bg_elev);color:var(--ink_mute);`);
+
+    // ── 3b: inspector ──
+    const inspSecs=["Identidad","Termodinámica","Composición","Hidráulica","Geometría"];
+    const inspSections=inspSecs.map((name,i)=>({
+      name,
+      style:`font-size:12px;padding:5px 10px 8px;white-space:nowrap;cursor:pointer;`
+        +(i===1?`color:var(--accent);border-bottom:2px solid var(--accent);font-weight:600;`:`color:var(--ink_soft);border-bottom:2px solid transparent;`),
+    }));
+    const specField=(label,val,unit,isSpec)=>({
+      label,val,unit,
+      ribbon:isSpec?"var(--spec_ribbon)":"var(--auto_ribbon)",
+      bg:isSpec?"var(--spec_bg)":"var(--auto_bg)",
+      border:"var(--line)",
+      valInk:isSpec?"color:var(--ink);":"color:var(--ink_soft);",
+      tag:isSpec?"spec":"auto",
+      tagStyle:isSpec
+        ?`font-size:9.5px;font-weight:700;letter-spacing:.6px;color:var(--spec_ink);background:color-mix(in srgb,var(--spec_bg) 60%,#fff0);border:1px solid var(--spec_ribbon);padding:1px 6px;border-radius:5px;`
+        :`font-size:9.5px;font-style:italic;color:var(--auto_ink);`,
+    });
+    const specRows=[
+      specField("Temperatura","40.0","°C",true),
+      specField("Presión","80.00","bar",true),
+      specField("Fase","LIQ","",false),
+      specField("Cp","2.53","kJ/kg·K",false),
+    ];
+    const inspComp=[
+      {name:"MeOH",pct:"89%",color:"var(--accent)"},
+      {name:"H₂O",pct:"8%",color:"var(--orange)"},
+      {name:"CO",pct:"3%",color:"var(--spec)"},
+    ];
+
+    // ── 3c: decisiones de la anotación ──
+    const annotDecisions=[
+      {t:"Crear", b:"Con la T activa, un click coloca el cursor y entra en edición directa; Esc o click-fuera confirma. Doble-click sobre una anotación existente la vuelve a editar."},
+      {t:"Mover / redimensionar", b:"Con la herramienta select: arrastrar el cuerpo la mueve; handles laterales ajustan el ancho de wrap. Sin rotación — es texto de plano, se lee horizontal."},
+      {t:"Estilos permitidos", b:"Solo la escala del sistema (Micro 10 / Rótulo 12 / Título 15), peso regular o 600, familia Sans o Mono. Sin tamaños ni itálicas libres."},
+      {t:"Color", b:"ink / ink_mute, más un rol «revisión» = danger para el flujo de revisión de plano. Sin color libre: el significado no puede vivir solo en el color (daltónico-safe)."},
+      {t:"Export", b:"Siempre visibles y siempre en el export — son parte del documento de ingeniería. Una capa «Anotaciones» permite ocultarlas en pantalla, pero por defecto ON."},
+      {t:"z-order y temas", b:"Capa por encima de bloques y streams, pero no captura puertos ni interfiere con el ruteo. Pill label_bg (par light+dark) para legibilidad; la tinta se re-tinta con el tema. Sin token nuevo: reusa label_ink/label_bg, ya existentes."},
+    ];
+    // ── Pendientes ──
+    const pendientes=[
+      {tag:"3a", t:"platos sieve vs valve a 22px", b:"El único par cuyo rasgo (perforación vs cápsula) queda al límite de la miniatura. Si el uso lo pide, evaluar diferenciar por el downcomer (macro-forma) en vez del detalle del plato."},
+      {tag:"3a", t:"Mixer — dynamic", b:"Aparece en defaults.py pero no en el catálogo del canvas. Si se suma, merece glifo propio (rotor) distinto del estático; hoy sería catálogo muerto."},
+      {tag:"3b", t:"Columnas configurables por el usuario", b:"El menú «columnas» abre la puerta a que cada quien elija su set esencial (Cp, ΔHvap, precio). Persistir la elección en prefs.json, junto a tema/densidad/acento."},
+      {tag:"3b", t:"Orden y agrupado de la tabla", b:"Ordenar por flujo/rol/fase y agrupar por sección de proceso (100/200/300). Excede el alcance de la pasada de jerarquía."},
+      {tag:"3c", t:"Anotación anclada a un bloque/stream", b:"Que un rótulo se pueda «pegar» a un equipo y lo siga al moverlo (como el líder de la nota de revisión, pero persistente). Requiere modelo de anclaje."},
+      {tag:"3c", t:"Tabla de revisiones del plano", b:"Las notas △N alimentarían un cuadro de revisiones en el export (rev · fecha · descripción), estándar en planos de ingeniería."},
+    ];
+
+    return {
+      annotDecisions, pendientes,
+      inspSections, specRows, inspComp,
+      showComp, streams, units, gridCols, streamCount:"5 corrientes",
+      unitLabel:curUnit, toggleComp:()=>this.setState({showComp:!showComp}),
+      compBtnStyle, compToggleLabel: showComp?"▾ visible":"▸ oculta",
+      glyphState: gs, glyphStateCls: gs==="unrun" ? "unrun" : "",
+      stateBtns, groups, mapping,
+      theme, accent,
+      setLight: () => this.setState({ theme: "light" }),
+      setDark: () => this.setState({ theme: "dark" }),
+      lightBtn: seg(theme === "light"),
+      darkBtn: seg(theme === "dark"),
+      accents, stateChips,
+    };
+  }
+}
+</script>
+</body>
+</html>
