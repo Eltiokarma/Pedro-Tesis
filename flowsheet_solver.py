@@ -2423,7 +2423,15 @@ def solve_equilibrium_reactors(fs):
         # (Frente B).  Sólo corrientes de proceso (no utility/ambient).
         proc_outs = [s for s in outs
                      if (s.role or "") not in ("utility", "ambient")]
-        if b.P_op_bar > 0:
+        # Sólo estampar P_op_bar si el reactor DECLARÓ una presión real de
+        # operación (> 1 atm).  El default de P_op_bar es 1.0, y un guard
+        # `> 0` lo trataba como declarado → pisaba las salidas a 1.0 bar,
+        # descartando la presión de entrada (bug: entra 30 bar, sale 1 bar).
+        # Umbral coherente con _seed_reactor_pressures (> ATM+1e-6): un
+        # reactor sin P_op declarado deja que la propagación de presión
+        # (solve_pressure_propagation) resuelva la salida = entrada + ΔP.
+        _ATM = 1.01325
+        if b.P_op_bar > _ATM + 1e-6:
             for s_out in proc_outs:
                 if not _is_pressure_locked(s_out):
                     s_out.pressure_bar = b.P_op_bar
@@ -3386,11 +3394,17 @@ def solve_pressure_hydraulic(fs, max_iter=8):
     # corrientes de proceso (el solver no la usaba) → la sección propaga
     # su presión real.  Crea locks ⇒ el solver opt-in se activa.
     _seed_reactor_pressures(fs)
-    # Check si vale la pena
+    # Check si vale la pena: hay algún spec de presión que propagar.  Antes
+    # sólo miraba streams con pressure_locked; pero un bloque con delta_p_bar
+    # declarado TAMBIÉN es un spec (su salida debe ser entrada+ΔP), y sin él
+    # la propagación no corría → el ΔP configurado se ignoraba (bug: "ni el
+    # ΔP de 0.5 se restó").  Ahora también dispara si hay ΔP de bloque.
     has_locked = any(getattr(s, "pressure_locked", False)
                       for s in fs.streams.values())
-    if not has_locked:
-        # Sin streams con P locked el solver no auto-dimensiona ΔP, pero
+    has_block_dp = any(abs(getattr(b, "delta_p_bar", 0.0) or 0.0) > 1e-6
+                       for b in fs.blocks.values())
+    if not has_locked and not has_block_dp:
+        # Sin specs de presión el solver no auto-dimensiona ΔP, pero
         # los compresores degenerados (sin P_op_bar ni delta_p_bar) siguen
         # siendo deuda visible → emitir el warning P13 igual.
         return _compressor_degenerate_warnings(fs)
@@ -3754,6 +3768,9 @@ def solve_pressure_propagation(fs):
         return []
 
     msgs = []
+    # HX de 4 puertos (2-in/2-out, lados que NO se mezclan): su presión se
+    # propaga por lado (tube↔tube, shell↔shell), no colapsando al min global.
+    _hx4_ids = _four_port_hx_ids(fs)
     # Pasada topológica simple: para cada stream con P resuelta,
     # propagar al destino vía su bloque.  Iterar hasta no haber cambios.
     for _ in range(20):
@@ -3767,9 +3784,6 @@ def solve_pressure_propagation(fs):
             ins_with_p = [s for s in ins if s.pressure_bar > 0]
             if len(ins_with_p) != len(ins):
                 continue
-            # P_in_min: si hay varios inlets, el output toma la menor
-            # (asumimos que las P se igualan en el mixer)
-            P_in_min = min(s.pressure_bar for s in ins)
             # ΔP del bloque
             dp_block = getattr(b, "delta_p_bar", 0.0)
             # Es bomba/compresor con η declarada y dp positivo? Sí → setear duty
@@ -3778,17 +3792,40 @@ def solve_pressure_propagation(fs):
                                       or "compressor" in eq_lower
                                       or "fan" in eq_lower
                                       or "bomba" in eq_lower)
-            # Output P = P_in + dp_block - ΔP_pipe_calc del output
+            # Presión de referencia POR SALIDA.  Antes se usaba min(TODAS las
+            # entradas) para TODAS las salidas — incorrecto cuando las
+            # corrientes NO se mezclan: en un HX de 4 puertos el lado de alta
+            # P colapsaba al de baja (rich/lean amine 50→1 bar), y una utility
+            # a baja P (vapor de reboiler) arrastraba la salida de proceso.
+            # Fix: cada salida hereda la P de la(s) entrada(s) de SU lado (HX
+            # 4-puertos, por puerto) o, en el resto, de las entradas de PROCESO
+            # (excluyendo utility/ambient).  Un mixer real sigue tomando el min
+            # de sus entradas de proceso (que es lo correcto al mezclar).
+            is_hx4 = b.id in _hx4_ids
+            proc_ins = [s for s in ins
+                        if (s.role or "") not in ("utility", "ambient")]
+            # Output P = P_in_ref + dp_block - ΔP_pipe_calc del output
             for s_out in outs:
                 if getattr(s_out, "pressure_locked", False):
                     continue
+                if is_hx4:
+                    side = _stream_side(getattr(s_out, "src_port", ""))
+                    ref = [s for s in ins
+                           if _stream_side(getattr(s, "dst_port", "")) == side]
+                    ref = ref or proc_ins or ins
+                else:
+                    ref = ins
+                ref_p = [s.pressure_bar for s in ref if s.pressure_bar > 0]
+                if not ref_p:
+                    continue
+                P_in_ref = min(ref_p)
                 # ΔP de la tubería del output (pérdida después del bloque)
                 try:
                     dp_pipe = _pd.stream_pressure_drop(s_out)
                     dp_pipe_bar = dp_pipe["delta_P_bar"] if dp_pipe else 0.0
                 except Exception:
                     dp_pipe_bar = 0.0
-                P_out = P_in_min + dp_block - dp_pipe_bar
+                P_out = P_in_ref + dp_block - dp_pipe_bar
                 if abs(P_out - s_out.pressure_bar) > 1e-4:
                     s_out.pressure_bar = max(P_out, 0.01)
                     changed = True
