@@ -8433,6 +8433,13 @@ class FlowsheetMainWindow(QMainWindow):
         elif isinstance(it, StreamItem):
             for other in self.scene.block_items.values():
                 other.set_selected_visual(False)
+            # Sincronía canvas → tabla de corrientes (3b)
+            dock = getattr(self, "streams_dock", None)
+            if dock is not None and hasattr(dock, "highlight_stream"):
+                try:
+                    dock.highlight_stream(it.model.id)
+                except Exception:
+                    pass
 
     def _add_block_of_type(self, eq_type, x=None, y=None):
         """Agrega un bloque del tipo dado al flowsheet.  Si x/y no se
