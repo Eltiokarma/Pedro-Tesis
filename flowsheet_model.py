@@ -437,10 +437,13 @@ class Stream:
                                  # composition, se calcula de components.py
 
     # ---- PRESIÓN (Capa de hidráulica) ----
-    # Presión absoluta de la corriente.  Se propaga por el solver:
-    #   bombas/compresores SUMAN delta_p_bar al input
-    #   columnas/HX RESTAN delta_p_bar (pérdida por equipo)
-    #   tuberías RESTAN ΔP calculado por pressure_drop (Darcy-Weisbach)
+    # Presión absoluta de la corriente.  Se propaga por el solver como
+    #   P_out = P_in + block.delta_p_bar  (delta_p_bar es un sumando CON SIGNO)
+    #   · bombas/compresores: delta_p_bar POSITIVO (suben la presión)
+    #   · columnas/HX/hornos: delta_p_bar NEGATIVO (pérdida por equipo)
+    #     — hydraulic_defaults lo puebla negativo; NO usar valor positivo
+    #       "a restar" (el solver suma el signo, no resta el módulo).
+    #   · tuberías: RESTAN ΔP calculado por pressure_drop (Darcy-Weisbach)
     pressure_bar: float = 1.013      # default 1 atm
     pressure_locked: bool = False    # spec: True si el user la fijó
     # Procedencia del lock de presión (aditivo):

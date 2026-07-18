@@ -6,11 +6,11 @@
 entra a un equipo a ~30 bar y sale a ~1 bar, con la caída (ΔP) configurada en
 0.5 bar **sin restarse**.
 
-> **Estado:** auditoría (diagnóstico + evidencia + plan de fix). Los fixes de
-> presión **NO se aplicaron todavía**: tocan `effective_pressure → factor FP
-> de Turton → ISBL`, que es un valor golden de los 41 ejemplos, así que exigen
-> re-export deliberado de goldens y re-validación del gate. Se documentan acá
-> para aplicarlos como cambio separado y controlado.
+> **Estado:** auditoría + **fixes APLICADOS** (2026-07-18, ver §Parte 3 al
+> final). Gate 41/41 verde con goldens re-exportados deliberadamente; 522
+> tests no-GUI verdes. Solo cambiaron de ISBL los dos ejemplos esperados
+> (gas_sweet +0.57%, hda_full −5.31%), ambos verificados como correcciones
+> físicas. Los grupos 1-2 (economía ya analizada) no se movieron.
 
 ---
 
@@ -211,3 +211,90 @@ es el físicamente correcto?) y luego `python export_examples.py` para
 regenerar goldens **deliberadamente**. Los ejemplos con presión alta y
 reactores/intercambiadores multi-corriente (gas_sweet, hno3, industrial,
 haber_rec, ethane_pfr, ethylene_crk, hda) son los candidatos a moverse.
+
+---
+
+# Parte 3 — Fixes aplicados (2026-07-18)
+
+Se aplicaron los tres fixes de presión + la alineación de convención de
+signo, más dos correcciones colaterales que el fix destapó. Todo validado.
+
+## Cambios en el solver
+
+1. **Bug A — guard del reactor** (`flowsheet_solver.py`,
+   `solve_equilibrium_reactors`): el guard `if b.P_op_bar > 0` pasó a
+   `if b.P_op_bar > ATM+1e-6` (ATM=1.01325), coherente con
+   `_seed_reactor_pressures`. Un reactor sin `P_op_bar` declarado (default
+   1.0) ya no estampa 1.0 en sus salidas: deja que la propagación resuelva
+   salida = entrada + ΔP.
+
+2. **Bug A — early-return de la propagación** (`solve_pressure_hydraulic`):
+   antes salía sin propagar si ningún stream estaba `pressure_locked`. Ahora
+   también corre la propagación si existe algún bloque con `delta_p_bar`
+   declarado (`has_block_dp`), así el ΔP configurado se aplica aunque no haya
+   locks.
+
+3. **Bug B — HX de 4 puertos por lado** (`solve_pressure_propagation`): la
+   presión de referencia de cada salida ya no es `min(TODAS las entradas)`.
+   Para un HX de 4 puertos (`_four_port_hx_ids`) cada salida hereda la
+   presión de la entrada de SU lado (`_stream_side` sobre tube/shell); el
+   resto de bloques usa el min de sus entradas como antes. Elimina el
+   colapso del lado de alta P al de baja (gas_sweet E-101: rich amine ahora
+   50 bar en vez de 1.01).
+
+4. **Convención de signo** (`flowsheet_model.py`): docstring alineado con el
+   código — `delta_p_bar` es un sumando CON SIGNO (positivo bombas/compresores,
+   negativo columnas/HX/hornos); no un módulo "a restar".
+
+## Correcciones colaterales que el fix destapó
+
+- **hda_full / K-101** (`data/examples/hda_full.json`): al corregir la
+  propagación, el compresor de reciclo K-101 dejó de sizearse a un target
+  espurio (48.99 bar, ~2× la presión del loop) y quedó a 25 bar (correcto).
+  Eso reveló que K-101 estaba **sub-especificado** (sin P_op_bar ni ΔP): su
+  compresión espuria previa era lo que "cerraba" la energía del loop. Fix de
+  datos honesto: `K-101.P_op_bar = 25.0` (el compresor de reciclo opera a la
+  presión del loop). Restaura status `ok`, sin warnings de energía. ISBL de
+  hda_full baja de 32.94 M a 31.19 M (se elimina el sobre-costeo por la
+  sobre-presión ficticia).
+
+- **inspector_evidence.compressor_text**: el fix cambió qué compresor
+  inspecciona un test, destapando una divergencia **pre-existente** —
+  `compressor_metrics` emitía `Q intercool` (multietapa) pero
+  `compressor_text` no lo imprimía. Se agregó la línea al texto para que
+  ambos coincidan.
+
+## Impacto en goldens (re-export deliberado)
+
+| Ejemplo | ISBL antes | ISBL después | sum_duty |
+|---|---:|---:|---|
+| gas_sweet | 12 772 946 | 12 845 908 (+0.57%) | sin cambio |
+| hda_full | 32 940 734 | 31 190 228 (−5.31%) | −438.9 → −553.9 |
+
+Ambos verificados como **correcciones físicas**: gas_sweet ahora conserva la
+presión de la amina rica por el lado tube del HX; hda_full elimina la
+sobre-presión ficticia del compresor de reciclo. Ningún ejemplo cambió de
+`overall_status`. Los grupos 1-2 (economía analizada) **no se movieron** —
+solo gas_sweet y hda_full (grupo 3) tenían el patrón del bug.
+
+## Verificación
+
+```
+python gate_examples.py               # 41/41 verde
+python gate_examples.py --registry    # 41/41 verde
+python -m pytest tests/ (no-GUI)      # 522 passed, 1 skipped
+# repro del bug reportado (entra 30 bar, HX ΔP=-0.5):
+#   feed no-locked ΔP=-0.5 → 29.5 bar  (antes: 1.0)  ✓
+```
+
+## Pendiente conocido (no crítico, fuera del bug reportado)
+
+- Un stream con presión no-default (ej. feed a 30 bar) pero SIN lock y SIN
+  ningún ΔP de bloque en el flowsheet no propaga (la propagación es opt-in:
+  requiere un lock o un ΔP declarado). El bug reportado —ΔP configurado que
+  no se restaba— sí quedó resuelto. Ampliar el opt-in a "feed con P
+  declarada" es un cambio de diseño separado.
+- La exclusión de utilities del `min` en bloques no-HX (evitar que el vapor
+  de un reboiler arrastre la salida de proceso) se dejó SIN aplicar: ningún
+  ejemplo la necesita hoy y ampliaba la superficie de cambio. Anotado por si
+  aparece un flowsheet que lo requiera.

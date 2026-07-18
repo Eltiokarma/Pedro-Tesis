@@ -391,6 +391,11 @@ def compressor_text(block, fs) -> Optional[str]:
             f"W_actual:         {cs['W_act_kW']:.1f} kW  (η={cs['eta_total']:.2f})",
         ]
         if cs['n_stages_rec'] > 1:
+            # Q_intercool: mismo dato que el panel de métricas (compressor_metrics
+            # key 'qic') — sin esta línea texto y métricas divergían.
+            lines.append(f"Q intercool:      "
+                         f"{cs.get('Q_intercool_kW', 0.0):,.1f} kW "
+                         f"(entre {cs['n_stages_rec']} etapas)")
             lines.append(f"⚠ Ratio {cs['ratio']:.1f} > 4: recomendar "
                          f"{cs['n_stages_rec']} etapas + intercoolers")
         if cs['T_out_C'] > 200:
