@@ -230,6 +230,13 @@ def _economics(fs, econ_inputs):
     rampup_schedule = econ_inputs.get("rampup_schedule")
     royalties_pct = float(econ_inputs.get("royalties_pct", 0.0) or 0.0)
     tax_lag = bool(econ_inputs.get("tax_lag", False))
+    # γ de manufactura (Turton 8.2): overhead sobre costos variables.  Orden
+    # de precedencia: econ_inputs (CLI) > fs.econ_overrides (embebido en el
+    # flowsheet) > default de econ_defaults (1.23).  None → cost_of_manufacture
+    # resuelve el default, así el caso química-standalone no cambia en nada.
+    _fs_econ = getattr(fs, "econ_overrides", None) or {}
+    com_gamma = econ_inputs.get("com_gamma", _fs_econ.get("com_gamma"))
+    com_gamma = float(com_gamma) if com_gamma is not None else None
 
     opex = fexp.categorize_opex(fs)                      # {revenue,crm,cut,cwt,col}
     cd = capex.compute_fci(fs, year_target=year_t,
@@ -242,17 +249,21 @@ def _economics(fs, econ_inputs):
         FCI_usd=fci, COL_usd=opex["col"],
         CUT_usd=opex["cut"], CRM_usd=opex["crm"], CWT_usd=opex["cwt"],
         depreciable_base_usd=dep, useful_life_yr=useful,
+        gamma=com_gamma,
     )
     # Split variable/fijo del costo cash para el ramp-up: variable =
     # γ·(CRM+CUT+CWT) (escala con producción); el resto (labor + M+T+I) es fijo.
     _var_cash = None
     if construction_schedule is not None or rampup_schedule is not None \
        or royalties_pct or tax_lag:
-        try:
-            import econ_defaults as _ed
-            _gamma = _ed.get_com_coeffs().get("gamma_variable", 1.23)
-        except Exception:
-            _gamma = 1.23
+        if com_gamma is not None:
+            _gamma = com_gamma
+        else:
+            try:
+                import econ_defaults as _ed
+                _gamma = _ed.get_com_coeffs().get("gamma_variable", 1.23)
+            except Exception:
+                _gamma = 1.23
         _var_cash = _gamma * (opex["crm"] + opex["cut"] + opex["cwt"])
 
     prof = ec.profitability_indicators(
@@ -273,7 +284,8 @@ def _economics(fs, econ_inputs):
                    "dep_years": dep_years,
                    "construction_schedule": construction_schedule,
                    "rampup_schedule": rampup_schedule,
-                   "royalties_pct": royalties_pct, "tax_lag": tax_lag},
+                   "royalties_pct": royalties_pct, "tax_lag": tax_lag,
+                   "com_gamma": com_gamma},
         "opex_usd_yr": opex,
         "capex": {"fci_grass_roots_usd": fci, "working_capital_usd": wc,
                   "depreciable_base_usd": dep,

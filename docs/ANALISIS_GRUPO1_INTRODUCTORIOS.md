@@ -181,3 +181,86 @@ aplicar solo con re-export deliberado de goldens, no como parche.
   confiable" (warning del propio `equipment_costs.py`).
 - CEPCI 2024 sin valor oficial → todos los costeos usan 2023 (797.9) con
   warning. Cosmético pero aparece en cada corrida.
+
+---
+
+# Correcciones aplicadas (2026-07-18)
+
+Se aplicaron las correcciones **físicamente honestas** — las que no dependen
+de precios ficticios ni de costeos fuera del rango validado de las
+correlaciones. Resultado: **3 ejemplos corregidos a VIABLE** y **4 dejados
+INVIABLE con su porqué documentado y demostrado** (no se fuerzan a viables
+apilando supuestos injustificables).
+
+## Cambio de infraestructura: γ de manufactura por flowsheet
+
+Turton 8.2 usa γ (overhead comercial sobre costos variables) = 1.23 para
+química standalone. El propio `econ_defaults.py` documenta γ=1.05–1.10 para
+refinería integrada / commodity con offtake, pero antes ese valor era un
+**global** de módulo: no había forma de que un ejemplo declarara su γ
+sectorial. Se añadió el campo `Flowsheet.econ_overrides["com_gamma"]`:
+
+- `flowsheet_model.py`: nuevo campo `econ_overrides` (serializado en
+  `to_dict`/`from_dict`).
+- `simulate_engine._economics`: lee `fs.econ_overrides["com_gamma"]` (o el
+  override del CLI, que tiene precedencia) y lo pasa a
+  `cost_of_manufacture_components(gamma=…)` y al split variable del ramp-up.
+  Se reporta en `economics.inputs.com_gamma`. Si no se declara, `None` →
+  el default 1.23 se resuelve como antes (el caso química-standalone **no
+  cambia en nada**; 40/41 goldens intactos).
+
+Ningún cambio afecta `_golden.json` (precios y γ no entran en el golden:
+status, bloques, corrientes, errores M/E, sum_duty, ISBL). **Gate 41/41
+verde** por ambos caminos (directo y vía registry); **522 tests no-GUI
+verdes**.
+
+## Estado final del grupo 1
+
+| Ejemplo | Cambio aplicado | NPV | Veredicto |
+|---|---|---:|---|
+| methanol | ninguno (referencia) | +11.86 M | **VIABLE** |
+| distillation | feed 850→600 $/tm (aromáticos mezclados con descuento realista) + `com_gamma`=1.10 | +2.72 M | **VIABLE** |
+| cdu | `com_gamma`=1.05 (refinería con offtake) | +11.16 M | **VIABLE** |
+| hda | purga 2 000→350 $/tm (correctitud: gas 84 % metano ≠ H₂ puro) | −21.78 M | INVIABLE (documentado) |
+| ammonia | ninguno | −24.92 M | INVIABLE (documentado) |
+| ethanol | ninguno | −16.51 M | INVIABLE (documentado) |
+| biodiesel | ninguno (revertido) | −7.07 M | INVIABLE (documentado) |
+
+### Por qué NO se forzaron los 4 restantes
+
+- **hda** — Con la purga a precio honesto (gas de purga 84 % metano vale
+  ~fuel gas, no 2 000 $/tm de H₂ puro), la viabilidad aparente
+  (NPV −4.7 M) se desploma a −21.8 M: **descansaba en un precio ficticio**.
+  Converge solo apilando 3 supuestos simultáneos (escala ×5 con equipo
+  re-dimensionado + γ=1.10 + tolueno más barato), y γ=1.0 no es defendible
+  para una planta que vende benceno al mercado. La versión industrial
+  Douglas ya existe como ejemplo aparte (`hda_full`); el HDA introductorio
+  queda como el caso pedagógico de "la ruta tolueno→benceno no paga a
+  escala de aula". Solo se aplicó el **fix de correctitud** (purga a 350).
+- **ammonia** — Sin reciclo, el 86 % del feed sale por la purga; γ no puede
+  arreglar una topología que tira la mayor parte de la materia prima
+  (inviable incluso a γ=1.0). Es el contraste pedagógico con `haber_rec`.
+- **ethanol** — Cerveza diluida: el reboiler (1 581 kW para 550 t/yr de
+  EtOH) da una energía específica enorme; el reactor convierte glucosa por
+  estequiometría fija, así que enriquecer el mosto no sube el rendimiento
+  por tonelada. Inviable a toda escala y γ.
+- **biodiesel** — **Falso positivo destapado:** escalar ×10 daba NPV +1.4 M,
+  pero con un **único reactor de 300 m³ costeado por extrapolación fuera
+  del rango Turton [0.1, 35] m³** (warning "costo NO confiable"). Costeado
+  honestamente con 10 reactores en paralelo dentro de rango, el ISBL sube
+  de 4.8 M a 9.0 M y vuelve a INVIABLE (−6.4 M). Su reactor ya está en el
+  techo del rango a escala piloto: no hay escala que sea a la vez viable y
+  dentro de la envolvente validada. Se **revirtió** el escalado.
+
+## Verificación
+
+```
+python gate_examples.py               # 41/41 verde
+python gate_examples.py --registry    # 41/41 verde (camino UI)
+python -m pytest tests/ (no-GUI)      # 522 passed, 1 skipped
+for k in distillation cdu; do python simulate_cli.py data/examples/$k.json --economics; done  # VIABLE
+```
+
+Warnings pre-existentes sin relación con estos cambios (ya anotados en
+§Colaterales): WHB de cdu/methanol fuera de rango Sinnott, CEPCI 2024→2023.
+No afectan las conclusiones (NPV de millones vs equipos marginales).
