@@ -1561,7 +1561,7 @@
  },
  "opex_extras": [
   {
-   "flowrate": 1500000.0,
+   "flowrate": 15000.0,
    "name": "Vapor de servicio (calderas)",
    "price_usd_per_unit": 15.0,
    "stream": "Utilities",
