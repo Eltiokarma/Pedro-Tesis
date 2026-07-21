@@ -17,7 +17,7 @@ parten de un ISBL ya corregido.
 | gas_sweet | ✓ ok | 0/0 | 12.8 M | 1.05 | +1 500 000 | 11.3% | **VIABLE** (marginal) |
 | talara | ✓ ok | 0/0 | 42.4 M | 1.10 | −14 840 000 | 5.9% | INVIABLE (marginal) |
 | sugar | ✓ ok | 0/0 | 56.9 M | 1.10 | −17 620 000 | 6.4% | INVIABLE (capital) |
-| hno3 | ✓ ok | 0/0 | 11.0 M | 1.23 | −21 314 399 | — | INVIABLE (demo) |
+| hno3 | ✓ ok | 0/0 | 11.0 M | 1.23 | −21 314 399 ¹ | — | INVIABLE (demo) |
 | quimpac | ✓ ok | 0/0 | 51.3 M | 1.23 | −102 556 370 | — | INVIABLE (demo) |
 
 ¹ `industrial` queda en `warning` por un advisory pre-existente (F-301:
@@ -93,6 +93,12 @@ bloques) pero con producción **simbólica**:
 - **quimpac**: 602 tm/yr de Cl₂ + 2 145 tm/yr de NaOH, con un ISBL de 51 M
   (ratio capital:revenue de **30:1**). El equipo tiene tamaño de planta real;
   los caudales, de laboratorio.
+> ¹ **Actualización posterior:** el fix de generación eléctrica (ver
+> `docs/ANALISIS_GRUPO6_MATERIALES_ENERGIA.md`) corrigió el expander de gas de
+> cola K-501 (−700 kW), que se cobraba como consumo en vez de generar
+> electricidad. NPV de hno3: −21.3 M → **−13.5 M**. Sigue INVIABLE (sub-escala);
+> la conclusión no cambia.
+
 - **hno3**: 5 616 tm/yr de HNO₃ al 60% con 3 compresores grandes (dual-
   presión Ostwald) → ISBL 11 M, revenue 2.5 M.
 

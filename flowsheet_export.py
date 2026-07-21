@@ -717,7 +717,8 @@ def compute_utilities_from_duties(fs):
         if util.get("type") in ("heating", "cooling"):
             cons_adjusted = cons * hi_factor
             tag = f"{util['name']} (PFD-util, HI×{hi_factor:.2f})"
-        elif util.get("type") == "generation":
+        elif util.get("type") in ("generation", "electrical_gen"):
+            # exportación (vapor o electricidad) → revenue, sin heat-integration
             cons_adjusted = cons
             tag = f"{util['name']} — exportado (revenue)"
         else:

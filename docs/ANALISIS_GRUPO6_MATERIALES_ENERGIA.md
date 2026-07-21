@@ -90,10 +90,26 @@ modelo**, no un precio faltante. Inviables por diseño de demostración.
 41/41 verde, 522 tests verdes. Ningún veredicto cambia (rankine sigue
 INVIABLE por rev=0), pero el ISBL deja de ser 124× la realidad.
 
-Queda **un** hallazgo estructural para trabajo futuro: turbina-como-HX sin
-potencia de eje → los ciclos de energía (rankine/nuclear) no monetizan la
-electricidad. Requiere un bloque de turbina que compute trabajo de eje + un
-crédito de energía; es una ampliación del modelo, no un precio faltante.
+**Segunda corrección (2026-07): generación de electricidad.** Se implementó
+el crédito de electricidad generada por equipo rotativo con duty<0
+(turbina/expander) — antes esos equipos se cobraban como si CONSUMIERAN.
+Cambios: nueva utility `electricity_generated` (type `electrical_gen`,
+precio −0.08, η=0.92) en `equipment_ports.py`; `autoselect_heat_source`
+devuelve generación si duty<0; `flowsheet_export` la trata como export
+(revenue, sin heat-integration).
+
+- **hno3 / K-501** (el fix REAL, no-token): el expander de gas de cola
+  (−700 kW) se cobraba **$577k/yr de COSTO** cuando debe **generar** ~$451k
+  de crédito. Swing de ~$1 M: NPV −21.3 M → **−13.5 M** (sigue INVIABLE por
+  sub-escala, pero el expander ya está bien modelado).
+- **rankine/nuclear**: se retiparon las turbinas `TUR-101` de
+  `Heat exch. — floating head` a `Compressor — axial` (la convención del repo:
+  turbina = compresor con P_out<P_in) + `delta_p_bar` declarado (−59.9/−69.9
+  bar). Ahora el solver computa la potencia de eje (−2.56/−1.96 kW) y la
+  acredita como electricidad. Pero a escala simbólica (100 tm/yr de fluido →
+  ~kW) el crédito es ~$1.6k/yr: **siguen INVIABLE** (token). El valor es la
+  correctitud del modelo (una turbina genera potencia), no la viabilidad.
+  Golden re-exportado (rankine/nuclear: ISBL + sum_duty); gate 41/41 verde.
 
 ## Verificación
 
@@ -142,7 +158,7 @@ python gate_examples.py               # 41/41 verde (sin cambios en este grupo)
 | K-101/K-202 compresor de reciclo sin P_op | **CORREGIDO** (PR #124/#125) |
 | Auto-sizing colapsa ISBL sin S fijado | **AUDITADO** (documentado, no crítico) |
 | Costeo del boiler (rankine ISBL 124× WHB) | **CORREGIDO** (K1 re-anclados al WHB Sinnott) |
-| Turbina-como-HX sin potencia de eje (rankine/nuclear) | **FLAGEADO** (ampliación estructural) |
+| Turbina/expander sin generación eléctrica (cobrado como consumo) | **CORREGIDO** (utility `electricity_generated`; fix real en hno3, +$1 M) |
 
 Infraestructura añadida: campo `Flowsheet.econ_overrides["com_gamma"]` para
 declarar el γ sectorial por flowsheet. Gate 41/41 verde en todo el recorrido;

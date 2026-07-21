@@ -895,6 +895,18 @@ UTILITIES = {
         "type":       "electrical",
         "efficiency": 0.85,    # eficiencia eléctrica del motor + driver
     },
+    # Electricidad GENERADA por un equipo rotativo con duty<0 (turbina de
+    # vapor, expander/turbina de gas de cola): recupera trabajo de eje y lo
+    # exporta como electricidad → revenue (precio negativo).  Antes estos
+    # equipos se cobraban como si CONSUMIERAN (bug: el expander de HNO3 pagaba
+    # $577k/yr en vez de generarlos).  η = mecánica→eléctrica del generador.
+    "electricity_generated": {
+        "name":       "Electricity (generada/exportada)",
+        "units":      "kWh",
+        "price":      -0.08,   # revenue por exportar electricidad
+        "type":       "electrical_gen",
+        "efficiency": 0.92,
+    },
 }
 
 
@@ -964,7 +976,9 @@ def autoselect_heat_source(eq_type, duty_kw, T_avg):
     if duty_kw == 0:
         return ""
     if is_electrical_equipment(eq_type):
-        return "electricity"
+        # duty<0 en un rotativo = expansión (turbina/expander) → GENERA
+        # electricidad (revenue); duty>0 = consumo (bomba/compresor → costo).
+        return "electricity_generated" if duty_kw < 0 else "electricity"
     if duty_kw > 0:
         # heating: elegir steam según T del proceso (con ΔT mínimo
         # de 20°C entre utility y proceso)
@@ -1027,6 +1041,11 @@ def utility_consumption(util_key, duty_kw_abs):
         # Para bombas/compresores la "duty" ya viene como potencia al eje;
         # el motor agrega su η.
         return duty * 8760.0 / eff
+
+    if util["type"] == "electrical_gen":
+        # Electricidad generada: potencia de eje × η_generador (las pérdidas
+        # mecánica→eléctrica REDUCEN lo exportable) × 8760 h = kWh/año.
+        return duty * 8760.0 * eff
 
     # heating o cooling: convertir kW térmicos a tm/año via ΔH_vap
     from flowsheet_model import SEC_PER_YEAR        # única fuente §6.3

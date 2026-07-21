@@ -234,13 +234,13 @@
   "sum_duty": -667.240902
  },
  "nuclear": {
-  "ISBL": 1688932.86,
+  "ISBL": 1773306.21,
   "energy_errors": 0,
   "mass_errors": 0,
   "n_blocks": 6,
   "n_streams": 5,
   "overall_status": "ok",
-  "sum_duty": 0.165649
+  "sum_duty": -1.263545
  },
  "pasteurizer": {
   "ISBL": 668536.87,
@@ -288,13 +288,13 @@
   "sum_duty": 1583.43729
  },
  "rankine": {
-  "ISBL": 6689961.61,
+  "ISBL": 6777802.69,
   "energy_errors": 0,
   "mass_errors": 0,
   "n_blocks": 6,
   "n_streams": 5,
   "overall_status": "ok",
-  "sum_duty": 0.160825
+  "sum_duty": -1.057408
  },
  "rxn_flash_col": {
   "ISBL": 3466167.77,
