@@ -77,6 +77,42 @@ proporción al caudal (como se hizo y verificó en el grupo 1), vigilando que
 cada equipo quede dentro del rango válido de su correlación (si no, usar
 N unidades en paralelo).
 
+### FIX aplicado (2026-07) — auto-sizing de equipos no-HX + swallow visible
+
+Se cerró la deuda del auto-sizing en tres partes (gate 41/41 verde, 522
+tests verdes; los ejemplos `S_locked=True` no se tocan → golden intacto
+salvo `talara`, que tenía 3 bombas placeholder desbloqueadas → re-export):
+
+1. **El solver ahora auto-dimensiona TODOS los equipos sin `S_locked`**, no
+   solo los HX. Nueva `flowsheet_solver._size_process_equipment(fs)` (llamada
+   en `solve()` tras `_size_heat_exchangers`): despacha al sizer por eq_type
+   o categoría (reactores, torres, bombas, compresores, vessels, tanques,
+   hornos, evaporadores) y escribe `b.S` solo si el bloque NO está locked.
+   Un equipo desbloqueado con `S=0` ya no anula su costo en silencio → el
+   ISBL **degrada con gracia** en vez de colapsar (methanol desbloqueado:
+   antes ~0, ahora 1.05× del baseline; sugar: 0.09× → 0.69×).
+
+2. **Sizers reconectados** (`equipment_sizing.SIZER_BY_EQTYPE`): los equipos
+   de "Solids / sep." (evaporador, dryer, crystallizer) no tenían su
+   categoría en `SIZER_BY_CAT`, pero su `S` lo calcula un sizer existente —
+   área de transferencia (`size_evaporator`) para evaporador/dryer, volumen
+   por residencia (`size_vessel`) para crystallizer. Antes un evaporador
+   desbloqueado quedaba en `S=0` (caso sugar: 4 evaporadores grandes sin
+   costo). El filtro de banda queda sin sizer aplicable (S = área de
+   filtración) → lo reporta el canal de abajo.
+
+3. **El swallow silencioso es ahora visible**: `capex.compute_fci` devuelve
+   `zero_cost_blocks` — lista de bloques cuyo costo salió 0 (S≤0 sin
+   dimensionar, eq_type sin correlación, o excepción de costeo), excluyendo
+   nodos virtuales `Ambient`. Se expone en `economics.capex.zero_cost_blocks`
+   del resultado del solver. Los 41 ejemplos shippeados salen **limpios**
+   (cero bloques sin costo).
+
+**Deuda restante (menor):** faltan sizers para 2 tipos de "Solids / sep." —
+`Filter — belt` (área de filtración desde caudal de slurry) y una correlación
+de residencia propia para `Crystallizer` (hoy usa `size_vessel` como proxy).
+Son equipos de pocos ejemplos; el canal `zero_cost_blocks` los hace visibles.
+
 ---
 
 # Parte 2 — Bug de presión (entra 30 bar, sale ~1 bar)

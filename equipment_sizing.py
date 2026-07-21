@@ -673,9 +673,22 @@ SIZER_BY_CAT = {
 # Sizers específicos por eq_type — tienen prioridad sobre SIZER_BY_CAT.
 # Los WHB son categoría "Heat exchangers" pero su S es caudal de vapor
 # [kg/h], no área, así que usan size_whb (no size_heat_exchanger).
+#
+# Los equipos de "Solids / sep." (evaporador, dryer, crystallizer) NO tienen
+# su categoría en SIZER_BY_CAT, pero su S es un parámetro que un sizer
+# existente ya sabe calcular: área de transferencia (Q/U·ΔT → size_evaporator)
+# para evaporador y dryer, volumen por tiempo de residencia (size_vessel)
+# para el crystallizer.  Reconectarlos acá evita que un evaporador
+# desbloqueado quede en S=0 (costo nulo → ISBL colapsado; caso sugar).
+# El filtro de banda (S = área de filtración desde caudal de slurry) no
+# tiene sizer aplicable → se deja sin dimensionar (lo reporta el warning
+# de bloque sin costo).
 SIZER_BY_EQTYPE = {
     "Heat exch. — WHB packaged":      size_whb,
     "Heat exch. — WHB field erected": size_whb,
+    "Evaporator — vertical":          size_evaporator,
+    "Dryer — drum":                   size_evaporator,
+    "Crystallizer":                   size_vessel,
 }
 
 

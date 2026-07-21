@@ -106,9 +106,16 @@ def compute_fci(fs,
     by_cat: Dict[str, list] = {}
     sum_cp  = 0.0
     sum_cbm = 0.0
+    # Bloques cuyo costo salió 0 (S≤0 sin sizer, eq_type sin correlación, o
+    # excepción de costeo).  Antes se tragaban en silencio y el ISBL se
+    # desplomaba sin aviso; se exponen acá para que el caller los reporte.
+    zero_cost_blocks: list = []
     for b in fs.blocks.values():
         if getattr(b, "auto_aux", False):
             continue   # source/sink de utility/ambiente — no es equipo real
+        # 'Ambient' es un nodo virtual (atmósfera: intake de aire, venteo,
+        # blowdown) — legítimamente costo 0, no un equipo a dimensionar.
+        is_virtual = (b.eq_type or "") == "Ambient"
         spec = eq.EQUIPMENT_DATA.get(b.eq_type, {})
         cat  = spec.get("categoria", "Otros")
         p_op = _eff_p(fs, b)
@@ -119,8 +126,19 @@ def compute_fci(fs,
                                        material=mat)
             cp_block  = res["Cp_target"] * b.n
             cbm_block = res["CBM"]       * b.n
-        except Exception:
+        except Exception as e:
             cp_block = cbm_block = 0.0
+            if not is_virtual:
+                reason = ("S≤0 (sin dimensionar)" if float(b.S or 0) <= 0
+                          else f"{type(e).__name__}: {e}")
+                zero_cost_blocks.append(
+                    {"name": b.name, "eq_type": b.eq_type,
+                     "S": float(b.S or 0), "reason": reason})
+        else:
+            if cbm_block == 0.0 and not is_virtual:
+                zero_cost_blocks.append(
+                    {"name": b.name, "eq_type": b.eq_type,
+                     "S": float(b.S or 0), "reason": "CBM=0"})
         sum_cp  += cp_block
         sum_cbm += cbm_block
         if cat not in by_cat:
@@ -158,6 +176,7 @@ def compute_fci(fs,
         "depreciable_base":    fci_gr,
         "year_target":         year_target,
         "by_category":         by_cat,
+        "zero_cost_blocks":    zero_cost_blocks,
         "isbl_override_used":  isbl_override_used,
         "params": {
             "contingency_frac":     contingency_frac,
