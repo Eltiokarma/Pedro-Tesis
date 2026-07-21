@@ -42,17 +42,23 @@ Monetizar la electricidad exigiría un bloque de turbina que calcule el
 trabajo de eje y un crédito de energía — es una **ampliación estructural del
 modelo**, no un precio faltante. Inviables por diseño de demostración.
 
-> **Bug de costeo flageado (rankine):** su ISBL de 271.9 M está dominado en
-> un **99.6%** por un solo equipo — `B-101 (Boiler — water tube, S=10)` da
-> CBM = **270.9 M**. La correlación Turton del boiler es sistemáticamente
-> alta (incluso a S=2, el mínimo, da Cp=15.2 M para una caldera de ~7 t/h que
-> en realidad cuesta ~$0.5 M), y además el S=10 del demo no matchea su flujo
-> simbólico. `nuclear` NO tiene este blowup (su ISBL 1.69 M es razonable).
-> **Recomendación:** revisar las constantes K1 de `Boiler — fire tube` /
-> `Boiler — water tube` en `equipment_costs.py:386-393` contra Turton
-> Apéndice A, y/o el S del boiler de rankine. No se corrigió acá (requiere la
-> referencia Turton y toca golden; rankine es inviable igual). Se documenta
-> como hallazgo accionable, igual que se hizo con el bug de presión.
+> **Bug de costeo del boiler — CORREGIDO (2026-07).** El ISBL de rankine de
+> 271.9 M estaba dominado en un **99.6%** por un solo equipo — `B-101 (Boiler
+> — water tube, S=10)` daba CBM = **270.9 M**, es decir **124× el WHB Sinnott
+> validado del mismo caudal** (36 t/h → $2.87 M). Las constantes K1 (fire
+> 6.6940, water 7.0489) estaban atribuidas a "Turton App A", pero Turton App
+> A **no trae correlación de boiler por kg/s de vapor** (el vapor es una
+> utility, no capital) → la atribución era espuria y los valores, absurdos
+> (incluso a S=2 daban Cp $15.2 M para una caldera de ~7 t/h real de ~$0.5 M).
+>
+> **Fix aplicado** (`equipment_costs.py`): K1 re-anclados al WHB field-erected
+> validado del repo (Sinnott Tabla 6.6). Un boiler DE FUEGO = superficie de
+> vapor + quemador/hogar/domo → water-tube ≈ 2× WHB (K1 7.0489→**5.375**),
+> fire-tube ≈ 0.65× WHB, más barato (K1 6.6940→**5.150**). Curva resultante
+> water-tube: $2.3 M (7 t/h) → $9.4 M (72 t/h) → $19 M (180 t/h) CBM, sana
+> para calderas de servicio. **rankine ISBL: 271.9 M → 6.69 M.** Sigue
+> INVIABLE (rev=0), pero el ISBL ya es honesto. Único ejemplo que usa boiler;
+> golden re-exportado (solo rankine), gate 41/41 verde, 522 tests verdes.
 
 ### 2. Utilities públicas (water_treat, desal) — no son centros de lucro
 
@@ -78,12 +84,16 @@ modelo**, no un precio faltante. Inviables por diseño de demostración.
 
 ## Correcciones aplicadas
 
-**Ninguna.** No hay un fix de dato defendible: los ciclos de energía necesitan
-modelar la generación eléctrica (estructural), las utilities de agua no son
-negocios, y los materiales son demo-scale (glass escalaría). Se flaguean dos
-hallazgos de ingeniería para trabajo futuro: (a) turbina-como-HX sin potencia
-de eje → sin ingreso eléctrico; (b) correlación de costeo del boiler
-(rankine ISBL 99.6% un boiler mal costeado).
+**Una:** corregida la correlación de costeo del boiler (ver §1 arriba) —
+`equipment_costs.py`, K1 re-anclados al WHB Sinnott validado. rankine ISBL
+271.9 M → 6.69 M. Golden-neutral salvo rankine (re-export deliberado), gate
+41/41 verde, 522 tests verdes. Ningún veredicto cambia (rankine sigue
+INVIABLE por rev=0), pero el ISBL deja de ser 124× la realidad.
+
+Queda **un** hallazgo estructural para trabajo futuro: turbina-como-HX sin
+potencia de eje → los ciclos de energía (rankine/nuclear) no monetizan la
+electricidad. Requiere un bloque de turbina que compute trabajo de eje + un
+crédito de energía; es una ampliación del modelo, no un precio faltante.
 
 ## Verificación
 
@@ -131,7 +141,7 @@ python gate_examples.py               # 41/41 verde (sin cambios en este grupo)
 | beer precio de granel vs microcervecería | **CORREGIDO** (PR #126) |
 | K-101/K-202 compresor de reciclo sin P_op | **CORREGIDO** (PR #124/#125) |
 | Auto-sizing colapsa ISBL sin S fijado | **AUDITADO** (documentado, no crítico) |
-| Costeo del boiler (rankine ISBL 99.6%) | **FLAGEADO** (requiere ref. Turton) |
+| Costeo del boiler (rankine ISBL 124× WHB) | **CORREGIDO** (K1 re-anclados al WHB Sinnott) |
 | Turbina-como-HX sin potencia de eje (rankine/nuclear) | **FLAGEADO** (ampliación estructural) |
 
 Infraestructura añadida: campo `Flowsheet.econ_overrides["com_gamma"]` para

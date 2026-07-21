@@ -383,14 +383,29 @@ EQUIPMENT_DATA = {
     # -------- UTILITIES (planta de servicios auxiliares) --------
     # Caldera de vapor — equipo industrial que produce steam para el
     # proceso a partir de combustible y agua tratada.
+    #
+    # CORRECCIÓN DE COSTEO (2026-07): los K1 previos (fire 6.6940, water
+    # 7.0489, atribuidos a Turton App A) daban costos absurdos — a 36 t/h de
+    # vapor el water-tube costaba $270.9M CBM, 124× el WHB Sinnott validado
+    # del mismo caudal ($2.87M).  Turton App A NO trae correlación de boiler
+    # por kg/s de vapor (el vapor es una utility, no capital), así que la
+    # atribución era espuria.  Re-anclados al WHB field-erected validado del
+    # repo (Sinnott Tabla 6.6): un boiler DE FUEGO = superficie de vapor +
+    # quemador/hogar/domo, ~2× el WHB (water-tube) y ~0.65× (fire-tube,
+    # paquete compacto de baja P).  Curva resultante water-tube: $2.3M (7 t/h)
+    # → $9.4M (72 t/h) → $19M (180 t/h) CBM.  Sólo `rankine/B-101` lo usa
+    # (demo Tier-2); su ISBL pasa de 271.9M a ~10M.  Ver
+    # docs/ANALISIS_GRUPO6_MATERIALES_ENERGIA.md §bug de costeo.
     "Boiler — fire tube":
-        dict(K1=6.6940, K2=0.1801, K3=0.0942,
+        dict(K1=5.1500, K2=0.1801, K3=0.0942,
              S_param="Steam output", S_unit="kg/s",
-             S_min=0.1, S_max=20, categoria="Utilities"),
+             S_min=0.1, S_max=20, categoria="Utilities",
+             source="repo_WHB_anchored_2026"),
     "Boiler — water tube":
-        dict(K1=7.0489, K2=0.4071, K3=0.1296,
+        dict(K1=5.3750, K2=0.4071, K3=0.1296,
              S_param="Steam output", S_unit="kg/s",
-             S_min=2,   S_max=50, categoria="Utilities"),
+             S_min=2,   S_max=50, categoria="Utilities",
+             source="repo_WHB_anchored_2026"),
 
     # Torre de enfriamiento — produce agua fría circulante para todos
     # los HX/condensadores de cooling water del proceso.
