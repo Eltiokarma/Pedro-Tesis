@@ -289,7 +289,10 @@ def _economics(fs, econ_inputs):
         "opex_usd_yr": opex,
         "capex": {"fci_grass_roots_usd": fci, "working_capital_usd": wc,
                   "depreciable_base_usd": dep,
-                  "isbl_usd": cd.get("sum_cbm")},
+                  "isbl_usd": cd.get("sum_cbm"),
+                  # bloques cuyo costo salió 0 (S sin dimensionar / eq_type
+                  # sin correlación): antes desplomaban el ISBL en silencio.
+                  "zero_cost_blocks": cd.get("zero_cost_blocks", [])},
         "com": {"COM_d_usd_yr": com.get("COM_d"),
                 "COM_usd_yr": com.get("COM"),
                 "depreciation_SL_usd_yr": com.get("Depreciation_SL"),

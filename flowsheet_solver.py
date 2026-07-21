@@ -1228,6 +1228,52 @@ def _size_heat_exchangers(fs, result):
         b.S = max(S_min, min(A, S_max))
 
 
+def _size_process_equipment(fs):
+    """Auto-dimensiona los equipos NO-HX (reactores, torres, bombas,
+    compresores, vessels, tanques, hornos, evaporadores) que NO están
+    S_locked, desde las condiciones de operación post-solve (duty, mass_flow,
+    ΔP, T_op, P_op).  Los HX los maneja `_size_heat_exchangers` (que además
+    persiste diagnósticos térmicos).
+
+    Motivación (ver docs/AUDITORIA_SIZING_Y_PRESION.md §Parte 1): antes el
+    solver sólo redimensionaba HX; el resto dependía 100% del S fijado a mano.
+    Al desbloquear un equipo (S_locked=False, S=0) su costo se anulaba en
+    silencio (purchased_cost lanza ValueError con S≤0 → capex.py lo tragaba a
+    cbm=0) y el ISBL se desplomaba.  Con esto, un equipo desbloqueado obtiene
+    un S estimado (clampeado al rango Turton) → el ISBL degrada con gracia en
+    vez de colapsar.
+
+    RESPETA S_locked: los 41 ejemplos vienen con S fijado a mano → NO se
+    tocan (golden byte-idéntico)."""
+    try:
+        import equipment_sizing as _es
+        import equipment_costs as _ec
+    except ImportError:
+        return
+    for b in fs.blocks.values():
+        if getattr(b, "S_locked", False):
+            continue                          # S fijado por el user: no tocar
+        spec = _ec.EQUIPMENT_DATA.get(b.eq_type, {})
+        cat = spec.get("categoria", "")
+        if cat == "Heat exchangers":
+            continue                          # los maneja _size_heat_exchangers
+        sizer = (_es.SIZER_BY_EQTYPE.get(b.eq_type)
+                 or _es.SIZER_BY_CAT.get(cat))
+        if sizer is None:
+            continue
+        try:
+            S_new = sizer(b, fs)
+        except Exception:
+            continue
+        if isinstance(S_new, tuple):          # contrato (S, diag) de algún sizer
+            S_new = S_new[0]
+        if S_new is None or S_new <= 0:
+            continue
+        S_min = spec.get("S_min", 0)
+        S_max = spec.get("S_max", float("inf"))
+        b.S = max(S_min, min(float(S_new), S_max))
+
+
 # ======================================================
 # SOLVER DE ENERGÍA — propagación de T por closure
 # ======================================================
@@ -6242,6 +6288,10 @@ def solve(fs, max_iter=MAX_ITER):
     # sizing + diagnósticos térmicos de HX (persiste block._hx_diagnostics;
     # re-dimensiona sólo los HX sin S_locked)
     _size_heat_exchangers(fs, result)
+    # sizing del resto de equipos NO-HX sin S_locked (reactores, torres,
+    # bombas, compresores, vessels, tanques, hornos): evita que un equipo
+    # desbloqueado con S=0 anule su costo en silencio y colapse el ISBL.
+    _size_process_equipment(fs)
     # auditoría térmica de HX (advisory, no rompe success)
     result.hx_warnings            = _check_heat_exchangers(fs)
     # Conciencia física del solver (PR-A): barrido advisory de cierre de
