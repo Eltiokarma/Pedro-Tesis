@@ -525,11 +525,15 @@ de `block_inspector`, glyph PFD, puertos y sizer. Matriz generada en
 
 ### Backlog documentado (no corregido en esta sesión)
 
-- **7 tipos con instancia y sin evidencia específica**: Crystallizer,
-  Dryer — drum, Evaporator — vertical (tienen editor de specs en la sección
-  "especial" pero ninguna evidencia computada post-solve), Mixer — static,
-  Valve — control globe, Boiler — fire tube/water tube (nada más allá de lo
-  genérico). Candidatos a una pasada de evidencia dedicada.
+- **7 tipos con instancia y sin evidencia específica** — ✅ **CERRADO en la
+  sesión siguiente (2026-07-22)**: dryer/crystallizer/evaporator/boiler/
+  valve/mixer ganan par text+metrics en `inspector_evidence`, cableado en
+  `block_inspector.evidence_specs` y en la matriz. Los modos especiales
+  hablan en AMBOS estados (modo automático activo con specs del solver, y
+  patrón sancionado con corrientes lockeadas — evidencia derivada de
+  corrientes con la procedencia dicha, p.ej. "CF ×1.43 efectivo"). La
+  matriz quedó en **0 huecos didácticos** con guards anti-leak verificados
+  (`tests/test_evidencia_tipos_mudos.py`, 11 tests).
 - **21 tipos sin instancia en los 58 ejemplos** (variantes de familia:
   U-tube, double pipe, condensers, rotary, reciprocating, reformer,
   fan axial, trays/packing, mixer inline, decanter centrifuge, relief/3-way,

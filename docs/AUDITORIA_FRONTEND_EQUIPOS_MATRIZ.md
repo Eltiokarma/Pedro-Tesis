@@ -7,7 +7,7 @@ Generada por `audit_frontend_matrix.py` — regenerar, no editar.
 | Heat exch. — fixed tube | sugar | 3 | hx_metrics, hx_text | ✓ | 6 | ✓ |
 | Heat exch. — U-tube | — | 0 | — | ✓ | 6 | ✓ |
 | Heat exch. — floating head | hda | 60 | hx_metrics, hx_text | ✓ | 6 | ✓ |
-| Heat exch. — kettle reboiler | hda | 12 | hx_metrics, hx_text | ✓ | 6 | ✓ |
+| Heat exch. — kettle reboiler | hda | 12 | boiler_text, hx_metrics, hx_text | ✓ | 6 | ✓ |
 | Heat exch. — double pipe | — | 0 | — | ✓ | 6 | ✓ |
 | Heat exch. — multiple pipe | — | 0 | — | ✓ | 6 | ✓ |
 | Heat exch. — air cooler | hda | 16 | hx_metrics, hx_text | ✓ | 6 | ✓ |
@@ -36,9 +36,9 @@ Generada por `audit_frontend_matrix.py` — regenerar, no editar.
 | Reactor — CSTR (agitado) | parallel | 3 | reactor_metrics, reactor_text | ✓ | 9 | ✓ |
 | Fired heater — reformer | — | 0 | — | ✓ | 7 | ✓ |
 | Fired heater — non-reformer | hda | 17 | hx_metrics, hx_text | ✓ | 7 | ✓ |
-| Crystallizer | sugar | 2 | — | ✓ | 7 | ✓ |
-| Dryer — drum | sugar | 2 | — | ✓ | 7 | ✓ |
-| Evaporator — vertical | sugar | 15 | — | ✓ | 7 | ✓ |
+| Crystallizer | sugar | 2 | crystallizer_text | ✓ | 7 | ✓ |
+| Dryer — drum | sugar | 2 | dryer_text | ✓ | 7 | ✓ |
+| Evaporator — vertical | sugar | 15 | evaporator_text | ✓ | 7 | ✓ |
 | Filter — belt | sugar | 5 | mech_sep_metrics, mech_sep_text | ✓ | 7 | ✓ |
 | Fan — centrifugal radial | blower | 1 | compressor_text | ✓ | 5 | ✓ |
 | Fan — axial | — | 0 | — | ✓ | 5 | ✓ |
@@ -47,16 +47,16 @@ Generada por `audit_frontend_matrix.py` — regenerar, no editar.
 | Packing — random | — | 0 | — | ✓ | 2 | ✗ |
 | Packing — structured | — | 0 | — | ✓ | 2 | ✗ |
 | Mixer — inline | — | 0 | — | ✓ | 8 | ✓ |
-| Mixer — static | smr_eq | 19 | — | ✓ | 8 | ✓ |
+| Mixer — static | smr_eq | 19 | mixer_text | ✓ | 8 | ✓ |
 | Splitter — flow divider | bypass | 2 | splitter_metrics, splitter_text | ✓ | 8 | ✓ |
 | Centrifuge — disc stack | leche_gloria | 2 | mech_sep_metrics, mech_sep_text | ✓ | 5 | ✓ |
 | Centrifuge — decanter | — | 0 | — | ✓ | 5 | ✓ |
 | Cyclone — gas/solid | cyclone | 1 | mech_sep_metrics, mech_sep_text | ✓ | 5 | ✓ |
 | Decanter — gravity | biodiesel | 2 | mech_sep_metrics, mech_sep_text | ✓ | 6 | ✓ |
-| Valve — control globe | letdown | 1 | — | ✓ | 3 | ✓ |
+| Valve — control globe | letdown | 1 | valve_text | ✓ | 3 | ✓ |
 | Valve — relief | — | 0 | — | ✓ | 3 | ✓ |
 | Valve — 3-way | — | 0 | — | ✓ | 8 | ✓ |
-| Boiler — fire tube | boiler_ft | 1 | — | ✓ | 5 | ✓ |
-| Boiler — water tube | rankine | 1 | — | ✓ | 5 | ✓ |
+| Boiler — fire tube | boiler_ft | 1 | boiler_text | ✓ | 5 | ✓ |
+| Boiler — water tube | rankine | 1 | boiler_text | ✓ | 5 | ✓ |
 | Cooling tower — induced draft | cooling | 2 | splitter_metrics, splitter_text | ✓ | 5 | ✓ |
 | Cooling tower — natural draft | — | 0 | — | ✓ | 5 | ✓ |

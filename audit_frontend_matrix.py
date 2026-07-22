@@ -48,6 +48,12 @@ SPECIFIC_EVIDENCE = [
     ("pump_metrics",      lambda ie, b, fs: ie.pump_metrics(b, fs)),
     ("compressor_text",   lambda ie, b, fs: ie.compressor_text(b, fs)),
     ("hydraulic_text",    lambda ie, b, fs: ie.hydraulic_breakdown_text(b, fs)),
+    ("dryer_text",        lambda ie, b, fs: ie.dryer_text(b, fs)),
+    ("crystallizer_text", lambda ie, b, fs: ie.crystallizer_text(b, fs)),
+    ("evaporator_text",   lambda ie, b, fs: ie.evaporator_text(b, fs)),
+    ("boiler_text",       lambda ie, b, fs: ie.boiler_text(b, fs)),
+    ("valve_text",        lambda ie, b, fs: ie.valve_text(b, fs)),
+    ("mixer_text",        lambda ie, b, fs: ie.mixer_text(b, fs)),
 ]
 
 
