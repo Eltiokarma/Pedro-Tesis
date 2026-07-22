@@ -49,6 +49,10 @@ def generate(formula: str) -> Optional[Dict]:
     e = counts.get("S", 0)
     if a == 0 or b == 0:
         return None
+    # Solo sabemos balancear C/H/O/N/S — un heteroátomo fuera del set
+    # (Cl, F, Br, P, metales...) produciría una reaccion desbalanceada.
+    if any(el not in ("C", "H", "O", "N", "S") for el in counts):
+        return None
     # O2 estequiometrico
     n_O2 = a + b/4.0 - c/2.0 + e
     if n_O2 <= 0:
@@ -57,10 +61,15 @@ def generate(formula: str) -> Optional[Dict]:
     stoich: List = []
     stoich.append(SE(formula=formula, phase="g", nu=-1))
     # nu de O2 puede ser fraccionario; reactions_db tipicamente usa
-    # enteros, asi que escalamos × 2 si es necesario.
-    scale = 2 if (n_O2 % 1 != 0 or (b/2.0) % 1 != 0 or (d/2.0) % 1 != 0
-                  or (e/1.0) % 1 != 0) else 1
-    n_O2_int = int(n_O2 * scale)
+    # enteros, asi que escalamos al primer factor que deja TODOS los
+    # coeficientes enteros. b/4 en n_O2 exige hasta ×4 (con ×2 un b impar
+    # truncaba el O2: int(5.5)=5 → O desbalanceado).
+    scale = 1
+    for s in (1, 2, 4):
+        if all(v * s % 1 == 0 for v in (n_O2, b / 2.0, d / 2.0)):
+            scale = s
+            break
+    n_O2_int = int(round(n_O2 * scale))
     a_int = int(a * scale)
     b_int = int((b/2.0) * scale)
     d_int = int((d/2.0) * scale)

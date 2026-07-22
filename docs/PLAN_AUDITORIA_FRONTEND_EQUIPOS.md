@@ -1,9 +1,16 @@
 # PLAN — Auditoría a fondo del FRONTEND de cada equipo (próxima sesión)
 
 **Fecha de anotación:** 2026-07-22
-**Estado:** PENDIENTE — este documento es el prompt de arranque de la próxima
-sesión. Continúa la auditoría de equipos/topologías cerrada en PRs #134–#137
-(17 ejemplos nuevos, 12 bugs corregidos, gate 58/58).
+**Estado:** EN CURSO — continúa la auditoría de equipos/topologías cerrada en
+PRs #134–#137 (17 ejemplos nuevos, 12 bugs corregidos, gate 58/58).
+
+| Frente | Estado |
+|---|---|
+| 5 — Predictor (acople) | ✅ CERRADO (sesión 2026-07-22): BUG 13 + 3 eslabones cableados, ver `BUGS_ENCONTRADOS_EJEMPLOS.md` |
+| 3 — DOF/sudoku | pendiente |
+| 1+1b — Matriz frontend + streams | pendiente |
+| 2 — Casos de libro | pendiente |
+| 4 — Propiedades Perry | pendiente |
 
 ## Prompt original del autor
 

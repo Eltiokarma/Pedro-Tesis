@@ -392,6 +392,71 @@ Regresión: `tests/test_splitter_tearing.py::test_splitter_multientrada_distribu
 
 ---
 
+## BUG 13 — Generador AUTO: 89/567 combustiones desbalanceadas átomo a átomo
+
+**Severidad:** correctitud (datos). Encontrado en el Frente 5 de la auditoría
+de frontend (acople del predictor chemfx) al escribir el test de balance
+atómico del cache `auto_reactions_db.md`. Dos defectos independientes en
+`chemfx/auto_reactions/`:
+
+1. **Heteroátomos no manejados**: `generate()` parsea TODOS los elementos de
+   la fórmula pero la estequiometría solo balancea C/H/O/N/S. Un compuesto
+   clorado producía basura: `2 C2H3Cl3 + 5 O2 → 4 CO2 + 3 H2O` (pierde 6 Cl,
+   sobra 1 O). La variante incompleta ni siquiera maneja N/S (el N de
+   acetonitrilo desaparecía).
+2. **Escala ×2 insuficiente**: `n_O2 = a + b/4 - c/2 + e` tiene denominador 4;
+   con `b` impar el escalado ×2 dejaba `n_O2·2 = 5.5` y el `int()` truncaba a
+   5 → O desbalanceado (acetamida, acetonitrilo, anilina...).
+
+### Fix aplicado
+
+- `combustion_complete`: rechaza fórmulas con elementos fuera de C/H/O/N/S;
+  escala ∈ {1,2,4} eligiendo el primer factor que deja TODOS los coeficientes
+  enteros (+ `round` antes de `int`).
+- `combustion_incomplete`: rechaza fórmulas fuera de C/H/O (los compuestos
+  N/S conservan solo su combustión completa, que sí los maneja); misma escala.
+- Cache regenerado: 567 → **504 reacciones, 0 desbalanceadas**.
+
+Regresión: `tests/test_predictor_acople.py::test_loader_balance_atomico_muestral`.
+
+---
+
+## Acople del predictor (Frente 5) — tres eslabones sin cablear
+
+No son bugs de cálculo sino integración muerta, detectada trazando
+predictor → reactions_db → block → solver (plan `PLAN_AUDITORIA_FRONTEND_EQUIPOS.md`):
+
+1. **`include_auto` ignorado**: `predict_reactions()` aceptaba el flag con
+   `# noqa: ARG001` y `fa.auto` siempre era `[]` — las 504 combustiones/
+   crackings del cache no tenían loader y jamás llegaban al predictor ni al
+   diálogo "Sugerir productos". **Fix:** `chemfx/auto_reactions/loader.py`
+   (parser del cache, lazy/memoizado, degrada a `[]` sin archivo) +
+   `_find_auto_for_feed` (mismo contrato de matching que curated: todos los
+   reactantes en el feed, rango T) con ΔH por Hess local sobre thermo_db —
+   misma fuente que el resto del sistema. El diálogo ahora ofrece
+   curated + auto + predicted.
+2. **`ReactivityDock` huérfano**: definido en `chemfx/ui/reactivity_dock_qt.py`
+   pero NUNCA instanciado — el menú Vista, el hide inicial y el refresh
+   post-solve lo tomaban con `getattr(..., None)` y degradaban a no-op
+   silencioso (el badge del canvas sí funcionaba; el dock con navegación y
+   sugerencias, no). **Fix:** `_build_reactivity_dock()` en la ventana
+   principal (guardado: sin chemfx/Qt no se crea), oculto al arrancar,
+   toggle en Vista ▸ "Predictor de reactividad".
+3. **ΔH del predictor descartado**: al aceptar una reacción sugerida, el
+   diálogo recalcula ΔH por Hess con thermo_db; si una especie no tiene ΔHf
+   el ΔH quedaba **0 silencioso** aunque el predictor traía su estimación
+   Joback/Benson con incertidumbre. **Fix:** fallback a la estimación del
+   predictor con procedencia visible en el badge ("joback ±15"), que muere
+   apenas el user edita ΔH a mano.
+
+Verificado: degradado limpio sin rdkit/thermo en TODOS los puntos de acople
+(subprocess con import bloqueado); gate 58/58 intacto (anotación ≠ modelo).
+Regresión: `tests/test_predictor_acople.py` (10 tests: loader, matching por
+feed, rango T, ΔH Hess ≈ −802 kJ/mol para CH4, include_auto=False, montaje
+del dock y refresh con ejemplo real).
+
+---
+
 ## Estado
 
 | Hallazgo | Estado |
@@ -409,6 +474,8 @@ Regresión: `tests/test_splitter_tearing.py::test_splitter_multientrada_distribu
 | BUG 10 — válvulas sin sizer → costo cero | **CORREGIDO** — `size_valve` |
 | BUG 11 — multitear: convergencia falsa (fuente stale + G no-estacionaria) | **CORREGIDO** — closure fuente-del-tear + verificación de estacionariedad |
 | BUG 12 — splitter multi-entrada reparte solo la primera entrada | **CORREGIDO** — suma de entradas (3 rutas alineadas) |
+| BUG 13 — generador AUTO: 89/567 combustiones desbalanceadas | **CORREGIDO** — heteroátomos rechazados + escala {1,2,4}; cache 504/0 |
+| Acople predictor — include_auto ignorado / dock huérfano / ΔH descartado | **CORREGIDO** — loader + dock montado + fallback con procedencia |
 
 Los 12 bugs quedaron corregidos con reproducción mínima y regresión. Los fixes
 son aditivos y backward-compatible (goldens existentes intactos, gate 58/58,

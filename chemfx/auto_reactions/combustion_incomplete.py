@@ -31,17 +31,26 @@ def generate(formula: str) -> Optional[Dict]:
     a = counts.get("C", 0)
     b = counts.get("H", 0)
     c = counts.get("O", 0)
-    # N y S no se incluyen en la variante simple (van a CO/H2O o no
-    # estan presentes en hidrocarburos puros).
     if a == 0 or b == 0:
+        return None
+    # La variante simple solo balancea C/H/O: un compuesto con N, S u
+    # otro heteroátomo daría una reaccion desbalanceada (el N/S no tiene
+    # a dónde ir sin productos extra) — esos quedan solo con su
+    # combustion COMPLETA, que sí los maneja.
+    if any(el not in ("C", "H", "O") for el in counts):
         return None
     n_O2 = a/2.0 + b/4.0 - c/2.0
     if n_O2 <= 0:
         return None
 
-    # Escalar a enteros
-    scale = 2 if (n_O2 % 1 != 0 or (b/2.0) % 1 != 0) else 1
-    n_O2_int = int(n_O2 * scale)
+    # Escalar al primer factor que deja TODOS los coeficientes enteros
+    # (b/4 exige hasta ×4; con ×2 un b impar truncaba el O2).
+    scale = 1
+    for s in (1, 2, 4):
+        if all(v * s % 1 == 0 for v in (n_O2, b / 2.0)):
+            scale = s
+            break
+    n_O2_int = int(round(n_O2 * scale))
     a_int = int(a * scale)
     b_int = int((b/2.0) * scale)
 

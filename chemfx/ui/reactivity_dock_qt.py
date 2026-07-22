@@ -75,7 +75,14 @@ class ReactivityDock(QDockWidget):
 
         # Status label
         self._status_label = QLabel("(corré Solve para activar el predictor)")
-        self._status_label.setStyleSheet("color: #6b7280; font-size: 8.5pt;")
+        try:
+            import tokens as _tokens
+            self._status_label.setStyleSheet(
+                f"color: {_tokens.TOK['ink_soft']}; "
+                f"font-size: {_tokens.FONT_HINT[1]}pt;")
+        except Exception:
+            self._status_label.setStyleSheet(
+                "color: #6b7280; font-size: 8.5pt;")
         layout.addWidget(self._status_label)
 
         # Tabs

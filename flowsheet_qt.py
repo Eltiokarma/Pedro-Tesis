@@ -1481,6 +1481,9 @@ class CustomReactionDialog(QDialog):
         self.product_chips:  list = []
         self._setting_dh = False
         self._user_overrode_dh = False
+        # Procedencia del ΔH cuando vino del predictor (joback/benson) —
+        # None mientras el valor sea Hess local o manual.
+        self._dh_from_predictor = None
 
         # Cargar thermo_db
         try:
@@ -1877,7 +1880,8 @@ class CustomReactionDialog(QDialog):
                 self.badge_dh.setStyleSheet(self._badge_style("neutral"))
         else:
             v = float(self.dh_edit.value())
-            self.badge_dh.setText(f"ΔH: {v:+.1f} kJ/mol (manual)")
+            src = getattr(self, "_dh_from_predictor", None) or "manual"
+            self.badge_dh.setText(f"ΔH: {v:+.1f} kJ/mol ({src})")
             self.badge_dh.setStyleSheet(self._badge_style("neutral"))
 
     def _hess_dh(self):
@@ -1921,6 +1925,7 @@ class CustomReactionDialog(QDialog):
         if self._setting_dh:
             return
         self._user_overrode_dh = True
+        self._dh_from_predictor = None
         self._recompute_all()
 
     def _auto_balance_chips(self, silent=False):
@@ -2037,6 +2042,7 @@ class CustomReactionDialog(QDialog):
                 f"El predictor falló: {e}")
             return
         cands = (list(getattr(fa, "curated", []) or [])
+                 + list(getattr(fa, "auto", []) or [])
                  + list(getattr(fa, "predicted", []) or []))
         if not cands:
             QMessageBox.information(self, "Sugerir productos",
@@ -2089,6 +2095,27 @@ class CustomReactionDialog(QDialog):
         self._user_overrode_dh = False
         self._refresh_chips()
         self._recompute_all()
+        # Fallback de procedencia: si Hess no puede calcular ΔH (especie
+        # sin ΔHf en thermo_db) pero el predictor trae su estimacion
+        # (Joback/Benson), usarla en vez de dejar 0 silencioso.
+        if self._hess_dh() is None:
+            est = getattr(rxn, "delta_h_298", None)
+            val = getattr(est, "value", None)
+            if val is not None:
+                self._setting_dh = True
+                try:
+                    self.dh_edit.setValue(float(val))
+                finally:
+                    self._setting_dh = False
+                self._user_overrode_dh = True
+                self._dh_from_predictor = str(
+                    getattr(est, "method", "") or "estimado")
+                unc = float(getattr(est, "uncertainty", 0.0) or 0.0)
+                suffix = f" ±{unc:.0f}" if unc else ""
+                self.badge_dh.setText(
+                    f"ΔH: {float(val):+.1f} kJ/mol "
+                    f"({self._dh_from_predictor}{suffix})")
+                self.badge_dh.setStyleSheet(self._badge_style("neutral"))
 
     def _on_accept(self):
         import reactions_db as _rdb
@@ -6064,6 +6091,7 @@ class FlowsheetMainWindow(QMainWindow):
         # (La "Biblioteca de equipos" vieja se eliminó en el rediseño 1c:
         # la paleta flotante cubre catálogo completo, variantes y drag.)
         self._build_streams_dock()
+        self._build_reactivity_dock()
         self._build_shared_actions()
         self._build_statusbar()
         self._build_menubar()
@@ -6830,6 +6858,23 @@ class FlowsheetMainWindow(QMainWindow):
         self.streams_dock = _NewStreamsTableDock(self, self)
         self.addDockWidget(Qt.BottomDockWidgetArea, self.streams_dock)
         self.streams_dock.refresh()
+
+    def _build_reactivity_dock(self):
+        """Dock del predictor de reactividad (chemfx, Fase 8).  Si chemfx
+        no está disponible el dock no se crea — todos los consumidores lo
+        toman con getattr(..., None) y degradan a no-op."""
+        self.reactivity_dock = None
+        try:
+            from chemfx.ui.reactivity_dock_qt import (
+                ReactivityDock, PYSIDE_AVAILABLE)
+            if not PYSIDE_AVAILABLE:
+                return
+            self.reactivity_dock = ReactivityDock(self, editor=self)
+            self.addDockWidget(Qt.RightDockWidgetArea, self.reactivity_dock)
+        except Exception as e:
+            import logging
+            logging.getLogger(__name__).debug(
+                f"reactivity dock no disponible: {e}")
 
     def _build_statusbar(self):
         self.status = QStatusBar()
