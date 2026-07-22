@@ -4008,6 +4008,12 @@ def solve_splitters(fs):
         feed = next((s for s in ins if s.mass_flow > 0), None)
         if feed is None:
             continue
+        # Masa a distribuir: la SUMA de todas las entradas (no solo `feed`).
+        # Un splitter multi-entrada (torre de enfriamiento con retorno +
+        # makeup) repartía únicamente la primera entrada e ignoraba el resto
+        # — el path de tearing y el audit W-SPLIT-LOCK ya usaban la suma;
+        # esto alinea las tres rutas.  Para 1 entrada es idéntico.
+        sum_in = sum(s.mass_flow for s in ins)
         # Fracciones ancladas por identidad (split_fraction por salida) tienen
         # prioridad: son ESTABLES ante inserción/reordenamiento de streams.
         # Si TODAS las salidas traen split_fraction, se usa ese mapeo keyed;
@@ -4028,7 +4034,7 @@ def solve_splitters(fs):
         # Distribuir mass_flow y propagar composición
         for s_out, frac in pairs:
             if not _is_mass_locked(s_out):
-                s_out.mass_flow = feed.mass_flow * frac
+                s_out.mass_flow = sum_in * frac
             if not _is_comp_locked(s_out):
                 s_out.composition = dict(feed.composition or {})
                 if feed.main_component:

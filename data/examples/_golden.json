@@ -125,6 +125,15 @@
   "overall_status": "ok",
   "sum_duty": -2013.966446
  },
+ "cw_loop": {
+  "ISBL": 740086.76,
+  "energy_errors": 0,
+  "mass_errors": 0,
+  "n_blocks": 5,
+  "n_streams": 10,
+  "overall_status": "ok",
+  "sum_duty": 470.663142
+ },
  "cyclone": {
   "ISBL": 830822.99,
   "energy_errors": 0,
@@ -259,6 +268,15 @@
   "n_streams": 27,
   "overall_status": "ok",
   "sum_duty": -553.940671
+ },
+ "hen": {
+  "ISBL": 3668328.9,
+  "energy_errors": 0,
+  "mass_errors": 0,
+  "n_blocks": 5,
+  "n_streams": 8,
+  "overall_status": "ok",
+  "sum_duty": 263.687655
  },
  "hno3": {
   "ISBL": 9726215.23,
@@ -430,6 +448,15 @@
   "n_streams": 8,
   "overall_status": "warning",
   "sum_duty": 10.096473
+ },
+ "sidedraw": {
+  "ISBL": 36578.39,
+  "energy_errors": 0,
+  "mass_errors": 0,
+  "n_blocks": 2,
+  "n_streams": 5,
+  "overall_status": "ok",
+  "sum_duty": 2600.754499
  },
  "smr_eq": {
   "ISBL": 9564627.81,
