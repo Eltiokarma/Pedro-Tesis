@@ -80,6 +80,15 @@
   "overall_status": "ok",
   "sum_duty": 2.32623
  },
+ "centrifuge": {
+  "ISBL": 84746.71,
+  "energy_errors": 0,
+  "mass_errors": 0,
+  "n_blocks": 2,
+  "n_streams": 4,
+  "overall_status": "ok",
+  "sum_duty": 0.28942
+ },
  "chloralkali_hcl": {
   "ISBL": 6288558.74,
   "energy_errors": 0,
@@ -88,6 +97,15 @@
   "n_streams": 13,
   "overall_status": "ok",
   "sum_duty": -17.873138
+ },
+ "cooling": {
+  "ISBL": 906055.43,
+  "energy_errors": 0,
+  "mass_errors": 0,
+  "n_blocks": 2,
+  "n_streams": 3,
+  "overall_status": "ok",
+  "sum_duty": -2013.966446
  },
  "cyclone": {
   "ISBL": 830822.99,
@@ -295,6 +313,15 @@
   "n_streams": 9,
   "overall_status": "ok",
   "sum_duty": -0.000531
+ },
+ "pfr": {
+  "ISBL": 174462.58,
+  "energy_errors": 0,
+  "mass_errors": 0,
+  "n_blocks": 2,
+  "n_streams": 3,
+  "overall_status": "ok",
+  "sum_duty": 1.174398
  },
  "pineapple": {
   "ISBL": 4070826.77,

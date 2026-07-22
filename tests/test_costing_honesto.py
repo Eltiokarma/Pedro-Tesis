@@ -130,3 +130,21 @@ def test_mixer_splitter_standalone_costeados():
                 assert b.name not in zc, \
                     f"{clave}/{b.name} ({b.eq_type}) quedó sin costo"
                 assert b.S > 0, f"{clave}/{b.name} sin dimensionar (S={b.S})"
+
+
+# ── centrífuga y cooling tower: dimensionadas y costeadas (no zero-cost) ──
+def test_centrifuge_y_cooling_tower_costeados():
+    """Los ejemplos 'centrifuge' (Solids / sep.) y 'cooling' (Utilities)
+    ejercitan equipos que tenían correlación de costo pero NINGÚN sizer
+    → S=0 (costo nulo).  Con size_centrifuge / size_cooling_tower deben
+    quedar dimensionados y costeados."""
+    import capex
+    from flowsheet_solver import solve
+    for clave, tag in (("centrifuge", "CF-101"), ("cooling", "CT-101")):
+        fs = reg.load_example(clave)
+        solve(fs)
+        cd = capex.compute_fci(fs)
+        zc = {b["name"] for b in cd.get("zero_cost_blocks", [])}
+        assert tag not in zc, f"{clave}/{tag} quedó sin costo"
+        b = next(b for b in fs.blocks.values() if b.name == tag)
+        assert b.S > 0, f"{clave}/{tag} sin dimensionar (S={b.S})"

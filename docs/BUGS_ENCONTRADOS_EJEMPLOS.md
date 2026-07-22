@@ -23,8 +23,13 @@ aparecieron dos defectos. Se documentan con reproducción mínima.
   splitter keyed + recombinación en mixer a distinta T. **Destapó BUG 5.**
 - **`parallel`** — Topología rara: dos CSTR en paralelo (debottlenecking) desde
   un mismo splitter, salidas recombinadas en un mixer.
+- **`centrifuge`** — `Centrifuge — disc stack`, deshidratación de lodos de CaCO₃
+  (sólido/líquido). Equipo poco usado; **destapó BUG 6.**
+- **`cooling`** — `Cooling tower — induced draft`, agua de proceso 45→28 °C
+  (~2 MW) con bomba de circulación. Equipo poco usado; **destapó BUG 7.**
+- **`pfr`** — `Reactor — PFR (tubular)` de glicol. Ejercita el sizing de PFR.
 
-Gate 46/46 verde.
+Gate 49/49 verde.
 
 ---
 
@@ -213,19 +218,45 @@ en el resto de ejemplos.
 
 ---
 
+## BUG 6 y BUG 7 — Más equipos con costo pero sin sizer → costo cero
+
+Misma clase que BUG 4/5 (correlación de costo Turton presente, sizer ausente →
+`S=0` → CBM nulo), destapados por los ejemplos `centrifuge` y `cooling`:
+
+- **BUG 6** — `Centrifuge — disc stack` / `Centrifuge — decanter` (categoría
+  `Solids / sep.`, S=Volume o Flow) sin sizer. → `size_centrifuge` (despacha por
+  `S_param`: Volume→Q·τ del bowl, Flow→m³/h).
+- **BUG 7** — `Cooling tower — induced draft` / `natural draft` (categoría
+  `Utilities`, S=Cooling duty MW) sin sizer. → `size_cooling_tower` (S=|duty|/
+  1000 MW; si no hay duty lo estima del ΔT del agua, Cp≈4.18).
+
+0/46 ejemplos existentes afectados (ninguno usaba esos equipos). Regresión:
+`tests/test_costing_honesto.py::test_centrifuge_y_cooling_tower_costeados`.
+
+> **Patrón transversal (BUG 4–7):** varios eq_types del catálogo tienen K1/K2/K3
+> de costo pero no estaban conectados a ningún sizer, así que un bloque de esos
+> tipos usado *standalone* costeaba cero en silencio. Se cerraron los 4 huecos
+> vistos (ciclón, mixer/splitter, centrífuga, cooling tower). Quedan otros
+> eq_types del catálogo aún no ejercitados por ningún ejemplo — candidatos a
+> nuevas rondas.
+
+---
+
 ## Estado
 
 | Hallazgo | Estado |
 |---|---|
-| `salt_crystal`/`decanter`/`cyclone`/`bypass`/`parallel` (ejemplos nuevos) | AGREGADOS al set (gate 46/46) |
+| `salt_crystal`/`decanter`/`cyclone`/`bypass`/`parallel`/`centrifuge`/`cooling`/`pfr` | AGREGADOS al set (gate 49/49) |
 | BUG 1 — splitter mapea fracciones por posición | **CORREGIDO** — `split_fraction` keyed + 5 ejemplos migrados |
 | BUG 2 — separador rutea al revés sin warning | **CORREGIDO** — `[W-PHYS-NONVOL]` en el audit |
 | BUG 3 — ciclón mal-etiqueta fases de salida | **CORREGIDO** — fase del carrier desde el feed |
 | BUG 4 — ciclón sin sizer → costo cero | **CORREGIDO** — `size_cyclone` (m³/s gas) |
 | BUG 5 — mixers/splitters standalone sin sizer → costo cero | **CORREGIDO** — `size_mixer_splitter` |
+| BUG 6 — centrífuga sin sizer → costo cero | **CORREGIDO** — `size_centrifuge` |
+| BUG 7 — cooling tower sin sizer → costo cero | **CORREGIDO** — `size_cooling_tower` |
 
-Los 5 bugs quedaron corregidos con reproducción mínima y regresión. Los fixes
-son aditivos y backward-compatible (goldens existentes intactos, gate 46/46,
-529 tests de lógica verdes). Método: "agregar al set + gate" — se agregaron 5
+Los 7 bugs quedaron corregidos con reproducción mínima y regresión. Los fixes
+son aditivos y backward-compatible (goldens existentes intactos, gate 49/49,
+531 tests de lógica verdes). Método: "agregar al set + gate" — se agregaron 8
 ejemplos limpios (equipos poco usados + topologías raras) y los defectos que
 destaparon se corrigieron en el mismo ciclo.

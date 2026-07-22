@@ -461,6 +461,36 @@
    "codigo_pfd": "PFD-PAR-001",
    "builder": "_example_parallel",
    "archivo": "parallel.json"
+  },
+  {
+   "clave": "centrifuge",
+   "label": "Centrífuga de discos (deshidratación de lodos CaCO₃)",
+   "categoria": "Física",
+   "nombre": "Centrífuga sólido-líquido",
+   "capa": "Sólidos",
+   "codigo_pfd": "PFD-CF-001",
+   "builder": "_example_centrifuge",
+   "archivo": "centrifuge.json"
+  },
+  {
+   "clave": "cooling",
+   "label": "Torre de enfriamiento (agua de proceso 45→28 °C, 2 MW)",
+   "categoria": "Física",
+   "nombre": "Torre de enfriamiento",
+   "capa": "Utilidades",
+   "codigo_pfd": "PFD-CT-001",
+   "builder": "_example_cooling",
+   "archivo": "cooling.json"
+  },
+  {
+   "clave": "pfr",
+   "label": "Reactor PFR tubular (glicol)",
+   "categoria": "Química",
+   "nombre": "Reactor PFR tubular",
+   "capa": "Reacción",
+   "codigo_pfd": "PFD-PFR-001",
+   "builder": "_example_pfr",
+   "archivo": "pfr.json"
   }
  ]
 }

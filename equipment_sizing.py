@@ -644,6 +644,50 @@ def size_mixer_splitter(block, fs) -> Optional[float]:
     return max((m_s / rho) * TAU_MIXER_S, 0.05)    # m³
 
 
+TAU_CENTRIFUGE_S = 60.0     # residencia en el bowl de una centrífuga [s]
+
+
+def size_centrifuge(block, fs) -> Optional[float]:
+    """Centrífuga (disc-stack / decanter).  Despacha por la base de costo:
+    'Volume' (m³ del bowl = Q·τ) o 'Flow' (m³/h de alimentación).  La
+    categoría 'Solids / sep.' no está en SIZER_BY_CAT y estos eq_types no
+    tenían sizer → S=0 (costo nulo)."""
+    ins = [s for s in fs.streams.values() if s.dst == block.id]
+    if not ins:
+        return None
+    feed = max(ins, key=lambda s: s.mass_flow or 0.0)
+    m_s = _flow_kg_s(feed.mass_flow or 0.0)
+    if m_s <= 0:
+        return None
+    rho = _rho_estimate(feed)
+    if rho <= 0:
+        return None
+    Q_m3_s = m_s / rho
+    spec = ec.EQUIPMENT_DATA.get(block.eq_type, {})
+    if (spec.get("S_param") or "").lower() == "flow":
+        return max(Q_m3_s * 3600.0, 1.0)          # m³/h
+    return max(Q_m3_s * TAU_CENTRIFUGE_S, 0.05)   # m³ (bowl)
+
+
+def size_cooling_tower(block, fs) -> Optional[float]:
+    """Cooling tower (Utilities).  S = carga de enfriamiento en MW = |duty|/
+    1000 (duty en kW).  Si el bloque no trae duty, se estima del ΔT del agua
+    (m·Cp·ΔT).  La categoría 'Utilities' no tiene sizer → S=0 (costo nulo)."""
+    duty_kW = abs(float(getattr(block, "duty", 0.0) or 0.0))
+    if duty_kW <= 0:
+        ins = [s for s in fs.streams.values() if s.dst == block.id]
+        outs = [s for s in fs.streams.values() if s.src == block.id]
+        if ins and outs:
+            feed = max(ins, key=lambda s: s.mass_flow or 0.0)
+            cold = max(outs, key=lambda s: s.mass_flow or 0.0)
+            m_s = _flow_kg_s(feed.mass_flow or 0.0)
+            dT = abs((feed.temperature or 0.0) - (cold.temperature or 0.0))
+            duty_kW = m_s * 4.18 * dT              # agua Cp≈4.18 kJ/kg·K
+    if duty_kW <= 0:
+        return None
+    return max(duty_kW / 1000.0, 1.0)             # MW
+
+
 def size_cyclone(block, fs) -> Optional[float]:
     """S [m³/s] = caudal volumétrico de gas de entrada (Turton usa Flow en
     m³/s para el ciclón gas/sólido).  El gas es la fase carrier del feed;
@@ -783,6 +827,10 @@ SIZER_BY_EQTYPE = {
     "Crystallizer":                   size_crystallizer,
     "Filter — belt":                  size_filter,
     "Cyclone — gas/solid":            size_cyclone,
+    "Centrifuge — disc stack":        size_centrifuge,
+    "Centrifuge — decanter":          size_centrifuge,
+    "Cooling tower — induced draft":  size_cooling_tower,
+    "Cooling tower — natural draft":  size_cooling_tower,
 }
 
 
