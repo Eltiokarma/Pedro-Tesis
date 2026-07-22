@@ -148,3 +148,22 @@ def test_centrifuge_y_cooling_tower_costeados():
         assert tag not in zc, f"{clave}/{tag} quedó sin costo"
         b = next(b for b in fs.blocks.values() if b.name == tag)
         assert b.S > 0, f"{clave}/{tag} sin dimensionar (S={b.S})"
+
+
+# ── boiler / fan / valve standalone: dimensionados y costeados ───────────
+def test_boiler_fan_valve_costeados():
+    """Ejemplos 'boiler_ft'/'blower'/'letdown' ejercitan eq_types que tenían
+    correlación de costo pero NINGÚN sizer (Utilities boiler, Fans / blowers,
+    Valves) → S=0.  Con size_boiler_steam / size_fan / size_valve deben quedar
+    dimensionados y costeados."""
+    import capex
+    from flowsheet_solver import solve
+    for clave, tag in (("boiler_ft", "B-101"), ("blower", "FN-101"),
+                       ("letdown", "V-101")):
+        fs = reg.load_example(clave)
+        solve(fs)
+        cd = capex.compute_fci(fs)
+        zc = {b["name"] for b in cd.get("zero_cost_blocks", [])}
+        assert tag not in zc, f"{clave}/{tag} quedó sin costo"
+        b = next(b for b in fs.blocks.values() if b.name == tag)
+        assert b.S > 0, f"{clave}/{tag} sin dimensionar (S={b.S})"

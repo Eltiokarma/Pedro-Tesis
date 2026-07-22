@@ -706,6 +706,54 @@ def size_cyclone(block, fs) -> Optional[float]:
     return max(m_s / rho, 0.1)                # m³/s
 
 
+def size_fan(block, fs) -> Optional[float]:
+    """S [m³/s] = caudal volumétrico de gas (Fans / blowers usan Fluid flow
+    en m³/s).  Densidad por gas ideal.  La categoría no tenía sizer → S=0."""
+    ins = [s for s in fs.streams.values() if s.dst == block.id]
+    outs = [s for s in fs.streams.values() if s.src == block.id]
+    ref = (ins or outs)
+    if not ref:
+        return None
+    feed = max(ref, key=lambda s: s.mass_flow or 0.0)
+    m_s = _flow_kg_s(feed.mass_flow or 0.0)
+    if m_s <= 0:
+        return None
+    rho = _rho_estimate(feed)
+    if rho <= 0:
+        return None
+    return max(m_s / rho, 0.1)                     # m³/s
+
+
+def size_valve(block, fs) -> Optional[float]:
+    """S [m³/h] = caudal volumétrico de la corriente (Valves: Flow/Capacity
+    en m³/h).  Los eq_types de válvula no tenían sizer → S=0 (costo nulo)."""
+    streams = [s for s in fs.streams.values()
+               if s.dst == block.id or s.src == block.id]
+    if not streams:
+        return None
+    ref = max(streams, key=lambda s: s.mass_flow or 0.0)
+    m_s = _flow_kg_s(ref.mass_flow or 0.0)
+    if m_s <= 0:
+        return None
+    rho = _rho_estimate(ref)
+    if rho <= 0:
+        return None
+    return max((m_s / rho) * 3600.0, 1.0)          # m³/h
+
+
+DH_STEAM_KJ_KG = 2100.0     # ΔH_vap típico de vapor de proceso [kJ/kg]
+
+
+def size_boiler_steam(block, fs) -> Optional[float]:
+    """S [kg/s] = |duty| / ΔH_vap — caudal de vapor generado por una caldera
+    pirotubular/acuotubular (Boiler — fire/water tube, S=Steam output kg/s).
+    Estos eq_types no tenían sizer → una caldera desbloqueada quedaba en S=0."""
+    Q_kW = abs(float(getattr(block, "duty", 0.0) or 0.0))
+    if Q_kW <= 0:
+        return None
+    return max(Q_kW / DH_STEAM_KJ_KG, 0.1)         # kg/s
+
+
 def size_evaporator(block, fs) -> Optional[float]:
     """A = |Q| / (U·ΔT_lm).  Mismo patrón que size_heat_exchanger,
     permite override por bloque y catálogo por tipo."""
@@ -804,6 +852,8 @@ SIZER_BY_CAT = {
     "Storage":           size_storage_tank,
     "Evaporators":       size_evaporator,
     "Mixers / splitters": size_mixer_splitter,
+    "Fans / blowers":    size_fan,
+    "Valves":            size_valve,
 }
 
 # Sizers específicos por eq_type — tienen prioridad sobre SIZER_BY_CAT.
@@ -831,6 +881,8 @@ SIZER_BY_EQTYPE = {
     "Centrifuge — decanter":          size_centrifuge,
     "Cooling tower — induced draft":  size_cooling_tower,
     "Cooling tower — natural draft":  size_cooling_tower,
+    "Boiler — fire tube":             size_boiler_steam,
+    "Boiler — water tube":            size_boiler_steam,
 }
 
 

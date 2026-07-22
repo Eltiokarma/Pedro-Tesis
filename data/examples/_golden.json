@@ -44,6 +44,24 @@
   "overall_status": "ok",
   "sum_duty": 4.234496
  },
+ "blower": {
+  "ISBL": 19211.36,
+  "energy_errors": 0,
+  "mass_errors": 0,
+  "n_blocks": 1,
+  "n_streams": 2,
+  "overall_status": "ok",
+  "sum_duty": 69.246965
+ },
+ "boiler_ft": {
+  "ISBL": 1275871.27,
+  "energy_errors": 0,
+  "mass_errors": 0,
+  "n_blocks": 2,
+  "n_streams": 3,
+  "overall_status": "warning",
+  "sum_duty": 6004.236339
+ },
  "bread": {
   "ISBL": 1642841.38,
   "energy_errors": 0,
@@ -268,6 +286,15 @@
   "n_streams": 22,
   "overall_status": "ok",
   "sum_duty": 415.05391
+ },
+ "letdown": {
+  "ISBL": 33566.27,
+  "energy_errors": 0,
+  "mass_errors": 0,
+  "n_blocks": 2,
+  "n_streams": 3,
+  "overall_status": "ok",
+  "sum_duty": 6.228871
  },
  "methanol": {
   "ISBL": 5206941.66,
