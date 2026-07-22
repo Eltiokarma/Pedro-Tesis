@@ -51,10 +51,17 @@ def test_catalogo_completo_en_eq_type_to_isa():
 
 
 def test_glyphs_mapeados_son_dibujables():
+    # Ciclo 3 (3a): la geometría canónica puede vivir en glyph_specs
+    # (bundle de Design) — BlockGlyph delega ahí primero y los _draw_*
+    # quedan como legado para los tipos sin spec nuevo.
+    import glyph_specs as gs
     for et, isa in ech.EQ_TYPE_TO_ISA.items():
         assert isa in ech.BLOCK_DIMS, f"{et} -> {isa}: sin BLOCK_DIMS"
-        assert getattr(ech.BlockGlyph, f"_draw_{isa}", None) is not None, \
-            f"{et} -> {isa}: sin BlockGlyph._draw_{isa}"
+        dibujable = (gs.has_spec(isa)
+                     or getattr(ech.BlockGlyph, f"_draw_{isa}", None)
+                     is not None)
+        assert dibujable, (f"{et} -> {isa}: sin spec en glyph_specs ni "
+                           f"BlockGlyph._draw_{isa}")
 
 
 def test_todo_eq_type_pertenece_a_un_palette_group():

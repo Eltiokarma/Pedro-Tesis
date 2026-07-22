@@ -53,7 +53,7 @@ from PySide6.QtCore import (
 from PySide6.QtGui import (
     QAction, QActionGroup, QPen, QBrush, QColor, QPainter, QFont, QPainterPath,
     QPolygonF, QPainterPathStroker, QFontMetrics, QKeySequence,
-    QTransform, QIcon,
+    QTransform, QIcon, QLinearGradient,
 )
 from PySide6.QtWidgets import (
     QApplication, QMainWindow, QGraphicsScene, QGraphicsView,
@@ -74,7 +74,8 @@ from PySide6.QtGui import QUndoStack, QUndoCommand
 import tokens as _tokens
 import equipment_costs as eq
 import equipment_ports as ep
-import equipment_icons as eicon
+# (equipment_icons murió en el ciclo 3 — el badge es el mismo glifo ISA
+#  renderizado chico: editor_chrome.glyph_pixmap)
 import pfd_symbols as pfd
 import pfd_fonts
 
@@ -145,9 +146,10 @@ def _get_svg_pixmap(eq_type, width, height, svg_str=None):
     """Renderiza un SVG a un QPixmap de tamaño width×height (con
     supersampling 2× para nitidez).  Cache compartido.
 
-    Si `svg_str` se pasa, se usa directamente (sirve para el catálogo
-    pfd_symbols, donde el SVG ya está armado).  Si no, se busca via
-    equipment_icons.get_icon_svg(eq_type) — legacy.
+    `svg_str` es OBLIGATORIO en la práctica (catálogo pfd_symbols, ya
+    armado — su único rol post-ciclo-3 es la EXPORTACIÓN). El camino
+    legacy via equipment_icons murió con ese módulo (3a): el badge de
+    tipo es el mismo glifo ISA chico (editor_chrome.glyph_pixmap).
 
     Devuelve None si:
       · no hay SVG, o
@@ -157,18 +159,12 @@ def _get_svg_pixmap(eq_type, width, height, svg_str=None):
     global _SVG_AVAILABLE
     if _SVG_AVAILABLE is False:
         return None
-
-    # cache key incluye un hash chico del svg_str para que distintas
-    # versiones (legacy vs pfd_symbols) no choquen.
-    key_suffix = hash(svg_str) if svg_str is not None else "legacy"
-    cache_key = (eq_type, width, height, key_suffix)
-    if cache_key in _SVG_PIXMAPS:
-        return _SVG_PIXMAPS[cache_key]
-
-    if svg_str is None:
-        svg_str = eicon.get_icon_svg(eq_type)
     if svg_str is None:
         return None
+
+    cache_key = (eq_type, width, height, hash(svg_str))
+    if cache_key in _SVG_PIXMAPS:
+        return _SVG_PIXMAPS[cache_key]
 
     try:
         from PySide6.QtSvg  import QSvgRenderer
@@ -3543,20 +3539,17 @@ class BlockItem(QGraphicsItemGroup):
         self.duty_badge.setAcceptedMouseButtons(Qt.NoButton)
         self._update_duty_badge()
 
-        # ---- Badge HYSYS icon (esquina inferior izquierda) ----
-        # Pequeño ícono del tipo de equipo (estilo HYSYS line-art) para
-        # identificar visualmente el bloque rápido — sin reemplazar el
-        # símbolo PFD detallado que dibuja pfd_symbols.
+        # ---- Badge de tipo (esquina inferior izquierda) ----
+        # Ciclo 3 (3a): el badge es el MISMO glifo ISA renderizado
+        # chico — no un segundo dibujo. Muere el set HYSYS por eq_type
+        # (cuyo fallback eq-mixer era el badge roto de los WHB).
         try:
-            from icons import icon_for_eq_type, make_qicon
+            from editor_chrome import glyph_pixmap
             from PySide6.QtWidgets import QGraphicsPixmapItem
-            icon_id = icon_for_eq_type(block.eq_type)
-            # Color de acento del tema + más grande (18px) + opacity 0.95
-            # para que sean realmente visibles sobre la silueta ISA.
-            ic = make_qicon(icon_id, color=_tokens.TOK["accent"], size=20)
-            if ic is not None:
-                self.type_badge = QGraphicsPixmapItem(
-                    ic.pixmap(18, 18), parent=self)
+            pm = glyph_pixmap(block.eq_type, size=18,
+                              color=_tokens.TOK["accent"])
+            if pm is not None:
+                self.type_badge = QGraphicsPixmapItem(pm, parent=self)
                 self.type_badge.setPos(2, self.H - 20)
                 self.type_badge.setZValue(2.5)
                 self.type_badge.setAcceptedMouseButtons(Qt.NoButton)
@@ -4289,6 +4282,87 @@ class StreamItem(QGraphicsPathItem):
         return QColor(_tokens.TOK[self._ROLE_TOKEN.get(role,
                                                         "stream_internal")])
 
+    def _service_gradient_colors(self):
+        """(color_T_in, color_T_out) del gradiente 3d, o None si no
+        aplica. El color de salida es el de la SIGUIENTE corriente del
+        lazo (la T a la que se llega); si no hay siguiente, degenera a
+        sólido (in == out)."""
+        s = self.model
+        is_hot, tmin, tmax = self._utility_loop_info()
+        if (tmax - tmin) <= 1e-6:
+            return None
+        pale = QColor(COLOR_UTIL_HOT_PALE if is_hot
+                      else COLOR_UTIL_COLD_PALE)
+        deep = QColor(COLOR_UTIL_HOT_DEEP if is_hot
+                      else COLOR_UTIL_COLD_DEEP)
+
+        def col_at(T):
+            f = (T - tmin) / (tmax - tmin)
+            f = 0.0 if f < 0.0 else (1.0 if f > 1.0 else f)
+            return _lerp_color(pale, deep, f)
+
+        T_in = float(getattr(s, "temperature", 25.0) or 25.0)
+        # Siguiente corriente del lazo: sale del bloque destino con el
+        # mismo rol de servicio.
+        T_out = T_in
+        if s.dst and s.dst > 0:
+            for o in self.fs.streams.values():
+                if (o.src == s.dst and o.id != s.id
+                        and (o.role or "") == "utility"):
+                    T_out = float(getattr(o, "temperature", T_in) or T_in)
+                    break
+        if abs(T_out - T_in) <= 1e-6:
+            return None
+        return col_at(T_in), col_at(T_out)
+
+    # Umbrales del artboard 3d: bajo estos, el banding es ruido y se
+    # pinta sólido medio (service_hot/cold).
+    GRAD_MIN_ZOOM = 0.6
+    GRAD_MIN_PX = 48.0
+
+    def paint(self, painter, option, widget=None):
+        grad = getattr(self, "_service_grad", None)
+        if not grad:
+            super().paint(painter, option, widget)
+            return
+        import math
+        pts, c_in, c_out = grad
+        zoom = abs(painter.transform().m11()) or 1.0
+        # Longitud acumulada del path (todos los segmentos + jumpers)
+        segs = []
+        total = 0.0
+        for i in range(0, len(pts) - 2, 2):
+            x1, y1, x2, y2 = pts[i], pts[i + 1], pts[i + 2], pts[i + 3]
+            d = math.hypot(x2 - x1, y2 - y1)
+            segs.append((x1, y1, x2, y2, total, total + d))
+            total += d
+        if zoom < self.GRAD_MIN_ZOOM or total * zoom < self.GRAD_MIN_PX \
+                or total <= 0:
+            # Sólido medio: el tono base del servicio, no el gradiente
+            pen = QPen(self.pen())
+            is_hot, _, _ = self._utility_loop_info()
+            pen.setColor(QColor(COLOR_UTIL_HOT if is_hot
+                                else COLOR_UTIL_COLD))
+            painter.setPen(pen)
+            painter.drawPath(self.path())
+            return
+        # Un QLinearGradient POR SEGMENTO con stops interpolados por la
+        # fracción de longitud de sus extremos → el color es continuo a
+        # lo largo del path y un jumper no lo reinicia. (Los arcos de
+        # los hops ~8 px se pintan con el trazo del segmento — a esa
+        # escala la diferencia es invisible.)
+        base = self.pen()
+        for x1, y1, x2, y2, l0, l1 in segs:
+            if l1 - l0 <= 1e-9:
+                continue
+            g = QLinearGradient(QPointF(x1, y1), QPointF(x2, y2))
+            g.setColorAt(0.0, _lerp_color(c_in, c_out, l0 / total))
+            g.setColorAt(1.0, _lerp_color(c_in, c_out, l1 / total))
+            pen = QPen(base)
+            pen.setBrush(QBrush(g))
+            painter.setPen(pen)
+            painter.drawLine(QPointF(x1, y1), QPointF(x2, y2))
+
     def hoverEnterEvent(self, event):
         """Engrosa la línea al hover para feedback visual."""
         self._hovered = True
@@ -4756,6 +4830,24 @@ class StreamItem(QGraphicsPathItem):
         # Hover: engrosar línea +50% para feedback visual
         if self._hovered:
             width *= 1.5
+        # ── Gradiente térmico REAL T_in→T_out (ciclo 3, 3d) ──
+        # Solo corrientes de servicio con semáforo sano (error/warning
+        # tienen prioridad y pintan sólido). Los stops van del color de
+        # la T de ESTA corriente al de la SIGUIENTE del lazo, sobre la
+        # longitud ACUMULADA del path (un jumper no reinicia el color).
+        self._service_grad = None
+        if role == "utility" and self._status not in ("error", "warning"):
+            try:
+                grad = self._service_gradient_colors()
+            except Exception:
+                grad = None
+            if grad is not None:
+                c_in, c_out = grad
+                self._service_grad = (list(pts), QColor(c_in),
+                                      QColor(c_out))
+                # La flecha hereda el color de LLEGADA (deep).
+                color = QColor(c_out)
+
         pen = QPen(color, width)
         pen.setCapStyle(Qt.FlatCap)
         pen.setJoinStyle(Qt.MiterJoin)
@@ -5555,7 +5647,7 @@ class _PaperFrame(QGraphicsItemGroup):
         bw = 460
         bx = W - 500                      # alineada con el cuadro de título
         collapsed = self._legend_collapsed
-        bh = 26 if collapsed else 118
+        bh = 26 if collapsed else 140     # +22: fila PROCEDENCIA (3b)
         by = H - 160 - bh - 6
 
         # tipografía de documento — escala de plano (excepción 2g)
@@ -5643,6 +5735,25 @@ class _PaperFrame(QGraphicsItemGroup):
         self._add_text(x3 + 12, rows[2] - 8, "Líq.", f_item)
         self._legend_dot(x3 + 52, rows[2] - 6, T["phase_vap"])
         self._add_text(x3 + 64, rows[2] - 8, "Vap.", f_item)
+
+        # ── Procedencia de la masa (ciclo 3, 3b) — fila completa ──
+        # Mismos glifos y términos que la pill y el diálogo DOF:
+        # ▪ declarada · ◦ derivada · ↻ reciclo (torn).
+        ry4 = by + 116
+        self._add_line(bx + 12, ry4 - 6, bx + bw - 12, ry4 - 6, 0.4)
+        self._add_text(bx + 12, ry4, "PROCEDENCIA · masa", f_grp,
+                       color=SOFT)
+        f_mark = QFont(self._mono, 8, QFont.DemiBold)
+        entries = (
+            ("▪", T["spec"],      "declarada — la puso el usuario"),
+            ("◦", T["ink_mute"],  "derivada — balance del solver"),
+            ("↻", T["phase_2ph"], "reciclo — converge por tearing"),
+        )
+        px = bx + 128
+        for mark, col, lbl in entries:
+            self._add_text(px, ry4, mark, f_mark, color=QColor(col))
+            self._add_text(px + 10, ry4, lbl.split(" — ")[0], f_item)
+            px += 10 + 7 * len(lbl.split(" — ")[0]) + 22
 
     def _build_title_block(self):
         BLACK = self._BLACK
@@ -5753,6 +5864,28 @@ class FlowsheetScene(QGraphicsScene):
             self.toggle_legend_collapsed()
             event.accept()
             return
+        ed = getattr(self, "editor", None)
+        if ed is not None and event.button() == Qt.LeftButton:
+            # Guía de anotación pendiente: este click fija el destino
+            waiting = getattr(ed, "_annotation_awaiting_guide", None)
+            if waiting is not None:
+                before = ed.begin_action()
+                waiting.data["guide"] = [event.scenePos().x(),
+                                         event.scenePos().y()]
+                waiting._sync_guide()
+                ed._annotation_awaiting_guide = None
+                ed.end_action("guía de anotación", before)
+                event.accept()
+                return
+            # Herramienta T (3c): click en vacío coloca una nota en
+            # edición directa. Sobre un item existente, el click sigue
+            # su camino normal (mover/seleccionar).
+            if (getattr(ed, "_active_canvas_tool", "select") == "text"
+                    and self.itemAt(event.scenePos(),
+                                    ed.view.transform()) is None):
+                ed.create_annotation(event.scenePos())
+                event.accept()
+                return
         super().mousePressEvent(event)
 
     # Cada cuántos pasos de grilla va una línea mayor (canvas_grid_major)
@@ -6034,6 +6167,7 @@ class FlowsheetMainWindow(QMainWindow):
 
         self.fs = Flowsheet()
         self.scene = FlowsheetScene(self)
+        self.scene.editor = self      # para el hit-test de herramientas (3c)
         self.view  = FlowsheetView(self.scene)
 
         # ── EditorTopbar (Parte B del rediseño NUEVA_UI) ────────────
@@ -6339,6 +6473,16 @@ class FlowsheetMainWindow(QMainWindow):
         self._aux_visibility_action.setShortcut("Ctrl+U")
         self._aux_visibility_action.triggered.connect(self._toggle_aux_visibility)
         m_view.addAction(self._aux_visibility_action)
+        # Anotaciones (3c) — toggle SOLO de pantalla (el export siempre
+        # las incluye: son documentación de ingeniería).
+        self._annotations_visibility_action = QAction(
+            "Mostrar anotaciones", self)
+        self._annotations_visibility_action.setCheckable(True)
+        self._annotations_visibility_action.setChecked(
+            getattr(self, "_show_annotations", True))
+        self._annotations_visibility_action.triggered.connect(
+            self.set_annotations_visible)
+        m_view.addAction(self._annotations_visibility_action)
         # Tabla de corrientes — acción de PRIMER NIVEL (antes solo vivía en
         # "Docks legacy").  Reusa la acción robusta del toolbar.
         if getattr(self, "_streams_table_action", None) is not None:
@@ -6635,6 +6779,10 @@ class FlowsheetMainWindow(QMainWindow):
             v.setDragMode(QGraphicsView.ScrollHandDrag)
         elif tool_id == "select":
             v.setDragMode(QGraphicsView.RubberBandDrag)
+        elif tool_id == "text":
+            # Anotación (3c): sin rubber band — el click coloca la nota
+            v.setDragMode(QGraphicsView.NoDrag)
+            v.viewport().setCursor(Qt.IBeamCursor)
         elif tool_id == "connect":
             # Si existe modo de conexión nativo, activarlo.  Si no, dar
             # un hint visual (cambio de cursor) y dejar la UX manual:
@@ -7139,11 +7287,14 @@ class FlowsheetMainWindow(QMainWindow):
         if not selected:
             return
         before = self.begin_action()
+        from annotations import AnnotationItem as _AnnItem
         for it in selected:
             if isinstance(it, BlockItem):
                 self._delete_block(it.model.id)
             elif isinstance(it, StreamItem):
                 self._delete_stream(it.model.id)
+            elif isinstance(it, _AnnItem):
+                self.remove_annotation(it.data, push_undo=False)
         self._mark_dirty()
         self._update_status()
         self.end_action(f"Borrar selección ({len(selected)})", before)
@@ -7198,6 +7349,23 @@ class FlowsheetMainWindow(QMainWindow):
                                  tone="" if not (report.n_under or
                                                  report.n_over) else "bad"))
         dlg.body.addLayout(hero)
+
+        # Corrientes por procedencia (ciclo 3, 3b) — mismos glifos y
+        # términos que la pill y la leyenda del Marco PFD.
+        n_dec = sum(1 for s in report.streams if s.mass_status == "locked")
+        n_torn = sum(1 for s in report.streams if s.mass_status == "torn")
+        n_der = len(report.streams) - n_dec - n_torn
+        proc = QLabel(
+            f"<span style='color:{_tokens.TOK['spec']};'>▪</span> "
+            f"Declaradas <b>{n_dec}</b>&nbsp;&nbsp;&nbsp;"
+            f"<span style='color:{_tokens.TOK['ink_mute']};'>◦</span> "
+            f"Derivadas <b>{n_der}</b>&nbsp;&nbsp;&nbsp;"
+            f"<span style='color:{_tokens.TOK['phase_2ph']};'>↻</span> "
+            f"Reciclo (torn) <b>{n_torn}</b>")
+        proc.setFont(_tokens.qfont(_tokens.FONT_UI))
+        proc.setStyleSheet(f"color:{_tokens.TOK['ink_mute']}; "
+                           f"padding:2px 2px;")
+        dlg.body.addWidget(proc)
 
         dlg.body.addWidget(kicker("DOF por bloque (masa · energía · comp.)"))
         rows = []
@@ -7856,6 +8024,16 @@ class FlowsheetMainWindow(QMainWindow):
                           and it.zValue() <= -100]
             for g in grid_items:
                 g.setVisible(False)
+            # Anotaciones (3c): el export SIEMPRE las incluye — son
+            # documentación de ingeniería. El toggle de Vista es solo
+            # de pantalla; acá se fuerzan visibles y se restauran.
+            ann_hidden = []
+            for a in getattr(self, "_annotation_items", []):
+                items = [a] + ([a._guide_item] if a._guide_item else [])
+                for it in items:
+                    if not it.isVisible():
+                        it.setVisible(True)
+                        ann_hidden.append(it)
             try:
                 self.scene.render(
                     painter,
@@ -7866,6 +8044,8 @@ class FlowsheetMainWindow(QMainWindow):
             finally:
                 for g in grid_items:
                     g.setVisible(True)
+                for it in ann_hidden:
+                    it.setVisible(False)
 
     # ---------------------------------------------------
     # API pública para BlockItem / StreamItem
@@ -8230,6 +8410,7 @@ class FlowsheetMainWindow(QMainWindow):
             self._render_block(b)
         for s in self.fs.streams.values():
             self._render_stream(s)
+        self._render_annotations()
         # FIX geometría stale + lanes: re-rutear TODOS los streams una vez que
         # bloques Y streams están en escena.  El _resolve_port ya ancla a los
         # puertos vivos en el primer render (toma editor.scene), pero el LANE
@@ -8253,6 +8434,72 @@ class FlowsheetMainWindow(QMainWindow):
         # ya está asentada (corrige el extremo COLA/src que en el GUI real
         # quedaba stale hasta el hover).
         self._schedule_stream_reanchor()
+
+    # ---------------------------------------------------
+    # ANOTACIONES (ciclo 3 · 3c) — notas de plano
+    # ---------------------------------------------------
+
+    def _render_annotations(self):
+        """Renderiza Flowsheet.annotations en la escena (post-rebuild).
+        Los items viejos ya los podó clear_flowsheet (z=40 > -100)."""
+        self._annotation_items = []
+        try:
+            from annotations import AnnotationItem
+        except Exception:
+            return
+        show = getattr(self, "_show_annotations", True)
+        for data in self.fs.annotations:
+            item = AnnotationItem(data, editor=self)
+            self.scene.addItem(item)
+            item._sync_guide()
+            item.setVisible(show)
+            if item._guide_item is not None:
+                item._guide_item.setVisible(show)
+            self._annotation_items.append(item)
+
+    def create_annotation(self, scene_pos):
+        """Click con la T activa (3c): coloca una nota vacía en edición
+        directa. Si queda vacía, AnnotationItem la descarta al blur."""
+        from annotations import AnnotationItem
+        before = self.begin_action()
+        data = {"id": self.fs.new_id(),
+                "x": float(scene_pos.x()), "y": float(scene_pos.y()),
+                "text": "", "style": "rotulo", "tint": "ink",
+                "pill": False, "guide": None}
+        self.fs.annotations.append(data)
+        item = AnnotationItem(data, editor=self)
+        self.scene.addItem(item)
+        if not hasattr(self, "_annotation_items"):
+            self._annotation_items = []
+        self._annotation_items.append(item)
+        item.start_edit()
+        # El undo de la creación se consolida al confirmar el texto
+        # (nota vacía descartada = no-op y before == after → no pushea).
+        self.end_action("crear anotación", before)
+
+    def remove_annotation(self, data, push_undo=True):
+        before = self.begin_action() if push_undo else None
+        try:
+            self.fs.annotations.remove(data)
+        except ValueError:
+            pass
+        for item in list(getattr(self, "_annotation_items", [])):
+            if item.data is data:
+                item.remove_guide_item()
+                if item.scene() is not None:
+                    item.scene().removeItem(item)
+                self._annotation_items.remove(item)
+        if push_undo and before is not None:
+            self.end_action("borrar anotación", before)
+
+    def set_annotations_visible(self, visible: bool):
+        """Vista ▸ Mostrar anotaciones — oculta EN PANTALLA; el export
+        siempre las incluye (documentación de ingeniería)."""
+        self._show_annotations = bool(visible)
+        for item in getattr(self, "_annotation_items", []):
+            item.setVisible(self._show_annotations)
+            if item._guide_item is not None:
+                item._guide_item.setVisible(self._show_annotations)
 
     # ---------------------------------------------------
     # UNDO / REDO infrastructure

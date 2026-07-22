@@ -95,6 +95,12 @@ BLOCK_DIMS: Dict[str, Tuple[int, int]] = {
     "hx_whb":          (84, 56),
     "empaque":         (48, 64),
     "torre_nat":       (56, 64),
+    # Ciclo 3 (3a): tres distinciones nuevas del bundle de Design —
+    # caldera water-tube (domo+calderín verticales), tray valve
+    # (cheurones sobre cada plato) y reactor encamisado (familia ◇).
+    "caldera_water":   (52, 64),
+    "platos_valve":    (48, 64),
+    "reactor_jacket":  (60, 64),
 }
 
 # Mapeo del tipo del mockup → eq_type canónico del catálogo
@@ -124,14 +130,14 @@ PALETTE_LABELS: Dict[str, str] = {
 # bajo el botón temáticamente más cercano para que TODO el catálogo
 # siga siendo alcanzable desde los menús de variantes (long-press).
 PALETTE_GROUPS: Dict[str, Tuple[str, ...]] = {
-    "reactor":   ("reactor", "reactor_pfr"),
+    "reactor":   ("reactor", "reactor_pfr", "reactor_jacket"),
     "mezclador": ("mezclador", "splitter", "valvula"),
     "separador": ("separador", "tambor", "ciclon", "centrifuga",
                   "filtro", "secador", "cristalizador"),
-    "columna":   ("columna", "platos", "empaque", "torre_enf",
-                  "torre_nat"),
+    "columna":   ("columna", "platos", "platos_valve", "empaque",
+                  "torre_enf", "torre_nat"),
     "hx":        ("hx", "hx_kettle", "hx_whb", "hx_aircooler",
-                  "hx_placa", "horno", "caldera"),
+                  "hx_placa", "horno", "caldera", "caldera_water"),
     "bomba":     ("bomba", "compresor", "compresor_recip", "ventilador"),
     "tanque":    ("tanque", "ambient"),
 }
@@ -164,7 +170,19 @@ class BlockGlyph:
         p.setBrush(fill_brush)
         p.setRenderHint(QPainter.Antialiasing, True)
 
-        # router por tipo
+        # Ciclo 3 (artboard 3a): la geometría canónica vive en
+        # glyph_specs (transcripción literal del bundle de Design, con
+        # roles o/d/body/dot y trazo non-scaling). Los tipos sin spec
+        # nuevo caen a los _draw_* previos.
+        try:
+            import glyph_specs as _gs
+            if _gs.draw_glyph(p, type_, w, h, stroke, fill_brush,
+                              sw=stroke_width, dashed=dashed):
+                return
+        except Exception:
+            pass
+
+        # router por tipo (legado — tipos sin spec del ciclo 3)
         method = getattr(BlockGlyph, f"_draw_{type_}", None)
         if method is None:
             # fallback: rect
@@ -1200,6 +1218,7 @@ class _ToolButton(QToolButton):
                 "select":  "↖",
                 "pan":     "✥",
                 "connect": "⟶",
+                "text":    "T",
                 "mass":    "→",
                 "energy":  "↯",
             }.get(self._id, "?")
@@ -1230,13 +1249,14 @@ class EditorPalette(QFrame):
     moreRequested        = Signal()
     streamRequested      = Signal(str)        # 'mass' | 'energy'
 
-    # ("text", "Anotación") se quitó del set: era un stub que solo
-    # cambiaba el cursor.  Se re-agrega cuando exista la colocación de
-    # texto real (rediseño 1g).
+    # La herramienta de anotación (T) volvió en el ciclo 3 (artboard
+    # 3c) con la colocación de texto real: click coloca la nota en
+    # edición directa (annotations.AnnotationItem).
     TOOLS = [
         ("select",  "Seleccionar (V)"),
         ("pan",     "Pan (espacio)"),
         ("connect", "Conectar stream (C)"),
+        ("text",    "Anotación (T)"),
     ]
     # Corrientes flotantes: click → crea la flecha en el centro de la
     # vista; el usuario arrastra los extremos hasta un puerto para
@@ -1752,7 +1772,7 @@ class _Overlay(QWidget):
 # steam trap, strainer, deaerator).
 EQ_TYPE_TO_ISA: Dict[str, str] = {
     "Boiler — fire tube": "caldera",
-    "Boiler — water tube": "caldera",
+    "Boiler — water tube": "caldera_water",
     "Centrifuge — decanter": "centrifuga",
     "Centrifuge — disc stack": "centrifuga",
     "Compressor — axial": "compresor",
@@ -1794,14 +1814,14 @@ EQ_TYPE_TO_ISA: Dict[str, str] = {
     "Reactor — CSTR (agitado)": "reactor",
     "Reactor — PFR (tubular)": "reactor_pfr",
     "Reactor — autoclave": "reactor",
-    "Reactor — jacketed agitated": "reactor",
-    "Reactor — jacketed non-agit.": "reactor",
+    "Reactor — jacketed agitated": "reactor_jacket",
+    "Reactor — jacketed non-agit.": "reactor_jacket",
     "Splitter — flow divider": "splitter",
     "Storage tank — cone roof": "tanque",
     "Storage tank — floating roof": "tanque",
     "Tower (column shell)": "columna",
     "Tray — sieve": "platos",
-    "Tray — valve": "platos",
+    "Tray — valve": "platos_valve",
     "Valve — 3-way": "valvula",
     "Valve — control globe": "valvula",
     "Valve — relief": "valvula",
@@ -1921,6 +1941,46 @@ def _isa_heuristic(eq_type: str) -> Optional[str]:
 #       selected → anillo dashed accent offset 6px (NO pisa el status)
 #       solving  → ring circular dashed pulsante
 ISA_INTERACTION_STATES = ("idle", "hover", "selected", "solving")
+
+
+def glyph_pixmap(eq_type: str, size: int = 24,
+                 color: Optional[str] = None,
+                 fill: Optional[str] = None):
+    """Badge del ciclo 3 (3a): el MISMO glifo ISA renderizado a `size`
+    px — no un segundo dibujo. Reemplaza a equipment_icons (muerto:
+    tercer lenguaje redundante y origen del badge de mixer en los WHB).
+
+    Devuelve QPixmap con devicePixelRatio 2 (nítido en HiDPI) o None si
+    el eq_type no mapea a ninguna silueta (el caller decide su fallback
+    honesto — nunca un ícono de otro equipo)."""
+    isa = isa_type_for_eq(eq_type)
+    if isa is None:
+        return None
+    dims = BLOCK_DIMS.get(isa)
+    if dims is None:
+        return None
+    from PySide6.QtGui import QImage, QPixmap
+    w0, h0 = dims
+    sup = 2
+    img = QImage(size * sup, size * sup, QImage.Format_ARGB32)
+    img.fill(Qt.transparent)
+    p = QPainter(img)
+    p.setRenderHint(QPainter.Antialiasing, True)
+    # Encajar preservando proporción, con 1px de aire
+    avail = size * sup - 2 * sup
+    k = min(avail / w0, avail / h0)
+    w, h = w0 * k, h0 * k
+    p.translate((size * sup - w) / 2.0, (size * sup - h) / 2.0)
+    stroke = QColor(color) if color else QColor(TOK["ink"])
+    fill_c = QColor(fill) if fill else QColor(TOK["bg_elev"])
+    # A 24px el trazo del sistema (1.6 device-px) se mantiene: los pens
+    # del renderer son cosméticos, así que el supersampleo ×2 pide sw×2.
+    BlockGlyph.draw(p, isa, w, h, stroke, fill_c,
+                    stroke_width=1.6 * sup)
+    p.end()
+    pm = QPixmap.fromImage(img)
+    pm.setDevicePixelRatio(sup)
+    return pm
 
 
 class IsaGlyphItem(QGraphicsItem):

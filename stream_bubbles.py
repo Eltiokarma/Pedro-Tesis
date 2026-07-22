@@ -122,12 +122,29 @@ class StreamBubble(QFrame):
                       mdot_kg_s: float = 0.0,
                       h_kJ_kg: Optional[float] = None,
                       composition: Optional[List[Tuple[str, float]]] = None,
-                      p_auto: bool = False):
+                      p_auto: bool = False,
+                      mass_status: str = "propagated"):
         """Refresca los valores numéricos.  Se llama cuando:
           · El stream se editó manualmente
           · El solver terminó y publicó nuevos valores
-        p_auto: True si la presión la derivó el solver (no es spec del user)."""
+        p_auto: True si la presión la derivó el solver (no es spec del user).
+        mass_status: procedencia de la masa (3b) — 'locked' (declarada),
+        'torn' (reciclo, converge por tearing) u otro (derivada)."""
         self._name = name or "?"
+        # Marca de procedencia (mismos términos que la leyenda y el DOF)
+        if mass_status == "locked":
+            self._proc_lbl.setText("▪")
+            self._proc_lbl.setStyleSheet(f"color:{TOK['spec']};")
+            self._proc_lbl.setToolTip("masa declarada — la puso el usuario")
+        elif mass_status == "torn":
+            self._proc_lbl.setText("↻")
+            self._proc_lbl.setStyleSheet(f"color:{TOK['phase_2ph']};")
+            self._proc_lbl.setToolTip(
+                "reciclo (torn) — converge por tearing")
+        else:
+            self._proc_lbl.setText("◦")
+            self._proc_lbl.setStyleSheet(f"color:{TOK['ink_mute']};")
+            self._proc_lbl.setToolTip("masa derivada — balance del solver")
         self._phase = (phase or "").lower()
         self._T_K = float(T_K or 0.0)
         self._P_bar = float(P_bar or 0.0)
@@ -200,6 +217,18 @@ class StreamBubble(QFrame):
             f"letter-spacing:-2px;"
         )
         lay.addWidget(grip)
+
+        # Procedencia de la masa (ciclo 3, 3b): ▪ declarada / ◦ derivada
+        # / ↻ reciclo (torn) — al borde de ARRANQUE de la pill. Es
+        # procedencia, no severidad: glifo mono + tinta, nunca un badge
+        # de warning.
+        self._proc_lbl = QLabel("◦", hd)
+        pfnt = QFont(pfd_fonts.MONO, 9, QFont.DemiBold)
+        self._proc_lbl.setFont(pfnt)
+        self._proc_lbl.setFixedWidth(12)
+        self._proc_lbl.setAlignment(Qt.AlignCenter)
+        self._proc_lbl.setStyleSheet(f"color:{TOK['ink_mute']};")
+        lay.addWidget(self._proc_lbl)
 
         # Stream name (IBM Plex Mono)
         self._name_lbl = QLabel("?", hd)
@@ -640,6 +669,14 @@ class BubbleManager:
             ids = {s.id for s in streams}
             streams_by_id = {s.id: s for s in streams}
 
+        # Procedencia (3b): los streams de reciclo se determinan por
+        # convergencia del tearing — misma fuente que el DOF audit.
+        try:
+            from dof_audit import _recycle_stream_ids
+            self._torn_ids = _recycle_stream_ids(fs)
+        except Exception:
+            self._torn_ids = set()
+
         # Cerrar burbujas de streams que ya no existen o que se desactivaron
         for sid in list(self._bubbles.keys()):
             if sid not in ids or not getattr(streams_by_id[sid], "bubble_visible", False):
@@ -759,6 +796,13 @@ class BubbleManager:
             _p_auto = not getattr(stream, "pressure_locked", False)
         else:
             _p_auto = _porg != "user"
+        # Procedencia de la masa (3b): declarada / reciclo / derivada
+        if getattr(stream, "mass_flow_locked", False):
+            _mstat = "locked"
+        elif stream.id in getattr(self, "_torn_ids", set()):
+            _mstat = "torn"
+        else:
+            _mstat = "propagated"
         bub.update_values(
             name=getattr(stream, "name", "?"),
             phase=phase,
@@ -766,6 +810,7 @@ class BubbleManager:
             h_kJ_kg=h_val,
             composition=comp,
             p_auto=_p_auto,
+            mass_status=_mstat,
         )
 
     def _refresh_leaders(self):
