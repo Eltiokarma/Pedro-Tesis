@@ -306,13 +306,13 @@
   "sum_duty": 500.050791
  },
  "salt_crystal": {
-  "ISBL": 2196381.24,
+  "ISBL": 2212336.47,
   "energy_errors": 0,
   "mass_errors": 0,
-  "n_blocks": 4,
-  "n_streams": 7,
+  "n_blocks": 5,
+  "n_streams": 8,
   "overall_status": "warning",
-  "sum_duty": 10.0
+  "sum_duty": 10.096473
  },
  "smr_eq": {
   "ISBL": 9564627.81,

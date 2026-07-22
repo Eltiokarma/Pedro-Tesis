@@ -715,13 +715,20 @@ def _solve_mass_iteration(fs):
         if getattr(b, "splitter_active", False) and len(outs) >= 2:
             ins_resolved = all(_is_mass_locked(s) or s.mass_flow > 0
                                for s in proc_ins)
-            fracs = list(getattr(b, "splitter_fractions", []) or [])
-            if len(fracs) != len(outs):
-                fracs = [1.0 / len(outs)] * len(outs)
-            f_tot = sum(fracs)
+            # Mismo criterio keyed-por-identidad que solve_splitters: si TODAS
+            # las salidas traen split_fraction, se usa ese mapeo estable.
+            _keyed = [getattr(s, "split_fraction", None) for s in outs]
+            if all(k is not None for k in _keyed):
+                _pairs = list(zip(outs, [float(k) for k in _keyed]))
+            else:
+                fracs = list(getattr(b, "splitter_fractions", []) or [])
+                if len(fracs) != len(outs):
+                    fracs = [1.0 / len(outs)] * len(outs)
+                _pairs = list(zip(outs, fracs))
+            f_tot = sum(f for _, f in _pairs)
             if ins_resolved and f_tot > 0:
                 sum_in = sum(s.mass_flow for s in proc_ins)
-                for s_out, frac in zip(outs, fracs):
+                for s_out, frac in _pairs:
                     if _is_mass_locked(s_out) or s_out.mass_flow != 0:
                         continue
                     # Un tear activo SÍ puede producirse acá: éste es su
@@ -3997,24 +4004,32 @@ def solve_splitters(fs):
         feed = next((s for s in ins if s.mass_flow > 0), None)
         if feed is None:
             continue
-        # Fracciones: validar
-        fracs = list(getattr(b, "splitter_fractions", []) or [])
-        if len(fracs) != len(outs):
-            # Uniform split como fallback
-            fracs = [1.0 / len(outs)] * len(outs)
-        total = sum(fracs)
+        # Fracciones ancladas por identidad (split_fraction por salida) tienen
+        # prioridad: son ESTABLES ante inserción/reordenamiento de streams.
+        # Si TODAS las salidas traen split_fraction, se usa ese mapeo keyed;
+        # si no, se cae al reparto posicional legacy (splitter_fractions).
+        keyed = [getattr(s, "split_fraction", None) for s in outs]
+        if all(k is not None for k in keyed):
+            pairs = list(zip(outs, [float(k) for k in keyed]))
+        else:
+            fracs = list(getattr(b, "splitter_fractions", []) or [])
+            if len(fracs) != len(outs):
+                # Uniform split como fallback
+                fracs = [1.0 / len(outs)] * len(outs)
+            pairs = list(zip(outs, fracs))
+        total = sum(f for _, f in pairs)
         if total <= 0:
             continue
-        fracs = [f / total for f in fracs]
+        pairs = [(s, f / total) for s, f in pairs]
         # Distribuir mass_flow y propagar composición
-        for s_out, frac in zip(outs, fracs):
+        for s_out, frac in pairs:
             if not _is_mass_locked(s_out):
                 s_out.mass_flow = feed.mass_flow * frac
             if not _is_comp_locked(s_out):
                 s_out.composition = dict(feed.composition or {})
                 if feed.main_component:
                     s_out.main_component = feed.main_component
-        msgs.append(f"✓ Splitter {b.name}: fracs={fracs}")
+        msgs.append(f"✓ Splitter {b.name}: fracs={[round(f, 4) for _, f in pairs]}")
     return msgs
 
 
@@ -6585,22 +6600,68 @@ def _compute_awareness_warnings(fs):
 
         # ── 1.6 [W-SPLIT-LOCK] fracción vs flujo lockeado ────────────
         if getattr(b, "splitter_active", False):
-            fr = list(getattr(b, "splitter_fractions", []) or [])
+            # Fracción por salida: keyed (split_fraction, estable) si TODAS las
+            # salidas la traen; si no, posicional legacy (splitter_fractions).
+            _keyed = [getattr(s, "split_fraction", None) for s in outs]
+            if outs and all(k is not None for k in _keyed):
+                _ftot = sum(float(k) for k in _keyed) or 1.0
+                frac_of = {s.id: float(k) / _ftot for s, k in zip(outs, _keyed)}
+            else:
+                fr = list(getattr(b, "splitter_fractions", []) or [])
+                _ftot = sum(fr) or 1.0
+                frac_of = {outs[k].id: fr[k] / _ftot
+                           for k in range(min(len(fr), len(outs)))}
             sum_in = sum(s.mass_flow for s in ins)
             if sum_in > 0:
-                for k, s in enumerate(outs):
-                    if k >= len(fr):
-                        break
+                for s in outs:
+                    if s.id not in frac_of:
+                        continue
                     if not getattr(s, "mass_flow_locked", False):
                         continue
-                    expected = sum_in * fr[k]
+                    expected = sum_in * frac_of[s.id]
                     rel = abs(s.mass_flow - expected) / max(abs(expected), 1.0)
                     if rel > 0.02:
                         warns.append(
                             f"[W-SPLIT-LOCK] {b.name}/{s.name}: flujo lockeado "
                             f"({s.mass_flow:.0f} t/a) contradice la fracción "
-                            f"splitter {fr[k]:.3f} (esperado {expected:.0f} "
+                            f"splitter {frac_of[s.id]:.3f} (esperado {expected:.0f} "
                             f"t/a) — posible error de orden fracción↔stream.")
+
+        # ── 1.6b [W-PHYS-NONVOL] no-volátil en fase vapor/gas ────────
+        # Sanity FÍSICO: un componente no-volátil (sal, sosa, clínker,
+        # polímero…) NO puede salir en una corriente de fase vapor/gas.  Los
+        # balances de masa cierran igual aunque el ruteo sea absurdo (un
+        # separador mal configurado manda el sólido al venteo en silencio),
+        # así que este chequeo protege ejemplos nuevos y ediciones de UI.
+        # No-volátil = Tb_C ≥ 700 °C (los sólidos usan la sentinela 99999;
+        # NaCl 1465, NaOH 1388 caen acá) O declarado en solid_components del
+        # bloque.  El nombre se normaliza (espacios→'_') para el catálogo.
+        def _norm_c(name):
+            return str(name).strip().lower().replace(" ", "_")
+        _solids = {_norm_c(x) for x in (getattr(b, "solid_components", []) or [])}
+        for s in outs:
+            if (s.phase or "").lower() not in ("vapor", "gas"):
+                continue
+            if (s.mass_flow or 0.0) < 1.0:
+                continue
+            for c, x in (s.composition or {}).items():
+                if x <= 0.02:
+                    continue
+                try:
+                    import components as _comp
+                    _obj = (_comp.COMPONENTS.get(c)
+                            or _comp.COMPONENTS.get(_norm_c(c)))
+                    _tb = float(getattr(_obj, "tb_c", 0.0)) if _obj else 0.0
+                except Exception:
+                    _tb = 0.0
+                if _tb >= 700.0 or _norm_c(c) in _solids:
+                    _why = (f"Tb={_tb:.0f} °C" if _tb >= 700.0
+                            else "declarado sólido del bloque")
+                    warns.append(
+                        f"[W-PHYS-NONVOL] {b.name}/{s.name}: componente "
+                        f"no-volátil '{c}' (x={x:.2f}) en fase {s.phase} "
+                        f"({_why}) — físicamente imposible; revisar "
+                        f"puertos/ruteo del separador (posible salida cruzada).")
 
         # ── 1.7 [W-DUTY-S] duty > S ──────────────────────────────────
         if cat in ("Fired heaters", "Compressors"):

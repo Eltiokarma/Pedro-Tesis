@@ -74,18 +74,31 @@ insertar un bloque, ese orden cambia y `zip(outs, fracs)` empareja cada fracció
 con la salida equivocada. La identidad "esta salida lleva esta fracción" es
 **posicional**, no estable.
 
-### Fix recomendado (cambio de modelo, no aplicado aún)
+### Fix aplicado — fracciones ancladas por salida (`split_fraction`)
 
-Mapear las fracciones a las salidas por **identidad estable**, no por posición.
-Opciones:
-1. `splitter_fractions` como dict `{nombre_o_id_de_salida: fracción}` en vez de
-   lista posicional (requiere migrar los ejemplos con splitter: haber_rec,
-   hno3, industrial, quimpac, talara).
-2. Un campo `split_fraction` por stream de salida.
+Se agregó el campo opcional **`Stream.split_fraction`** (default `None`). El
+solver ahora resuelve el splitter así:
 
-Un simple ordenamiento por id NO alcanza: al reemplazar una salida por un stream
-insertado, el conjunto de salidas cambia de identidad. Hay que anclar la
-fracción a la salida.
+- Si **todas** las salidas del bloque traen `split_fraction` → se usa ese mapeo
+  **por identidad de stream** (estable ante inserción/reordenamiento).
+- Si no → cae al reparto posicional legacy (`splitter_fractions`) — 100 %
+  compatible con los flowsheets viejos.
+
+El mismo criterio keyed se aplica en las 3 rutas que tocaban el splitter:
+`solve_splitters`, la deducción durante el tearing (`_solve_mass_iteration`) y
+el audit `[W-SPLIT-LOCK]`.
+
+Los 5 ejemplos con splitter (`haber_rec`, `hno3`, `industrial`, `quimpac`,
+`talara`) fueron **migrados**: cada salida lleva su `split_fraction`. Golden
+idéntico (gate 42/42), pero ahora son robustos a la re-inserción de day-tanks.
+
+> Un simple ordenamiento por id NO alcanzaba: al reemplazar una salida por un
+> stream insertado, el conjunto de salidas cambia de identidad. Por eso la
+> fracción se ancla a la salida, no a una posición.
+
+Reproducción/regresión: `tests/test_splitter_tearing.py`
+(`test_splitter_posicional_rota_al_insertar_bloque` documenta el bug,
+`test_splitter_keyed_estable_ante_insercion` verifica el fix).
 
 ---
 
@@ -109,17 +122,24 @@ S-salt  (producto)  : water = 1.00             ← el "producto sal" es agua
 El balance de masa cerraba y no hubo error — la nonsense física pasó
 inadvertida. Con los puertos correctos, todo se rutea bien.
 
-### Fix recomendado (no aplicado aún)
+### Fix aplicado — chequeo `[W-PHYS-NONVOL]` en el audit
 
-Agregar al audit de consistencia del solver un chequeo de **sanity físico**:
-- Componente no-volátil (sal, azúcar, clínker, polímero, carbón…) con fracción
-  significativa en una corriente de fase `vapor`/`gas` → warning.
-- (Ya probado sobre los 41 ejemplos existentes: **0 anomalías** — todos están
-  bien configurados; el chequeo protegería ejemplos NUEVOS y ediciones de UI.)
+Se agregó al audit de consistencia del solver un chequeo de **sanity físico**:
+un componente **no-volátil** con fracción > 0.02 en una salida de fase
+`vapor`/`gas` dispara `[W-PHYS-NONVOL]`, localizado al bloque/stream.
 
-Script de auditoría física usado (corre sobre cualquier ejemplo):
-`scratchpad/physcheck.py` — lista no-volátiles + chequea Σx≈1, fracciones ≥0 y
-no-volátil-en-vapor.
+No-volátil se define de forma **data-driven** (no lista hardcodeada):
+- `Tb_C ≥ 700 °C` en el catálogo `components.py` (los sólidos usan la sentinela
+  99999; NaCl 1465 y NaOH 1388 también caen acá), **o**
+- el componente está declarado en `solid_components` del bloque.
+
+El nombre se normaliza (`espacios → '_'`) para el catálogo. Probado sobre los
+42 ejemplos: **0 falsos positivos** (golden intacto, gate 42/42). El warning es
+advisory — NO cambia `overall_status`.
+
+Regresión: `tests/test_solver_awareness.py`
+(`test_phys_nonvol_detecta_solido_en_vapor` y
+`test_phys_nonvol_no_falso_positivo_agua_en_vapor`).
 
 ---
 
@@ -127,10 +147,10 @@ no-volátil-en-vapor.
 
 | Hallazgo | Estado |
 |---|---|
-| `salt_crystal` (ejemplo nuevo, solids train) | AGREGADO al set (gate 42/42) |
-| BUG 1 — splitter mapea fracciones por posición | DOCUMENTADO (fix = fracciones keyed) |
-| BUG 2 — separador rutea al revés sin warning | DOCUMENTADO (fix = sanity físico en el audit) |
+| `salt_crystal` (ejemplo nuevo, solids train) | AGREGADO al set (gate 42/42) + bomba de alimentación |
+| BUG 1 — splitter mapea fracciones por posición | **CORREGIDO** — `split_fraction` keyed + 5 ejemplos migrados |
+| BUG 2 — separador rutea al revés sin warning | **CORREGIDO** — `[W-PHYS-NONVOL]` en el audit |
 
-Ambos bugs tienen reproducción mínima y fix recomendado; no se aplicaron para
-no mezclar hallazgo con cambio de modelo. Son buenos candidatos para el
-próximo ciclo.
+Ambos bugs quedaron corregidos con reproducción mínima y regresión. Los fixes
+son aditivos y backward-compatible (golden 42/42 intacto, 524 tests de lógica
+verdes).

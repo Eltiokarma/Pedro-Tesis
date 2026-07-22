@@ -220,7 +220,14 @@ def test_split_lock_detector_sigue_vivo():
     detector quedó muerto."""
     fs = reg.load_example("talara")
     b = next(b for b in fs.blocks.values() if b.name == "V-101")
-    b.splitter_fractions = list(reversed(b.splitter_fractions))  # re-cruzar
+    # V-101 ya usa fracciones ancladas por salida (split_fraction).  Para
+    # re-introducir el cruce hay que invertir el campo AUTORITATIVO (el keyed),
+    # no la lista posicional legacy (que el solver ignora si hay keyed).
+    outs = [s for s in fs.streams.values() if s.src == b.id]
+    fr = [s.split_fraction for s in outs]
+    for s, f in zip(outs, reversed(fr)):
+        s.split_fraction = f
+    b.splitter_fractions = list(reversed(b.splitter_fractions))  # coherencia
     res = fsv.solve(fs)
     lines = _lines(res, "W-SPLIT-LOCK")
     assert any("V-101" in w for w in lines), \
@@ -279,3 +286,53 @@ def test_ok_example_con_warnings_sigue_ok():
     _, res = _solve("talara")
     assert res.overall_status == "ok"
     assert len(res.awareness_warnings) >= 5
+
+
+# ── 1.6b [W-PHYS-NONVOL] no-volátil en fase vapor ───────────────────────
+def test_phys_nonvol_detecta_solido_en_vapor():
+    """Un componente no-volátil (sal) ruteado a una salida de fase vapor —
+    el síntoma del separador mal configurado (BUG 2) — debe disparar
+    [W-PHYS-NONVOL] aunque el balance de masa cierre.  Protege ejemplos
+    nuevos / ediciones de UI de la nonsense física silenciosa."""
+    import flowsheet_model as fm
+    fs = fm.Flowsheet()
+    dr = fm.Block(id=fs.new_id(), name="DR-BAD", eq_type="Dryer — drum",
+                  S=0.0, dryer_active=True, moisture_component="water",
+                  final_moisture=0.005, solid_components=["sodium chloride"],
+                  duty=40.0, duty_locked=True)
+    fs.blocks[dr.id] = dr
+    fs.streams[fs.new_id()] = (i := fm.Stream(
+        id=fs._next_id - 1, name="S-in", src=0, dst=dr.id, role="feed",
+        mass_flow=1000, mass_flow_locked=True, phase="liquid",
+        main_component="sodium chloride", composition_locked=True,
+        composition={"sodium chloride": 0.9, "water": 0.1}))
+    fs.streams[fs.new_id()] = fm.Stream(
+        id=fs._next_id - 1, name="S-vent-bad", src=dr.id, dst=0, role="waste",
+        phase="vapor", main_component="sodium chloride",
+        composition={"sodium chloride": 0.99, "water": 0.01})
+    res = fsv.solve(fs)
+    lines = _lines(res, "W-PHYS-NONVOL")
+    assert any("S-vent-bad" in w and "sodium chloride" in w for w in lines), \
+        f"debe disparar W-PHYS-NONVOL por sal en vapor: {res.awareness_warnings}"
+
+
+def test_phys_nonvol_no_falso_positivo_agua_en_vapor():
+    """El vapor de agua legítimo (volátil) NO debe disparar W-PHYS-NONVOL."""
+    import flowsheet_model as fm
+    fs = fm.Flowsheet()
+    dr = fm.Block(id=fs.new_id(), name="DR-OK", eq_type="Dryer — drum",
+                  S=0.0, dryer_active=True, moisture_component="water",
+                  final_moisture=0.005, solid_components=["sodium chloride"],
+                  duty=40.0, duty_locked=True)
+    fs.blocks[dr.id] = dr
+    fs.streams[fs.new_id()] = fm.Stream(
+        id=fs._next_id - 1, name="S-in", src=0, dst=dr.id, role="feed",
+        mass_flow=1000, mass_flow_locked=True, phase="liquid",
+        main_component="sodium chloride", composition_locked=True,
+        composition={"sodium chloride": 0.9, "water": 0.1})
+    fs.streams[fs.new_id()] = fm.Stream(
+        id=fs._next_id - 1, name="S-vapor", src=dr.id, dst=0, role="waste",
+        phase="vapor", main_component="water", composition={"water": 1.0})
+    res = fsv.solve(fs)
+    assert _lines(res, "W-PHYS-NONVOL") == [], \
+        "agua en vapor no debe disparar W-PHYS-NONVOL"

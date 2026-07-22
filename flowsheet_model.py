@@ -431,6 +431,15 @@ class Stream:
     dst_port:  str = ""          # nombre del puerto en dst; "" = autoselect
     price_usd_per_tm: float = 0.0
 
+    # ---- SPLIT keyed (fracción de splitter anclada a ESTA salida) ----
+    # Si este stream es salida de un bloque splitter_active y tiene
+    # split_fraction != None, el solver usa ESTE valor como su fracción
+    # del feed, mapeado por IDENTIDAD del stream (no por posición en la
+    # lista splitter_fractions del bloque).  Esto hace el reparto estable
+    # ante inserción/reordenamiento de streams alrededor del splitter.
+    # Si es None, se usa el reparto posicional legacy (splitter_fractions).
+    split_fraction: Optional[float] = None
+
     # termofísicas (balance de energía)
     temperature: float = 25.0    # °C
     cp:          float = 0.0     # kJ/kg·K — override manual; si 0 y hay
