@@ -1,10 +1,12 @@
 # PLAN — Ciclo 4 (backlog anotado)
 
 **Fecha de anotación:** 2026-07-22
-**Estado:** PENDIENTE — este documento junta todo lo que quedó
-deliberadamente fuera al cerrar el ciclo 3 y el plan de auditoría
-frontend. Es el punto de arranque de la próxima tanda; nada de esto es
-urgente ni bloquea la tesis.
+**Estado:** PARCIALMENTE EJECUTADO (2026-07-22) — la primera tanda
+cerró **B completo** (menos la pasada formal de streams_table/
+stream_inspector, que requiere Design) y **C.3**, siguiendo el orden
+sugerido en §D. Regresión en `tests/test_ciclo4.py` (14 tests); bugs
+14-15 documentados en `BUGS_ENCONTRADOS_EJEMPLOS.md`. Quedan A, C.1,
+C.2 y la pasada de diseño de streams_table/stream_inspector.
 
 ## A. ⚡ del bundle de Design ciclo 3 (deuda que el propio Design anotó)
 
@@ -19,17 +21,24 @@ urgente ni bloquea la tesis.
 
 ## B. Remanentes ⚡ del ciclo 2 aún vivos
 
-- **`solver_report.py`** duplica una paleta light-only propia (§G.5 de
-  `AUDITORIA_UI_2.md`) → unificar con tokens.
-- **`hx_edu.py`** (SVG educativo) y las **curvas matplotlib** de
-  `inspector_evidence` (~45 hex hardcodeados que derivan en silencio si
-  los tokens cambian) → ola de tokenización propia.
+- ✓ **`solver_report.py`** duplicaba una paleta light-only propia (§G.5
+  de `AUDITORIA_UI_2.md`) → CERRADO: consume `tokens.TOK` vivo (el
+  fallback murió — tokens.py es headless-safe) y las severidades se
+  leen en caliente (`_sev()`); mueren también los px sueltos y el
+  `color: white`.
+- ✓ **`hx_edu.py`** y las **curvas matplotlib** de `inspector_evidence`
+  → CERRADO: inspector_evidence quedó en 0 hex (patrón `_tok()` +
+  `_style_fig`/`_legend` theme-aware, mismo sistema que econ_figures);
+  hx_edu ya estaba tokenizado vía `var(--token)` (auditoría 2 §G.5) —
+  se mató su `color:white` y los defaults `#000` de `hx_icons.py`.
 - **`streams_table` / `stream_inspector`**: pasada formal de diseño
-  (hoy consumen tokens de fase pero nunca tuvieron artboard).
-- Menores (§G de la auditoría 2): el chip del solver de la topbar no
-  siempre recibe iter/tiempo (`update_solver_chip` — verificar cableado
-  en todos los caminos de solve); la anotación de payback de las
-  figuras queda tenue en dark; 1 hex suelto en `inspector_widgets.py`.
+  (hoy consumen tokens de fase pero nunca tuvieron artboard). ←
+  PENDIENTE (requiere mini-prompt de Design).
+- ✓ Menores (§G de la auditoría 2) → CERRADOS: el chip leía atributos
+  fantasma (`iter_count`/`elapsed_s` — BUG 14) → ahora recibe
+  `iterations` + wall-time real, y Ctrl+U resetea el chip tras sus
+  solves internos; payback pasa a `spec_ink` (+bold); el fallback
+  `#000000` de `inspector_widgets._tok` cae a `TOK["ink"]`.
 
 (La herramienta de anotación y el gradiente térmico, que estaban en
 esta lista, se cerraron en el ciclo 3 ✓.)
@@ -47,11 +56,13 @@ esta lista, se cerraron en el ciclo 3 ✓.)
   trays/packing, mixer inline, decanter centrifuge, relief/3-way,
   natural draft): glifo/puertos/sizer están; decidir si ameritan
   mini-fixtures de UI o un par de ejemplos nuevos que los usen.
-- **Origin-tagging de reacciones custom nacidas del predictor**
-  (Frente 5): `reaction_from_dict` no persiste `origin`/
-  `estimation_method` — hoy una reacción aceptada desde "Sugerir
-  productos" queda indistinguible de una escrita a mano. Extender el
-  esquema del dict es barato y cierra la trazabilidad de procedencia.
+- ✓ **Origin-tagging de reacciones custom nacidas del predictor**
+  (Frente 5) → CERRADO: el esquema del dict acepta `origin`
+  (`user`/`curated`/`auto`/`predicted`, default `user`),
+  `estimation_method`, `estimation_uncertainty_kJ_mol`,
+  `transformation_id` y las dos confianzas; `CustomReactionDialog`
+  registra la procedencia al aceptar una sugerencia y la evidencia del
+  reactor distingue "(N del predictor)". Round-trip testeado.
 
 ## D. Sugerencia de arranque
 

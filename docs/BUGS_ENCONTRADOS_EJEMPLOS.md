@@ -576,3 +576,35 @@ ejemplos limpios (equipos poco usados + topologías raras) y los defectos que
 destaparon se corrigieron en el mismo ciclo. La auditoría sistemática del
 catálogo cerró **toda** la clase de huecos de sizing salvo los internos de
 columna (trays/packing), documentados como excepción deliberada.
+
+---
+
+## Ciclo 4 (2026-07-22) — hallazgos del bloque B
+
+### BUG 14 — Chip del solver: atributos fantasma → iter/tiempo siempre 0
+
+**Reproducción mínima:** `action_solve` leía
+`getattr(result, "iter_count", 0)` y `getattr(result, "elapsed_s", 0.0)`,
+pero `SolverResult` expone `iterations` y no mide tiempo → los `getattr`
+caían SIEMPRE al default y el chip del topbar mostraba 0 iteraciones /
+0 s en todo solve (el "parcial" de §G.1 de la auditoría 2 era en
+realidad un mudo total en los metadatos).
+
+**Fix:** leer `result.iterations` y medir el wall-time del solve con
+`perf_counter` en `action_solve`. Además `_ensure_hx_auxiliaries`
+(Ctrl+U) ahora marca `_dirty_after_solve` y resetea el chip a "en
+espera" tras sus solves internos — mismo patrón honesto que el
+goal-seek. **Regresión:** `test_ciclo4.py::test_chip_recibe_iteraciones_reales`.
+
+### BUG 15 — `StreamItem._last_pts` no inicializado → AttributeError
+
+**Reproducción mínima:** `python -m pytest
+tests/test_canvas_interaction.py::test_aux_no_atraviesan_bloques_metanol`
+(rojo pre-existente en `main`): `update_path()` asigna `_last_pts`
+recién al final del ruteo; cualquier rama de early-return (puerto sin
+resolver, stream flotante) sale antes y el atributo nunca existe. El
+código de producción se defiende con `getattr` en todos los accesos;
+los tests (y cualquier consumidor nuevo) accedían directo y reventaban.
+
+**Fix:** `self._last_pts = None` en `StreamItem.__init__`.
+**Regresión:** los 5 tests de `test_canvas_interaction.py` quedan verdes.

@@ -417,7 +417,8 @@ class EducationalPopover(QDialog):
         cb = QPushButton("Cerrar"); cb.setCursor(Qt.PointingHandCursor)
         cb.setFont(QFont(pfd_fonts.SANS, 9, QFont.Medium))
         cb.setStyleSheet(
-            f"QPushButton {{ background:{TOK['accent']}; color:white; border:0; "
+            f"QPushButton {{ background:{TOK['accent']}; "
+            f"color:{TOK['bg_elev']}; border:0; "
             f"border-radius:7px; padding:6px 16px; }} "
             f"QPushButton:hover {{ background:{TOK['accent_deep']}; }}")
         cb.clicked.connect(self.accept)

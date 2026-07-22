@@ -16,34 +16,24 @@ escondido tras "Ver detalles") por un diálogo formateado:
 """
 
 import pfd_fonts
-from tokens import (FONT_DISPLAY, FONT_TITLE, FONT_UI, FONT_VALUE,
+from tokens import (TOK, FONT_DISPLAY, FONT_TITLE, FONT_UI, FONT_VALUE,
                     FONT_HINT, FONT_LABEL)
 
-try:
-    from block_inspector import TOK
-except Exception:
-    # Fallback headless (sin Qt): permite testear build_report y los
-    # helpers de formato sin importar la cadena de PySide6.
-    TOK = {
-        "bg": "#f6f3ec", "bg_elev": "#ffffff", "bg_mute": "#f1ede4",
-        "bg_sunk": "#ece6d8", "line": "#e6e0d0", "line_strong": "#d4ccb8",
-        "ink": "#1a1714", "ink_mute": "#6b6256", "accent": "#0d6e78",
-        "accent_deep": "#064951", "accent_tint": "#eaf4f5",
-        "green": "#4d8742", "green_bg": "#e6f0df", "amber": "#b8841a",
-        "amber_bg": "#f4ecd1", "danger": "#b8453a", "danger_bg": "#f3dcd8",
-    }
-
-# Metadatos de severidad → color/ícono/etiqueta.
-SEV = {
-    "error":  {"ink": TOK["danger"], "bg": TOK["danger_bg"], "icon": "✗",
-               "label": "Error"},
-    "warn":   {"ink": TOK["amber"],  "bg": TOK["amber_bg"],  "icon": "⚠",
-               "label": "Advertencia"},
-    "info":   {"ink": TOK["accent"], "bg": TOK.get("accent_tint", "#eaf4f5"),
-               "icon": "•", "label": "Info"},
-    "ok":     {"ink": TOK["green"],  "bg": TOK["green_bg"],   "icon": "✓",
-               "label": "OK"},
+# Metadatos de severidad → (token ink, token bg, ícono, etiqueta).
+_SEV_META = {
+    "error": ("danger", "danger_bg",  "✗", "Error"),
+    "warn":  ("amber",  "amber_bg",   "⚠", "Advertencia"),
+    "info":  ("accent", "accent_tint", "•", "Info"),
+    "ok":    ("green",  "green_bg",   "✓", "OK"),
 }
+
+
+def _sev(kind):
+    """Metadatos de severidad con colores leídos en caliente de TOK —
+    respeta tema/acento activos (antes congelaba la paleta light al
+    importar el módulo)."""
+    ink, bg, icon, label = _SEV_META.get(kind, _SEV_META["info"])
+    return {"ink": TOK[ink], "bg": TOK[bg], "icon": icon, "label": label}
 
 # Banner por estado global.
 _HERO = {
@@ -244,7 +234,7 @@ def _build_dialog(report, summary_text, parent=None):
 
     sev_hero = {"ok": "ok", "warning": "warn", "error": "error",
                 "empty": "info"}.get(report["status"], "info")
-    meta = SEV[sev_hero]
+    meta = _sev(sev_hero)
 
     # ── Banner de estado ──
     hero = QFrame()
@@ -283,7 +273,7 @@ def _build_dialog(report, summary_text, parent=None):
     ml.setContentsMargins(14, 10, 14, 10)
     ml.setSpacing(8)
     for label, value, kind in report["metrics"]:
-        m = SEV.get(kind, SEV["info"])
+        m = _sev(kind)
         chip = QFrame()
         chip.setStyleSheet(
             f"background: {m['bg']}; border-radius: 8px;")
@@ -359,7 +349,8 @@ def _build_dialog(report, summary_text, parent=None):
 
 def _btn_style(primary):
     if primary:
-        return (f"QPushButton {{ background: {TOK['accent']}; color: white; "
+        return (f"QPushButton {{ background: {TOK['accent']}; "
+                f"color: {TOK['bg_elev']}; "
                 f"border: none; border-radius: 7px; padding: 7px 18px; "
                 f"font-weight: 600; }}"
                 f"QPushButton:hover {{ background: {TOK['accent_deep']}; }}")
@@ -373,7 +364,7 @@ def _section_card(sec):
     from PySide6.QtCore import Qt
     from PySide6.QtWidgets import (QFrame, QVBoxLayout, QHBoxLayout, QLabel,
                                    QPushButton, QWidget)
-    meta = SEV.get(sec["kind"], SEV["info"])
+    meta = _sev(sec["kind"])
     card = QFrame()
     card.setStyleSheet(
         f"QFrame#card {{ background: {TOK['bg_elev']}; "
@@ -416,7 +407,7 @@ def _section_card(sec):
     if sec.get("is_recycle"):
         for d in rows:
             head, subs = _fmt_recycle_row(d)
-            rmeta = SEV["ok"] if d["converged"] else SEV["warn"]
+            rmeta = _sev("ok") if d["converged"] else _sev("warn")
             lh = QLabel(head)
             lh.setWordWrap(True)
             lh.setStyleSheet(f"color: {rmeta['ink']}; "
@@ -434,7 +425,8 @@ def _section_card(sec):
             lbl = QLabel("·  " + str(r))
             lbl.setWordWrap(True)
             lbl.setTextInteractionFlags(Qt.TextSelectableByMouse)
-            lbl.setStyleSheet(f"color: {TOK['ink']}; font-size: 11.5px;")
+            lbl.setStyleSheet(f"color: {TOK['ink']}; "
+                              f"font-size: {FONT_VALUE[1]}pt;")
             bl.addWidget(lbl)
 
     if sec.get("collapsible") and n > 0:
@@ -444,7 +436,8 @@ def _section_card(sec):
         toggle.setCursor(Qt.PointingHandCursor)
         toggle.setStyleSheet(
             f"QPushButton {{ background: transparent; border: none; "
-            f"color: {TOK['accent']}; font-size: 11.5px; text-align: left; "
+            f"color: {TOK['accent']}; font-size: {FONT_VALUE[1]}pt; "
+            f"text-align: left; "
             f"padding: 2px 0; }}"
             f"QPushButton:hover {{ color: {TOK['accent_deep']}; }}")
 

@@ -178,6 +178,8 @@ class Reaction:
     #   'curated'   — escrita a mano en reactions_db.md (literatura)
     #   'auto'      — generada por chemfx.auto_reactions (combustion, cracking)
     #   'predicted' — generada por templates T01-T20 + Joback/Benson
+    #   'user'      — custom in-memory escrita a mano por el usuario
+    #                 (reaction_from_dict sin procedencia declarada)
     origin: str = "curated"
     # Confianza del mecanismo (que la reaccion realmente puede ocurrir
     # con el set de reactantes dado).
@@ -711,7 +713,20 @@ def reaction_from_dict(d: dict) -> Reaction:
           "T_min_K":            float (opcional, default 298.15),
           "T_max_K":            float (opcional, default 2000.0),
           "irreversible":       bool  (opcional, default False),
+          # -- procedencia (opcional; ciclo 4 C.3) --
+          "origin":             'user'|'curated'|'auto'|'predicted'
+                                (default 'user' — escrita a mano),
+          "estimation_method":  str  (ej. 'joback', 'benson'; default ""),
+          "estimation_uncertainty_kJ_mol": float (default 0.0),
+          "transformation_id":  str  (template T01..T20; default None),
+          "confidence_mechanism": 'alta'|'media'|'baja' (default 'alta'),
+          "confidence_thermo":    'alta'|'media'|'baja' (default 'alta'),
         }
+
+    Procedencia: antes NO se persistía — una reacción aceptada desde
+    "Sugerir productos" (predictor chemfx) quedaba indistinguible de
+    una escrita a mano.  Los campos de procedencia cierran esa
+    trazabilidad end-to-end (dict del builder → Reaction).
 
     Deriva los coeficientes vant_hoff_A/B (ln Keq = A + B/T) desde:
         B = -ΔH / R                                      [K]
@@ -820,6 +835,28 @@ def reaction_from_dict(d: dict) -> Reaction:
     T_max    = float(d.get("T_max_K", 2000.0))
     irrev    = bool(d.get("irreversible", False))
 
+    # Procedencia (C.3 ciclo 4) — round-trip del dict a los campos
+    # Capa 4b del Reaction.  Default 'user': custom escrita a mano.
+    origin = str(d.get("origin") or "user")
+    if origin not in ("user", "curated", "auto", "predicted"):
+        raise ValueError(f"origin '{origin}' inválido "
+                         f"(user|curated|auto|predicted).")
+    conf_mech = str(d.get("confidence_mechanism") or "alta")
+    conf_th   = str(d.get("confidence_thermo") or "alta")
+    for label, conf in (("confidence_mechanism", conf_mech),
+                        ("confidence_thermo", conf_th)):
+        if conf not in ("alta", "media", "baja"):
+            raise ValueError(f"{label} '{conf}' inválida "
+                             f"(alta|media|baja).")
+    est_method = str(d.get("estimation_method") or "")
+    try:
+        est_unc = float(d.get("estimation_uncertainty_kJ_mol") or 0.0)
+    except (TypeError, ValueError):
+        raise ValueError("estimation_uncertainty_kJ_mol debe ser "
+                         "numérico.")
+    transformation_id = (str(d["transformation_id"])
+                         if d.get("transformation_id") else None)
+
     # delta_nu = Σ ν_i (cambio de moles totales)
     delta_nu = sum(s.nu for s in stoich)
 
@@ -840,6 +877,12 @@ def reaction_from_dict(d: dict) -> Reaction:
         comments=("Reacción custom in-memory.  Keq(T) usa forma 2-param "
                    "(ΔCp=0); error crece a T lejana de 298 K."),
         kinetics_available=False,
+        origin=origin,
+        estimation_method=est_method,
+        estimation_uncertainty_kJ_mol=est_unc,
+        transformation_id=transformation_id,
+        confidence_mechanism=conf_mech,
+        confidence_thermo=conf_th,
     )
 
 

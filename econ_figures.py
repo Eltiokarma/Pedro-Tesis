@@ -90,12 +90,17 @@ def cashflow_figure(cashflow, payback_year=None) -> Tuple[Optional[object], Opti
             # de esa fila es el marcador.
             idx = min(int(math.floor(payback_year)), len(op_rows) - 1)
             marker_x = op_rows[idx]["year"] - 1 + (payback_year - int(payback_year))
-            ax.axvline(marker_x, color=_tok("spec"), lw=1.4,
+            # spec_ink (no spec): en dark el par _ink es más claro/pesado
+            # (#b4befa vs #92a0ef) — la anotación quedaba tenue (§G.2
+            # auditoría 2); en light gana profundidad sin salir de la
+            # familia spec.
+            ax.axvline(marker_x, color=_tok("spec_ink"), lw=1.4,
                        ls="--")
             ax.annotate(f"payback ≈ {payback_year:.1f}",
                         xy=(marker_x, 0),
                         xytext=(4, 6), textcoords="offset points",
-                        fontsize=7, color=_tok("spec"))
+                        fontsize=7, fontweight="bold",
+                        color=_tok("spec_ink"))
         ax.set_xlabel("Año de operación", fontsize=8)
         ax.set_ylabel("Cash flow (M USD)", fontsize=8)
         ax.set_title("Perfil de cash flow", fontsize=9)

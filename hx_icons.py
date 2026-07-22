@@ -198,12 +198,13 @@ def glyph_icon(name: str, size: int, color: str, stroke: float = 1.5) -> QIcon:
 class GlyphLabel(QLabel):
     """QLabel que muestra un glyph HX renderizado a un tamaño/color dado."""
 
-    def __init__(self, name: str, size: int = 16, color: str = "#000",
+    def __init__(self, name: str, size: int = 16, color: str | None = None,
                  stroke: float = 1.6, parent=None):
         super().__init__(parent)
         self._name, self._size, self._stroke = name, size, stroke
         self.setFixedSize(size, size)
-        self.set_color(color)
+        from tokens import TOK
+        self.set_color(color or TOK["ink"])
 
     def set_color(self, color: str):
         self._color = color
@@ -211,4 +212,5 @@ class GlyphLabel(QLabel):
 
     def set_glyph(self, name: str, color: str | None = None):
         self._name = name
-        self.set_color(color or getattr(self, "_color", "#000"))
+        from tokens import TOK
+        self.set_color(color or getattr(self, "_color", None) or TOK["ink"])

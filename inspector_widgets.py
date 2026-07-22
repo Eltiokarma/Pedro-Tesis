@@ -66,8 +66,10 @@ _BAR_KIND = {
 
 
 def _tok(name: str, fallback: str = "ink") -> str:
-    """Lee TOK[name] en caliente (TOK muta in-place al cambiar tema)."""
-    return _bi.TOK.get(name, _bi.TOK.get(fallback, "#000000"))
+    """Lee TOK[name] en caliente (TOK muta in-place al cambiar tema).
+    Sin fallback hex: "ink" siempre existe en la paleta — un hex fijo
+    derivaría en silencio al cambiar tema (§G.3 auditoría 2)."""
+    return _bi.TOK.get(name, _bi.TOK[fallback])
 
 
 # ─────────────────────────────────────────────────────────────────────

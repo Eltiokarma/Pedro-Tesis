@@ -1480,6 +1480,10 @@ class CustomReactionDialog(QDialog):
         # Procedencia del ΔH cuando vino del predictor (joback/benson) —
         # None mientras el valor sea Hess local o manual.
         self._dh_from_predictor = None
+        self._dh_predictor_unc = 0.0
+        # Procedencia de la reacción cuando la armó "Sugerir productos"
+        # (C.3 ciclo 4) — None mientras sea escrita a mano.
+        self._suggestion_provenance = None
 
         # Cargar thermo_db
         try:
@@ -2066,6 +2070,18 @@ class CustomReactionDialog(QDialog):
             QMessageBox.warning(self, "Sugerir productos",
                 "La reacción seleccionada no trae estequiometría.")
             return
+        # Registrar la procedencia de la sugerencia aceptada (C.3):
+        # sin esto la reacción quedaba indistinguible de una manual.
+        _org = getattr(rxn, "origin", None)
+        _cm = getattr(rxn, "confidence_mechanism", None)
+        _ct = getattr(rxn, "confidence_thermo", None)
+        self._suggestion_provenance = {
+            "origin": getattr(_org, "value", None) or "predicted",
+            "transformation_id":
+                getattr(rxn, "transformation_id", "") or None,
+            "confidence_mechanism": getattr(_cm, "value", None),
+            "confidence_thermo": getattr(_ct, "value", None),
+        }
         self.reactant_chips.clear()
         self.product_chips.clear()
         for sp in stoich:
@@ -2107,6 +2123,7 @@ class CustomReactionDialog(QDialog):
                 self._dh_from_predictor = str(
                     getattr(est, "method", "") or "estimado")
                 unc = float(getattr(est, "uncertainty", 0.0) or 0.0)
+                self._dh_predictor_unc = unc
                 suffix = f" ±{unc:.0f}" if unc else ""
                 self.badge_dh.setText(
                     f"ΔH: {float(val):+.1f} kJ/mol "
@@ -2144,6 +2161,22 @@ class CustomReactionDialog(QDialog):
                 d["keq_298"] = keq
             else:
                 d["ds_rxn_298_J_mol_K"] = ds
+        # Procedencia (C.3 ciclo 4): si la reacción salió de "Sugerir
+        # productos" persiste origin/template/confianzas del predictor;
+        # escrita a mano queda 'user' (default de reaction_from_dict).
+        prov = self._suggestion_provenance or {}
+        if prov.get("origin"):
+            d["origin"] = prov["origin"]
+        if prov.get("transformation_id"):
+            d["transformation_id"] = prov["transformation_id"]
+        if prov.get("confidence_mechanism"):
+            d["confidence_mechanism"] = prov["confidence_mechanism"]
+        if prov.get("confidence_thermo"):
+            d["confidence_thermo"] = prov["confidence_thermo"]
+        if self._dh_from_predictor:
+            d["estimation_method"] = self._dh_from_predictor
+            if self._dh_predictor_unc:
+                d["estimation_uncertainty_kJ_mol"] = self._dh_predictor_unc
         try:
             _rdb.reaction_from_dict(d)
         except ValueError as e:
@@ -4112,6 +4145,12 @@ class StreamItem(QGraphicsPathItem):
         # handles draggables (uno por waypoint).  Se crean/muestran
         # solo cuando el stream está seleccionado.
         self._handles: list = []
+
+        # Bend points del último ruteo.  update_path() lo asigna al
+        # final; una rama de early-return (puerto sin resolver, stream
+        # flotante) puede salir antes — sin este default el atributo
+        # no existe y el acceso directo revienta con AttributeError.
+        self._last_pts: list | None = None
 
         # status del solver (verde/ámbar/rojo/azul).  Default "stale"
         # hasta que solve() corra y populé el status.
@@ -6679,6 +6718,12 @@ class FlowsheetMainWindow(QMainWindow):
             except Exception:
                 pass
             self._rebuild_scene()
+            # §G.1 auditoría 2: los solves internos mutaron el estado fuera
+            # de action_solve — el chip del topbar quedaría mintiendo el
+            # resultado del diagrama anterior. Mismo patrón honesto que el
+            # goal-seek: marcar dirty y volver el chip a "en espera".
+            self._dirty_after_solve = True
+            self.update_solver_chip("idle")
         return created
 
     def _apply_aux_visibility(self):
@@ -7552,7 +7597,10 @@ class FlowsheetMainWindow(QMainWindow):
         if not self.fs.blocks:
             QMessageBox.information(self, "Solve", "El diagrama está vacío.")
             return
+        import time as _time
+        _t0 = _time.perf_counter()
         result = fsolv.solve(self.fs)
+        _dt_solve = _time.perf_counter() - _t0
         # Aplicar status visual (semáforo) a cada bloque y stream
         self._apply_solver_status(result)
         # refrescar streams (mass_flow / T pueden haber cambiado)
@@ -7567,9 +7615,10 @@ class FlowsheetMainWindow(QMainWindow):
             "warning": "warning",
             "error":   "failed",
         }.get(result.overall_status, "idle")
-        n_iter = getattr(result, "iter_count", 0) or 0
-        dt = getattr(result, "elapsed_s", 0.0) or 0.0
-        self.update_solver_chip(chip_state, n_iter, dt)
+        # §G.1 auditoría 2: SolverResult expone `iterations` (no
+        # `iter_count`) y no mide tiempo — el chip recibía siempre 0/0.
+        n_iter = getattr(result, "iterations", 0) or 0
+        self.update_solver_chip(chip_state, n_iter, _dt_solve)
         # Refrescar burbujas con los valores resueltos
         if self._bubble_manager is not None:
             self._bubble_manager.refresh_all()
