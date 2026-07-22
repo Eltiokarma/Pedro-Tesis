@@ -104,3 +104,37 @@ def test_broyden_detecta_no_convergencia():
     tears = F._choose_tears(scc, fs)
     rs = F._solve_recycle_broyden(fs, scc, tears, max_iter=1)
     assert not rs.converged, "no debe declarar convergencia en 1 iteración"
+
+
+# ── BUG 11: convergencia falsa por G no-estacionaria + fuente stale ──────
+def test_nested_recycle_converge_con_estado_consistente():
+    """El ejemplo 'nested_recycle' (2 tears al mismo mixer, VF del flash
+    dependiente de composición) destapó DOS defectos compuestos:
+
+      (a) el UPDATE-closure excluía a TODO bloque que tocara un tear activo
+          — también al FUENTE pass-through (C-101), cuya salida-tear quedaba
+          stale (in=9353 / out=63983) y G(x) devolvía basura;
+      (b) Broyden declaraba converged=True con un residuo chico TRANSITORIO
+          (la composición va una ronda detrás de la masa → G no-estacionaria),
+          dejando un estado final desbalanceado (R-101 con Δ=49%).
+
+    Con los fixes: converge de verdad y el estado es consistente."""
+    import examples_registry as reg
+    fs = reg.load_example("nested_recycle")
+    res = F.solve(fs)
+    assert res.overall_status == "ok", \
+        f"nested_recycle debe resolver ok, got {res.overall_status}"
+    assert res.mass_balance_errors == [], res.mass_balance_errors
+    rs = res.recycle_solutions[0]
+    assert rs.converged, "el multitear debe converger de verdad"
+    # consistencia interna: cada bloque balancea (nada stale)
+    for b in fs.blocks.values():
+        m_in = sum(s.mass_flow for s in fs.streams.values() if s.dst == b.id)
+        m_out = sum(s.mass_flow for s in fs.streams.values() if s.src == b.id)
+        assert abs(m_in - m_out) <= max(m_in, 1.0) * 0.005, \
+            f"{b.name} desbalanceado: in={m_in:.1f} out={m_out:.1f}"
+    # balance GLOBAL: purga + producto = feed fresco (0.5% tol)
+    byname = {s.name: s for s in fs.streams.values()}
+    salida = byname["S-purge"].mass_flow + byname["S-prod"].mass_flow
+    assert abs(salida - 20000.0) < 100.0, \
+        f"global no cierra: feed=20000, purga+prod={salida:.1f}"

@@ -31,8 +31,16 @@ aparecieron dos defectos. Se documentan con reproducción mínima.
 - **`boiler_ft`** — `Boiler — fire tube`, BFW → vapor de proceso (6 MW). **BUG 9.**
 - **`letdown`** — `Valve — control globe`, letdown de presión de metanol. **BUG 10.**
 - **`blower`** — `Fan — centrifugal radial`, aire de combustión. **BUG 8.**
+- **`feed_effluent`** — Intercambio feed-efluente: HX 4 puertos standalone
+  (tube: feed frío / shell: efluente del reactor). Lazo TÉRMICO sin reciclo de
+  masa — audita la detección de ciclos port-aware fuera de un SCC real.
+- **`double_effect`** — Evaporador doble efecto (jugo 12% → 48% sólidos):
+  cadena evaporador→evaporador con composición derivada dos veces.
+- **`nested_recycle`** — Dos reciclos anidados al MISMO mixer (vapor con purga
+  vía compresor + reflujo líquido). **Destapó BUG 11 — el hallazgo más
+  importante de la auditoría** (multitear con convergencia falsa).
 
-Gate 52/52 verde.
+Gate 55/55 verde.
 
 ---
 
@@ -268,11 +276,75 @@ de llegada, igual que un compresor) — antes la convención solo aceptaba
 
 ---
 
+## BUG 11 — Multitear: convergencia FALSA con estado final desbalanceado
+
+**Severidad:** correctitud del solver (corazón del multitear). Destapado por
+`nested_recycle` (2 tears de fases distintas al mismo mixer, con el VF del
+flash dependiente de la composición del lazo). Dos defectos compuestos:
+
+### (a) El UPDATE-closure excluía al bloque FUENTE del tear
+
+El guard del closure saltaba **cualquier** bloque que tocara un tear activo
+(`proc_ins + proc_outs`). Eso protege al mixer **destino** (donde el tear
+transitorio en 0 es un sentinel), pero también bloqueaba al **fuente**
+pass-through: el compresor de reciclo C-101 quedaba con su salida-tear stale
+(`in=9353 / out=63983`, 6.8×) y las rondas declaraban "no hay más trabajo".
+G(x) devolvía el valor viejo → el "punto fijo" de G ni siquiera era físico
+(purga+producto = 63 016 con feed = 20 000).
+
+**Fix:** el guard ahora solo excluye tears en las **entradas** (`proc_ins`).
+Re-derivar la salida-tear stale en su fuente es la "producción forward honesta"
+que el propio diseño del tearing sanciona. En fase (c) los tears están LOCKED →
+`_is_mass_locked` los protege igual que antes (S2-B intacto).
+
+### (b) Broyden declaraba converged=True con un residuo transitorio
+
+G depende también del estado de **composición** (el VF del flash usa la
+composición de la ronda anterior) → G no es estacionaria y un residuo chico
+puede ser un artefacto. Broyden aceptaba el primer `|G(x)−x| < tol` y la pasada
+final de fijado producía un estado lejos del punto fijo (R-101 con Δ=49%,
+`status=error` pero `converged=True` — contradictorio).
+
+**Fix:** VERIFICACIÓN de estacionariedad — se exigen **dos residuos
+consecutivos** chicos antes de declarar convergencia; si el segundo regresa
+grande, se sigue iterando (nunca un "converged" falso). Más un **polish** de
+sustitución post-convergencia (hasta 6 pasadas x←G(x), corte en tol/10).
+
+### (c) Las salidas del flash quedaban un paso de composición atrás
+
+Dentro de cada ronda del forward-pass, el orden era `flash → … →
+auto_propagate_compositions`: el flash computaba su split con la composición
+del feed de la ronda ANTERIOR, y el ratchet elemental (`test_element_balance`)
+lo detectó — 1.45 % de C no conservado en V-101 (metanol: entra 31 436, sale
+30 979). Re-correr `solve_flashes` sobre el estado final cerraba exacto
+(Δ=0.0) → era orden de última escritura, no el modelo VLE.
+
+**Fix:** reordenar la ronda — `auto_propagate_compositions` PRIMERO, unit-ops
+después, cierre de masa al final. La ronda que rompe el loop (sin más trabajo
+de masa) deja flash/separadores consistentes con la composición final; en un
+punto estacionario es equivalente (goldens existentes intactos).
+
+### Resultado
+
+`nested_recycle` ahora converge de verdad en ~5 iteraciones Broyden (la
+aceleración cuasi-Newton real, una vez que G es consistente), con balance
+global cerrado (Δ=0.005 %), **elemental-limpio** (ratchet C/H/O verde) y
+VF≈0.53 en el punto fijo físico (el lazo enriquece metanol hasta que
+purga+producto igualan al feed — sensato).
+
+Regresión: `tests/test_multitear_broyden.py::test_nested_recycle_converge_con_estado_consistente`
+(consistencia por bloque + balance global) + el ratchet elemental existente.
+Los 29 tests previos de multitear/tearing (S2-B/C/D, anchor, Broyden,
+Wegstein vectorial) pasan intactos y el gate 55/55 no movió ningún golden
+existente.
+
+---
+
 ## Estado
 
 | Hallazgo | Estado |
 |---|---|
-| 11 ejemplos nuevos (`salt_crystal`…`blower`) | AGREGADOS al set (gate 52/52) |
+| 14 ejemplos nuevos (`salt_crystal`…`nested_recycle`) | AGREGADOS al set (gate 55/55) |
 | BUG 1 — splitter mapea fracciones por posición | **CORREGIDO** — `split_fraction` keyed + 5 ejemplos migrados |
 | BUG 2 — separador rutea al revés sin warning | **CORREGIDO** — `[W-PHYS-NONVOL]` en el audit |
 | BUG 3 — ciclón mal-etiqueta fases de salida | **CORREGIDO** — fase del carrier desde el feed |
@@ -283,10 +355,11 @@ de llegada, igual que un compresor) — antes la convención solo aceptaba
 | BUG 8 — fan/blower sin sizer → costo cero | **CORREGIDO** — `size_fan` |
 | BUG 9 — caldera piro/acuotubular sin sizer → costo cero | **CORREGIDO** — `size_boiler_steam` |
 | BUG 10 — válvulas sin sizer → costo cero | **CORREGIDO** — `size_valve` |
+| BUG 11 — multitear: convergencia falsa (fuente stale + G no-estacionaria) | **CORREGIDO** — closure fuente-del-tear + verificación de estacionariedad |
 
-Los 10 bugs quedaron corregidos con reproducción mínima y regresión. Los fixes
-son aditivos y backward-compatible (goldens existentes intactos, gate 52/52,
-531 tests de lógica verdes). Método: "agregar al set + gate" — se agregaron 11
+Los 11 bugs quedaron corregidos con reproducción mínima y regresión. Los fixes
+son aditivos y backward-compatible (goldens existentes intactos, gate 55/55,
+533 tests de lógica verdes). Método: "agregar al set + gate" — se agregaron 14
 ejemplos limpios (equipos poco usados + topologías raras) y los defectos que
 destaparon se corrigieron en el mismo ciclo. La auditoría sistemática del
 catálogo cerró **toda** la clase de huecos de sizing salvo los internos de

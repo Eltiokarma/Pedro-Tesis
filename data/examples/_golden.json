@@ -170,6 +170,15 @@
   "overall_status": "ok",
   "sum_duty": 130.490264
  },
+ "double_effect": {
+  "ISBL": 5673348.88,
+  "energy_errors": 0,
+  "mass_errors": 0,
+  "n_blocks": 3,
+  "n_streams": 6,
+  "overall_status": "ok",
+  "sum_duty": 5200.390321
+ },
  "ethane_pfr": {
   "ISBL": 6219933.84,
   "energy_errors": 0,
@@ -196,6 +205,15 @@
   "n_streams": 11,
   "overall_status": "ok",
   "sum_duty": 69.922634
+ },
+ "feed_effluent": {
+  "ISBL": 3438343.81,
+  "energy_errors": 0,
+  "mass_errors": 0,
+  "n_blocks": 4,
+  "n_streams": 6,
+  "overall_status": "ok",
+  "sum_duty": 311.998443
  },
  "gas_sweet": {
   "ISBL": 12579750.37,
@@ -304,6 +322,15 @@
   "n_streams": 9,
   "overall_status": "ok",
   "sum_duty": -667.240902
+ },
+ "nested_recycle": {
+  "ISBL": 2981566.16,
+  "energy_errors": 0,
+  "mass_errors": 0,
+  "n_blocks": 7,
+  "n_streams": 11,
+  "overall_status": "ok",
+  "sum_duty": 134.445666
  },
  "nuclear": {
   "ISBL": 1518263.23,
