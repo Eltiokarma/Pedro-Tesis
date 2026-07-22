@@ -57,10 +57,16 @@ def test_recycle_converge_a_5000():
 
 def test_balance_global_y_elemental_cierran():
     fs, _ = _solve()
+    # Borde de planta = corrientes cuyo src/dst NO es un equipo interno.
+    # Cuenta como borde: src/dst==0 (feeds/products de borde) y los nodos
+    # 'Ambient' (atmósfera: venteos, purgas, intake de aire) — un stream
+    # a/desde un Ambient cruza el límite de batería, no es equipo interno.
+    real = {bid for bid, b in fs.blocks.items()
+            if (b.eq_type or "") != "Ambient"}
     feeds = sum(s.mass_flow for s in fs.streams.values()
-                if s.src not in fs.blocks and s.dst in fs.blocks)
+                if s.src not in real and s.dst in real)
     sinks = sum(s.mass_flow for s in fs.streams.values()
-                if s.dst not in fs.blocks and s.src in fs.blocks)
+                if s.dst not in real and s.src in real)
     assert abs(feeds - sinks) < 1e-6, f"global no cierra: feeds={feeds} sinks={sinks}"
     # balance elemental N y H sobre el reactor R-101 (mass-weighted comp).
     r101 = next(b for b in fs.blocks.values() if b.name == "R-101")
