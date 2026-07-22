@@ -490,6 +490,57 @@ todos → under masivo, lock ×2 en sugar R-102 → over, sin falsos over).
 
 ---
 
+## Matriz frontend por eq_type (Frente 1+1b) — dos mudos reales + backlog acotado
+
+Nace `audit_frontend_matrix.py` (headless): para cada uno de los 56 eq_types
+del catálogo audita instancia en los 58 ejemplos (RESUELTOS — la evidencia
+depende del solver), evidencia específica de `inspector_evidence`, secciones
+de `block_inspector`, glyph PFD, puertos y sizer. Matriz generada en
+`docs/AUDITORIA_FRONTEND_EQUIPOS_MATRIZ.md`.
+
+### Verde congelado (tests/test_frontend_matrix.py)
+
+- **0 eq_types sin glyph PFD propio, 0 sin puertos catalogados.**
+- **Sin sizer: exactamente los 4 internos de columna** (trays/packing) —
+  la excepción deliberada se mantiene.
+- `test_stream_orthogonality` corre VERDE con display (7/7) — el pendiente
+  "hoy falla por entorno GUI" del plan era solo entorno.
+
+### Dos mudos reales corregidos
+
+1. **Expansor/turbina sin evidencia**: la convención del proyecto es
+   "compresor con P_out < P_in = turbina" y el solver computa la expansión
+   (T_out, W generado, duty<0), pero `design_compressor_for_block` devuelve
+   None con ΔP negativo → `compressor_text/metrics` mostraban NADA (caso
+   K-501 de hno3, el expander de tail gas de 700 kW). **Fix:**
+   `_expander_case` lee el estado resuelto (sin recomputar física) y
+   texto+métricas muestran ratio de expansión, T in/out y W generada con η.
+2. **Reactor 'equilibrium' sin lista de reacciones mudo**: `reactor_text`
+   exigía reactions/custom o modo pfr/cstr/batch/stoich — el patrón
+   sancionado (equilibrium + composiciones lockeadas, caso pfr/parallel)
+   no mostraba nada en reactividad. **Fix:** 'equilibrium' cuenta como modo
+   declarado SOLO para eq_types de reactor (es el default del dataclass en
+   TODOS los bloques — sin el guard, bombas y válvulas reportaban evidencia
+   de reactor).
+
+### Backlog documentado (no corregido en esta sesión)
+
+- **7 tipos con instancia y sin evidencia específica**: Crystallizer,
+  Dryer — drum, Evaporator — vertical (tienen editor de specs en la sección
+  "especial" pero ninguna evidencia computada post-solve), Mixer — static,
+  Valve — control globe, Boiler — fire tube/water tube (nada más allá de lo
+  genérico). Candidatos a una pasada de evidencia dedicada.
+- **21 tipos sin instancia en los 58 ejemplos** (variantes de familia:
+  U-tube, double pipe, condensers, rotary, reciprocating, reformer,
+  fan axial, trays/packing, mixer inline, decanter centrifuge, relief/3-way,
+  natural draft). Glyph/puertos/sizer están; nunca se vieron en UI real.
+- **1b — pills de streams**: muestran nombre/fase/T/P/masa/entalpía/
+  composición y distinguen P spec vs auto, pero NO marcan el estado sudoku
+  de la masa (locked vs derivada) ni de T. Decisión visual pendiente
+  (candidata al ciclo 3 de diseño).
+
+---
+
 ## Estado
 
 | Hallazgo | Estado |
@@ -510,6 +561,7 @@ todos → under masivo, lock ×2 en sugar R-102 → over, sin falsos over).
 | BUG 13 — generador AUTO: 89/567 combustiones desbalanceadas | **CORREGIDO** — heteroátomos rechazados + escala {1,2,4}; cache 504/0 |
 | Acople predictor — include_auto ignorado / dock huérfano / ΔH descartado | **CORREGIDO** — loader + dock montado + fallback con procedencia |
 | DOF audit — ciego a reciclos (7 falsos under) / rama over muerta / veredicto por total | **CORREGIDO** — status torn vía SCC + conflicto entre locks + veredicto por contadores |
+| Frontend — expansor mudo / reactor equilibrium mudo | **CORREGIDO** — _expander_case + modo equilibrium con guard de eq_type |
 
 Los 12 bugs quedaron corregidos con reproducción mínima y regresión. Los fixes
 son aditivos y backward-compatible (goldens existentes intactos, gate 58/58,

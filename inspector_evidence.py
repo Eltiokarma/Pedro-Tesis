@@ -27,7 +27,15 @@ def reactor_text(block) -> Optional[str]:
         rxs = list(getattr(block, "reactions", None) or [])
         cust = list(getattr(block, "custom_reactions", None) or [])
         mode = getattr(block, "reactor_mode", "") or ""
-        if not (rxs or cust or mode in ("pfr", "cstr", "batch", "stoich")):
+        # 'equilibrium' cuenta como modo declarado SOLO en eq_types de
+        # reactor: es el default del dataclass en TODOS los bloques
+        # (bombas incluidas), pero un reactor de equilibrio sin lista
+        # de reacciones (patrón sancionado, composiciones lockeadas)
+        # no mostraba NADA en la sección de reactividad.
+        es_reactor = "reactor" in (getattr(block, "eq_type", "") or "").lower()
+        if not (rxs or cust
+                or mode in ("pfr", "cstr", "batch", "stoich")
+                or (mode == "equilibrium" and es_reactor)):
             return None
         lines = []
         if mode:
@@ -391,6 +399,33 @@ def pump_figure(block, fs):
         return _no_fig(f"{type(e).__name__}: {e}")
 
 
+def _expander_case(block, fs) -> Optional[dict]:
+    """Datos de un expansor/turbina desde el estado RESUELTO.
+
+    Convención del proyecto: no hay tipo 'Turbine' — un compresor con
+    P_out < P_in es turbina/expansor (genera W, duty < 0). La física
+    vive en el solver; acá solo se lee para la evidencia — antes el
+    inspector mostraba NADA para estos bloques (design_compressor
+    devuelve None con ΔP negativo)."""
+    ins = [s for s in fs.streams.values() if s.dst == block.id]
+    outs = [s for s in fs.streams.values() if s.src == block.id]
+    if len(ins) != 1 or len(outs) != 1:
+        return None
+    feed, out = ins[0], outs[0]
+    P_in = float(feed.pressure_bar or 0.0)
+    P_out = float(out.pressure_bar or 0.0)
+    if feed.mass_flow <= 0 or P_out <= 0 or P_in <= P_out:
+        return None
+    duty = float(getattr(block, "duty", 0.0) or 0.0)
+    return {
+        "ratio_exp": P_in / P_out,
+        "T_in_C": float(feed.temperature),
+        "T_out_C": float(out.temperature),
+        "W_gen_kW": (-duty) if duty < 0 else 0.0,
+        "eta": float(getattr(block, "efficiency", 0.0) or 0.85),
+    }
+
+
 def compressor_text(block, fs) -> Optional[str]:
     try:
         eq = (block.eq_type or "").lower()
@@ -399,7 +434,19 @@ def compressor_text(block, fs) -> Optional[str]:
         import equipment_design as _ed
         cs = _ed.design_compressor_for_block(block, fs)
         if cs is None:
-            return None
+            ex = _expander_case(block, fs)
+            if ex is None:
+                return None
+            lines = [
+                "Turbina / expansor (P_out < P_in → genera trabajo)",
+                f"Ratio P_in/P_out: {ex['ratio_exp']:.2f}",
+                f"T entrada:        {ex['T_in_C']:.1f} °C",
+                f"T descarga:       {ex['T_out_C']:.1f} °C",
+            ]
+            if ex["W_gen_kW"] > 0:
+                lines.append(f"W generada:       {ex['W_gen_kW']:,.1f} kW  "
+                             f"(η={ex['eta']:.2f})")
+            return "\n".join(lines)
         lines = [
             f"Ratio P_out/P_in: {cs['ratio']:.2f}",
             f"Etapas rec.:      {cs['n_stages_rec']}",
@@ -1407,7 +1454,15 @@ def reactor_metrics(block) -> Optional[dict]:
         rxs = list(getattr(block, "reactions", None) or [])
         cust = list(getattr(block, "custom_reactions", None) or [])
         mode = getattr(block, "reactor_mode", "") or ""
-        if not (rxs or cust or mode in ("pfr", "cstr", "batch", "stoich")):
+        # 'equilibrium' cuenta como modo declarado SOLO en eq_types de
+        # reactor: es el default del dataclass en TODOS los bloques
+        # (bombas incluidas), pero un reactor de equilibrio sin lista
+        # de reacciones (patrón sancionado, composiciones lockeadas)
+        # no mostraba NADA en la sección de reactividad.
+        es_reactor = "reactor" in (getattr(block, "eq_type", "") or "").lower()
+        if not (rxs or cust
+                or mode in ("pfr", "cstr", "batch", "stoich")
+                or (mode == "equilibrium" and es_reactor)):
             return None
         metrics = []
         status = []
@@ -1987,7 +2042,29 @@ def compressor_metrics(block, fs) -> Optional[dict]:
         import equipment_design as _ed
         cs = _ed.design_compressor_for_block(block, fs)
         if cs is None:
-            return None
+            # Turbina/expansor — espejo de compressor_text (Gate 1:
+            # cada metric aparece textualmente en la *_text()).
+            ex = _expander_case(block, fs)
+            if ex is None:
+                return None
+            metrics = [
+                {"key": "ratio_exp", "label": "Ratio P_in/P_out",
+                 "value": f"{ex['ratio_exp']:.2f}", "state": "info"},
+                {"key": "Tin", "label": "T entrada",
+                 "value": f"{ex['T_in_C']:.1f}", "unit": "°C",
+                 "state": "info"},
+                {"key": "Tout", "label": "T descarga",
+                 "value": f"{ex['T_out_C']:.1f}", "unit": "°C",
+                 "state": "alert"},
+            ]
+            if ex["W_gen_kW"] > 0:
+                metrics.append(
+                    {"key": "Wgen", "label": "W generada",
+                     "value": f"{ex['W_gen_kW']:,.1f}", "unit": "kW",
+                     "state": "orange", "sub": f"η={ex['eta']:.2f}"})
+            status = [{"text": "Turbina / expansor", "kind": "accent"}]
+            return {"status": status, "metrics": metrics, "figure": None,
+                    "warnings": []}
         metrics = [
             {"key": "ratio", "label": "Ratio P_out/P_in",
              "value": f"{cs['ratio']:.2f}", "state": "info"},

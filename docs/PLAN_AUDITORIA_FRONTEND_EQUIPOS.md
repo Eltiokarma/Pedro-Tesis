@@ -8,7 +8,7 @@ PRs #134–#137 (17 ejemplos nuevos, 12 bugs corregidos, gate 58/58).
 |---|---|
 | 5 — Predictor (acople) | ✅ CERRADO (sesión 2026-07-22): BUG 13 + 3 eslabones cableados, ver `BUGS_ENCONTRADOS_EJEMPLOS.md` |
 | 3 — DOF/sudoku | ✅ CERRADO (sesión 2026-07-22): 58/58 exactos, status torn, over-spec detectable, ver `BUGS_ENCONTRADOS_EJEMPLOS.md` |
-| 1+1b — Matriz frontend + streams | pendiente |
+| 1+1b — Matriz frontend + streams | ✅ AUDITADO (sesión 2026-07-22): matriz + 2 mudos corregidos; backlog de 7 tipos sin evidencia + pills sin estado sudoku, ver `BUGS_ENCONTRADOS_EJEMPLOS.md` |
 | 2 — Casos de libro | pendiente |
 | 4 — Propiedades Perry | pendiente |
 
