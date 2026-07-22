@@ -457,6 +457,39 @@ del dock y refresh con ejemplo real).
 
 ---
 
+## Sistema sudoku / DOF (Frente 3) — el audit era ciego a reciclos y a la sobre-especificación
+
+Auditoría de `dof_audit.analyze_flowsheet` sobre los 58 ejemplos + tests de
+perturbación (quitar/agregar locks). Tres defectos:
+
+1. **Falsos under-specificados en los 7 ejemplos con reciclo** (hda,
+   haber_rec, industrial, feed_effluent, nested_recycle, hen, cw_loop —
+   hasta DOF=14 en industrial): `_determinable_masses` propagaba solo
+   forward y no sabía que el solver determina los lazos por convergencia
+   del tearing. **Fix:** `_recycle_stream_ids` reutiliza el Tarjan del
+   solver (`_strongly_connected_components` + `_streams_in_scc`); los
+   streams con ambos extremos en un SCC se siembran como determinables con
+   status nuevo **"torn"** (visible en el reporte: "Streams de reciclo
+   (convergen por tearing): N"). Resultado: **58/58 exactamente
+   determinados** (0 DOF, 0 masa indeterminable).
+2. **La rama "over" era código muerto**: los tres `*_dof` eran siempre ≥0,
+   así que `total_dof < 0` era inalcanzable — agregar un lock conflictivo
+   NO se detectaba jamás. **Fix:** un bloque con TODOS sus streams
+   lockeados cuyo balance no cierra (>1 %) es conflicto entre locks
+   (`mass_dof = -1`). El patrón sancionado de los ejemplos (locks que
+   cierran por diseño) no se flagea — verificado en los 58.
+3. **Veredicto por total en vez de por contadores**: un under y un over
+   simultáneos cancelaban `total_dof` a 0 → "BIEN ESPECIFICADO"; y total 0
+   con masa indeterminable caía por descarte en la rama "OVER". **Fix:**
+   summary y diálogo DOF deciden por `n_under`/`n_over`/indeterminables
+   (nuevo estado "mixto (sub + sobre)").
+
+Regresión: `tests/test_dof_audit_sudoku.py` (15 tests: 58/58 exactos,
+reciclos torn, quitar lock → under en soap/distillation/methanol, quitar
+todos → under masivo, lock ×2 en sugar R-102 → over, sin falsos over).
+
+---
+
 ## Estado
 
 | Hallazgo | Estado |
@@ -476,6 +509,7 @@ del dock y refresh con ejemplo real).
 | BUG 12 — splitter multi-entrada reparte solo la primera entrada | **CORREGIDO** — suma de entradas (3 rutas alineadas) |
 | BUG 13 — generador AUTO: 89/567 combustiones desbalanceadas | **CORREGIDO** — heteroátomos rechazados + escala {1,2,4}; cache 504/0 |
 | Acople predictor — include_auto ignorado / dock huérfano / ΔH descartado | **CORREGIDO** — loader + dock montado + fallback con procedencia |
+| DOF audit — ciego a reciclos (7 falsos under) / rama over muerta / veredicto por total | **CORREGIDO** — status torn vía SCC + conflicto entre locks + veredicto por contadores |
 
 Los 12 bugs quedaron corregidos con reproducción mínima y regresión. Los fixes
 son aditivos y backward-compatible (goldens existentes intactos, gate 58/58,

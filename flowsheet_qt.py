@@ -7170,11 +7170,19 @@ class FlowsheetMainWindow(QMainWindow):
 
         # Diálogo del kit (artboard 2d, caso 1): hero de stats + tabla
         # por bloque — muere el QTextEdit mono con el dump ASCII.
+        # Veredicto desde los contadores por bloque (un under y un over
+        # simultáneos cancelan el total a 0 — no es "bien especificado").
         dof = report.total_dof
-        tone = "ok" if dof == 0 else ("warn" if dof > 0 else "bad")
-        estado = ("bien especificado" if dof == 0
-                  else "sub-especificado" if dof > 0
-                  else "sobre-especificado")
+        bien = (report.n_under == 0 and report.n_over == 0
+                and report.n_indeterminable_mass == 0)
+        if bien:
+            tone, estado = "ok", "bien especificado"
+        elif report.n_over and report.n_under:
+            tone, estado = "bad", "mixto (sub + sobre)"
+        elif report.n_over:
+            tone, estado = "bad", "sobre-especificado"
+        else:
+            tone, estado = "warn", "sub-especificado"
         dlg = KitDialog("Grados de libertad · Balance",
                         f"{report.n_blocks} bloques · {report.n_streams} "
                         f"corrientes · {report.n_components} componentes",
