@@ -93,6 +93,14 @@ TAU_REACTOR_DEFAULT = 600
 
 # Tiempos de residencia para vessels / separadores (s)
 TAU_VESSEL_DEFAULT = 300        # 5 min separación bifásica
+TAU_CRYSTALLIZER   = 7200       # 2 h — retención de magma (Perry §18): los
+                                # cristales necesitan tiempo para crecer; τ
+                                # de un cristalizador es horas, no minutos.
+
+# Flux típico de un filtro de banda al vacío [m³ de slurry / (m²·h)] — usado
+# para dimensionar el área de filtración desde el caudal (Sinnott §10, Perry
+# §18: 0.5–2 m³/m²·h según torta; 1.5 es un valor medio razonable).
+FILTER_BELT_FLUX_M3_M2_H = 1.5
 
 # Densidades default (kg/m³)
 RHO_LIQUID_DEFAULT = 800.0
@@ -571,6 +579,40 @@ def size_storage_tank(block, fs) -> Optional[float]:
     return max(V, 10.0)
 
 
+def size_crystallizer(block, fs) -> Optional[float]:
+    """V = m_in/ρ · τ_crystallizer (2 h).  Como size_vessel pero con el
+    tiempo de residencia largo propio de un cristalizador (retención de
+    magma para que crezca el cristal), no los 5 min de un separador."""
+    ins = [s for s in fs.streams.values() if s.dst == block.id]
+    if not ins:
+        return None
+    m_s = _flow_kg_s(sum(s.mass_flow for s in ins))
+    if m_s <= 0:
+        return None
+    rho = _rho_estimate(ins[0])
+    V = m_s / rho * TAU_CRYSTALLIZER
+    return max(V, 0.5)
+
+
+def size_filter(block, fs) -> Optional[float]:
+    """A [m²] = caudal volumétrico de slurry / flux del filtro de banda.
+
+    El S de un filtro de banda es el ÁREA de filtración, que se dimensiona
+    por el caudal de slurry a procesar y un flux típico (m³/m²·h), no por
+    duty ni volumen.  Antes no tenía sizer → un filtro desbloqueado quedaba
+    en S=0 (costo nulo)."""
+    ins = [s for s in fs.streams.values() if s.dst == block.id]
+    if not ins:
+        return None
+    m_s = _flow_kg_s(sum(s.mass_flow for s in ins))
+    if m_s <= 0:
+        return None
+    rho = _rho_estimate(ins[0])
+    Q_m3_h = (m_s / rho) * 3600.0            # caudal volumétrico [m³/h]
+    A = Q_m3_h / FILTER_BELT_FLUX_M3_M2_H
+    return max(A, 1.0)
+
+
 def size_evaporator(block, fs) -> Optional[float]:
     """A = |Q| / (U·ΔT_lm).  Mismo patrón que size_heat_exchanger,
     permite override por bloque y catálogo por tipo."""
@@ -688,7 +730,8 @@ SIZER_BY_EQTYPE = {
     "Heat exch. — WHB field erected": size_whb,
     "Evaporator — vertical":          size_evaporator,
     "Dryer — drum":                   size_evaporator,
-    "Crystallizer":                   size_vessel,
+    "Crystallizer":                   size_crystallizer,
+    "Filter — belt":                  size_filter,
 }
 
 
