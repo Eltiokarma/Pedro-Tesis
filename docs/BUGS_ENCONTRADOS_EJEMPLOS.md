@@ -137,6 +137,24 @@ Reproducción/regresión: `tests/test_splitter_tearing.py`
 (`test_splitter_posicional_rota_al_insertar_bloque` documenta el bug,
 `test_splitter_keyed_estable_ante_insercion` verifica el fix).
 
+### Respaldo en la UI (auditoría posterior)
+
+Tres consumidores UI-adyacentes leían **solo** la lista posicional y quedaban
+ciegos ante flowsheets keyed-only (los 5 ejemplos nuevos con splitter):
+
+| Consumidor | Antes | Ahora |
+|---|---|---|
+| `inspector_evidence.splitter_text/metrics` | "Salida 1/2/3 …%" o **nada** | nombre de stream + % (se ve QUÉ salida lleva QUÉ fracción) |
+| `flowsheet_export` (xlsx Equipment) | celda vacía | `S-top:0.300,S-side:0.240,…` |
+| `dof_audit._determinable_masses` | salidas keyed-only NO determinables | keyed cuenta igual que posicional |
+
+Fuente única nueva: `flowsheet_solver.effective_split_fractions(fs, block)` —
+el mismo criterio keyed-else-posicional que usa el solver. No hay editor de
+fracciones en la UI (solo display), así que no existe riesgo de edición
+ignorada. El resto de los cambios de la auditoría no necesita UI: los
+awareness warnings nuevos ([W-PHYS-NONVOL]) se renderizan genéricamente en
+`solver_report`, y el botón Auto-size recoge los sizers nuevos del registry.
+
 ---
 
 ## BUG 2 — Separador mal configurado rutea al revés en SILENCIO
@@ -374,6 +392,159 @@ Regresión: `tests/test_splitter_tearing.py::test_splitter_multientrada_distribu
 
 ---
 
+## BUG 13 — Generador AUTO: 89/567 combustiones desbalanceadas átomo a átomo
+
+**Severidad:** correctitud (datos). Encontrado en el Frente 5 de la auditoría
+de frontend (acople del predictor chemfx) al escribir el test de balance
+atómico del cache `auto_reactions_db.md`. Dos defectos independientes en
+`chemfx/auto_reactions/`:
+
+1. **Heteroátomos no manejados**: `generate()` parsea TODOS los elementos de
+   la fórmula pero la estequiometría solo balancea C/H/O/N/S. Un compuesto
+   clorado producía basura: `2 C2H3Cl3 + 5 O2 → 4 CO2 + 3 H2O` (pierde 6 Cl,
+   sobra 1 O). La variante incompleta ni siquiera maneja N/S (el N de
+   acetonitrilo desaparecía).
+2. **Escala ×2 insuficiente**: `n_O2 = a + b/4 - c/2 + e` tiene denominador 4;
+   con `b` impar el escalado ×2 dejaba `n_O2·2 = 5.5` y el `int()` truncaba a
+   5 → O desbalanceado (acetamida, acetonitrilo, anilina...).
+
+### Fix aplicado
+
+- `combustion_complete`: rechaza fórmulas con elementos fuera de C/H/O/N/S;
+  escala ∈ {1,2,4} eligiendo el primer factor que deja TODOS los coeficientes
+  enteros (+ `round` antes de `int`).
+- `combustion_incomplete`: rechaza fórmulas fuera de C/H/O (los compuestos
+  N/S conservan solo su combustión completa, que sí los maneja); misma escala.
+- Cache regenerado: 567 → **504 reacciones, 0 desbalanceadas**.
+
+Regresión: `tests/test_predictor_acople.py::test_loader_balance_atomico_muestral`.
+
+---
+
+## Acople del predictor (Frente 5) — tres eslabones sin cablear
+
+No son bugs de cálculo sino integración muerta, detectada trazando
+predictor → reactions_db → block → solver (plan `PLAN_AUDITORIA_FRONTEND_EQUIPOS.md`):
+
+1. **`include_auto` ignorado**: `predict_reactions()` aceptaba el flag con
+   `# noqa: ARG001` y `fa.auto` siempre era `[]` — las 504 combustiones/
+   crackings del cache no tenían loader y jamás llegaban al predictor ni al
+   diálogo "Sugerir productos". **Fix:** `chemfx/auto_reactions/loader.py`
+   (parser del cache, lazy/memoizado, degrada a `[]` sin archivo) +
+   `_find_auto_for_feed` (mismo contrato de matching que curated: todos los
+   reactantes en el feed, rango T) con ΔH por Hess local sobre thermo_db —
+   misma fuente que el resto del sistema. El diálogo ahora ofrece
+   curated + auto + predicted.
+2. **`ReactivityDock` huérfano**: definido en `chemfx/ui/reactivity_dock_qt.py`
+   pero NUNCA instanciado — el menú Vista, el hide inicial y el refresh
+   post-solve lo tomaban con `getattr(..., None)` y degradaban a no-op
+   silencioso (el badge del canvas sí funcionaba; el dock con navegación y
+   sugerencias, no). **Fix:** `_build_reactivity_dock()` en la ventana
+   principal (guardado: sin chemfx/Qt no se crea), oculto al arrancar,
+   toggle en Vista ▸ "Predictor de reactividad".
+3. **ΔH del predictor descartado**: al aceptar una reacción sugerida, el
+   diálogo recalcula ΔH por Hess con thermo_db; si una especie no tiene ΔHf
+   el ΔH quedaba **0 silencioso** aunque el predictor traía su estimación
+   Joback/Benson con incertidumbre. **Fix:** fallback a la estimación del
+   predictor con procedencia visible en el badge ("joback ±15"), que muere
+   apenas el user edita ΔH a mano.
+
+Verificado: degradado limpio sin rdkit/thermo en TODOS los puntos de acople
+(subprocess con import bloqueado); gate 58/58 intacto (anotación ≠ modelo).
+Regresión: `tests/test_predictor_acople.py` (10 tests: loader, matching por
+feed, rango T, ΔH Hess ≈ −802 kJ/mol para CH4, include_auto=False, montaje
+del dock y refresh con ejemplo real).
+
+---
+
+## Sistema sudoku / DOF (Frente 3) — el audit era ciego a reciclos y a la sobre-especificación
+
+Auditoría de `dof_audit.analyze_flowsheet` sobre los 58 ejemplos + tests de
+perturbación (quitar/agregar locks). Tres defectos:
+
+1. **Falsos under-specificados en los 7 ejemplos con reciclo** (hda,
+   haber_rec, industrial, feed_effluent, nested_recycle, hen, cw_loop —
+   hasta DOF=14 en industrial): `_determinable_masses` propagaba solo
+   forward y no sabía que el solver determina los lazos por convergencia
+   del tearing. **Fix:** `_recycle_stream_ids` reutiliza el Tarjan del
+   solver (`_strongly_connected_components` + `_streams_in_scc`); los
+   streams con ambos extremos en un SCC se siembran como determinables con
+   status nuevo **"torn"** (visible en el reporte: "Streams de reciclo
+   (convergen por tearing): N"). Resultado: **58/58 exactamente
+   determinados** (0 DOF, 0 masa indeterminable).
+2. **La rama "over" era código muerto**: los tres `*_dof` eran siempre ≥0,
+   así que `total_dof < 0` era inalcanzable — agregar un lock conflictivo
+   NO se detectaba jamás. **Fix:** un bloque con TODOS sus streams
+   lockeados cuyo balance no cierra (>1 %) es conflicto entre locks
+   (`mass_dof = -1`). El patrón sancionado de los ejemplos (locks que
+   cierran por diseño) no se flagea — verificado en los 58.
+3. **Veredicto por total en vez de por contadores**: un under y un over
+   simultáneos cancelaban `total_dof` a 0 → "BIEN ESPECIFICADO"; y total 0
+   con masa indeterminable caía por descarte en la rama "OVER". **Fix:**
+   summary y diálogo DOF deciden por `n_under`/`n_over`/indeterminables
+   (nuevo estado "mixto (sub + sobre)").
+
+Regresión: `tests/test_dof_audit_sudoku.py` (15 tests: 58/58 exactos,
+reciclos torn, quitar lock → under en soap/distillation/methanol, quitar
+todos → under masivo, lock ×2 en sugar R-102 → over, sin falsos over).
+
+---
+
+## Matriz frontend por eq_type (Frente 1+1b) — dos mudos reales + backlog acotado
+
+Nace `audit_frontend_matrix.py` (headless): para cada uno de los 56 eq_types
+del catálogo audita instancia en los 58 ejemplos (RESUELTOS — la evidencia
+depende del solver), evidencia específica de `inspector_evidence`, secciones
+de `block_inspector`, glyph PFD, puertos y sizer. Matriz generada en
+`docs/AUDITORIA_FRONTEND_EQUIPOS_MATRIZ.md`.
+
+### Verde congelado (tests/test_frontend_matrix.py)
+
+- **0 eq_types sin glyph PFD propio, 0 sin puertos catalogados.**
+- **Sin sizer: exactamente los 4 internos de columna** (trays/packing) —
+  la excepción deliberada se mantiene.
+- `test_stream_orthogonality` corre VERDE con display (7/7) — el pendiente
+  "hoy falla por entorno GUI" del plan era solo entorno.
+
+### Dos mudos reales corregidos
+
+1. **Expansor/turbina sin evidencia**: la convención del proyecto es
+   "compresor con P_out < P_in = turbina" y el solver computa la expansión
+   (T_out, W generado, duty<0), pero `design_compressor_for_block` devuelve
+   None con ΔP negativo → `compressor_text/metrics` mostraban NADA (caso
+   K-501 de hno3, el expander de tail gas de 700 kW). **Fix:**
+   `_expander_case` lee el estado resuelto (sin recomputar física) y
+   texto+métricas muestran ratio de expansión, T in/out y W generada con η.
+2. **Reactor 'equilibrium' sin lista de reacciones mudo**: `reactor_text`
+   exigía reactions/custom o modo pfr/cstr/batch/stoich — el patrón
+   sancionado (equilibrium + composiciones lockeadas, caso pfr/parallel)
+   no mostraba nada en reactividad. **Fix:** 'equilibrium' cuenta como modo
+   declarado SOLO para eq_types de reactor (es el default del dataclass en
+   TODOS los bloques — sin el guard, bombas y válvulas reportaban evidencia
+   de reactor).
+
+### Backlog documentado (no corregido en esta sesión)
+
+- **7 tipos con instancia y sin evidencia específica** — ✅ **CERRADO en la
+  sesión siguiente (2026-07-22)**: dryer/crystallizer/evaporator/boiler/
+  valve/mixer ganan par text+metrics en `inspector_evidence`, cableado en
+  `block_inspector.evidence_specs` y en la matriz. Los modos especiales
+  hablan en AMBOS estados (modo automático activo con specs del solver, y
+  patrón sancionado con corrientes lockeadas — evidencia derivada de
+  corrientes con la procedencia dicha, p.ej. "CF ×1.43 efectivo"). La
+  matriz quedó en **0 huecos didácticos** con guards anti-leak verificados
+  (`tests/test_evidencia_tipos_mudos.py`, 11 tests).
+- **21 tipos sin instancia en los 58 ejemplos** (variantes de familia:
+  U-tube, double pipe, condensers, rotary, reciprocating, reformer,
+  fan axial, trays/packing, mixer inline, decanter centrifuge, relief/3-way,
+  natural draft). Glyph/puertos/sizer están; nunca se vieron en UI real.
+- **1b — pills de streams**: muestran nombre/fase/T/P/masa/entalpía/
+  composición y distinguen P spec vs auto, pero NO marcan el estado sudoku
+  de la masa (locked vs derivada) ni de T. Decisión visual pendiente
+  (candidata al ciclo 3 de diseño).
+
+---
+
 ## Estado
 
 | Hallazgo | Estado |
@@ -391,6 +562,12 @@ Regresión: `tests/test_splitter_tearing.py::test_splitter_multientrada_distribu
 | BUG 10 — válvulas sin sizer → costo cero | **CORREGIDO** — `size_valve` |
 | BUG 11 — multitear: convergencia falsa (fuente stale + G no-estacionaria) | **CORREGIDO** — closure fuente-del-tear + verificación de estacionariedad |
 | BUG 12 — splitter multi-entrada reparte solo la primera entrada | **CORREGIDO** — suma de entradas (3 rutas alineadas) |
+| BUG 13 — generador AUTO: 89/567 combustiones desbalanceadas | **CORREGIDO** — heteroátomos rechazados + escala {1,2,4}; cache 504/0 |
+| Acople predictor — include_auto ignorado / dock huérfano / ΔH descartado | **CORREGIDO** — loader + dock montado + fallback con procedencia |
+| DOF audit — ciego a reciclos (7 falsos under) / rama over muerta / veredicto por total | **CORREGIDO** — status torn vía SCC + conflicto entre locks + veredicto por contadores |
+| Frontend — expansor mudo / reactor equilibrium mudo | **CORREGIDO** — _expander_case + modo equilibrium con guard de eq_type |
+| ρ líquida sin calibrar (agua −12 %, etanol +11 %) — capa 7 despoblada | **CORREGIDO** — rho_ref CRC para los 7 líquidos más usados; golden re-exportado (≤0.6 % ISBL) |
+| talara — splitter redistribuye al insertar pass-through (regla all-keyed-o-posicional ×4 rutas) | **CORREGIDO** — keyed parcial en effective_split_fractions como fuente única + inserción UI copia split_fraction |
 
 Los 12 bugs quedaron corregidos con reproducción mínima y regresión. Los fixes
 son aditivos y backward-compatible (goldens existentes intactos, gate 58/58,

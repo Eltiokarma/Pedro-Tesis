@@ -6,7 +6,7 @@
   "n_blocks": 10,
   "n_streams": 13,
   "overall_status": "ok",
-  "sum_duty": -103.412942
+  "sum_duty": -103.417728
  },
  "air_sep": {
   "ISBL": 2269553.86,
@@ -54,13 +54,13 @@
   "sum_duty": 69.246965
  },
  "boiler_ft": {
-  "ISBL": 1275871.27,
+  "ISBL": 1275284.09,
   "energy_errors": 0,
   "mass_errors": 0,
   "n_blocks": 2,
   "n_streams": 3,
   "overall_status": "warning",
-  "sum_duty": 6004.236339
+  "sum_duty": 6003.753209
  },
  "bread": {
   "ISBL": 1642841.38,
@@ -72,13 +72,13 @@
   "sum_duty": 10.383593
  },
  "bypass": {
-  "ISBL": 2964086.98,
+  "ISBL": 2963878.57,
   "energy_errors": 0,
   "mass_errors": 0,
   "n_blocks": 4,
   "n_streams": 6,
   "overall_status": "ok",
-  "sum_duty": 603.457695
+  "sum_duty": 603.287425
  },
  "cdu": {
   "ISBL": 5589429.14,
@@ -105,7 +105,7 @@
   "n_blocks": 2,
   "n_streams": 4,
   "overall_status": "ok",
-  "sum_duty": 0.28942
+  "sum_duty": 0.255366
  },
  "chloralkali_hcl": {
   "ISBL": 6288558.74,
@@ -114,25 +114,25 @@
   "n_blocks": 8,
   "n_streams": 13,
   "overall_status": "ok",
-  "sum_duty": -17.873138
+  "sum_duty": -17.873223
  },
  "cooling": {
-  "ISBL": 906055.43,
+  "ISBL": 904822.42,
   "energy_errors": 0,
   "mass_errors": 0,
   "n_blocks": 2,
   "n_streams": 3,
   "overall_status": "ok",
-  "sum_duty": -2013.966446
+  "sum_duty": -2015.258474
  },
  "cw_loop": {
-  "ISBL": 740086.76,
+  "ISBL": 739877.74,
   "energy_errors": 0,
   "mass_errors": 0,
   "n_blocks": 5,
   "n_streams": 10,
   "overall_status": "ok",
-  "sum_duty": 470.663142
+  "sum_duty": 470.490023
  },
  "cyclone": {
   "ISBL": 830822.99,
@@ -150,7 +150,7 @@
   "n_blocks": 2,
   "n_streams": 4,
   "overall_status": "ok",
-  "sum_duty": 0.194651
+  "sum_duty": 0.179765
  },
  "desal": {
   "ISBL": 7570989.39,
@@ -186,7 +186,7 @@
   "n_blocks": 3,
   "n_streams": 6,
   "overall_status": "ok",
-  "sum_duty": 5200.390321
+  "sum_duty": 5200.350365
  },
  "ethane_pfr": {
   "ISBL": 6219933.84,
@@ -216,13 +216,13 @@
   "sum_duty": 69.922634
  },
  "feed_effluent": {
-  "ISBL": 3438343.81,
+  "ISBL": 3438324.18,
   "energy_errors": 0,
   "mass_errors": 0,
   "n_blocks": 4,
   "n_streams": 6,
   "overall_status": "ok",
-  "sum_duty": 311.998443
+  "sum_duty": 311.978039
  },
  "gas_sweet": {
   "ISBL": 12579750.37,
@@ -231,7 +231,7 @@
   "n_blocks": 11,
   "n_streams": 16,
   "overall_status": "ok",
-  "sum_duty": 4480.949346
+  "sum_duty": 4438.84537
  },
  "glass": {
   "ISBL": 550974.64,
@@ -258,7 +258,7 @@
   "n_blocks": 12,
   "n_streams": 14,
   "overall_status": "ok",
-  "sum_duty": 60.185814
+  "sum_duty": 60.15916
  },
  "hda_full": {
   "ISBL": 30645844.58,
@@ -267,16 +267,16 @@
   "n_blocks": 22,
   "n_streams": 27,
   "overall_status": "ok",
-  "sum_duty": -553.940671
+  "sum_duty": -554.13625
  },
  "hen": {
-  "ISBL": 3668328.9,
+  "ISBL": 3668298.9,
   "energy_errors": 0,
   "mass_errors": 0,
   "n_blocks": 5,
   "n_streams": 8,
   "overall_status": "ok",
-  "sum_duty": 263.687655
+  "sum_duty": 263.663861
  },
  "hno3": {
   "ISBL": 9726215.23,
@@ -285,7 +285,7 @@
   "n_blocks": 20,
   "n_streams": 25,
   "overall_status": "ok",
-  "sum_duty": -843.315305
+  "sum_duty": -843.326043
  },
  "hydraulic": {
   "ISBL": 581835.06,
@@ -294,7 +294,7 @@
   "n_blocks": 3,
   "n_streams": 4,
   "overall_status": "ok",
-  "sum_duty": 9.360386
+  "sum_duty": 9.349639
  },
  "industrial": {
   "ISBL": 26946428.64,
@@ -303,7 +303,7 @@
   "n_blocks": 24,
   "n_streams": 30,
   "overall_status": "warning",
-  "sum_duty": -5473.507777
+  "sum_duty": -5475.375877
  },
  "ldpe": {
   "ISBL": 2144426.56,
@@ -321,16 +321,16 @@
   "n_blocks": 15,
   "n_streams": 22,
   "overall_status": "ok",
-  "sum_duty": 415.05391
+  "sum_duty": 414.938971
  },
  "letdown": {
-  "ISBL": 33566.27,
+  "ISBL": 33356.69,
   "energy_errors": 0,
   "mass_errors": 0,
   "n_blocks": 2,
   "n_streams": 3,
   "overall_status": "ok",
-  "sum_duty": 6.228871
+  "sum_duty": 6.070478
  },
  "methanol": {
   "ISBL": 5206941.66,
@@ -348,7 +348,7 @@
   "n_blocks": 7,
   "n_streams": 11,
   "overall_status": "ok",
-  "sum_duty": 134.445666
+  "sum_duty": 134.442124
  },
  "nuclear": {
   "ISBL": 1518263.23,
@@ -357,7 +357,7 @@
   "n_blocks": 4,
   "n_streams": 5,
   "overall_status": "ok",
-  "sum_duty": -1.263545
+  "sum_duty": -1.267461
  },
  "parallel": {
   "ISBL": 1398423.58,
@@ -366,7 +366,7 @@
   "n_blocks": 5,
   "n_streams": 7,
   "overall_status": "ok",
-  "sum_duty": 0.770106
+  "sum_duty": 0.863173
  },
  "pasteurizer": {
   "ISBL": 365098.99,
@@ -420,7 +420,7 @@
   "n_blocks": 19,
   "n_streams": 28,
   "overall_status": "ok",
-  "sum_duty": 1583.43729
+  "sum_duty": 1583.43471
  },
  "rankine": {
   "ISBL": 6522759.71,
@@ -429,7 +429,7 @@
   "n_blocks": 4,
   "n_streams": 5,
   "overall_status": "ok",
-  "sum_duty": -1.057408
+  "sum_duty": -1.060756
  },
  "rxn_flash_col": {
   "ISBL": 3057396.95,
@@ -447,7 +447,7 @@
   "n_blocks": 5,
   "n_streams": 8,
   "overall_status": "warning",
-  "sum_duty": 10.096473
+  "sum_duty": 10.085122
  },
  "sidedraw": {
   "ISBL": 36578.39,
@@ -456,7 +456,7 @@
   "n_blocks": 2,
   "n_streams": 5,
   "overall_status": "ok",
-  "sum_duty": 2600.754499
+  "sum_duty": 2600.731665
  },
  "smr_eq": {
   "ISBL": 9564627.81,
@@ -501,7 +501,7 @@
   "n_blocks": 38,
   "n_streams": 52,
   "overall_status": "ok",
-  "sum_duty": 9073.439807
+  "sum_duty": 9073.417994
  },
  "urea": {
   "ISBL": 4565492.08,

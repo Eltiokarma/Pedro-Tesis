@@ -101,4 +101,4 @@
 | Expander/turbina cobrado como consumo (generación eléctrica) | CORREGIDO |
 | Auto-sizing colapsa ISBL sin S fijado (+ sizers filtro/cristalizador) | CORREGIDO |
 | Mega-tanques 7d y feeds/products como tanques (→ day-tank 1d + corrientes de borde) | CORREGIDO |
-| talara: splitters FCC redistribuyen flujos al insertar bloque pass-through | PENDIENTE (aislado) |
+| talara: splitters FCC redistribuyen flujos al insertar bloque pass-through | **CORREGIDO** (2026-07-22) — keyed parcial en effective_split_fractions (fuente única ×4 rutas) + la inserción copia split_fraction; ver `AUDITORIA_TALARA.md` §D |

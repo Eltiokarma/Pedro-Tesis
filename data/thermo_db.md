@@ -40,6 +40,7 @@ Coeficientes para fase gas (ideal) y fase líquida separadas.
 - Tb (1 atm): 64.7 °C
 - Tc: 239.4 °C, Pc: 80.9 bar
 - omega: 0.566
+- rho_ref = 791.8 kg/m3 @ 20 °C
 
 ### Capa 1 — Antoine [NIST]
 Equation: log10(P_sat / kPa) = A - B / (T_°C + C)
@@ -82,6 +83,7 @@ dH_f_liq_298K = -239.2 kJ/mol
 - Tb (1 atm): 78.3 °C
 - Tc: 240.9 °C, Pc: 61.4 bar
 - omega: 0.644
+- rho_ref = 789.3 kg/m3 @ 20 °C
 
 ### Capa 1 — Antoine [NIST]
 Equation: log10(P_sat / kPa) = A - B / (T_°C + C)
@@ -124,6 +126,7 @@ dH_f_liq_298K = -277.0 kJ/mol
 - Tb (1 atm): 100.0 °C
 - Tc: 373.9 °C, Pc: 220.6 bar
 - omega: 0.344
+- rho_ref = 998.2 kg/m3 @ 20 °C
 
 ### Capa 1 — Antoine [NIST]
 Equation: log10(P_sat / kPa) = A - B / (T_°C + C)
@@ -166,6 +169,7 @@ dH_f_liq_298K = -285.83 kJ/mol
 - Tb (1 atm): 80.1 °C
 - Tc: 289.0 °C, Pc: 48.9 bar
 - omega: 0.211
+- rho_ref = 876.5 kg/m3 @ 20 °C
 
 ### Capa 1 — Antoine [NIST]
 Equation: log10(P_sat / kPa) = A - B / (T_°C + C)
@@ -208,6 +212,7 @@ dH_f_liq_298K = 49.08 kJ/mol
 - Tb (1 atm): 110.6 °C
 - Tc: 318.6 °C, Pc: 41.0 bar
 - omega: 0.263
+- rho_ref = 866.9 kg/m3 @ 20 °C
 
 ### Capa 1 — Antoine [NIST]
 Equation: log10(P_sat / kPa) = A - B / (T_°C + C)
@@ -1168,6 +1173,7 @@ dH_f_liq_298K = N/A
 - Tb (1 atm): 56.0 °C
 - Tc: 235.0 °C, Pc: 47.0 bar
 - omega: 0.307
+- rho_ref = 790.0 kg/m3 @ 20 °C
 
 ### Capa 1 — Antoine [NIST]
 Equation: log10(P_sat / kPa) = A - B / (T_°C + C)
@@ -4210,6 +4216,7 @@ dH_f_liq_298K = N/A
 - Tb (1 atm): 117.9 °C
 - Tc: 318.8 °C, Pc: 57.86 bar
 - omega: 0.4665
+- rho_ref = 1049.2 kg/m3 @ 20 °C
 
 ### Capa 2b — Cp líquido (DIPPR-100) [DIPPR]
 Equation: Cp_liq(T) = C1 + C2·T + C3·T² + C4·T³ + C5·T⁴   [J/(kmol·K)]

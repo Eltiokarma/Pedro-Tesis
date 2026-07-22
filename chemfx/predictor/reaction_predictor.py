@@ -104,6 +104,97 @@ def _find_curated_for_feed(feed_compounds: List[str], T_K: float) -> List:
 
 
 # ======================================================
+# AUTO (Fase 6) — combustiones/cracking del cache generado
+# ======================================================
+def _find_auto_for_feed(feed_compounds: List[str],
+                        T_K: float) -> List[PredictedReaction]:
+    """Busca en el cache auto_reactions_db.md las reacciones AUTO cuyos
+    reactantes estan TODOS en el feed y aplican a T_K — mismo contrato
+    de matching que _find_curated_for_feed (formula o thermo_name)."""
+    try:
+        from chemfx.auto_reactions.loader import load_auto_reactions
+        cache = load_auto_reactions()
+    except Exception as e:
+        logger.debug(f"load_auto_reactions fallo: {e}")
+        return []
+    if not cache:
+        return []
+
+    try:
+        import reactions_db as _rdb
+        _thermo_name = _rdb.thermo_name
+    except ImportError:
+        def _thermo_name(_f):
+            return None
+
+    feed_set = {c.lower() for c in feed_compounds}
+    out: List[PredictedReaction] = []
+    for d in cache:
+        T_min = d.get("T_min_K", 0.0) or 0.0
+        T_max = d.get("T_max_K", 10000.0) or 10000.0
+        if not (T_min <= T_K <= T_max):
+            continue
+        reactants_found = 0
+        reactants_in_feed = True
+        for sp in d.get("stoich", []):
+            if sp.nu < 0:
+                reactants_found += 1
+                names = {sp.formula.lower()}
+                try:
+                    tn = _thermo_name(sp.formula)
+                except Exception:
+                    tn = None
+                if tn:
+                    names.add(tn.lower())
+                if not names & feed_set:
+                    reactants_in_feed = False
+                    break
+        if reactants_found == 0 or not reactants_in_feed:
+            continue
+
+        # Termodinamica: Hess sobre thermo_db (solo para las matcheadas —
+        # el cache no persiste ΔH; misma fuente que el resto del sistema).
+        dh298 = None
+        conf_thermo = Confidence.MEDIA
+        try:
+            reactants = []
+            products = []
+            resolvable = True
+            for sp in d["stoich"]:
+                tn = _thermo_name(sp.formula)
+                if not tn:
+                    resolvable = False
+                    break
+                (reactants if sp.nu < 0 else products).append(
+                    (tn, abs(int(sp.nu))))
+            if resolvable and reactants and products:
+                th = thermo_estimator.estimate_reaction_thermo(
+                    reactants=reactants, products=products, T_K=T_K)
+                dh298 = th.get("delta_h_298_kJ_mol")
+                conf_thermo = th.get("overall_confidence", Confidence.MEDIA)
+        except Exception as e:
+            logger.debug(f"thermo de {d.get('id')} no estimable: {e}")
+
+        out.append(PredictedReaction(
+            id=d.get("id", "AUTO_?"),
+            transformation_id=d.get("category", "auto"),
+            origin=Origin.AUTO,
+            stoichiometry=list(d.get("stoich", [])),
+            delta_h_298=dh298,
+            # Mecanismo conocido (combustion/cracking balanceados
+            # atomicamente por el generator) — la incertidumbre esta en
+            # la termodinamica estimada, no en que la reaccion exista.
+            confidence_mechanism=Confidence.ALTA,
+            confidence_thermo=(conf_thermo if isinstance(
+                conf_thermo, Confidence) else Confidence.MEDIA),
+            T_range_K=(T_min, T_max),
+            display_label=d.get("name", d.get("id", "")),
+            notes=d.get("comments", ""),
+        ))
+    return out
+
+
+# ======================================================
 # PREDICTED — aplica templates T01-T20
 # ======================================================
 def _build_stoich_entries(reactants: List[Tuple[str, int]],
@@ -338,12 +429,12 @@ def predict_reactions(
     P_bar: float = 1.0,
     tau_s: Optional[float] = None,
     include_curated: bool = True,
-    include_auto: bool = True,    # noqa: ARG001 (Fase 6)
+    include_auto: bool = True,
     include_predicted: bool = True,
 ) -> FeedAnalysis:
     """API principal del predictor. Devuelve FeedAnalysis con:
       - reacciones curadas aplicables (de reactions_db)
-      - reacciones AUTO aplicables (Fase 6 — placeholder ahora)
+      - reacciones AUTO aplicables (combustion/cracking del cache)
       - reacciones PREDICTED detectadas (templates T01-T20)
       - warnings de peligros (Fase 7 — placeholder)
       - sugerencias del asistente (Fase 7 — placeholder)
@@ -372,8 +463,14 @@ def predict_reactions(
             logger.debug(f"_find_curated_for_feed fallo: {e}")
             fa.curated = []
 
-    # 2. AUTO (Fase 6 — placeholder)
+    # 2. AUTO (Fase 6 — combustiones/cracking del cache generado)
     fa.auto = []
+    if include_auto:
+        try:
+            fa.auto = _find_auto_for_feed(feed_compounds, T_K)
+        except Exception as e:
+            logger.debug(f"_find_auto_for_feed fallo: {e}")
+            fa.auto = []
 
     # 3. PREDICTED (templates T01-T20)
     if include_predicted and RDKIT_AVAILABLE:

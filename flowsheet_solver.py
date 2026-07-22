@@ -715,18 +715,10 @@ def _solve_mass_iteration(fs):
         if getattr(b, "splitter_active", False) and len(outs) >= 2:
             ins_resolved = all(_is_mass_locked(s) or s.mass_flow > 0
                                for s in proc_ins)
-            # Mismo criterio keyed-por-identidad que solve_splitters: si TODAS
-            # las salidas traen split_fraction, se usa ese mapeo estable.
-            _keyed = [getattr(s, "split_fraction", None) for s in outs]
-            if all(k is not None for k in _keyed):
-                _pairs = list(zip(outs, [float(k) for k in _keyed]))
-            else:
-                fracs = list(getattr(b, "splitter_fractions", []) or [])
-                if len(fracs) != len(outs):
-                    fracs = [1.0 / len(outs)] * len(outs)
-                _pairs = list(zip(outs, fracs))
-            f_tot = sum(f for _, f in _pairs)
-            if ins_resolved and f_tot > 0:
+            # Fuente única de fracciones (keyed total/parcial/posicional):
+            # effective_split_fractions — misma regla que solve_splitters.
+            _pairs = effective_split_fractions(fs, b)
+            if ins_resolved and _pairs:
                 sum_in = sum(s.mass_flow for s in proc_ins)
                 for s_out, frac in _pairs:
                     if _is_mass_locked(s_out) or s_out.mass_flow != 0:
@@ -734,7 +726,7 @@ def _solve_mass_iteration(fs):
                     # Un tear activo SÍ puede producirse acá: éste es su
                     # BLOQUE FUENTE (misma semántica que solve_splitters,
                     # que escribe todos los outs no lockeados).
-                    val = sum_in * frac / f_tot
+                    val = sum_in * frac
                     if val > 0:
                         s_out.mass_flow = val
                         propagated.append((s_out.name, val))
@@ -3990,6 +3982,52 @@ def solve_pressure_propagation(fs):
     return msgs
 
 
+def effective_split_fractions(fs, block):
+    """Fracciones EFECTIVAS de un splitter, como las resuelve el solver.
+
+    Regla (fuente ÚNICA — solve_splitters, la iteración de masa, el audit
+    W-SPLIT-LOCK y los consumidores de UI/export/DOF la llaman a ella;
+    antes cada sitio duplicaba la lógica y podían divergir):
+
+      · TODAS las salidas con split_fraction → mapeo keyed (estable ante
+        inserción/reordenamiento).
+      · ALGUNAS keyed (caso "insertar bloque pass-through": la edición
+        recrea UNA salida sin split_fraction) → las keyed conservan su
+        fracción y las nuevas se reparten el remanente 1−Σkeyed en partes
+        iguales.  Antes esto caía al reparto POSICIONAL y las fracciones
+        rotaban entre salidas (el pendiente de talara: editar un corte
+        del FCC redistribuía los otros cinco).
+      · NINGUNA keyed → posicional legacy (splitter_fractions; uniforme
+        si la lista no calza).
+
+    Devuelve lista [(stream_salida, fracción_normalizada)] o None si el
+    bloque no es splitter_active o no tiene ≥2 salidas.
+    """
+    if not getattr(block, "splitter_active", False):
+        return None
+    outs = [s for s in fs.streams.values() if s.src == block.id]
+    if len(outs) < 2:
+        return None
+    keyed = [getattr(s, "split_fraction", None) for s in outs]
+    n_keyed = sum(1 for k in keyed if k is not None)
+    if n_keyed == len(outs):
+        pairs = [(s, float(k)) for s, k in zip(outs, keyed)]
+    elif n_keyed > 0:
+        rem = max(0.0, 1.0 - sum(float(k) for k in keyed if k is not None))
+        share = rem / (len(outs) - n_keyed)
+        pairs = [(s, float(k) if k is not None else share)
+                 for s, k in zip(outs, keyed)]
+    else:
+        fracs = list(getattr(block, "splitter_fractions", []) or [])
+        if len(fracs) != len(outs):
+            fracs = [1.0 / len(outs)] * len(outs)
+        pairs = list(zip(outs, fracs))
+    total = sum(f for _, f in pairs)
+    if total <= 0:
+        return None
+    return [(s, f / total) for s, f in pairs]
+
+
 def solve_splitters(fs):
     """Para cada bloque con splitter_active=True, distribuye el feed
     según splitter_fractions y propaga composición idéntica a todos
@@ -4016,21 +4054,11 @@ def solve_splitters(fs):
         sum_in = sum(s.mass_flow for s in ins)
         # Fracciones ancladas por identidad (split_fraction por salida) tienen
         # prioridad: son ESTABLES ante inserción/reordenamiento de streams.
-        # Si TODAS las salidas traen split_fraction, se usa ese mapeo keyed;
-        # si no, se cae al reparto posicional legacy (splitter_fractions).
-        keyed = [getattr(s, "split_fraction", None) for s in outs]
-        if all(k is not None for k in keyed):
-            pairs = list(zip(outs, [float(k) for k in keyed]))
-        else:
-            fracs = list(getattr(b, "splitter_fractions", []) or [])
-            if len(fracs) != len(outs):
-                # Uniform split como fallback
-                fracs = [1.0 / len(outs)] * len(outs)
-            pairs = list(zip(outs, fracs))
-        total = sum(f for _, f in pairs)
-        if total <= 0:
+        # Regla completa (keyed total / parcial / posicional) en la fuente
+        # única effective_split_fractions.
+        pairs = effective_split_fractions(fs, b)
+        if not pairs:
             continue
-        pairs = [(s, f / total) for s, f in pairs]
         # Distribuir mass_flow y propagar composición
         for s_out, frac in pairs:
             if not _is_mass_locked(s_out):
@@ -6655,17 +6683,10 @@ def _compute_awareness_warnings(fs):
 
         # ── 1.6 [W-SPLIT-LOCK] fracción vs flujo lockeado ────────────
         if getattr(b, "splitter_active", False):
-            # Fracción por salida: keyed (split_fraction, estable) si TODAS las
-            # salidas la traen; si no, posicional legacy (splitter_fractions).
-            _keyed = [getattr(s, "split_fraction", None) for s in outs]
-            if outs and all(k is not None for k in _keyed):
-                _ftot = sum(float(k) for k in _keyed) or 1.0
-                frac_of = {s.id: float(k) / _ftot for s, k in zip(outs, _keyed)}
-            else:
-                fr = list(getattr(b, "splitter_fractions", []) or [])
-                _ftot = sum(fr) or 1.0
-                frac_of = {outs[k].id: fr[k] / _ftot
-                           for k in range(min(len(fr), len(outs)))}
+            # Fracción por salida — fuente única (keyed total/parcial/
+            # posicional): effective_split_fractions, ya normalizada.
+            _pairs = effective_split_fractions(fs, b) or []
+            frac_of = {s.id: f for s, f in _pairs}
             sum_in = sum(s.mass_flow for s in ins)
             if sum_in > 0:
                 for s in outs:

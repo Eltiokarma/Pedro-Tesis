@@ -27,7 +27,15 @@ def reactor_text(block) -> Optional[str]:
         rxs = list(getattr(block, "reactions", None) or [])
         cust = list(getattr(block, "custom_reactions", None) or [])
         mode = getattr(block, "reactor_mode", "") or ""
-        if not (rxs or cust or mode in ("pfr", "cstr", "batch", "stoich")):
+        # 'equilibrium' cuenta como modo declarado SOLO en eq_types de
+        # reactor: es el default del dataclass en TODOS los bloques
+        # (bombas incluidas), pero un reactor de equilibrio sin lista
+        # de reacciones (patrón sancionado, composiciones lockeadas)
+        # no mostraba NADA en la sección de reactividad.
+        es_reactor = "reactor" in (getattr(block, "eq_type", "") or "").lower()
+        if not (rxs or cust
+                or mode in ("pfr", "cstr", "batch", "stoich")
+                or (mode == "equilibrium" and es_reactor)):
             return None
         lines = []
         if mode:
@@ -146,15 +154,34 @@ def mech_sep_text(block) -> Optional[str]:
         return None
 
 
-def splitter_text(block) -> Optional[str]:
+def _splitter_pairs(block, fs):
+    """[(etiqueta, fracción)] efectivos del splitter.  Con fs usa la fuente
+    única del solver (effective_split_fractions: keyed por salida si TODAS
+    la traen, si no posicional) y etiqueta con el NOMBRE del stream — así el
+    inspector muestra QUÉ salida lleva QUÉ fracción, no una posición.  Sin
+    fs cae al display posicional legacy ("Salida N")."""
+    if fs is not None:
+        try:
+            import flowsheet_solver as _fsv
+            pairs = _fsv.effective_split_fractions(fs, block)
+            if pairs:
+                return [(s.name, f) for s, f in pairs]
+        except Exception:
+            pass
+    fracs = list(getattr(block, "splitter_fractions", []) or [])
+    return [(f"Salida {i+1}", f) for i, f in enumerate(fracs)]
+
+
+def splitter_text(block, fs=None) -> Optional[str]:
     try:
         if not getattr(block, "splitter_active", False):
             return None
-        fracs = list(getattr(block, "splitter_fractions", []) or [])
-        if not fracs:
+        pairs = _splitter_pairs(block, fs)
+        if not pairs:
             return None
-        lines = [f"Salida {i+1}    {f * 100:.1f} %" for i, f in enumerate(fracs)]
-        s = sum(fracs)
+        w = max(len(lbl) for lbl, _ in pairs)
+        lines = [f"{lbl:<{w}}    {f * 100:.1f} %" for lbl, f in pairs]
+        s = sum(f for _, f in pairs)
         if abs(s - 1.0) > 1e-3:
             lines.append(f"⚠ fracciones suman {s:.3f} (≠ 1)")
         return "\n".join(lines)
@@ -186,6 +213,256 @@ def tank_text(block, fs) -> Optional[str]:
                     else:
                         lines.append(f"Residencia  ≈ {tau_h:.1f} h "
                                      f"(estim. con ρ=1000)")
+        return "\n".join(lines)
+    except Exception:
+        return None
+
+
+# ── Helpers de topología para los modos especiales (mismo convenio de
+#    puertos que flowsheet_solver: producto / venteo-vapor-liquido) ──
+def _io_streams(block, fs):
+    ins = [s for s in fs.streams.values() if s.dst == block.id]
+    outs = [s for s in fs.streams.values() if s.src == block.id]
+    return ins, outs
+
+
+def _feed_of(block, fs):
+    ins, _ = _io_streams(block, fs)
+    return next((s for s in ins if s.mass_flow > 0), None)
+
+
+def _out_by_port(block, fs, prefixes):
+    _, outs = _io_streams(block, fs)
+    for s in outs:
+        p = (getattr(s, "dst_port", "") or getattr(s, "src_port", "") or "")
+        if any(p.startswith(px) for px in prefixes):
+            return s
+    return None
+
+
+def _special_outs(block, fs):
+    """(producto, venteo) por convenio de puertos del solver; caen a
+    (primera, segunda) salida con masa si los puertos no están tagueados."""
+    prod = _out_by_port(block, fs, ("producto",))
+    vent = _out_by_port(block, fs, ("venteo", "vapor", "liquido"))
+    if prod is None or vent is None:
+        _, outs = _io_streams(block, fs)
+        outs = [s for s in outs if s.mass_flow > 0]
+        if len(outs) >= 2:
+            prod = prod or outs[0]
+            vent = vent or (outs[1] if outs[1] is not prod else outs[0])
+    return prod, vent
+
+
+def dryer_text(block, fs) -> Optional[str]:
+    """Secador: humedad in→out, agua evaporada (evidencia post-solve —
+    antes el tipo solo tenía editor de specs y ninguna evidencia)."""
+    try:
+        eq = (block.eq_type or "").lower()
+        active = getattr(block, "dryer_active", False)
+        if not active and "dryer" not in eq:
+            return None
+        feed = _feed_of(block, fs)
+        dry, vent = _special_outs(block, fs)
+        if feed is None or dry is None or vent is None:
+            return None
+        moist_c = getattr(block, "moisture_component", "") or "water"
+        comp_in = {c: feed.mass_flow * w
+                   for c, w in (feed.composition or {}).items()}
+        m_moist_in = comp_in.get(moist_c, 0.0)
+        x_in = m_moist_in / feed.mass_flow if feed.mass_flow > 0 else 0.0
+        if active:
+            x_out = float(getattr(block, "final_moisture", 0.0) or 0.0)
+            hum_line = f"Humedad final:  {x_out * 100:.1f} %  (declarada)"
+        else:
+            if dry.mass_flow <= 0 and vent.mass_flow <= 0:
+                return None
+            hum_line = ("Corrientes lockeadas (modo automático inactivo)")
+        lines = [
+            f"Humedad in:     {x_in * 100:.1f} %  ({moist_c})",
+            hum_line,
+            f"Evaporado:      {vent.mass_flow:,.0f} tm/a → venteo",
+            f"Producto seco:  {dry.mass_flow:,.0f} tm/a",
+        ]
+        return "\n".join(lines)
+    except Exception:
+        return None
+
+
+def crystallizer_text(block, fs) -> Optional[str]:
+    """Cristalizador: soluto, yield, cristales vs licor madre.
+
+    Con el modo automático INACTIVO (patrón sancionado: corrientes
+    lockeadas, caso sugar/R-102) la evidencia sale de las corrientes y
+    lo dice — no muestra specs que el solver no aplicó."""
+    try:
+        eq = (block.eq_type or "").lower()
+        active = getattr(block, "crystallizer_active", False)
+        if not active and "crystallizer" not in eq:
+            return None
+        feed = _feed_of(block, fs)
+        prod, vent = _special_outs(block, fs)
+        if feed is None or prod is None or vent is None:
+            return None
+        if active:
+            solute = (getattr(block, "solute_component", "")
+                      or feed.main_component or "?")
+            yield_ = float(getattr(block, "crystal_yield", 0.0) or 0.0)
+            comp_in = {c: feed.mass_flow * w
+                       for c, w in (feed.composition or {}).items()}
+            m_solute_in = comp_in.get(solute, 0.0)
+            lines = [
+                f"Soluto:        {solute}  ({m_solute_in:,.0f} tm/a en feed)",
+                f"Yield:         {yield_ * 100:.1f} %  (declarado)",
+                f"Cristales:     {prod.mass_flow:,.0f} tm/a  (soluto puro, "
+                f"modelo simple)",
+                f"Licor madre:   {vent.mass_flow:,.0f} tm/a",
+            ]
+        else:
+            if prod.mass_flow <= 0 and vent.mass_flow <= 0:
+                return None
+            split = (prod.mass_flow / feed.mass_flow * 100.0
+                     if feed.mass_flow > 0 else 0.0)
+            lines = [
+                "Corrientes lockeadas (modo automático inactivo)",
+                f"Feed:          {feed.mass_flow:,.0f} tm/a",
+                f"Producto:      {prod.mass_flow:,.0f} tm/a  "
+                f"({split:.1f} % del feed)",
+                f"Venteo:        {vent.mass_flow:,.0f} tm/a",
+            ]
+        return "\n".join(lines)
+    except Exception:
+        return None
+
+
+def evaporator_text(block, fs) -> Optional[str]:
+    """Evaporador: factor de concentración, vapor retirado, sólidos.
+
+    Con el modo automático INACTIVO (corrientes lockeadas, caso sugar
+    EV-101..104) el CF se calcula EFECTIVO desde las corrientes y la
+    procedencia queda dicha."""
+    try:
+        eq = (block.eq_type or "").lower()
+        active = getattr(block, "evaporator_active", False)
+        if not active and "evaporator" not in eq:
+            return None
+        feed = _feed_of(block, fs)
+        conc, vap = _special_outs(block, fs)
+        if feed is None or conc is None or vap is None:
+            return None
+        vol_c = getattr(block, "volatile_component", "") or "water"
+        comp_in = {c: feed.mass_flow * w
+                   for c, w in (feed.composition or {}).items()}
+        m_nonvol = sum(m for c, m in comp_in.items() if c != vol_c)
+        x_in = m_nonvol / feed.mass_flow if feed.mass_flow > 0 else 0.0
+        x_out = (m_nonvol / conc.mass_flow) if conc.mass_flow > 0 else 0.0
+        if active:
+            cf = float(getattr(block, "concentration_factor", 0.0) or 0.0)
+            cf_line = f"Factor conc.:  ×{cf:.2f}  (declarado)"
+        else:
+            if conc.mass_flow <= 0:
+                return None
+            cf_ef = feed.mass_flow / conc.mass_flow
+            cf_line = (f"Factor conc.:  ×{cf_ef:.2f}  (efectivo, de "
+                       f"corrientes lockeadas — modo automático inactivo)")
+        lines = [
+            cf_line,
+            f"Sólidos:       {x_in * 100:.1f} % → {x_out * 100:.1f} %",
+            f"Evaporado:     {vap.mass_flow:,.0f} tm/a de {vol_c}",
+            f"Concentrado:   {conc.mass_flow:,.0f} tm/a",
+        ]
+        return "\n".join(lines)
+    except Exception:
+        return None
+
+
+def boiler_text(block, fs) -> Optional[str]:
+    """Caldera: BFW → vapor, duty, energía específica vs ΔH agua."""
+    try:
+        eq = (block.eq_type or "").lower()
+        if "boiler" not in eq:
+            return None
+        ins, outs = _io_streams(block, fs)
+        feed = next((s for s in ins if s.mass_flow > 0), None)
+        steam = next((s for s in outs if s.mass_flow > 0), None)
+        if feed is None or steam is None:
+            return None
+        duty = float(getattr(block, "duty", 0.0) or 0.0)
+        eta = float(getattr(block, "efficiency", 0.0) or 0.0)
+        from flowsheet_model import SEC_PER_YEAR, TM_TO_KG
+        m_kg_s = steam.mass_flow * TM_TO_KG / SEC_PER_YEAR
+        lines = [
+            f"Vapor:        {steam.mass_flow:,.0f} tm/a "
+            f"({m_kg_s * 3.6:,.1f} t/h) a {steam.pressure_bar:.1f} bar",
+            f"BFW:          {feed.temperature:.0f} °C → "
+            f"{steam.temperature:.0f} °C ({steam.phase})",
+            f"Duty:         {duty:,.0f} kW",
+        ]
+        if m_kg_s > 0 and duty > 0:
+            lines.append(f"Específica:   {duty / m_kg_s:,.0f} kJ/kg vapor "
+                         f"(sensible + latente)")
+        if eta > 0:
+            lines.append(f"η caldera:    {eta:.2f}")
+        return "\n".join(lines)
+    except Exception:
+        return None
+
+
+def valve_text(block, fs) -> Optional[str]:
+    """Válvula: letdown isoentálpico P_in → P_out; alerta si flashea."""
+    try:
+        eq = (block.eq_type or "").lower()
+        if "valve" not in eq:
+            return None
+        ins, outs = _io_streams(block, fs)
+        feed = next((s for s in ins if s.mass_flow > 0), None)
+        out = next((s for s in outs if s.mass_flow > 0), None)
+        if feed is None or out is None:
+            return None
+        P_in = float(feed.pressure_bar or 0.0)
+        P_out = float(out.pressure_bar or 0.0)
+        if P_in <= 0 or P_out <= 0:
+            return None
+        vf = float(getattr(out, "vapor_fraction", 0.0) or 0.0)
+        lines = [
+            "Expansión isoentálpica (sin trabajo, sin calor)",
+            f"P:            {P_in:.2f} → {P_out:.2f} bar  "
+            f"(ΔP = {P_out - P_in:+.2f})",
+            f"T:            {feed.temperature:.1f} → {out.temperature:.1f} °C",
+            f"Fase salida:  {out.phase}  (VF={vf:.2f})",
+        ]
+        if vf > 0.0:
+            lines.append("⚠ La expansión genera flasheo (VF > 0): "
+                         "considerar un tanque flash aguas abajo")
+        return "\n".join(lines)
+    except Exception:
+        return None
+
+
+def mixer_text(block, fs) -> Optional[str]:
+    """Mixer: entradas con masa/T, salida mezclada, cierre de masa."""
+    try:
+        eq = (block.eq_type or "").lower()
+        if "mixer" not in eq:
+            return None
+        ins, outs = _io_streams(block, fs)
+        ins = [s for s in ins if s.mass_flow > 0]
+        out = next((s for s in outs if s.mass_flow > 0), None)
+        if len(ins) < 2 or out is None:
+            return None
+        lines = []
+        for s in ins:
+            lines.append(f"⊕ {s.name:14s} {s.mass_flow:>10,.0f} tm/a  "
+                         f"{s.temperature:>6.1f} °C")
+        lines.append(f"= {out.name:14s} {out.mass_flow:>10,.0f} tm/a  "
+                     f"{out.temperature:>6.1f} °C (mezcla)")
+        sum_in = sum(s.mass_flow for s in ins)
+        err = abs(sum_in - out.mass_flow)
+        rel = err / sum_in if sum_in > 0 else 0.0
+        if rel > 1e-3:
+            lines.append(f"⚠ Balance: Σin − out = {sum_in - out.mass_flow:+,.0f} tm/a")
+        else:
+            lines.append("Balance:      Σin = out ✓")
         return "\n".join(lines)
     except Exception:
         return None
@@ -372,6 +649,33 @@ def pump_figure(block, fs):
         return _no_fig(f"{type(e).__name__}: {e}")
 
 
+def _expander_case(block, fs) -> Optional[dict]:
+    """Datos de un expansor/turbina desde el estado RESUELTO.
+
+    Convención del proyecto: no hay tipo 'Turbine' — un compresor con
+    P_out < P_in es turbina/expansor (genera W, duty < 0). La física
+    vive en el solver; acá solo se lee para la evidencia — antes el
+    inspector mostraba NADA para estos bloques (design_compressor
+    devuelve None con ΔP negativo)."""
+    ins = [s for s in fs.streams.values() if s.dst == block.id]
+    outs = [s for s in fs.streams.values() if s.src == block.id]
+    if len(ins) != 1 or len(outs) != 1:
+        return None
+    feed, out = ins[0], outs[0]
+    P_in = float(feed.pressure_bar or 0.0)
+    P_out = float(out.pressure_bar or 0.0)
+    if feed.mass_flow <= 0 or P_out <= 0 or P_in <= P_out:
+        return None
+    duty = float(getattr(block, "duty", 0.0) or 0.0)
+    return {
+        "ratio_exp": P_in / P_out,
+        "T_in_C": float(feed.temperature),
+        "T_out_C": float(out.temperature),
+        "W_gen_kW": (-duty) if duty < 0 else 0.0,
+        "eta": float(getattr(block, "efficiency", 0.0) or 0.85),
+    }
+
+
 def compressor_text(block, fs) -> Optional[str]:
     try:
         eq = (block.eq_type or "").lower()
@@ -380,7 +684,19 @@ def compressor_text(block, fs) -> Optional[str]:
         import equipment_design as _ed
         cs = _ed.design_compressor_for_block(block, fs)
         if cs is None:
-            return None
+            ex = _expander_case(block, fs)
+            if ex is None:
+                return None
+            lines = [
+                "Turbina / expansor (P_out < P_in → genera trabajo)",
+                f"Ratio P_in/P_out: {ex['ratio_exp']:.2f}",
+                f"T entrada:        {ex['T_in_C']:.1f} °C",
+                f"T descarga:       {ex['T_out_C']:.1f} °C",
+            ]
+            if ex["W_gen_kW"] > 0:
+                lines.append(f"W generada:       {ex['W_gen_kW']:,.1f} kW  "
+                             f"(η={ex['eta']:.2f})")
+            return "\n".join(lines)
         lines = [
             f"Ratio P_out/P_in: {cs['ratio']:.2f}",
             f"Etapas rec.:      {cs['n_stages_rec']}",
@@ -1388,7 +1704,15 @@ def reactor_metrics(block) -> Optional[dict]:
         rxs = list(getattr(block, "reactions", None) or [])
         cust = list(getattr(block, "custom_reactions", None) or [])
         mode = getattr(block, "reactor_mode", "") or ""
-        if not (rxs or cust or mode in ("pfr", "cstr", "batch", "stoich")):
+        # 'equilibrium' cuenta como modo declarado SOLO en eq_types de
+        # reactor: es el default del dataclass en TODOS los bloques
+        # (bombas incluidas), pero un reactor de equilibrio sin lista
+        # de reacciones (patrón sancionado, composiciones lockeadas)
+        # no mostraba NADA en la sección de reactividad.
+        es_reactor = "reactor" in (getattr(block, "eq_type", "") or "").lower()
+        if not (rxs or cust
+                or mode in ("pfr", "cstr", "batch", "stoich")
+                or (mode == "equilibrium" and es_reactor)):
             return None
         metrics = []
         status = []
@@ -1554,23 +1878,24 @@ def mech_sep_metrics(block) -> Optional[dict]:
         return None
 
 
-def splitter_metrics(block) -> Optional[dict]:
-    """Estructurado de splitter_text(). Misma fuente (splitter_fractions)."""
+def splitter_metrics(block, fs=None) -> Optional[dict]:
+    """Estructurado de splitter_text(). Misma fuente (_splitter_pairs:
+    keyed con nombre de stream si hay fs, posicional legacy si no)."""
     try:
         if not getattr(block, "splitter_active", False):
             return None
-        fracs = list(getattr(block, "splitter_fractions", []) or [])
-        if not fracs:
+        pairs = _splitter_pairs(block, fs)
+        if not pairs:
             return None
         bars = []
         metrics = []
-        for i, f in enumerate(fracs):
-            metrics.append({"key": f"out{i+1}", "label": f"Salida {i+1}",
+        for i, (lbl, f) in enumerate(pairs):
+            metrics.append({"key": f"out{i+1}", "label": lbl,
                             "value": f"{f * 100:.1f}", "unit": "%",
                             "state": "info"})
-            bars.append({"label": f"Salida {i+1}", "frac": float(f),
+            bars.append({"label": lbl, "frac": float(f),
                          "value": f"{f * 100:.1f}", "kind": "out"})
-        s = sum(fracs)
+        s = sum(f for _, f in pairs)
         status = []
         if abs(s - 1.0) > 1e-3:
             status.append({"text": f"fracciones suman {s:.3f}",
@@ -1613,6 +1938,269 @@ def tank_metrics(block, fs) -> Optional[dict]:
                                         "sub": "estim. ρ=1000"})
         return {"status": [], "metrics": metrics, "figure": None,
                 "warnings": []}
+    except Exception:
+        return None
+
+
+def dryer_metrics(block, fs) -> Optional[dict]:
+    """Estructurado de dryer_text(). Misma fuente (feed + outs + specs)."""
+    try:
+        eq = (block.eq_type or "").lower()
+        active = getattr(block, "dryer_active", False)
+        if not active and "dryer" not in eq:
+            return None
+        feed = _feed_of(block, fs)
+        dry, vent = _special_outs(block, fs)
+        if feed is None or dry is None or vent is None:
+            return None
+        moist_c = getattr(block, "moisture_component", "") or "water"
+        comp_in = {c: feed.mass_flow * w
+                   for c, w in (feed.composition or {}).items()}
+        m_moist_in = comp_in.get(moist_c, 0.0)
+        x_in = m_moist_in / feed.mass_flow if feed.mass_flow > 0 else 0.0
+        metrics = [
+            {"key": "xin", "label": "Humedad in",
+             "value": f"{x_in * 100:.1f}", "unit": "%", "state": "info",
+             "sub": moist_c},
+        ]
+        status = []
+        if active:
+            x_out = float(getattr(block, "final_moisture", 0.0) or 0.0)
+            metrics.append({"key": "xout", "label": "Humedad final",
+                            "value": f"{x_out * 100:.1f}", "unit": "%",
+                            "state": "spec"})
+        else:
+            if dry.mass_flow <= 0 and vent.mass_flow <= 0:
+                return None
+            status = [{"text": "Corrientes lockeadas (modo inactivo)",
+                       "kind": "warn"}]
+        metrics += [
+            {"key": "evap", "label": "Evaporado",
+             "value": f"{vent.mass_flow:,.0f}", "unit": "tm/a",
+             "state": "alert"},
+            {"key": "seco", "label": "Producto seco",
+             "value": f"{dry.mass_flow:,.0f}", "unit": "tm/a",
+             "state": "auto"},
+        ]
+        return {"status": status, "metrics": metrics, "figure": None,
+                "warnings": []}
+    except Exception:
+        return None
+
+
+def crystallizer_metrics(block, fs) -> Optional[dict]:
+    """Estructurado de crystallizer_text(). Misma fuente y mismos guards
+    (activo → specs del solver; inactivo → corrientes lockeadas)."""
+    try:
+        eq = (block.eq_type or "").lower()
+        active = getattr(block, "crystallizer_active", False)
+        if not active and "crystallizer" not in eq:
+            return None
+        feed = _feed_of(block, fs)
+        prod, vent = _special_outs(block, fs)
+        if feed is None or prod is None or vent is None:
+            return None
+        if active:
+            solute = (getattr(block, "solute_component", "")
+                      or feed.main_component or "?")
+            yield_ = float(getattr(block, "crystal_yield", 0.0) or 0.0)
+            metrics = [
+                {"key": "solute", "label": "Soluto", "value": solute,
+                 "state": "info"},
+                {"key": "yield", "label": "Yield",
+                 "value": f"{yield_ * 100:.1f}", "unit": "%",
+                 "state": "spec"},
+                {"key": "xtal", "label": "Cristales",
+                 "value": f"{prod.mass_flow:,.0f}", "unit": "tm/a",
+                 "state": "auto"},
+                {"key": "mother", "label": "Licor madre",
+                 "value": f"{vent.mass_flow:,.0f}", "unit": "tm/a",
+                 "state": "info"},
+            ]
+            status = []
+        else:
+            if prod.mass_flow <= 0 and vent.mass_flow <= 0:
+                return None
+            split = (prod.mass_flow / feed.mass_flow * 100.0
+                     if feed.mass_flow > 0 else 0.0)
+            metrics = [
+                {"key": "feed", "label": "Feed",
+                 "value": f"{feed.mass_flow:,.0f}", "unit": "tm/a",
+                 "state": "info"},
+                {"key": "prod", "label": "Producto",
+                 "value": f"{prod.mass_flow:,.0f}", "unit": "tm/a",
+                 "state": "spec", "sub": f"{split:.1f} % del feed"},
+                {"key": "vent", "label": "Venteo",
+                 "value": f"{vent.mass_flow:,.0f}", "unit": "tm/a",
+                 "state": "info"},
+            ]
+            status = [{"text": "Corrientes lockeadas (modo inactivo)",
+                       "kind": "warn"}]
+        return {"status": status, "metrics": metrics, "figure": None,
+                "warnings": []}
+    except Exception:
+        return None
+
+
+def evaporator_metrics(block, fs) -> Optional[dict]:
+    """Estructurado de evaporator_text(). Misma fuente y mismos guards
+    (activo → CF declarado; inactivo → CF efectivo de corrientes)."""
+    try:
+        eq = (block.eq_type or "").lower()
+        active = getattr(block, "evaporator_active", False)
+        if not active and "evaporator" not in eq:
+            return None
+        feed = _feed_of(block, fs)
+        conc, vap = _special_outs(block, fs)
+        if feed is None or conc is None or vap is None:
+            return None
+        vol_c = getattr(block, "volatile_component", "") or "water"
+        comp_in = {c: feed.mass_flow * w
+                   for c, w in (feed.composition or {}).items()}
+        m_nonvol = sum(m for c, m in comp_in.items() if c != vol_c)
+        x_in = m_nonvol / feed.mass_flow if feed.mass_flow > 0 else 0.0
+        x_out = (m_nonvol / conc.mass_flow) if conc.mass_flow > 0 else 0.0
+        status = []
+        if active:
+            cf = float(getattr(block, "concentration_factor", 0.0) or 0.0)
+            cf_metric = {"key": "cf", "label": "Factor conc.",
+                         "value": f"×{cf:.2f}", "state": "spec"}
+        else:
+            if conc.mass_flow <= 0:
+                return None
+            cf_ef = feed.mass_flow / conc.mass_flow
+            cf_metric = {"key": "cf", "label": "Factor conc.",
+                         "value": f"×{cf_ef:.2f}", "state": "auto",
+                         "sub": "efectivo (corrientes)"}
+            status = [{"text": "Corrientes lockeadas (modo inactivo)",
+                       "kind": "warn"}]
+        metrics = [
+            cf_metric,
+            {"key": "solidos", "label": "Sólidos",
+             "value": f"{x_in * 100:.1f} → {x_out * 100:.1f}",
+             "unit": "%", "state": "info"},
+            {"key": "evap", "label": "Evaporado",
+             "value": f"{vap.mass_flow:,.0f}", "unit": "tm/a",
+             "state": "alert", "sub": vol_c},
+            {"key": "conc", "label": "Concentrado",
+             "value": f"{conc.mass_flow:,.0f}", "unit": "tm/a",
+             "state": "auto"},
+        ]
+        return {"status": status, "metrics": metrics, "figure": None,
+                "warnings": []}
+    except Exception:
+        return None
+
+
+def boiler_metrics(block, fs) -> Optional[dict]:
+    """Estructurado de boiler_text(). Misma fuente."""
+    try:
+        eq = (block.eq_type or "").lower()
+        if "boiler" not in eq:
+            return None
+        ins, outs = _io_streams(block, fs)
+        feed = next((s for s in ins if s.mass_flow > 0), None)
+        steam = next((s for s in outs if s.mass_flow > 0), None)
+        if feed is None or steam is None:
+            return None
+        duty = float(getattr(block, "duty", 0.0) or 0.0)
+        eta = float(getattr(block, "efficiency", 0.0) or 0.0)
+        from flowsheet_model import SEC_PER_YEAR, TM_TO_KG
+        m_kg_s = steam.mass_flow * TM_TO_KG / SEC_PER_YEAR
+        metrics = [
+            {"key": "vapor", "label": "Vapor",
+             "value": f"{m_kg_s * 3.6:,.1f}", "unit": "t/h",
+             "state": "auto", "sub": f"{steam.pressure_bar:.1f} bar"},
+            {"key": "T", "label": "BFW → vapor",
+             "value": f"{feed.temperature:.0f} → {steam.temperature:.0f}",
+             "unit": "°C", "state": "info"},
+            {"key": "duty", "label": "Duty",
+             "value": f"{duty:,.0f}", "unit": "kW", "state": "orange"},
+        ]
+        if m_kg_s > 0 and duty > 0:
+            metrics.append({"key": "esp", "label": "Específica",
+                            "value": f"{duty / m_kg_s:,.0f}",
+                            "unit": "kJ/kg", "state": "info"})
+        if eta > 0:
+            metrics.append({"key": "eta", "label": "η caldera",
+                            "value": f"{eta:.2f}", "state": "spec"})
+        return {"status": [], "metrics": metrics, "figure": None,
+                "warnings": []}
+    except Exception:
+        return None
+
+
+def valve_metrics(block, fs) -> Optional[dict]:
+    """Estructurado de valve_text(). Misma fuente."""
+    try:
+        eq = (block.eq_type or "").lower()
+        if "valve" not in eq:
+            return None
+        ins, outs = _io_streams(block, fs)
+        feed = next((s for s in ins if s.mass_flow > 0), None)
+        out = next((s for s in outs if s.mass_flow > 0), None)
+        if feed is None or out is None:
+            return None
+        P_in = float(feed.pressure_bar or 0.0)
+        P_out = float(out.pressure_bar or 0.0)
+        if P_in <= 0 or P_out <= 0:
+            return None
+        vf = float(getattr(out, "vapor_fraction", 0.0) or 0.0)
+        status = [{"text": "Expansión isoentálpica", "kind": "accent"}]
+        metrics = [
+            {"key": "P", "label": "P",
+             "value": f"{P_in:.2f} → {P_out:.2f}", "unit": "bar",
+             "state": "info", "sub": f"ΔP = {P_out - P_in:+.2f}"},
+            {"key": "T", "label": "T",
+             "value": f"{feed.temperature:.1f} → {out.temperature:.1f}",
+             "unit": "°C", "state": "info"},
+            {"key": "vf", "label": "VF salida",
+             "value": f"{vf:.2f}",
+             "state": "danger" if vf > 0 else "auto",
+             "sub": out.phase},
+        ]
+        warnings = []
+        if vf > 0.0:
+            warnings.append("La expansión genera flasheo (VF > 0): "
+                            "considerar un tanque flash aguas abajo")
+        return {"status": status, "metrics": metrics, "figure": None,
+                "warnings": warnings}
+    except Exception:
+        return None
+
+
+def mixer_metrics(block, fs) -> Optional[dict]:
+    """Estructurado de mixer_text(). Misma fuente."""
+    try:
+        eq = (block.eq_type or "").lower()
+        if "mixer" not in eq:
+            return None
+        ins, outs = _io_streams(block, fs)
+        ins = [s for s in ins if s.mass_flow > 0]
+        out = next((s for s in outs if s.mass_flow > 0), None)
+        if len(ins) < 2 or out is None:
+            return None
+        metrics = []
+        for i, s in enumerate(ins):
+            metrics.append({"key": f"in{i}", "label": s.name,
+                            "value": f"{s.mass_flow:,.0f}", "unit": "tm/a",
+                            "state": "info",
+                            "sub": f"{s.temperature:.1f} °C"})
+        metrics.append({"key": "out", "label": out.name,
+                        "value": f"{out.mass_flow:,.0f}", "unit": "tm/a",
+                        "state": "auto",
+                        "sub": f"{out.temperature:.1f} °C (mezcla)"})
+        sum_in = sum(s.mass_flow for s in ins)
+        rel = abs(sum_in - out.mass_flow) / sum_in if sum_in > 0 else 0.0
+        status = []
+        warnings = []
+        if rel > 1e-3:
+            warnings.append(f"Balance: Σin − out = "
+                            f"{sum_in - out.mass_flow:+,.0f} tm/a")
+        else:
+            status.append({"text": "Σin = out ✓", "kind": "ok"})
+        return {"status": status, "metrics": metrics, "figure": None,
+                "warnings": warnings}
     except Exception:
         return None
 
@@ -1967,7 +2555,29 @@ def compressor_metrics(block, fs) -> Optional[dict]:
         import equipment_design as _ed
         cs = _ed.design_compressor_for_block(block, fs)
         if cs is None:
-            return None
+            # Turbina/expansor — espejo de compressor_text (Gate 1:
+            # cada metric aparece textualmente en la *_text()).
+            ex = _expander_case(block, fs)
+            if ex is None:
+                return None
+            metrics = [
+                {"key": "ratio_exp", "label": "Ratio P_in/P_out",
+                 "value": f"{ex['ratio_exp']:.2f}", "state": "info"},
+                {"key": "Tin", "label": "T entrada",
+                 "value": f"{ex['T_in_C']:.1f}", "unit": "°C",
+                 "state": "info"},
+                {"key": "Tout", "label": "T descarga",
+                 "value": f"{ex['T_out_C']:.1f}", "unit": "°C",
+                 "state": "alert"},
+            ]
+            if ex["W_gen_kW"] > 0:
+                metrics.append(
+                    {"key": "Wgen", "label": "W generada",
+                     "value": f"{ex['W_gen_kW']:,.1f}", "unit": "kW",
+                     "state": "orange", "sub": f"η={ex['eta']:.2f}"})
+            status = [{"text": "Turbina / expansor", "kind": "accent"}]
+            return {"status": status, "metrics": metrics, "figure": None,
+                    "warnings": []}
         metrics = [
             {"key": "ratio", "label": "Ratio P_out/P_in",
              "value": f"{cs['ratio']:.2f}", "state": "info"},

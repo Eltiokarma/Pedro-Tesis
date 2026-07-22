@@ -81,12 +81,37 @@ def _is_column(eq_type: str) -> bool:
 # Propagación topológica de mass_flow
 # ─────────────────────────────────────────────────────────────
 
-def _determinable_masses(fs: Flowsheet) -> Set[int]:
+def _recycle_stream_ids(fs: Flowsheet) -> Set[int]:
+    """Streams cuyos DOS extremos viven en un mismo SCC del grafo de
+    bloques: el solver NO los propaga forward — los determina por
+    convergencia (tear + Wegstein/Broyden). Sin esto el audit marcaba
+    como under-specificados los 7 ejemplos con reciclo que el gate
+    resuelve (hda, haber_rec, industrial, feed_effluent,
+    nested_recycle, hen, cw_loop)."""
+    try:
+        from flowsheet_solver import (_strongly_connected_components,
+                                      _streams_in_scc)
+    except ImportError:
+        return set()
+    out: Set[int] = set()
+    try:
+        for scc in _strongly_connected_components(fs):
+            # Para SCC de 1 bloque sin auto-edge, _streams_in_scc no
+            # devuelve nada — no hace falta filtrar por tamaño.
+            out.update(s.id for s in _streams_in_scc(scc, fs))
+    except Exception:
+        return set()
+    return out
+
+
+def _determinable_masses(fs: Flowsheet,
+                         torn: Set[int] = None) -> Set[int]:
     """Devuelve set de stream.id cuya mass_flow se puede determinar
     desde locks + balance topológico (recursivo).
 
     Reglas:
       · Stream lockeado → determinable.
+      · Stream de reciclo (`torn`) → determinable por convergencia.
       · Bloque con todos los inputs determinables + N-1 outputs
         determinables (o N-1 fracciones de splitter) → último output
         determinable.
@@ -97,6 +122,7 @@ def _determinable_masses(fs: Flowsheet) -> Set[int]:
     """
     det: Set[int] = {s.id for s in fs.streams.values()
                        if getattr(s, "mass_flow_locked", False)}
+    det |= set(torn or ())
 
     # Iterar hasta convergencia
     for _ in range(50):   # límite defensivo
@@ -108,10 +134,16 @@ def _determinable_masses(fs: Flowsheet) -> Set[int]:
             if not all_streams:
                 continue
 
-            # ── Caso splitter_active: con N fracciones e input determinable
+            # ── Caso splitter_active: con N fracciones e input determinable.
+            # Las fracciones pueden venir keyed por salida (split_fraction,
+            # el mapeo estable del solver) o como lista posicional legacy —
+            # ambas determinan las salidas por igual.
             if getattr(b, "splitter_active", False):
                 fracs = getattr(b, "splitter_fractions", []) or []
-                if len(fracs) == len(outs) and len(ins) >= 1:
+                keyed_ok = outs and all(
+                    getattr(s, "split_fraction", None) is not None
+                    for s in outs)
+                if (keyed_ok or len(fracs) == len(outs)) and len(ins) >= 1:
                     main_in = next((s for s in ins if s.mass_flow > 0
                                       or s.id in det), None)
                     if main_in and main_in.id in det:
@@ -212,8 +244,10 @@ def analyze_flowsheet(fs: Flowsheet) -> DOFReport:
             all_comps.add(s.main_component)
     report.n_components = len(all_comps)
 
-    # Propagación de masa y composición
-    det_mass = _determinable_masses(fs)
+    # Propagación de masa y composición.  Los streams de reciclo se
+    # determinan por convergencia del tearing, no por forward-pass.
+    torn = _recycle_stream_ids(fs)
+    det_mass = _determinable_masses(fs, torn=torn)
     det_comp = _determinable_compositions(fs)
     report.n_indeterminable_mass = len(fs.streams) - len(det_mass)
 
@@ -222,6 +256,8 @@ def analyze_flowsheet(fs: Flowsheet) -> DOFReport:
         ss = StreamStatus(name=s.name)
         if getattr(s, "mass_flow_locked", False):
             ss.mass_status = "locked"
+        elif s.id in torn:
+            ss.mass_status = "torn"
         elif s.id in det_mass:
             ss.mass_status = "propagated"
         elif s.mass_flow > 0:
@@ -256,6 +292,23 @@ def analyze_flowsheet(fs: Flowsheet) -> DOFReport:
             bs.notes.append(
                 f"Mass balance no cierra: {len(indet)} streams "
                 f"indeterminables ({indet_names})")
+        elif (ins and outs
+                and all(getattr(s, "mass_flow_locked", False)
+                        for s in all_streams)):
+            # SOBRE-especificación: todos los streams lockeados → la
+            # ecuación de balance del bloque no determina nada, solo
+            # CONSTRIÑE los locks. Si además no cierran, hay conflicto
+            # (el patrón sancionado de los ejemplos cierra por diseño,
+            # así que no se flagea).
+            sum_in = sum(s.mass_flow for s in ins)
+            sum_out = sum(s.mass_flow for s in outs)
+            ref = max(abs(sum_in), abs(sum_out), 1e-12)
+            if abs(sum_in - sum_out) / ref > 0.01:
+                bs.mass_dof = -1
+                bs.notes.append(
+                    f"Conflicto entre locks: Σin={sum_in:.1f} ≠ "
+                    f"Σout={sum_out:.1f} (todos lockeados, el balance "
+                    f"del bloque no puede corregir ninguno)")
 
         # ── ENERGY DOF: solo reactores isotermales sin T_op_K
         is_reactor   = bool(getattr(b, "reactions", None))
@@ -299,24 +352,38 @@ def analyze_flowsheet(fs: Flowsheet) -> DOFReport:
 
     report.total_dof = sum(b.total_dof for b in report.blocks)
 
-    if report.total_dof == 0 and report.n_indeterminable_mass == 0:
+    # El veredicto sale de los CONTADORES por bloque, no del total: un
+    # under y un over simultáneos cancelaban el total a 0 y antes se
+    # reportaba "BIEN ESPECIFICADO"; y con total 0 + masa indeterminable
+    # caía en la rama OVER por descarte.
+    if (report.n_under == 0 and report.n_over == 0
+            and report.n_indeterminable_mass == 0):
         report.summary = (
             f"✓ Flowsheet BIEN ESPECIFICADO  "
             f"({report.n_ok}/{report.n_blocks} bloques ok)")
-    elif report.total_dof > 0:
+    elif report.n_over and report.n_under:
+        report.summary = (
+            f"✗ MIXTO — {report.n_under} bloque(s) UNDER y "
+            f"{report.n_over} con conflicto entre locks (OVER)")
+        report.suggestions.append(
+            "Resolver primero los conflictos entre locks (✗); después "
+            "agregar los locks que faltan (⚠).")
+    elif report.n_over:
+        report.summary = (
+            f"✗ OVER-SPECIFICADO — DOF = {report.total_dof}  "
+            f"({report.n_over} bloque(s) con conflicto entre locks)")
+        report.suggestions.append(
+            "Quitar o corregir locks en conflicto: el balance del bloque "
+            "ya determina esos valores y el lock crea contradicción.")
+    else:
         report.summary = (
             f"⚠ UNDER-SPECIFICADO — DOF = {report.total_dof}  "
-            f"({report.n_under} bloque(s) con specs faltantes)")
+            f"({report.n_under} bloque(s) con specs faltantes, "
+            f"{report.n_indeterminable_mass} stream(s) sin masa "
+            f"determinable)")
         report.suggestions.append(
             "Cada bloque con DOF>0 necesita locks adicionales para que "
             "el solver lo cierre sin warnings.")
-    else:
-        report.summary = (
-            f"✗ OVER-SPECIFICADO — DOF = {report.total_dof}  "
-            f"(conflicto entre locks)")
-        report.suggestions.append(
-            "Quitar locks redundantes: el balance del bloque ya determina "
-            "esos valores y el lock crea conflicto.")
 
     return report
 
@@ -338,6 +405,10 @@ def format_report(report: DOFReport, max_blocks: int = 50) -> str:
     if report.n_indeterminable_mass > 0:
         out.append(f"  Streams sin mass determinable: "
                     f"{report.n_indeterminable_mass}")
+    n_torn = sum(1 for s in report.streams if s.mass_status == "torn")
+    if n_torn:
+        out.append(f"  Streams de reciclo (convergen por tearing): "
+                    f"{n_torn}")
     out.append("")
 
     problems = [b for b in report.blocks if b.overall != "ok"]
