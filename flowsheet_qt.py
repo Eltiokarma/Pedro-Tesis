@@ -8168,6 +8168,14 @@ class FlowsheetMainWindow(QMainWindow):
                      if t.src == src and t.src_port]),
                 dst_port=port_in,
             )
+            if src == existing_src_id:
+                # El reemplazo hereda la fracción keyed del stream que
+                # sustituye: si old_src es un splitter, sin esto el
+                # splitter dejaba de ser all-keyed y el reparto caía al
+                # posicional (rotaba fracciones — pendiente de talara).
+                sf = getattr(existing_stream, "split_fraction", None)
+                if sf is not None:
+                    self.fs.streams[new_sid].split_fraction = sf
         # Mixer → reactor
         final_sid = self.fs.new_id()
         self.fs.streams[final_sid] = Stream(

@@ -563,6 +563,7 @@ de `block_inspector`, glyph PFD, puertos y sizer. Matriz generada en
 | DOF audit — ciego a reciclos (7 falsos under) / rama over muerta / veredicto por total | **CORREGIDO** — status torn vía SCC + conflicto entre locks + veredicto por contadores |
 | Frontend — expansor mudo / reactor equilibrium mudo | **CORREGIDO** — _expander_case + modo equilibrium con guard de eq_type |
 | ρ líquida sin calibrar (agua −12 %, etanol +11 %) — capa 7 despoblada | **CORREGIDO** — rho_ref CRC para los 7 líquidos más usados; golden re-exportado (≤0.6 % ISBL) |
+| talara — splitter redistribuye al insertar pass-through (regla all-keyed-o-posicional ×4 rutas) | **CORREGIDO** — keyed parcial en effective_split_fractions como fuente única + inserción UI copia split_fraction |
 
 Los 12 bugs quedaron corregidos con reproducción mínima y regresión. Los fixes
 son aditivos y backward-compatible (goldens existentes intactos, gate 58/58,
