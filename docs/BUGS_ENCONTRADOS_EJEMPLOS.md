@@ -18,8 +18,13 @@ aparecieron dos defectos. Se documentan con reproducción mínima.
 - **`cyclone`** — Ciclón gas/sólido: gases de combustión con sílice → compresor
   → `Cyclone — gas/solid` → gas limpio + polvo. Equipo poco usado; **destapó
   BUG 3 y BUG 4** (ver abajo).
+- **`bypass`** — Topología rara: bomba → splitter (KEYED 70/30) → [horno |
+  bypass] → mixer → producto. Control de T de mezcla por bypass. Ejercita el
+  splitter keyed + recombinación en mixer a distinta T. **Destapó BUG 5.**
+- **`parallel`** — Topología rara: dos CSTR en paralelo (debottlenecking) desde
+  un mismo splitter, salidas recombinadas en un mixer.
 
-Gate 44/44 verde.
+Gate 46/46 verde.
 
 ---
 
@@ -183,17 +188,44 @@ ahora dimensiona S≈1.0 m³/s y se costea. Regresión:
 
 ---
 
+## BUG 5 — Mixers/splitters standalone sin sizer → costo cero
+
+**Severidad:** costeo. La categoría `Mixers / splitters` (eq_types
+`Splitter — flow divider`, `Mixer — static`, `Mixer — inline`) **sí** tiene
+correlación de costo Turton (K1), pero **no tenía sizer** (ni en `SIZER_BY_CAT`
+ni en `SIZER_BY_EQTYPE`), así que un mixer/splitter standalone quedaba en `S=0`
+→ CBM nulo. Los 42 ejemplos no lo notaban porque modelan el split con
+`splitter_active` sobre un **vessel real** (V-101, V-102…), nunca un bloque
+`Splitter — flow divider` suelto.
+
+### Fix aplicado
+
+Nuevo `size_mixer_splitter` (despacha por `S_param`: `Flow`→kg/s del feed;
+`Volume`→Q·τ con τ de mezclador) registrado en
+`SIZER_BY_CAT["Mixers / splitters"]`. Los ejemplos `bypass`/`parallel` ahora
+costean su splitter/mixer. 0/42 ejemplos existentes afectados (ninguno usa
+bloques de esa categoría).
+
+**Nota de autoría (no es bug):** un mixer con la T de salida SIN lockear queda
+en T_ref y arrastra un duty espurio — lo detecta `[W-MIXER-DUTY]`. Es el modelo
+sudoku pidiendo la spec: se declara la T de salida (adiabática) lockeada, como
+en el resto de ejemplos.
+
+---
+
 ## Estado
 
 | Hallazgo | Estado |
 |---|---|
-| `salt_crystal` / `decanter` / `cyclone` (ejemplos nuevos) | AGREGADOS al set (gate 44/44) |
+| `salt_crystal`/`decanter`/`cyclone`/`bypass`/`parallel` (ejemplos nuevos) | AGREGADOS al set (gate 46/46) |
 | BUG 1 — splitter mapea fracciones por posición | **CORREGIDO** — `split_fraction` keyed + 5 ejemplos migrados |
 | BUG 2 — separador rutea al revés sin warning | **CORREGIDO** — `[W-PHYS-NONVOL]` en el audit |
 | BUG 3 — ciclón mal-etiqueta fases de salida | **CORREGIDO** — fase del carrier desde el feed |
 | BUG 4 — ciclón sin sizer → costo cero | **CORREGIDO** — `size_cyclone` (m³/s gas) |
+| BUG 5 — mixers/splitters standalone sin sizer → costo cero | **CORREGIDO** — `size_mixer_splitter` |
 
-Los 4 bugs quedaron corregidos con reproducción mínima y regresión. Los fixes
-son aditivos y backward-compatible (goldens existentes intactos, gate 44/44,
-529 tests de lógica verdes). Método: "agregar al set + gate" — se agregaron 3
-ejemplos limpios y los defectos que destaparon se corrigieron en el mismo ciclo.
+Los 5 bugs quedaron corregidos con reproducción mínima y regresión. Los fixes
+son aditivos y backward-compatible (goldens existentes intactos, gate 46/46,
+529 tests de lógica verdes). Método: "agregar al set + gate" — se agregaron 5
+ejemplos limpios (equipos poco usados + topologías raras) y los defectos que
+destaparon se corrigieron en el mismo ciclo.

@@ -110,3 +110,23 @@ def test_cyclone_fases_gas_solido_y_costeado():
     assert "CY-101" not in zc, "el ciclón debe dimensionarse y costearse"
     cy = next(b for b in fs.blocks.values() if b.name == "CY-101")
     assert cy.S > 0, f"CY-101 sin dimensionar (S={cy.S})"
+
+
+# ── mixers/splitters standalone: dimensionados y costeados (no zero-cost) ─
+def test_mixer_splitter_standalone_costeados():
+    """Los ejemplos 'bypass'/'parallel' (topologías raras) usan bloques
+    'Splitter — flow divider' y 'Mixer — static' standalone.  La categoría
+    'Mixers / splitters' tiene correlación de costo pero antes no tenía sizer
+    → S=0 (costo nulo).  Con size_mixer_splitter deben quedar dimensionados."""
+    import capex
+    from flowsheet_solver import solve
+    for clave in ("bypass", "parallel"):
+        fs = reg.load_example(clave)
+        solve(fs)
+        cd = capex.compute_fci(fs)
+        zc = {b["name"] for b in cd.get("zero_cost_blocks", [])}
+        for b in fs.blocks.values():
+            if b.eq_type.startswith(("Splitter", "Mixer")):
+                assert b.name not in zc, \
+                    f"{clave}/{b.name} ({b.eq_type}) quedó sin costo"
+                assert b.S > 0, f"{clave}/{b.name} sin dimensionar (S={b.S})"

@@ -441,6 +441,26 @@
    "codigo_pfd": "PFD-D-001",
    "builder": "_example_decanter",
    "archivo": "decanter.json"
+  },
+  {
+   "clave": "bypass",
+   "label": "Bypass térmico (split → horno | bypass → mix, control de T)",
+   "categoria": "Física",
+   "nombre": "Bypass térmico",
+   "capa": "Térmica",
+   "codigo_pfd": "PFD-BYP-001",
+   "builder": "_example_bypass",
+   "archivo": "bypass.json"
+  },
+  {
+   "clave": "parallel",
+   "label": "Trenes paralelos (2 CSTR en paralelo → mezcla)",
+   "categoria": "Química",
+   "nombre": "Reactores en paralelo",
+   "capa": "Reacción",
+   "codigo_pfd": "PFD-PAR-001",
+   "builder": "_example_parallel",
+   "archivo": "parallel.json"
   }
  ]
 }

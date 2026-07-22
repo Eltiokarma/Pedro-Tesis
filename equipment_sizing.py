@@ -617,6 +617,33 @@ def size_filter(block, fs) -> Optional[float]:
     return max(A, 1.0)
 
 
+TAU_MIXER_S = 30.0      # tiempo de residencia de un mezclador estático [s]
+
+
+def size_mixer_splitter(block, fs) -> Optional[float]:
+    """Dimensiona mixers y splitters según su base de costo Turton, que varía
+    por eq_type: 'Flow' (kg/s del feed, p.ej. flow divider) o 'Volume' (m³,
+    Q·τ con τ corto de mezclador en línea).  La categoría 'Mixers / splitters'
+    tenía correlación de costo (K1) pero NINGÚN sizer → un mixer/splitter
+    standalone quedaba en S=0 (costo nulo).  Los ejemplos existentes no lo
+    notaban porque modelan el split con splitter_active sobre un vessel real."""
+    ins = [s for s in fs.streams.values() if s.dst == block.id]
+    if not ins:
+        return None
+    m_s = _flow_kg_s(sum(s.mass_flow for s in ins))
+    if m_s <= 0:
+        return None
+    spec = ec.EQUIPMENT_DATA.get(block.eq_type, {})
+    s_param = (spec.get("S_param") or "").lower()
+    if s_param == "flow":
+        return max(m_s, 0.1)                       # kg/s
+    # base Volume: Q[m³/s]·τ  (mezclador en línea, retención corta)
+    rho = _rho_estimate(ins[0])
+    if rho <= 0:
+        return None
+    return max((m_s / rho) * TAU_MIXER_S, 0.05)    # m³
+
+
 def size_cyclone(block, fs) -> Optional[float]:
     """S [m³/s] = caudal volumétrico de gas de entrada (Turton usa Flow en
     m³/s para el ciclón gas/sólido).  El gas es la fase carrier del feed;
@@ -732,6 +759,7 @@ SIZER_BY_CAT = {
     "Towers":            size_tower,
     "Storage":           size_storage_tank,
     "Evaporators":       size_evaporator,
+    "Mixers / splitters": size_mixer_splitter,
 }
 
 # Sizers específicos por eq_type — tienen prioridad sobre SIZER_BY_CAT.
