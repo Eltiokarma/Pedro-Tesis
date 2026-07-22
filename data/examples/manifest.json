@@ -521,6 +521,36 @@
    "codigo_pfd": "PFD-FN-001",
    "builder": "_example_blower",
    "archivo": "blower.json"
+  },
+  {
+   "clave": "feed_effluent",
+   "label": "Intercambio feed-efluente (HX 4 puertos, lazo térmico)",
+   "categoria": "Física",
+   "nombre": "Intercambio feed-efluente",
+   "capa": "Térmica",
+   "codigo_pfd": "PFD-FE-001",
+   "builder": "_example_feed_effluent",
+   "archivo": "feed_effluent.json"
+  },
+  {
+   "clave": "double_effect",
+   "label": "Evaporador doble efecto (jugo 12% → 48% sólidos)",
+   "categoria": "Alimentaria",
+   "nombre": "Evaporador doble efecto",
+   "capa": "Térmica",
+   "codigo_pfd": "PFD-DE-001",
+   "builder": "_example_double_effect",
+   "archivo": "double_effect.json"
+  },
+  {
+   "clave": "nested_recycle",
+   "label": "Reciclo anidado (2 lazos al mismo mixer, multitear)",
+   "categoria": "Química",
+   "nombre": "Reciclo anidado",
+   "capa": "Reciclo",
+   "codigo_pfd": "PFD-NR-001",
+   "builder": "_example_nested_recycle",
+   "archivo": "nested_recycle.json"
   }
  ]
 }

@@ -775,12 +775,17 @@ def _solve_mass_iteration(fs):
                 propagated.append((unknown_ins[0].name, deduced))
 
         elif not unknown_ins and not unknown_outs \
-                and not any(s.id in _ACTIVE_TEAR_IDS
-                            for s in proc_ins + proc_outs):
-            # (El bloque que TOCA un tear activo queda fuera: durante el
+                and not any(s.id in _ACTIVE_TEAR_IDS for s in proc_ins):
+            # (El bloque DESTINO de un tear activo queda fuera: durante el
             # recompute (d) el tear vale 0 transitorio — un sentinel, no un
             # valor — y "rebalancear" contra ese 0 destruye la propagación
-            # del guess en el mixer destino.)
+            # del guess en el mixer destino.  El bloque FUENTE del tear SÍ
+            # entra: re-derivar su salida-tear stale es la "producción
+            # forward honesta" — sin esto, un pass-through fuente (compresor
+            # de reciclo) retiene el valor de una ronda anterior y G(x)
+            # devuelve basura: nested_recycle con C-101 in=9353/out=63983.
+            # En fase (c) los tears están LOCKED → _is_mass_locked los
+            # protege de este closure igual que antes (S2-B intacto).)
             # ── UPDATE-closure (TF §3) ─────────────────────────────────
             # Las reglas de arriba solo LLENAN ceros.  Tras converger un
             # tear, los unit-ops (columna, flash) RE-escriben sus salidas,
@@ -788,15 +793,14 @@ def _solve_mass_iteration(fs):
             # retenían la masa de una iteración intermedia (E-201 con
             # in=21283 / out=24426 stale en industrial).  Si el bloque está
             # completamente resuelto pero NO balancea y hay exactamente UNA
-            # salida libre (no locked / no tear), se RE-deriva.  El análogo
+            # salida libre (no locked), se RE-deriva.  El análogo
             # backward (una entrada libre) sólo FUERA del SCC activo (S2-D).
             sum_in  = sum(s.mass_flow for s in proc_ins)
             sum_out = sum(s.mass_flow for s in proc_outs)
             imbal = sum_in - sum_out
             if abs(imbal) > 1e-6:
                 free_outs = [s for s in proc_outs
-                             if not _is_mass_locked(s)
-                             and s.id not in _ACTIVE_TEAR_IDS]
+                             if not _is_mass_locked(s)]
                 free_ins  = [s for s in proc_ins
                              if not _is_mass_locked(s)
                              and s.id not in _ACTIVE_TEAR_IDS]
@@ -5717,15 +5721,22 @@ def _tears_forward_pass(fs, scc_streams, tears, x_vec):
         # split PRIMERO; recién después los splitters lo distribuyen a
         # reciclo/producto.  Interleaved unas pasadas para que productos y
         # reciclos queden consistentes con el mismo split (evita staleness).
-        for _ in range(5):
+        # Orden DENTRO de la ronda: composiciones PRIMERO, unit-ops después,
+        # cierre de masa al final.  Con el orden viejo (flash primero,
+        # propagate después) las salidas del flash quedaban computadas con
+        # la comp del feed de la ronda ANTERIOR (un paso atrás) → desbalance
+        # elemental residual en el separador (nested_recycle: 1.5% de C en
+        # V-101).  Con comps al inicio, la ronda que rompe el loop (sin más
+        # trabajo de masa) deja flash/separadores consistentes con la
+        # composición final; en un punto estacionario es equivalente.
+        for _ in range(6):
+            auto_propagate_compositions(fs)
             solve_flashes(fs)
             solve_mechanical_separators(fs)
             solve_columns(fs)
             solve_splitters(fs)
-            auto_propagate_compositions(fs)
             if not _solve_mass_iteration(fs):
                 break
-        auto_propagate_compositions(fs)
         g = [t.mass_flow for t in tears]
     finally:
         _ACTIVE_TEAR_IDS = _prev_active
@@ -5786,12 +5797,35 @@ def _solve_recycle_broyden(fs, scc_block_ids, tears,
     for it in range(max_iter):
         scale = max(max(abs(v) for v in x), 1e-9)
         if max(abs(f) for f in F) / scale < tol:
-            rs.converged = True
-            rs.iterations = it + 1
-            rs.final_value = sum(g)
-            # fijar el SS convergido y propagarlo
-            _tears_forward_pass(fs, scc_streams, tears, x)
-            return rs
+            # VERIFICACIÓN de estacionariedad: G depende también del estado
+            # de composición (el VF del flash usa la composición de la ronda
+            # anterior), así que un residuo chico puede ser TRANSITORIO.
+            # Exigir DOS residuos consecutivos chicos antes de declarar
+            # convergencia — si el segundo regresa grande, seguir iterando
+            # (nunca un "converged" falso con estado desbalanceado).
+            F2, g2 = _residual(x)
+            if max(abs(f) for f in F2) / scale < tol:
+                rs.converged = True
+                rs.iterations = it + 1
+                rs.final_value = sum(g2)
+                # fijar el SS convergido y propagarlo — con POLISH:
+                # la composición va una ronda detrás de la masa (el VF del
+                # flash usa la comp de la ronda anterior), así que en el
+                # punto fijo de MASA puede quedar un desbalance elemental
+                # residual (nested_recycle: 1.5% de C en V-101).  Unas
+                # pasadas extra de sustitución x←G(x) dejan masa Y
+                # composición estacionarias; corta cuando el paso es <tol/10.
+                xf = list(x)
+                for _ in range(6):
+                    gf = _tears_forward_pass(fs, scc_streams, tears, xf)
+                    if max(abs(gf[i] - xf[i])
+                           for i in range(n)) / scale < tol / 10.0:
+                        break
+                    xf = gf
+                return rs
+            F, g = F2, g2
+            rs.history.append(sum(x))
+            continue
 
         # paso Broyden:  dx = −H·F
         dx = [-v for v in _matvec(H, F)]
