@@ -98,3 +98,73 @@ def test_industrial_lazo_vivo_converge():
     vap = next(s for s in fs.streams.values() if s.name == "S-vap")
     assert abs(meoh.mass_flow - vap.mass_flow) < 1.0, \
         "cadena pass-through stale aguas abajo del lazo (update-closure)"
+
+
+# ── keyed fractions: el reparto es ESTABLE ante cambios de topología ────
+def _build_split3(insert_tank=False, keyed=False):
+    """Splitter con 3 salidas [0.5,0.3,0.2].  Con insert_tank=True se mete
+    un tanque pass-through en la primera salida (cambia el orden de
+    enumeración de streams).  Con keyed=True las fracciones se anclan por
+    salida (split_fraction); si no, se usan posicionales (splitter_fractions)."""
+    import copy
+    fs = Flowsheet()
+    sp = Block(id=fs.new_id(), name="SP-101", eq_type="Splitter — flow divider",
+               S=0.0, x=0, y=0, splitter_active=True,
+               splitter_fractions=[0.5, 0.3, 0.2])
+    fs.blocks[sp.id] = sp
+    feed = Stream(id=fs.new_id(), name="S-feed", src=0, dst=sp.id,
+                  mass_flow=10000, mass_flow_locked=True, phase="liquid",
+                  main_component="water", composition={"water": 1.0})
+    fs.streams[feed.id] = feed
+    p1 = Stream(id=fs.new_id(), name="S-p1", src=sp.id, dst=0, role="product")
+    p2 = Stream(id=fs.new_id(), name="S-p2", src=sp.id, dst=0, role="product")
+    p3 = Stream(id=fs.new_id(), name="S-p3", src=sp.id, dst=0, role="product")
+    if keyed:
+        p1.split_fraction, p2.split_fraction, p3.split_fraction = 0.5, 0.3, 0.2
+    for s in (p1, p2, p3):
+        fs.streams[s.id] = s
+    if insert_tank:
+        tk = Block(id=fs.new_id(), name="TK-x",
+                   eq_type="Storage tank — cone roof", S=0.0, x=0, y=0)
+        fs.blocks[tk.id] = tk
+        internal = copy.deepcopy(p1)
+        internal.id = fs.new_id()
+        internal.name = "S-p1-int"
+        internal.role = "internal"
+        internal.dst = tk.id
+        fs.streams[internal.id] = internal
+        p1.src = tk.id
+        if keyed:
+            internal.split_fraction = 0.5   # el keyed viaja con la salida real
+            p1.split_fraction = None        # p1 ya NO es salida del splitter
+    return fs
+
+
+def _products(fs):
+    return {s.name: round(s.mass_flow)
+            for s in fs.streams.values() if s.role == "product"}
+
+
+def test_splitter_posicional_rota_al_insertar_bloque():
+    """BUG 1 (documentado): con fracciones POSICIONALES, insertar un bloque
+    pass-through en una salida ROTA la asignación."""
+    fs = _build_split3(insert_tank=False, keyed=False)
+    fsv.solve(fs)
+    assert _products(fs) == {"S-p1": 5000, "S-p2": 3000, "S-p3": 2000}
+    fs = _build_split3(insert_tank=True, keyed=False)
+    fsv.solve(fs)
+    # posicional: el reparto se desalinea (evidencia del bug)
+    assert _products(fs) != {"S-p1": 5000, "S-p2": 3000, "S-p3": 2000}
+
+
+def test_splitter_keyed_estable_ante_insercion():
+    """FIX: con split_fraction anclado por salida, insertar un bloque
+    pass-through NO altera el reparto — cada fracción sigue con su salida."""
+    esperado = {"S-p1": 5000, "S-p2": 3000, "S-p3": 2000}
+    fs = _build_split3(insert_tank=False, keyed=True)
+    fsv.solve(fs)
+    assert _products(fs) == esperado
+    fs = _build_split3(insert_tank=True, keyed=True)
+    fsv.solve(fs)
+    assert _products(fs) == esperado, \
+        "las fracciones keyed deben mantenerse ancladas a su salida"

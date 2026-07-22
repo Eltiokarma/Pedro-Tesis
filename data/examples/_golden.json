@@ -53,6 +53,15 @@
   "overall_status": "ok",
   "sum_duty": 10.383593
  },
+ "bypass": {
+  "ISBL": 2964086.98,
+  "energy_errors": 0,
+  "mass_errors": 0,
+  "n_blocks": 4,
+  "n_streams": 6,
+  "overall_status": "ok",
+  "sum_duty": 603.457695
+ },
  "cdu": {
   "ISBL": 5589429.14,
   "energy_errors": 0,
@@ -79,6 +88,24 @@
   "n_streams": 13,
   "overall_status": "ok",
   "sum_duty": -17.873138
+ },
+ "cyclone": {
+  "ISBL": 830822.99,
+  "energy_errors": 0,
+  "mass_errors": 0,
+  "n_blocks": 2,
+  "n_streams": 4,
+  "overall_status": "ok",
+  "sum_duty": 76.352683
+ },
+ "decanter": {
+  "ISBL": 35224.85,
+  "energy_errors": 0,
+  "mass_errors": 0,
+  "n_blocks": 2,
+  "n_streams": 4,
+  "overall_status": "ok",
+  "sum_duty": 0.194651
  },
  "desal": {
   "ISBL": 7570989.39,
@@ -242,6 +269,15 @@
   "overall_status": "ok",
   "sum_duty": -1.263545
  },
+ "parallel": {
+  "ISBL": 1398423.58,
+  "energy_errors": 0,
+  "mass_errors": 0,
+  "n_blocks": 5,
+  "n_streams": 7,
+  "overall_status": "ok",
+  "sum_duty": 0.770106
+ },
  "pasteurizer": {
   "ISBL": 365098.99,
   "energy_errors": 0,
@@ -304,6 +340,15 @@
   "n_streams": 8,
   "overall_status": "ok",
   "sum_duty": 500.050791
+ },
+ "salt_crystal": {
+  "ISBL": 2212336.47,
+  "energy_errors": 0,
+  "mass_errors": 0,
+  "n_blocks": 5,
+  "n_streams": 8,
+  "overall_status": "warning",
+  "sum_duty": 10.096473
  },
  "smr_eq": {
   "ISBL": 9564627.81,

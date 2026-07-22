@@ -772,6 +772,7 @@
    "pipe_length_m": 0.0,
    "pipe_roughness_m": 4.5e-05,
    "pressure_bar": 200.0,
+   "pressure_lock_origin": "user",
    "pressure_locked": true,
    "price_usd_per_tm": 0.0,
    "reaction_warnings": [],
@@ -787,8 +788,7 @@
    "temperature": 333,
    "temperature_locked": true,
    "vapor_fraction": 0.0,
-   "waypoints": [],
-   "pressure_lock_origin": "user"
+   "waypoints": []
   },
   "13": {
    "active_reactions": [],
@@ -825,6 +825,7 @@
    "pipe_length_m": 0.0,
    "pipe_roughness_m": 4.5e-05,
    "pressure_bar": 200.0,
+   "pressure_lock_origin": "user",
    "pressure_locked": true,
    "price_usd_per_tm": 0.0,
    "reaction_warnings": [],
@@ -840,8 +841,7 @@
    "temperature": 80,
    "temperature_locked": true,
    "vapor_fraction": 0.0,
-   "waypoints": [],
-   "pressure_lock_origin": "user"
+   "waypoints": []
   },
   "14": {
    "active_reactions": [],
@@ -1131,6 +1131,7 @@
    "reaction_warnings": [],
    "residence_time_s": null,
    "role": "waste",
+   "split_fraction": 0.009900990099009901,
    "src": 8,
    "src_port": "vapor",
    "start_xy": [],
@@ -1180,6 +1181,7 @@
    "reaction_warnings": [],
    "residence_time_s": null,
    "role": "internal",
+   "split_fraction": 0.9900990099009901,
    "src": 8,
    "src_port": "liquido",
    "start_xy": [],
@@ -1227,6 +1229,7 @@
    "pipe_length_m": 0.0,
    "pipe_roughness_m": 4.5e-05,
    "pressure_bar": 200.0,
+   "pressure_lock_origin": "user",
    "pressure_locked": true,
    "price_usd_per_tm": 0.0,
    "reaction_warnings": [],
@@ -1242,8 +1245,7 @@
    "temperature": 200.0,
    "temperature_locked": true,
    "vapor_fraction": 0.0,
-   "waypoints": [],
-   "pressure_lock_origin": "user"
+   "waypoints": []
   }
  }
 }

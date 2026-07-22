@@ -411,6 +411,56 @@
    "codigo_pfd": "PFD-DESAL-001",
    "builder": "_example_desalination",
    "archivo": "desal.json"
+  },
+  {
+   "clave": "salt_crystal",
+   "label": "Sal por cristalización (brine → cristalizador → filtro → dryer)",
+   "categoria": "Química",
+   "nombre": "Sal por cristalización",
+   "capa": "Sólidos",
+   "codigo_pfd": "PFD-NACL-001",
+   "builder": "_example_salt_crystal",
+   "archivo": "salt_crystal.json"
+  },
+  {
+   "clave": "cyclone",
+   "label": "Ciclón gas/sólido (gases de combustión → gas limpio + polvo)",
+   "categoria": "Física",
+   "nombre": "Ciclón gas/sólido",
+   "capa": "Sólidos",
+   "codigo_pfd": "PFD-CY-001",
+   "builder": "_example_cyclone",
+   "archivo": "cyclone.json"
+  },
+  {
+   "clave": "decanter",
+   "label": "Decantador L-L (agua/aceite por gravedad)",
+   "categoria": "Física",
+   "nombre": "Decantador líquido-líquido",
+   "capa": "Sólidos",
+   "codigo_pfd": "PFD-D-001",
+   "builder": "_example_decanter",
+   "archivo": "decanter.json"
+  },
+  {
+   "clave": "bypass",
+   "label": "Bypass térmico (split → horno | bypass → mix, control de T)",
+   "categoria": "Física",
+   "nombre": "Bypass térmico",
+   "capa": "Térmica",
+   "codigo_pfd": "PFD-BYP-001",
+   "builder": "_example_bypass",
+   "archivo": "bypass.json"
+  },
+  {
+   "clave": "parallel",
+   "label": "Trenes paralelos (2 CSTR en paralelo → mezcla)",
+   "categoria": "Química",
+   "nombre": "Reactores en paralelo",
+   "capa": "Reacción",
+   "codigo_pfd": "PFD-PAR-001",
+   "builder": "_example_parallel",
+   "archivo": "parallel.json"
   }
  ]
 }
