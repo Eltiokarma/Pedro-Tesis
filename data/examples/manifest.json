@@ -411,6 +411,16 @@
    "codigo_pfd": "PFD-DESAL-001",
    "builder": "_example_desalination",
    "archivo": "desal.json"
+  },
+  {
+   "clave": "salt_crystal",
+   "label": "Sal por cristalización (brine → cristalizador → filtro → dryer)",
+   "categoria": "Química",
+   "nombre": "Sal por cristalización",
+   "capa": "Sólidos",
+   "codigo_pfd": "PFD-NACL-001",
+   "builder": "_example_salt_crystal",
+   "archivo": "salt_crystal.json"
   }
  ]
 }
