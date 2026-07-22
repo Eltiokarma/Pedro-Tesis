@@ -556,8 +556,12 @@ def size_vessel(block, fs) -> Optional[float]:
     return max(V, 0.5)
 
 
+STORAGE_TANK_DAYS = 1        # day-tank: buffer corto de 1 día (entrega/
+                            # despacho frecuente), no 7 días (mega-tanque).
+
+
 def size_storage_tank(block, fs) -> Optional[float]:
-    """V = caudal · 7 días / ρ — buffer típico de almacenamiento.
+    """V = caudal · STORAGE_TANK_DAYS / ρ — day-tank (buffer corto).
 
     Usa _rho_estimate(stream) para detectar gas vs líquido en lugar de
     asumir siempre RHO_LIQUID_DEFAULT. Esto corrige el sub-sizing 400x
@@ -574,7 +578,7 @@ def size_storage_tank(block, fs) -> Optional[float]:
         return None
     m_s = _flow_kg_s(stream_ref.mass_flow)
     rho = _rho_estimate(stream_ref)
-    tau = 7 * 86400         # 7 días
+    tau = STORAGE_TANK_DAYS * 86400
     V = m_s / rho * tau
     return max(V, 10.0)
 
