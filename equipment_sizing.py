@@ -644,6 +644,50 @@ def size_mixer_splitter(block, fs) -> Optional[float]:
     return max((m_s / rho) * TAU_MIXER_S, 0.05)    # m³
 
 
+TAU_CENTRIFUGE_S = 60.0     # residencia en el bowl de una centrífuga [s]
+
+
+def size_centrifuge(block, fs) -> Optional[float]:
+    """Centrífuga (disc-stack / decanter).  Despacha por la base de costo:
+    'Volume' (m³ del bowl = Q·τ) o 'Flow' (m³/h de alimentación).  La
+    categoría 'Solids / sep.' no está en SIZER_BY_CAT y estos eq_types no
+    tenían sizer → S=0 (costo nulo)."""
+    ins = [s for s in fs.streams.values() if s.dst == block.id]
+    if not ins:
+        return None
+    feed = max(ins, key=lambda s: s.mass_flow or 0.0)
+    m_s = _flow_kg_s(feed.mass_flow or 0.0)
+    if m_s <= 0:
+        return None
+    rho = _rho_estimate(feed)
+    if rho <= 0:
+        return None
+    Q_m3_s = m_s / rho
+    spec = ec.EQUIPMENT_DATA.get(block.eq_type, {})
+    if (spec.get("S_param") or "").lower() == "flow":
+        return max(Q_m3_s * 3600.0, 1.0)          # m³/h
+    return max(Q_m3_s * TAU_CENTRIFUGE_S, 0.05)   # m³ (bowl)
+
+
+def size_cooling_tower(block, fs) -> Optional[float]:
+    """Cooling tower (Utilities).  S = carga de enfriamiento en MW = |duty|/
+    1000 (duty en kW).  Si el bloque no trae duty, se estima del ΔT del agua
+    (m·Cp·ΔT).  La categoría 'Utilities' no tiene sizer → S=0 (costo nulo)."""
+    duty_kW = abs(float(getattr(block, "duty", 0.0) or 0.0))
+    if duty_kW <= 0:
+        ins = [s for s in fs.streams.values() if s.dst == block.id]
+        outs = [s for s in fs.streams.values() if s.src == block.id]
+        if ins and outs:
+            feed = max(ins, key=lambda s: s.mass_flow or 0.0)
+            cold = max(outs, key=lambda s: s.mass_flow or 0.0)
+            m_s = _flow_kg_s(feed.mass_flow or 0.0)
+            dT = abs((feed.temperature or 0.0) - (cold.temperature or 0.0))
+            duty_kW = m_s * 4.18 * dT              # agua Cp≈4.18 kJ/kg·K
+    if duty_kW <= 0:
+        return None
+    return max(duty_kW / 1000.0, 1.0)             # MW
+
+
 def size_cyclone(block, fs) -> Optional[float]:
     """S [m³/s] = caudal volumétrico de gas de entrada (Turton usa Flow en
     m³/s para el ciclón gas/sólido).  El gas es la fase carrier del feed;
@@ -660,6 +704,54 @@ def size_cyclone(block, fs) -> Optional[float]:
     if rho <= 0:
         return None
     return max(m_s / rho, 0.1)                # m³/s
+
+
+def size_fan(block, fs) -> Optional[float]:
+    """S [m³/s] = caudal volumétrico de gas (Fans / blowers usan Fluid flow
+    en m³/s).  Densidad por gas ideal.  La categoría no tenía sizer → S=0."""
+    ins = [s for s in fs.streams.values() if s.dst == block.id]
+    outs = [s for s in fs.streams.values() if s.src == block.id]
+    ref = (ins or outs)
+    if not ref:
+        return None
+    feed = max(ref, key=lambda s: s.mass_flow or 0.0)
+    m_s = _flow_kg_s(feed.mass_flow or 0.0)
+    if m_s <= 0:
+        return None
+    rho = _rho_estimate(feed)
+    if rho <= 0:
+        return None
+    return max(m_s / rho, 0.1)                     # m³/s
+
+
+def size_valve(block, fs) -> Optional[float]:
+    """S [m³/h] = caudal volumétrico de la corriente (Valves: Flow/Capacity
+    en m³/h).  Los eq_types de válvula no tenían sizer → S=0 (costo nulo)."""
+    streams = [s for s in fs.streams.values()
+               if s.dst == block.id or s.src == block.id]
+    if not streams:
+        return None
+    ref = max(streams, key=lambda s: s.mass_flow or 0.0)
+    m_s = _flow_kg_s(ref.mass_flow or 0.0)
+    if m_s <= 0:
+        return None
+    rho = _rho_estimate(ref)
+    if rho <= 0:
+        return None
+    return max((m_s / rho) * 3600.0, 1.0)          # m³/h
+
+
+DH_STEAM_KJ_KG = 2100.0     # ΔH_vap típico de vapor de proceso [kJ/kg]
+
+
+def size_boiler_steam(block, fs) -> Optional[float]:
+    """S [kg/s] = |duty| / ΔH_vap — caudal de vapor generado por una caldera
+    pirotubular/acuotubular (Boiler — fire/water tube, S=Steam output kg/s).
+    Estos eq_types no tenían sizer → una caldera desbloqueada quedaba en S=0."""
+    Q_kW = abs(float(getattr(block, "duty", 0.0) or 0.0))
+    if Q_kW <= 0:
+        return None
+    return max(Q_kW / DH_STEAM_KJ_KG, 0.1)         # kg/s
 
 
 def size_evaporator(block, fs) -> Optional[float]:
@@ -760,6 +852,8 @@ SIZER_BY_CAT = {
     "Storage":           size_storage_tank,
     "Evaporators":       size_evaporator,
     "Mixers / splitters": size_mixer_splitter,
+    "Fans / blowers":    size_fan,
+    "Valves":            size_valve,
 }
 
 # Sizers específicos por eq_type — tienen prioridad sobre SIZER_BY_CAT.
@@ -783,6 +877,12 @@ SIZER_BY_EQTYPE = {
     "Crystallizer":                   size_crystallizer,
     "Filter — belt":                  size_filter,
     "Cyclone — gas/solid":            size_cyclone,
+    "Centrifuge — disc stack":        size_centrifuge,
+    "Centrifuge — decanter":          size_centrifuge,
+    "Cooling tower — induced draft":  size_cooling_tower,
+    "Cooling tower — natural draft":  size_cooling_tower,
+    "Boiler — fire tube":             size_boiler_steam,
+    "Boiler — water tube":            size_boiler_steam,
 }
 
 

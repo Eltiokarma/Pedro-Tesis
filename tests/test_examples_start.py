@@ -27,8 +27,11 @@ _DATA_DIR = os.path.join(_PARENT, "data", "examples")
 
 # Bloques fuente aceptables (pasivos: contienen o reciben, no impulsan).
 _FUENTES_OK = ("Storage tank", "Vessel")
-# Máquinas que impulsan fluido: SIEMPRE necesitan succión.
-_MOVEDORES = ("Pump", "Compressor")
+# Máquinas que impulsan fluido: SIEMPRE necesitan succión.  Los fans/blowers
+# son impulsores de gas (tiro forzado) igual que un compresor de baja carga.
+_MOVEDORES = ("Pump", "Compressor", "Fan", "Blower")
+# Impulsores válidos de un feed GASEOSO (la P de llegada es trabajo, no dato).
+_MOVEDORES_GAS = ("Compressor", "Fan", "Blower")
 
 # Feeds de fase "liquid" que en realidad son sólidos transportados (harina/
 # masa, caliza, batch de vidrio, papa entera): van por faja/tornillo, no por
@@ -151,10 +154,10 @@ class TestIniciosDeEjemplos(unittest.TestCase):
                 self.assertIsNotNone(
                     dst, f"{key}: feed '{s.get('name')}' sin bloque destino")
                 self.assertTrue(
-                    dst["eq_type"].startswith("Compressor"),
+                    dst["eq_type"].startswith(_MOVEDORES_GAS),
                     f"{key}: feed gaseoso '{s.get('name')}' entra a "
-                    f"'{dst['eq_type']}' ({dst['name']}) sin compresor de "
-                    f"alimentación")
+                    f"'{dst['eq_type']}' ({dst['name']}) sin impulsor de gas "
+                    f"(compresor/fan/blower) de alimentación")
 
     def test_bombas_y_compresores_tienen_succion(self):
         """Toda bomba/compresor tiene corriente de entrada (succión)."""

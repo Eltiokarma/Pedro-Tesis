@@ -23,8 +23,16 @@ aparecieron dos defectos. Se documentan con reproducción mínima.
   splitter keyed + recombinación en mixer a distinta T. **Destapó BUG 5.**
 - **`parallel`** — Topología rara: dos CSTR en paralelo (debottlenecking) desde
   un mismo splitter, salidas recombinadas en un mixer.
+- **`centrifuge`** — `Centrifuge — disc stack`, deshidratación de lodos de CaCO₃
+  (sólido/líquido). Equipo poco usado; **destapó BUG 6.**
+- **`cooling`** — `Cooling tower — induced draft`, agua de proceso 45→28 °C
+  (~2 MW) con bomba de circulación. Equipo poco usado; **destapó BUG 7.**
+- **`pfr`** — `Reactor — PFR (tubular)` de glicol. Ejercita el sizing de PFR.
+- **`boiler_ft`** — `Boiler — fire tube`, BFW → vapor de proceso (6 MW). **BUG 9.**
+- **`letdown`** — `Valve — control globe`, letdown de presión de metanol. **BUG 10.**
+- **`blower`** — `Fan — centrifugal radial`, aire de combustión. **BUG 8.**
 
-Gate 46/46 verde.
+Gate 52/52 verde.
 
 ---
 
@@ -213,19 +221,73 @@ en el resto de ejemplos.
 
 ---
 
+## BUG 6 y BUG 7 — Más equipos con costo pero sin sizer → costo cero
+
+Misma clase que BUG 4/5 (correlación de costo Turton presente, sizer ausente →
+`S=0` → CBM nulo), destapados por los ejemplos `centrifuge` y `cooling`:
+
+- **BUG 6** — `Centrifuge — disc stack` / `Centrifuge — decanter` (categoría
+  `Solids / sep.`, S=Volume o Flow) sin sizer. → `size_centrifuge` (despacha por
+  `S_param`: Volume→Q·τ del bowl, Flow→m³/h).
+- **BUG 7** — `Cooling tower — induced draft` / `natural draft` (categoría
+  `Utilities`, S=Cooling duty MW) sin sizer. → `size_cooling_tower` (S=|duty|/
+  1000 MW; si no hay duty lo estima del ΔT del agua, Cp≈4.18).
+
+0/46 ejemplos existentes afectados (ninguno usaba esos equipos). Regresión:
+`tests/test_costing_honesto.py::test_centrifuge_y_cooling_tower_costeados`.
+
+> **Patrón transversal (BUG 4–10):** varios eq_types del catálogo tienen
+> K1/K2/K3 de costo pero no estaban conectados a ningún sizer, así que un bloque
+> de esos tipos usado *standalone* costeaba cero en silencio.
+
+### Auditoría sistemática del catálogo (cierre del patrón)
+
+En vez de descubrir los huecos uno por uno, se auditó **todo** el catálogo
+cruzando `EQUIPMENT_DATA` (tiene costo) contra `SIZER_BY_CAT`/`SIZER_BY_EQTYPE`
+(tiene sizer). Huecos encontrados y cerrados:
+
+| Categoría / eq_type | Bug | Sizer nuevo |
+|---|---|---|
+| `Cyclone — gas/solid` | 4 | `size_cyclone` (m³/s gas) |
+| `Mixers / splitters` | 5 | `size_mixer_splitter` (Flow/Volume) |
+| `Centrifuge — disc stack/decanter` | 6 | `size_centrifuge` (Volume/Flow) |
+| `Cooling tower — induced/natural` | 7 | `size_cooling_tower` (MW) |
+| `Fans / blowers` | 8 | `size_fan` (m³/s gas) |
+| `Boiler — fire/water tube` | 9 | `size_boiler_steam` (kg/s vapor) |
+| `Valves` | 10 | `size_valve` (m³/h) |
+
+**Único hueco restante (documentado, no cerrado):** `Trays / packing`
+(`Tray — sieve/valve`, `Packing — random/structured`). Son **internos de
+columna**, no equipos standalone — su costo se contabiliza dentro del shell de
+la torre. Quedan sin sizer a propósito (usarlos como bloque suelto es atípico).
+
+**Refinamiento de convención:** los `Fan`/`Blower` se reconocen ahora como
+impulsores válidos de un **feed gaseoso** (tiro forzado = trabajo que fija la P
+de llegada, igual que un compresor) — antes la convención solo aceptaba
+`Compressor` (`tests/test_examples_start.py`, `_MOVEDORES_GAS`).
+
+---
+
 ## Estado
 
 | Hallazgo | Estado |
 |---|---|
-| `salt_crystal`/`decanter`/`cyclone`/`bypass`/`parallel` (ejemplos nuevos) | AGREGADOS al set (gate 46/46) |
+| 11 ejemplos nuevos (`salt_crystal`…`blower`) | AGREGADOS al set (gate 52/52) |
 | BUG 1 — splitter mapea fracciones por posición | **CORREGIDO** — `split_fraction` keyed + 5 ejemplos migrados |
 | BUG 2 — separador rutea al revés sin warning | **CORREGIDO** — `[W-PHYS-NONVOL]` en el audit |
 | BUG 3 — ciclón mal-etiqueta fases de salida | **CORREGIDO** — fase del carrier desde el feed |
 | BUG 4 — ciclón sin sizer → costo cero | **CORREGIDO** — `size_cyclone` (m³/s gas) |
 | BUG 5 — mixers/splitters standalone sin sizer → costo cero | **CORREGIDO** — `size_mixer_splitter` |
+| BUG 6 — centrífuga sin sizer → costo cero | **CORREGIDO** — `size_centrifuge` |
+| BUG 7 — cooling tower sin sizer → costo cero | **CORREGIDO** — `size_cooling_tower` |
+| BUG 8 — fan/blower sin sizer → costo cero | **CORREGIDO** — `size_fan` |
+| BUG 9 — caldera piro/acuotubular sin sizer → costo cero | **CORREGIDO** — `size_boiler_steam` |
+| BUG 10 — válvulas sin sizer → costo cero | **CORREGIDO** — `size_valve` |
 
-Los 5 bugs quedaron corregidos con reproducción mínima y regresión. Los fixes
-son aditivos y backward-compatible (goldens existentes intactos, gate 46/46,
-529 tests de lógica verdes). Método: "agregar al set + gate" — se agregaron 5
+Los 10 bugs quedaron corregidos con reproducción mínima y regresión. Los fixes
+son aditivos y backward-compatible (goldens existentes intactos, gate 52/52,
+531 tests de lógica verdes). Método: "agregar al set + gate" — se agregaron 11
 ejemplos limpios (equipos poco usados + topologías raras) y los defectos que
-destaparon se corrigieron en el mismo ciclo.
+destaparon se corrigieron en el mismo ciclo. La auditoría sistemática del
+catálogo cerró **toda** la clase de huecos de sizing salvo los internos de
+columna (trays/packing), documentados como excepción deliberada.
