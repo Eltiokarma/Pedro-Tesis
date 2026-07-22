@@ -660,6 +660,9 @@ class Flowsheet:
     # consume simulate_engine._economics; econ_inputs del CLI tiene
     # precedencia sobre este valor embebido en el flowsheet.
     econ_overrides: Dict[str, float] = field(default_factory=dict)
+    # Anotaciones de plano (ciclo 3, 3c): notas de texto sobre el lienzo.
+    # {"id", "x", "y", "text", "style", "tint", "pill", "guide"}
+    annotations: List[Dict] = field(default_factory=list)
 
     def new_id(self):
         v = self._next_id
@@ -679,6 +682,7 @@ class Flowsheet:
             "opex_extras":     list(self.opex_extras),
             "fixed_overrides": dict(self.fixed_overrides),
             "econ_overrides":  dict(self.econ_overrides),
+            "annotations":     [dict(a) for a in self.annotations],
         }
 
     @staticmethod
@@ -721,4 +725,5 @@ class Flowsheet:
         fs.opex_extras     = list(d.get("opex_extras", []))
         fs.fixed_overrides = dict(d.get("fixed_overrides", {}))
         fs.econ_overrides  = dict(d.get("econ_overrides", {}))
+        fs.annotations     = [dict(a) for a in d.get("annotations", [])]
         return fs

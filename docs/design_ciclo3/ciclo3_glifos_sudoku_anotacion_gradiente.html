@@ -1,0 +1,750 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<meta name="design_doc_mode" content="canvas">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg:#f6f3ec; --bg_elev:#ffffff; --bg_mute:#f1ede4; --bg_sunk:#ece6d8;
+    --line:#e6e0d0; --line_strong:#d4ccb8; --line_soft:#efeadd;
+    --ink:#1a1714; --ink_mute:#6b6256; --ink_soft:#948a7c; --ink_ghost:#bab2a3;
+    --accent:#0d6e78; --accent_deep:#064951; --accent_soft:#d4ebed; --accent_tint:#eaf4f5;
+    --spec:#3548b4; --spec_ink:#2a3a9a; --spec_bg:#eef1ff; --spec_ribbon:#4a5dcc;
+    --auto_bg:#f3efe5; --auto_ink:#918878; --auto_ribbon:#c9c0ad;
+    --green:#4d8742; --green_bg:#e6f0df; --amber:#b8841a; --amber_bg:#f4ecd1;
+    --orange:#c26329; --orange_bg:#f5e1d0; --danger:#b8453a; --danger_bg:#f3dcd8;
+    --tag_bg:#ede7d6; --tag_ink:#6b6253;
+    --phase_liq:#2f6690; --phase_vap:#c47a1e; --phase_gas:#8a8172; --phase_2ph:#6d5a9c;
+    --canvas_bg:#fbfaf6; --canvas_grid:#eae5d9; --canvas_grid_major:#ddd6c6;
+    --stream_internal:#2a2620; --stream_product:#b8323f; --stream_utility:#2f4d9e; --stream_waste:#6d4c41;
+    --service_hot:#d5501f; --service_hot_pale:#f4c8a8; --service_hot_deep:#a8320f;
+    --service_cold:#2b8fc4; --service_cold_pale:#bfe0f0; --service_cold_deep:#125f88;
+    --torn:#6d5a9c;
+    --sw-o:1.6; --sw-d:1.0;
+    --gl-ink:var(--ink);
+    --gl-detail:color-mix(in srgb, var(--ink) 52%, transparent);
+    --gl-fill:var(--bg_elev);
+    --shadow:0 1px 2px rgba(40,34,26,.05), 0 8px 30px rgba(40,34,26,.06);
+  }
+  [data-theme="dark"]{
+    --bg:#16130f; --bg_elev:#1f1b16; --bg_mute:#26211b; --bg_sunk:#110e0a;
+    --line:#2f2920; --line_strong:#3f3830; --line_soft:#251f18;
+    --ink:#efe7d6; --ink_mute:#a59a89; --ink_soft:#6f6759; --ink_ghost:#4a4438;
+    --accent:#5dc1cc; --accent_deep:#92dde4; --accent_soft:#1f3a3d; --accent_tint:#1a2b2d;
+    --spec:#92a0ef; --spec_ink:#b4befa; --spec_bg:#20254a; --spec_ribbon:#8294f5;
+    --auto_bg:#221d16; --auto_ink:#8a8170; --auto_ribbon:#463f33;
+    --green:#85b274; --green_bg:#1f2a1d; --amber:#d8aa3a; --amber_bg:#2e2618;
+    --orange:#d18a55; --orange_bg:#2e2118; --danger:#d97262; --danger_bg:#2e1a17;
+    --tag_bg:#2a241d; --tag_ink:#a59a89;
+    --phase_liq:#6fa8d6; --phase_vap:#e0a94e; --phase_gas:#b3a892; --phase_2ph:#a795d6;
+    --canvas_bg:#221d15; --canvas_grid:#2c2519; --canvas_grid_major:#38301f;
+    --stream_internal:#d8cfbf; --stream_product:#e07a82; --stream_utility:#8595d8; --stream_waste:#b39a8a;
+    --service_hot:#e88a5a; --service_hot_pale:#5a3320; --service_hot_deep:#f0a877;
+    --service_cold:#63b8e0; --service_cold_pale:#1e3a4a; --service_cold_deep:#8fcdec;
+    --torn:#a795d6;
+    --shadow:0 1px 2px rgba(0,0,0,.3), 0 10px 34px rgba(0,0,0,.4);
+  }
+  [data-accent="terracota"]{ --accent:#a44a2b; --accent_deep:#7a341c; --accent_soft:#f0d3c5; --accent_tint:#f7e7df; }
+  [data-accent="cobalto"]{ --accent:#3548b4; --accent_deep:#1f2e8c; --accent_soft:#cfd5f0; --accent_tint:#e5e8f7; }
+  [data-accent="oliva"]{ --accent:#5f7a30; --accent_deep:#3f5520; --accent_soft:#d9e3c2; --accent_tint:#ecf0dc; }
+  [data-theme="dark"][data-accent="terracota"]{ --accent:#d18a6a; --accent_deep:#ecae8c; --accent_soft:#3a221a; --accent_tint:#2a1812; }
+  [data-theme="dark"][data-accent="cobalto"]{ --accent:#8a98ed; --accent_deep:#aab5f4; --accent_soft:#23295a; --accent_tint:#1a1f40; }
+  [data-theme="dark"][data-accent="oliva"]{ --accent:#9cb56a; --accent_deep:#bccf8d; --accent_soft:#2c3520; --accent_tint:#1f2618; }
+
+  *{box-sizing:border-box;}
+  body{margin:0;background:var(--bg);color:var(--ink);
+    font-family:"IBM Plex Sans",system-ui,sans-serif;font-size:15px;line-height:1.55;-webkit-font-smoothing:antialiased;}
+  a{color:var(--accent);text-decoration:none;} a:hover{color:var(--accent_deep);text-decoration:underline;}
+  .mono{font-family:"IBM Plex Mono",ui-monospace,monospace;}
+  .o{fill:none;stroke:var(--gl-ink);stroke-width:var(--sw-o);vector-effect:non-scaling-stroke;stroke-linecap:round;stroke-linejoin:round;}
+  .d{fill:none;stroke:var(--gl-detail);stroke-width:var(--sw-d);vector-effect:non-scaling-stroke;stroke-linecap:round;stroke-linejoin:round;}
+  .body{fill:var(--gl-fill);}
+  .dot{fill:var(--gl-detail);stroke:none;}
+  .unrun .o{stroke-dasharray:3 2.4;}
+  svg.glyph{display:block;overflow:visible;}
+  [data-state="ok"]{ --gl-fill:var(--green_bg); }
+  [data-state="warning"]{ --gl-ink:var(--amber); --gl-fill:var(--amber_bg); }
+  [data-state="error"]{ --gl-ink:var(--danger); --gl-fill:var(--danger_bg); }
+  [data-state="stale"]{ --gl-ink:var(--ink_soft); --gl-detail:color-mix(in srgb, var(--ink_soft) 60%, transparent); --gl-fill:var(--bg_elev); }
+  [data-state="unrun"]{ --gl-ink:var(--ink_mute); --gl-fill:var(--bg_elev); }
+</style>
+</helmet>
+<div data-theme="{{ theme }}" data-accent="{{ accent }}" style="min-height:100vh;background:var(--bg);color:var(--ink);">
+
+<svg width="0" height="0" style="position:absolute" aria-hidden="true"><defs>
+  <symbol id="g-bomba" viewBox="0 0 100 100"><circle class="body o" cx="50" cy="46" r="26"/><path class="d" d="M40 34 L66 46 L40 58 Z"/><circle class="dot" cx="50" cy="46" r="2.4"/><line class="o" x1="34" y1="82" x2="66" y2="82"/></symbol>
+  <symbol id="g-compresor" viewBox="0 0 100 100"><path class="body o" d="M22 24 L78 40 L78 60 L22 76 Z"/><path class="d" d="M32 50 H64 M56 44 L64 50 L56 56"/><line class="o" x1="36" y1="86" x2="64" y2="86"/></symbol>
+  <symbol id="g-compresor-recip" viewBox="0 0 100 100"><rect class="body o" x="16" y="36" width="42" height="26" rx="3"/><circle class="body o" cx="37" cy="22" r="9"/><line class="d" x1="34" y1="38" x2="34" y2="60"/><line class="d" x1="42" y1="38" x2="42" y2="60"/><line class="o" x1="50" y1="49" x2="72" y2="49"/><circle class="body o" cx="80" cy="49" r="8"/><line class="o" x1="30" y1="82" x2="72" y2="82"/></symbol>
+  <symbol id="g-reactor-cstr" viewBox="0 0 100 100"><rect class="body o" x="24" y="20" width="52" height="52" rx="7"/><rect class="dot" x="45" y="6" width="10" height="7"/><line class="d" x1="50" y1="13" x2="50" y2="56"/><line class="o" x1="39" y1="56" x2="61" y2="56"/><line class="d" x1="43" y1="50" x2="57" y2="62"/><line class="d" x1="36" y1="72" x2="36" y2="80"/><line class="d" x1="64" y1="72" x2="64" y2="80"/></symbol>
+  <symbol id="g-reactor-jacket" viewBox="0 0 100 100"><rect class="body o" x="20" y="18" width="60" height="56" rx="7"/><rect class="d" x="27" y="24" width="46" height="44" rx="4"/><rect class="dot" x="45" y="4" width="10" height="7"/><line class="d" x1="50" y1="11" x2="50" y2="54"/><line class="o" x1="40" y1="54" x2="60" y2="54"/></symbol>
+  <symbol id="g-reactor-pfr" viewBox="0 0 100 100"><rect class="body o" x="14" y="38" width="72" height="24" rx="11"/><path class="d" d="M22 50 Q30 30 38 50 Q46 70 54 50 Q62 30 70 50"/><path class="d" d="M74 50 H84"/></symbol>
+  <symbol id="g-caldera-fire" viewBox="0 0 100 100"><rect class="body o" x="18" y="30" width="64" height="40" rx="15"/><line class="d" x1="28" y1="42" x2="72" y2="42"/><line class="d" x1="28" y1="50" x2="72" y2="50"/><line class="d" x1="28" y1="58" x2="72" y2="58"/><path class="d" d="M22 74 L26 66 L30 74"/></symbol>
+  <symbol id="g-caldera-water" viewBox="0 0 100 100"><rect class="body o" x="30" y="14" width="40" height="16" rx="8"/><rect class="body o" x="32" y="66" width="36" height="12" rx="6"/><line class="d" x1="38" y1="30" x2="38" y2="66"/><line class="d" x1="46" y1="30" x2="46" y2="66"/><line class="d" x1="54" y1="30" x2="54" y2="66"/><line class="d" x1="62" y1="30" x2="62" y2="66"/><line class="o" x1="50" y1="14" x2="50" y2="6"/><path class="d" d="M42 62 L46 54 L50 62 L54 52 L58 62"/></symbol>
+  <symbol id="g-platos-sieve" viewBox="0 0 100 100"><rect class="body o" x="36" y="12" width="28" height="76" rx="3"/><g class="dot"><circle cx="43" cy="28" r="1.3"/><circle cx="50" cy="28" r="1.3"/><circle cx="57" cy="28" r="1.3"/><circle cx="43" cy="44" r="1.3"/><circle cx="50" cy="44" r="1.3"/><circle cx="57" cy="44" r="1.3"/><circle cx="43" cy="60" r="1.3"/><circle cx="50" cy="60" r="1.3"/><circle cx="57" cy="60" r="1.3"/></g><line class="d" x1="40" y1="28" x2="60" y2="28"/><line class="d" x1="40" y1="44" x2="60" y2="44"/><line class="d" x1="40" y1="60" x2="60" y2="60"/><line class="d" x1="40" y1="76" x2="60" y2="76"/></symbol>
+  <symbol id="g-empaque-struct" viewBox="0 0 100 100"><rect class="body o" x="36" y="12" width="28" height="76" rx="3"/><path class="d" d="M40 22 L60 42 M40 42 L60 22 M40 42 L60 62 M40 62 L60 42 M40 62 L60 82 M40 82 L60 62"/></symbol>
+  <symbol id="g-hx" viewBox="0 0 100 100"><rect class="body o" x="16" y="38" width="68" height="24" rx="4"/><line class="d" x1="26" y1="38" x2="26" y2="62"/><line class="d" x1="74" y1="38" x2="74" y2="62"/><path class="d" d="M26 45 Q50 38 74 45 M26 50 Q50 44 74 50 M26 55 Q50 50 74 55"/><line class="o" x1="40" y1="38" x2="40" y2="32"/><line class="o" x1="60" y1="62" x2="60" y2="68"/></symbol>
+  <symbol id="g-hx-kettle" viewBox="0 0 100 100"><rect class="body o" x="16" y="42" width="68" height="34" rx="14"/><path class="body o" d="M38 42 A12 10 0 0 1 62 42 Z"/><path class="d" d="M24 56 H70 A6 6 0 0 1 70 64 H24"/><line class="d" x1="24" y1="70" x2="76" y2="70" stroke-dasharray="3 2"/></symbol>
+  <symbol id="g-hx-whb" viewBox="0 0 100 100"><rect class="body o" x="16" y="34" width="68" height="42" rx="8"/><rect class="body o" x="34" y="12" width="32" height="16" rx="8"/><line class="d" x1="42" y1="28" x2="42" y2="34"/><line class="d" x1="58" y1="28" x2="58" y2="34"/><line class="d" x1="24" y1="54" x2="76" y2="54"/><line class="d" x1="24" y1="60" x2="76" y2="60"/><line class="o" x1="50" y1="12" x2="50" y2="4"/></symbol>
+  <symbol id="g-columna" viewBox="0 0 100 100"><rect class="body o" x="38" y="10" width="24" height="80" rx="4"/><line class="d" x1="42" y1="22" x2="58" y2="22"/><line class="d" x1="42" y1="32" x2="58" y2="32"/><line class="d" x1="42" y1="42" x2="58" y2="42"/><line class="d" x1="42" y1="52" x2="58" y2="52"/><line class="d" x1="42" y1="62" x2="58" y2="62"/><line class="d" x1="42" y1="72" x2="58" y2="72"/><line class="o" x1="38" y1="50" x2="30" y2="50"/></symbol>
+  <symbol id="g-mezclador" viewBox="0 0 100 100"><path class="o" d="M18 24 L48 48 L18 76 M18 24 L82 48 M18 76 L82 48"/><circle class="body o" cx="50" cy="49" r="5"/></symbol>
+  <symbol id="g-splitter" viewBox="0 0 100 100"><path class="o" d="M18 50 H50 M50 50 L82 22 M50 50 L82 78"/><path class="d" d="M74 22 H82 M82 22 L78 30 M74 78 H82 M82 78 L78 70"/><circle class="body o" cx="50" cy="50" r="5"/></symbol>
+  <symbol id="g-torre-enf" viewBox="0 0 100 100"><path class="body o" d="M30 82 Q37 46 34 14 L66 14 Q63 46 70 82 Z"/><circle class="body o" cx="50" cy="14" r="10"/><path class="d" d="M50 14 L50 6 M50 14 L57 19 M50 14 L43 19"/><line class="d" x1="34" y1="70" x2="66" y2="70"/></symbol>
+  <symbol id="g-torre-nat" viewBox="0 0 100 100"><path class="body o" d="M28 84 Q40 48 34 12 L66 12 Q60 48 72 84 Z"/><path class="d" d="M44 12 Q48 6 54 10"/><line class="d" x1="34" y1="72" x2="66" y2="72"/></symbol>
+  <symbol id="g-valvula-globe" viewBox="0 0 100 100"><path class="body o" d="M18 46 L18 70 L50 58 Z"/><path class="body o" d="M82 46 L82 70 L50 58 Z"/><line class="d" x1="50" y1="58" x2="50" y2="32"/><path class="body o" d="M37 32 A13 13 0 0 1 63 32 Z"/><line class="d" x1="37" y1="32" x2="63" y2="32"/></symbol>
+  <symbol id="g-tambor" viewBox="0 0 100 100"><rect class="body o" x="12" y="38" width="76" height="24" rx="12"/><line class="d" x1="20" y1="52" x2="80" y2="52" stroke-dasharray="3 2"/><line class="d" x1="34" y1="62" x2="34" y2="72"/><line class="d" x1="66" y1="62" x2="66" y2="72"/></symbol>
+  <symbol id="g-filtro" viewBox="0 0 100 100"><rect class="body o" x="20" y="18" width="60" height="60" rx="5"/><line class="d" x1="20" y1="42" x2="80" y2="42"/><line class="d" x1="20" y1="58" x2="80" y2="58"/><path class="d" d="M28 58 L34 42 M40 58 L46 42 M52 58 L58 42 M64 58 L70 42"/></symbol>
+</defs></svg>
+
+<header style="position:sticky;top:0;z-index:50;background:color-mix(in srgb,var(--bg_elev) 88%, transparent);backdrop-filter:blur(10px);border-bottom:1px solid var(--line);">
+  <div style="max-width:1180px;margin:0 auto;padding:11px 26px;display:flex;align-items:center;gap:16px;flex-wrap:wrap;">
+    <div style="display:flex;align-items:center;gap:10px;">
+      <div style="width:30px;height:30px;border-radius:8px;background:var(--accent_tint);border:1px solid var(--accent_soft);color:var(--accent);display:grid;place-items:center;font-size:15px;">◆</div>
+      <div style="line-height:1.15;">
+        <div class="mono" style="font-size:13.5px;font-weight:500;">Pedro-Tesis · <span style="color:var(--accent)">Ciclo 3</span></div>
+        <div style="font-size:11px;color:var(--ink_soft);letter-spacing:.4px;">Diseño · glifos · sudoku · anotación · gradiente</div>
+      </div>
+    </div>
+    <nav style="display:flex;gap:2px;margin-left:8px;flex-wrap:wrap;">
+      <a href="#3a" style="padding:6px 11px;border-radius:7px;font-size:13px;color:var(--ink_mute);">3a · Glifos</a>
+      <a href="#3b" style="padding:6px 11px;border-radius:7px;font-size:13px;color:var(--ink_mute);">3b · Sudoku</a>
+      <a href="#3c" style="padding:6px 11px;border-radius:7px;font-size:13px;color:var(--ink_mute);">3c · Anotación</a>
+      <a href="#3d" style="padding:6px 11px;border-radius:7px;font-size:13px;color:var(--ink_mute);">3d · Gradiente</a>
+      <a href="#pend" style="padding:6px 11px;border-radius:7px;font-size:13px;color:var(--ink_mute);">⚡ Pendientes</a>
+    </nav>
+    <div style="flex:1;"></div>
+    <div style="display:flex;align-items:center;gap:14px;">
+      <div style="display:flex;gap:3px;background:var(--bg_mute);border:1px solid var(--line);border-radius:8px;padding:3px;">
+        <button onClick="{{ setLight }}" style="{{ lightBtn }}">Claro</button>
+        <button onClick="{{ setDark }}" style="{{ darkBtn }}">Oscuro</button>
+      </div>
+      <div style="display:flex;gap:6px;align-items:center;">
+        <sc-for list="{{ accents }}" as="a" hint-placeholder-count="4">
+          <button onClick="{{ a.pick }}" title="{{ a.name }}" style="{{ a.style }}"></button>
+        </sc-for>
+      </div>
+    </div>
+  </div>
+</header>
+
+<main style="max-width:1180px;margin:0 auto;padding:34px 26px 120px;">
+
+  <section style="margin-bottom:14px;">
+    <div style="font-size:12px;letter-spacing:2px;color:var(--accent);font-weight:600;text-transform:uppercase;margin-bottom:8px;">Fase Design · Ciclo 3 · respuesta a PROMPT_DESIGN_CICLO3</div>
+    <h1 style="font-size:33px;line-height:1.12;margin:0 0 12px;font-weight:700;max-width:22ch;">Cerrar la deuda visual de los ciclos 1 y 2</h1>
+    <p style="font-size:16px;color:var(--ink_mute);max-width:76ch;margin:0 0 4px;text-wrap:pretty;">
+      Cuatro artboards, todos sobre los tokens vigentes (par claro/oscuro · 4 acentos, arriba a la derecha — probalos, nada de lo nuevo se rompe).
+      <strong style="color:var(--ink)">3a</strong> unifica el sistema de símbolos on-canvas y diferencia las familias donde el aliasing invierte semántica.
+      <strong style="color:var(--ink)">3b</strong> lleva el estado <em>sudoku</em> de la masa (declarada / derivada / reciclo) a las pills sin que parezca severidad.
+      <strong style="color:var(--ink)">3c</strong> define la herramienta de anotación (T). <strong style="color:var(--ink)">3d</strong> resuelve el gradiente térmico real T<sub>in</sub>→T<sub>out</sub>.
+      Cada sección termina con valores exactos, y la página cierra con la lista <a href="#pend">⚡ de lo que dejo fuera</a>.
+    </p>
+  </section>
+
+  <section style="display:grid;grid-template-columns:repeat(auto-fit,minmax(250px,1fr));gap:14px;margin:26px 0 8px;">
+    <div style="background:var(--bg_elev);border:1px solid var(--line);border-radius:12px;padding:16px 18px;box-shadow:var(--shadow);">
+      <div style="font-size:11px;letter-spacing:1.4px;color:var(--ink_soft);text-transform:uppercase;font-weight:600;margin-bottom:9px;">Regla de trazo (única)</div>
+      <div style="display:flex;gap:14px;align-items:center;">
+        <svg class="glyph" width="52" height="52" viewBox="0 0 100 100"><rect class="o" x="16" y="30" width="68" height="40" rx="6"/><line class="d" x1="24" y1="42" x2="76" y2="42"/><line class="d" x1="24" y1="52" x2="76" y2="52"/></svg>
+        <div style="font-size:13px;color:var(--ink_mute);line-height:1.45;">
+          <div><span class="mono" style="color:var(--ink)">STROKE_OUTLINE 1.6</span> · contorno</div>
+          <div><span class="mono" style="color:var(--ink)">STROKE_DETAIL 1.0</span> · detalle</div>
+          <div style="margin-top:4px;font-size:12px;"><span class="mono">non-scaling-stroke</span> → grosor constante con el zoom.</div>
+        </div>
+      </div>
+    </div>
+    <div style="background:var(--bg_elev);border:1px solid var(--line);border-radius:12px;padding:16px 18px;box-shadow:var(--shadow);">
+      <div style="font-size:11px;letter-spacing:1.4px;color:var(--ink_soft);text-transform:uppercase;font-weight:600;margin-bottom:9px;">Color = estado · forma = identidad</div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;">
+        <sc-for list="{{ stateChips }}" as="s" hint-placeholder-count="5">
+          <span data-state="{{ s.state }}" style="display:inline-flex;align-items:center;gap:5px;font-size:11.5px;color:var(--ink_mute);border:1px solid var(--line);border-radius:20px;padding:3px 9px 3px 5px;">
+            <svg class="glyph {{ s.cls }}" width="18" height="18" viewBox="0 0 100 100"><rect class="body o" x="20" y="30" width="60" height="40" rx="6"/></svg>{{ s.label }}
+          </span>
+        </sc-for>
+      </div>
+      <div style="margin-top:9px;font-size:12px;color:var(--ink_soft);">Daltónico-safe: ninguna distinción sólo por matiz. El estado del solver es el color; el equipo se reconoce por la silueta.</div>
+    </div>
+    <div style="background:var(--bg_elev);border:1px solid var(--line);border-radius:12px;padding:16px 18px;box-shadow:var(--shadow);">
+      <div style="font-size:11px;letter-spacing:1.4px;color:var(--ink_soft);text-transform:uppercase;font-weight:600;margin-bottom:9px;">Doble escala obligatoria</div>
+      <div style="display:flex;gap:16px;align-items:flex-end;">
+        <div style="text-align:center;"><svg class="glyph" width="60" height="60" viewBox="0 0 100 100"><use href="#g-splitter"/></svg><div style="font-size:11px;color:var(--ink_soft);margin-top:3px;">~60px · lienzo</div></div>
+        <div style="text-align:center;"><svg class="glyph" width="24" height="24" viewBox="0 0 100 100"><use href="#g-splitter"/></svg><div style="font-size:11px;color:var(--ink_soft);margin-top:3px;">24px · paleta/badge</div></div>
+        <div style="font-size:12px;color:var(--ink_soft);line-height:1.4;">Si un rasgo desaparece a 24px, no diferencia. El distintivo es <strong style="color:var(--ink_mute)">macro-forma</strong>, no textura.</div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ══════════════ 3a ══════════════ -->
+  <section id="3a" style="scroll-margin-top:70px;margin-top:52px;">
+    <div style="display:flex;align-items:baseline;gap:14px;border-top:2px solid var(--ink);padding-top:16px;margin-bottom:6px;">
+      <div style="font-size:40px;font-weight:700;letter-spacing:-1px;">3a</div>
+      <div>
+        <h2 style="font-size:23px;margin:0;font-weight:600;">Diferenciación de glifos por familia</h2>
+        <div style="color:var(--ink_soft);font-size:14px;max-width:80ch;">El encargo grande (§C.4). Un solo sistema on-canvas; diferenciar donde el aliasing invierte o confunde; token único de trazo; mini-spec dibujable por glifo.</div>
+      </div>
+    </div>
+
+    <!-- decisión: un solo sistema -->
+    <div style="background:var(--bg_elev);border:1px solid var(--line);border-radius:13px;padding:18px 22px;margin:18px 0 22px;box-shadow:var(--shadow);">
+      <div style="font-size:11px;letter-spacing:1.4px;color:var(--ink_soft);text-transform:uppercase;font-weight:600;margin-bottom:12px;">Decisión 1 · un solo sistema de símbolos, y el rol de los otros tres</div>
+      <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(230px,1fr));gap:0;border:1px solid var(--line);border-radius:10px;overflow:hidden;">
+        <div style="padding:13px 15px;border-right:1px solid var(--line);background:var(--accent_tint);">
+          <div style="font-size:13px;font-weight:600;color:var(--accent_deep);">Glifos ISA QPainter <span class="mono" style="font-weight:400;font-size:11px;">→ VIVE</span></div>
+          <div style="font-size:12px;color:var(--ink_mute);margin-top:4px;line-height:1.45;">Único activo on-canvas. Se alimentan del subset SVG de este bundle vía <span class="mono">glyph_specs</span>; clases <span class="mono">o/d/body/dot</span> mapean a estado del solver.</div>
+        </div>
+        <div style="padding:13px 15px;border-right:1px solid var(--line);">
+          <div style="font-size:13px;font-weight:600;">badge 24×24 <span class="mono" style="font-weight:400;font-size:11px;color:var(--green)">→ VIVE (rol acotado)</span></div>
+          <div style="font-size:12px;color:var(--ink_mute);margin-top:4px;line-height:1.45;">Mismo glifo renderizado a 24px: paleta, listas, tabla de mapeo. No es un segundo dibujo — es la misma geometría escalada.</div>
+        </div>
+        <div style="padding:13px 15px;border-right:1px solid var(--line);">
+          <div style="font-size:13px;font-weight:600;color:var(--ink_mute);"><span class="mono">pfd_symbols</span> SVG <span style="font-weight:400;font-size:11px;color:var(--orange)">→ SOLO export</span></div>
+          <div style="font-size:12px;color:var(--ink_mute);margin-top:4px;line-height:1.45;">Deja de ser fallback del lienzo. Queda como hoja de exportación PFD (papel claro), regenerada desde la MISMA geometría — no una fuente paralela.</div>
+        </div>
+        <div style="padding:13px 15px;">
+          <div style="font-size:13px;font-weight:600;color:var(--danger);"><span class="mono">equipment_icons</span> <span style="font-weight:400;font-size:11px;">→ MUERE</span></div>
+          <div style="font-size:12px;color:var(--ink_mute);margin-top:4px;line-height:1.45;">Tercer lenguaje redundante (y origen del badge roto de los WHB). Se elimina; el badge 24×24 lo reemplaza en todos sus usos.</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- semáforo interactivo -->
+    <div style="background:var(--bg_elev);border:1px solid var(--line);border-radius:12px;padding:16px 18px;margin:0 0 26px;box-shadow:var(--shadow);">
+      <div style="display:flex;justify-content:space-between;align-items:center;gap:16px;flex-wrap:wrap;margin-bottom:12px;">
+        <div>
+          <div style="font-size:11px;letter-spacing:1.4px;color:var(--ink_soft);text-transform:uppercase;font-weight:600;">El color es el estado del solver — la forma es la identidad</div>
+          <div style="font-size:13px;color:var(--ink_mute);margin-top:2px;">El spec del glifo define <em>geometría + roles</em> (ink / fill / detalle), nunca hex propios. Cambiá el estado:</div>
+        </div>
+        <div style="display:flex;gap:4px;flex-wrap:wrap;">
+          <sc-for list="{{ stateBtns }}" as="b" hint-placeholder-count="5">
+            <button onClick="{{ b.pick }}" style="{{ b.style }}">{{ b.label }}</button>
+          </sc-for>
+        </div>
+      </div>
+      <div data-state="{{ glyphState }}" class="{{ glyphStateCls }}" style="display:flex;gap:26px;align-items:center;flex-wrap:wrap;padding:14px 6px;background:var(--canvas_bg);border:1px solid var(--line_soft);border-radius:9px;background-image:radial-gradient(var(--canvas_grid) 1px, transparent 1px);background-size:16px 16px;">
+        <svg class="glyph" width="60" height="60" viewBox="0 0 100 100"><use href="#g-reactor-jacket"/></svg>
+        <svg class="glyph" width="60" height="60" viewBox="0 0 100 100"><use href="#g-columna"/></svg>
+        <svg class="glyph" width="60" height="60" viewBox="0 0 100 100"><use href="#g-hx"/></svg>
+        <svg class="glyph" width="60" height="60" viewBox="0 0 100 100"><use href="#g-splitter"/></svg>
+        <svg class="glyph" width="60" height="60" viewBox="0 0 100 100"><use href="#g-compresor"/></svg>
+        <span style="font-size:12.5px;color:var(--ink_soft);max-width:24ch;">ok tinta sólo el relleno (éxito silencioso) · unrun = contorno punteado · stale = desaturado · warning/error = trazo + fill + chip «!».</span>
+      </div>
+    </div>
+
+    <div style="font-size:12px;letter-spacing:1.4px;color:var(--ink_soft);text-transform:uppercase;font-weight:600;margin:0 0 14px;">Decisión 2 · diferenciación por prioridad — antes ▚ / después ●</div>
+
+    <sc-for list="{{ groups }}" as="grp" hint-placeholder-count="7">
+      <div style="background:var(--bg_elev);border:1px solid var(--line);border-radius:14px;padding:20px 22px;margin-bottom:18px;box-shadow:var(--shadow);">
+        <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:4px;">
+          <span style="{{ grp.rankStyle }}">{{ grp.rank }}</span>
+          <h3 style="font-size:18px;margin:0;font-weight:600;">{{ grp.title }}</h3>
+        </div>
+        <p style="font-size:13.5px;color:var(--ink_mute);margin:0 0 3px;max-width:88ch;text-wrap:pretty;">{{ grp.summary }}</p>
+        <div style="font-size:12.5px;color:var(--ink_soft);margin-bottom:15px;"><span style="color:var(--danger)">▚</span> antes: {{ grp.before }}</div>
+        <div style="display:flex;gap:14px;flex-wrap:wrap;">
+          <sc-for list="{{ grp.variants }}" as="v" hint-placeholder-count="2">
+            <div style="flex:1 1 210px;min-width:200px;background:var(--bg);border:1px solid var(--line);border-radius:11px;padding:14px 15px;">
+              <div style="display:flex;align-items:flex-end;gap:14px;padding-bottom:10px;border-bottom:1px dashed var(--line);margin-bottom:9px;">
+                <svg class="glyph" width="58" height="58" viewBox="0 0 100 100"><use href="{{ v.href }}"/></svg>
+                <div style="text-align:center;"><svg class="glyph" width="24" height="24" viewBox="0 0 100 100"><use href="{{ v.href }}"/></svg><div style="font-size:9px;color:var(--ink_ghost);margin-top:2px;">24px</div></div>
+              </div>
+              <div style="font-size:14px;font-weight:600;line-height:1.2;">{{ v.name }}</div>
+              <div class="mono" style="font-size:11px;color:var(--ink_soft);margin:2px 0 7px;">{{ v.eq }}</div>
+              <div style="font-size:12.5px;color:var(--ink_mute);line-height:1.42;text-wrap:pretty;">{{ v.trait }}</div>
+            </div>
+          </sc-for>
+        </div>
+      </div>
+    </sc-for>
+
+    <!-- variantes sólo-paleta -->
+    <div style="background:var(--bg_mute);border:1px dashed var(--line_strong);border-radius:14px;padding:18px 22px;margin-bottom:18px;">
+      <div style="font-size:15px;font-weight:600;margin-bottom:4px;">Variantes sin instancia (21 tipos, sólo en la paleta)</div>
+      <p style="font-size:13px;color:var(--ink_mute);margin:0;max-width:90ch;text-wrap:pretty;">Para los tipos que <strong style="color:var(--ink)">nunca aparecen en los 58 ejemplos</strong>, alcanza con que la variante se distinga <strong style="color:var(--ink)">en la paleta y el badge</strong>: el glifo on-canvas puede compartir la base de familia (p. ej. <span class="mono">reactor_cstr</span> y <span class="mono">reactor_autoclave</span> comparten silueta de recipiente vertical, y el badge lleva el rasgo). No se dibuja geometría que nadie va a instanciar.</p>
+    </div>
+
+    <!-- HX×6 decisión cerrada -->
+    <div style="background:var(--bg_mute);border:1px dashed var(--line_strong);border-radius:14px;padding:18px 22px;margin-bottom:18px;">
+      <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;">
+        <svg class="glyph" width="46" height="46" viewBox="0 0 100 100"><use href="#g-hx"/></svg>
+        <div style="flex:1;min-width:280px;">
+          <div style="font-size:15px;font-weight:600;">HX casco-y-tubo ×6 — compartido a propósito <span style="font-size:11px;color:var(--ink_soft);font-weight:400;">(◇ familia · decisión cerrada)</span></div>
+          <p style="font-size:13px;color:var(--ink_mute);margin:4px 0 0;max-width:90ch;">fixed / U-tube / floating head / double pipe / multiple pipe / condenser comparten <span class="mono">#g-hx</span>. Misma familia geométrica; diferenciarlas sería textura interna invisible a 24px. El rol térmico y el ribbon Sinnott/Turton del inspector desambiguan. <strong style="color:var(--ink)">No reabrir.</strong></p>
+        </div>
+      </div>
+    </div>
+
+    <!-- tabla de mapeo -->
+    <div style="background:var(--bg_elev);border:1px solid var(--line);border-radius:14px;padding:20px 22px;box-shadow:var(--shadow);">
+      <h3 style="font-size:16px;margin:0 0 3px;font-weight:600;">Tabla eq_type → glifo</h3>
+      <div style="font-size:12.5px;color:var(--ink_soft);margin-bottom:14px;"><span style="color:var(--accent);font-weight:600;">●</span> silueta diferenciada de este ciclo · <span style="color:var(--ink_soft);font-weight:600;">◇</span> comparte base de familia (decisión escrita).</div>
+      <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:2px 22px;">
+        <sc-for list="{{ mapping }}" as="m" hint-placeholder-count="14">
+          <div style="display:flex;align-items:center;gap:9px;padding:5px 0;border-bottom:1px solid var(--line_soft);font-size:12.5px;">
+            <svg class="glyph" width="26" height="22" viewBox="0 0 100 100" style="flex:none;"><use href="{{ m.href }}"/></svg>
+            <span class="mono" style="flex:1;color:var(--ink_mute);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">{{ m.eq }}</span>
+            <span style="{{ m.badgeStyle }}">{{ m.badge }}</span>
+          </div>
+        </sc-for>
+      </div>
+    </div>
+  </section>
+
+  <!-- ══════════════ 3b ══════════════ -->
+  <section id="3b" style="scroll-margin-top:70px;margin-top:56px;">
+    <div style="display:flex;align-items:baseline;gap:14px;border-top:2px solid var(--ink);padding-top:16px;margin-bottom:6px;">
+      <div style="font-size:40px;font-weight:700;letter-spacing:-1px;">3b</div>
+      <div>
+        <h2 style="font-size:23px;margin:0;font-weight:600;">Estado sudoku en las corrientes</h2>
+        <div style="color:var(--ink_soft);font-size:14px;max-width:82ch;">Procedencia de la masa — <strong style="color:var(--ink_mute)">declarada</strong> / <strong style="color:var(--ink_mute)">derivada</strong> / <strong style="color:var(--ink_mute)">reciclo</strong> — sin que parezca un warning. «Declarado vs calculado» es procedencia, no severidad (principio del ciclo 2).</div>
+      </div>
+    </div>
+
+    <!-- las tres marcas -->
+    <div style="background:var(--bg_elev);border:1px solid var(--line);border-radius:13px;padding:20px 22px;margin:18px 0 20px;box-shadow:var(--shadow);">
+      <div style="font-size:11px;letter-spacing:1.4px;color:var(--ink_soft);text-transform:uppercase;font-weight:600;margin-bottom:16px;">Decisión 1 · la marca es tipografía + un glifo mono, nunca color-severidad</div>
+      <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:16px;">
+
+        <div style="border:1px solid var(--line);border-radius:11px;padding:15px 16px;">
+          <div style="display:flex;align-items:center;gap:9px;margin-bottom:10px;">
+            <span class="mono" style="font-size:15px;color:var(--spec);font-weight:500;">▪</span>
+            <span style="font-size:15px;font-weight:600;">declarada</span>
+            <span class="mono" style="font-size:11px;color:var(--ink_soft);margin-left:auto;">locked</span>
+          </div>
+          <!-- pill mock -->
+          <div style="display:inline-flex;align-items:center;gap:7px;background:var(--label_bg,var(--bg_elev));border:1px solid var(--line_strong);border-radius:8px;padding:5px 11px;box-shadow:var(--shadow);">
+            <span class="mono" style="font-size:12px;color:var(--spec);font-weight:500;">▪</span>
+            <span class="mono" style="font-size:12.5px;color:var(--ink);border-bottom:2px solid var(--spec);padding-bottom:1px;">46 940</span>
+            <span style="font-size:10px;color:var(--ink_soft);">kg/h</span>
+          </div>
+          <p style="font-size:12.5px;color:var(--ink_mute);margin:11px 0 0;line-height:1.45;">Cuadro macizo <span class="mono" style="color:var(--spec)">▪</span> en tinta <span class="mono">spec</span> (#3548b4) + valor con <strong style="color:var(--ink)">subrayado spec 2px</strong> (ya existe en 3b implementado). El usuario lo puso: es el ancla del balance.</p>
+        </div>
+
+        <div style="border:1px solid var(--line);border-radius:11px;padding:15px 16px;">
+          <div style="display:flex;align-items:center;gap:9px;margin-bottom:10px;">
+            <span class="mono" style="font-size:15px;color:var(--ink_soft);">◦</span>
+            <span style="font-size:15px;font-weight:600;">derivada</span>
+            <span class="mono" style="font-size:11px;color:var(--ink_soft);margin-left:auto;">propagated</span>
+          </div>
+          <div style="display:inline-flex;align-items:center;gap:7px;background:var(--bg_elev);border:1px solid var(--line_strong);border-radius:8px;padding:5px 11px;box-shadow:var(--shadow);">
+            <span class="mono" style="font-size:12px;color:var(--ink_soft);">◦</span>
+            <span class="mono" style="font-size:12.5px;color:var(--ink_mute);">21 280</span>
+            <span style="font-size:10px;color:var(--ink_soft);">kg/h</span>
+          </div>
+          <p style="font-size:12.5px;color:var(--ink_mute);margin:11px 0 0;line-height:1.45;">Es la <strong style="color:var(--ink)">línea base</strong>: círculo hueco <span class="mono">◦</span> + tinta <span class="mono">ink_mute</span>, sin subrayado. La ausencia de énfasis ES la marca — deducida por balance, sin drama.</p>
+        </div>
+
+        <div style="border:1px solid var(--line);border-radius:11px;padding:15px 16px;">
+          <div style="display:flex;align-items:center;gap:9px;margin-bottom:10px;">
+            <span class="mono" style="font-size:15px;color:var(--torn);">↻</span>
+            <span style="font-size:15px;font-weight:600;">reciclo</span>
+            <span class="mono" style="font-size:11px;color:var(--ink_soft);margin-left:auto;">torn</span>
+          </div>
+          <div style="display:inline-flex;align-items:center;gap:7px;background:var(--bg_elev);border:1px solid var(--line_strong);border-radius:8px;padding:5px 11px;box-shadow:var(--shadow);">
+            <span class="mono" style="font-size:12px;color:var(--torn);">↻</span>
+            <span class="mono" style="font-size:12.5px;color:var(--ink_mute);border-bottom:1.5px dotted var(--torn);padding-bottom:1px;">9 512</span>
+            <span style="font-size:10px;color:var(--ink_soft);">kg/h</span>
+          </div>
+          <p style="font-size:12.5px;color:var(--ink_mute);margin:11px 0 0;line-height:1.45;">Glifo <span class="mono" style="color:var(--torn)">↻</span> + subrayado <strong style="color:var(--ink)">punteado</strong> en <span class="mono">phase_2ph</span>/<span class="mono">torn</span> (#6d5a9c, violeta frío — ya en tokens, no severidad).</p>
+        </div>
+      </div>
+    </div>
+
+    <!-- decisión torn -->
+    <div style="background:var(--accent_tint);border:1px solid var(--accent_soft);border-radius:13px;padding:18px 22px;margin-bottom:20px;">
+      <div style="font-size:11px;letter-spacing:1.4px;color:var(--accent_deep);text-transform:uppercase;font-weight:600;margin-bottom:8px;">Decisión 2 · torn merece marca propia (argumentado)</div>
+      <p style="font-size:14px;color:var(--ink_mute);margin:0;max-width:92ch;text-wrap:pretty;">
+        <strong style="color:var(--ink)">Sí, marca propia.</strong> Una corriente de reciclo no es «declarada» (no la puso el usuario) ni «derivada de un balance directo» — <strong style="color:var(--ink)">converge iterativamente por tearing</strong>, y esa distinción es <em>didáctica</em>: en una tesis, mostrar dónde el solver «corta» el lazo y qué corriente arrastra el error de convergencia es contenido, no ruido. Agruparla con «derivada» borraría el único punto del diagrama donde el número no es exacto sino <em>convergido a tolerancia</em>. Se distingue por <strong style="color:var(--ink)">glifo ↻ + trazo punteado</strong> (procedencia, forma), reusando el violeta frío que ya existe — cero tokens nuevos, cero riesgo de leerse como warning.
+      </p>
+    </div>
+
+    <!-- canvas mock con reciclo -->
+    <div style="border:1px solid var(--line);border-radius:12px;overflow:hidden;box-shadow:var(--shadow);margin-bottom:10px;">
+      <div style="background:var(--bg_mute);border-bottom:1px solid var(--line);padding:9px 16px;font-size:11px;letter-spacing:1.3px;color:var(--ink);text-transform:uppercase;font-weight:600;">On-canvas · pills sobre el trazo</div>
+      <div style="position:relative;height:230px;background:var(--canvas_bg);background-image:radial-gradient(var(--canvas_grid) 1px,transparent 1px);background-size:18px 18px;">
+        <svg viewBox="0 0 720 230" width="100%" height="230" style="display:block;">
+          <!-- feed declarado -->
+          <line x1="40" y1="72" x2="150" y2="72" stroke="var(--stream_internal)" stroke-width="2.4"/>
+          <path d="M144 68 l8 4 l-8 4 z" fill="var(--stream_internal)"/>
+          <!-- reactor -->
+          <g transform="translate(150,42)"><svg class="glyph" x="0" y="0" width="60" height="60" viewBox="0 0 100 100"><use href="#g-reactor-cstr"/></svg></g>
+          <!-- derivada al splitter -->
+          <line x1="210" y1="72" x2="340" y2="72" stroke="var(--stream_internal)" stroke-width="2"/>
+          <path d="M334 68 l8 4 l-8 4 z" fill="var(--stream_internal)"/>
+          <g transform="translate(340,42)"><svg class="glyph" x="0" y="0" width="60" height="60" viewBox="0 0 100 100"><use href="#g-splitter"/></svg></g>
+          <!-- producto -->
+          <line x1="400" y1="60" x2="540" y2="60" stroke="var(--stream_product)" stroke-width="2"/>
+          <path d="M534 56 l8 4 l-8 4 z" fill="var(--stream_product)"/>
+          <!-- reciclo (torn) loop back -->
+          <path d="M400 86 L440 86 L440 180 L120 180 L120 84" fill="none" stroke="var(--torn)" stroke-width="2" stroke-dasharray="7 4"/>
+          <path d="M116 90 l4 -8 l4 8 z" fill="var(--torn)"/>
+        </svg>
+        <!-- pills -->
+        <div style="position:absolute;left:52px;top:44px;display:inline-flex;align-items:center;gap:6px;background:color-mix(in srgb,var(--bg_elev) 90%,transparent);border:1px solid var(--line_strong);border-radius:7px;padding:3px 8px;font-size:11px;box-shadow:var(--shadow);">
+          <span class="mono" style="color:var(--spec);">▪</span><span class="mono" style="color:var(--ink);border-bottom:2px solid var(--spec);">S-01</span>
+        </div>
+        <div style="position:absolute;left:250px;top:44px;display:inline-flex;align-items:center;gap:6px;background:color-mix(in srgb,var(--bg_elev) 90%,transparent);border:1px solid var(--line_strong);border-radius:7px;padding:3px 8px;font-size:11px;box-shadow:var(--shadow);">
+          <span class="mono" style="color:var(--ink_soft);">◦</span><span class="mono" style="color:var(--ink_mute);">S-03</span>
+        </div>
+        <div style="position:absolute;left:250px;top:184px;display:inline-flex;align-items:center;gap:6px;background:color-mix(in srgb,var(--bg_elev) 90%,transparent);border:1px solid var(--torn);border-radius:7px;padding:3px 8px;font-size:11px;box-shadow:var(--shadow);">
+          <span class="mono" style="color:var(--torn);">↻</span><span class="mono" style="color:var(--ink_mute);border-bottom:1.5px dotted var(--torn);">S-07 reciclo</span>
+        </div>
+      </div>
+    </div>
+    <div style="display:flex;gap:22px;flex-wrap:wrap;font-size:12px;color:var(--ink_soft);margin:9px 2px 24px;">
+      <span><span class="mono" style="color:var(--spec)">▪</span> declarada</span>
+      <span><span class="mono" style="color:var(--ink_soft)">◦</span> derivada</span>
+      <span><span class="mono" style="color:var(--torn)">↻</span> reciclo (torn) · trazo punteado del lazo</span>
+      <span>La procedencia va al <strong style="color:var(--ink_mute)">borde de arranque</strong> de la pill; el T/P spec-vs-auto sigue viviendo en la tinta+subrayado como en 3b.</span>
+    </div>
+
+    <!-- dónde vive la explicación + DOF -->
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;">
+      <div style="background:var(--bg_elev);border:1px solid var(--line);border-radius:13px;padding:18px 20px;box-shadow:var(--shadow);">
+        <div style="font-size:11px;letter-spacing:1.4px;color:var(--ink_soft);text-transform:uppercase;font-weight:600;margin-bottom:12px;">Decisión 3 · nueva fila PROCEDENCIA en la leyenda del Marco PFD</div>
+        <div style="border:1px solid var(--line);border-radius:9px;overflow:hidden;font-size:12.5px;">
+          <div style="background:var(--bg_mute);padding:6px 12px;font-size:10px;letter-spacing:1.4px;color:var(--ink_soft);font-weight:600;">LEYENDA · MARCO PFD</div>
+          <div style="padding:7px 12px;border-bottom:1px solid var(--line_soft);color:var(--ink_ghost);">ESTADO · PUERTOS · SERVICIO · CORRIENTE·FASE <span style="font-size:11px;">(ya existen)</span></div>
+          <div style="padding:9px 12px;background:var(--accent_tint);">
+            <div style="font-size:10px;letter-spacing:1.4px;color:var(--accent_deep);font-weight:600;margin-bottom:6px;">PROCEDENCIA · masa ← nueva fila</div>
+            <div style="display:flex;flex-direction:column;gap:5px;">
+              <div><span class="mono" style="color:var(--spec)">▪</span> declarada <span style="color:var(--ink_soft)">— la puso el usuario</span></div>
+              <div><span class="mono" style="color:var(--ink_soft)">◦</span> derivada <span style="color:var(--ink_soft)">— balance del solver</span></div>
+              <div><span class="mono" style="color:var(--torn)">↻</span> reciclo <span style="color:var(--ink_soft)">— converge por tearing</span></div>
+            </div>
+          </div>
+        </div>
+        <p style="font-size:12px;color:var(--ink_mute);margin:11px 0 0;line-height:1.4;">Una sección más en la banda colapsable — sin diálogo nuevo. El tooltip de cada pill repite el término + una línea («deducida del balance en R-101»).</p>
+      </div>
+      <div style="background:var(--bg_elev);border:1px solid var(--line);border-radius:13px;padding:18px 20px;box-shadow:var(--shadow);">
+        <div style="font-size:11px;letter-spacing:1.4px;color:var(--ink_soft);text-transform:uppercase;font-weight:600;margin-bottom:12px;">Decisión 4 · mismos términos que el diálogo DOF (kit, caso 1)</div>
+        <div style="border:1px solid var(--line);border-radius:9px;overflow:hidden;font-size:12.5px;">
+          <div style="background:var(--bg_mute);padding:6px 12px;font-size:10px;letter-spacing:1.4px;color:var(--ink_soft);font-weight:600;">DOF / BALANCE · corrientes por procedencia</div>
+          <div style="display:flex;align-items:center;gap:10px;padding:8px 12px;border-bottom:1px solid var(--line_soft);"><span class="mono" style="color:var(--spec)">▪</span><span style="flex:1;">Declaradas</span><span class="mono" style="color:var(--ink);">4</span></div>
+          <div style="display:flex;align-items:center;gap:10px;padding:8px 12px;border-bottom:1px solid var(--line_soft);"><span class="mono" style="color:var(--ink_soft)">◦</span><span style="flex:1;">Derivadas</span><span class="mono" style="color:var(--ink);">11</span></div>
+          <div style="display:flex;align-items:center;gap:10px;padding:8px 12px;"><span class="mono" style="color:var(--torn)">↻</span><span style="flex:1;">Reciclo (torn)</span><span class="mono" style="color:var(--ink);">2</span></div>
+        </div>
+        <p style="font-size:12px;color:var(--ink_mute);margin:11px 0 0;line-height:1.4;">Los mismos <strong style="color:var(--ink)">▪ ◦ ↻</strong> y las mismas palabras que la pill y la leyenda. El DOF ya lista streams por estado; sólo adopta el vocabulario común de procedencia.</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- ══════════════ 3c ══════════════ -->
+  <section id="3c" style="scroll-margin-top:70px;margin-top:56px;">
+    <div style="display:flex;align-items:baseline;gap:14px;border-top:2px solid var(--ink);padding-top:16px;margin-bottom:6px;">
+      <div style="font-size:40px;font-weight:700;letter-spacing:-1px;">3c</div>
+      <div>
+        <h2 style="font-size:23px;margin:0;font-weight:600;">Herramienta de anotación (T)</h2>
+        <div style="color:var(--ink_soft);font-size:14px;max-width:82ch;">Nota de plano — no un editor de texto rico. Vuelve a la paleta con UX definida: crear, editar, mover, borrar, y una guía opcional al bloque/corriente.</div>
+      </div>
+    </div>
+
+    <!-- ciclo de vida -->
+    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:12px;margin:18px 0 20px;">
+      <sc-for list="{{ annotSteps }}" as="a" hint-placeholder-count="4">
+        <div style="background:var(--bg_elev);border:1px solid var(--line);border-radius:11px;padding:14px 16px;box-shadow:var(--shadow);">
+          <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px;"><span class="mono" style="width:22px;height:22px;border-radius:6px;background:var(--accent_tint);color:var(--accent);display:grid;place-items:center;font-size:12px;">{{ a.n }}</span><span style="font-size:13.5px;font-weight:600;">{{ a.title }}</span></div>
+          <div style="font-size:12.5px;color:var(--ink_mute);line-height:1.45;">{{ a.body }}</div>
+        </div>
+      </sc-for>
+    </div>
+
+    <!-- mock de anotación sobre canvas -->
+    <div style="border:1px solid var(--line);border-radius:12px;overflow:hidden;box-shadow:var(--shadow);margin-bottom:10px;">
+      <div style="background:var(--bg_mute);border-bottom:1px solid var(--line);padding:9px 16px;display:flex;align-items:center;gap:12px;">
+        <span style="font-size:11px;letter-spacing:1.3px;color:var(--ink);text-transform:uppercase;font-weight:600;">Estilo on-canvas</span>
+        <span style="display:inline-flex;align-items:center;gap:6px;font-size:11px;color:var(--ink_soft);"><span class="mono" style="width:20px;height:20px;border:1px solid var(--line_strong);border-radius:5px;display:grid;place-items:center;background:var(--bg_elev);">T</span> herramienta en la paleta</span>
+      </div>
+      <div style="position:relative;height:210px;background:var(--canvas_bg);background-image:radial-gradient(var(--canvas_grid) 1px,transparent 1px);background-size:18px 18px;">
+        <svg viewBox="0 0 720 210" width="100%" height="210" style="display:block;">
+          <g transform="translate(120,70)"><svg x="0" y="0" width="60" height="60" viewBox="0 0 100 100" class="glyph"><use href="#g-columna"/></svg></g>
+          <line x1="180" y1="100" x2="300" y2="100" stroke="var(--stream_internal)" stroke-width="2"/>
+          <g transform="translate(300,70)"><svg x="0" y="0" width="60" height="60" viewBox="0 0 100 100" class="glyph"><use href="#g-hx"/></svg></g>
+          <!-- guía punteada de la nota al bloque -->
+          <path d="M470 60 L360 92" fill="none" stroke="var(--ink_soft)" stroke-width="1.2" stroke-dasharray="4 3"/>
+          <circle cx="360" cy="92" r="3" fill="var(--ink_soft)"/>
+        </svg>
+        <!-- nota título -->
+        <div style="position:absolute;left:150px;top:26px;font-family:'IBM Plex Sans';font-weight:600;font-size:15px;color:var(--ink);background:var(--label_bg,transparent);padding:2px 6px;border-radius:5px;">T-101 · Columna de topping</div>
+        <!-- nota rótulo con pill -->
+        <div style="position:absolute;left:470px;top:44px;display:inline-block;background:color-mix(in srgb,var(--bg_elev) 88%,transparent);border-radius:6px;padding:5px 9px;font-size:12px;color:var(--ink_mute);box-shadow:var(--shadow);max-width:210px;line-height:1.4;">Reflujo asumido R=1.8 · verificar contra FUG antes de costear.</div>
+        <!-- nota revisión -->
+        <div style="position:absolute;left:150px;top:150px;font-size:12px;color:var(--danger);font-family:'IBM Plex Sans';font-weight:600;">△ rev. B — falta corriente de purga</div>
+      </div>
+    </div>
+    <div style="font-size:12px;color:var(--ink_soft);margin:9px 2px 22px;">Multilínea con Enter · el ancho se adapta al texto (sin handles en el MVP) · z=40 (sobre streams, bajo overlays de UI).</div>
+
+    <!-- especificación de estilo -->
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:8px;">
+      <div style="background:var(--bg_elev);border:1px solid var(--line);border-radius:13px;padding:18px 20px;box-shadow:var(--shadow);">
+        <div style="font-size:11px;letter-spacing:1.4px;color:var(--ink_soft);text-transform:uppercase;font-weight:600;margin-bottom:12px;">Estilo — sólo la escala del sistema</div>
+        <table style="width:100%;border-collapse:collapse;font-size:12.5px;">
+          <tbody>
+            <tr style="border-bottom:1px solid var(--line_soft);"><td style="padding:7px 0;color:var(--ink_mute);">Tipografía</td><td style="text-align:right;"><span class="mono">FONT_LABEL/UI/TITLE</span> · 600</td></tr>
+            <tr style="border-bottom:1px solid var(--line_soft);"><td style="padding:7px 0;color:var(--ink_mute);">Estilos</td><td style="text-align:right;">Micro · Rótulo · Título</td></tr>
+            <tr style="border-bottom:1px solid var(--line_soft);"><td style="padding:7px 0;color:var(--ink_mute);">Tinta</td><td style="text-align:right;"><span class="mono" style="color:var(--ink)">ink</span> · <span class="mono" style="color:var(--ink_soft)">ink_soft</span> · <span class="mono" style="color:var(--danger)">danger</span> (revisión)</td></tr>
+            <tr style="border-bottom:1px solid var(--line_soft);"><td style="padding:7px 0;color:var(--ink_mute);">Fondo</td><td style="text-align:right;">transparente · pill <span class="mono">label_bg</span> 88%</td></tr>
+            <tr><td style="padding:7px 0;color:var(--ink_mute);">Sin</td><td style="text-align:right;">negrita/itálica libre, color libre, rotación</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <div style="background:var(--bg_elev);border:1px solid var(--line);border-radius:13px;padding:18px 20px;box-shadow:var(--shadow);">
+        <div style="font-size:11px;letter-spacing:1.4px;color:var(--ink_soft);text-transform:uppercase;font-weight:600;margin-bottom:12px;">Export + zoom</div>
+        <ul style="margin:0;padding-left:18px;font-size:13px;color:var(--ink_mute);line-height:1.55;">
+          <li>El export <strong style="color:var(--ink)">siempre incluye las anotaciones</strong> — son documentación de ingeniería. En papel claro, heredan tinta clara.</li>
+          <li>Vista ▸ «Mostrar anotaciones» las oculta <em>en pantalla</em>, no en el export.</li>
+          <li>Escalan con el zoom como texto de plano (con el lienzo), no tamaño fijo de pantalla — se leen a cualquier zoom sin taparlo todo.</li>
+          <li>Persisten en <span class="mono">Flowsheet.annotations</span> → undo/redo gratis por snapshot.</li>
+        </ul>
+      </div>
+    </div>
+    <div style="background:var(--bg_mute);border:1px dashed var(--line_strong);border-radius:12px;padding:15px 20px;">
+      <span style="font-size:13px;font-weight:600;">MVP vs futuro · </span>
+      <span style="font-size:13px;color:var(--ink_mute);">MVP: caja de texto plana, guía opcional recta a un punto, 3 estilos, 3 tintas. Futuro (⚡): anclaje que sigue al bloque/corriente al moverlo, handles de ancho de wrap, cuadro de revisiones △N en el export.</span>
+    </div>
+  </section>
+
+  <!-- ══════════════ 3d ══════════════ -->
+  <section id="3d" style="scroll-margin-top:70px;margin-top:56px;">
+    <div style="display:flex;align-items:baseline;gap:14px;border-top:2px solid var(--ink);padding-top:16px;margin-bottom:6px;">
+      <div style="font-size:40px;font-weight:700;letter-spacing:-1px;">3d</div>
+      <div>
+        <h2 style="font-size:23px;margin:0;font-weight:600;">Gradiente térmico en corrientes de servicio</h2>
+        <div style="color:var(--ink_soft);font-size:14px;max-width:82ch;">Los extremos pale/deep por temperatura ya son tokens. Falta el gradiente REAL a lo largo del path — continuo o dos tramos, multi-segmento con jumpers, y cuándo se apaga.</div>
+      </div>
+    </div>
+
+    <!-- interactivo continuo vs segmento -->
+    <div style="background:var(--bg_elev);border:1px solid var(--line);border-radius:12px;padding:18px 20px;margin:18px 0 20px;box-shadow:var(--shadow);">
+      <div style="display:flex;justify-content:space-between;align-items:center;gap:16px;flex-wrap:wrap;margin-bottom:14px;">
+        <div>
+          <div style="font-size:11px;letter-spacing:1.4px;color:var(--ink_soft);text-transform:uppercase;font-weight:600;">Decisión 1 · gradiente continuo (elegido) vs dos tramos</div>
+          <div style="font-size:13px;color:var(--ink_mute);margin-top:2px;">Compará las dos opciones sobre el mismo trazo de agua de enfriamiento (25°C → 40°C):</div>
+        </div>
+        <div style="display:flex;gap:4px;">
+          <button onClick="{{ setGradCont }}" style="{{ gradContBtn }}">continuo</button>
+          <button onClick="{{ setGradSeg }}" style="{{ gradSegBtn }}">dos tramos</button>
+        </div>
+      </div>
+      <div style="background:var(--canvas_bg);border:1px solid var(--line_soft);border-radius:9px;padding:26px 18px;background-image:radial-gradient(var(--canvas_grid) 1px,transparent 1px);background-size:16px 16px;">
+        <svg viewBox="0 0 720 90" width="100%" height="90" style="display:block;">
+          <defs>
+            <linearGradient id="gradCold" gradientUnits="userSpaceOnUse" x1="30" y1="45" x2="660" y2="45">
+              <stop offset="0%" stop-color="var(--service_cold_pale)"/>
+              <stop offset="100%" stop-color="var(--service_cold_deep)"/>
+            </linearGradient>
+          </defs>
+          <sc-if value="{{ gradContinuous }}" hint-placeholder-val="{{ true }}">
+            <line x1="30" y1="45" x2="660" y2="45" stroke="url(#gradCold)" stroke-width="5" stroke-linecap="round"/>
+            <path d="M652 39 l12 6 l-12 6 z" fill="var(--service_cold_deep)"/>
+          </sc-if>
+          <sc-if value="{{ gradSegment }}" hint-placeholder-val="{{ true }}">
+            <line x1="30" y1="45" x2="345" y2="45" stroke="var(--service_cold_pale)" stroke-width="5" stroke-linecap="round"/>
+            <line x1="345" y1="45" x2="660" y2="45" stroke="var(--service_cold_deep)" stroke-width="5" stroke-linecap="round"/>
+            <path d="M652 39 l12 6 l-12 6 z" fill="var(--service_cold_deep)"/>
+          </sc-if>
+          <circle cx="30" cy="45" r="5" fill="var(--service_cold_pale)" stroke="var(--bg_elev)" stroke-width="1.5"/>
+          <circle cx="660" cy="45" r="5" fill="var(--service_cold_deep)" stroke="var(--bg_elev)" stroke-width="1.5"/>
+        </svg>
+        <div style="display:flex;justify-content:space-between;font-size:11px;color:var(--ink_soft);margin-top:2px;"><span class="mono">T_in 25°C · <span style="color:var(--service_cold)">pale</span></span><span class="mono"><span style="color:var(--service_cold)">deep</span> · 40°C T_out</span></div>
+      </div>
+      <p style="font-size:13px;color:var(--ink_mute);margin:14px 0 0;max-width:94ch;text-wrap:pretty;"><strong style="color:var(--ink)">Elegido: continuo.</strong> Un <span class="mono">QLinearGradient</span> del color de la T de esta corriente al color de la T de la siguiente corriente del lazo (extremos pale↔deep del ciclo 2). Los «dos tramos» inventan un salto en el punto medio que no existe físicamente y compite con las flechas — sólo confunde. La flecha hereda el color de <strong style="color:var(--ink)">llegada</strong> (deep).</p>
+    </div>
+
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:8px;">
+      <div style="background:var(--bg_elev);border:1px solid var(--line);border-radius:13px;padding:18px 20px;box-shadow:var(--shadow);">
+        <div style="font-size:11px;letter-spacing:1.4px;color:var(--ink_soft);text-transform:uppercase;font-weight:600;margin-bottom:10px;">Decisión 2 · multi-segmento con jumpers</div>
+        <p style="font-size:13px;color:var(--ink_mute);margin:0 0 10px;line-height:1.5;">El gradiente se calcula sobre la <strong style="color:var(--ink)">longitud total acumulada</strong> del path (todos los segmentos + jumpers), no por segmento. Cada vértice recibe un stop interpolado por su fracción de longitud → un jumper <strong style="color:var(--ink)">no reinicia</strong> el color.</p>
+        <svg viewBox="0 0 320 70" width="100%" height="70">
+          <defs><linearGradient id="gradHot" gradientUnits="userSpaceOnUse" x1="20" y1="20" x2="300" y2="50"><stop offset="0%" stop-color="var(--service_hot_pale)"/><stop offset="100%" stop-color="var(--service_hot_deep)"/></linearGradient></defs>
+          <path d="M20 20 L120 20 L120 50 L300 50" fill="none" stroke="url(#gradHot)" stroke-width="4.5" stroke-linecap="round" stroke-linejoin="round"/>
+          <rect x="112" y="12" width="16" height="6" rx="3" fill="var(--canvas_bg)" stroke="var(--service_hot)" stroke-width="1"/>
+        </svg>
+        <div style="font-size:11px;color:var(--ink_soft);margin-top:2px;">jumper = salto de una corriente sobre otra; la interpolación lo atraviesa.</div>
+      </div>
+      <div style="background:var(--bg_elev);border:1px solid var(--line);border-radius:13px;padding:18px 20px;box-shadow:var(--shadow);">
+        <div style="font-size:11px;letter-spacing:1.4px;color:var(--ink_soft);text-transform:uppercase;font-weight:600;margin-bottom:10px;">Decisión 3 · cuándo se apaga · export</div>
+        <ul style="margin:0;padding-left:18px;font-size:13px;color:var(--ink_mute);line-height:1.5;">
+          <li>Se apaga a <span class="mono" style="color:var(--ink)">zoom &lt; 0.6</span> o segmento pintado <span class="mono" style="color:var(--ink)">&lt; 48px</span> → color sólido medio (<span class="mono">service_hot/cold</span>): el banding a poca resolución es ruido.</li>
+          <li>error/warning del semáforo <strong style="color:var(--ink)">tiene prioridad</strong> sobre el gradiente (la corriente se pinta danger/amber).</li>
+          <li>Export: papel claro, gradiente incluido con los tokens light — nunca sólido salvo que caiga bajo el umbral de 48px a la escala exportada.</li>
+        </ul>
+      </div>
+    </div>
+    <div style="background:var(--bg_mute);border:1px dashed var(--line_strong);border-radius:12px;padding:14px 20px;font-size:12.5px;color:var(--ink_mute);">
+      Ambos temas: los stops usan <span class="mono">service_*_pale/deep</span>, que ya invierten en dark (el pale oscuro es un sepia frío/cálido, no el bg). El matiz caliente↔frío se conserva; el eje pale→deep sube en |ΔT|.
+    </div>
+  </section>
+
+  <!-- ══════════════ pendientes ══════════════ -->
+  <section id="pend" style="scroll-margin-top:70px;margin-top:56px;">
+    <div style="display:flex;align-items:baseline;gap:14px;border-top:2px solid var(--ink);padding-top:16px;margin-bottom:16px;">
+      <div style="font-size:34px;">⚡</div>
+      <div><h2 style="font-size:22px;margin:0;font-weight:600;">Lo que dejo fuera — y por qué</h2>
+      <div style="color:var(--ink_soft);font-size:14px;">Deuda anotada para un ciclo futuro, con la razón.</div></div>
+    </div>
+    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:12px;">
+      <sc-for list="{{ pendientes }}" as="p" hint-placeholder-count="6">
+        <div style="background:var(--bg_elev);border:1px solid var(--line);border-left:3px solid var(--amber);border-radius:10px;padding:14px 16px;box-shadow:var(--shadow);">
+          <div style="font-size:11px;color:var(--amber);font-weight:600;letter-spacing:.5px;margin-bottom:3px;">{{ p.tag }}</div>
+          <div style="font-size:13.5px;font-weight:600;margin-bottom:4px;">{{ p.title }}</div>
+          <div style="font-size:12.5px;color:var(--ink_mute);line-height:1.45;text-wrap:pretty;">{{ p.body }}</div>
+        </div>
+      </sc-for>
+    </div>
+    <div style="margin-top:26px;padding-top:16px;border-top:1px solid var(--line);font-size:12px;color:var(--ink_soft);">
+      Todos los valores nuevos viven en <span class="mono">tokens.py</span> con par claro/oscuro · ningún token técnico deriva del acento (las 8 combinaciones acento×tema no rompen nada) · ninguna distinción sólo por matiz · el export en papel claro hereda glifos, procedencia, anotaciones y gradiente.
+    </div>
+  </section>
+
+</main>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script>
+class Component extends DCLogic {
+  state = { theme:'light', accent:'teal', gs:'stale', gradMode:'continuous' };
+
+  renderVals(){
+    const S = this.state, set = (o)=>this.setState(o);
+    const seg = (active)=>`font:600 12px 'IBM Plex Sans';padding:5px 12px;border-radius:6px;border:none;cursor:pointer;transition:.12s;`
+      + (active ? `background:var(--accent);color:#fff;` : `background:transparent;color:var(--ink_mute);`);
+
+    const accents = [['teal','#0d6e78'],['terracota','#a44a2b'],['cobalto','#3548b4'],['oliva','#5f7a30']].map(([name,col])=>({
+      name,
+      pick:()=>set({accent:name}),
+      style:`width:20px;height:20px;border-radius:50%;cursor:pointer;padding:0;background:${col};`
+        + `border:2px solid ${S.accent===name?'var(--ink)':'transparent'};box-shadow:0 0 0 1px var(--line);`
+    }));
+
+    const stateChips = [
+      {state:'ok',cls:'',label:'ok'},
+      {state:'warning',cls:'',label:'warning'},
+      {state:'error',cls:'',label:'error'},
+      {state:'stale',cls:'',label:'stale'},
+      {state:'unrun',cls:'unrun',label:'unrun'},
+    ];
+    const stateBtns = ['stale','ok','warning','error','unrun'].map(k=>({
+      label:k, pick:()=>set({gs:k}), style:seg(S.gs===k)
+    }));
+
+    const rankPill = (n,crit)=>`display:inline-flex;align-items:center;justify-content:center;min-width:22px;height:22px;padding:0 7px;`
+      + `border-radius:6px;font:600 11px 'IBM Plex Mono';`
+      + (crit?`background:var(--danger_bg);color:var(--danger);`:`background:var(--bg_sunk);color:var(--ink_mute);`);
+
+    const groups = [
+      { rank:'CRÍTICO', rankStyle:rankPill('c',true), title:'Splitter ≠ Mixer',
+        summary:'La inversión de semántica más peligrosa: el divisor se dibujaba como mezclador — el diagrama miente sobre la dirección del flujo.',
+        before:'ambos = ◁ triángulos convergentes idénticos',
+        variants:[
+          {href:'#g-mezclador',name:'Mixer',eq:'mixer',trait:'Dos+ entradas convergen a un vértice → 1 salida. Triángulo lleno apuntando a la salida.'},
+          {href:'#g-splitter',name:'Splitter',eq:'splitter',trait:'1 entrada → nodo → 2 salidas divergentes con puntas de flecha. El nodo abierto marca el punto de reparto.'},
+        ]},
+      { rank:'ALTA', rankStyle:rankPill('a',false), title:'PFR vs CSTR',
+        summary:'Reactor tubular vs tanque agitado: régimen de flujo opuesto (pistón vs mezcla perfecta), hoy misma caja.',
+        before:'ambos = caja con agitador',
+        variants:[
+          {href:'#g-reactor-cstr',name:'CSTR',eq:'reactor_cstr',trait:'Recipiente cuadrado + eje y paleta de agitador + boquilla superior. Mezcla perfecta.'},
+          {href:'#g-reactor-pfr',name:'PFR',eq:'reactor_pfr',trait:'Tubo horizontal capsulado con serpentín interno = flujo pistón. Sin agitador.'},
+        ]},
+      { rank:'ALTA', rankStyle:rankPill('a',false), title:'Compresor recíproco vs centrífugo',
+        summary:'Tecnologías y curvas de costo distintas; el badge y el glifo deben separarlas.',
+        before:'los 4 compresores = mismo trapecio',
+        variants:[
+          {href:'#g-compresor',name:'Centrífugo',eq:'compressor_centrifugal',trait:'Trapecio (voluta) con flecha de flujo. Base de familia para axial/rotativo en la paleta.'},
+          {href:'#g-compresor-recip',name:'Recíproco',eq:'compressor_reciprocating',trait:'Cilindro + cabezal de pistón + culata. Desplazamiento positivo, inequívoco.'},
+        ]},
+      { rank:'ALTA', rankStyle:rankPill('a',false), title:'Kettle reboiler vs WHB',
+        summary:'Y de paso arregla el badge roto de los DOS WHB (hoy caen a badge de mixer).',
+        before:'kettle ×3 y WHB ×2 comparten glifo; WHB con badge de mixer',
+        variants:[
+          {href:'#g-hx-kettle',name:'Kettle reboiler',eq:'hx_kettle',trait:'Casco ensanchado con domo de vapor y nivel de líquido punteado. Rehervidor de columna.'},
+          {href:'#g-hx-whb',name:'Waste-heat boiler',eq:'hx_whb',trait:'Casco + calderín superior con boquilla de vapor. Badge propio — muere el de mixer.'},
+        ]},
+      { rank:'MEDIA', rankStyle:rankPill('m',false), title:'Boiler fire-tube vs water-tube',
+        summary:'Qué está adentro del tubo (gas vs agua) cambia el equipo y su costo.',
+        before:'ambos = rectángulo con llama',
+        variants:[
+          {href:'#g-caldera-fire',name:'Fire-tube',eq:'boiler_fire_tube',trait:'Casco horizontal, tubos de humo internos, llama abajo. Gas por dentro del tubo.'},
+          {href:'#g-caldera-water',name:'Water-tube',eq:'boiler_water_tube',trait:'Domo + calderín unidos por bancos de tubos verticales de agua. Llama afuera.'},
+        ]},
+      { rank:'MEDIA', rankStyle:rankPill('m',false), title:'Cooling tower — induced vs natural draft',
+        summary:'Con ventilador o por tiro natural: perfil y consumo distintos.',
+        before:'ambas = trapecio hiperbólico',
+        variants:[
+          {href:'#g-torre-enf',name:'Induced draft',eq:'cooling_tower_induced',trait:'Perfil recto con ventilador en la cima (aspas). El motor es la señal.'},
+          {href:'#g-torre-nat',name:'Natural draft',eq:'cooling_tower_natural',trait:'Perfil hiperbólico limpio, penacho, sin ventilador. Tiro por chimenea.'},
+        ]},
+      { rank:'MEDIA', rankStyle:rankPill('m',false), title:'Internos de columna — tray vs packing',
+        summary:'Contacto por platos vs relleno; el interno define el modelo de separación.',
+        before:'todos los internos = mismas líneas horizontales',
+        variants:[
+          {href:'#g-platos-sieve',name:'Trays (sieve)',eq:'tray_sieve',trait:'Platos horizontales perforados (puntos). Valve añade cheurones ⌃ sobre cada plato.'},
+          {href:'#g-empaque-struct',name:'Packing (structured)',eq:'packing_structured',trait:'Malla en zig-zag (estructurado) o círculos dispersos (random). Sin platos.'},
+        ]},
+    ];
+
+    const bNew = `font:600 10px 'IBM Plex Mono';color:var(--accent);white-space:nowrap;`;
+    const bFam = `font:600 10px 'IBM Plex Mono';color:var(--ink_soft);white-space:nowrap;`;
+    const mNew = (href,eq)=>({href,eq,badge:'● nueva',badgeStyle:bNew});
+    const mFam = (href,eq)=>({href,eq,badge:'◇ familia',badgeStyle:bFam});
+    const mapping = [
+      mNew('#g-splitter','splitter'), mNew('#g-mezclador','mixer'),
+      mNew('#g-reactor-cstr','reactor_cstr'), mNew('#g-reactor-pfr','reactor_pfr'),
+      mFam('#g-reactor-jacket','reactor_jacketed'), mFam('#g-reactor-cstr','reactor_autoclave'),
+      mNew('#g-compresor','compressor_centrifugal'), mNew('#g-compresor-recip','compressor_reciprocating'),
+      mFam('#g-compresor','compressor_axial'), mFam('#g-compresor','compressor_rotary'),
+      mNew('#g-hx-kettle','hx_kettle'), mNew('#g-hx-whb','hx_whb'),
+      mFam('#g-hx','hx_fixed_tube'), mFam('#g-hx','hx_u_tube'),
+      mFam('#g-hx','hx_floating_head'), mFam('#g-hx','hx_double_pipe'),
+      mFam('#g-hx','hx_condenser'), mNew('#g-caldera-fire','boiler_fire_tube'),
+      mNew('#g-caldera-water','boiler_water_tube'), mNew('#g-torre-enf','cooling_tower_induced'),
+      mNew('#g-torre-nat','cooling_tower_natural'), mNew('#g-platos-sieve','tray_sieve'),
+      mNew('#g-platos-sieve','tray_valve'), mNew('#g-empaque-struct','packing_structured'),
+      mFam('#g-empaque-struct','packing_random'), mNew('#g-columna','column'),
+      mNew('#g-filtro','filter'), mNew('#g-torre-enf','cyclone'),
+      mNew('#g-tambor','flash_drum'), mNew('#g-bomba','pump_centrifugal'),
+      mNew('#g-valvula-globe','valve_globe'),
+    ];
+
+    const annotSteps = [
+      {n:'1',title:'Crear',body:'Click con la T activa coloca una caja de texto en edición directa; si queda vacía, se descarta al hacer blur. Sin modal.'},
+      {n:'2',title:'Editar',body:'Doble-click re-entra en edición. Enter agrega línea; Esc/blur confirma. El ancho se adapta al texto.'},
+      {n:'3',title:'Mover',body:'Drag reubica la nota (con undo por snapshot). Guía opcional recta a un bloque/corriente que se dibuja al arrastrar el extremo.'},
+      {n:'4',title:'Borrar',body:'Seleccionada + Supr, o menú contextual. Borrar la guía no borra la nota.'},
+    ];
+
+    const pendientes = [
+      {tag:'3a', title:'Sieve vs valve al límite a 22px', body:'A tamaño de badge el downcomer se pierde. Diferenciar por downcomer sólo si el uso pedagógico lo pide.'},
+      {tag:'3a', title:'Mixer — dynamic', body:'No está en el catálogo; si se suma, glifo propio (hoy sería catálogo muerto — no lo dibujo).'},
+      {tag:'3b', title:'Procedencia por-componente', body:'Hoy la marca es por corriente. Marcar qué componente vino declarado vs deducido excede la pill; iría al inspector.'},
+      {tag:'3c', title:'Anclaje que sigue al bloque', body:'La nota anclada que se mueve con su equipo requiere modelo de anclaje. MVP: guía visual estática.'},
+      {tag:'3c', title:'Cuadro de revisiones △N', body:'Bloque de revisiones formal en el export (rev. A/B/C con fecha). Futuro — el △ manual cubre el MVP.'},
+      {tag:'3d', title:'Gradiente en corrientes de proceso', body:'Sólo servicio por ahora. Extenderlo a proceso necesita un eje de T de referencia acordado, no sólo el par de la corriente.'},
+    ];
+
+    return {
+      theme:S.theme, accent:S.accent,
+      setLight:()=>set({theme:'light'}), setDark:()=>set({theme:'dark'}),
+      lightBtn:seg(S.theme==='light'), darkBtn:seg(S.theme==='dark'),
+      accents, stateChips, stateBtns,
+      glyphState:S.gs, glyphStateCls: S.gs==='unrun' ? 'unrun' : '',
+      groups, mapping, annotSteps, pendientes,
+      gradContinuous: S.gradMode==='continuous',
+      gradSegment: S.gradMode==='segment',
+      setGradCont:()=>set({gradMode:'continuous'}),
+      setGradSeg:()=>set({gradMode:'segment'}),
+      gradContBtn:seg(S.gradMode==='continuous'),
+      gradSegBtn:seg(S.gradMode==='segment'),
+    };
+  }
+}
+</script>
+</body>
+</html>
