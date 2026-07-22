@@ -5,13 +5,21 @@
 topologías raras (más el intento de re-insertar day-tanks del PR #133),
 aparecieron dos defectos. Se documentan con reproducción mínima.
 
-## Ejemplo nuevo agregado (limpio)
+## Ejemplos nuevos agregados (limpios)
 
-- **`salt_crystal`** — Sal por cristalización: brine (26% NaCl) → cristalizador
-  → filtro de banda → dryer → sal seca. Ejercita los 3 equipos de
+- **`salt_crystal`** — Sal por cristalización: brine (26% NaCl) → bomba →
+  cristalizador → filtro de banda → dryer → sal seca. Ejercita los 3 equipos de
   "Solids / sep." (cristalizador, filtro, dryer) que antes solo usaba `sugar`.
   Balance cierra (10 000 t → 7 530 t licor madre + 2 470 t sal), físicamente
-  sano. Gate 42/42 verde.
+  sano.
+- **`decanter`** — Decantador L-L por gravedad: mezcla agua/benceno → bomba →
+  `Decanter — gravity` → agua (fase pesada) + aceite (fase liviana, η=0.95).
+  Equipo poco usado (`_sep_liquid_liquid`, clasificación por densidad).
+- **`cyclone`** — Ciclón gas/sólido: gases de combustión con sílice → compresor
+  → `Cyclone — gas/solid` → gas limpio + polvo. Equipo poco usado; **destapó
+  BUG 3 y BUG 4** (ver abajo).
+
+Gate 44/44 verde.
 
 ---
 
@@ -143,14 +151,49 @@ Regresión: `tests/test_solver_awareness.py`
 
 ---
 
+---
+
+## BUG 3 — Ciclón gas/sólido: mal-etiqueta las fases de salida
+
+**Severidad:** correctitud. `_sep_by_phase` fijaba las etiquetas de fase de las
+salidas a `liquid` para cualquier `target_phase != gas`. En un ciclón gas/sólido
+(feed GAS) eso dejaba el **gas limpio etiquetado `liquid`** y el **polvo sólido
+etiquetado `liquid`** — físicamente absurdo y con Cp equivocado aguas abajo.
+
+### Fix aplicado
+
+`_sep_by_phase` ahora deriva la fase del carrier del **feed**: si el feed es
+gas (ciclón), el reject queda `gas` y el target `solid`; si el feed es líquido
+(filtro/centrífuga) el comportamiento previo se mantiene intacto (reject/target
+`liquid`) → **ningún golden existente cambia** (0/42 usan mech_sep con feed gas).
+
+## BUG 4 — Ciclón sin sizer → costo cero
+
+**Severidad:** costeo. `Cyclone — gas/solid` no tenía sizer (ni por eq_type ni
+por categoría "Solids / sep."), así que un ciclón desbloqueado quedaba en `S=0`
+→ CBM nulo (mismo patrón que el evaporador/filtro antes de cerrar la deuda de
+auto-sizing).
+
+### Fix aplicado
+
+Nuevo `size_cyclone` (S = caudal volumétrico de gas en m³/s, densidad por gas
+ideal P·M/RT) registrado en `SIZER_BY_EQTYPE`. El ciclón del ejemplo `cyclone`
+ahora dimensiona S≈1.0 m³/s y se costea. Regresión:
+`tests/test_costing_honesto.py::test_cyclone_fases_gas_solido_y_costeado`.
+
+---
+
 ## Estado
 
 | Hallazgo | Estado |
 |---|---|
-| `salt_crystal` (ejemplo nuevo, solids train) | AGREGADO al set (gate 42/42) + bomba de alimentación |
+| `salt_crystal` / `decanter` / `cyclone` (ejemplos nuevos) | AGREGADOS al set (gate 44/44) |
 | BUG 1 — splitter mapea fracciones por posición | **CORREGIDO** — `split_fraction` keyed + 5 ejemplos migrados |
 | BUG 2 — separador rutea al revés sin warning | **CORREGIDO** — `[W-PHYS-NONVOL]` en el audit |
+| BUG 3 — ciclón mal-etiqueta fases de salida | **CORREGIDO** — fase del carrier desde el feed |
+| BUG 4 — ciclón sin sizer → costo cero | **CORREGIDO** — `size_cyclone` (m³/s gas) |
 
-Ambos bugs quedaron corregidos con reproducción mínima y regresión. Los fixes
-son aditivos y backward-compatible (golden 42/42 intacto, 524 tests de lógica
-verdes).
+Los 4 bugs quedaron corregidos con reproducción mínima y regresión. Los fixes
+son aditivos y backward-compatible (goldens existentes intactos, gate 44/44,
+529 tests de lógica verdes). Método: "agregar al set + gate" — se agregaron 3
+ejemplos limpios y los defectos que destaparon se corrigieron en el mismo ciclo.

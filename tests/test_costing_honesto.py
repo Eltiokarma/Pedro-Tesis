@@ -88,3 +88,25 @@ def test_fired_heaters_siempre_cs():
         assert by[tag]["FBM"] < 7.0, f"{tag} FBM={by[tag]['FBM']} (aún aleado?)"
     # F-HTD (alta P + más grande) sigue costando más que F-101 (atm)
     assert by["F-HTD"]["CBM USD (2024)"] > by["F-101"]["CBM USD (2024)"]
+
+
+# ── ciclón gas/sólido: fases correctas + costeado (no zero-cost) ────────
+def test_cyclone_fases_gas_solido_y_costeado():
+    """El ejemplo 'cyclone' (equipo poco usado) ejercita el ciclón gas/sólido:
+    la salida limpia debe quedar en fase GAS, el polvo en fase SOLID (antes
+    ambos salían mal-etiquetados 'liquid'), y el ciclón debe DIMENSIONARSE y
+    costearse (antes S=0 → costo nulo, no tenía sizer)."""
+    import capex
+    fs = reg.load_example("cyclone")
+    from flowsheet_solver import solve
+    solve(fs)
+    byname = {s.name: s for s in fs.streams.values()}
+    assert (byname["S-cleangas"].phase or "").lower() == "gas", \
+        "el gas limpio del ciclón debe quedar en fase gas"
+    assert (byname["S-dust"].phase or "").lower() == "solid", \
+        "el polvo del ciclón debe quedar en fase solid"
+    cd = capex.compute_fci(fs)
+    zc = {b["name"] for b in cd.get("zero_cost_blocks", [])}
+    assert "CY-101" not in zc, "el ciclón debe dimensionarse y costearse"
+    cy = next(b for b in fs.blocks.values() if b.name == "CY-101")
+    assert cy.S > 0, f"CY-101 sin dimensionar (S={cy.S})"

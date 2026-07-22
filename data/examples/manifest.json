@@ -421,6 +421,26 @@
    "codigo_pfd": "PFD-NACL-001",
    "builder": "_example_salt_crystal",
    "archivo": "salt_crystal.json"
+  },
+  {
+   "clave": "cyclone",
+   "label": "Ciclón gas/sólido (gases de combustión → gas limpio + polvo)",
+   "categoria": "Física",
+   "nombre": "Ciclón gas/sólido",
+   "capa": "Sólidos",
+   "codigo_pfd": "PFD-CY-001",
+   "builder": "_example_cyclone",
+   "archivo": "cyclone.json"
+  },
+  {
+   "clave": "decanter",
+   "label": "Decantador L-L (agua/aceite por gravedad)",
+   "categoria": "Física",
+   "nombre": "Decantador líquido-líquido",
+   "capa": "Sólidos",
+   "codigo_pfd": "PFD-D-001",
+   "builder": "_example_decanter",
+   "archivo": "decanter.json"
   }
  ]
 }

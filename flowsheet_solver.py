@@ -4219,9 +4219,16 @@ def _sep_by_phase(b, feed, target_out, reject_out, target_phase, eff):
             return c in override
         return get_component_phase(c, T_C, P_bar) == want
 
+    # Fase del carrier (reject): la del feed.  En un ciclón gas/sólido el
+    # feed es GAS → el reject (gas limpio) debe quedar gas, no líquido; en un
+    # filtro/centrífuga el feed es líquido → reject líquido (comportamiento
+    # previo intacto: ningún separador con feed líquido cambia).
+    feed_ph = (getattr(feed, "phase", "") or "").lower()
+    carrier_is_gas = feed_ph in ("gas", "vapor")
+
     m_target_phase = sum(m for c, m in comp_in.items() if _is_target(c))
     if m_target_phase <= 0:
-        phase_out = "gas" if want == "gas" else "liquid"
+        phase_out = "gas" if (want == "gas" or carrier_is_gas) else "liquid"
         _passthrough_to(feed, reject_out, target_out, phase=phase_out)
         return (f"⚠ MechSep {b.name}: feed sin fase '{target_phase}' "
                 f"→ pass-through a reject")
@@ -4234,8 +4241,16 @@ def _sep_by_phase(b, feed, target_out, reject_out, target_phase, eff):
             rej_masses[c] = m
     m_t = sum(tgt_masses.values())
     m_r = sum(rej_masses.values())
-    tgt_phase_lbl = "liquid" if want != "gas" else "gas"
-    rej_phase_lbl = "gas" if want == "gas" else "liquid"
+    # Etiqueta de fase de la salida objetivo: gas→gas, solid→solid (si el feed
+    # es gaseoso, p.ej. ciclón), y líquido en el resto (cake húmedo del filtro
+    # se mantiene 'liquid' como antes para no alterar los goldens existentes).
+    if want == "gas":
+        tgt_phase_lbl = "gas"
+    elif want == "solid" and carrier_is_gas:
+        tgt_phase_lbl = "solid"
+    else:
+        tgt_phase_lbl = "liquid"
+    rej_phase_lbl = "gas" if (want == "gas" or carrier_is_gas) else "liquid"
     _write_output(target_out, m_t, tgt_masses, phase=tgt_phase_lbl)
     _write_output(reject_out, m_r, rej_masses, phase=rej_phase_lbl)
     return (f"✓ MechSep {b.name}: target={m_t:.0f} (fase {target_phase}, "

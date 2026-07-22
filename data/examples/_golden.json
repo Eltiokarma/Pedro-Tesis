@@ -80,6 +80,24 @@
   "overall_status": "ok",
   "sum_duty": -17.873138
  },
+ "cyclone": {
+  "ISBL": 830822.99,
+  "energy_errors": 0,
+  "mass_errors": 0,
+  "n_blocks": 2,
+  "n_streams": 4,
+  "overall_status": "ok",
+  "sum_duty": 76.352683
+ },
+ "decanter": {
+  "ISBL": 35224.85,
+  "energy_errors": 0,
+  "mass_errors": 0,
+  "n_blocks": 2,
+  "n_streams": 4,
+  "overall_status": "ok",
+  "sum_duty": 0.194651
+ },
  "desal": {
   "ISBL": 7570989.39,
   "energy_errors": 0,

@@ -617,6 +617,24 @@ def size_filter(block, fs) -> Optional[float]:
     return max(A, 1.0)
 
 
+def size_cyclone(block, fs) -> Optional[float]:
+    """S [m³/s] = caudal volumétrico de gas de entrada (Turton usa Flow en
+    m³/s para el ciclón gas/sólido).  El gas es la fase carrier del feed;
+    su densidad se estima con gas ideal (P·M/RT).  Antes no tenía sizer → un
+    ciclón desbloqueado quedaba en S=0 (costo nulo)."""
+    ins = [s for s in fs.streams.values() if s.dst == block.id]
+    if not ins:
+        return None
+    feed = max(ins, key=lambda s: s.mass_flow or 0.0)
+    m_s = _flow_kg_s(feed.mass_flow or 0.0)
+    if m_s <= 0:
+        return None
+    rho = _rho_estimate(feed)                 # gas ideal si phase gas/vapor
+    if rho <= 0:
+        return None
+    return max(m_s / rho, 0.1)                # m³/s
+
+
 def size_evaporator(block, fs) -> Optional[float]:
     """A = |Q| / (U·ΔT_lm).  Mismo patrón que size_heat_exchanger,
     permite override por bloque y catálogo por tipo."""
@@ -736,6 +754,7 @@ SIZER_BY_EQTYPE = {
     "Dryer — drum":                   size_evaporator,
     "Crystallizer":                   size_crystallizer,
     "Filter — belt":                  size_filter,
+    "Cyclone — gas/solid":            size_cyclone,
 }
 
 
