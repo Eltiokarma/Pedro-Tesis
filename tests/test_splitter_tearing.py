@@ -168,3 +168,28 @@ def test_splitter_keyed_estable_ante_insercion():
     fsv.solve(fs)
     assert _products(fs) == esperado, \
         "las fracciones keyed deben mantenerse ancladas a su salida"
+
+
+# ── BUG 12: splitter multi-entrada distribuía solo la PRIMERA entrada ────
+def test_splitter_multientrada_distribuye_la_suma():
+    """Un splitter con DOS entradas (torre de enfriamiento: retorno caliente
+    + makeup) repartía únicamente la primera entrada e ignoraba el resto —
+    solve_splitters usaba `feed.mass_flow` mientras el path de tearing y el
+    audit W-SPLIT-LOCK ya usaban la SUMA (tres rutas inconsistentes).  El
+    ejemplo cw_loop lo reproduce: evap/blowdown salían 1747.6/1165.0 en vez
+    de los 1800/1200 de diseño, con el descuadre escondido en el HX."""
+    import examples_registry as reg
+    fs = reg.load_example("cw_loop")
+    fsv.solve(fs)
+    byname = {s.name: s for s in fs.streams.values()}
+    assert abs(byname["S-evap"].mass_flow - 1800.0) < 1.0, \
+        f"evap debe ser 1800 (suma de entradas), got {byname['S-evap'].mass_flow}"
+    assert abs(byname["S-blowdown"].mass_flow - 1200.0) < 1.0, \
+        f"blowdown debe ser 1200, got {byname['S-blowdown'].mass_flow}"
+    # el lazo cierra: retorno = circulación lockeada, sin descuadre en el HX
+    assert abs(byname["S-cwwarm"].mass_flow - 100000.0) < 1.0
+    for b in fs.blocks.values():
+        m_in = sum(s.mass_flow for s in fs.streams.values() if s.dst == b.id)
+        m_out = sum(s.mass_flow for s in fs.streams.values() if s.src == b.id)
+        assert abs(m_in - m_out) < 1.0, \
+            f"{b.name} desbalanceado: in={m_in:.1f} out={m_out:.1f}"

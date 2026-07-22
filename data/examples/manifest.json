@@ -551,6 +551,36 @@
    "codigo_pfd": "PFD-NR-001",
    "builder": "_example_nested_recycle",
    "archivo": "nested_recycle.json"
+  },
+  {
+   "clave": "hen",
+   "label": "Red de integración térmica (2 HX feed-efluente en contracorriente)",
+   "categoria": "Física",
+   "nombre": "Red de integración térmica",
+   "capa": "Térmica",
+   "codigo_pfd": "PFD-HEN-001",
+   "builder": "_example_hen",
+   "archivo": "hen.json"
+  },
+  {
+   "clave": "sidedraw",
+   "label": "Columna con extracción lateral (metanol/etanol/agua)",
+   "categoria": "Química",
+   "nombre": "Columna con side-draw",
+   "capa": "Separación",
+   "codigo_pfd": "PFD-SD-001",
+   "builder": "_example_sidedraw",
+   "archivo": "sidedraw.json"
+  },
+  {
+   "clave": "cw_loop",
+   "label": "Lazo de agua de enfriamiento (makeup/blowdown/evaporación)",
+   "categoria": "Física",
+   "nombre": "Lazo de cooling water",
+   "capa": "Utilidades",
+   "codigo_pfd": "PFD-CW-001",
+   "builder": "_example_cw_loop",
+   "archivo": "cw_loop.json"
   }
  ]
 }

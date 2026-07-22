@@ -39,8 +39,16 @@ aparecieron dos defectos. Se documentan con reproducción mínima.
 - **`nested_recycle`** — Dos reciclos anidados al MISMO mixer (vapor con purga
   vía compresor + reflujo líquido). **Destapó BUG 11 — el hallazgo más
   importante de la auditoría** (multitear con convergencia falsa).
+- **`hen`** — Red de integración térmica: 2 HX feed-efluente **cruzados** en
+  contracorriente (el efluente cede calor primero a la etapa caliente E-102 y
+  después a la fría E-101). Audita la cadena de HX 4-puertos encadenados.
+- **`sidedraw`** — Columna con extracción lateral (metanol/etanol/agua, patrón
+  sancionado tipo talara T-101: `splitter_active` + fracciones keyed +
+  composiciones lockeadas que cierran por componente).
+- **`cw_loop`** — Lazo de cooling water CERRADO con makeup/blowdown/evaporación
+  y bomba de reposición. **Destapó BUG 12** (splitter multi-entrada).
 
-Gate 55/55 verde.
+Gate 58/58 verde.
 
 ---
 
@@ -340,11 +348,37 @@ existente.
 
 ---
 
+## BUG 12 — Splitter multi-entrada: distribuía solo la PRIMERA entrada
+
+**Severidad:** correctitud. `solve_splitters` tomaba `feed = next(ins con
+masa)` y repartía `feed.mass_flow · frac` — **ignorando las demás entradas**.
+El path del splitter durante el tearing y el audit `[W-SPLIT-LOCK]` ya usaban
+la SUMA de entradas: tres rutas inconsistentes entre sí.
+
+### Síntoma observado (cw_loop)
+
+Torre de enfriamiento con dos entradas (retorno 100 000 + makeup 3 000):
+evaporación salía 1 747.6 (diseño 1 800) y blowdown 1 165.0 (diseño 1 200) —
+el splitter repartió solo el retorno. Los 87.4 t/a de descuadre quedaban
+ESCONDIDOS como desbalance del HX aguas arriba (0.05 %, bajo la tolerancia),
+así que ningún error saltaba.
+
+### Fix aplicado
+
+`solve_splitters` distribuye la **suma de todas las entradas** (idéntico para
+1 entrada → los 12 splitters de los ejemplos existentes no cambian, gate
+verde). Las tres rutas quedan alineadas.
+
+Regresión: `tests/test_splitter_tearing.py::test_splitter_multientrada_distribuye_la_suma`
+(valores de diseño exactos + balance por bloque a <1 t/a).
+
+---
+
 ## Estado
 
 | Hallazgo | Estado |
 |---|---|
-| 14 ejemplos nuevos (`salt_crystal`…`nested_recycle`) | AGREGADOS al set (gate 55/55) |
+| 17 ejemplos nuevos (`salt_crystal`…`cw_loop`) | AGREGADOS al set (gate 58/58) |
 | BUG 1 — splitter mapea fracciones por posición | **CORREGIDO** — `split_fraction` keyed + 5 ejemplos migrados |
 | BUG 2 — separador rutea al revés sin warning | **CORREGIDO** — `[W-PHYS-NONVOL]` en el audit |
 | BUG 3 — ciclón mal-etiqueta fases de salida | **CORREGIDO** — fase del carrier desde el feed |
@@ -356,10 +390,11 @@ existente.
 | BUG 9 — caldera piro/acuotubular sin sizer → costo cero | **CORREGIDO** — `size_boiler_steam` |
 | BUG 10 — válvulas sin sizer → costo cero | **CORREGIDO** — `size_valve` |
 | BUG 11 — multitear: convergencia falsa (fuente stale + G no-estacionaria) | **CORREGIDO** — closure fuente-del-tear + verificación de estacionariedad |
+| BUG 12 — splitter multi-entrada reparte solo la primera entrada | **CORREGIDO** — suma de entradas (3 rutas alineadas) |
 
-Los 11 bugs quedaron corregidos con reproducción mínima y regresión. Los fixes
-son aditivos y backward-compatible (goldens existentes intactos, gate 55/55,
-533 tests de lógica verdes). Método: "agregar al set + gate" — se agregaron 14
+Los 12 bugs quedaron corregidos con reproducción mínima y regresión. Los fixes
+son aditivos y backward-compatible (goldens existentes intactos, gate 58/58,
+534 tests de lógica verdes). Método: "agregar al set + gate" — se agregaron 17
 ejemplos limpios (equipos poco usados + topologías raras) y los defectos que
 destaparon se corrigieron en el mismo ciclo. La auditoría sistemática del
 catálogo cerró **toda** la clase de huecos de sizing salvo los internos de
