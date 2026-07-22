@@ -3990,6 +3990,37 @@ def solve_pressure_propagation(fs):
     return msgs
 
 
+def effective_split_fractions(fs, block):
+    """Fracciones EFECTIVAS de un splitter, como las resuelve el solver:
+    keyed por salida (split_fraction, estable) si TODAS las salidas la traen;
+    si no, posicional legacy (splitter_fractions; uniforme como fallback).
+
+    Fuente única para los consumidores de UI/export/DOF (inspector_evidence,
+    flowsheet_export, dof_audit) — antes cada uno leía solo la lista
+    posicional y los flowsheets keyed-only mostraban/exportaban/contaban vacío.
+
+    Devuelve lista [(stream_salida, fracción_normalizada)] o None si el
+    bloque no es splitter_active o no tiene ≥2 salidas.
+    """
+    if not getattr(block, "splitter_active", False):
+        return None
+    outs = [s for s in fs.streams.values() if s.src == block.id]
+    if len(outs) < 2:
+        return None
+    keyed = [getattr(s, "split_fraction", None) for s in outs]
+    if all(k is not None for k in keyed):
+        pairs = [(s, float(k)) for s, k in zip(outs, keyed)]
+    else:
+        fracs = list(getattr(block, "splitter_fractions", []) or [])
+        if len(fracs) != len(outs):
+            fracs = [1.0 / len(outs)] * len(outs)
+        pairs = list(zip(outs, fracs))
+    total = sum(f for _, f in pairs)
+    if total <= 0:
+        return None
+    return [(s, f / total) for s, f in pairs]
+
+
 def solve_splitters(fs):
     """Para cada bloque con splitter_active=True, distribuye el feed
     según splitter_fractions y propaga composición idéntica a todos

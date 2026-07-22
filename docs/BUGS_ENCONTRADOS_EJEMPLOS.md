@@ -137,6 +137,24 @@ Reproducción/regresión: `tests/test_splitter_tearing.py`
 (`test_splitter_posicional_rota_al_insertar_bloque` documenta el bug,
 `test_splitter_keyed_estable_ante_insercion` verifica el fix).
 
+### Respaldo en la UI (auditoría posterior)
+
+Tres consumidores UI-adyacentes leían **solo** la lista posicional y quedaban
+ciegos ante flowsheets keyed-only (los 5 ejemplos nuevos con splitter):
+
+| Consumidor | Antes | Ahora |
+|---|---|---|
+| `inspector_evidence.splitter_text/metrics` | "Salida 1/2/3 …%" o **nada** | nombre de stream + % (se ve QUÉ salida lleva QUÉ fracción) |
+| `flowsheet_export` (xlsx Equipment) | celda vacía | `S-top:0.300,S-side:0.240,…` |
+| `dof_audit._determinable_masses` | salidas keyed-only NO determinables | keyed cuenta igual que posicional |
+
+Fuente única nueva: `flowsheet_solver.effective_split_fractions(fs, block)` —
+el mismo criterio keyed-else-posicional que usa el solver. No hay editor de
+fracciones en la UI (solo display), así que no existe riesgo de edición
+ignorada. El resto de los cambios de la auditoría no necesita UI: los
+awareness warnings nuevos ([W-PHYS-NONVOL]) se renderizan genéricamente en
+`solver_report`, y el botón Auto-size recoge los sizers nuevos del registry.
+
 ---
 
 ## BUG 2 — Separador mal configurado rutea al revés en SILENCIO

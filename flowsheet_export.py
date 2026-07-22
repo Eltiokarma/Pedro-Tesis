@@ -217,10 +217,24 @@ def collect_equipment_rows(fs, year_target=2024):
         if getattr(b, "flash_active", False):
             row["Flash T K"]  = float(getattr(b, "flash_T_K", 0.0) or 0.0)
             row["Flash P bar"]= float(getattr(b, "flash_P_bar", 0.0) or 0.0)
-        # Splitter fractions
-        fracs = getattr(b, "splitter_fractions", None) or []
-        if fracs:
-            row["Splitter fracs"] = ",".join(f"{f:.3f}" for f in fracs)
+        # Splitter fractions — fuente única del solver (keyed por salida si
+        # TODAS la traen, posicional legacy si no).  Con keyed la celda lleva
+        # nombre:frac para que el xlsx muestre QUÉ salida lleva QUÉ fracción;
+        # los flowsheets keyed-only (sidedraw, cw_loop…) exportaban vacío.
+        if getattr(b, "splitter_active", False):
+            try:
+                import flowsheet_solver as _fsv
+                pairs = _fsv.effective_split_fractions(fs, b)
+            except Exception:
+                pairs = None
+            if pairs and all(getattr(s, "split_fraction", None) is not None
+                             for s, _ in pairs):
+                row["Splitter fracs"] = ",".join(
+                    f"{s.name}:{f:.3f}" for s, f in pairs)
+            else:
+                fracs = getattr(b, "splitter_fractions", None) or []
+                if fracs:
+                    row["Splitter fracs"] = ",".join(f"{f:.3f}" for f in fracs)
         rows.append(row)
     return rows
 

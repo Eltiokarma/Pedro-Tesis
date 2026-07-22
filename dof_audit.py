@@ -108,10 +108,16 @@ def _determinable_masses(fs: Flowsheet) -> Set[int]:
             if not all_streams:
                 continue
 
-            # ── Caso splitter_active: con N fracciones e input determinable
+            # ── Caso splitter_active: con N fracciones e input determinable.
+            # Las fracciones pueden venir keyed por salida (split_fraction,
+            # el mapeo estable del solver) o como lista posicional legacy —
+            # ambas determinan las salidas por igual.
             if getattr(b, "splitter_active", False):
                 fracs = getattr(b, "splitter_fractions", []) or []
-                if len(fracs) == len(outs) and len(ins) >= 1:
+                keyed_ok = outs and all(
+                    getattr(s, "split_fraction", None) is not None
+                    for s in outs)
+                if (keyed_ok or len(fracs) == len(outs)) and len(ins) >= 1:
                     main_in = next((s for s in ins if s.mass_flow > 0
                                       or s.id in det), None)
                     if main_in and main_in.id in det:

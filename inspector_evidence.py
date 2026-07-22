@@ -146,15 +146,34 @@ def mech_sep_text(block) -> Optional[str]:
         return None
 
 
-def splitter_text(block) -> Optional[str]:
+def _splitter_pairs(block, fs):
+    """[(etiqueta, fracción)] efectivos del splitter.  Con fs usa la fuente
+    única del solver (effective_split_fractions: keyed por salida si TODAS
+    la traen, si no posicional) y etiqueta con el NOMBRE del stream — así el
+    inspector muestra QUÉ salida lleva QUÉ fracción, no una posición.  Sin
+    fs cae al display posicional legacy ("Salida N")."""
+    if fs is not None:
+        try:
+            import flowsheet_solver as _fsv
+            pairs = _fsv.effective_split_fractions(fs, block)
+            if pairs:
+                return [(s.name, f) for s, f in pairs]
+        except Exception:
+            pass
+    fracs = list(getattr(block, "splitter_fractions", []) or [])
+    return [(f"Salida {i+1}", f) for i, f in enumerate(fracs)]
+
+
+def splitter_text(block, fs=None) -> Optional[str]:
     try:
         if not getattr(block, "splitter_active", False):
             return None
-        fracs = list(getattr(block, "splitter_fractions", []) or [])
-        if not fracs:
+        pairs = _splitter_pairs(block, fs)
+        if not pairs:
             return None
-        lines = [f"Salida {i+1}    {f * 100:.1f} %" for i, f in enumerate(fracs)]
-        s = sum(fracs)
+        w = max(len(lbl) for lbl, _ in pairs)
+        lines = [f"{lbl:<{w}}    {f * 100:.1f} %" for lbl, f in pairs]
+        s = sum(f for _, f in pairs)
         if abs(s - 1.0) > 1e-3:
             lines.append(f"⚠ fracciones suman {s:.3f} (≠ 1)")
         return "\n".join(lines)
@@ -1554,23 +1573,24 @@ def mech_sep_metrics(block) -> Optional[dict]:
         return None
 
 
-def splitter_metrics(block) -> Optional[dict]:
-    """Estructurado de splitter_text(). Misma fuente (splitter_fractions)."""
+def splitter_metrics(block, fs=None) -> Optional[dict]:
+    """Estructurado de splitter_text(). Misma fuente (_splitter_pairs:
+    keyed con nombre de stream si hay fs, posicional legacy si no)."""
     try:
         if not getattr(block, "splitter_active", False):
             return None
-        fracs = list(getattr(block, "splitter_fractions", []) or [])
-        if not fracs:
+        pairs = _splitter_pairs(block, fs)
+        if not pairs:
             return None
         bars = []
         metrics = []
-        for i, f in enumerate(fracs):
-            metrics.append({"key": f"out{i+1}", "label": f"Salida {i+1}",
+        for i, (lbl, f) in enumerate(pairs):
+            metrics.append({"key": f"out{i+1}", "label": lbl,
                             "value": f"{f * 100:.1f}", "unit": "%",
                             "state": "info"})
-            bars.append({"label": f"Salida {i+1}", "frac": float(f),
+            bars.append({"label": lbl, "frac": float(f),
                          "value": f"{f * 100:.1f}", "kind": "out"})
-        s = sum(fracs)
+        s = sum(f for _, f in pairs)
         status = []
         if abs(s - 1.0) > 1e-3:
             status.append({"text": f"fracciones suman {s:.3f}",
