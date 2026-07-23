@@ -103,6 +103,8 @@ class ClassificationScale(QWidget):
         _PrefsBus.signal().connect(self.update)
 
     def paintEvent(self, ev):
+        if self.width() <= 0 or self.height() <= 0:
+            return   # widget 0×0 (thrash de layout) → QPainter(self) no activaría
         p = QPainter(self)
         p.setRenderHint(QPainter.Antialiasing, True)
         w = self.width()
@@ -244,6 +246,8 @@ class MetricCard(QFrame):
         self.update()
 
     def paintEvent(self, ev):
+        if self.width() <= 0 or self.height() <= 0:
+            return   # widget 0×0 (thrash de layout) → QPainter(self) no activaría
         p = QPainter(self)
         p.setRenderHint(QPainter.Antialiasing, True)
         w, h = self.width(), self.height()
@@ -372,6 +376,8 @@ class StatusBadge(QFrame):
         return self.sizeHint()
 
     def paintEvent(self, ev):
+        if self.width() <= 0 or self.height() <= 0:
+            return   # widget 0×0 (thrash de layout) → QPainter(self) no activaría
         p = QPainter(self)
         p.setRenderHint(QPainter.Antialiasing, True)
         w, h = self.width(), self.height()
@@ -419,6 +425,8 @@ class GaugePill(QWidget):
         return QSize(140, 70)
 
     def paintEvent(self, ev):
+        if self.width() <= 0 or self.height() <= 0:
+            return   # widget 0×0 (thrash de layout) → QPainter(self) no activaría
         p = QPainter(self)
         p.setRenderHint(QPainter.Antialiasing, True)
         w, h = self.width(), self.height()
@@ -492,6 +500,8 @@ class DeltaBar(QFrame):
         _PrefsBus.signal().connect(self.update)
 
     def paintEvent(self, ev):
+        if self.width() <= 0 or self.height() <= 0:
+            return   # widget 0×0 (thrash de layout) → QPainter(self) no activaría
         p = QPainter(self)
         p.setRenderHint(QPainter.Antialiasing, True)
         w, h = self.width(), self.height()

@@ -345,6 +345,8 @@ class HXLeaderOverlay(QWidget):
     def paintEvent(self, ev):
         if not self._links:
             return
+        if self.width() <= 0 or self.height() <= 0:
+            return   # widget 0×0 (thrash de layout) → QPainter(self) no activaría
         p = QPainter(self); p.setRenderHint(QPainter.Antialiasing, True)
         for src, dst, state, status in self._links:
             self._paint_one(p, src, dst, state, status)
