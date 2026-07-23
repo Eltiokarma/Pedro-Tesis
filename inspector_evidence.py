@@ -279,13 +279,13 @@ def flash_split_table_text(block) -> Optional[str]:
     L = [f"Flash TP    T = {d['T_K'] - 273.15:.1f} °C · "
          f"P = {d['P_bar']:.3f} bar · V/F = {d['V_frac']:.4f} (molar)"]
     L.append("")
-    L.append(f"{'Comp.':<14}{'z_i':>8}{'x_i':>8}{'y_i':>8}{'K_i':>9}")
+    L.append(f"{'Comp.':<14}{'z_i':>8}{'x_i':>8}{'y_i':>8}{'K_i':>11}")
     orden = sorted(range(len(d["names"])),
                    key=lambda i: -d["K"][i])          # volátil primero
     for i in orden:
         L.append(f"{d['names'][i]:<14}"
                  f"{d['z'][i]:>8.4f}{d['x'][i]:>8.4f}"
-                 f"{d['y'][i]:>8.4f}{d['K'][i]:>9.4f}")
+                 f"{d['y'][i]:>8.4f}{d['K'][i]:>11.4g}")
     L.append(f"{'Σ':<14}{sum(d['z']):>8.4f}{sum(d['x']):>8.4f}"
              f"{sum(d['y']):>8.4f}")
     if d.get("nonvolatiles"):
@@ -2652,6 +2652,19 @@ def pump_metrics(block, fs) -> Optional[dict]:
                             "state": "danger" if margin < 1.0 else "ok"})
             if margin < 1.0:
                 status.append({"text": "Riesgo cavitación", "kind": "danger"})
+        # Velocidad específica + rodete (Frente E, libros): Perry 8ª
+        # fig. 10-32 — también en el camino rico, no solo en el texto.
+        ns = ps.get("Ns_us")
+        if ns is not None:
+            metrics.append({"key": "Ns", "label": "N_s (US)",
+                            "value": f"{ns:.0f}",
+                            "unit": f"@ {ps.get('N_rpm', 3550):.0f} rpm",
+                            "state": "info",
+                            "sub": "Perry fig. 10-32"})
+            imp = ps.get("impeller_type") or ""
+            if imp:
+                kind = "warn" if "fuera de rango" in imp else "accent"
+                status.append({"text": f"Rodete {imp}", "kind": kind})
         return {"status": status, "metrics": metrics, "gauges": gauges,
                 "figure": None, "warnings": []}
     except Exception:
