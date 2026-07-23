@@ -7479,8 +7479,17 @@ class FlowsheetMainWindow(QMainWindow):
         if hasattr(self, "_paper_action"):
             self._paper_action.setChecked(True)
 
-        self.view.zoom_reset()
-        self._center_view_on_blocks()
+        # Encuadrar TODO el diagrama en la vista: a zoom 1:1 (zoom_reset)
+        # los ejemplos anchos —y más aún tras _expand_block_spacing(1.7)—
+        # no entraban en el viewport y los equipos de los bordes quedaban
+        # fuera de cuadro ("no se veían algunos equipos").  zoom_fit encaja
+        # el bounding box de bloques con margen, mismo criterio que la ruta
+        # `--open`.  Fallback defensivo al centrado 1:1 si algo falla.
+        try:
+            self.view.zoom_fit()
+        except Exception:
+            self.view.zoom_reset()
+            self._center_view_on_blocks()
         # El chip del topbar conservaba el estado del diagrama anterior
         # ("convergido" de otro flowsheet) — el ejemplo recién cargado
         # todavía no se resolvió.
