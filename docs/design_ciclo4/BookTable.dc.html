@@ -1,0 +1,293 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+</helmet>
+<div style="background:var(--bg-elev); border:1px solid var(--line); border-radius:10px; overflow:hidden; font-family:'IBM Plex Sans',sans-serif; width:100%;">
+
+  <!-- panel kicker -->
+  <div style="display:flex; align-items:center; gap:8px; padding:9px 14px; background:var(--bg-mute); border-bottom:1px solid var(--line);">
+    <span style="width:6px; height:6px; border-radius:50%; background:var(--accent); flex:none;"></span>
+    <span style="font-size:10px; font-weight:600; letter-spacing:1.2px; text-transform:uppercase; color:var(--ink-soft);">{{ kicker }}</span>
+  </div>
+
+  <!-- context strip -->
+  <div style="display:flex; flex-wrap:wrap; gap:6px 18px; padding:11px 14px; background:var(--bg-sunk);">
+    <sc-for list="{{ contextItems }}" as="c" hint-placeholder-count="2">
+      <span style="display:inline-flex; align-items:baseline; gap:5px;">
+        <span style="font-size:10px; font-weight:600; letter-spacing:.4px; text-transform:uppercase; color:var(--ink-soft);">{{ c.label }}</span>
+        <span style="font-family:'IBM Plex Mono',monospace; font-size:12px; font-weight:500; color:var(--ink);">{{ c.value }}</span>
+      </span>
+    </sc-for>
+  </div>
+
+  <!-- table -->
+  <div style="padding:6px 14px 2px;">
+    <table style="width:100%; border-collapse:collapse; font-family:'IBM Plex Mono',monospace;">
+      <thead>
+        <tr>
+          <sc-for list="{{ cols }}" as="col" hint-placeholder-count="6">
+            <th style="{{ col.headStyle }}">{{ col.label }}</th>
+          </sc-for>
+        </tr>
+      </thead>
+      <tbody>
+        <sc-for list="{{ gridRows }}" as="row" hint-placeholder-count="4">
+          <tr style="{{ row.trStyle }}">
+            <sc-for list="{{ row.cells }}" as="cell" hint-placeholder-count="6">
+              <td style="{{ cell.style }}">
+                <sc-if value="{{ cell.badge }}" hint-placeholder-val="{{ false }}">
+                  <span style="{{ cell.badgeStyle }}">{{ cell.badgeText }}</span>
+                </sc-if>
+                <sc-if value="{{ cell.arrow }}" hint-placeholder-val="{{ false }}">
+                  <span style="{{ cell.arrowStyle }}">{{ cell.arrowGlyph }}</span>
+                </sc-if>
+                <span>{{ cell.text }}</span>
+              </td>
+            </sc-for>
+          </tr>
+        </sc-for>
+      </tbody>
+    </table>
+  </div>
+
+  <!-- derived chips -->
+  <sc-if value="{{ hasChips }}" hint-placeholder-val="{{ true }}">
+    <div style="display:flex; flex-wrap:wrap; gap:8px; padding:10px 14px 4px;">
+      <sc-for list="{{ chips }}" as="ch" hint-placeholder-count="2">
+        <span style="{{ ch.wrapStyle }}">
+          <span style="font-family:'IBM Plex Mono',monospace; font-size:11px; font-weight:600; letter-spacing:.3px;">{{ ch.label }}</span>
+          <span style="font-family:'IBM Plex Mono',monospace; font-size:12px; font-weight:600;">{{ ch.value }}</span>
+        </span>
+      </sc-for>
+    </div>
+  </sc-if>
+
+  <!-- provenance of X (declarada / alcanzada) -->
+  <sc-if value="{{ provenance }}" hint-placeholder-val="{{ false }}">
+    <div style="display:flex; align-items:center; gap:8px; padding:6px 14px 4px;">
+      <span style="font-size:11px; color:var(--ink-mute); font-family:'IBM Plex Sans',sans-serif;">{{ provenance.pre }}</span>
+      <span style="{{ provenance.pillStyle }}">
+        <span style="font-family:'IBM Plex Mono',monospace;">{{ provenance.glyph }}</span>
+        <span>{{ provenance.label }}</span>
+      </span>
+    </div>
+  </sc-if>
+
+  <!-- identity note (formula) -->
+  <sc-if value="{{ note }}" hint-placeholder-val="{{ false }}">
+    <div style="padding:4px 14px 2px; font-family:'IBM Plex Mono',monospace; font-size:11px; color:var(--ink-mute); line-height:1.5;">{{ note }}</div>
+  </sc-if>
+
+  <!-- source footer -->
+  <div style="display:flex; align-items:center; gap:7px; padding:9px 14px; margin-top:6px; background:var(--bg-mute); border-top:1px solid var(--line-soft);">
+    <span style="font-size:11px; flex:none; color:var(--ink-soft);">▤</span>
+    <span style="font-size:11px; font-family:'IBM Plex Sans',sans-serif; color:var(--ink-soft); line-height:1.4;">Fuente: {{ source }}</span>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;$preview&quot;:{&quot;width&quot;:520,&quot;height&quot;:420},&quot;variant&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;options&quot;:[&quot;stoich&quot;,&quot;flash&quot;,&quot;wh&quot;],&quot;default&quot;:&quot;stoich&quot;,&quot;tsType&quot;:&quot;string&quot;}}">
+class Component extends DCLogic {
+  // ── kind → [ink var, bg var] for pills/chips ──
+  _kind(k) {
+    const m = {
+      accent:['--accent','--accent-tint'], spec:['--spec','--spec-bg'],
+      neutral:['--tag-ink','--tag-bg'], warm:['--service-hot-deep','--service-hot-pale'],
+      cool:['--service-cold-deep','--service-cold-pale'], sigma:['--ink','--bg-sunk'],
+      green:['--green','--green-bg'], amber:['--amber','--amber-bg'],
+      danger:['--danger','--danger-bg'], sinnott:['--sinnott-ink','--sinnott-bg'],
+    };
+    return m[k] || m.neutral;
+  }
+
+  _data() {
+    const stoich = {
+      kicker: 'Tabla estequiométrica · Fogler §3.4',
+      contextItems: [
+        {label:'Reacción', value:'2 SO₂ + O₂ → 2 SO₃'},
+        {label:'Base', value:'1 mol SO₂ (limitante)'},
+        {label:'F_A0', value:'82.6 kmol/h'},
+      ],
+      colDefs: [
+        {label:'Especie', align:'left'},
+        {label:'ν/|ν_A|', align:'right'},
+        {label:'F_i0', align:'right'},
+        {label:'θ_i', align:'right'},
+        {label:'Cambio', align:'right'},
+        {label:'F_i(X)', align:'right'},
+      ],
+      rows: [
+        {ribbon:'accent', cells:[
+          {t:'SO₂', badge:{text:'A',kind:'accent'}}, {t:'−1.00'}, {t:'82.6'}, {t:'1.000'}, {t:'−41.3',dir:'down'}, {t:'41.3'} ]},
+        {cells:[ {t:'O₂'}, {t:'−0.50'}, {t:'44.6'}, {t:'0.540'}, {t:'−20.6',dir:'down'}, {t:'23.9'} ]},
+        {muted:true, cells:[
+          {t:'N₂', badge:{text:'I',kind:'neutral'}}, {t:'+0.00'}, {t:'168'}, {t:'2.031'}, {t:'0', neutral:true}, {t:'168'} ]},
+        {cells:[ {t:'SO₃'}, {t:'+1.00'}, {t:'0'}, {t:'0.000'}, {t:'+41.3',dir:'up'}, {t:'41.3'} ]},
+      ],
+      chips: [
+        {label:'δ = Σν/|ν_A|', value:'−0.500', kind:'neutral'},
+        {label:'ε = y_A0·δ', value:'−0.1400', kind:'neutral'},
+        {label:'y_A0', value:'0.280', kind:'neutral'},
+      ],
+      provenance: {pre:'Conversión X = 0.500', glyph:'▪', label:'declarada', kind:'spec'},
+      note: null,
+      source: 'Fogler, Elements of CRE 4ª ed., §3.4 (tablas 3-3 / 3-5)',
+    };
+
+    const flash = {
+      kicker: 'Reparto del flash · estilo ChemSep',
+      contextItems: [
+        {label:'Flash TP · T', value:'86.9 °C'},
+        {label:'P', value:'1.013 bar'},
+        {label:'V/F', value:'0.2685 mol'},
+      ],
+      colDefs: [
+        {label:'Comp.', align:'left'},
+        {label:'z_i', align:'right'},
+        {label:'x_i', align:'right'},
+        {label:'y_i', align:'right'},
+        {label:'K_i', align:'right'},
+      ],
+      rows: [
+        {cells:[ {t:'ethanol'}, {t:'0.1934'}, {t:'0.1110'}, {t:'0.4177'}, {t:'3.7620', K:'up'} ]},
+        {cells:[ {t:'hexane'},  {t:'0.0295'}, {t:'0.0266'}, {t:'0.0374'}, {t:'1.4040', K:'up'} ]},
+        {cells:[ {t:'water'},   {t:'0.7771'}, {t:'0.8623'}, {t:'0.5449'}, {t:'0.6319', K:'down'} ]},
+        {sigma:true, cells:[ {t:'Σ'}, {t:'1.0000'}, {t:'1.0000'}, {t:'1.0000'}, {t:'—', neutral:true} ]},
+      ],
+      chips: [
+        {label:'V/F', value:'0.2685', kind:'cool'},
+        {label:'no-volátil → líq.', value:'glucose', kind:'neutral'},
+      ],
+      provenance: null,
+      note: 'K_i = γ_i(NRTL)·P_sat,i / P   ·   Rachford-Rice C-componente   ·   K>1 ↑ vapor · K<1 ↓ líquido',
+      source: 'Seader/Henley, Sep. Process Principles §4 · Smith-Van Ness-Abbott §12',
+    };
+
+    const wh = {
+      kicker: 'Etapas de columna · Wang-Henke (MESH)',
+      contextItems: [
+        {label:'R', value:'1.80'},
+        {label:'N_teo', value:'8'},
+        {label:'Q_cond', value:'−1.42 MW'},
+        {label:'Q_reb', value:'+1.55 MW'},
+      ],
+      colDefs: [
+        {label:'Etapa', align:'left'},
+        {label:'T [°C]', align:'right'},
+        {label:'x_LK', align:'right'},
+        {label:'y_LK', align:'right'},
+        {label:'L [kmol/h]', align:'right'},
+        {label:'V [kmol/h]', align:'right'},
+      ],
+      rows: [
+        {ribbon:'cool', cells:[ {t:'1', badge:{text:'COND',kind:'cool'}}, {t:'78.4'}, {t:'0.885'}, {t:'0.912'}, {t:'62.1'}, {t:'—', neutral:true} ]},
+        {cells:[ {t:'2'}, {t:'79.1'}, {t:'0.760'}, {t:'0.845'}, {t:'63.8'}, {t:'88.4'} ]},
+        {cells:[ {t:'3'}, {t:'81.3'}, {t:'0.612'}, {t:'0.741'}, {t:'64.2'}, {t:'90.1'} ]},
+        {ribbon:'accent', cells:[ {t:'4', badge:{text:'FEED',kind:'accent'}}, {t:'84.6'}, {t:'0.470'}, {t:'0.628'}, {t:'118.5'}, {t:'90.5'} ]},
+        {cells:[ {t:'5'}, {t:'88.9'}, {t:'0.331'}, {t:'0.505'}, {t:'120.2'}, {t:'74.8'} ]},
+        {cells:[ {t:'6'}, {t:'93.7'}, {t:'0.208'}, {t:'0.362'}, {t:'121.0'}, {t:'76.5'} ]},
+        {cells:[ {t:'7'}, {t:'98.2'}, {t:'0.108'}, {t:'0.214'}, {t:'121.6'}, {t:'77.3'} ]},
+        {ribbon:'warm', cells:[ {t:'8', badge:{text:'REB',kind:'warm'}}, {t:'101.4'}, {t:'0.045'}, {t:'0.104'}, {t:'—', neutral:true}, {t:'77.9'} ]},
+      ],
+      chips: [],
+      provenance: null,
+      note: 'Toggle tabla ↔ figura: comparte el perfil tray-by-tray ya graficado (misma fuente de datos).',
+      source: 'Seader/Henley §10 (Wang-Henke MESH) · perfil tray-by-tray',
+    };
+
+    return {stoich, flash, wh}[this.props.variant] || stoich;
+  }
+
+  renderVals() {
+    const d = this._data();
+    const mono = "'IBM Plex Mono',monospace";
+
+    const cols = d.colDefs.map(c => ({
+      label: c.label,
+      headStyle: `padding:6px 6px 7px; text-align:${c.align}; font-family:'IBM Plex Sans',sans-serif; font-size:10px; font-weight:600; letter-spacing:.6px; text-transform:uppercase; color:var(--ink-soft); border-bottom:1px solid var(--line-strong); white-space:nowrap;`,
+    }));
+
+    const gridRows = d.rows.map(r => {
+      let trStyle = '';
+      if (r.sigma) trStyle = 'background:var(--bg-sunk);';
+      const cells = r.cells.map((cell, ci) => {
+        const align = d.colDefs[ci].align;
+        let color = 'var(--ink)';
+        let weight = ci === 0 ? 600 : 500;
+        if (cell.neutral) color = 'var(--ink-soft)';
+        if (r.muted && ci === 0) color = 'var(--ink-mute)';
+        if (r.sigma) weight = 700;
+        // K_i thermal coding
+        if (cell.K === 'up') { color = 'var(--service-hot-deep)'; weight = 600; }
+        if (cell.K === 'down') { color = 'var(--service-cold-deep)'; weight = 600; }
+        // "Cambio" consumption/production: neutral ink + sign (NOT semantic red)
+        if (cell.dir === 'down') color = 'var(--ink-mute)';
+        const first = ci === 0;
+        const ribbonBorder = (first && r.ribbon)
+          ? `box-shadow: inset 3px 0 0 var(${this._kind(r.ribbon)[0]});` : '';
+        const style = `padding:${r.sigma?'7px':'5px'} 6px; text-align:${align}; color:${color}; `
+          + `font-family:${mono}; font-size:12.5px; font-weight:${weight}; font-variant-numeric:tabular-nums; `
+          + `white-space:nowrap; border-bottom:1px solid ${r.sigma?'transparent':'var(--line-soft)'}; `
+          + `border-top:${r.sigma?'1.5px solid var(--line-strong)':'0'}; ${ribbonBorder}`;
+
+        const out = {text:cell.t, style, badge:!!cell.badge, arrow:false};
+        if (cell.badge) {
+          const [ink,bg] = this._kind(cell.badge.kind);
+          out.badgeText = cell.badge.text;
+          out.badgeStyle = `display:inline-block; margin-right:6px; padding:1px 6px; border-radius:5px; `
+            + `background:var(${bg}); color:var(${ink}); font-family:'IBM Plex Sans',sans-serif; `
+            + `font-size:9px; font-weight:700; letter-spacing:.5px; vertical-align:1px;`;
+        }
+        if (cell.dir === 'down' || cell.dir === 'up') {
+          out.arrow = true;
+          out.arrowGlyph = cell.dir === 'down' ? '↓' : '↑';
+          out.arrowStyle = `margin-right:3px; font-size:10px; color:var(--ink-ghost);`;
+        }
+        return out;
+      });
+      return {trStyle, cells};
+    });
+
+    const chips = (d.chips || []).map(ch => {
+      const [ink,bg] = this._kind(ch.kind);
+      return {
+        label: ch.label, value: ch.value,
+        wrapStyle: `display:inline-flex; align-items:baseline; gap:7px; padding:4px 11px; border-radius:7px; `
+          + `background:var(${bg}); color:var(${ink});`,
+      };
+    });
+
+    let provenance = null;
+    if (d.provenance) {
+      const [ink,bg] = this._kind(d.provenance.kind);
+      provenance = {
+        pre: d.provenance.pre, glyph: d.provenance.glyph, label: d.provenance.label,
+        pillStyle: `display:inline-flex; align-items:center; gap:5px; padding:2px 9px; border-radius:6px; `
+          + `background:var(${bg}); color:var(${ink}); font-family:'IBM Plex Sans',sans-serif; `
+          + `font-size:11px; font-weight:600; letter-spacing:.3px;`,
+      };
+    }
+
+    return {
+      kicker: d.kicker,
+      contextItems: d.contextItems,
+      cols, gridRows,
+      chips, hasChips: chips.length > 0,
+      provenance,
+      note: d.note,
+      source: d.source,
+    };
+  }
+}
+</script>
+</body>
+</html>

@@ -661,8 +661,16 @@ class Flowsheet:
     # precedencia sobre este valor embebido en el flowsheet.
     econ_overrides: Dict[str, float] = field(default_factory=dict)
     # Anotaciones de plano (ciclo 3, 3c): notas de texto sobre el lienzo.
-    # {"id", "x", "y", "text", "style", "tint", "pill", "guide"}
+    # {"id", "x", "y", "text", "style", "tint", "pill", "guide",
+    #  "guide_anchor"} — guide_anchor (ciclo 4, 4d): la guía se ancla a
+    # un bloque/corriente y lo sigue al moverse:
+    #  {"kind": "block"|"stream", "id": int, "offset": [dx, dy]}
     annotations: List[Dict] = field(default_factory=list)
+    # Cuadro de revisiones △N del plano (ciclo 4, 4d — deuda 3c del
+    # bundle ciclo 3): rev. A/B/C manual con fecha, dibujado como
+    # title-block en el Marco PFD (pantalla y export).
+    # {"rev": "A", "desc": str, "date": "dd-mm", "by": str}
+    revisions: List[Dict] = field(default_factory=list)
 
     def new_id(self):
         v = self._next_id
@@ -683,6 +691,7 @@ class Flowsheet:
             "fixed_overrides": dict(self.fixed_overrides),
             "econ_overrides":  dict(self.econ_overrides),
             "annotations":     [dict(a) for a in self.annotations],
+            "revisions":       [dict(r) for r in self.revisions],
         }
 
     @staticmethod
@@ -726,4 +735,5 @@ class Flowsheet:
         fs.fixed_overrides = dict(d.get("fixed_overrides", {}))
         fs.econ_overrides  = dict(d.get("econ_overrides", {}))
         fs.annotations     = [dict(a) for a in d.get("annotations", [])]
+        fs.revisions       = [dict(r) for r in d.get("revisions", [])]
         return fs

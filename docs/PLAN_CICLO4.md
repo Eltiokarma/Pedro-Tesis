@@ -1,23 +1,25 @@
 # PLAN — Ciclo 4 (backlog anotado)
 
 **Fecha de anotación:** 2026-07-22
-**Estado:** PARCIALMENTE EJECUTADO (2026-07-22) — la primera tanda
-cerró **B completo** (menos la pasada formal de streams_table/
-stream_inspector, que requiere Design) y **C.3**, siguiendo el orden
-sugerido en §D. Regresión en `tests/test_ciclo4.py` (14 tests); bugs
-14-15 documentados en `BUGS_ENCONTRADOS_EJEMPLOS.md`. Quedan A, C.1,
-C.2 y la pasada de diseño de streams_table/stream_inspector.
+**Estado:** EJECUTADO (2026-07-23) — la primera tanda cerró **B
+completo** y **C.3**; la segunda cerró **C.1 + C.2** y la auditoría
+con libros; la tanda de diseño cerró **A completo** y la pasada
+formal de streams_table/stream_inspector con el bundle de Design
+ciclo 4 (`docs/design_ciclo4/`, implementación en
+`REDISENO_CICLO4_2026-07.md`). Regresión en `tests/test_ciclo4.py`
+(14 tests) + `tests/test_ciclo4_design.py` (20 tests); bugs 14-16
+documentados en `BUGS_ENCONTRADOS_EJEMPLOS.md`.
 
-## A. ⚡ del bundle de Design ciclo 3 (deuda que el propio Design anotó)
+## A. ⚡ del bundle de Design ciclo 3 — ✓ CERRADO (bundle ciclo 4, 4d)
 
-| Artboard | Pendiente | Nota |
+| Artboard | Pendiente | Resolución (2026-07-23) |
 |---|---|---|
-| 3a | Sieve vs valve al límite a 22 px | A tamaño de badge el rasgo se pierde; diferenciar por downcomer solo si el uso pedagógico lo pide |
-| 3a | Mixer — dynamic | No está en el catálogo; si se suma, glifo propio (no dibujar catálogo muerto) |
-| 3b | Procedencia POR COMPONENTE | La marca actual es por corriente; marcar qué componente vino declarado vs deducido excede la pill → iría al inspector |
-| 3c | Anclaje de nota que sigue al bloque/corriente | Requiere modelo de anclaje; el MVP dejó la guía visual estática |
-| 3c | Cuadro de revisiones △N en el export | Bloque formal rev. A/B/C con fecha; el △ manual del estilo "Revisión" cubre el MVP |
-| 3d | Gradiente térmico en corrientes de PROCESO | Solo servicio por ahora; proceso necesita un eje de T de referencia acordado, no el par pale/deep de la corriente |
+| 3a | Sieve vs valve al límite a 22 px | ✓ Cerrado ratificando el bundle: a 22 px el rasgo es textura invisible — no se diferencia en el badge (el glifo 60 px ya distingue) |
+| 3a | Mixer — dynamic | ✓ Cerrado: no está en el catálogo → no se dibuja glifo muerto |
+| 3b | Procedencia POR COMPONENTE | ✓ Columna sudoku de 14 px en la tabla de Composición del stream_inspector (▪ declarado / ◦ deducido) + hook `_comp_provenance` |
+| 3c | Anclaje de nota que sigue al bloque/corriente | ✓ `guide_anchor` (id + offset relativo); la guía sigue al elemento; ◆ accent al seleccionar |
+| 3c | Cuadro de revisiones △N en el export | ✓ `Flowsheet.revisions` + bloque formal en el Marco PFD + Vista ▸ "Registrar revisión △N…" |
+| 3d | Gradiente térmico en corrientes de PROCESO | ✓ Eje GLOBAL por proyecto (cold_deep → ink_ghost → hot_deep) + banda en la leyenda |
 
 ## B. Remanentes ⚡ del ciclo 2 aún vivos
 
@@ -31,9 +33,11 @@ C.2 y la pasada de diseño de streams_table/stream_inspector.
   `_style_fig`/`_legend` theme-aware, mismo sistema que econ_figures);
   hx_edu ya estaba tokenizado vía `var(--token)` (auditoría 2 §G.5) —
   se mató su `color:white` y los defaults `#000` de `hx_icons.py`.
-- **`streams_table` / `stream_inspector`**: pasada formal de diseño
-  (hoy consumen tokens de fase pero nunca tuvieron artboard). ←
-  PENDIENTE (requiere mini-prompt de Design).
+- ✓ **`streams_table` / `stream_inspector`**: pasada formal de diseño
+  → CERRADO (2026-07-23) con el artboard 4c del bundle ciclo 4:
+  escala de celda definitiva (FONT_VALUE + FONT_LABEL — muere el 8pt
+  suelto), sudoku de masa en la celda de flujo, path a FONT_LABEL,
+  densidades 8/10/13. Ver `REDISENO_CICLO4_2026-07.md`.
 - ✓ **Remate post-tanda-1 (2026-07-22): últimos hex + tipografía.**
   Murió la clase "hex suelto en superficie UI" completa: diálogo de
   reacción "estilo iPhone" y diálogo de composición de `flowsheet_qt`

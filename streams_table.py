@@ -180,11 +180,14 @@ class _CompositionStrip(QFrame):
         for name, frac, color in items_colored[:3]:
             chip = QLabel()
             chip.setTextFormat(Qt.RichText)
+            # leyenda de composición (4c): sube del 8pt suelto a
+            # FONT_LABEL — la escala de celda es una sola
             chip.setText(
                 f'<span style="color:{color};">●</span>'
-                # micro-tipografía de chip de datos (px): escala de densidad, no tipografía (excepción 2g)
-                f' <span style="color:{TOK["ink_mute"]};font-family:\'{pfd_fonts.MONO}\';font-size:8pt;">{name}</span>'
-                f' <span style="color:{TOK["ink_soft"]};font-family:\'{pfd_fonts.MONO}\';font-size:8pt;">{frac*100:.1f}%</span>'
+                f' <span style="color:{TOK["ink_mute"]};font-family:\'{pfd_fonts.MONO}\';'
+                f'font-size:{FONT_LABEL[1]}pt;">{name}</span>'
+                f' <span style="color:{TOK["ink_soft"]};font-family:\'{pfd_fonts.MONO}\';'
+                f'font-size:{FONT_LABEL[1]}pt;">{frac*100:.1f}%</span>'
             )
             legend.addWidget(chip)
         legend.addStretch(1)
@@ -222,7 +225,13 @@ class _StackedBar(QFrame):
 # ════════════════════════════════════════════════════════
 
 class _StreamRow(QFrame):
-    """Una fila de la tabla — custom layout, no QTableWidget."""
+    """Una fila de la tabla — custom layout, no QTableWidget.
+
+    Pasada formal de diseño (ciclo 4, artboard 4c): escala de celda
+    definitiva (valor FONT_VALUE · unidad FONT_LABEL — muere el 8pt
+    suelto), procedencia sudoku de la MASA en la celda de flujo
+    (▪ locked / ◦ derivada / ↻ torn, mismos glifos que la burbuja
+    on-canvas), path en FONT_LABEL mono, densidades 8/10/13."""
 
     clicked       = Signal(int)   # stream_id
     doubleClicked = Signal(int)   # stream_id
@@ -231,8 +240,12 @@ class _StreamRow(QFrame):
     COL_WEIGHTS = (44, 220, 200, 96, 220, 240, 96)
     # number, tag+role, path, phase, flow, comp, T/P
 
+    # pad vertical de fila por densidad (spec 4c: fila 44/52/60 px)
+    _V_PAD = {"compact": 8, "cozy": 10, "comfy": 13}
+
     def __init__(self, stream, fs, unit: str, max_mass: float,
-                 status: str = "ok", selected: bool = False, parent=None):
+                 status: str = "ok", selected: bool = False,
+                 mass_status: str = "derived", parent=None):
         super().__init__(parent)
         self._sid = stream.id
         self._selected = selected
@@ -240,8 +253,11 @@ class _StreamRow(QFrame):
         self.setCursor(Qt.PointingHandCursor)
         self._apply_style()
 
+        import tokens as _tokens
+        v_pad = self._V_PAD.get(_tokens.current_prefs().get("density"),
+                                10)
         lay = QHBoxLayout(self)
-        lay.setContentsMargins(16, 10, 16, 10); lay.setSpacing(14)
+        lay.setContentsMargins(16, v_pad, 16, v_pad); lay.setSpacing(14)
 
         # ── columna 1: number pill ──
         pill = _NumberPill(
@@ -275,17 +291,17 @@ class _StreamRow(QFrame):
                      if b_dst else "(boundary)")
         path_wrap = QFrame()
         path_lay = QHBoxLayout(path_wrap); path_lay.setContentsMargins(0,0,0,0); path_lay.setSpacing(6)
-        # path: micro-tipografía de densidad — a 11.5pt el tag se recorta
-        # en el ancho de columna (excepción 2g)
+        # path (4c): FONT_LABEL en mono, ink_mute — sube del 9pt libre
+        # al sistema (el tamaño mínimo oficial es 10pt).
         from_lbl = QLabel(src_label)
-        from_lbl.setFont(QFont(pfd_fonts.MONO, 9))
+        from_lbl.setFont(QFont(pfd_fonts.MONO, int(FONT_LABEL[1])))
         from_lbl.setStyleSheet(f"color:{TOK['ink_mute']};")
         from_lbl.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
         arrow = QLabel("→")
-        # glifo-ícono: tamaño geométrico, no tipografía (excepción 2g)
-        arrow.setStyleSheet(f"color:{TOK['ink_soft']}; font-size:10pt;")
+        # glifo-ícono 12px: tamaño geométrico, no tipografía (spec 4c)
+        arrow.setStyleSheet(f"color:{TOK['ink_soft']}; font-size:12px;")
         to_lbl = QLabel(dst_label)
-        to_lbl.setFont(QFont(pfd_fonts.MONO, 9))
+        to_lbl.setFont(QFont(pfd_fonts.MONO, int(FONT_LABEL[1])))
         to_lbl.setStyleSheet(f"color:{TOK['ink_mute']};")
         path_lay.addWidget(from_lbl, 1)
         path_lay.addWidget(arrow)
@@ -307,6 +323,20 @@ class _StreamRow(QFrame):
         flow_wrap = QFrame()
         fl = QVBoxLayout(flow_wrap); fl.setContentsMargins(0,0,0,0); fl.setSpacing(4)
         flow_text_row = QHBoxLayout(); flow_text_row.setSpacing(5)
+        # Procedencia sudoku de la MASA en la celda (4c): se extiende de
+        # «solo P» a la masa — mismo glifo/tinta que la burbuja on-canvas
+        # y la leyenda del Marco PFD (ciclo 3, 3b).
+        proc_glyph, proc_tok, proc_tip = {
+            "locked": ("▪", "spec", "masa declarada — la puso el usuario"),
+            "torn": ("↻", "phase_2ph", "reciclo (torn) — converge por tearing"),
+        }.get(mass_status, ("◦", "ink_mute",
+                            "masa derivada — balance del solver"))
+        proc_lbl = QLabel(proc_glyph)
+        proc_lbl.setFont(QFont(pfd_fonts.MONO, int(FONT_LABEL[1]),
+                               QFont.DemiBold))
+        proc_lbl.setStyleSheet(f"color:{TOK[proc_tok]};")
+        proc_lbl.setToolTip(proc_tip)
+        flow_text_row.addWidget(proc_lbl)
         # convert via flowsheet_units si la unidad cambió
         try:
             mass_disp = funits.format_flow(mass, unit)
@@ -317,13 +347,16 @@ class _StreamRow(QFrame):
             num_txt = f"{mass:,.0f}".replace(",", " ")
             unit_txt = unit
         val = QLabel(num_txt)
-        val.setFont(qfont(FONT_VALUE))
+        f_flow = qfont(FONT_VALUE); f_flow.setWeight(QFont.DemiBold)
+        val.setFont(f_flow)
         val.setStyleSheet(
             f"color:{TOK['ink'] if locked else TOK['ink_soft']};"
         )
         flow_text_row.addWidget(val)
+        # unidad (4c): FONT_LABEL ink_soft — la escala de celda es la
+        # misma de las cards, no hay «tamaño de celda» aparte
         unit_lbl = QLabel(unit_txt)
-        unit_lbl.setFont(qfont(FONT_HINT))
+        unit_lbl.setFont(qfont(FONT_LABEL))
         unit_lbl.setStyleSheet(f"color:{TOK['ink_soft']};")
         flow_text_row.addWidget(unit_lbl)
         if not locked:
@@ -363,14 +396,16 @@ class _StreamRow(QFrame):
         T = float(getattr(stream, "temperature", 25.0) or 25.0)
         T_locked = bool(getattr(stream, "temperature_locked", False))
         t_unit = funits.active_unit("temp")
-        # micro-tipografía de celda (valor 10pt + unidad 8pt): escala de
-        # densidad de la tabla, no tipografía (excepción 2g) — la pasada
-        # formal de diseño de esta tabla sigue pendiente de artboard.
+        # Escala de celda definitiva (4c): valor FONT_VALUE (T 600 /
+        # P 500) + unidad FONT_LABEL ink_soft — el 8pt suelto sube al
+        # sistema; la excepción «hasta que exista artboard» se cierra.
         t_html = (
             f'<span style="color:{TOK["ink"] if T_locked else TOK["ink_soft"]};'
-            f' font-family:\'{pfd_fonts.MONO}\'; font-size:10pt; font-weight:600;">'
+            f' font-family:\'{pfd_fonts.MONO}\'; font-size:{FONT_VALUE[1]}pt;'
+            f' font-weight:600;">'
             f'{funits.conv_temp(T, t_unit):.1f}</span>'
-            f'<span style="color:{TOK["ink_soft"]}; font-size:8pt;"> {t_unit}</span>'
+            f'<span style="color:{TOK["ink_soft"]};'
+            f' font-size:{FONT_LABEL[1]}pt;"> {t_unit}</span>'
         )
         t_lbl = QLabel(); t_lbl.setTextFormat(Qt.RichText); t_lbl.setText(t_html)
         t_lbl.setAlignment(Qt.AlignRight)
@@ -380,9 +415,11 @@ class _StreamRow(QFrame):
         p_unit = funits.active_unit("pressure")
         p_html = (
             f'<span style="color:{TOK["ink"] if P_locked else TOK["ink_soft"]};'
-            f' font-family:\'{pfd_fonts.MONO}\'; font-size:10pt; font-weight:500;">'
+            f' font-family:\'{pfd_fonts.MONO}\'; font-size:{FONT_VALUE[1]}pt;'
+            f' font-weight:500;">'
             f'{funits.conv_pressure(P, p_unit):.2f}</span>'
-            f'<span style="color:{TOK["ink_soft"]}; font-size:8pt;"> {p_unit}</span>'
+            f'<span style="color:{TOK["ink_soft"]};'
+            f' font-size:{FONT_LABEL[1]}pt;"> {p_unit}</span>'
         )
         p_lbl = QLabel(); p_lbl.setTextFormat(Qt.RichText); p_lbl.setText(p_html)
         p_lbl.setAlignment(Qt.AlignRight)
@@ -798,13 +835,27 @@ class StreamsTableDock(QDockWidget):
 
         # max mass para barra
         max_mass = max((s.mass_flow for s in streams), default=0.0)
+        # Procedencia sudoku de la masa (4c): torn desde la MISMA fuente
+        # que el DOF audit y las burbujas (SCC del solver).
+        try:
+            from dof_audit import _recycle_stream_ids
+            torn_ids = _recycle_stream_ids(fs)
+        except Exception:
+            torn_ids = set()
         # añadir rows
         for s in streams:
             # status puede venir de algún campo o quedar "ok" por default
             status = getattr(s, "_status", None) or "ok"
+            if bool(getattr(s, "mass_flow_locked", False)):
+                mass_status = "locked"
+            elif s.id in torn_ids:
+                mass_status = "torn"
+            else:
+                mass_status = "derived"
             row = _StreamRow(
                 s, fs, self._current_unit, max_mass,
                 status=status, selected=(s.id == self._selected_sid),
+                mass_status=mass_status,
             )
             row.clicked.connect(self._on_row_click)
             row.doubleClicked.connect(self._on_row_double_click)

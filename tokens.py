@@ -222,6 +222,32 @@ def qfont(spec):
 
 
 # ════════════════════════════════════════════════════════
+#  ESCALA DE TARJETA COMPACTA ON-CANVAS — 4ª escala (ciclo 4, 4e)
+# ════════════════════════════════════════════════════════
+# Design ratificó la excepción de stream_bubbles / hx_bubbles como
+# escala OFICIAL del sistema (bundle ciclo 4, artboard 4e) — NO migra
+# a FONT_LABEL/VALUE porque rompería la densidad de 50+ burbujas.
+#
+# Regla que la separa del sistema tipográfico:
+#   · físico FIJO (panel, tabla, diálogo — no zooma) → FONT_*
+#   · escala CON LA ESCENA (burbujas, labels de plano) → escala
+#     compacta on-canvas
+#
+# Valores documentados (px de referencia del bundle):
+#   valor    Mono 9/600 · etiqueta Sans 8/600 upper ·
+#   unidad   Sans 8/400 ink_soft · mínimo absoluto on-canvas 7
+# (Los widgets de burbuja los consumen como px/pt directos — son
+# tamaños de tarjeta compacta, deliberadamente bajo FONT_LABEL.)
+COMPACT_VALUE_PX = 9
+COMPACT_LABEL_PX = 8
+COMPACT_MIN_PX   = 7
+
+# Degradación (4e): a zoom < 0.5 la burbuja colapsa a solo número +
+# dot de fase — con 50+ burbujas en pantalla la densidad manda.
+BUBBLE_COLLAPSE_ZOOM = 0.5
+
+
+# ════════════════════════════════════════════════════════
 #  STROKES — 2 pesos (artboard 1a)
 # ════════════════════════════════════════════════════════
 # Reemplazan los 0.9–2.5 dispersos en los _draw_* de glifos.

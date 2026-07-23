@@ -1841,14 +1841,83 @@ class BlockInspectorPanel(QWidget):
             import inspector_evidence as _ev
             l.addWidget(self._figure_card(
                 "McCabe-Thiele", _ev.mccabe_figure(b, self.fs)))
-            l.addWidget(self._figure_card(
-                "Perfil tray-by-tray", _ev.profile_figure(b, self.fs)))
+            # Perfil tray-by-tray: figura, con toggle a la tabla de
+            # etapas Wang-Henke (Design ciclo 4, 4a — misma fuente de
+            # datos, _wh_result; el toggle no recomputa nada).
+            fig_card = self._figure_card(
+                "Perfil tray-by-tray", _ev.profile_figure(b, self.fs))
+            wh_spec = None
+            try:
+                wh_spec = _ev.wh_stage_book_spec(b, self.fs)
+            except Exception:
+                wh_spec = None
+            if wh_spec:
+                l.addWidget(self._profile_toggle(fig_card, wh_spec))
+            else:
+                l.addWidget(fig_card)
         except Exception as exc:
             l.addWidget(self._diag_placeholder_card(
                 "Figuras de columna",
                 f"inspector_evidence no disponible: {exc}"))
 
         return sect
+
+    def _profile_toggle(self, fig_card, wh_spec) -> QFrame:
+        """Toggle Figura ↔ Tabla del perfil de columna (artboard 4a):
+        segmentado de 2 botones sobre un stack — ambos consumen el
+        MISMO _wh_result (nada se recomputa al alternar)."""
+        from PySide6.QtWidgets import QStackedWidget, QPushButton
+        wrap = QFrame()
+        wl = QVBoxLayout(wrap)
+        wl.setContentsMargins(0, 0, 0, 0); wl.setSpacing(6)
+
+        seg = QFrame()
+        seg.setStyleSheet(
+            f"QFrame {{ background:{TOK['bg_elev']}; "
+            f"border:1px solid {TOK['line_strong']}; border-radius:6px; }}")
+        sl = QHBoxLayout(seg)
+        sl.setContentsMargins(2, 2, 2, 2); sl.setSpacing(1)
+        stack = QStackedWidget()
+        stack.addWidget(fig_card)
+        try:
+            from book_table import BookTable
+            stack.addWidget(BookTable(wh_spec))
+        except Exception:
+            return fig_card    # sin widget de tabla → figura sola
+
+        def _btn_style(active: bool) -> str:
+            if active:
+                return (f"QPushButton {{ background:{TOK['accent']}; "
+                        f"color:{TOK['bg_elev']}; border:0; "
+                        f"border-radius:4px; padding:3px 12px; }}")
+            return (f"QPushButton {{ background:transparent; "
+                    f"color:{TOK['ink_mute']}; border:0; "
+                    f"border-radius:4px; padding:3px 12px; }} "
+                    f"QPushButton:hover {{ background:{TOK['bg_mute']}; "
+                    f"color:{TOK['ink']}; }}")
+
+        btns = []
+
+        def _pick(idx: int):
+            stack.setCurrentIndex(idx)
+            for i, bt in enumerate(btns):
+                bt.setStyleSheet(_btn_style(i == idx))
+
+        for i, txt in enumerate(("Figura", "Tabla")):
+            bt = QPushButton(txt)
+            bt.setCursor(Qt.PointingHandCursor)
+            bt.setFont(qfont(FONT_LABEL))
+            bt.clicked.connect(lambda _=False, i=i: _pick(i))
+            btns.append(bt)
+            sl.addWidget(bt)
+        _pick(0)
+        seg_row = QHBoxLayout()
+        seg_row.setContentsMargins(0, 0, 0, 0)
+        seg_row.addWidget(seg)
+        seg_row.addStretch(1)
+        wl.addLayout(seg_row)
+        wl.addWidget(stack)
+        return wrap
 
     def _section_flash(self, b, eq_type) -> QFrame:
         """Flash isotérmico VLE — Vessels y flash drums."""
@@ -2285,7 +2354,31 @@ class BlockInspectorPanel(QWidget):
             ("Balance de energía",     lambda: _ev.energy_balance_metrics(b, fs),
                                        lambda: _ev.energy_balance_text(b, fs)),
         ]
+        # Tablas de libro (Design ciclo 4, 4a): el componente BookTable
+        # reemplaza el render monoespaciado — el *_text queda de
+        # fallback si el widget no puede construirse.
+        book_specs = {
+            "Tabla estequiométrica (Fogler §3.4)":
+                lambda: _ev.stoich_book_spec(b, fs),
+            "Flash — reparto por componente (x/y/K)":
+                lambda: _ev.flash_book_spec(b),
+        }
         for title, metrics_fn, text_fn in evidence_specs:
+            bk_fn = book_specs.get(title)
+            if bk_fn is not None:
+                spec = None
+                try:
+                    spec = bk_fn()
+                except Exception:
+                    spec = None
+                if spec:
+                    try:
+                        from book_table import BookTable
+                        l.addWidget(BookTable(spec))
+                        any_added = True
+                        continue
+                    except Exception:
+                        pass   # cae al fallback de texto
             m = None
             try:
                 m = metrics_fn()
@@ -2379,7 +2472,8 @@ class BlockInspectorPanel(QWidget):
         for m in metrics.get("metrics") or []:
             grid.add(MetricCard(**{k: v for k, v in m.items()
                                    if k in ("key", "label", "value", "unit",
-                                            "state", "sub", "flag", "span")}))
+                                            "state", "sub", "flag", "span",
+                                            "scale")}))
             any_grid = True
         for g in metrics.get("gauges") or []:
             kw = {k: v for k, v in g.items()

@@ -232,6 +232,7 @@ _UI_FILES = [
     "solver_report.py", "inspector_evidence.py", "econ_figures.py",
     "econ_widgets.py", "dialog_kit.py", "indicators.py",
     "estimated_overlay.py", "hx_bubbles.py", "stream_bubbles.py",
+    "book_table.py",     # tabla de libro (Design ciclo 4, 4a)
 ]
 
 

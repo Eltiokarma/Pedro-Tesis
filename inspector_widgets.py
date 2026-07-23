@@ -2,10 +2,15 @@
 
 Componentes del rediseño (handoff §3), portados del mockup HTML/CSS a Qt:
   · MetricCard   — tarjeta valor+label con ribbon de 3px por `state`.
+                   Ciclo 4 (4b): columna que fluye (el sub crece, no se
+                   recorta) + escala de clasificación opcional.
+  · ClassificationScale — barra 9px de bandas frío/acento/cálido con
+                   marcador (N_s radial·mixto·axial, etc.) — artboard 4b.
   · MetricGrid   — grilla responsiva (cols = max(1,min(3, w//150))).
   · StatusBadge  — pill dot+texto por `kind`.
   · GaugePill    — medidor radial (arco 180°) para fracciones 0..1.
-  · DeltaBar     — fila [label][track][valor], fill por `kind`.
+  · DeltaBar     — fila de 3 celdas [label][track flex][valor auto] —
+                   el valor nunca se recorta (bug 2 del bundle ciclo 4).
 
 Patrón del repo (igual que streams_table._MassBar/_StackedBar):
   · QWidget/QFrame + paintEvent(QPainter, Antialiasing).
@@ -73,14 +78,96 @@ def _tok(name: str, fallback: str = "ink") -> str:
 
 
 # ─────────────────────────────────────────────────────────────────────
+#  ClassificationScale — barra de clasificación de la MetricCard (4b)
+# ─────────────────────────────────────────────────────────────────────
+class ClassificationScale(QWidget):
+    """Escala de clasificación del bundle ciclo 4 (artboard 4b): barra
+    de 9 px con bandas (pale del eje frío/cálido + tint del acento),
+    marcador de 2 px `ink` con halo `bg_elev`, y ticks con el nombre de
+    cada banda.  P. ej. N_s: radial · mixto · axial (Perry fig. 10-32).
+
+    spec = {"marker": float, "max": float, "min": float (default 0),
+            "bands": [{"label": str, "to": float, "kind":
+                       "cool"|"accent"|"warm"}, ...]}
+    """
+
+    BAR_H = 9
+    _BAND_BG = {"cool": "service_cold_pale", "accent": "accent_tint",
+                "warm": "service_hot_pale"}
+
+    def __init__(self, spec: dict, parent=None):
+        super().__init__(parent)
+        self._spec = dict(spec or {})
+        self.setFixedHeight(24)          # barra 9 + gap 3 + ticks 12
+        self.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
+        _PrefsBus.signal().connect(self.update)
+
+    def paintEvent(self, ev):
+        p = QPainter(self)
+        p.setRenderHint(QPainter.Antialiasing, True)
+        w = self.width()
+        if w < 12:
+            return
+        s = self._spec
+        bands = s.get("bands") or []
+        lo = float(s.get("min", 0.0))
+        hi = float(s.get("max", 1.0) or 1.0)
+        if hi - lo <= 0 or not bands:
+            return
+        # bandas (clip redondeado radius 5)
+        path = QPainterPath()
+        path.addRoundedRect(QRectF(0, 0, w, self.BAR_H), 5, 5)
+        p.save()
+        p.setClipPath(path)
+        prev = lo
+        for b in bands:
+            to = float(b.get("to", hi))
+            x0 = (prev - lo) / (hi - lo) * w
+            x1 = (to - lo) / (hi - lo) * w
+            p.fillRect(QRectF(x0, 0, x1 - x0, self.BAR_H),
+                       QColor(_tok(self._BAND_BG.get(b.get("kind"),
+                                                     "bg_sunk"))))
+            prev = to
+        p.restore()
+        # marcador: línea 2px ink con halo bg_elev (spec 4b)
+        mk = s.get("marker")
+        if mk is not None:
+            f = (float(mk) - lo) / (hi - lo)
+            f = 0.0 if f < 0.0 else (1.0 if f > 1.0 else f)
+            mx = f * w
+            p.setPen(Qt.NoPen)
+            p.setBrush(QBrush(QColor(_tok("bg_elev"))))
+            p.drawRect(QRectF(mx - 2.5, -2, 5, self.BAR_H + 4))
+            p.setBrush(QBrush(QColor(_tok("ink"))))
+            p.drawRect(QRectF(mx - 1, -2, 2, self.BAR_H + 4))
+        # ticks (nombres de banda) — micro-tipografía de la escala de
+        # clasificación (spec dibujable 4b: 9px/600), no un tamaño libre
+        f_t = QFont(pfd_fonts.SANS, 7, QFont.DemiBold)
+        p.setFont(f_t)
+        p.setPen(QColor(_tok("ink_soft")))
+        n = len(bands)
+        for i, b in enumerate(bands):
+            align = (Qt.AlignLeft if i == 0 else
+                     Qt.AlignRight if i == n - 1 else Qt.AlignHCenter)
+            p.drawText(QRectF(0, self.BAR_H + 3, w, 11),
+                       align | Qt.AlignVCenter, str(b.get("label", "")))
+
+
+# ─────────────────────────────────────────────────────────────────────
 #  MetricCard
 # ─────────────────────────────────────────────────────────────────────
 class MetricCard(QFrame):
-    """Tarjeta: label (upper) + valor (mono grande) + unidad + sub, con
-    ribbon de 3 px a la izquierda pintado con el color de `state`."""
+    """Tarjeta: label (upper) + valor (mono grande) + unidad + sub +
+    escala de clasificación opcional, con ribbon de 3 px a la izquierda
+    pintado con el color de `state`.
+
+    Ciclo 4 (bug 3 del bundle): columna que FLUYE — el sub es una fila
+    propia con word-wrap y la tarjeta crece (nada de posición absoluta
+    a h−16 que recortaba «Perry fig. 10-32»).  Pad 9/12/10/15,
+    min-height 58, radius 8."""
 
     def __init__(self, key="", label="", value="", unit="", state="auto",
-                 sub=None, flag=None, span=1, parent=None):
+                 sub=None, flag=None, span=1, scale=None, parent=None):
         super().__init__(parent)
         self.key = key
         self._label = str(label)
@@ -92,14 +179,69 @@ class MetricCard(QFrame):
         self.span = max(1, int(span))
         self.setMinimumHeight(58)
         self.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Minimum)
+
+        lay = QVBoxLayout(self)
+        # l=15 (12 + ribbon 3) · t=9 · r=12 · b=10 — spec 4b
+        lay.setContentsMargins(15, 9, 12, 10)
+        lay.setSpacing(3)
+
+        # label (fila 1) — deja sitio al flag pintado arriba-derecha
+        self._lab_w = QLabel(self._label.upper())
+        f_lab = qfont(FONT_LABEL)
+        f_lab.setLetterSpacing(QFont.AbsoluteSpacing, 0.5)
+        self._lab_w.setFont(f_lab)
+        lay.addWidget(self._lab_w)
+
+        # valor + unidad (fila 2, baseline)
+        row = QHBoxLayout()
+        row.setContentsMargins(0, 0, 0, 0)
+        row.setSpacing(5)
+        self._val_w = QLabel(self._value)
+        f_val = qfont(FONT_VALUE)
+        f_val.setWeight(QFont.DemiBold)
+        self._val_w.setFont(f_val)
+        row.addWidget(self._val_w, 0, Qt.AlignBottom)
+        self._unit_w = None
+        if self._unit:
+            self._unit_w = QLabel(self._unit)
+            self._unit_w.setFont(qfont(FONT_HINT))
+            row.addWidget(self._unit_w, 0, Qt.AlignBottom)
+        row.addStretch(1)
+        lay.addLayout(row)
+
+        # sub (fila 3): FLUYE — word-wrap, la tarjeta crece (bug 3)
+        self._sub_w = None
+        if self._sub:
+            self._sub_w = QLabel(str(self._sub))
+            self._sub_w.setFont(qfont(FONT_HINT))
+            self._sub_w.setWordWrap(True)
+            lay.addWidget(self._sub_w)
+
+        # escala de clasificación (fila 4, opcional — artboard 4b)
+        self._scale_w = None
+        if scale:
+            self._scale_w = ClassificationScale(scale)
+            lay.addSpacing(3)
+            lay.addWidget(self._scale_w)
+
+        self._retint()
         _PrefsBus.signal().connect(self._on_prefs)
 
-    def _on_prefs(self):
-        self.update()
+    def _retint(self):
+        """Aplica tintas desde TOK (en caliente al cambiar tema)."""
+        base = "background:transparent; border:0;"
+        self._lab_w.setStyleSheet(f"color:{_tok('ink_soft')}; {base}")
+        ink = _tok(_STATE_INK.get(self._state, "ink"), "ink") \
+            if self._state in _STATE_INK else _tok("ink")
+        self._val_w.setStyleSheet(f"color:{ink}; {base}")
+        if self._unit_w is not None:
+            self._unit_w.setStyleSheet(f"color:{_tok('ink_soft')}; {base}")
+        if self._sub_w is not None:
+            self._sub_w.setStyleSheet(f"color:{_tok('ink_mute')}; {base}")
 
-    def sizeHint(self):
-        from PySide6.QtCore import QSize
-        return QSize(150, 62)
+    def _on_prefs(self):
+        self._retint()
+        self.update()
 
     def paintEvent(self, ev):
         p = QPainter(self)
@@ -108,8 +250,6 @@ class MetricCard(QFrame):
         if w < 6 or h < 6:
             return   # demasiado chico para pintar (evita rects negativos / GDI)
         r = 8.0
-        pad_l = 12
-        text_w = max(0, w - pad_l - 6)   # nunca negativo (Windows GDI)
         # fondo + borde redondeado
         path = QPainterPath()
         path.addRoundedRect(QRectF(0.5, 0.5, w - 1, h - 1), r, r)
@@ -122,37 +262,6 @@ class MetricCard(QFrame):
         p.fillRect(QRectF(0, 0, 3, h),
                    QBrush(QColor(_tok(_STATE_RIBBON[self._state]))))
         p.restore()
-        # textos (todos los anchos clampados a >=0 — Windows GDI dibsection)
-        # label
-        p.setPen(QColor(_tok("ink_soft")))
-        f_lab = qfont(FONT_LABEL)
-        f_lab.setLetterSpacing(QFont.AbsoluteSpacing, 0.5)
-        p.setFont(f_lab)
-        p.drawText(QRectF(pad_l, 6, text_w, 14),
-                   Qt.AlignLeft | Qt.AlignVCenter, self._label.upper())
-        # valor (tinta semántica si aplica) + unidad
-        ink = _tok(_STATE_INK.get(self._state, "ink"), "ink") \
-            if self._state in _STATE_INK else _tok("ink")
-        p.setPen(QColor(ink))
-        f_val = qfont(FONT_VALUE)
-        p.setFont(f_val)
-        fm = p.fontMetrics()
-        val_w = fm.horizontalAdvance(self._value)
-        y_val = 22
-        p.drawText(QRectF(pad_l, y_val, text_w, 24),
-                   Qt.AlignLeft | Qt.AlignVCenter, self._value)
-        if self._unit:
-            p.setPen(QColor(_tok("ink_soft")))
-            p.setFont(qfont(FONT_VALUE))
-            unit_w = max(0, w - pad_l - val_w - 8)
-            p.drawText(QRectF(pad_l + val_w + 4, y_val, unit_w, 24),
-                       Qt.AlignLeft | Qt.AlignVCenter, self._unit)
-        # sub
-        if self._sub:
-            p.setPen(QColor(_tok("ink_mute")))
-            p.setFont(qfont(FONT_HINT))
-            p.drawText(QRectF(pad_l, h - 16, text_w, 14),
-                       Qt.AlignLeft | Qt.AlignVCenter, str(self._sub))
         # flag (chip arriba-derecha) — sólo si entra
         if self._flag and w > 60:
             p.setFont(qfont(FONT_LABEL))
@@ -364,7 +473,12 @@ class GaugePill(QWidget):
 #  DeltaBar — fila [label][track][valor]
 # ─────────────────────────────────────────────────────────────────────
 class DeltaBar(QFrame):
-    """Fila horizontal: label (mono) · track con fill por `kind` · valor."""
+    """Fila horizontal de 3 celdas: [label] · [track flex] · [valor en
+    celda propia].  Bug 2 del bundle ciclo 4: el valor vive FUERA de la
+    barra, con su ancho medido del texto → nunca se recorta («00000.0»
+    al ancho real del panel).  El track absorbe el resto (min-width 0)."""
+
+    LABEL_MIN = 38     # spec 4b: [label 38px] · [track flex] · [valor auto]
 
     def __init__(self, label="", frac=0.0, value="", kind="accent",
                  parent=None):
@@ -383,29 +497,38 @@ class DeltaBar(QFrame):
         w, h = self.width(), self.height()
         if w < 6 or h < 6:
             return
-        lab_w = max(0, min(140, int(w * 0.34)))
-        val_w = min(64, max(0, w - lab_w - 12))
-        track_x = lab_w + 6
-        track_w = max(2, w - lab_w - val_w - 12)
+        from PySide6.QtGui import QFontMetrics
+        f_lab = qfont(FONT_VALUE)
+        f_val = qfont(FONT_VALUE); f_val.setWeight(QFont.DemiBold)
+        # celda de valor: ancho = el del texto (nunca se recorta)
+        val_w = QFontMetrics(f_val).horizontalAdvance(self._value)
+        # celda de label: su texto, entre LABEL_MIN y 140
+        lab_w = min(140, max(self.LABEL_MIN,
+                             QFontMetrics(f_lab).horizontalAdvance(
+                                 self._label)))
+        lab_w = min(lab_w, max(0, w - val_w - 24))   # panel muy angosto
+        track_x = lab_w + 12
+        track_w = max(0, w - track_x - val_w - 12)   # min-width 0
         # label
         p.setPen(QColor(_tok("ink_mute")))
-        p.setFont(qfont(FONT_VALUE))
+        p.setFont(f_lab)
         p.drawText(QRectF(0, 0, lab_w, h),
                    Qt.AlignLeft | Qt.AlignVCenter, self._label)
-        # track
-        ty = h / 2 - 3
-        p.setBrush(QBrush(QColor(_tok("bg_sunk")))); p.setPen(Qt.NoPen)
-        p.drawRoundedRect(QRectF(track_x, ty, track_w, 6), 3, 3)
-        if self._frac > 0:
-            p.setBrush(QBrush(QColor(_tok(_BAR_KIND[self._kind]))))
-            p.drawRoundedRect(QRectF(track_x, ty, track_w * self._frac, 6),
-                              3, 3)
-        # valor
+        # track (flex — puede colapsar a 0; el valor no)
+        if track_w > 2:
+            ty = h / 2 - 4
+            p.setBrush(QBrush(QColor(_tok("bg_sunk")))); p.setPen(Qt.NoPen)
+            p.drawRoundedRect(QRectF(track_x, ty, track_w, 8), 4, 4)
+            if self._frac > 0:
+                p.setBrush(QBrush(QColor(_tok(_BAR_KIND[self._kind]))))
+                p.drawRoundedRect(
+                    QRectF(track_x, ty, track_w * self._frac, 8), 4, 4)
+        # valor — celda propia, alineado a la derecha
         p.setPen(QColor(_tok("ink")))
-        f_val = qfont(FONT_VALUE); f_val.setWeight(QFont.DemiBold)
         p.setFont(f_val)
         p.drawText(QRectF(w - val_w, 0, val_w, h),
                    Qt.AlignRight | Qt.AlignVCenter, self._value)
 
 
-__all__ = ["MetricCard", "MetricGrid", "StatusBadge", "GaugePill", "DeltaBar"]
+__all__ = ["MetricCard", "MetricGrid", "StatusBadge", "GaugePill",
+           "DeltaBar", "ClassificationScale"]

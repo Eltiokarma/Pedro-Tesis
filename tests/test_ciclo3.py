@@ -218,8 +218,11 @@ def test_gradiente_en_lazo_de_servicio():
         it = win.scene.stream_items[s_in.id]
         assert getattr(it, "_service_grad", None) is not None, \
             "la corriente fría no armó gradiente"
-        _, c_in, c_out = it._service_grad
+        # Contrato ciclo 4: la tupla suma el sólido de fallback (el
+        # tono medio que pinta paint() bajo el umbral de zoom).
+        _, c_in, c_out, c_solid = it._service_grad
         assert c_in != c_out
+        assert c_solid is not None
         # La flecha hereda el color de LLEGADA
         assert it.pen().color().name() == c_out.name()
         # render offscreen — el paint() por segmentos no debe reventar
