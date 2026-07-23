@@ -113,6 +113,26 @@ def pump_sizing(m_kg_s:     float,
     else:
         npshr_est = None
         cav_margin = None
+
+    # Velocidad específica del rodete (Perry 8ª fig. 10-32, Karassik §2):
+    #   N_s = N·√Q[gpm] / H[ft]^0.75   (US customary, por etapa)
+    # Clasifica la geometría del impulsor — el diagnóstico didáctico
+    # clásico de selección de bomba (auditoría con libros, Frente E).
+    head_ft = head_m / 0.3048
+    if Q_gpm > 1e-6 and head_ft > 1e-6:
+        Ns_us = N_rpm * math.sqrt(Q_gpm) / (head_ft ** 0.75)
+        if Ns_us < 500:
+            impeller = ("fuera de rango centrífugo (Ns<500) — "
+                        "considerar desplazamiento positivo")
+        elif Ns_us < 4000:
+            impeller = "radial"
+        elif Ns_us < 9000:
+            impeller = "Francis / flujo mixto"
+        else:
+            impeller = "axial (propeller)"
+    else:
+        Ns_us, impeller = None, None
+
     return dict(
         W_hyd_kW=W_hyd,
         W_shaft_kW=W_shaft,
@@ -123,6 +143,9 @@ def pump_sizing(m_kg_s:     float,
         NPSHr_m_est=npshr_est,
         cavitation_margin_m=cav_margin,
         eta_total=eta_h * eta_m,
+        Ns_us=Ns_us,
+        impeller_type=impeller,
+        N_rpm=N_rpm,
     )
 
 

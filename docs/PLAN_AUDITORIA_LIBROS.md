@@ -113,6 +113,42 @@ Para igualar el modo equilibrium-stage faltan, en orden:
 - En el flash: tabla x/y/K por componente + V/F (S.2).
 - Cita al pie en cada tabla (Seader/Henley §10; King §…).
 
+## Frente E — rigor de libro en el resto del catálogo
+
+Decisión 2026-07-22: la misma vara (identidad del libro + checkpoint
+recomputado a mano + superficie didáctica) aplica a TODO el catálogo,
+no solo reactores/separadores. Regla de esta pasada: **aditivo** — se
+agregan identidades y evidencia sin tocar la física que fija goldens;
+lo que movería goldens queda en backlog con bandera.
+
+### Hecho (2026-07-22, `tests/test_libros_equipos.py`)
+
+| Familia | Identidad del libro | Dónde vive |
+|---|---|---|
+| Bombas | **N_s = N·√Q[gpm]/H[ft]^0.75** + clasificación de rodete (Perry 8ª fig. 10-32 / Karassik §2: <500 despl. positivo · <4000 radial · 4000-9000 mixto · >9000 axial) | `pump_sizing` devuelve `Ns_us`/`impeller_type`; la evidencia de bomba lo muestra con la regla de Perry citada. Se suma a lo ya validado (caso 5: W/head/NPSHr por N_ss) |
+| Válvulas | **C_v de Crane TP-410 ec. 3-16** (C_v = Q[gpm]·√(SG/ΔP[psi]); 1 gpm agua @ 1 psi ⇒ C_v=1 por definición) | `_valve_cv_liquid` + línea en la evidencia de válvula (servicio líquido) |
+| HX | **Factor F de Bowman (1940)** — la implementación contra la fórmula cerrada publicada, transcripta independiente en el test (3 puntos R≠1 + límite F(P→0)=1 + F≤1) | ya se usaba en sizing; ahora está anclado al libro |
+| Compresores | **k = Cp/(Cp−R) del aire = 1.400** (Cengel A-2) — valida la capa Cp que alimenta el isentrópico (caso 6 ya validaba T_out) | checkpoint de datos |
+
+### Backlog Frente E (⚠ = mueve goldens; requiere re-export justificado)
+
+- ⚠ **k real por composición** en `design_compressor_for_block`: hoy
+  usa la heurística documentada (1.4 diatómicos / 1.30 CO2-agua);
+  computarlo de Cp de mezcla (k = Cp/(Cp−R)) es 1 línea pero cambia
+  T_out/W de compresores → duties → goldens (mismo protocolo que el
+  episodio rho_ref).
+- ⚠ **Souders-Brown para vessels/separadores V-L** (GPSA §7 / Svrcek):
+  v_max = K_SB·√((ρ_L−ρ_V)/ρ_V) — hoy el vessel se dimensiona por
+  tiempo de residencia; agregar el cross-check de velocidad de vapor
+  (y el K_SB con demister) cambia S de vessels flash → goldens.
+- **Fan laws** (Perry §10): identidades ΔP∝N², W∝N³ como checkpoint
+  del sizer de fans (aditivo, solo test).
+- **Cooling tower**: rango/approach/efectividad como evidencia (los
+  datos ya están en los streams; aditivo). Merkel/NTU queda fuera de
+  alcance (pide curva de saturación entálpica del aire húmedo).
+- **Cv de gas** (Crane ec. 3-20, flujo compresible con Y): solo si un
+  ejemplo lo pide; el C_v líquido cubre las válvulas del set.
+
 ## Frente D — dónde vive lo didáctico (convención)
 
 - **Evidencia por bloque** (`inspector_evidence` + `evidence_specs` del

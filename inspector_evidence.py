@@ -663,10 +663,43 @@ def valve_text(block, fs) -> Optional[str]:
             f"T:            {feed.temperature:.1f} → {out.temperature:.1f} °C",
             f"Fase salida:  {out.phase}  (VF={vf:.2f})",
         ]
+        cv = _valve_cv_liquid(feed, P_in, P_out)
+        if cv is not None:
+            lines.append(f"C_v (líq.)    {cv:.1f} gpm/√psi   "
+                         f"— Crane TP-410: C_v = Q[gpm]·√(SG/ΔP[psi])")
         if vf > 0.0:
             lines.append("⚠ La expansión genera flasheo (VF > 0): "
                          "considerar un tanque flash aguas abajo")
         return "\n".join(lines)
+    except Exception:
+        return None
+
+
+def _valve_cv_liquid(feed, P_in_bar: float, P_out_bar: float):
+    """Coeficiente de caudal C_v de Crane (TP-410, ec. 3-16) para
+    servicio LÍQUIDO:  C_v = Q[gpm]·√(SG/ΔP[psi]).
+
+    Es la identidad de selección de válvulas de control del libro —
+    por definición, 1 gpm de agua (SG=1) con 1 psi de caída ⇒ C_v = 1.
+    None si la válvula no cae presión, el servicio no es líquido o la
+    densidad no es computable (composición sin datos)."""
+    try:
+        dp_psi = (P_in_bar - P_out_bar) * 14.5038
+        if dp_psi <= 1e-6:
+            return None
+        if (feed.phase or "liquid").lower() != "liquid":
+            return None
+        import pressure_drop as _pd
+        comp = feed.composition or (
+            {feed.main_component: 1.0} if feed.main_component else {})
+        rho = _pd._density_kg_m3(comp, feed.temperature + 273.15, "liquid")
+        if rho is None or rho <= 0 or feed.mass_flow <= 0:
+            return None
+        from flowsheet_model import SEC_PER_YEAR, TM_TO_KG
+        m_kg_s = feed.mass_flow * TM_TO_KG / SEC_PER_YEAR
+        Q_gpm = (m_kg_s / rho) * 3600.0 * 4.40287
+        SG = rho / 999.0                      # agua a 15.6 °C (Crane)
+        return Q_gpm * (SG / dp_psi) ** 0.5
     except Exception:
         return None
 
@@ -802,6 +835,14 @@ def pump_text(block, fs) -> Optional[str]:
                 lines.append(f"⚠ Margen cavitación: {margin:.2f} m (<1 m, riesgo)")
             else:
                 lines.append(f"Margen cav. {margin:.2f} m  ✓")
+        # Velocidad específica + geometría del rodete (Frente E, libros):
+        # N_s = N·√Q[gpm]/H[ft]^0.75 — Perry 8ª fig. 10-32 / Karassik §2.
+        ns = ps.get("Ns_us")
+        if ns is not None:
+            lines.append(f"N_s (US)    {ns:.0f}  @ {ps.get('N_rpm', 3550):.0f} rpm"
+                         f"  →  rodete {ps.get('impeller_type', '?')}")
+            lines.append("            (Perry 8ª fig. 10-32: <4000 radial · "
+                         "4000-9000 mixto · >9000 axial)")
         return "\n".join(lines)
     except Exception:
         return None
