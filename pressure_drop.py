@@ -307,15 +307,26 @@ def _density_kg_m3(composition: dict, T_K: float,
 
 def _viscosity_Pa_s(composition: dict, T_K: float,
                      phase: str = "liquid") -> float:
-    """Viscosidad estimada de la mezcla.  Default fallback para
-    líquidos: 1 cP (agua a 20°C).  Para gases: 1.8e-5 Pa·s (aire)."""
-    # Estimación gruesa.  thermo_db no siempre tiene viscosidad.
-    # Para precisión real, usar correlación Lewis-Squires o Letsou-Stiel.
+    """Viscosidad de la mezcla.
+
+    Líquidos: PRIMERO la capa 8 de thermo_db (mu_ref por compuesto,
+    Lewis-Squires + mezcla de Arrhenius — ciclo 4 C.1).  Si ningún
+    componente tiene la capa poblada, cae a la heurística documentada
+    de siempre (1 cP a 25 °C con corrección lineal en T).
+    Gases: 1.8e-5 Pa·s (aire a T moderada) — la capa 8 es líquida.
+    """
     if phase in ("vapor", "gas"):
         return 1.8e-5    # Pa·s típico para gas a T moderada
-    # Líquido típico: 1 cP a 25°C, baja con T
     T_C = T_K - 273.15
-    # Ajuste empírico para agua: μ ≈ 0.001 / (1 + 0.02·(T_C - 25))
+    try:
+        import thermo_db as _td
+        mu = _td.viscosity_mix_Pa_s(composition or {}, T_C)
+    except Exception:
+        mu = None
+    if mu is not None and mu > 0:
+        return mu
+    # Fallback heurístico (capa despoblada para estos componentes):
+    # líquido típico 1 cP a 25°C, baja con T.
     if T_C >= 100:
         return 2.8e-4   # vapor agua superheated
     return max(0.001 / (1 + 0.02 * (T_C - 25)), 1e-4)

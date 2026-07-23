@@ -323,6 +323,79 @@ def test_bug16_whb_desbloqueado_se_dimensiona_en_solve():
         f"size_whb (regresión del BUG 16)")
 
 
+# ══════════════════════════════════════════════════════════════════════
+# C.1 — capa 8: viscosidad μ(T) y conductividad k líquidas por compuesto
+# ══════════════════════════════════════════════════════════════════════
+def test_capa8_puntos_crc():
+    """Los puntos experimentales (CRC 97ª, 25 °C) se leen del .md y se
+    devuelven exactos en el punto de referencia."""
+    import thermo_db as td
+    esperados = {          # (μ mPa·s, k W/m·K) @ 25 °C
+        "water": (0.890, 0.6062), "ethanol": (1.074, 0.167),
+        "benzene": (0.604, 0.1411), "toluene": (0.560, 0.1310),
+        "hexane": (0.300, 0.1200), "glycerin": (934.0, 0.285),
+        "kerosene": (1.64, 0.115),
+    }
+    for n, (mu, k) in esperados.items():
+        assert td.viscosity_Pa_s(n, 25) == pytest.approx(mu * 1e-3), n
+        c = td.get(n)
+        assert c.thermal_conductivity_W_mK(25) == pytest.approx(k), n
+
+
+def test_capa8_lewis_squires_extrapola():
+    """μ(T) desde UN punto (Lewis-Squires): contra CRC a 50 °C queda
+    dentro de la banda documentada (±15 %)."""
+    import thermo_db as td
+    crc_50 = {"water": 0.547, "ethanol": 0.702, "glycerin": 142.0}
+    for n, mu_crc in crc_50.items():
+        mu = td.viscosity_Pa_s(n, 50) * 1e3
+        assert abs(mu - mu_crc) / mu_crc < 0.15, \
+            f"{n}: μ(50°C)={mu:.3f} vs CRC {mu_crc} (>15%)"
+
+
+def test_capa8_mezcla_arrhenius_y_prandtl():
+    import thermo_db as td
+    # ln μ_mix = Σ w ln μ — 50/50 agua/etanol a 25 °C
+    import math
+    mu = td.viscosity_mix_Pa_s({"water": 0.5, "ethanol": 0.5}, 25)
+    esperado = math.exp(0.5 * math.log(0.890e-3)
+                        + 0.5 * math.log(1.074e-3))
+    assert mu == pytest.approx(esperado)
+    # componentes sin capa → se omiten; ninguno con capa → None
+    assert td.viscosity_mix_Pa_s({"syngas": 1.0}, 25) is None
+    # Pr del agua a 25 °C ≈ 6.1 (cp 4.18 · μ 0.89e-3 / k 0.606)
+    pr = td.prandtl_liq({"water": 1.0}, 25)
+    assert pr is not None and 5.5 < pr < 6.8, pr
+
+
+def test_capa8_pressure_drop_consume_la_capa():
+    """_viscosity_Pa_s usa la capa 8 cuando está poblada y conserva la
+    heurística documentada cuando no."""
+    import pressure_drop as pdp
+    mu = pdp._viscosity_Pa_s({"water": 1.0}, 298.15, "liquid")
+    assert mu == pytest.approx(0.890e-3), \
+        "agua a 25°C debería salir de la capa 8 (0.89 cP), no 1 cP"
+    mu_fallback = pdp._viscosity_Pa_s({"syngas": 1.0}, 298.15, "liquid")
+    assert mu_fallback == pytest.approx(1.0e-3), \
+        "sin capa poblada debe caer a la heurística (1 cP @ 25°C)"
+    assert pdp._viscosity_Pa_s({"water": 1.0}, 298.15, "gas") \
+        == pytest.approx(1.8e-5)
+
+
+def test_capa8_prandtl_en_diagnostico_hx():
+    """El diag del HX gana Pr_process informativo (sin tocar U)."""
+    import examples_registry as reg
+    import flowsheet_solver as fsolv
+    fs = reg.load_example("cw_natural")
+    fsolv.solve(fs)
+    e303 = next(b for b in fs.blocks.values() if b.name == "E-303")
+    diag = getattr(e303, "_hx_diagnostics", {}) or {}
+    pr = diag.get("Pr_process")
+    assert pr is not None and 1.5 < pr < 4.0, (
+        f"Pr_process del agua a 80°C debería rondar 2-3, vino {pr}")
+    assert diag.get("U_used"), "la U de servicio no debe desaparecer"
+
+
 def test_evidencia_reactor_distingue_predictor():
     import inspector_evidence as ev
     block = SimpleNamespace(

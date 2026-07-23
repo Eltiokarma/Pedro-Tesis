@@ -75,6 +75,17 @@ class ComponentThermo:
     rho_ref_T_C:   Optional[float] = None   # T del punto experimental
     z_ra_override: Optional[float] = None   # Z_RA pre-calibrado
 
+    # ---- Capa 8 — viscosidad y conductividad líquidas (ciclo 4 C.1) ----
+    # Mismo patrón declarativo que rho_ref: UN punto experimental por
+    # línea del .md, nada de tablas paralelas.  μ(T) se extrapola con
+    # Lewis-Squires desde el punto; k se toma del punto (varía débil
+    # con T).  None = capa despoblada → los consumidores conservan sus
+    # defaults documentados (pressure_drop heurístico, U por servicio).
+    mu_ref_mPa_s: Optional[float] = None    # μ líquida [mPa·s] @ mu_ref_T_C
+    mu_ref_T_C:   Optional[float] = None
+    k_liq_W_mK:   Optional[float] = None    # k líquida [W/(m·K)] @ k_liq_T_C
+    k_liq_T_C:    Optional[float] = None
+
     # ---- Capa 4b (predictor) — campos cheminformaticos ----
     # SMILES canonico para el predictor. Si vacio, predictor cae a
     # lookup manual de grupos (functional_groups_db.md).
@@ -240,6 +251,41 @@ class ComponentThermo:
         mw_kg_mol = self.mw / 1000.0
         return mw_kg_mol / V_sat   # kg/m³
 
+    def viscosity_Pa_s(self, T_C: float) -> Optional[float]:
+        """Viscosidad LÍQUIDA a T (°C), en Pa·s (capa 8).
+
+        Lewis-Squires (Poling/Prausnitz/O'Connell 5ª ed., ec. 9-11.3):
+        extrapola desde UN punto experimental —exactamente lo que la
+        capa declara— sin pedir parámetros extra:
+
+            μ^(-0.2661) = μ_ref^(-0.2661) + (T − T_ref) / 233
+
+        con μ en cP y T en °C (solo entra la diferencia).  Precisión
+        típica ±5-15 % lejos del punto; suficiente para Re/f de Darcy
+        (dependencia débil en turbulento).  None si la capa está
+        despoblada o la extrapolación sale del rango físico de la forma
+        (T muy por encima del punto para líquidos muy livianos).
+        """
+        if (self.mu_ref_mPa_s is None or self.mu_ref_T_C is None
+                or self.mu_ref_mPa_s <= 0):
+            return None
+        base = (self.mu_ref_mPa_s ** (-0.2661)
+                + (T_C - self.mu_ref_T_C) / 233.0)
+        if base <= 0:
+            return None
+        return (base ** (1.0 / -0.2661)) * 1e-3
+
+    def thermal_conductivity_W_mK(self, T_C: float) -> Optional[float]:
+        """Conductividad térmica LÍQUIDA, W/(m·K), desde el punto
+        experimental de la capa 8.  Se devuelve el punto sin pendiente
+        inventada: para los líquidos del set k varía <10-15 % en ±50 °C
+        (CRC 97ª, tabla de k(T)) y su consumidor (Prandtl informativo
+        del diagnóstico HX) no amerita más — la firma conserva T para
+        cuando alguien pueble una pendiente."""
+        if self.k_liq_W_mK is None or self.k_liq_W_mK <= 0:
+            return None
+        return self.k_liq_W_mK
+
 
 # ======================================================
 # PARSER DEL .md
@@ -371,6 +417,21 @@ def _parse_db() -> Dict[str, ComponentThermo]:
             comp.rho_ref_T_C   = float(m.group(2))
         m = re.search(r"z_ra\s*=\s*([\d.]+)", body)
         if m: comp.z_ra_override = float(m.group(1))
+
+        # Capa 8 — viscosidad/conductividad líquidas (una línea cada una,
+        # mismo formato compacto que rho_ref):
+        #     mu_ref = 0.890 mPa·s @ 25 °C
+        #     k_liq = 0.607 W/mK @ 25 °C
+        m = re.search(r"mu_ref\s*=\s*([\d.]+)\s*mPa.{0,2}s\s*@\s*([\-\d.]+)",
+                      body)
+        if m:
+            comp.mu_ref_mPa_s = float(m.group(1))
+            comp.mu_ref_T_C   = float(m.group(2))
+        m = re.search(r"k_liq\s*=\s*([\d.]+)\s*W/m.{0,2}K\s*@\s*([\-\d.]+)",
+                      body)
+        if m:
+            comp.k_liq_W_mK = float(m.group(1))
+            comp.k_liq_T_C  = float(m.group(2))
 
         # Merge en lugar de overwrite. Si el nombre ya existe (compuesto
         # repetido con datos por capa: e.g. Perry da Cp_liq + ΔHf, otra
@@ -634,6 +695,91 @@ def density_mix_kg_m3(comp_dict: Dict[str, float], T_C: float,
         return None
     # Si solo algunos componentes tenían data, normalizo a esos
     return w_used / inv_rho_sum
+
+
+def viscosity_Pa_s(name: str, T_C: float) -> Optional[float]:
+    """μ líquida del componente puro a T (°C), Pa·s.  Lewis-Squires
+    desde el punto experimental de la capa 8.  None si está despoblada."""
+    c = get(name)
+    if c is None:
+        return None
+    return c.viscosity_Pa_s(T_C)
+
+
+def viscosity_mix_Pa_s(comp_dict: Dict[str, float], T_C: float,
+                        phase: str = "liquid") -> Optional[float]:
+    """μ de la mezcla líquida a T (°C), Pa·s.
+
+    Regla de mezcla de Arrhenius (Grunberg-Nissan con G_ij = 0):
+
+        ln μ_mix = Σᵢ wᵢ · ln μᵢ
+
+    con wᵢ fracción MÁSICA (consistente con density_mix/cp_mix, que
+    también mezclan en base másica).  Componentes sin capa 8 se omiten
+    y sus wᵢ se renormalizan; si NINGUNO tiene dato devuelve None —
+    el caller decide su fallback (pressure_drop conserva su heurística
+    documentada).  Para gas no aplica (None): el default de gas vive
+    en pressure_drop.
+    """
+    if phase != "liquid" or not comp_dict:
+        return None
+    import math as _m
+    ln_sum = 0.0
+    w_used = 0.0
+    for name, w in comp_dict.items():
+        if w <= 0:
+            continue
+        mu = viscosity_Pa_s(name, T_C)
+        if mu is None or mu <= 0:
+            continue
+        ln_sum += w * _m.log(mu)
+        w_used += w
+    if w_used <= 0:
+        return None
+    return _m.exp(ln_sum / w_used)
+
+
+def k_liq_mix_W_mK(comp_dict: Dict[str, float], T_C: float
+                    ) -> Optional[float]:
+    """k de la mezcla líquida, W/(m·K): promedio ponderado másico de los
+    puntos de la capa 8 (regla lineal simple — el consumidor es el Pr
+    informativo del HX, no un rating).  None si ningún componente tiene
+    dato."""
+    if not comp_dict:
+        return None
+    k_sum = 0.0
+    w_used = 0.0
+    for name, w in comp_dict.items():
+        if w <= 0:
+            continue
+        k = None
+        c = get(name)
+        if c is not None:
+            k = c.thermal_conductivity_W_mK(T_C)
+        if k is None:
+            continue
+        k_sum += w * k
+        w_used += w
+    if w_used <= 0:
+        return None
+    return k_sum / w_used
+
+
+def prandtl_liq(comp_dict: Dict[str, float], T_C: float,
+                cp_kJ_kg_K: Optional[float] = None) -> Optional[float]:
+    """Número de Prandtl de la mezcla líquida: Pr = cp·μ/k.
+
+    cp opcional (kJ/kg·K) — si no viene, se calcula de cp_mix_kJ_kg_K.
+    Devuelve None si falta cualquiera de las tres propiedades (capa 8
+    despoblada para esos componentes): el caller NO debe inventar un Pr.
+    """
+    mu = viscosity_mix_Pa_s(comp_dict, T_C)
+    k = k_liq_mix_W_mK(comp_dict, T_C)
+    cp = (cp_kJ_kg_K if cp_kJ_kg_K is not None
+          else cp_mix_kJ_kg_K(comp_dict, T_C, phase="liquid"))
+    if mu is None or k is None or not cp or k <= 0:
+        return None
+    return (cp * 1000.0) * mu / k
 
 
 def bubble_T_C(comp_dict: Dict[str, float], P_kPa: float = P_ATM_KPA,

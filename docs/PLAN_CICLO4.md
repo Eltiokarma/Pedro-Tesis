@@ -60,11 +60,17 @@ esta lista, se cerraron en el ciclo 3 ✓.)
 
 ## C. Del plan de auditoría frontend (fuera de alcance declarado)
 
-- **Viscosidad μ(T) y conductividad k/Prandtl** (Frente 4,
-  `CASOS_LIBRO.md`): hoy `pressure_drop` recibe μ por argumento con
-  defaults por caso y la U de HX sale de rangos típicos por servicio.
-  Poblarlas seguiría el patrón capa-por-compuesto del `.md` (como
-  `rho_ref`), NO una tabla paralela.
+- ✓ **Viscosidad μ(T) y conductividad k/Prandtl** (Frente 4,
+  `CASOS_LIBRO.md`) → CERRADO (2026-07-22): capa 8 del `.md`
+  (`mu_ref`/`k_liq`, patrón `rho_ref` — CRC 97ª @ 25 °C para los 10
+  líquidos más usados, kerosene de Perry por ser pseudo-corte);
+  μ(T) por Lewis-Squires desde el punto, mezcla de Arrhenius,
+  `pressure_drop` consume la capa con fallback a su heurística; k al
+  punto (sin pendiente inventada) + `prandtl_liq` → `Pr_process`
+  informativo en el diagnóstico del HX. La U de sizing sigue saliendo
+  de rangos por servicio (decisión documentada en CASOS_LIBRO §F4).
+  Goldens intactos (la hidráulica viva solo corre con tubería
+  declarada). Regresión: 5 tests capa 8 en `test_ciclo4.py`.
 - ✓ **21 eq_types sin instancia en los 58 ejemplos** → CERRADO
   (2026-07-22) con 3 ejemplos nuevos que instancian los 17 tipos
   standalone (los 4 internos de columna — trays/packing — quedan como

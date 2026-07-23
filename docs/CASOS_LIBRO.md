@@ -63,8 +63,8 @@ Criterio documentado, por propiedad:
 | ρ_liq(T) | Rackett + calibración `rho_ref` (capa 7) | **Suficiente con la capa poblada** — agregar compuestos = 1 línea `rho_ref = X kg/m3 @ T °C` en el .md, no una tabla nueva |
 | ΔH_vap(T) | Clausius-Clapeyron desde Antoine (verificado: agua 2256.5 kJ/kg a 100 °C, <2 %) | **Suficiente** |
 | Antoine | NIST por compuesto; no-volátiles con sentinela | **Suficiente** (excepción deliberada ya documentada) |
-| Viscosidad μ(T) | NO existe tabla — los llamadores de `pressure_drop` pasan μ como argumento con defaults por caso | **Fuera de alcance de la tesis** — el ΔP de tubería es secundario al balance/economía; documentado como trabajo futuro |
-| Conductividad k / Prandtl | NO existe — U de HX viene de rangos típicos por servicio | **Fuera de alcance** — mismo criterio |
+| Viscosidad μ(T) | **Capa 8 poblada (ciclo 4 C.1)**: `mu_ref = X mPa·s @ T °C` por compuesto en el .md (CRC 97ª, 25 °C, 10 líquidos) + Lewis-Squires desde el punto + mezcla de Arrhenius; `pressure_drop` la consume con fallback a la heurística documentada | **Suficiente con la capa poblada** — mismo patrón que `rho_ref`: agregar compuestos = 1 línea en el .md. Verificado vs CRC a 50 °C (agua +12 %, etanol +3.6 %, glicerina −2.6 % — dentro de la banda ±15 % de Lewis-Squires) |
+| Conductividad k / Prandtl | **Capa 8 poblada (ciclo 4 C.1)**: `k_liq = X W/mK @ T °C` (punto CRC, sin pendiente inventada) + `prandtl_liq` (cp·μ/k) → `Pr_process` informativo en el diagnóstico del HX | **La U de sizing SIGUE saliendo de rangos por servicio** (decisión deliberada: un rating por coeficientes de película pide geometría que el alcance no modela); el Pr cierra el cross-check didáctico del inspector |
 
 Razón de fondo: el formato `.md` por compuesto con capas (Antoine/Cp/
 formación/ρ_ref) ya ES la "tabla de Perry" del proyecto, con procedencia

@@ -41,6 +41,8 @@ Coeficientes para fase gas (ideal) y fase líquida separadas.
 - Tc: 239.4 °C, Pc: 80.9 bar
 - omega: 0.566
 - rho_ref = 791.8 kg/m3 @ 20 °C
+- mu_ref = 0.544 mPa·s @ 25 °C
+- k_liq = 0.2 W/mK @ 25 °C
 
 ### Capa 1 — Antoine [NIST]
 Equation: log10(P_sat / kPa) = A - B / (T_°C + C)
@@ -84,6 +86,8 @@ dH_f_liq_298K = -239.2 kJ/mol
 - Tc: 240.9 °C, Pc: 61.4 bar
 - omega: 0.644
 - rho_ref = 789.3 kg/m3 @ 20 °C
+- mu_ref = 1.074 mPa·s @ 25 °C
+- k_liq = 0.167 W/mK @ 25 °C
 
 ### Capa 1 — Antoine [NIST]
 Equation: log10(P_sat / kPa) = A - B / (T_°C + C)
@@ -127,6 +131,8 @@ dH_f_liq_298K = -277.0 kJ/mol
 - Tc: 373.9 °C, Pc: 220.6 bar
 - omega: 0.344
 - rho_ref = 998.2 kg/m3 @ 20 °C
+- mu_ref = 0.89 mPa·s @ 25 °C
+- k_liq = 0.6062 W/mK @ 25 °C
 
 ### Capa 1 — Antoine [NIST]
 Equation: log10(P_sat / kPa) = A - B / (T_°C + C)
@@ -170,6 +176,8 @@ dH_f_liq_298K = -285.83 kJ/mol
 - Tc: 289.0 °C, Pc: 48.9 bar
 - omega: 0.211
 - rho_ref = 876.5 kg/m3 @ 20 °C
+- mu_ref = 0.604 mPa·s @ 25 °C
+- k_liq = 0.1411 W/mK @ 25 °C
 
 ### Capa 1 — Antoine [NIST]
 Equation: log10(P_sat / kPa) = A - B / (T_°C + C)
@@ -213,6 +221,8 @@ dH_f_liq_298K = 49.08 kJ/mol
 - Tc: 318.6 °C, Pc: 41.0 bar
 - omega: 0.263
 - rho_ref = 866.9 kg/m3 @ 20 °C
+- mu_ref = 0.56 mPa·s @ 25 °C
+- k_liq = 0.131 W/mK @ 25 °C
 
 ### Capa 1 — Antoine [NIST]
 Equation: log10(P_sat / kPa) = A - B / (T_°C + C)
@@ -675,6 +685,8 @@ dH_f_liq_298K = -173.2 kJ/mol
 - Tb (1 atm): 68.7 °C
 - Tc: 234.5 °C, Pc: 30.2 bar
 - omega: 0.301
+- mu_ref = 0.3 mPa·s @ 25 °C
+- k_liq = 0.12 W/mK @ 25 °C
 
 ### Capa 1 — Antoine [NIST]
 Equation: log10(P_sat / kPa) = A - B / (T_°C + C)
@@ -1174,6 +1186,8 @@ dH_f_liq_298K = N/A
 - Tc: 235.0 °C, Pc: 47.0 bar
 - omega: 0.307
 - rho_ref = 790.0 kg/m3 @ 20 °C
+- mu_ref = 0.306 mPa·s @ 25 °C
+- k_liq = 0.161 W/mK @ 25 °C
 
 ### Capa 1 — Antoine [NIST]
 Equation: log10(P_sat / kPa) = A - B / (T_°C + C)
@@ -1258,6 +1272,8 @@ dH_f_liq_298K = -318.2 kJ/mol
 - Tb (1 atm): 118.1 °C
 - Tc: 319.6 °C, Pc: 57.8 bar
 - omega: 0.467
+- mu_ref = 1.056 mPa·s @ 25 °C
+- k_liq = 0.158 W/mK @ 25 °C
 
 ### Capa 1 — Antoine [NIST]
 Equation: log10(P_sat / kPa) = A - B / (T_°C + C)
@@ -1469,6 +1485,8 @@ dH_f_liq_298K = -134.5 kJ/mol
 - Tc: 577.0 °C, Pc: 75.0 bar
 - omega: 0.513
 - rho_ref = 1261.0 kg/m3 @ 20 °C
+- mu_ref = 934.0 mPa·s @ 25 °C
+- k_liq = 0.285 W/mK @ 25 °C
 
 ### Capa 1 — Antoine [NIST]
 Equation: log10(P_sat / kPa) = A - B / (T_°C + C)
@@ -3957,6 +3975,8 @@ dH_f_liq_298K = -224.2 kJ/mol
 - Tb (1 atm): 215.0 °C
 - Tc: 385.0 °C, Pc: 20.0 bar
 - omega: 0.55
+- mu_ref = 1.64 mPa·s @ 25 °C  (Perry 8ª (corte típico))
+- k_liq = 0.115 W/mK @ 25 °C  (Perry 8ª (corte típico))
 
 ### Capa 1 — Antoine [FIT]
 Equation: log10(P_sat / kPa) = A - B / (T_°C + C)

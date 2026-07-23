@@ -397,6 +397,25 @@ def size_heat_exchanger(block, fs):
     if dT_user is not None and dT_user > 0:
         dT = dT_user
 
+    # Pr informativo del lado proceso (capa 8 de thermo_db, ciclo 4
+    # C.1): cp·μ/k de la mezcla líquida de entrada.  NO toca U — la U
+    # sigue saliendo del servicio/catálogo (decisión documentada en
+    # CASOS_LIBRO.md §Frente 4); es evidencia didáctica para el
+    # inspector, y queda None si la capa está despoblada.
+    try:
+        import thermo_db as _td
+        _, _, proc_in, _ = _process_streams(fs, block)
+        if proc_in:
+            s0 = proc_in[0]
+            if (s0.phase or "liquid").lower() == "liquid":
+                comp = (s0.composition
+                        or ({s0.main_component: 1.0}
+                            if s0.main_component else {}))
+                diag["Pr_process"] = _td.prandtl_liq(
+                    comp, float(s0.temperature or 25.0))
+    except Exception:
+        pass
+
     diag["U_used"], diag["dTlm"], diag["F"] = U, dT, F
     A = Q * 1000.0 / (U * F * dT)        # Q en kW → W
     return max(A, 0.5), diag
