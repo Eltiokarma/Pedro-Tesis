@@ -46,10 +46,11 @@ from __future__ import annotations
 
 from typing import List, Optional
 
-from PySide6.QtCore import Qt, QRectF
+from PySide6.QtCore import Qt, QRectF, QRect, QSize, QPoint
 from PySide6.QtGui import QColor, QFont, QBrush, QPainter, QPen, QFontMetrics
 from PySide6.QtWidgets import (
-    QWidget, QFrame, QLabel, QVBoxLayout, QHBoxLayout, QSizePolicy,
+    QWidget, QFrame, QLabel, QVBoxLayout, QHBoxLayout, QGridLayout,
+    QLayout, QSizePolicy,
 )
 
 import block_inspector as _bi     # TOK en caliente (muta con el tema)
@@ -431,4 +432,352 @@ class BookTable(QFrame):
         lay.addWidget(src)
 
 
-__all__ = ["BookTable"]
+# ─────────────────────────────────────────────────────────────────────
+#  _FlowLayout — chips que envuelven a la siguiente línea (procedencia
+#  molecular del balance de átomos, 4f).  Patrón estándar de Qt.
+# ─────────────────────────────────────────────────────────────────────
+class _FlowLayout(QLayout):
+    def __init__(self, parent=None, hspace=5, vspace=5):
+        super().__init__(parent)
+        self._items = []
+        self._hs = hspace
+        self._vs = vspace
+        self.setContentsMargins(0, 0, 0, 0)
+
+    def addItem(self, item):
+        self._items.append(item)
+
+    def count(self):
+        return len(self._items)
+
+    def itemAt(self, i):
+        return self._items[i] if 0 <= i < len(self._items) else None
+
+    def takeAt(self, i):
+        return self._items.pop(i) if 0 <= i < len(self._items) else None
+
+    def expandingDirections(self):
+        return Qt.Orientation(0)
+
+    def hasHeightForWidth(self):
+        return True
+
+    def heightForWidth(self, w):
+        return self._do_layout(QRect(0, 0, w, 0), test=True)
+
+    def setGeometry(self, rect):
+        super().setGeometry(rect)
+        self._do_layout(rect, test=False)
+
+    def sizeHint(self):
+        return self.minimumSize()
+
+    def minimumSize(self):
+        s = QSize()
+        for it in self._items:
+            s = s.expandedTo(it.minimumSize())
+        m = self.contentsMargins()
+        s += QSize(m.left() + m.right(), m.top() + m.bottom())
+        return s
+
+    def _do_layout(self, rect, test):
+        x, y = rect.x(), rect.y()
+        line_h = 0
+        for it in self._items:
+            sz = it.sizeHint()
+            nx = x + sz.width()
+            if nx - rect.x() > rect.width() and line_h > 0:
+                x = rect.x()
+                y = y + line_h + self._vs
+                nx = x + sz.width()
+                line_h = 0
+            if not test:
+                it.setGeometry(QRect(QPoint(x, y), sz))
+            x = nx + self._hs
+            line_h = max(line_h, sz.height())
+        return y + line_h - rect.y()
+
+
+# ─────────────────────────────────────────────────────────────────────
+#  AtomBalanceCard — balance de átomos en pantalla (4f).
+#  Comparte la anatomía del shell de la tabla de libro (kicker + strip
+#  de contexto + pie de fuente) con filas de elemento y procedencia
+#  molecular.  Misma familia visual que 4a.
+# ─────────────────────────────────────────────────────────────────────
+class AtomBalanceCard(QFrame):
+    """Tarjeta de conservación elemental.  `spec` es el dict Qt-free de
+    inspector_evidence.atom_balance_book_spec (elementos con Σ IN /
+    Σ OUT / Δ / cierre y las moléculas de las que viene cada átomo)."""
+
+    # grid del bundle: 1.05 · .8 · .8 · .62 · 40px
+    _STRETCH = (105, 80, 80, 62)
+
+    def __init__(self, spec: dict, parent=None):
+        super().__init__(parent)
+        self.setObjectName("atomBalance")
+        self.setStyleSheet(
+            f"#atomBalance {{ background:{_tok('bg_elev')}; "
+            f"border:1px solid {_tok('line')}; border-radius:10px; }}")
+        lay = QVBoxLayout(self)
+        lay.setContentsMargins(0, 0, 0, 0)
+        lay.setSpacing(0)
+
+        chip_ok = bool(spec.get("chip_ok", True))
+        lay.addWidget(self._kicker(spec.get("kicker", ""), chip_ok))
+
+        ctx = spec.get("context") or []
+        if ctx:
+            lay.addWidget(self._context_strip(ctx))
+
+        # cabecera de columnas
+        lay.addWidget(self._column_header())
+
+        for el in spec.get("elements") or []:
+            lay.addWidget(self._element_block(el))
+
+        note = spec.get("note")
+        if note:
+            nl = QLabel(str(note))
+            nl.setFont(qfont(FONT_VALUE))
+            nl.setWordWrap(True)
+            nl.setStyleSheet(
+                f"color:{_tok('ink_mute')}; border:0; "
+                f"padding:8px 14px 2px 14px; background:transparent;")
+            lay.addWidget(nl)
+
+        lay.addWidget(self._source_footer(spec.get("source", "")))
+
+    # ── piezas del shell (compartidas con la tabla de libro) ──
+    def _kicker(self, text: str, ok: bool) -> QFrame:
+        kick = QFrame()
+        kick.setStyleSheet(
+            f"background:{_tok('bg_mute')}; border:0; "
+            f"border-bottom:1px solid {_tok('line')}; "
+            f"border-top-left-radius:10px; border-top-right-radius:10px;")
+        kl = QHBoxLayout(kick)
+        kl.setContentsMargins(14, 7, 14, 7)
+        kl.setSpacing(8)
+        dot = QLabel()
+        dot.setFixedSize(6, 6)
+        # dot green del kicker (4f: familia del ✓ átomos)
+        dot.setStyleSheet(
+            f"background:{_tok('green')}; border-radius:3px; border:0;")
+        kl.addWidget(dot)
+        kt = QLabel(str(text).upper())
+        f_k = qfont(FONT_LABEL)
+        f_k.setLetterSpacing(QFont.AbsoluteSpacing, 1.2)
+        kt.setFont(f_k)
+        kt.setStyleSheet(f"color:{_tok('ink_soft')}; border:0;")
+        kl.addWidget(kt)
+        kl.addStretch(1)
+        # chip resumen: ✓ átomos (green) / ⚠ átomos (danger)
+        ink_t, bg_t = ("green", "green_bg") if ok else ("danger", "danger_bg")
+        chip = QLabel(("✓ átomos" if ok else "⚠ átomos"))
+        f_c = qfont(FONT_LABEL)
+        f_c.setWeight(QFont.Bold)
+        chip.setFont(f_c)
+        chip.setStyleSheet(
+            f"background:{_tok(bg_t)}; color:{_tok(ink_t)}; border:0; "
+            f"border-radius:6px; padding:2px 8px;")
+        kl.addWidget(chip)
+        return kick
+
+    def _context_strip(self, ctx) -> QFrame:
+        strip = QFrame()
+        strip.setStyleSheet(f"background:{_tok('bg_sunk')}; border:0;")
+        sl = QHBoxLayout(strip)
+        sl.setContentsMargins(14, 8, 14, 8)
+        sl.setSpacing(18)
+        for lab, val in ctx:
+            cell = QHBoxLayout()
+            cell.setSpacing(5)
+            ll = QLabel(str(lab).upper())
+            ll.setFont(qfont(FONT_LABEL))
+            ll.setStyleSheet(f"color:{_tok('ink_soft')}; border:0;")
+            cell.addWidget(ll)
+            vl = QLabel(str(val))
+            vl.setFont(qfont(FONT_VALUE))
+            vl.setStyleSheet(f"color:{_tok('ink')}; border:0;")
+            cell.addWidget(vl)
+            wrap = QFrame()
+            wrap.setStyleSheet("border:0; background:transparent;")
+            wrap.setLayout(cell)
+            sl.addWidget(wrap)
+        sl.addStretch(1)
+        return strip
+
+    def _apply_col_stretch(self, g: QGridLayout):
+        for i, s in enumerate(self._STRETCH):
+            g.setColumnStretch(i, s)
+        g.setColumnStretch(4, 0)
+        g.setColumnMinimumWidth(4, 40)
+
+    def _column_header(self) -> QFrame:
+        hd = QFrame()
+        hd.setStyleSheet(
+            f"background:transparent; border:0; "
+            f"border-bottom:1px solid {_tok('line_strong')};")
+        g = QGridLayout(hd)
+        g.setContentsMargins(14, 8, 14, 6)
+        g.setHorizontalSpacing(6)
+        f_h = qfont(FONT_LABEL)
+        cols = [("Elemento", Qt.AlignLeft), ("Σ IN", Qt.AlignRight),
+                ("Σ OUT", Qt.AlignRight), ("Δ", Qt.AlignRight),
+                ("✓", Qt.AlignHCenter)]
+        for i, (txt, align) in enumerate(cols):
+            lbl = QLabel(txt.upper())
+            lbl.setFont(f_h)
+            lbl.setStyleSheet(f"color:{_tok('ink_soft')}; border:0;")
+            g.addWidget(lbl, 0, i, align | Qt.AlignVCenter)
+        self._apply_col_stretch(g)
+        return hd
+
+    def _element_block(self, el: dict) -> QFrame:
+        wrap = QFrame()
+        wrap.setStyleSheet(
+            f"background:transparent; border:0; "
+            f"border-bottom:1px solid {_tok('line_soft')};")
+        v = QVBoxLayout(wrap)
+        v.setContentsMargins(0, 0, 0, 0)
+        v.setSpacing(0)
+
+        # fila de totales (grid alineado a la cabecera)
+        row = QFrame()
+        row.setStyleSheet("background:transparent; border:0;")
+        g = QGridLayout(row)
+        g.setContentsMargins(14, 8, 14, 6)
+        g.setHorizontalSpacing(6)
+
+        # celda 0: badge + nombre / A
+        cell0 = QHBoxLayout()
+        cell0.setContentsMargins(0, 0, 0, 0)
+        cell0.setSpacing(8)
+        badge = QLabel(str(el.get("sym", "")))
+        f_b = qfont(FONT_VALUE)
+        f_b.setPointSizeF(13.0)
+        f_b.setWeight(QFont.Bold)
+        badge.setFont(f_b)
+        badge.setAlignment(Qt.AlignCenter)
+        badge.setMinimumWidth(26)
+        badge.setFixedHeight(24)
+        badge.setStyleSheet(
+            f"background:{_tok('accent_tint')}; color:{_tok('accent')}; "
+            f"border:0; border-radius:6px; padding:0 6px;")
+        cell0.addWidget(badge)
+        name_col = QVBoxLayout()
+        name_col.setContentsMargins(0, 0, 0, 0)
+        name_col.setSpacing(0)
+        nm = QLabel(str(el.get("name", "")))
+        nm.setFont(qfont(FONT_HINT))
+        nm.setStyleSheet(f"color:{_tok('ink')}; border:0;")
+        name_col.addWidget(nm)
+        aw = QLabel(f"A = {el.get('A', '')}")
+        f_a = qfont(FONT_LABEL)
+        aw.setFont(QFont("IBM Plex Mono", int(FONT_LABEL[1])))
+        aw.setStyleSheet(f"color:{_tok('ink_soft')}; border:0;")
+        name_col.addWidget(aw)
+        cell0.addLayout(name_col)
+        cell0.addStretch(1)
+        c0w = QFrame(); c0w.setStyleSheet("border:0;"); c0w.setLayout(cell0)
+        g.addWidget(c0w, 0, 0)
+
+        # celdas numéricas
+        closes = bool(el.get("closes", True))
+        f_v = qfont(FONT_VALUE)
+        f_v.setWeight(QFont.DemiBold)
+        for i, (key, tokname) in enumerate(
+                (("in_total", "ink"), ("out_total", "ink")), start=1):
+            lbl = QLabel(str(el.get(key, "")))
+            lbl.setFont(f_v)
+            lbl.setStyleSheet(f"color:{_tok(tokname)}; border:0;")
+            g.addWidget(lbl, 0, i, Qt.AlignRight | Qt.AlignVCenter)
+        # Δ: ink_mute si cierra, danger si no
+        dl = QLabel(str(el.get("delta", "")))
+        dl.setFont(f_v)
+        dl.setStyleSheet(
+            f"color:{_tok('ink_mute' if closes else 'danger')}; border:0;")
+        g.addWidget(dl, 0, 3, Qt.AlignRight | Qt.AlignVCenter)
+        # dot de cierre Ø9
+        dot = QLabel()
+        dot.setFixedSize(9, 9)
+        dot.setStyleSheet(
+            f"background:{_tok('green' if closes else 'danger')}; "
+            f"border:0; border-radius:4px;")
+        g.addWidget(dot, 0, 4, Qt.AlignHCenter | Qt.AlignVCenter)
+        self._apply_col_stretch(g)
+        v.addWidget(row)
+
+        # procedencia molecular (dos cajas)
+        prov = QFrame()
+        prov.setStyleSheet("background:transparent; border:0;")
+        pg = QHBoxLayout(prov)
+        pg.setContentsMargins(14, 2, 14, 10)
+        pg.setSpacing(8)
+        pg.addWidget(self._prov_box("IN · viene de", "spec",
+                                    el.get("in_mols") or []), 1)
+        pg.addWidget(self._prov_box("OUT · va a", "orange",
+                                    el.get("out_mols") or []), 1)
+        v.addWidget(prov)
+        return wrap
+
+    def _prov_box(self, title: str, title_tok: str, mols) -> QFrame:
+        box = QFrame()
+        box.setStyleSheet(
+            f"background:{_tok('bg_mute')}; border:0; border-radius:7px;")
+        bl = QVBoxLayout(box)
+        bl.setContentsMargins(9, 6, 9, 6)
+        bl.setSpacing(5)
+        t = QLabel(title.upper())
+        f_t = qfont(FONT_LABEL)
+        f_t.setWeight(QFont.Bold)
+        f_t.setLetterSpacing(QFont.AbsoluteSpacing, 0.6)
+        t.setFont(f_t)
+        t.setStyleSheet(f"color:{_tok(title_tok)}; border:0;")
+        bl.addWidget(t)
+        chips_host = QFrame()
+        chips_host.setStyleSheet("border:0; background:transparent;")
+        flow = _FlowLayout(chips_host, hspace=5, vspace=5)
+        for m in mols:
+            flow.addWidget(self._mol_chip(m))
+        bl.addWidget(chips_host)
+        return box
+
+    def _mol_chip(self, m: dict) -> QLabel:
+        chip = QLabel()
+        chip.setTextFormat(Qt.RichText)
+        mono = "'IBM Plex Mono',monospace"
+        chip.setText(
+            f'<span style="font-family:{mono}; font-size:{FONT_VALUE[1]}pt; '
+            f'font-weight:600; color:{_tok("ink")};">{m.get("f", "")}</span>'
+            f'<span style="font-family:{mono}; font-size:{FONT_LABEL[1]}pt; '
+            f'color:{_tok("ink_soft")};"> {m.get("c", "")}</span>'
+            f'<span style="font-family:{mono}; font-size:{FONT_LABEL[1]}pt; '
+            f'color:{_tok("ink_mute")};"> {m.get("v", "")}</span>')
+        chip.setStyleSheet(
+            f"background:{_tok('bg_elev')}; border:1px solid {_tok('line')}; "
+            f"border-radius:6px; padding:2px 7px;")
+        return chip
+
+    def _source_footer(self, source: str) -> QFrame:
+        src = QFrame()
+        src.setStyleSheet(
+            f"background:{_tok('bg_mute')}; border:0; "
+            f"border-top:1px solid {_tok('line_soft')}; "
+            f"border-bottom-left-radius:10px; "
+            f"border-bottom-right-radius:10px;")
+        srl = QHBoxLayout(src)
+        srl.setContentsMargins(14, 7, 14, 7)
+        srl.setSpacing(7)
+        glyph = QLabel("▤")
+        glyph.setStyleSheet(
+            f"color:{_tok('ink_soft')}; border:0; font-size:11px;")
+        srl.addWidget(glyph)
+        st = QLabel(f"Fuente: {source}")
+        st.setFont(qfont(FONT_HINT))
+        st.setWordWrap(True)
+        st.setStyleSheet(f"color:{_tok('ink_soft')}; border:0;")
+        srl.addWidget(st, 1)
+        return src
+
+
+__all__ = ["BookTable", "AtomBalanceCard"]

@@ -10,6 +10,17 @@ ciclo 4 (`docs/design_ciclo4/`, implementación en
 (14 tests) + `tests/test_ciclo4_design.py` (20 tests); bugs 14-16
 documentados en `BUGS_ENCONTRADOS_EJEMPLOS.md`.
 
+## Ampliación 4f (bundle ciclo 4, tanda 2) — Balance de átomos en pantalla
+
+✓ CERRADO (2026-07-23): el chequeo de conservación elemental que solo
+vivía como el chip «✓ átomos» del header gana **superficie propia** —
+`atom_balance_book_spec` (Qt-free) + `AtomBalanceCard` (comparte el
+shell de la tabla de libro). Tabla por elemento C/H/O/N/S (Σ IN /
+Σ OUT / Δ / cierre) con la **procedencia molecular** de cada átomo
+(de qué moléculas viene, IN y OUT, ×n exacto), base átomo-molar,
+aplica a reactores. Reusa el motor `audit_examples_components`. Ver
+`REDISENO_CICLO4_2026-07.md` §4f.
+
 ## A. ⚡ del bundle de Design ciclo 3 — ✓ CERRADO (bundle ciclo 4, 4d)
 
 | Artboard | Pendiente | Resolución (2026-07-23) |

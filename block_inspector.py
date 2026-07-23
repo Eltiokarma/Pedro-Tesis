@@ -2399,6 +2399,23 @@ class BlockInspectorPanel(QWidget):
                 l.addWidget(self._diag_text_card(title, txt))
                 any_added = True
 
+        # 1b) Balance de átomos (Design ciclo 4, 4f): superficie propia
+        # del chequeo elemental C/H/O/N/S — expansión del chip «✓ átomos»
+        # del header (chip → tabla, patrón DOF → diálogo).  Aplica a
+        # reactores (la química conserva átomos aunque rompa el balance
+        # por especie).
+        try:
+            atom_spec = _ev.atom_balance_book_spec(b, fs)
+        except Exception:
+            atom_spec = None
+        if atom_spec:
+            try:
+                from book_table import AtomBalanceCard
+                l.addWidget(AtomBalanceCard(atom_spec))
+                any_added = True
+            except Exception:
+                pass
+
         # 2) Figuras — viven en sus secciones temáticas (lazy al abrir
         #    cada sección).  Acá solo el ÍNDICE de qué hay y dónde, para
         #    que el estudiante las descubra sin duplicar canvases.

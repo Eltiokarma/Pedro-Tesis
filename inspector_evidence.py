@@ -2965,6 +2965,191 @@ def pump_metrics(block, fs) -> Optional[dict]:
         return None
 
 
+# Nombres de elemento (español) para la tabla de átomos (4f)
+_ELEMENT_NAME = {
+    "H": "Hidrógeno", "C": "Carbono", "N": "Nitrógeno", "O": "Oxígeno",
+    "S": "Azufre", "Cl": "Cloro", "Na": "Sodio", "K": "Potasio",
+    "Ca": "Calcio", "Mg": "Magnesio", "Si": "Silicio", "Al": "Aluminio",
+    "Fe": "Hierro", "P": "Fósforo", "F": "Flúor", "Br": "Bromo",
+    "I": "Yodo", "B": "Boro", "Ar": "Argón", "He": "Helio",
+}
+
+_SUBSCRIPT = str.maketrans("0123456789", "₀₁₂₃₄₅₆₇₈₉")
+
+
+def _formula_subscript(name: str) -> str:
+    """Fórmula del componente con dígitos en subíndice (CH4 → CH₄) para
+    la lectura didáctica.  Cae al nombre si no hay fórmula en thermo_db."""
+    try:
+        import thermo_db as _td
+        c = _td.get(name)
+        f = getattr(c, "formula", "") if c is not None else ""
+        if f:
+            return f.translate(_SUBSCRIPT)
+    except Exception:
+        pass
+    return name
+
+
+def atom_balance_book_spec(block, fs) -> Optional[dict]:
+    """Spec de «balance de átomos en pantalla» (Design ciclo 4, 4f) —
+    la superficie propia del chequeo de conservación elemental que hoy
+    solo vive como el chip «✓ átomos» del header.
+
+    Reusa el motor `audit_examples_components` (misma fuente que el
+    chip y el gate): reparte la masa de cada componente por fracción de
+    fórmula (n_E·A_E / Σ n·A), así la suma elemental reproduce EXACTO
+    la masa del componente.  Los valores se leen en base ATÓMO-MOLAR
+    (kmol átomo/h) — la decisión del bundle: cuadra con la tabla
+    estequiométrica y hace el «×n» exacto; el cierre es equivalente al
+    de masa.  Aplica a reactores (la química conserva átomos aunque
+    rompa el balance por especie).
+
+    Devuelve None cuando el bloque no es evaluable (sin in/out, sin
+    composición, o componente no-traza sin fórmula parseable) — no se
+    fabrica un desbalance falso.
+    """
+    try:
+        import audit_examples_components as _ax
+        from flowsheet_model import SEC_PER_YEAR, TM_TO_KG
+
+        if getattr(block, "auto_aux", False):
+            return None
+        ins = [s for s in fs.streams.values()
+               if s.dst == block.id and s.src != -1 and s.dst != -1
+               and s.mass_flow > 0]
+        outs = [s for s in fs.streams.values()
+                if s.src == block.id and s.src != -1 and s.dst != -1
+                and s.mass_flow > 0]
+        if not ins or not outs:
+            return None
+
+        # Masa por componente en cada lado (tm/año).
+        comp_in, comp_out = {}, {}
+        for s in ins:
+            for c, m in _ax._stream_component_mass(s).items():
+                comp_in[c] = comp_in.get(c, 0.0) + m
+        for s in outs:
+            for c, m in _ax._stream_component_mass(s).items():
+                comp_out[c] = comp_out.get(c, 0.0) + m
+        if not comp_in or not comp_out:
+            return None
+        block_flow = max(sum(comp_in.values()), sum(comp_out.values()))
+        if block_flow <= 0:
+            return None
+        # Stream con masa pero sin composición → no evaluable (fabricaría
+        # un desbalance falso), mismo criterio que audit_block_elements.
+        for s in ins + outs:
+            if not _ax._stream_component_mass(s) and \
+                    s.mass_flow >= _ax.TRACE_FRAC * block_flow:
+                return None
+
+        # tm/año de elemento → kmol átomo/h.  kg/h = tm_yr·TM_TO_KG/
+        # SEC_PER_YEAR·3600; kmol átomo/h = kg/h / A_E.
+        def _mol(mass_el_tm_yr, A):
+            return mass_el_tm_yr * TM_TO_KG / SEC_PER_YEAR * 3600.0 / A
+
+        # Reparte un lado en {elemento: kmol/h total} y {elemento:
+        # [(componente, n_E, kmol/h)]} de procedencia molecular.
+        def _side(comp_masses):
+            totals, prov = {}, {}
+            for c, m in comp_masses.items():
+                counts = _ax._formula_for(c)
+                if counts is None:
+                    if m >= _ax.TRACE_FRAC * block_flow:
+                        return None, None       # no-traza sin fórmula
+                    continue
+                for el, n in counts.items():
+                    A = _ax._ATOMIC_MASS[el]
+                    mass_el = m * (n * A) / sum(
+                        nn * _ax._ATOMIC_MASS[ee] for ee, nn in counts.items())
+                    mol = _mol(mass_el, A)
+                    totals[el] = totals.get(el, 0.0) + mol
+                    prov.setdefault(el, []).append((c, n, mol))
+            return totals, prov
+
+        in_tot, in_prov = _side(comp_in)
+        out_tot, out_prov = _side(comp_out)
+        if in_tot is None or out_tot is None:
+            return None
+
+        # kmol átomo/h de referencia para la tolerancia (traza/relativa)
+        flow_mol = _mol(block_flow, min(_ax._ATOMIC_MASS.values()))
+        elements = []
+        any_bad = False
+        for el in sorted(set(in_tot) | set(out_tot)):
+            mi, mo = in_tot.get(el, 0.0), out_tot.get(el, 0.0)
+            # Traza (mismo criterio del motor, en base molar)
+            A = _ax._ATOMIC_MASS[el]
+            trace_mol = _mol(_ax.TRACE_FRAC * block_flow, A)
+            if max(mi, mo) < trace_mol:
+                continue
+            d = abs(mi - mo)
+            rel = d / max(mi, mo, 1e-9)
+            closes = rel < _ax.TOL_REL
+            # Crítico: Δ > 5 % del flujo del bloque (en masa, como el motor)
+            crit_mol = _mol(_ax.CRIT_FRAC * block_flow, A)
+            critical = (not closes) and d > crit_mol
+            if not closes:
+                any_bad = True
+
+            def _mols(prov_list):
+                out = []
+                for c, n, mol in sorted(prov_list or [],
+                                        key=lambda t: -t[2]):
+                    if mol < trace_mol:
+                        continue
+                    out.append({"f": _formula_subscript(c),
+                                "c": f"×{n}", "v": f"{mol:.2f}"})
+                return out
+
+            elements.append({
+                "sym": el,
+                "name": _ELEMENT_NAME.get(el, el),
+                "A": f"{A:.3f}",
+                "in_total": f"{mi:.2f}",
+                "out_total": f"{mo:.2f}",
+                "delta": f"{d:.2f}",
+                "closes": closes,
+                "critical": critical,
+                "in_mols": _mols(in_prov.get(el)),
+                "out_mols": _mols(out_prov.get(el)),
+            })
+        if not elements:
+            return None
+
+        rxn = None
+        for rid in (getattr(block, "reactions", None) or []):
+            try:
+                import reactions_db as _rdb
+                r = _rdb.get(rid)
+                if r is not None:
+                    rxn = r.name or r.id
+                    break
+            except Exception:
+                pass
+        ctx = [("Bloque", f"{block.name} · "
+                f"{(block.eq_type or '').split('—')[0].strip() or 'bloque'}")]
+        if rxn:
+            ctx.append(("Reacción", rxn))
+        ctx.append(("Base", "kmol átomo/h"))
+        return {
+            "kicker": "Balance de átomos · conservación elemental",
+            "chip_ok": not any_bad,
+            "context": ctx,
+            "elements": elements,
+            "note": ("Los átomos se conservan aunque haya reacción — cada "
+                     "molécula se reparte en sus elementos por n_E·A_E / "
+                     "Σ(n·A).  El chip «✓ átomos» del header lo resume; "
+                     "esta tabla lo abre."),
+            "source": ("audit_examples_components.audit_block_elements — "
+                       "chequeo elemental C/H/O/N/S (tol 1 % rel · "
+                       "CRÍTICO si Δ > 5 % del flujo)"),
+        }
+    except Exception:
+        return None
+
+
 def atom_balance_chip(block, fs):
     """('ok'|'bad'|'na', detalle) para el chip 'átomos' del header del
     inspector (artboard 2f.3).  Reusa la auditoría elemental C/H/O de

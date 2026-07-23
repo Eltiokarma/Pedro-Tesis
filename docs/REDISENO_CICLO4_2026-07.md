@@ -1,13 +1,15 @@
 # Rediseño del frontend — ciclo 4, implementación (julio 2026)
 
-Implementación del paquete de Design "Ciclo 4" (artboards 4a–4e,
+Implementación del paquete de Design "Ciclo 4" (artboards 4a–4f,
 `docs/design_ciclo4/ciclo4_tablas_libro_deuda_tabular.html` +
-componentes `BookTable.dc.html` / `MetricScene.dc.html`, respuesta a
-`docs/PROMPT_DESIGN_CICLO4.md`).  Evidencia visual renderizada por el
-sistema real: `outputs/design4_booktable_{stoich,flash,wh}_{light,dark}.png`
-y `outputs/design4_ns_metriccard_{light,dark}.png`.  Regresión:
-`tests/test_ciclo4_design.py` (20 tests) + censo hex ampliado en
-`test_ciclo4.py`.  Suite 757 verdes · gate 61/61.
+componentes `BookTable.dc.html` / `MetricScene.dc.html` /
+`AtomBalance.dc.html`, respuesta a `docs/PROMPT_DESIGN_CICLO4.md`).
+Evidencia visual renderizada por el sistema real:
+`outputs/design4_booktable_{stoich,flash,wh}_{light,dark}.png`,
+`outputs/design4_ns_metriccard_{light,dark}.png` y
+`outputs/design4_atombalance_smr_{light,dark}.png`.  Regresión:
+`tests/test_ciclo4_design.py` (25 tests) + censo hex ampliado en
+`test_ciclo4.py`.  Suite verde · gate 61/61.
 
 ## 4a — «Tabla de libro» como componente del sistema
 
@@ -123,6 +125,33 @@ y `outputs/design4_ns_metriccard_{light,dark}.png`.  Regresión:
   `_refresh_leaders`).  El estado del user (collapsed, toggles) no se
   toca: al volver el zoom la burbuja se restituye.
 
+## 4f — Balance de átomos en pantalla · conservación elemental
+
+- El motor ya auditaba la conservación de átomos por bloque
+  (`audit_examples_components.audit_block_elements`) — hoy solo vivía
+  como el chip «✓ átomos» del header.  Se le da **superficie propia**:
+  nace **`atom_balance_book_spec`** (spec Qt-free) + **`AtomBalanceCard`**
+  (widget que comparte el shell de la tabla de libro: kicker con dot
+  `green` y chip ✓/⚠ átomos, strip de contexto, pie de fuente ▤).
+- **Tabla por elemento** (C/H/O/N/S): badge `accent_tint`/`accent`,
+  nombre + A_E, Σ IN, Σ OUT, Δ (`ink_mute` si cierra <1 % rel,
+  `danger` si no) y dot de cierre Ø9 verde/rojo (crítico si
+  Δ > 5 % del flujo — mismo umbral del motor).
+- **Procedencia molecular**: bajo cada elemento, dos cajas `bg_mute`
+  (IN · viene de `spec` / OUT · va a `orange`) con chips
+  `fórmula ×n valor` — abre las moléculas de las que viene cada átomo,
+  en `_FlowLayout` que envuelve.
+- Decisiones del bundle: **base átomo-molar (kmol átomo/h)** — el motor
+  cierra en masa (fracción de fórmula n_E·A_E/Σn·A), pero la lectura
+  didáctica es en moles de átomo (cuadra con la tabla estequiométrica
+  y hace el «×n» exacto; el cierre es equivalente).  **Reactores
+  incluidos** (el único chequeo que corre a través de la química —
+  donde el balance por especie se saltea).  El chip del header queda
+  como resumen colapsado y esta tabla es su expansión (patrón
+  chip → tabla, igual que DOF → diálogo).  Sin fórmula parseable el
+  elemento no aparece y el bloque cae al balance de masa total (no se
+  fabrica un desbalance falso → spec `None`).
+
 ## Defectos de las capturas — los 3 del prompt
 
 1. **Columnas que bailan** → resuelto en 4a (la tabla ES un
@@ -152,6 +181,12 @@ y `outputs/design4_ns_metriccard_{light,dark}.png`.  Regresión:
    el dict `_comp_provenance` queda como contrato para el caso mixto
    cuando el solver lo publique — no se inventa procedencia que el
    motor no rastrea.
+6. **AtomBalanceCard como componente hermano** (no una variante de
+   BookTable): la fila de elemento + las dos cajas de procedencia
+   molecular son una estructura distinta a la grilla genérica, pero
+   comparten el shell (kicker/contexto/footer) — "misma familia
+   visual" sin forzar un solo widget. Los chips que envuelven usan un
+   `_FlowLayout` (patrón estándar de Qt).
 
 ## ⚡ Dejado fuera por Design (sin cambios, con su razón)
 

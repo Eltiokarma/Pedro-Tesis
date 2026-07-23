@@ -456,3 +456,105 @@ def test_burbuja_degradacion_por_zoom(qapp):
     assert not hb._body.isVisibleTo(host)
     hb.set_zoom_degraded(False)
     assert hb._body.isVisibleTo(host)
+
+
+# ══════════════════════════════════════════════════════════════════════
+# 4f — balance de átomos en pantalla (conservación elemental)
+# ══════════════════════════════════════════════════════════════════════
+
+def _smr_reactor():
+    import examples_registry as reg
+    import flowsheet_solver as fsolv
+    fs = reg.load_example("smr_eq")
+    fsolv.solve(fs)
+    rb = next(b for b in fs.blocks.values()
+              if "reactor" in (b.eq_type or "").lower())
+    return fs, rb
+
+
+def test_atom_balance_spec_conserva_en_reactor():
+    """El reactor SMR conserva átomos (Δ≈0, chip ✓) — el chequeo corre
+    A TRAVÉS de la química, donde el balance por especie se saltea."""
+    fs, rb = _smr_reactor()
+    spec = ev.atom_balance_book_spec(rb, fs)
+    assert spec is not None
+    assert spec["chip_ok"] is True
+    syms = {el["sym"] for el in spec["elements"]}
+    assert {"C", "H", "O"} <= syms
+    for el in spec["elements"]:
+        assert el["closes"] is True
+        assert float(el["delta"]) < 0.5      # kmol átomo/h ≈ 0
+    assert spec["context"][-1] == ("Base", "kmol átomo/h")
+    assert "audit_block_elements" in spec["source"]
+
+
+def test_atom_balance_procedencia_molecular():
+    """Cada átomo abre las moléculas de las que viene, con ×n exacto y
+    subíndices didácticos (CH₄, H₂O)."""
+    fs, rb = _smr_reactor()
+    spec = ev.atom_balance_book_spec(rb, fs)
+    carbono = next(el for el in spec["elements"] if el["sym"] == "C")
+    # el carbono ENTRA solo del metano (×1)
+    assert any("CH" in m["f"] and m["c"] == "×1"
+               for m in carbono["in_mols"])
+    # subíndices unicode, no dígitos crudos
+    joined = "".join(m["f"] for m in carbono["in_mols"] + carbono["out_mols"])
+    assert "₄" in joined or "₂" in joined
+    hidro = next(el for el in spec["elements"] if el["sym"] == "H")
+    # el H del metano cuenta ×4
+    assert any(m["c"] == "×4" for m in hidro["in_mols"])
+
+
+def test_atom_balance_desbalance_marca_danger():
+    """CH₄ → H₂O rompe la conservación: chip ⚠, elementos que no cierran
+    marcados crítico (Δ > 5 % del flujo)."""
+    fs = Flowsheet()
+    b = Block(id=fs.new_id(), name="X-1", eq_type="Mixer — inline", S=1.0)
+    fs.blocks[b.id] = b
+    sin = Stream(id=fs.new_id(), name="in", src=0, dst=b.id,
+                 mass_flow=1000, composition={"methane": 1.0},
+                 main_component="methane", role="feed")
+    sout = Stream(id=fs.new_id(), name="out", src=b.id, dst=0,
+                  mass_flow=1000, composition={"water": 1.0},
+                  main_component="water", role="product")
+    fs.streams[sin.id] = sin
+    fs.streams[sout.id] = sout
+    spec = ev.atom_balance_book_spec(b, fs)
+    assert spec is not None and spec["chip_ok"] is False
+    carbono = next(el for el in spec["elements"] if el["sym"] == "C")
+    assert carbono["closes"] is False and carbono["critical"] is True
+
+
+def test_atom_balance_no_evaluable_devuelve_none():
+    """Sin composición o sin in/out → None (no se fabrica desbalance)."""
+    fs = Flowsheet()
+    b = Block(id=fs.new_id(), name="Y", eq_type="Pump — centrifugal",
+              S=1.0)
+    fs.blocks[b.id] = b
+    s1 = Stream(id=fs.new_id(), name="a", src=0, dst=b.id, mass_flow=100,
+                role="feed")
+    s2 = Stream(id=fs.new_id(), name="b", src=b.id, dst=0, mass_flow=100,
+                role="product")
+    fs.streams[s1.id] = s1
+    fs.streams[s2.id] = s2
+    assert ev.atom_balance_book_spec(b, fs) is None      # sin composición
+    fs2 = Flowsheet()
+    z = Block(id=fs2.new_id(), name="Z", eq_type="Tank", S=1.0)
+    fs2.blocks[z.id] = z
+    assert ev.atom_balance_book_spec(z, fs2) is None      # sin in/out
+
+
+def test_atom_balance_card_par_claro_oscuro(qapp, tema_claro):
+    """El widget AtomBalanceCard construye y pinta en ambos temas
+    (comparte el shell de la tabla de libro — el par dark es gratis)."""
+    from PySide6.QtGui import QImage
+    from book_table import AtomBalanceCard
+    fs, rb = _smr_reactor()
+    spec = ev.atom_balance_book_spec(rb, fs)
+    for theme in ("light", "dark"):
+        tokens.apply_preferences(theme=theme)
+        c = AtomBalanceCard(spec)
+        c.resize(560, max(300, c.sizeHint().height()))
+        img = QImage(c.size(), QImage.Format_ARGB32)
+        img.fill(0)
+        c.render(img)
