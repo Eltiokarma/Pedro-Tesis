@@ -73,6 +73,193 @@ def reactor_text(block) -> Optional[str]:
         return None
 
 
+def stoich_table(block, fs) -> Optional[dict]:
+    """Tabla estequiométrica de Fogler (Elements of CRE, §3.4, tablas
+    3-3/3-5) para la PRIMERA reacción activa del reactor — la
+    herramienta didáctica canónica para plantear el balance molar.
+
+    Base: 1 mol del reactivo limitante A (ν normalizado por |ν_A|).
+    Para cada especie del sistema (feed + productos + inertes):
+
+        F_i(X) = F_i0 + (ν_i/|ν_A|)·F_A0·X   [kmol/h]
+        θ_i    = F_i0 / F_A0
+        δ      = Σ ν_i/|ν_A|      (cambio de moles por mol de A)
+        ε      = y_A0 · δ          (factor de expansión, gas)
+
+    X: la conversión declarada (modo stoich) o la alcanzada por el
+    solver (1 − w_A,out/w_A,in — exacta porque la masa total del
+    reactor se conserva).  Devuelve dict con rows/δ/ε/X/procedencia o
+    None si el bloque no es un reactor con reacción y feed resolubles.
+    """
+    try:
+        import reactions_db as _rdb
+        import thermo_db as _td
+
+        es_reactor = "reactor" in (getattr(block, "eq_type", "") or "").lower()
+        if not es_reactor:
+            return None
+
+        # ── 1. estequiometría de la primera reacción activa ──
+        stoich = []          # [(formula, nu_entero)]
+        rxn_label = None
+        n_rxns = 0
+        for rid in (getattr(block, "reactions", None) or []):
+            r = _rdb.get(rid)
+            if r is not None and r.stoich:
+                n_rxns += 1
+                if rxn_label is None:
+                    stoich = [(e.formula, e.nu) for e in r.stoich]
+                    rxn_label = f"{r.id} — {r.name}"
+        for d in (getattr(block, "custom_reactions", None) or []):
+            entries = d.get("stoich") or []
+            if entries:
+                n_rxns += 1
+                if rxn_label is None:
+                    stoich = [(str(e.get("formula")), int(e.get("nu", 0)))
+                              for e in entries]
+                    rxn_label = str(d.get("name") or d.get("id") or "custom")
+        if not stoich:
+            return None
+
+        # ── 2. feed molar (kmol/h) desde los inlets de proceso ──
+        ins = [s for s in fs.streams.values()
+               if s.dst == block.id and (s.role or "") != "utility"
+               and not getattr(s, "auto_aux", False)]
+        m_tot = sum(s.mass_flow or 0.0 for s in ins)
+        if not ins or m_tot <= 0:
+            return None
+        inlet_w = {}
+        for s in ins:
+            mf = (s.mass_flow or 0.0) / m_tot
+            comp = s.composition or (
+                {s.main_component: 1.0} if s.main_component else {})
+            for c, w in comp.items():
+                inlet_w[c] = inlet_w.get(c, 0.0) + w * mf
+        if not inlet_w:
+            return None
+        from flowsheet_model import SEC_PER_YEAR, TM_TO_KG
+        kg_h = m_tot * TM_TO_KG / SEC_PER_YEAR * 3600.0
+        F0 = {}                       # thermo_name -> kmol/h
+        sin_mw = []
+        for name, w in inlet_w.items():
+            c = _td.get(name)
+            if c is None or c.mw <= 0:
+                sin_mw.append(name)
+                continue
+            F0[name] = w * kg_h / c.mw
+        if not F0:
+            return None
+
+        # ── 3. reactivo limitante A y ν normalizado por |ν_A| ──
+        rxn_names = {}                # thermo_name -> nu entero
+        for f, nu in stoich:
+            tn = _rdb.thermo_name(f) or f.lower()
+            rxn_names[tn] = rxn_names.get(tn, 0) + nu
+        cands = [(F0[n] / abs(nu), n) for n, nu in rxn_names.items()
+                 if nu < 0 and F0.get(n, 0.0) > 0]
+        if not cands:
+            return None
+        _, lim = min(cands)
+        nu_A = abs(rxn_names[lim])
+        F_A0 = F0[lim]
+        F_tot0 = sum(F0.values())
+        y_A0 = F_A0 / F_tot0 if F_tot0 > 0 else 0.0
+        delta = sum(nu for nu in rxn_names.values()) / nu_A
+        epsilon = y_A0 * delta
+
+        # ── 4. conversión X y su procedencia ──
+        mode = (getattr(block, "reactor_mode", "") or "").lower()
+        X, X_origin = None, ""
+        if mode == "stoich" and getattr(block, "reactor_conversion",
+                                        None) is not None:
+            X = float(block.reactor_conversion)
+            X_origin = "declarada"
+        else:
+            outs = [s for s in fs.streams.values()
+                    if s.src == block.id and (s.role or "") != "utility"
+                    and not getattr(s, "auto_aux", False)]
+            m_out = sum(s.mass_flow or 0.0 for s in outs)
+            if m_out > 0 and inlet_w.get(lim, 0.0) > 0:
+                w_out = sum((s.composition or {}).get(lim, 0.0)
+                            * (s.mass_flow or 0.0) for s in outs) / m_out
+                X = max(0.0, min(1.0, 1.0 - w_out / inlet_w[lim]))
+                X_origin = "alcanzada (solver)"
+
+        # ── 5. filas: feed + productos + inertes ──
+        orden = list(F0.keys()) + [n for n in rxn_names if n not in F0]
+        rows = []
+        for n in orden:
+            nu_norm = rxn_names.get(n, 0) / nu_A
+            f_i0 = F0.get(n, 0.0)
+            cambio = (nu_norm * F_A0 * X) if X is not None else None
+            f_x = max(0.0, f_i0 + cambio) if cambio is not None else None
+            rows.append({
+                "name": n,
+                "formula": _rdb.formula_for(n) or n,
+                "nu_norm": nu_norm,
+                "F0_kmol_h": f_i0,
+                "theta": (f_i0 / F_A0) if F_A0 > 0 else None,
+                "cambio_kmol_h": cambio,
+                "F_X_kmol_h": f_x,
+                "es_limitante": n == lim,
+                "es_inerte": n not in rxn_names,
+            })
+        return {"rxn_label": rxn_label, "n_rxns": n_rxns,
+                "limitante": lim,
+                "limitante_formula": _rdb.formula_for(lim) or lim,
+                "F_A0_kmol_h": F_A0, "y_A0": y_A0,
+                "delta": delta, "epsilon": epsilon,
+                "X": X, "X_origin": X_origin,
+                "sin_mw": sin_mw, "rows": rows}
+    except Exception:
+        return None
+
+
+def stoich_table_text(block, fs) -> Optional[str]:
+    """Render monoespaciado de stoich_table() — el formato tabular del
+    libro (Fogler 4ª ed., tabla 3-5), con δ, ε y la procedencia de X."""
+    d = stoich_table(block, fs)
+    if d is None:
+        return None
+    L = [f"Reacción    {d['rxn_label']}"]
+    if d["n_rxns"] > 1:
+        L.append(f"            (primera de {d['n_rxns']} activas — la "
+                 f"tabla es por reacción)")
+    L.append(f"Base        1 mol de {d['limitante_formula']} (limitante)"
+             f"  ·  F_A0 = {d['F_A0_kmol_h']:.3g} kmol/h")
+    L.append("")
+    con_x = d["X"] is not None
+    hdr = f"{'Especie':<12}{'ν/|νA|':>8}{'F_i0':>10}{'θ_i':>8}"
+    if con_x:
+        hdr += f"{'Cambio':>10}{'F_i(X)':>10}"
+    L.append(hdr)
+    for r in d["rows"]:
+        tag = " (A)" if r["es_limitante"] else \
+              " (I)" if r["es_inerte"] else ""
+        line = (f"{(r['formula'] + tag):<12}"
+                f"{r['nu_norm']:>+8.2f}"
+                f"{r['F0_kmol_h']:>10.3g}"
+                f"{(r['theta'] if r['theta'] is not None else 0):>8.3f}")
+        if con_x:
+            line += (f"{r['cambio_kmol_h']:>+10.3g}"
+                     f"{r['F_X_kmol_h']:>10.3g}")
+        L.append(line)
+    L.append("")
+    L.append(f"δ = Σν/|ν_A| = {d['delta']:+.3f}   "
+             f"ε = y_A0·δ = {d['epsilon']:+.4f}   "
+             f"(y_A0 = {d['y_A0']:.3f})")
+    if con_x:
+        L.append(f"X = {d['X']:.3f}  [{d['X_origin']}]")
+    else:
+        L.append("X sin resolver — F_i(X) = F_i0 + (ν_i/|ν_A|)·F_A0·X")
+    if d["sin_mw"]:
+        L.append(f"⚠ sin MW en thermo_db (excluidos): "
+                 f"{', '.join(d['sin_mw'])}")
+    L.append("Fuente: Fogler, Elements of CRE 4ª ed., §3.4 "
+             "(tablas 3-3/3-5)")
+    return "\n".join(L)
+
+
 def hx_text(block) -> Optional[str]:
     """T_h, T_c, ΔT_LMTD, approach, U, F, servicio, warnings desde
     `_hx_diagnostics` que pinta solve_heat_exchangers."""

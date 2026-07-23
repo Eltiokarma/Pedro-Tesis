@@ -2236,6 +2236,9 @@ class BlockInspectorPanel(QWidget):
         evidence_specs = [
             ("Reactor",                lambda: _ev.reactor_metrics(b),
                                        lambda: _ev.reactor_text(b)),
+            ("Tabla estequiométrica (Fogler §3.4)",
+                                       lambda: None,
+                                       lambda: _ev.stoich_table_text(b, fs)),
             ("Intercambiador (HX)",    lambda: _ev.hx_metrics(b),
                                        lambda: _ev.hx_text(b)),
             ("HX — Utility / lazo cerrado", lambda: _ev.utility_aux_metrics(b, fs),
