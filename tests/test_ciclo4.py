@@ -27,7 +27,9 @@ import pytest
 import tokens
 
 
-_HEX_RE = re.compile(r"#[0-9a-fA-F]{3,8}\b")
+# (?<!&) descarta entidades HTML tipo &#916; — falsos positivos que ya
+# anotó la auditoría 2 en hx_edu.
+_HEX_RE = re.compile(r"(?<!&)#[0-9a-fA-F]{3,8}\b")
 
 
 @pytest.fixture
@@ -217,6 +219,44 @@ def test_origin_invalido_rechazado():
     d = dict(_BASE); d["confidence_mechanism"] = "altisima"
     with pytest.raises(ValueError, match="confidence_mechanism"):
         rdb.reaction_from_dict(d)
+
+
+# ══════════════════════════════════════════════════════════════════════
+# P3/P4 — censo final: 0 hex sueltos en las superficies UI auditadas
+# ══════════════════════════════════════════════════════════════════════
+_UI_FILES = [
+    "flowsheet_qt.py", "chemfx/ui/reactivity_dock_qt.py",
+    "block_inspector.py", "stream_inspector.py", "streams_table.py",
+    "econ_richview.py", "editor_chrome.py", "welcome_qt.py",
+    "hx_inspector.py", "inspector_widgets.py", "hx_edu.py", "hx_icons.py",
+    "solver_report.py", "inspector_evidence.py", "econ_figures.py",
+    "econ_widgets.py", "dialog_kit.py", "indicators.py",
+    "estimated_overlay.py", "hx_bubbles.py", "stream_bubbles.py",
+]
+
+
+def test_censo_hex_ui_cero():
+    """La clase 'hex suelto en superficie UI' murió en el ciclo 4.
+    tokens.py (la paleta) y los glifos/papel del PFD quedan fuera por
+    diseño."""
+    for rel in _UI_FILES:
+        malos = []
+        for i, line in enumerate(
+                (ROOT / rel).read_text(encoding="utf-8").splitlines(), 1):
+            if line.lstrip().startswith("#") or "antes:" in line:
+                continue     # comentarios (p.ej. "antes: #3a3a3a")
+            malos += [(i, m) for m in _HEX_RE.findall(line)]
+        assert malos == [], f"{rel} tiene hex sueltos: {malos[:5]}"
+
+
+def test_hx_edu_popover_usa_qfont():
+    """P3: el popover educativo adopta la escala FONT_* (qfont); no
+    quedan QFont numéricos sueltos en hx_edu."""
+    src = (ROOT / "hx_edu.py").read_text(encoding="utf-8")
+    assert "QFont(" not in src
+    for tok in ("qfont(FONT_TITLE)", "qfont(FONT_UI)",
+                "qfont(FONT_VALUE)", "qfont(FONT_HINT)"):
+        assert tok in src, f"falta {tok}"
 
 
 def test_evidencia_reactor_distingue_predictor():

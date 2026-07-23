@@ -363,6 +363,9 @@ class _StreamRow(QFrame):
         T = float(getattr(stream, "temperature", 25.0) or 25.0)
         T_locked = bool(getattr(stream, "temperature_locked", False))
         t_unit = funits.active_unit("temp")
+        # micro-tipografía de celda (valor 10pt + unidad 8pt): escala de
+        # densidad de la tabla, no tipografía (excepción 2g) — la pasada
+        # formal de diseño de esta tabla sigue pendiente de artboard.
         t_html = (
             f'<span style="color:{TOK["ink"] if T_locked else TOK["ink_soft"]};'
             f' font-family:\'{pfd_fonts.MONO}\'; font-size:10pt; font-weight:600;">'

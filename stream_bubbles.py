@@ -21,6 +21,12 @@ Piezas:
                                leaders al mover bloques/streams.
   · bubble_attachment(...)  — helper para calcular el punto de
                                aterrizaje del leader en la burbuja.
+
+NOTA de tipografía (ciclo 4): las burbujas usan micro-tipografía de
+tarjeta compacta (7-10pt, deliberada — 50+ streams en pantalla) que NO
+adopta la escala FONT_* del sistema. Es la misma clase de excepción que
+la escala de plano del papel (2g). Si algún día reciben artboard propio,
+la decisión se revisa ahí; no "corregir" mecánicamente estos tamaños.
 """
 
 from __future__ import annotations

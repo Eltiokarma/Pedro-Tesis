@@ -2537,7 +2537,7 @@ class BlockInspectorPanel(QWidget):
                 border-radius: 6px;
                 padding: 5px 8px;
                 font-family: '{pfd_fonts.SANS}';
-                font-size: 9pt;
+                font-size: {FONT_HINT[1]}pt;
             }}
             QComboBox:hover {{ border: 1px solid {TOK['accent_soft']}; }}
             QComboBox::drop-down {{ border: 0; }}

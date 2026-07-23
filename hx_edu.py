@@ -9,7 +9,7 @@ import math
 import re
 
 from PySide6.QtCore import Qt, QByteArray
-from PySide6.QtGui import QFont, QPixmap, QPainter
+from PySide6.QtGui import QPixmap, QPainter
 from PySide6.QtSvg import QSvgRenderer
 from PySide6.QtWidgets import (
     QDialog, QVBoxLayout, QHBoxLayout, QLabel, QPushButton, QFrame,
@@ -18,6 +18,7 @@ from PySide6.QtWidgets import (
 
 import pfd_fonts
 from block_inspector import TOK
+from tokens import qfont, FONT_TITLE, FONT_UI, FONT_VALUE, FONT_HINT
 import hx_icons as hi
 
 
@@ -349,11 +350,12 @@ class EducationalPopover(QDialog):
         ic.setPixmap(hi.glyph_pixmap(t["icon"], 22, TOK["accent"], 1.5))
         hl.addWidget(ic)
         tl = QLabel(t["title"]); tl.setWordWrap(True)
-        tl.setFont(QFont(pfd_fonts.SANS, 11, QFont.Bold))
+        tl.setFont(qfont(FONT_TITLE))
         tl.setStyleSheet(f"color:{TOK['ink']};")
         hl.addWidget(tl, 1)
         xb = QPushButton("✕"); xb.setFixedSize(28, 28); xb.setCursor(Qt.PointingHandCursor)
         xb.setStyleSheet(
+            # glifo-ícono ✕: tamaño geométrico, no tipografía (excepción 2g)
             f"QPushButton {{ background:transparent; color:{TOK['ink_mute']}; "
             f"border:0; border-radius:6px; font-size:14px; }} "
             f"QPushButton:hover {{ background:{TOK['bg_mute']}; color:{TOK['ink']}; }}")
@@ -372,7 +374,7 @@ class EducationalPopover(QDialog):
 
         prose = QLabel(t["body"]); prose.setWordWrap(True)
         prose.setTextFormat(Qt.RichText)
-        prose.setFont(QFont(pfd_fonts.SANS, 9))
+        prose.setFont(qfont(FONT_UI))
         prose.setStyleSheet(f"color:{TOK['ink_mute']};")
         bl.addWidget(prose)
 
@@ -381,7 +383,7 @@ class EducationalPopover(QDialog):
             fl = QVBoxLayout(fcard); fl.setContentsMargins(16, 14, 16, 14)
             flab = QLabel(t["formula"]); flab.setWordWrap(True)
             flab.setAlignment(Qt.AlignCenter)
-            flab.setFont(QFont(pfd_fonts.MONO, 11, QFont.Medium))
+            flab.setFont(qfont(FONT_VALUE))
             flab.setStyleSheet(f"color:{TOK['ink']};")
             fl.addWidget(flab)
             fcard.setStyleSheet(
@@ -404,7 +406,7 @@ class EducationalPopover(QDialog):
         # source
         src = QLabel("<b>Fuente:</b> &nbsp;" + t["source"]); src.setWordWrap(True)
         src.setTextFormat(Qt.RichText)
-        src.setFont(QFont(pfd_fonts.SANS, 8))
+        src.setFont(qfont(FONT_HINT))
         src.setStyleSheet(
             f"color:{TOK['ink_soft']}; font-style:italic; "
             f"background:{TOK['bg']}; padding:12px 18px; "
@@ -415,7 +417,7 @@ class EducationalPopover(QDialog):
         ft = QFrame(); fl2 = QHBoxLayout(ft); fl2.setContentsMargins(14, 10, 14, 10)
         fl2.addStretch(1)
         cb = QPushButton("Cerrar"); cb.setCursor(Qt.PointingHandCursor)
-        cb.setFont(QFont(pfd_fonts.SANS, 9, QFont.Medium))
+        cb.setFont(qfont(FONT_UI))
         cb.setStyleSheet(
             f"QPushButton {{ background:{TOK['accent']}; "
             f"color:{TOK['bg_elev']}; border:0; "

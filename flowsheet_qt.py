@@ -1087,7 +1087,8 @@ class BlockEditDialog(QDialog):
             )
         status_lbl = QLabel(status_text)
         status_lbl.setStyleSheet(
-            "color: #444; font-size: 8.5pt; padding: 4px 0;")
+            f"color: {_tokens.TOK['ink_mute']}; "
+            f"font-size: {_tokens.FONT_HINT[1]}pt; padding: 4px 0;")
         rxlay.addWidget(status_lbl)
 
         # Tabla de reacciones detectadas + checkboxes en active_reactions
@@ -1263,7 +1264,7 @@ class BlockEditDialog(QDialog):
         tbl.setRowCount(len(streams))
         for ri, s in enumerate(streams):
             nm = QTableWidgetItem(s.name)
-            nm.setForeground(QColor("#1565c0"))
+            nm.setForeground(QColor(_tokens.TOK["accent"]))
             f = nm.font(); f.setUnderline(True); nm.setFont(f)
             nm.setToolTip("Doble-click para editar este stream")
             tbl.setItem(ri, 0, nm)
@@ -1285,7 +1286,7 @@ class BlockEditDialog(QDialog):
                 comp_color = None
             else:
                 comp_str = "⚠ Aún no resuelto. Ejecutá Solve."
-                comp_color = QColor("#b8860b")
+                comp_color = QColor(_tokens.TOK["amber"])
             it = QTableWidgetItem(comp_str)
             it.setToolTip(comp_str)
             if comp_color is not None:
@@ -1512,7 +1513,9 @@ class CustomReactionDialog(QDialog):
         # Título
         title = QLabel("✨ Nueva reacción")
         title.setStyleSheet(
-            "font-size: 17pt; font-weight: 600; color: #111;")
+            f"font-size: {_tokens.FONT_TITLE[1]}pt; "
+            f"font-weight: {_tokens.FONT_TITLE[2]}; "
+            f"color: {_tokens.TOK['ink']};")
         outer.addWidget(title)
         hint = QLabel(
             "Elegí reactivos y productos. Los coeficientes, el balance "
@@ -1710,9 +1713,13 @@ class CustomReactionDialog(QDialog):
             btn_add = QPushButton("+")
             btn_add.setFixedSize(34, 34)
             btn_add.setStyleSheet(
-                "QPushButton { border-radius: 17px; background: #34c759; "
-                "color: white; font-weight: bold; font-size: 14pt; border: none; }"
-                "QPushButton:hover { background: #2ab04b; }"
+                # glifo-ícono +: tamaño geométrico, no tipografía (exc. 2g)
+                f"QPushButton {{ border-radius: 17px; "
+                f"background: {_tokens.TOK['accent']}; "
+                f"color: {_tokens.TOK['bg_elev']}; font-weight: bold; "
+                f"font-size: 14pt; border: none; }}"
+                f"QPushButton:hover {{ "
+                f"background: {_tokens.TOK['accent_deep']}; }}"
             )
             btn_add.setToolTip(
                 "Agregar reactivo" if side == "reactant" else "Agregar producto")
@@ -1724,8 +1731,9 @@ class CustomReactionDialog(QDialog):
     def _make_chip_widget(self, side, ch):
         fr = QFrame()
         fr.setStyleSheet(
-            "QFrame { background: white; border: 1px solid #d0d0d0; "
-            "border-radius: 14px; }"
+            f"QFrame {{ background: {_tokens.TOK['bg_elev']}; "
+            f"border: 1px solid {_tokens.TOK['line_strong']}; "
+            f"border-radius: 14px; }}"
         )
         fr.setMinimumHeight(32)
         h = QHBoxLayout(fr)
@@ -1738,15 +1746,18 @@ class CustomReactionDialog(QDialog):
         _c = _tokens.TOK["ink_soft"]
         lbl = QLabel(
             f"<b>{prefix}{nm}</b>"
-            f"&nbsp;&nbsp;<span style='color:{_c}; font-size:8pt;'>({phase})</span>"
+            f"&nbsp;&nbsp;<span style='color:{_c}; "
+            f"font-size:{_tokens.FONT_LABEL[1]}pt;'>({phase})</span>"
         )
         h.addWidget(lbl)
         btn_x = QPushButton("×")
         btn_x.setFixedSize(22, 22)
         btn_x.setStyleSheet(
-            "QPushButton { border: none; color: #999; font-size: 13pt; "
-            "background: transparent; }"
-            "QPushButton:hover { color: #c41e3a; }"
+            # glifo-ícono ×: tamaño geométrico, no tipografía (exc. 2g)
+            f"QPushButton {{ border: none; "
+            f"color: {_tokens.TOK['ink_soft']}; font-size: 13pt; "
+            f"background: transparent; }}"
+            f"QPushButton:hover {{ color: {_tokens.TOK['danger']}; }}"
         )
         btn_x.clicked.connect(
             lambda _c=False, s=side, c=ch: self._remove_chip(s, c))
@@ -3450,13 +3461,14 @@ class _EndpointHandle(QGraphicsEllipseItem):
 def _auto_badge(text="AUTO"):
     return (f"<span style='background:{_tokens.TOK['auto_ribbon']}; "
             f"color:{_tokens.TOK['bg_elev']}; "
-            "border-radius:3px; padding:0 3px; font-size:7pt;'>"
+            f"border-radius:3px; padding:0 3px; "
+            f"font-size:{_tokens.FONT_LABEL[1]}pt;'>"
             f"{text}</span>")
 
 
 def _spec_tag():
     return (f"<span style='color:{_tokens.TOK['ink_soft']}; "
-            "font-size:7pt;'>[spec]</span>")
+            f"font-size:{_tokens.FONT_LABEL[1]}pt;'>[spec]</span>")
 
 
 def _pressure_origin_is_auto(s):
@@ -3814,7 +3826,7 @@ class BlockItem(QGraphicsItemGroup):
         if b.heat_source:
             lines.append(f"Utility: {b.heat_source}")
         lines.append(f"<span style='color:{_tokens.TOK['ink_soft']}; "
-                     f"font-size:8pt;'>"
+                     f"font-size:{_tokens.FONT_LABEL[1]}pt;'>"
                      f"Puertos: {port_list}</span>")
         self.setToolTip("<br>".join(lines))
 

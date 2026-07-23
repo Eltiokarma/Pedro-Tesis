@@ -13,6 +13,10 @@ Piezas (espejo de stream_bubbles):
   · HXBubble(QFrame)        — el widget visual (3 densidades).
   · HXLeaderOverlay(QWidget)— capa que pinta leaders + anchor-dot por estado.
   · HXBubbleManager         — orquesta vida/posición/refresh.
+
+NOTA de tipografía (ciclo 4): micro-tipografía de tarjeta compacta
+(7-10pt, deliberada) — misma excepción que stream_bubbles; NO adopta la
+escala FONT_* del sistema hasta que exista un artboard propio.
 """
 from __future__ import annotations
 

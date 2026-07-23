@@ -34,6 +34,21 @@ C.2 y la pasada de diseño de streams_table/stream_inspector.
 - **`streams_table` / `stream_inspector`**: pasada formal de diseño
   (hoy consumen tokens de fase pero nunca tuvieron artboard). ←
   PENDIENTE (requiere mini-prompt de Design).
+- ✓ **Remate post-tanda-1 (2026-07-22): últimos hex + tipografía.**
+  Murió la clase "hex suelto en superficie UI" completa: diálogo de
+  reacción "estilo iPhone" y diálogo de composición de `flowsheet_qt`
+  (9 hex → tokens; el botón + adopta el patrón primario del
+  dialog_kit) y los 2 fallbacks de `reactivity_dock_qt` (patrón "sin
+  fallback hex"). Tipografía: el popover de `hx_edu` adopta qfont
+  (FONT_TITLE/UI/VALUE/HINT), el combo del inspector pasa a FONT_HINT,
+  y los micro-tags de tooltips (AUTO/[spec]/puertos) suben de 7-8pt a
+  FONT_LABEL. El resto de tamaños numéricos que sobreviven son
+  excepciones deliberadas ya anotadas en el código: glifos-ícono
+  (✕ + × → ▸ ◆), escala de plano del papel PFD (2g), labels on-canvas
+  que zooman con la escena, y micro-tipografía de tarjetas compactas
+  (burbujas/pills/celdas — anotadas ahora; se revisan si algún día
+  reciben artboard). Regresión: censo hex=0 sobre 21 archivos UI en
+  `test_ciclo4.py`.
 - ✓ Menores (§G de la auditoría 2) → CERRADOS: el chip leía atributos
   fantasma (`iter_count`/`elapsed_s` — BUG 14) → ahora recibe
   `iterations` + wall-time real, y Ctrl+U resetea el chip tras sus
