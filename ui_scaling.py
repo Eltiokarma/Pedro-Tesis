@@ -55,7 +55,8 @@ def _available_geometry(win):
 
 
 def fit_to_screen(win, pref_w: int, pref_h: int,
-                  frac: float = 0.9, center: bool = True) -> None:
+                  frac: float = 0.9, center: bool = True,
+                  maximize_if_tight: bool = False) -> None:
     """Redimensiona `win` al menor entre (pref_w, pref_h) y `frac` del
     área disponible del monitor, y la centra.
 
@@ -65,6 +66,10 @@ def fit_to_screen(win, pref_w: int, pref_h: int,
         pref_h: alto preferido.
         frac:   fracción máxima del área disponible a ocupar (0–1).
         center: si True, centra la ventana en el monitor.
+        maximize_if_tight: si el tamaño preferido NO entra en el área
+            disponible (pantalla chica), arranca maximizada para aprovechar
+            todo el espacio en vez de dejar una ventana clamped y centrada.
+            La barra de scroll del lienzo cubre lo que aún no entre.
     """
     try:
         avail = _available_geometry(win)
@@ -80,6 +85,13 @@ def fit_to_screen(win, pref_w: int, pref_h: int,
             x = avail.x() + (avail.width()  - w) // 2
             y = avail.y() + (avail.height() - h) // 2
             win.move(x, y)
+        # Pantalla más chica que el tamaño preferido → maximizar al mostrar.
+        if maximize_if_tight and (pref_w > max_w or pref_h > max_h):
+            try:
+                from PySide6.QtCore import Qt
+                win.setWindowState(win.windowState() | Qt.WindowMaximized)
+            except Exception:
+                pass
     except Exception:
         try:
             win.resize(pref_w, pref_h)

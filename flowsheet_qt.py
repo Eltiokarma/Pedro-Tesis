@@ -5322,6 +5322,14 @@ class StreamItem(QGraphicsPathItem):
         nx, ny = -uy, ux             # perpendicular
         size = 11
         wing = 4.5
+        # Red de seguridad: si el último tramo es muy corto (equipos casi
+        # pegados, o un arrastre manual que los juntó), encoger la cabeza
+        # para que NUNCA se coma toda la corriente y quede solo la punta.
+        # Deja siempre un mínimo de cuerpo visible (~40 % del tramo).
+        if L < size * 2.2:
+            k = max(0.4, L / (size * 2.2))
+            size *= k
+            wing *= k
         tip = QPointF(x_end, y_end)
         b1  = QPointF(x_end - size*ux + wing*nx, y_end - size*uy + wing*ny)
         b2  = QPointF(x_end - size*ux - wing*nx, y_end - size*uy - wing*ny)
@@ -5696,9 +5704,26 @@ class _PaperFrame(QGraphicsItemGroup):
 
     def __init__(self, project_title="PFD", area="100",
                  drawing_no="PFD-100-001", rev="A", date=None,
-                 legend_collapsed=False, revisions=None):
+                 legend_collapsed=False, revisions=None,
+                 paper_w=None, paper_h=None):
         super().__init__()
         self.setZValue(-100)
+        # Tamaño de la hoja: por defecto el nominal, pero `set_paper_visible`
+        # lo agranda para que el marco ENVUELVA todo el proyecto (antes el
+        # marco fijo 1600×960 quedaba chico frente a diagramas grandes).
+        # Se guardan como atributos de instancia que sombrean las constantes
+        # de clase, así todos los `_build_*` usan el tamaño efectivo.
+        W0, H0 = _PaperFrame.PAPER_W, _PaperFrame.PAPER_H
+        self.PAPER_W = int(paper_w) if paper_w else W0
+        self.PAPER_H = int(paper_h) if paper_h else H0
+        # Escala del bloque leyenda+cuadro de título: crece (sublinealmente)
+        # con la hoja para que no se vea diminuto en un proyecto grande.
+        # Acotada a [1.0, 1.8]; ancla en la esquina inferior-derecha.
+        ratio = max(self.PAPER_W / W0, self.PAPER_H / H0)
+        self._doc_scale = min(1.8, max(1.0, ratio ** 0.6))
+        # `_doc_parent` lo consumen los helpers _add_*/_legend_dot; el marco
+        # exterior va a `self`, la leyenda/título a un subgrupo escalable.
+        self._doc_parent = self
         # decorativo puro: no participa del hit-testing (rubber band);
         # el chevron de la leyenda se maneja por hit-test en la escena
         # (legend_chevron_rect).
@@ -5726,27 +5751,48 @@ class _PaperFrame(QGraphicsItemGroup):
         self._SOFT  = QColor(_tokens.TOK["label_ink_soft"])
         self._PAPER = QColor(_tokens.TOK["canvas_bg"])
 
+        # Marco exterior + ticks → directamente sobre `self` (coords 1:1
+        # con los bloques, no se escala).
+        self._doc_parent = self
         self._build_frame()
+        # Leyenda + cuadro de título + revisiones → subgrupo escalable
+        # anclado en la esquina inferior-derecha de la hoja.
+        self._doc_group = QGraphicsItemGroup(self)
+        self._doc_group.setAcceptedMouseButtons(Qt.NoButton)
+        self._doc_parent = self._doc_group
         self._build_legend()
         self._build_title_block()
         self._build_revisions_block()
+        self._doc_parent = self
+        if self._doc_scale > 1.001:
+            ox, oy = self.PAPER_W - 40, self.PAPER_H - 40   # esquina inf-der
+            self._doc_group.setTransformOriginPoint(ox, oy)
+            self._doc_group.setScale(self._doc_scale)
+            # El hit-rect del chevron se testea en coords de escena → mapear
+            # por la misma transformación de escala del subgrupo.
+            if self.legend_chevron_rect is not None:
+                self.legend_chevron_rect = self._doc_group.mapRectToScene(
+                    self.legend_chevron_rect)
 
     # ---------- helpers ----------
+    # `_doc_parent` redirige los items al subgrupo escalable de la
+    # leyenda/cuadro de título cuando corresponde (ver __init__); para el
+    # marco exterior vale `self`.
     def _add_rect(self, x, y, w, h, stroke_w=1.0, fill=None, parent=None):
-        item = QGraphicsRectItem(x, y, w, h, parent or self)
+        item = QGraphicsRectItem(x, y, w, h, parent or self._doc_parent)
         item.setPen(QPen(self._BLACK, stroke_w))
         item.setBrush(QBrush(fill) if fill else QBrush(Qt.NoBrush))
         item.setAcceptedMouseButtons(Qt.NoButton)
         return item
 
     def _add_line(self, x1, y1, x2, y2, stroke_w=0.8, color=None, parent=None):
-        item = QGraphicsLineItem(x1, y1, x2, y2, parent or self)
+        item = QGraphicsLineItem(x1, y1, x2, y2, parent or self._doc_parent)
         item.setPen(QPen(color or self._BLACK, stroke_w))
         item.setAcceptedMouseButtons(Qt.NoButton)
         return item
 
     def _add_text(self, x, y, text, font, color=None, parent=None):
-        t = QGraphicsSimpleTextItem(text, parent or self)
+        t = QGraphicsSimpleTextItem(text, parent or self._doc_parent)
         t.setFont(font)
         t.setBrush(QBrush(color or self._BLACK))
         t.setPos(x, y)
@@ -5766,7 +5812,7 @@ class _PaperFrame(QGraphicsItemGroup):
             self._add_line(W-40, H*t, W-20, H*t, 0.6)
 
     def _legend_dot(self, x, y, color, r=3.4):
-        d = QGraphicsEllipseItem(x, y, 2*r, 2*r, self)
+        d = QGraphicsEllipseItem(x, y, 2*r, 2*r, self._doc_parent)
         d.setBrush(QBrush(QColor(color)))
         d.setPen(QPen(Qt.NoPen))
         d.setAcceptedMouseButtons(Qt.NoButton)
@@ -5823,7 +5869,7 @@ class _PaperFrame(QGraphicsItemGroup):
             ("stale",   "Desactualizado"),
         )
         for (st, lbl), ry in zip(estados, rows):
-            sq = QGraphicsRectItem(x0, ry - 8, 11, 11, self)
+            sq = QGraphicsRectItem(x0, ry - 8, 11, 11, self._doc_parent)
             fill = _tokens.status_fill_hex(st)
             sq.setBrush(QBrush(QColor(fill)) if fill
                         else QBrush(self._PAPER))
@@ -5907,7 +5953,7 @@ class _PaperFrame(QGraphicsItemGroup):
         grad.setColorAt(0.0, QColor(T["service_cold_deep"]))
         grad.setColorAt(0.5, QColor(T["ink_ghost"]))
         grad.setColorAt(1.0, QColor(T["service_hot_deep"]))
-        bar = QGraphicsRectItem(gx, ry5 + 1, gw, gh, self)
+        bar = QGraphicsRectItem(gx, ry5 + 1, gw, gh, self._doc_parent)
         bar.setBrush(QBrush(grad))
         bar.setPen(QPen(Qt.NoPen))
         bar.setAcceptedMouseButtons(Qt.NoButton)
@@ -6035,11 +6081,34 @@ class FlowsheetScene(QGraphicsScene):
         self.paper_frame: "_PaperFrame|None" = None
         self._draw_grid()
 
+    def _content_paper_size(self):
+        """Tamaño de hoja que ENVUELVE todo el proyecto: bbox de los bloques
+        + margen, con piso en el nominal 1600×960.  Así el marco crece con
+        el diagrama en vez de quedar chico frente a un proyecto grande."""
+        W0, H0 = _PaperFrame.PAPER_W, _PaperFrame.PAPER_H
+        ed = getattr(self, "editor", None)
+        fs = getattr(ed, "fs", None)
+        blocks = getattr(fs, "blocks", None)
+        if not blocks:
+            return W0, H0
+        try:
+            xs = [b.x for b in blocks.values()]
+            ys = [b.y for b in blocks.values()]
+            max_x = max(xs) + BLOCK_W
+            max_y = max(ys) + BLOCK_H
+            MARGIN = 140          # aire alrededor del contenido
+            W = max(W0, int(max_x + MARGIN))
+            H = max(H0, int(max_y + MARGIN))
+            return W, H
+        except Exception:
+            return W0, H0
+
     def set_paper_visible(self, visible: bool,
                            project_title="PFD", area="100",
                            drawing_no="PFD-100-001"):
         """Muestra/oculta el papel de dibujo PFD (marco + leyenda +
-        cuadro de título).  Se posiciona en (0, 0)."""
+        cuadro de título).  Se posiciona en (0, 0) y se dimensiona para
+        envolver el proyecto completo."""
         if visible:
             if self.paper_frame is None:
                 # Cuadro de revisiones △N (ciclo 4, 4d): vive en el
@@ -6047,19 +6116,36 @@ class FlowsheetScene(QGraphicsScene):
                 ed = getattr(self, "editor", None)
                 revs = list(getattr(getattr(ed, "fs", None),
                                     "revisions", []) or [])
+                pw, ph = self._content_paper_size()
                 self.paper_frame = _PaperFrame(
                     project_title=project_title,
                     area=area, drawing_no=drawing_no,
                     legend_collapsed=getattr(
                         self, "_legend_collapsed", False),
                     revisions=revs,
+                    paper_w=pw, paper_h=ph,
                 )
                 self.paper_frame.setPos(0, 0)
                 self.addItem(self.paper_frame)
+                # Ampliar el sceneRect para que la hoja (y el scroll de la
+                # vista) alcancen todo el marco en pantallas chicas.
+                self._grow_scene_rect_for(pw, ph)
             self.paper_frame.setVisible(True)
         else:
             if self.paper_frame is not None:
                 self.paper_frame.setVisible(False)
+
+    def _grow_scene_rect_for(self, pw, ph):
+        """Asegura que el sceneRect cubra una hoja de pw×ph (más margen),
+        sin encoger el rect actual."""
+        try:
+            cur = self.sceneRect()
+            right  = max(cur.right(),  pw + 200)
+            bottom = max(cur.bottom(), ph + 200)
+            self.setSceneRect(cur.left(), cur.top(),
+                              right - cur.left(), bottom - cur.top())
+        except Exception:
+            pass
 
     def toggle_legend_collapsed(self):
         """Pliega/despliega la leyenda del Marco PFD (artboard 2c) —
@@ -6391,7 +6477,7 @@ class FlowsheetMainWindow(QMainWindow):
         super().__init__()
         self.setWindowTitle("Diagrama de proceso — Qt edition")
         import ui_scaling
-        ui_scaling.fit_to_screen(self, 1400, 820)
+        ui_scaling.fit_to_screen(self, 1400, 820, maximize_if_tight=True)
 
         # Registrar IBM Plex Sans / Mono para tags y especs (Aspen style).
         # Idempotente — si Qt no encuentra las TTFs, cae al sistema.
@@ -6425,7 +6511,24 @@ class FlowsheetMainWindow(QMainWindow):
         wrap_lay.setContentsMargins(0, 0, 0, 0)
         wrap_lay.setSpacing(0)
         self.editor_topbar = EditorTopbar(self)
-        wrap_lay.addWidget(self.editor_topbar)
+        # En pantallas angostas el topbar (botones de ancho fijo) se cortaba
+        # y quedaban acciones inalcanzables.  Envolverlo en un scroll
+        # horizontal: en pantallas amplias se comporta igual (sin barra); en
+        # chicas aparece una barra fina para llegar a todos los botones.
+        self._topbar_scroll = QScrollArea(self)
+        self._topbar_scroll.setObjectName("topbarScroll")
+        self._topbar_scroll.setWidget(self.editor_topbar)
+        self._topbar_scroll.setWidgetResizable(True)
+        self._topbar_scroll.setFrameShape(QScrollArea.NoFrame)
+        self._topbar_scroll.setVerticalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+        self._topbar_scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarAsNeeded)
+        # 52 (topbar) + ~8 para la barra fina cuando aparece.
+        self._topbar_scroll.setFixedHeight(60)
+        self._topbar_scroll.setStyleSheet(
+            "#topbarScroll { border: 0; background: transparent; }"
+            "#topbarScroll QScrollBar:horizontal { height: 7px; margin: 0; }"
+        )
+        wrap_lay.addWidget(self._topbar_scroll)
         wrap_lay.addWidget(self.view, 1)
         self.setCentralWidget(central_wrap)
         # guardar refs (overlays se construyen después de las acciones)
@@ -6850,22 +6953,22 @@ class FlowsheetMainWindow(QMainWindow):
 
     def _toggle_aux_visibility(self, show: bool):
         """Vista > Mostrar corrientes auxiliares (Ctrl+U): muestra/oculta
-        los bloques y streams auto_aux (utility/ambiente).  Si todavía no
-        hay ninguna corriente auto_aux (p.ej. en un ejemplo o archivo
-        cargado), el click las materializa para los intercambiadores de
-        calor que no tengan utility y las muestra."""
-        has_aux = any(getattr(s, "auto_aux", False)
-                      for s in self.fs.streams.values())
-        if not has_aux:
-            n = self._ensure_hx_auxiliaries()
-            if n:
-                self._show_aux = True
-                if getattr(self, "_aux_visibility_action", None) is not None:
-                    self._aux_visibility_action.setChecked(True)
-                self._apply_aux_visibility()
-                self._update_status()
-                return
+        los bloques y streams auto_aux (utility/ambiente).
+
+        Es un toggle de PURA VISIBILIDAD: nunca resuelve el flowsheet ni
+        reconstruye la escena — enseñar/ocultar corrientes de servicio no
+        debe disparar un recálculo.  Las corrientes auxiliares ya se
+        materializan al cargar el ejemplo y al crear un bloque; acá solo
+        se conmuta su `setVisible`.  El check queda siempre en sincronía
+        con el estado real `_show_aux`."""
         self._show_aux = bool(show)
+        # Mantener el check del menú/toolbar en sincronía con el estado
+        # real sin re-emitir la señal (evita recursión).
+        act = getattr(self, "_aux_visibility_action", None)
+        if act is not None and act.isChecked() != self._show_aux:
+            blocked = act.blockSignals(True)
+            act.setChecked(self._show_aux)
+            act.blockSignals(blocked)
         self._apply_aux_visibility()
 
     def _toggle_streams_table(self, *args):
@@ -6891,20 +6994,27 @@ class FlowsheetMainWindow(QMainWindow):
             except Exception:
                 pass
 
-    def _ensure_hx_auxiliaries(self):
+    def _ensure_hx_auxiliaries(self, resize: bool = True):
         """Materializa las corrientes de servicio (cooling water / steam) de
         los intercambiadores de calor que aún no tengan ninguna corriente
-        utility conectada, las dimensiona desde el duty (solve) y redibuja.
-        Devuelve cuántos HX recibieron auxiliares."""
+        utility conectada.  Devuelve cuántos HX recibieron auxiliares.
+
+        Con `resize=True` (default histórico) resuelve el flowsheet para
+        dimensionar las corrientes nuevas desde el duty y redibuja.  Con
+        `resize=False` SOLO crea las corrientes (sin resolver ni
+        reconstruir) — usado al cargar un ejemplo para que existan y sean
+        conmutables sin disparar un recálculo; se dimensionan en el próximo
+        solve del usuario, como cualquier otra corriente."""
         import equipment_auxiliaries as _aux
         import equipment_costs as _ec
         import flowsheet_solver as _fsolv
-        # Resolver PRIMERO (duties + flujos de proceso): añadir corrientes
-        # nuevas antes del solve inicial puede interferir con la resolución.
-        try:
-            _fsolv.solve(self.fs)
-        except Exception:
-            pass
+        if resize:
+            # Resolver PRIMERO (duties + flujos de proceso): añadir corrientes
+            # nuevas antes del solve inicial puede interferir con la resolución.
+            try:
+                _fsolv.solve(self.fs)
+            except Exception:
+                pass
         created = 0
         for b in list(self.fs.blocks.values()):
             if _ec.EQUIPMENT_DATA.get(b.eq_type, {}).get("categoria") != "Heat exchangers":
@@ -6916,7 +7026,7 @@ class FlowsheetMainWindow(QMainWindow):
                 continue
             if _aux.instantiate_auxiliaries(self.fs, b):
                 created += 1
-        if created:
+        if created and resize:
             # dimensionar las corrientes nuevas desde el duty + redibujar
             try:
                 _fsolv.solve(self.fs)
@@ -7465,11 +7575,23 @@ class FlowsheetMainWindow(QMainWindow):
         except Exception:
             pass
         # Los JSON traen las posiciones legacy (silueta 130x60); las siluetas
-        # ISA nuevas son más grandes y quedan apachurradas → expandir.
+        # ISA nuevas son más grandes y quedan apachurradas → expandir.  El
+        # factor es adaptativo: garantiza una separación mínima entre equipos
+        # conectados para que las corrientes tengan cuerpo visible y no queden
+        # reducidas a la cabeza de la flecha.
         self._expand_block_spacing(factor=1.7)
+        # Materializar las corrientes de servicio de los HX que no traen
+        # utility, SIN resolver (se dimensionan en el próximo solve).  Así el
+        # toggle "Mostrar corrientes auxiliares" es pura visibilidad y nunca
+        # dispara un recálculo.
+        try:
+            self._ensure_hx_auxiliaries(resize=False)
+        except Exception:
+            pass
         self._last_overall_status = None
         self._dirty_after_solve = True
         self._rebuild_scene()
+        self._apply_aux_visibility()
 
         # Auto-mostrar el marco PFD con los datos del ejemplo
         self.scene.set_paper_visible(False)
@@ -7506,9 +7628,37 @@ class FlowsheetMainWindow(QMainWindow):
         un factor + snap a la grilla.  Usado al cargar ejemplos legacy
         para que las nuevas siluetas ISA (más grandes que el rect
         130x60 viejo) no queden apachurradas y los streams tengan
-        longitud cómoda."""
+        longitud cómoda.
+
+        El factor es ADAPTATIVO: `factor` es el piso (ejemplos ya bien
+        espaciados no se tocan), pero si el par de equipos CONECTADOS más
+        cercano quedaría más junto que `TARGET` centro-a-centro tras la
+        expansión, el factor se sube lo justo para separarlos —acotado por
+        `MAX_FACTOR` para no generar hojas gigantes—.  Así se elimina el
+        caso 'la flecha es solo la cabeza' sin desparramar los diagramas
+        que ya estaban bien.  Las corrientes auto_aux (stubs de servicio,
+        cortos por diseño) se excluyen del cálculo del mínimo."""
         if not self.fs.blocks:
             return
+        import math
+        # Separación centro-a-centro deseada para el par conectado más
+        # apretado: ancho de bloque + un colchón para que la corriente
+        # tenga cuerpo (~3 pasos de grilla).  MAX_FACTOR acota el blow-up.
+        TARGET = BLOCK_W + 3 * GRID_STEP           # ≈ 190
+        MAX_FACTOR = 2.6
+        pos = {b.id: (b.x, b.y) for b in self.fs.blocks.values()}
+        min_d = None
+        for s in self.fs.streams.values():
+            if getattr(s, "auto_aux", False):
+                continue                            # stubs de servicio: cortos a propósito
+            a, b = getattr(s, "src", -1), getattr(s, "dst", -1)
+            if a in pos and b in pos:
+                d = math.hypot(pos[a][0] - pos[b][0], pos[a][1] - pos[b][1])
+                if d > 1.0 and (min_d is None or d < min_d):
+                    min_d = d
+        if min_d:
+            needed = TARGET / min_d
+            factor = max(factor, min(needed, MAX_FACTOR))
         # Anclar el escalado al bloque más arriba-izquierda para no
         # desparramar el diagrama lejos del origen.
         min_x = min(b.x for b in self.fs.blocks.values())
