@@ -975,16 +975,6 @@ class EditorTopbar(QFrame):
         self.set_solver_state(st, it_, dt)
 
     # ── helpers UI ─────────────────────────────────────
-    def _mk_icon_btn(self, glyph: str, tooltip: str) -> QToolButton:
-        b = QToolButton(self)
-        b.setText(glyph)
-        b.setToolTip(tooltip)
-        b.setFixedSize(32, 32)
-        b.setCursor(Qt.PointingHandCursor)
-        b.setFont(QFont(pfd_fonts.SANS, 14))  # glifo-ícono: tamaño geométrico, no tipografía (excepción 2g)
-        b.setStyleSheet(self._qss_toolbutton())
-        return b
-
     def _mk_vdivider(self) -> QFrame:
         d = QFrame(self); d.setFrameShape(QFrame.VLine)
         d.setFixedWidth(1); d.setFixedHeight(24)
@@ -1248,17 +1238,19 @@ class EditorPalette(QFrame):
     toolSelected         = Signal(str)
     blockRequested       = Signal(str)        # palette-id (legacy)
     blockTypeRequested   = Signal(str)        # eq_type canónico
-    moreRequested        = Signal()
     streamRequested      = Signal(str)        # 'mass' | 'energy'
 
     # La herramienta de anotación (T) volvió en el ciclo 3 (artboard
     # 3c) con la colocación de texto real: click coloca la nota en
     # edición directa (annotations.AnnotationItem).
+    # (Los tooltips NO anuncian atajos de teclado: no hay hotkeys de
+    # herramienta cableados, y una tecla suelta chocaría con la edición
+    # de anotaciones. Antes prometían V/espacio/C/T inexistentes.)
     TOOLS = [
-        ("select",  "Seleccionar (V)"),
-        ("pan",     "Pan (espacio)"),
-        ("connect", "Conectar stream (C)"),
-        ("text",    "Anotación (T)"),
+        ("select",  "Seleccionar"),
+        ("pan",     "Pan (arrastrar el lienzo)"),
+        ("connect", "Conectar stream"),
+        ("text",    "Anotación de texto"),
     ]
     # Corrientes flotantes: click → crea la flecha en el centro de la
     # vista; el usuario arrastra los extremos hasta un puerto para
@@ -1443,10 +1435,6 @@ class EditorPalette(QFrame):
         self._active_tool = tool_id
         self._tool_btns[tool_id].set_active(True)
         self.toolSelected.emit(tool_id)
-
-    def set_active_tool(self, tool_id: str):
-        if tool_id in self._tool_btns:
-            self._on_tool_click(tool_id)
 
     # ── Popups de variantes / catálogo completo ──
     def _eq_types_for_palette(self, palette_id: str) -> List[str]:
@@ -1653,7 +1641,13 @@ class EditorZoom(QFrame):
         lay = QHBoxLayout(self)
         lay.setContentsMargins(4, 3, 4, 3); lay.setSpacing(0)
 
-        self._btn_minus = self._mk_btn("−", "Zoom out (⌘−)")
+        # Atajos en TEXTO NATIVO de la plataforma (antes hardcodeaban el
+        # glifo ⌘ de macOS, mentira en Windows/Linux donde es Ctrl).
+        def _sc(seq: str) -> str:
+            from PySide6.QtGui import QKeySequence
+            return QKeySequence(seq).toString(QKeySequence.NativeText)
+
+        self._btn_minus = self._mk_btn("−", f"Zoom out ({_sc('Ctrl+-')})")
         self._btn_minus.clicked.connect(self.zoomOutRequested.emit)
         lay.addWidget(self._btn_minus)
 
@@ -1662,12 +1656,12 @@ class EditorZoom(QFrame):
         self._lbl_pct.setFixedSize(54, 28)
         self._lbl_pct.setCursor(Qt.PointingHandCursor)
         self._lbl_pct.setFont(qfont(FONT_VALUE))
-        self._lbl_pct.setToolTip("Click → 100% (⌘0)")
+        self._lbl_pct.setToolTip(f"Click → 100% ({_sc('Ctrl+0')})")
         self._lbl_pct.setStyleSheet(self._qss_pct())
         self._lbl_pct.clicked.connect(self.zoomResetRequested.emit)
         lay.addWidget(self._lbl_pct)
 
-        self._btn_plus = self._mk_btn("+", "Zoom in (⌘+)")
+        self._btn_plus = self._mk_btn("+", f"Zoom in ({_sc('Ctrl++')})")
         self._btn_plus.clicked.connect(self.zoomInRequested.emit)
         lay.addWidget(self._btn_plus)
 

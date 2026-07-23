@@ -20,7 +20,8 @@ ESTADO DE LA MIGRACIÓN
     ✓ Zoom Ctrl+wheel, pan middle-drag, scrollbars automáticas
     ✓ Drag bloques con snap a grid
     ✓ Paleta flotante de equipos (catálogo completo + variantes + drag)
-    ✓ Toolbar: New / Open / Save / Examples / Solve / Calcular
+    ✓ Menú + EditorTopbar: New / Open / Save / Examples / Solve / Calcular
+      (las QToolBars legacy se eliminaron; el menú es superset)
     ✓ Property panel con info del item seleccionado
     ✓ Reusa equipment_costs, equipment_ports, flowsheet_solver
 
@@ -60,7 +61,7 @@ from PySide6.QtWidgets import (
     QGraphicsItem, QGraphicsRectItem, QGraphicsPathItem, QGraphicsPolygonItem,
     QGraphicsTextItem, QGraphicsEllipseItem, QGraphicsLineItem,
     QGraphicsItemGroup, QGraphicsSimpleTextItem,
-    QToolBar, QStatusBar, QDockWidget, QTreeWidget, QTreeWidgetItem,
+    QStatusBar, QDockWidget, QTreeWidget, QTreeWidgetItem,
     QWidget, QVBoxLayout, QHBoxLayout, QFormLayout, QLabel, QPushButton,
     QFileDialog, QMessageBox, QInputDialog, QMenu, QMenuBar,
     QSplitter, QTextEdit, QSizePolicy, QStyle,
@@ -6296,6 +6297,11 @@ class FlowsheetScene(QGraphicsScene):
 class FlowsheetView(QGraphicsView):
     """QGraphicsView con zoom anclado al cursor y pan con middle-drag."""
 
+    # Emitida cada vez que cambia el zoom (rueda, botones, fit, reset) con
+    # el factor actual (m11).  El overlay de zoom la escucha para refrescar
+    # el "%" — reemplaza al timer de polling de 250 ms que corría siempre.
+    zoomChanged = Signal(float)
+
     ZOOM_STEP = 1.15
     ZOOM_MIN  = 0.30
     ZOOM_MAX  = 3.00
@@ -6369,6 +6375,7 @@ class FlowsheetView(QGraphicsView):
             if self.ZOOM_MIN <= new_zoom <= self.ZOOM_MAX:
                 self._zoom = new_zoom
                 self.scale(factor, factor)
+                self.zoomChanged.emit(self._zoom)
             event.accept()
         else:
             super().wheelEvent(event)
@@ -6444,6 +6451,7 @@ class FlowsheetView(QGraphicsView):
         if self.ZOOM_MIN <= new_zoom <= self.ZOOM_MAX:
             self._zoom = new_zoom
             self.scale(factor, factor)
+            self.zoomChanged.emit(self._zoom)
 
     def zoom_fit(self):
         if not self.scene().items():
@@ -6454,6 +6462,7 @@ class FlowsheetView(QGraphicsView):
         if not items:
             self.resetTransform()
             self._zoom = 1.0
+            self.zoomChanged.emit(self._zoom)
             return
         bbox = QRectF()
         for it in items:
@@ -6461,10 +6470,12 @@ class FlowsheetView(QGraphicsView):
         bbox.adjust(-50, -50, 50, 50)
         self.fitInView(bbox, Qt.KeepAspectRatio)
         self._zoom = self.transform().m11()
+        self.zoomChanged.emit(self._zoom)
 
     def zoom_reset(self):
         self.resetTransform()
         self._zoom = 1.0
+        self.zoomChanged.emit(self._zoom)
 
 
 # ======================================================
@@ -6498,10 +6509,10 @@ class FlowsheetMainWindow(QMainWindow):
 
         # ── EditorTopbar (Parte B del rediseño NUEVA_UI) ────────────
         # Barra superior fina (52px) con identidad del proyecto, undo/
-        # redo, status del solver y los dos botones primarios (Validar
-        # DOF + Resolver).  Convive con las QToolBars legacy debajo,
-        # que mantienen las acciones de file / examples / export /
-        # análisis económico.
+        # redo, status del solver y los botones primarios del workflow
+        # (Validar DOF · Resolver · Economía).  Las acciones de file /
+        # examples / export / análisis viven en el menú (superset); las
+        # QToolBars legacy se eliminaron.
         from editor_chrome import (
             EditorTopbar, EditorPalette, EditorZoom, _Overlay,
             PALETTE_TO_EQ_TYPE,
@@ -6686,20 +6697,16 @@ class FlowsheetMainWindow(QMainWindow):
 
     def _setup_shortcuts(self):
         from PySide6.QtGui import QShortcut
-        # navegación / archivo
+        # Los atajos de archivo/export/simulación/zoom (New/Open/Save/Quit,
+        # Ctrl+E, Ctrl+Shift+E, F5, F9, Ctrl+±/0) ya viven en las QActions
+        # del menú y disparan globalmente.  Registrarlos también acá causaba
+        # "Ambiguous shortcut overload" (dos dueños del mismo atajo) — el
+        # mismo problema que el comentario de Delete abajo evita.  Se dejan
+        # SÓLO los que el menú no cubre:
+        #   · Ctrl+1  → Ajustar a vista (el menú usa 'F' para lo mismo;
+        #               distinta tecla ⇒ sin conflicto, se conserva).
         for seq, slot in (
-            (QKeySequence.New,    self.action_new),
-            (QKeySequence.Open,   self.action_open),
-            (QKeySequence.Save,   self.action_save),
-            (QKeySequence.Quit,   self.close),
-            ("Ctrl+E",            self.action_export_pdf),       # default = PDF
-            ("Ctrl+Shift+E",      self.action_export_svg),
-            ("F5",                self.action_solve),
-            ("F9",                self.action_compute),
-            ("Ctrl+Plus",         self.view.zoom_in),
-            ("Ctrl+-",            self.view.zoom_out),
-            ("Ctrl+0",            self.view.zoom_reset),
-            ("Ctrl+1",            self.view.zoom_fit),
+            ("Ctrl+1", self.view.zoom_fit),
         ):
             sc = QShortcut(QKeySequence(seq), self)
             sc.activated.connect(slot)
@@ -6713,8 +6720,10 @@ class FlowsheetMainWindow(QMainWindow):
     # ---------------------------------------------------
 
     def _build_menubar(self):
-        """Menu bar que reusa todas las acciones del toolbar legacy.
-        Una vez construido, las QToolBars se ocultan por default."""
+        """Menu bar del editor: superset de acciones (file / edit / view /
+        simulación).  Comparte las QActions con el EditorTopbar vía
+        _build_shared_actions.  (Reemplazó a las QToolBars legacy, ya
+        eliminadas.)"""
         mb = self.menuBar()
         # estilo plano consistente con el resto del editor — se re-aplica
         # en _on_theme_changed
@@ -6834,9 +6843,10 @@ class FlowsheetMainWindow(QMainWindow):
         # "Docks legacy").  Reusa la acción robusta del toolbar.
         if getattr(self, "_streams_table_action", None) is not None:
             m_view.addAction(self._streams_table_action)
-        # Inspector dock (slide-out de la nueva UI)
-        if hasattr(self, "_inspector_dock") and self._inspector_dock is not None:
-            m_view.addAction(self._inspector_dock.toggleViewAction())
+        # (El Inspector de bloques es slide-out y se abre al seleccionar un
+        # equipo; su dock se crea perezosamente DESPUÉS de armar este menú,
+        # así que la entrada "toggle" nunca llegaba a agregarse — era código
+        # muerto.  Se removió; el Inspector se invoca por selección.)
         # Docks secundarios — entradas directas, sin sub-menú "legacy".
         # (La Biblioteca vieja se eliminó: la paleta cubre el catálogo.)
         for attr, label in (
@@ -7087,23 +7097,11 @@ class FlowsheetMainWindow(QMainWindow):
         zm.zoomOutRequested.connect(self.view.zoom_out)
         zm.zoomResetRequested.connect(self.view.zoom_reset)
         zm.zoomFitRequested.connect(self.view.zoom_fit)
-        # observador de zoom para actualizar el %
-        if hasattr(self.view, "zoomChanged"):
-            self.view.zoomChanged.connect(zm.set_zoom)
-        else:
-            # Fallback: refrescar via timer cada 200ms (sutil)
-            from PySide6.QtCore import QTimer
-            self._zoom_refresh_timer = QTimer(self)
-            self._zoom_refresh_timer.setInterval(250)
-            self._zoom_refresh_timer.timeout.connect(self._refresh_zoom_chip)
-            self._zoom_refresh_timer.start()
-
-    def _refresh_zoom_chip(self):
-        try:
-            f = self.view.transform().m11()
-            self._zoom_widget.set_zoom(f)
-        except Exception:
-            pass
+        # El % del overlay se refresca por señal (FlowsheetView.zoomChanged),
+        # emitida en cada cambio de zoom — antes esta rama estaba muerta
+        # (la señal no existía) y un timer de 250 ms hacía polling perpetuo.
+        self.view.zoomChanged.connect(zm.set_zoom)
+        zm.set_zoom(self.view._zoom)
 
     def _current_project_name(self) -> str:
         # Sin path persistido aún: usar el window title como fallback
@@ -7298,11 +7296,10 @@ class FlowsheetMainWindow(QMainWindow):
         """QActions compartidas — UNA por concepto, consumidas por el
         menú y por el EditorTopbar (artboard 1c).
 
-        Reemplaza a las dos QToolBars legacy ("Archivo y edición" /
-        "Cálculo y análisis"), que vivían ocultas desde la NUEVA_UI: el
-        menú ya era superset de ambas.  El patrón de acción compartida
-        (el que ya usaba "Tabla de corrientes") garantiza que un toggle
-        nunca desincronice su check entre superficies.
+        El patrón de acción compartida (el que ya usaba "Tabla de
+        corrientes") garantiza que un toggle nunca desincronice su check
+        entre superficies.  (En su momento reemplazó a dos QToolBars
+        legacy, hoy ya eliminadas.)
         """
         from icons import make_qicon as _mk
         # Color de íconos desde tokens (antes: #3a3a3a hardcodeado).
@@ -7310,8 +7307,9 @@ class FlowsheetMainWindow(QMainWindow):
         self._mk_icon = _mk
         self._icon_color = _ICON_COLOR
 
-        # undo/redo — shortcuts REALES (antes los anunciaba el tooltip
-        # del topbar pero vivían en la toolbar oculta)
+        # undo/redo — QActions del QUndoStack con shortcuts REALES
+        # (Ctrl+Z / Ctrl+Shift+Z), consumidas por el menú Editar y por el
+        # EditorTopbar; enabled automático según el stack.
         self.undo_action = self.undo_stack.createUndoAction(self, "Deshacer")
         self.undo_action.setShortcut(QKeySequence.Undo)
         self._set_themed_icon(self.undo_action, "edit-undo", 20)
@@ -7488,7 +7486,15 @@ class FlowsheetMainWindow(QMainWindow):
                 return
         self.fs = Flowsheet()
         self.scene.clear_flowsheet()
+        self._dirty_after_solve = True
+        self._last_overall_status = None
         self._update_status()
+        # Reset del topbar: nombre/estado de guardado y chip del solver —
+        # antes 'Nuevo' dejaba el nombre del archivo anterior y el chip
+        # 'convergido' del diagrama viejo (estado mentiroso).
+        if hasattr(self, "editor_topbar"):
+            self.editor_topbar.set_project("(sin nombre)", "sin guardar")
+            self.update_solver_chip("idle")
         # Burbujas: limpiar todas (no hay streams)
         if getattr(self, "_bubble_manager", None) is not None:
             self._bubble_manager.refresh_all()
