@@ -581,6 +581,36 @@
    "codigo_pfd": "PFD-CW-001",
    "builder": "_example_cw_loop",
    "archivo": "cw_loop.json"
+  },
+  {
+   "clave": "solvent_rec",
+   "label": "Recuperación de solvente (tren de condensación)",
+   "categoria": "Física",
+   "nombre": "Recuperación de hexano",
+   "capa": "Térmica",
+   "codigo_pfd": "PFD-SR-001",
+   "builder": "_example_solvent_rec",
+   "archivo": "solvent_rec.json"
+  },
+  {
+   "clave": "reformer_whb",
+   "label": "Tren de calor de reformado (WHB field-erected)",
+   "categoria": "Física",
+   "nombre": "Tren de calor de reformado",
+   "capa": "Térmica",
+   "codigo_pfd": "PFD-RW-001",
+   "builder": "_example_reformer_whb",
+   "archivo": "reformer_whb.json"
+  },
+  {
+   "clave": "cw_natural",
+   "label": "Red de CW con torre de tiro natural",
+   "categoria": "Física",
+   "nombre": "Red de cooling water (tiro natural)",
+   "capa": "Utilidades",
+   "codigo_pfd": "PFD-CWN-001",
+   "builder": "_example_cw_natural",
+   "archivo": "cw_natural.json"
   }
  ]
 }

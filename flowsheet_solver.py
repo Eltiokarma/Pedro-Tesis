@@ -1258,7 +1258,12 @@ def _size_process_equipment(fs):
             continue                          # S fijado por el user: no tocar
         spec = _ec.EQUIPMENT_DATA.get(b.eq_type, {})
         cat = spec.get("categoria", "")
-        if cat == "Heat exchangers":
+        # Los HX de área los maneja _size_heat_exchangers; pero los WHB
+        # (categoría HX con S = kg/h de vapor) tienen sizer dedicado en
+        # SIZER_BY_EQTYPE (size_whb) que size_heat_exchanger rehúsa —
+        # sin esta excepción un WHB desbloqueado quedaba en S=0 y su
+        # costo colapsaba en silencio (BUG 16, ciclo 4 C.2).
+        if cat == "Heat exchangers" and b.eq_type not in _es.SIZER_BY_EQTYPE:
             continue                          # los maneja _size_heat_exchangers
         sizer = (_es.SIZER_BY_EQTYPE.get(b.eq_type)
                  or _es.SIZER_BY_CAT.get(cat))

@@ -608,3 +608,26 @@ los tests (y cualquier consumidor nuevo) accedían directo y reventaban.
 
 **Fix:** `self._last_pts = None` en `StreamItem.__init__`.
 **Regresión:** los 5 tests de `test_canvas_interaction.py` quedan verdes.
+
+### BUG 16 — WHB desbloqueado nunca se dimensiona en solve → costo cero
+
+**Encontrado por:** el ejemplo nuevo `reformer_whb` (C.2 — primer WHB
+field-erected del set, y primer WHB que llega al solve sin `S_locked`).
+
+**Reproducción mínima:** un `Heat exch. — WHB field erected` con
+`heat_source='bfw_to_steam_HP'`, S=0 y sin lock, corriente de proceso
+850→330 °C: tras `solve()` quedaba S=0. Los WHB son categoría "Heat
+exchangers" pero su S es caudal de vapor [kg/h]: `_size_heat_exchangers`
+los rehúsa (solo área — su propio cross-check lo dice) y
+`_size_process_equipment` salteaba TODA la categoría HX, así que
+`size_whb` (registrado en `SIZER_BY_EQTYPE`) no corría nunca dentro del
+solve. Con S=0 el costo del equipo colapsa en silencio — exactamente la
+clase de hueco que la auditoría de sizing había cerrado para el resto
+del catálogo. Los 11 ejemplos con WHB packaged lo ocultaban porque
+traen S fijado a mano (S_locked).
+
+**Fix:** `_size_process_equipment` ya no saltea la categoría HX cuando
+el eq_type tiene sizer dedicado en `SIZER_BY_EQTYPE` (los WHB van por
+`size_whb`; los HX de área siguen en `_size_heat_exchangers`). Goldens
+existentes intactos (todos los WHB del set están S_locked).
+**Regresión:** `test_ciclo4.py::test_bug16_whb_desbloqueado_se_dimensiona_en_solve`.

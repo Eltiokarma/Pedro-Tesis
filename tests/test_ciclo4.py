@@ -259,6 +259,70 @@ def test_hx_edu_popover_usa_qfont():
         assert tok in src, f"falta {tok}"
 
 
+# ══════════════════════════════════════════════════════════════════════
+# C.2 — cobertura de catálogo + BUG 16 (WHB desbloqueado sin sizer)
+# ══════════════════════════════════════════════════════════════════════
+# Internos de columna: excepción deliberada — no son bloques standalone
+# en un flowsheet real (viven dentro de la torre); quedan como únicos
+# eq_types sin ejemplo.
+_INTERNOS_COLUMNA = {"Tray — sieve", "Tray — valve",
+                     "Packing — random", "Packing — structured"}
+
+
+def test_cobertura_catalogo_solo_internos_sin_ejemplo():
+    """Los 3 ejemplos nuevos (solvent_rec, reformer_whb, cw_natural)
+    cierran C.2: todo eq_type del catálogo menos los internos de
+    columna tiene al menos una instancia en el set de ejemplos."""
+    import json as _json
+    import equipment_costs as ec
+    usados = set()
+    for fn in (ROOT / "data" / "examples").glob("*.json"):
+        if fn.name.startswith("_") or fn.name == "manifest.json":
+            continue
+        d = _json.loads(fn.read_text(encoding="utf-8"))
+        for b in d.get("blocks", {}).values():
+            if b.get("eq_type"):
+                usados.add(b["eq_type"])
+    sin_uso = set(ec.EQUIPMENT_DATA) - usados
+    assert sin_uso == _INTERNOS_COLUMNA, (
+        f"eq_types sin ejemplo fuera de la excepción: "
+        f"{sorted(sin_uso - _INTERNOS_COLUMNA)}; "
+        f"internos que ganaron ejemplo: "
+        f"{sorted(_INTERNOS_COLUMNA - sin_uso)}")
+
+
+def test_bug16_whb_desbloqueado_se_dimensiona_en_solve():
+    """BUG 16: los WHB (categoría HX pero S = kg/h de vapor) no pasaban
+    por ningún sizer en solve() — _size_heat_exchangers los rehúsa
+    (solo área) y _size_process_equipment salteaba toda la categoría →
+    S=0 y costo colapsado en silencio para un WHB sin S_locked."""
+    from flowsheet_model import Flowsheet, Block, Stream
+    import flowsheet_solver as fsolv
+
+    fs = Flowsheet()
+    w = Block(id=fs.new_id(), name="E-1",
+              eq_type="Heat exch. — WHB field erected", S=0.0,
+              heat_source="bfw_to_steam_HP", heat_source_locked=True)
+    fs.blocks[w.id] = w
+    comp = {"methane": 0.25, "water": 0.75}
+    s1 = Stream(id=fs.new_id(), name="in", src=0, dst=w.id,
+                mass_flow=900000, mass_flow_locked=True,
+                temperature=850, temperature_locked=True, role="feed",
+                phase="vapor", phase_locked=True,
+                composition=dict(comp), composition_locked=True)
+    s2 = Stream(id=fs.new_id(), name="out", src=w.id, dst=0,
+                temperature=330, temperature_locked=True,
+                role="product", phase="vapor", phase_locked=True,
+                composition=dict(comp))
+    fs.streams[s1.id] = s1
+    fs.streams[s2.id] = s2
+
+    fsolv.solve(fs)
+    assert w.S > 20000, (
+        f"WHB desbloqueado quedó en S={w.S} — el solve no aplicó "
+        f"size_whb (regresión del BUG 16)")
+
+
 def test_evidencia_reactor_distingue_predictor():
     import inspector_evidence as ev
     block = SimpleNamespace(

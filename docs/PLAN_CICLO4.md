@@ -65,12 +65,25 @@ esta lista, se cerraron en el ciclo 3 ✓.)
   defaults por caso y la U de HX sale de rangos típicos por servicio.
   Poblarlas seguiría el patrón capa-por-compuesto del `.md` (como
   `rho_ref`), NO una tabla paralela.
-- **21 eq_types sin instancia en los 58 ejemplos** (variantes: U-tube,
-  double/multiple pipe, condensers, spiral/flat plate, WHB field
-  erected, rotary, reciprocating pump, reformer, fan axial,
-  trays/packing, mixer inline, decanter centrifuge, relief/3-way,
-  natural draft): glifo/puertos/sizer están; decidir si ameritan
-  mini-fixtures de UI o un par de ejemplos nuevos que los usen.
+- ✓ **21 eq_types sin instancia en los 58 ejemplos** → CERRADO
+  (2026-07-22) con 3 ejemplos nuevos que instancian los 17 tipos
+  standalone (los 4 internos de columna — trays/packing — quedan como
+  excepción deliberada: no son bloques de flowsheet):
+  · `solvent_rec` — tren de condensación de hexano: condenser
+    air-cooled → compresor rotary → condenser shell-tube → spiral
+    plate → centrifuge decanter (status warning: el aviso pedagógico
+    de cambio de fase, mismo precedente que boiler_ft/ethanol).
+  · `reformer_whb` — fired heater reformer → WHB field erected
+    (66 t/h de vapor HP) → U-tube.
+  · `cw_natural` — torre de tiro natural (con evaporación/purga
+    keyed como cw_loop) → splitter → mixer inline → valve 3-way;
+    dosificación con pump reciprocating + valve relief; coolers
+    double pipe / multiple pipe / flat plate; fan axial.
+  Destapó el **BUG 16** (WHB desbloqueado nunca se dimensionaba en
+  solve → S=0 y costo colapsado en silencio) — corregido en
+  `_size_process_equipment`. Gate 61/61; goldens existentes
+  byte-idénticos; cobertura vigilada por regresión
+  (`test_cobertura_catalogo_solo_internos_sin_ejemplo`).
 - ✓ **Origin-tagging de reacciones custom nacidas del predictor**
   (Frente 5) → CERRADO: el esquema del dict acepta `origin`
   (`user`/`curated`/`auto`/`predicted`, default `user`),

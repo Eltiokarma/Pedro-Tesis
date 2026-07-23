@@ -134,6 +134,15 @@
   "overall_status": "ok",
   "sum_duty": 470.490023
  },
+ "cw_natural": {
+  "ISBL": 5565366.61,
+  "energy_errors": 0,
+  "mass_errors": 0,
+  "n_blocks": 14,
+  "n_streams": 24,
+  "overall_status": "ok",
+  "sum_duty": -6136.952392
+ },
  "cyclone": {
   "ISBL": 830822.99,
   "energy_errors": 0,
@@ -431,6 +440,15 @@
   "overall_status": "ok",
   "sum_duty": -1.060756
  },
+ "reformer_whb": {
+  "ISBL": 20401121.68,
+  "energy_errors": 0,
+  "mass_errors": 0,
+  "n_blocks": 3,
+  "n_streams": 4,
+  "overall_status": "ok",
+  "sum_duty": -10846.263723
+ },
  "rxn_flash_col": {
   "ISBL": 3057396.95,
   "energy_errors": 0,
@@ -475,6 +493,15 @@
   "n_streams": 8,
   "overall_status": "ok",
   "sum_duty": 6.818021
+ },
+ "solvent_rec": {
+  "ISBL": 1224486.35,
+  "energy_errors": 0,
+  "mass_errors": 0,
+  "n_blocks": 5,
+  "n_streams": 7,
+  "overall_status": "warning",
+  "sum_duty": -850.348483
  },
  "sugar": {
   "ISBL": 56135033.11,
