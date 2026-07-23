@@ -4549,12 +4549,16 @@ class StreamItem(QGraphicsPathItem):
             _, x1, y1 = self._resolve_port(b_src, s.src_port, "right")
         elif s.start_xy and len(s.start_xy) >= 2:
             x1, y1 = float(s.start_xy[0]), float(s.start_xy[1])
+        elif s.src <= 0 and b_dst is not None:
+            x1, y1 = self._boundary_stub(b_dst, s.dst_port, "left")
         else:
             return []
         if b_dst is not None:
             _, x2, y2 = self._resolve_port(b_dst, s.dst_port, "left")
         elif s.end_xy and len(s.end_xy) >= 2:
             x2, y2 = float(s.end_xy[0]), float(s.end_xy[1])
+        elif s.dst <= 0 and b_src is not None:
+            x2, y2 = self._boundary_stub(b_src, s.src_port, "right")
         else:
             return []
         return [(x1, y1)]             + [(float(w[0]), float(w[1])) for w in (s.waypoints or [])]             + [(x2, y2)]
@@ -4796,6 +4800,10 @@ class StreamItem(QGraphicsPathItem):
             _, x1, y1 = self._resolve_port(b_src, s.src_port, "right")
         elif s.start_xy and len(s.start_xy) >= 2:
             x1, y1 = float(s.start_xy[0]), float(s.start_xy[1])
+        elif s.src <= 0 and b_dst is not None:
+            # Feed de FRONTERA (ambiente) sin xy: stub hacia afuera del puerto
+            # de ENTRADA del bloque destino.
+            x1, y1 = self._boundary_stub(b_dst, s.dst_port, "left")
         else:
             return   # stream sin punto de inicio definido, no se puede dibujar
         # Endpoint END
@@ -4803,6 +4811,10 @@ class StreamItem(QGraphicsPathItem):
             _, x2, y2 = self._resolve_port(b_dst, s.dst_port, "left")
         elif s.end_xy and len(s.end_xy) >= 2:
             x2, y2 = float(s.end_xy[0]), float(s.end_xy[1])
+        elif s.dst <= 0 and b_src is not None:
+            # Producto/residuo de FRONTERA (ambiente) sin xy: stub hacia afuera
+            # del puerto de SALIDA del bloque origen.
+            x2, y2 = self._boundary_stub(b_src, s.src_port, "right")
         else:
             return
         # Si hay waypoints declarados, usar routing manual.
@@ -5573,6 +5585,23 @@ class StreamItem(QGraphicsPathItem):
     def _side_dir(side):
         return {"right": (1, 0), "left": (-1, 0),
                 "top":   (0, -1), "bottom": (0, 1)}.get(side, (1, 0))
+
+    # Largo del "stub" de frontera: distancia a la que se dibuja el extremo
+    # de una corriente feed/product que va al/del ambiente (src/dst<=0) y no
+    # trae start_xy/end_xy explícito.
+    BOUNDARY_STUB_LEN = 44.0
+
+    def _boundary_stub(self, block, port_name, default_side):
+        """Posición sintética para el extremo de FRONTERA (ambiente) de una
+        corriente feed/product sin xy declarado: un punto a BOUNDARY_STUB_LEN
+        hacia AFUERA del puerto conectado, en la dirección que ese puerto
+        mira.  Así la flecha de frontera SÍ se dibuja — antes, sin bloque real
+        ni xy en ese extremo, update_path()/_node_list() hacían early-return y
+        feeds/productos quedaban invisibles en el canvas (los 206 de los 61
+        ejemplos traían start_xy/end_xy vacío)."""
+        side, px, py = self._resolve_port(block, port_name, default_side)
+        dx, dy = self._side_dir(side)
+        return px + dx * self.BOUNDARY_STUB_LEN, py + dy * self.BOUNDARY_STUB_LEN
 
     def _compute_polyline(self, b_src, b_dst, s):
         """Polyline ortogonal Z-shape o L-shape entre puertos del src y dst."""
