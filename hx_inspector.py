@@ -513,6 +513,8 @@ class _RangeBar(QWidget):
         return min(1.02, max(-0.02, p))
 
     def paintEvent(self, e):
+        if self.width() <= 0 or self.height() <= 0:
+            return   # widget 0×0 (thrash de layout) → QPainter(self) no activaría
         p = QPainter(self); p.setRenderHint(QPainter.Antialiasing)
         w, h = self.width(), self.height()
         ty, th = 5, 8

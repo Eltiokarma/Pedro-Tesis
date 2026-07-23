@@ -42,6 +42,7 @@ from block_inspector import (
     TOK, ROW_PAD, SECT_GAP, PANEL_W,
     SpecField, _PrefsBus,
 )
+from tokens import PANEL_MIN, dock_default_width
 
 
 # ════════════════════════════════════════════════════════
@@ -304,6 +305,8 @@ class _DashArrow(QFrame):
         self._color = color or QColor(TOK["accent"])
 
     def paintEvent(self, ev):
+        if self.width() <= 0 or self.height() <= 0:
+            return   # widget 0×0 (thrash de layout) → QPainter(self) no activaría
         p = QPainter(self); p.setRenderHint(QPainter.Antialiasing, True)
         pen = QPen(self._color, 2)
         pen.setStyle(Qt.CustomDashLine); pen.setDashPattern([6, 4])
@@ -1698,7 +1701,10 @@ class StreamInspectorDock(QDockWidget):
             QDockWidget.DockWidgetFloatable |
             QDockWidget.DockWidgetClosable
         )
-        self.setMinimumWidth(PANEL_W)
+        # Mínimo reducido (ver BlockInspectorDock / tokens.PANEL_MIN): la
+        # ventana entra en pantallas chicas; el ancho por defecto sigue siendo
+        # PANEL_W vía resizeDocks en show_for().
+        self.setMinimumWidth(PANEL_MIN)
         empty_tb = QWidget(self); empty_tb.setFixedHeight(0)
         self.setTitleBarWidget(empty_tb)
 
@@ -1714,6 +1720,13 @@ class StreamInspectorDock(QDockWidget):
                                on_save=on_save, on_cancel=on_cancel)
         self.show()
         self.raise_()
+        # Ancho por defecto = PANEL_W en pantallas grandes, acotado en chicas.
+        try:
+            mw = self.parent()
+            if mw is not None and hasattr(mw, "resizeDocks"):
+                mw.resizeDocks([self], [dock_default_width(mw)], Qt.Horizontal)
+        except Exception:
+            pass
 
     def refresh_calc(self):
         """FASE 3.5 — refresca la sección 'Propiedades [calculado]' tras un

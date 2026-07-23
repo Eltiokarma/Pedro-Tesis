@@ -117,7 +117,29 @@ TOK = {
 
 ROW_PAD   = 12   # cozy
 SECT_GAP  = 22   # cozy
-PANEL_W   = 520
+PANEL_W   = 520  # ancho PREFERIDO de los docks del inspector (pantallas grandes)
+# Ancho MÍNIMO de los docks del inspector.  Antes el mínimo era PANEL_W (520):
+# en laptops / monitores con escala 150-200 %, PANEL_W + canvas + toolbars
+# superaba el ancho lógico de la pantalla, así que la ventana principal no
+# podía alcanzar su tamaño mínimo → Windows recortaba la geometría
+# (setGeometry warning) y los equipos quedaban tapados por los docks.  Con un
+# mínimo menor la ventana entra en pantallas chicas; el ancho por defecto sigue
+# siendo PANEL_W vía resizeDocks (dock_default_width) en show_for().
+PANEL_MIN = 340
+
+
+def dock_default_width(main_window) -> int:
+    """Ancho por defecto para un dock del inspector: PANEL_W en pantallas
+    grandes, acotado a la mitad de la ventana en las chicas (así el canvas
+    con los equipos nunca queda por debajo de ~la mitad).  Defensivo: si algo
+    falla devuelve PANEL_W."""
+    try:
+        w = int(main_window.width())
+        if w > 0:
+            return max(PANEL_MIN, min(PANEL_W, w // 2))
+    except Exception:
+        pass
+    return PANEL_W
 
 
 # ════════════════════════════════════════════════════════

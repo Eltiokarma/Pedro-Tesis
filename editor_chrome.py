@@ -1184,6 +1184,8 @@ class _ToolButton(QToolButton):
         drag.exec(Qt.CopyAction)
 
     def paintEvent(self, ev):
+        if self.width() <= 0 or self.height() <= 0:
+            return   # widget 0×0 (thrash de layout) → QPainter(self) no activaría
         # Pintar el fondo (vía stylesheet) primero
         from PySide6.QtWidgets import QStyleOption, QStyle
         opt = QStyleOption(); opt.initFrom(self)

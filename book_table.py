@@ -150,6 +150,8 @@ class _BookGrid(QWidget):
         return sum(self._col_w) + self.RIBBON_W + 2
 
     def paintEvent(self, ev):
+        if self.width() <= 0 or self.height() <= 0:
+            return   # widget 0×0 (thrash de layout) → QPainter(self) no activaría
         p = QPainter(self)
         p.setRenderHint(QPainter.Antialiasing, True)
         w = self.width()

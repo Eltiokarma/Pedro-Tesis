@@ -53,7 +53,7 @@ import equipment_costs as eq
 
 import tokens as _tokens
 from tokens import (
-    TOK, PANEL_W,
+    TOK, PANEL_W, PANEL_MIN, dock_default_width,
     qfont, FONT_TITLE, FONT_UI, FONT_VALUE, FONT_HINT, FONT_LABEL,
     THEME_LIGHT, THEME_DARK, ACCENTS, ACCENTS_DARK, DENSITIES,
     current_prefs, apply_preferences, _PrefsBus, _PREFS, _PREFS_PATH,
@@ -2979,7 +2979,11 @@ class BlockInspectorDock(QDockWidget):
             QDockWidget.DockWidgetFloatable |
             QDockWidget.DockWidgetClosable
         )
-        self.setMinimumWidth(PANEL_W)
+        # Mínimo REDUCIDO (PANEL_MIN) para que la ventana quepa en pantallas
+        # chicas; el ancho por defecto sigue siendo PANEL_W vía resizeDocks
+        # en show_for().  (Antes el mínimo era PANEL_W y forzaba la ventana
+        # más grande que la pantalla → setGeometry warning + equipos tapados.)
+        self.setMinimumWidth(PANEL_MIN)
         # title bar custom — el panel ya tiene su propio header con
         # tag/close, así que escondemos el de Qt para no duplicar.
         # Mantenemos un widget vacío como title para permitir drag.
@@ -2997,6 +3001,14 @@ class BlockInspectorDock(QDockWidget):
                               open_advanced=open_advanced)
         self.show()
         self.raise_()
+        # Ancho por defecto = PANEL_W en pantallas grandes, acotado en chicas.
+        # Se aplica tras show() para que el dock ya esté acoplado a la ventana.
+        try:
+            mw = self.parent()
+            if mw is not None and hasattr(mw, "resizeDocks"):
+                mw.resizeDocks([self], [dock_default_width(mw)], Qt.Horizontal)
+        except Exception:
+            pass
 
 
 # ════════════════════════════════════════════════════════

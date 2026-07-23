@@ -59,6 +59,8 @@ class _NumberPill(QFrame):
         self._selected = selected
 
     def paintEvent(self, ev):
+        if self.width() <= 0 or self.height() <= 0:
+            return   # widget 0×0 (thrash de layout) → QPainter(self) no activaría
         p = QPainter(self); p.setRenderHint(QPainter.Antialiasing, True)
         bg = QColor(TOK["accent"]) if self._selected else QColor(TOK["bg_elev"])
         fg = QColor("white") if self._selected else QColor(TOK["ink"])
@@ -119,6 +121,8 @@ class _StatusDot(QFrame):
         self._status = status
 
     def paintEvent(self, ev):
+        if self.width() <= 0 or self.height() <= 0:
+            return   # widget 0×0 (thrash de layout) → QPainter(self) no activaría
         p = QPainter(self); p.setRenderHint(QPainter.Antialiasing, True)
         color_map = {
             "ok": TOK["green"], "warning": TOK["amber"], "warn": TOK["amber"],
@@ -145,6 +149,8 @@ class _MassBar(QFrame):
                       else QColor(TOK["auto_ribbon"])
 
     def paintEvent(self, ev):
+        if self.width() <= 0 or self.height() <= 0:
+            return   # widget 0×0 (thrash de layout) → QPainter(self) no activaría
         p = QPainter(self); p.setRenderHint(QPainter.Antialiasing, True)
         # bg
         p.setBrush(QBrush(QColor(TOK["bg_sunk"]))); p.setPen(Qt.NoPen)
@@ -205,6 +211,8 @@ class _StackedBar(QFrame):
         )
 
     def paintEvent(self, ev):
+        if self.width() <= 0 or self.height() <= 0:
+            return   # widget 0×0 (thrash de layout) → QPainter(self) no activaría
         p = QPainter(self); p.setRenderHint(QPainter.Antialiasing, True)
         # bg
         p.setBrush(QBrush(QColor(TOK["bg_sunk"])))

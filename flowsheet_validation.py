@@ -378,6 +378,19 @@ def validate_all_streams(fs):
         # conexión atípica ni de puerto huérfano.
         if getattr(s, "auto_aux", False):
             continue
+        # Endpoints de FRONTERA / FLOTANTES (mismo convenio que el solver,
+        # flowsheet_solver.py: `src <= 0 or dst <= 0`):
+        #   · src/dst == 0   ⇒  frontera externa (feed entra desde el
+        #                        ambiente, product/waste sale hacia él).
+        #   · src/dst == -1  ⇒  endpoint flotante (conexión pendiente).
+        # En ninguno de los dos casos hay un bloque real que buscar en
+        # `fs.blocks`, así que validar la conexión disparaba un falso
+        # "Bloque no existe" en TODO feed/producto (61/61 ejemplos), aun
+        # cuando el balance de masa cerraba (esos extremos son "afuera",
+        # no bloques huérfanos).  Los saltamos: solo validamos conexiones
+        # entre dos bloques reales.
+        if s.src <= 0 or s.dst <= 0:
+            continue
         sev, msg = validate_connection(
             fs, s.src, s.dst, s.src_port, s.dst_port,
             stream_phase=(getattr(s, "phase", "") or "") or None,
