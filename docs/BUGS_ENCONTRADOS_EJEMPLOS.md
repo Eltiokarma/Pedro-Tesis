@@ -631,3 +631,24 @@ el eq_type tiene sizer dedicado en `SIZER_BY_EQTYPE` (los WHB van por
 `size_whb`; los HX de área siguen en `_size_heat_exchangers`). Goldens
 existentes intactos (todos los WHB del set están S_locked).
 **Regresión:** `test_ciclo4.py::test_bug16_whb_desbloqueado_se_dimensiona_en_solve`.
+
+### BUG 17 — Wang-Henke con componente sin Antoine: converged=True con balance roto
+
+**Encontrado por:** la auditoría S.1 con libros (primer ternario corrido
+contra el teorema de Fenske usó `p_xylene`).
+
+**Reproducción mínima:** `wang_henke(["benzene","toluene","p_xylene"],
+[0.3,0.4,0.3], …)` — `p_xylene`/`m_xylene` NO tienen capa Antoine en
+thermo_db (el genérico `xylene` sí). El componente caía al sentinela de
+no-volátil (P_sat≈0), el tridiagonal producía basura (T del condensador
+426 °C, benceno D+B = 0.006 vs 3.0 alimentados — balance por componente
+roto al 100 %) y el resultado igual reportaba **converged=True**.
+
+**Fix:** guard de honestidad en `wang_henke`: componente sin Antoine →
+`converged=False` + warning explícito ("Wang-Henke no puede modelar su
+equilibrio L-V… revisá el nombre o poblá su capa Antoine"). La brecha de
+datos (Antoine de p-/m-xileno) queda anotada como pendiente de dato, no
+de código.
+**Regresión:** `test_libros_seader_wh.py::test_bug17_componente_sin_antoine_se_rechaza`
+(+ cierre por componente del ternario sano en
+`test_mesh_ternario_cierra_por_componente`).

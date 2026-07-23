@@ -235,6 +235,33 @@ def wang_henke(comps, feed_z, F, T_feed_K, P_bar, N, feed_stage,
     NOTE (P3.2): el modo 'spec' es opt-in; el contrato por D/F (diseño)
     se mantiene como default para backward-compat con solve_columns().
     """
+    # ── Guard de honestidad (BUG 17, auditoría S.1 con libros) ──
+    # Un componente SIN Antoine cae al sentinela de no-volátil
+    # (P_sat≈0): el tridiagonal lo manda entero al fondo y el resultado
+    # puede reportar converged=True con el balance por componente roto
+    # (caso p_xylene: benzene D+B = 0.006 vs 3.0 alimentados).  Una
+    # columna no puede destilar lo que su termodinámica no modela →
+    # se rehúsa EXPLÍCITAMENTE en vez de mentir.
+    try:
+        import thermo_db as _tdg
+        sin_antoine = [c for c in comps
+                       if (_tdg.get(c) is None
+                           or _tdg.get(c).antoine_A is None)]
+    except Exception:
+        sin_antoine = []
+    if sin_antoine:
+        return dict(
+            converged=False, iterations=0,
+            x_profile=[], y_profile=[], T_profile=[],
+            V_profile=[], L_profile=[],
+            D_comp=[0.0] * len(comps), B_comp=[0.0] * len(comps),
+            Q_cond_kW=0.0, Q_reb_kW=0.0, D=0.0, B=0.0, V_var=0.0,
+            warnings=[f"componente(s) sin Antoine en thermo_db: "
+                      f"{', '.join(sin_antoine)} — Wang-Henke no puede "
+                      f"modelar su equilibrio L-V (usaría el sentinela "
+                      f"de no-volátil y rompería el balance). Revisá el "
+                      f"nombre del componente o poblá su capa Antoine."])
+
     if spec is None:
         return _wh_solve_design(comps, feed_z, F, T_feed_K, P_bar, N,
                                 feed_stage, D_over_F, R, max_iter, tol)

@@ -3186,6 +3186,20 @@ def solve_flashes(fs):
                          f"(falta par binario?)")
             continue
 
+        # Persistir el detalle MOLAR del reparto (S.2, auditoría con
+        # libros): el flash del solver ES multicomponente (Rachford-Rice
+        # C-componente con γ NRTL) pero su tabla x/y/K por componente no
+        # se veía en ningún lado — la evidencia del inspector la lee de
+        # acá (flash_split_table).  Solo diagnóstico: no toca streams.
+        b._flash_diagnostics = {
+            "names": list(vol_names), "z": list(z),
+            "x": list(res["x"]), "y": list(res["y"]),
+            "K": list(res["K"]), "V_frac": res["V_frac"],
+            "T_K": T_K, "P_bar": P_bar,
+            "iterations": res.get("iterations"),
+            "nonvolatiles": list(nonvol_names),
+        }
+
         # Identificar vapor vs líquido por port o phase declarada
         vap_out = next((s for s in outs
                          if "vap" in (s.src_port or "").lower()

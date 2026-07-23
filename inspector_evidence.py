@@ -260,6 +260,45 @@ def stoich_table_text(block, fs) -> Optional[str]:
     return "\n".join(L)
 
 
+def flash_split_table(block) -> Optional[dict]:
+    """Reparto por componente del flash TP — la tabla que imprime
+    ChemSep (equilibrium-stage): z_i, x_i, y_i, K_i y V/F molares,
+    leída del diagnóstico que persiste el solver (_flash_diagnostics,
+    Rachford-Rice C-componente con γ NRTL).  None sin flash resuelto."""
+    d = getattr(block, "_flash_diagnostics", None)
+    if not (d and isinstance(d, dict) and d.get("names")):
+        return None
+    return d
+
+
+def flash_split_table_text(block) -> Optional[str]:
+    """Render monoespaciado estilo ChemSep del reparto del flash."""
+    d = flash_split_table(block)
+    if d is None:
+        return None
+    L = [f"Flash TP    T = {d['T_K'] - 273.15:.1f} °C · "
+         f"P = {d['P_bar']:.3f} bar · V/F = {d['V_frac']:.4f} (molar)"]
+    L.append("")
+    L.append(f"{'Comp.':<14}{'z_i':>8}{'x_i':>8}{'y_i':>8}{'K_i':>9}")
+    orden = sorted(range(len(d["names"])),
+                   key=lambda i: -d["K"][i])          # volátil primero
+    for i in orden:
+        L.append(f"{d['names'][i]:<14}"
+                 f"{d['z'][i]:>8.4f}{d['x'][i]:>8.4f}"
+                 f"{d['y'][i]:>8.4f}{d['K'][i]:>9.4f}")
+    L.append(f"{'Σ':<14}{sum(d['z']):>8.4f}{sum(d['x']):>8.4f}"
+             f"{sum(d['y']):>8.4f}")
+    if d.get("nonvolatiles"):
+        L.append("")
+        L.append(f"No-volátiles (100 % al líquido): "
+                 f"{', '.join(d['nonvolatiles'])}")
+    L.append("")
+    L.append("K_i = γ_i(NRTL)·P_sat,i/P · Rachford-Rice C-componente")
+    L.append("Fuente: Seader/Henley, Sep. Process Principles §4 · "
+             "Smith-Van Ness-Abbott §12")
+    return "\n".join(L)
+
+
 def hx_text(block) -> Optional[str]:
     """T_h, T_c, ΔT_LMTD, approach, U, F, servicio, warnings desde
     `_hx_diagnostics` que pinta solve_heat_exchangers."""

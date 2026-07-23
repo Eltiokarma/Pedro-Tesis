@@ -75,18 +75,29 @@ proyecto en sí mismo y no cambia el balance/economía del set.
 
 Para igualar el modo equilibrium-stage faltan, en orden:
 
-1. **S.1 — Validación publicada del Wang-Henke (auditoría, sin código
-   nuevo):** correr WH contra 2-3 ejemplos completos de libro con
-   perfiles publicados (Seader/Henley ej. 10.x multicomponente;
-   benceno-tolueno-cumeno es el clásico con perfiles tabulados) y
-   congelar checkpoints (T por etapa ±2 K, composiciones de D/B
-   ±0.01, Q_cond/Q_reb ±5 %). **Este es el paso que da derecho a
-   decir "nivel ChemSep equilibrium-stage".**
-2. **S.2 — Flash multicomponente TP real:** Rachford-Rice C-componente
-   con K = γ·P_sat/P (hoy el flash de Vessel se proyecta a binario).
-   Checkpoint: Seader ej. 4.x / Smith-Van Ness ej. 12.x. Superficie:
-   la tabla de reparto por componente (x_i, y_i, K_i, V/F) en el
-   inspector del flash — la tabla que imprime ChemSep.
+1. ✓ **S.1 — Validación del Wang-Henke** (2026-07-22,
+   `tests/test_libros_seader_wh.py`): checkpoints anclados a
+   literatura EXTERNA — azeótropo etanol-agua vs CRC/Horsley (el
+   barrido de burbuja NRTL da x=0.913 vs 0.894 publicado, T=78.18 °C
+   vs 78.17 ✓), teorema de reflujo total (a R=15 con 7 etapas de
+   equilibrio, el N_min de Fenske con α media geométrica —Seader
+   ec. 9-85, recomputado a mano— da 6.5 vs 7 ✓), y cierre MESH del
+   ternario benceno/tolueno/xileno (D+B=F·z ≤0.5 %, T monótona,
+   duties con signo). **Destapó el BUG 17** (componente sin Antoine
+   → converged=True con balance roto; ahora se rehúsa explícito).
+   PENDIENTE DE EJEMPLAR FÍSICO: los perfiles tabulados de Seader
+   ej. 10.x — cuando el autor pase los números del libro se congelan
+   como checkpoint adicional (T por etapa ±2 K, D/B ±0.01).
+2. ✓ **S.2 — Tabla de reparto del flash TP** (2026-07-22,
+   `tests/test_libros_flash_s2.py`): el flash del solver YA era
+   multicomponente (hallazgo del relevamiento: Rachford-Rice
+   C-componente con γ NRTL sobre los volátiles; la proyección binaria
+   era solo la figura del inspector) — lo que faltaba era VERLO. El
+   solver ahora persiste el reparto molar (`_flash_diagnostics`) y el
+   inspector muestra la tabla estilo ChemSep (z/x/y/K por componente,
+   V/F, no-volátiles al líquido, fuente al pie). Checkpoints: las
+   identidades del libro sobre los números persistidos (Σx=Σy=1,
+   residual R-R=0, K_i=γ_i·P_sat,i/P recomputado a mano).
 3. **S.3 — Eficiencia de Murphree por etapa** en WH (parámetro por
    bloque, default 1.0 = teórico): N_real = N_teo/E_o cierra el
    puente con el sizing de internos (trays/packing — los 4 eq_types
@@ -112,6 +123,19 @@ Para igualar el modo equilibrium-stage faltan, en orden:
   diagrama + fuente, para conceptos (no para números del caso). Si un
   frente lo amerita se agregan topics (p. ej. "tabla estequiométrica"
   y "MESH vs shortcut").
+
+### ⚡ Derivación a Design (decisión 2026-07-22)
+
+Las tablas didácticas nuevas (estequiométrica de Fogler, reparto del
+flash x/y/K, y la futura tabla de etapas del WH) hoy salen por el
+camino **texto monoespaciado** de la evidencia — fieles al libro pero
+por debajo del nivel visual de las tarjetas ricas del inspector
+(MetricCards, kickers, ribbons). El MVP mecánico queda; el salto a
+"tabla como tarjeta del sistema" (columnas alineadas con FONT_VALUE,
+limitante/inerte como pills, δ/ε como chips, fuente como footer del
+kit) **entra al mini-prompt de Design pendiente** junto con
+streams_table/stream_inspector y el bloque A del ciclo 4 — es la misma
+familia de superficie tabular sin artboard.
 
 ## Orden sugerido
 
