@@ -474,6 +474,294 @@
    "fuente": "https://www.ksb.com/en-at/lc/etanorm/E04B",
    "fecha_consulta": "2026-07-24",
    "granularidad": "familia"
+  },
+  {
+   "marca": "Elliott Group",
+   "modelo": "PYR",
+   "eq_type": "Turbine — steam",
+   "S": 150,
+   "params": {
+    "P_max_bar": 45,
+    "T_max_C": 400,
+    "rpm": 5000,
+    "notas": "Turbina de vapor monoetapa de impulso (serie YR, monovalvula). S = potencia maxima publicada del frame en kW, impresa en par hp/kW en la tabla de especificaciones por frame (pag. 6 del folleto 'Single-Stage Steam Turbines', Elliott/Ebara TUR.3001.0819): 200 hp = 150 kW (1 hp = 0.7457 kW). P_max_bar = presion inicial de vapor vivo, bar(g) (la tabla la da en psig/bar; OJO: las entradas Siemens del catalogo usan bar(a) de entrada, aqui es MANOMETRICA). T_max_C = temperatura inicial de vapor. rpm = velocidad maxima del frame. Diseñada segun API 611 (estandar) / API 612 (opcional). Material no declarado: omitido."
+   },
+   "fuente": "https://www.elliott-turbo.com/Files/Admin/company-literature-steam-turbines/yr-steam-turbines.pdf",
+   "fecha_consulta": "2026-07-24"
+  },
+  {
+   "marca": "Elliott Group",
+   "modelo": "AYR",
+   "eq_type": "Turbine — steam",
+   "S": 560,
+   "params": {
+    "P_max_bar": 48,
+    "T_max_C": 440,
+    "rpm": 7064,
+    "notas": "Turbina de vapor monoetapa de impulso (serie YR, monovalvula). S = potencia maxima publicada del frame en kW, impresa en par hp/kW en la tabla de especificaciones por frame (pag. 6 del folleto 'Single-Stage Steam Turbines', Elliott/Ebara TUR.3001.0819): 750 hp = 560 kW (1 hp = 0.7457 kW). P_max_bar = presion inicial de vapor vivo, bar(g) (la tabla la da en psig/bar; OJO: las entradas Siemens del catalogo usan bar(a) de entrada, aqui es MANOMETRICA). T_max_C = temperatura inicial de vapor. rpm = velocidad maxima del frame. Diseñada segun API 611 (estandar) / API 612 (opcional). Material no declarado: omitido."
+   },
+   "fuente": "https://www.elliott-turbo.com/Files/Admin/company-literature-steam-turbines/yr-steam-turbines.pdf",
+   "fecha_consulta": "2026-07-24"
+  },
+  {
+   "marca": "Elliott Group",
+   "modelo": "BYR",
+   "eq_type": "Turbine — steam",
+   "S": 1044,
+   "params": {
+    "P_max_bar": 48,
+    "T_max_C": 482,
+    "rpm": 6675,
+    "notas": "Turbina de vapor monoetapa de impulso (serie YR, monovalvula). S = potencia maxima publicada del frame en kW, impresa en par hp/kW en la tabla de especificaciones por frame (pag. 6 del folleto 'Single-Stage Steam Turbines', Elliott/Ebara TUR.3001.0819): 1400 hp = 1044 kW (1 hp = 0.7457 kW). P_max_bar = presion inicial de vapor vivo, bar(g) (la tabla la da en psig/bar; OJO: las entradas Siemens del catalogo usan bar(a) de entrada, aqui es MANOMETRICA). T_max_C = temperatura inicial de vapor. rpm = velocidad maxima del frame. Diseñada segun API 611 (estandar) / API 612 (opcional). Escape a vacio-100 psig. Material no declarado: omitido."
+   },
+   "fuente": "https://www.elliott-turbo.com/Files/Admin/company-literature-steam-turbines/yr-steam-turbines.pdf",
+   "fecha_consulta": "2026-07-24"
+  },
+  {
+   "marca": "Elliott Group",
+   "modelo": "BYRH / BYRHH",
+   "eq_type": "Turbine — steam",
+   "S": 2610,
+   "params": {
+    "P_max_bar": 62,
+    "T_max_C": 482,
+    "rpm": 7090,
+    "notas": "Turbina de vapor monoetapa de impulso (serie YR, monovalvula). S = potencia maxima publicada del frame en kW, impresa en par hp/kW en la tabla de especificaciones por frame (pag. 6 del folleto 'Single-Stage Steam Turbines', Elliott/Ebara TUR.3001.0819): 3500 hp = 2610 kW (1 hp = 0.7457 kW). P_max_bar = presion inicial de vapor vivo, bar(g) (la tabla la da en psig/bar; OJO: las entradas Siemens del catalogo usan bar(a) de entrada, aqui es MANOMETRICA). T_max_C = temperatura inicial de vapor. rpm = velocidad maxima del frame. Diseñada segun API 611 (estandar) / API 612 (opcional). Material no declarado: omitido."
+   },
+   "fuente": "https://www.elliott-turbo.com/Files/Admin/company-literature-steam-turbines/yr-steam-turbines.pdf",
+   "fecha_consulta": "2026-07-24"
+  },
+  {
+   "marca": "Elliott Group",
+   "modelo": "DYR / DYRH / DYRM / DYRN",
+   "eq_type": "Turbine — steam",
+   "S": 4027,
+   "params": {
+    "P_max_bar": 62,
+    "T_max_C": 482,
+    "rpm": 5770,
+    "notas": "Turbina de vapor monoetapa de impulso (serie YR, monovalvula). S = potencia maxima publicada del frame en kW, impresa en par hp/kW en la tabla de especificaciones por frame (pag. 6 del folleto 'Single-Stage Steam Turbines', Elliott/Ebara TUR.3001.0819): 5400 hp = 4027 kW (1 hp = 0.7457 kW). P_max_bar = presion inicial de vapor vivo, bar(g) (la tabla la da en psig/bar; OJO: las entradas Siemens del catalogo usan bar(a) de entrada, aqui es MANOMETRICA). T_max_C = temperatura inicial de vapor. rpm = velocidad maxima del frame. Diseñada segun API 611 (estandar) / API 612 (opcional). Tope de la serie YR monoetapa; la MYR multietapa (10 440 kW) queda fuera del rango del tipo. Material no declarado: omitido."
+   },
+   "fuente": "https://www.elliott-turbo.com/Files/Admin/company-literature-steam-turbines/yr-steam-turbines.pdf",
+   "fecha_consulta": "2026-07-24"
+  },
+  {
+   "marca": "Viessmann",
+   "modelo": "Vitomax 200-HS (M75) tam. 1",
+   "eq_type": "Boiler — fire tube",
+   "S": 1.389,
+   "params": {
+    "P_max_bar": 25,
+    "notas": "Caldera pirotubular de vapor de alta presion, tres pasos (Grossraumwasserraum / shell boiler de tres pasos, confirmado en la guia tecnica). S = caudal masico nominal de vapor con gas natural del tamaño 1: 5.0 t/h = 5.0*1000/3600 = 1.389 kg/s (S_unit del tipo = kg/s). Condiciones generales impresas: agua de alimentacion 102 C, 100% carga, O2 3% vol, altitud <500 m. P_max_bar = 25 = presion de operacion ADMISIBLE MAXIMA DE LA SERIE (rango 6-25 bar del type M75), NO el rating de este tamaño puntual: para tamaño B en adelante el maximo baja de 25 bar segun el tubo de llama, y el limite de aplicacion de tubo liso impreso va de 18 bar (tam. 1) a 10 bar (tam. 8) — confirmar contra la hoja de datos del pedido. Datasheet Viessmann 5834810 GB 9/2018. T de vapor saturado no impresa por tamaño: omitida. Material no declarado: omitido."
+   },
+   "fuente": "https://cdn0.scrvt.com/2828ebc457efab95be01dd36047e3b52/8fde0b1cea96b7c1/22e104ceb3e7/Vitomax-HS-Technical-Data.PDF",
+   "fecha_consulta": "2026-07-24"
+  },
+  {
+   "marca": "Viessmann",
+   "modelo": "Vitomax 200-HS (M75) tam. 3",
+   "eq_type": "Boiler — fire tube",
+   "S": 1.944,
+   "params": {
+    "P_max_bar": 25,
+    "notas": "Caldera pirotubular de vapor de alta presion, tres pasos (Grossraumwasserraum / shell boiler de tres pasos, confirmado en la guia tecnica). S = caudal masico nominal de vapor con gas natural del tamaño 3: 7.0 t/h = 7.0*1000/3600 = 1.944 kg/s (S_unit del tipo = kg/s). Condiciones generales impresas: agua de alimentacion 102 C, 100% carga, O2 3% vol, altitud <500 m. P_max_bar = 25 = presion de operacion ADMISIBLE MAXIMA DE LA SERIE (rango 6-25 bar del type M75), NO el rating de este tamaño puntual: para tamaño B en adelante el maximo baja de 25 bar segun el tubo de llama, y el limite de aplicacion de tubo liso impreso va de 18 bar (tam. 1) a 10 bar (tam. 8) — confirmar contra la hoja de datos del pedido. Datasheet Viessmann 5834810 GB 9/2018. T de vapor saturado no impresa por tamaño: omitida. Material no declarado: omitido."
+   },
+   "fuente": "https://cdn0.scrvt.com/2828ebc457efab95be01dd36047e3b52/8fde0b1cea96b7c1/22e104ceb3e7/Vitomax-HS-Technical-Data.PDF",
+   "fecha_consulta": "2026-07-24"
+  },
+  {
+   "marca": "Viessmann",
+   "modelo": "Vitomax 200-HS (M75) tam. 5",
+   "eq_type": "Boiler — fire tube",
+   "S": 2.778,
+   "params": {
+    "P_max_bar": 25,
+    "notas": "Caldera pirotubular de vapor de alta presion, tres pasos (Grossraumwasserraum / shell boiler de tres pasos, confirmado en la guia tecnica). S = caudal masico nominal de vapor con gas natural del tamaño 5: 10.0 t/h = 10.0*1000/3600 = 2.778 kg/s (S_unit del tipo = kg/s). Condiciones generales impresas: agua de alimentacion 102 C, 100% carga, O2 3% vol, altitud <500 m. P_max_bar = 25 = presion de operacion ADMISIBLE MAXIMA DE LA SERIE (rango 6-25 bar del type M75), NO el rating de este tamaño puntual: para tamaño B en adelante el maximo baja de 25 bar segun el tubo de llama, y el limite de aplicacion de tubo liso impreso va de 18 bar (tam. 1) a 10 bar (tam. 8) — confirmar contra la hoja de datos del pedido. Datasheet Viessmann 5834810 GB 9/2018. T de vapor saturado no impresa por tamaño: omitida. Material no declarado: omitido."
+   },
+   "fuente": "https://cdn0.scrvt.com/2828ebc457efab95be01dd36047e3b52/8fde0b1cea96b7c1/22e104ceb3e7/Vitomax-HS-Technical-Data.PDF",
+   "fecha_consulta": "2026-07-24"
+  },
+  {
+   "marca": "Viessmann",
+   "modelo": "Vitomax 200-HS (M75) tam. 8",
+   "eq_type": "Boiler — fire tube",
+   "S": 4.444,
+   "params": {
+    "P_max_bar": 25,
+    "notas": "Caldera pirotubular de vapor de alta presion, tres pasos (Grossraumwasserraum / shell boiler de tres pasos, confirmado en la guia tecnica). S = caudal masico nominal de vapor con gas natural del tamaño 8: 16.0 t/h = 16.0*1000/3600 = 4.444 kg/s (S_unit del tipo = kg/s). Condiciones generales impresas: agua de alimentacion 102 C, 100% carga, O2 3% vol, altitud <500 m. P_max_bar = 25 = presion de operacion ADMISIBLE MAXIMA DE LA SERIE (rango 6-25 bar del type M75), NO el rating de este tamaño puntual: para tamaño B en adelante el maximo baja de 25 bar segun el tubo de llama, y el limite de aplicacion de tubo liso impreso va de 18 bar (tam. 1) a 10 bar (tam. 8) — confirmar contra la hoja de datos del pedido. Datasheet Viessmann 5834810 GB 9/2018. T de vapor saturado no impresa por tamaño: omitida. Material no declarado: omitido."
+   },
+   "fuente": "https://cdn0.scrvt.com/2828ebc457efab95be01dd36047e3b52/8fde0b1cea96b7c1/22e104ceb3e7/Vitomax-HS-Technical-Data.PDF",
+   "fecha_consulta": "2026-07-24"
+  },
+  {
+   "marca": "Viessmann",
+   "modelo": "Vitomax 200-HS (M75) tam. C",
+   "eq_type": "Boiler — fire tube",
+   "S": 6.667,
+   "params": {
+    "P_max_bar": 25,
+    "notas": "Caldera pirotubular de vapor de alta presion, tres pasos (Grossraumwasserraum / shell boiler de tres pasos, confirmado en la guia tecnica). S = caudal masico nominal de vapor con gas natural del tamaño C: 24.0 t/h = 24.0*1000/3600 = 6.667 kg/s (S_unit del tipo = kg/s). Condiciones generales impresas: agua de alimentacion 102 C, 100% carga, O2 3% vol, altitud <500 m. P_max_bar = 25 = presion de operacion ADMISIBLE MAXIMA DE LA SERIE (rango 6-25 bar del type M75), NO el rating de este tamaño puntual: para tamaño B en adelante el maximo baja de 25 bar segun el tubo de llama, y el limite de aplicacion de tubo liso impreso va de 18 bar (tam. 1) a 10 bar (tam. 8) — confirmar contra la hoja de datos del pedido. Datasheet Viessmann 5834810 GB 9/2018. T de vapor saturado no impresa por tamaño: omitida. Material no declarado: omitido."
+   },
+   "fuente": "https://cdn0.scrvt.com/2828ebc457efab95be01dd36047e3b52/8fde0b1cea96b7c1/22e104ceb3e7/Vitomax-HS-Technical-Data.PDF",
+   "fecha_consulta": "2026-07-24"
+  },
+  {
+   "marca": "Viessmann",
+   "modelo": "Vitomax 200-HS (M75) tam. G",
+   "eq_type": "Boiler — fire tube",
+   "S": 8.75,
+   "params": {
+    "P_max_bar": 25,
+    "notas": "Caldera pirotubular de vapor de alta presion, tres pasos (Grossraumwasserraum / shell boiler de tres pasos, confirmado en la guia tecnica). S = caudal masico nominal de vapor con gas natural del tamaño G: 31.5 t/h = 31.5*1000/3600 = 8.75 kg/s (S_unit del tipo = kg/s). Condiciones generales impresas: agua de alimentacion 102 C, 100% carga, O2 3% vol, altitud <500 m. P_max_bar = 25 = presion de operacion ADMISIBLE MAXIMA DE LA SERIE (rango 6-25 bar del type M75), NO el rating de este tamaño puntual: para tamaño B en adelante el maximo baja de 25 bar segun el tubo de llama, y el limite de aplicacion de tubo liso impreso va de 18 bar (tam. 1) a 10 bar (tam. 8) — confirmar contra la hoja de datos del pedido. Datasheet Viessmann 5834810 GB 9/2018. T de vapor saturado no impresa por tamaño: omitida. Material no declarado: omitido."
+   },
+   "fuente": "https://cdn0.scrvt.com/2828ebc457efab95be01dd36047e3b52/8fde0b1cea96b7c1/22e104ceb3e7/Vitomax-HS-Technical-Data.PDF",
+   "fecha_consulta": "2026-07-24"
+  },
+  {
+   "marca": "Viking Pump",
+   "modelo": "H124C",
+   "eq_type": "Pump — positive displacement",
+   "S_no_publicado": "punto_de_operacion",
+   "params": {
+    "Q_max_m3_h": 3.4,
+    "P_max_bar": 14,
+    "rpm": 1750,
+    "notas": "Bomba rotativa de engranaje interno (Universal Product Line, fundicion). SIN S ESCALAR: el kW al eje depende del punto de operacion (caudal x DP x viscosidad), Viking no publica kW por modelo -> punto_de_operacion ('operates at any point on the curve'). GRANULARIDAD = MODELO: Q_max_m3_h 3.4 es el caudal maximo IMPRESO de ESTE tamaño (15 gpm, 15*0.2271=3.4 m3/h; el catalogo ya imprime 3.4 m3/h) a velocidad maxima 1750 rpm, conexion 1.5\" NPT. P_max_bar = 14 (200 psig / 14 bar) es el rating de la LINEA Universal fundicion, comun a todos los tamaños (no inflado por el mayor). Catalogo oficial 'Viking Pump Product Catalog' Form 5000, pag. 18 (PDF: cdn.bfldr.com/FMWE0LVS/at/fv8gtm7jb9cssqv68t8r5jm8/Form_5000_ProductCatalog.pdf). Material no declarado: omitido."
+   },
+   "fuente": "https://www.vikingpump.com/library/product-catalog",
+   "fecha_consulta": "2026-07-24",
+   "granularidad": "modelo"
+  },
+  {
+   "marca": "Viking Pump",
+   "modelo": "K124C",
+   "eq_type": "Pump — positive displacement",
+   "S_no_publicado": "punto_de_operacion",
+   "params": {
+    "Q_max_m3_h": 18,
+    "P_max_bar": 14,
+    "rpm": 780,
+    "notas": "Bomba rotativa de engranaje interno (Universal Product Line, fundicion). SIN S ESCALAR: el kW al eje depende del punto de operacion (caudal x DP x viscosidad), Viking no publica kW por modelo -> punto_de_operacion ('operates at any point on the curve'). GRANULARIDAD = MODELO: Q_max_m3_h 18 es el caudal maximo IMPRESO de ESTE tamaño (80 gpm, 80*0.2271=18.2 m3/h; el catalogo ya imprime 18 m3/h) a velocidad maxima 780 rpm, conexion 2\" NPT. P_max_bar = 14 (200 psig / 14 bar) es el rating de la LINEA Universal fundicion, comun a todos los tamaños (no inflado por el mayor). Catalogo oficial 'Viking Pump Product Catalog' Form 5000, pag. 18 (PDF: cdn.bfldr.com/FMWE0LVS/at/fv8gtm7jb9cssqv68t8r5jm8/Form_5000_ProductCatalog.pdf). Material no declarado: omitido."
+   },
+   "fuente": "https://www.vikingpump.com/library/product-catalog",
+   "fecha_consulta": "2026-07-24",
+   "granularidad": "modelo"
+  },
+  {
+   "marca": "Viking Pump",
+   "modelo": "L124C",
+   "eq_type": "Pump — positive displacement",
+   "S_no_publicado": "punto_de_operacion",
+   "params": {
+    "Q_max_m3_h": 31,
+    "P_max_bar": 14,
+    "rpm": 640,
+    "notas": "Bomba rotativa de engranaje interno (Universal Product Line, fundicion). SIN S ESCALAR: el kW al eje depende del punto de operacion (caudal x DP x viscosidad), Viking no publica kW por modelo -> punto_de_operacion ('operates at any point on the curve'). GRANULARIDAD = MODELO: Q_max_m3_h 31 es el caudal maximo IMPRESO de ESTE tamaño (135 gpm, 135*0.2271=30.7 m3/h; el catalogo ya imprime 31 m3/h) a velocidad maxima 640 rpm, conexion 2\" NPT. P_max_bar = 14 (200 psig / 14 bar) es el rating de la LINEA Universal fundicion, comun a todos los tamaños (no inflado por el mayor). Catalogo oficial 'Viking Pump Product Catalog' Form 5000, pag. 18 (PDF: cdn.bfldr.com/FMWE0LVS/at/fv8gtm7jb9cssqv68t8r5jm8/Form_5000_ProductCatalog.pdf). Material no declarado: omitido."
+   },
+   "fuente": "https://www.vikingpump.com/library/product-catalog",
+   "fecha_consulta": "2026-07-24",
+   "granularidad": "modelo"
+  },
+  {
+   "marca": "Viking Pump",
+   "modelo": "LS124C",
+   "eq_type": "Pump — positive displacement",
+   "S_no_publicado": "punto_de_operacion",
+   "params": {
+    "Q_max_m3_h": 45,
+    "P_max_bar": 14,
+    "rpm": 640,
+    "notas": "Bomba rotativa de engranaje interno (Universal Product Line, fundicion). SIN S ESCALAR: el kW al eje depende del punto de operacion (caudal x DP x viscosidad), Viking no publica kW por modelo -> punto_de_operacion ('operates at any point on the curve'). GRANULARIDAD = MODELO: Q_max_m3_h 45 es el caudal maximo IMPRESO de ESTE tamaño (200 gpm, 200*0.2271=45.4 m3/h; el catalogo ya imprime 45 m3/h) a velocidad maxima 640 rpm, conexion 3\" brida. P_max_bar = 14 (200 psig / 14 bar) es el rating de la LINEA Universal fundicion, comun a todos los tamaños (no inflado por el mayor). Catalogo oficial 'Viking Pump Product Catalog' Form 5000, pag. 18 (PDF: cdn.bfldr.com/FMWE0LVS/at/fv8gtm7jb9cssqv68t8r5jm8/Form_5000_ProductCatalog.pdf). Material no declarado: omitido."
+   },
+   "fuente": "https://www.vikingpump.com/library/product-catalog",
+   "fecha_consulta": "2026-07-24",
+   "granularidad": "modelo"
+  },
+  {
+   "marca": "Viking Pump",
+   "modelo": "Q124C",
+   "eq_type": "Pump — positive displacement",
+   "S_no_publicado": "punto_de_operacion",
+   "params": {
+    "Q_max_m3_h": 68,
+    "P_max_bar": 14,
+    "rpm": 520,
+    "notas": "Bomba rotativa de engranaje interno (Universal Product Line, fundicion). SIN S ESCALAR: el kW al eje depende del punto de operacion (caudal x DP x viscosidad), Viking no publica kW por modelo -> punto_de_operacion ('operates at any point on the curve'). GRANULARIDAD = MODELO: Q_max_m3_h 68 es el caudal maximo IMPRESO de ESTE tamaño (300 gpm, 300*0.2271=68.1 m3/h; el catalogo ya imprime 68 m3/h) a velocidad maxima 520 rpm, conexion 4\" brida. P_max_bar = 14 (200 psig / 14 bar) es el rating de la LINEA Universal fundicion, comun a todos los tamaños (no inflado por el mayor). Catalogo oficial 'Viking Pump Product Catalog' Form 5000, pag. 18 (PDF: cdn.bfldr.com/FMWE0LVS/at/fv8gtm7jb9cssqv68t8r5jm8/Form_5000_ProductCatalog.pdf). Material no declarado: omitido."
+   },
+   "fuente": "https://www.vikingpump.com/library/product-catalog",
+   "fecha_consulta": "2026-07-24",
+   "granularidad": "modelo"
+  },
+  {
+   "marca": "Viking Pump",
+   "modelo": "QS124C",
+   "eq_type": "Pump — positive displacement",
+   "S_no_publicado": "punto_de_operacion",
+   "params": {
+    "Q_max_m3_h": 114,
+    "P_max_bar": 14,
+    "rpm": 520,
+    "notas": "Bomba rotativa de engranaje interno (Universal Product Line, fundicion). SIN S ESCALAR: el kW al eje depende del punto de operacion (caudal x DP x viscosidad), Viking no publica kW por modelo -> punto_de_operacion ('operates at any point on the curve'). GRANULARIDAD = MODELO: Q_max_m3_h 114 es el caudal maximo IMPRESO de ESTE tamaño (500 gpm, 500*0.2271=113.5 m3/h; el catalogo ya imprime 114 m3/h) a velocidad maxima 520 rpm, conexion 6\" brida. P_max_bar = 14 (200 psig / 14 bar) es el rating de la LINEA Universal fundicion, comun a todos los tamaños (no inflado por el mayor). Catalogo oficial 'Viking Pump Product Catalog' Form 5000, pag. 18 (PDF: cdn.bfldr.com/FMWE0LVS/at/fv8gtm7jb9cssqv68t8r5jm8/Form_5000_ProductCatalog.pdf). Material no declarado: omitido."
+   },
+   "fuente": "https://www.vikingpump.com/library/product-catalog",
+   "fecha_consulta": "2026-07-24",
+   "granularidad": "modelo"
+  },
+  {
+   "marca": "SWEP",
+   "modelo": "B16",
+   "eq_type": "Heat exch. — flat plate",
+   "S_no_publicado": "configurable",
+   "params": {
+    "n_placas_max": 50,
+    "Q_max_m3_h": 16.9,
+    "notas": "Intercambiador de placas SOLDADAS (brazed), placas 316 SS, soldadura inox. AREA NO PUBLICADA como escalar: se configura por numero de placas segun el duty -> configurable. Envolvente IMPRESA por modelo (pag. 1 de la product sheet, Product No.100000077): n_placas_max = 50 (numero maximo de placas, cota del area configurable) y Q_max_m3_h = 16.9 ('Max flow' de esta variante). La presion/temperatura de diseño SWEP solo se publican como DIAGRAMA de derating PED/UL (curva P-T en pag. 2), no como escalar; por la regla de la casa (no leer de una grafica) no se transcriben P_max_bar/T_max_C. GRANULARIDAD = MODELO: los limites son de este tamaño. Placas 316/316L; material de orden: omitido."
+   },
+   "fuente": "https://www.swepgroup.com/content/dam/swep/product-datasheets/SWEP-B16-en.pdf",
+   "fecha_consulta": "2026-07-24",
+   "granularidad": "modelo"
+  },
+  {
+   "marca": "SWEP",
+   "modelo": "B25",
+   "eq_type": "Heat exch. — flat plate",
+   "S_no_publicado": "configurable",
+   "params": {
+    "n_placas_max": 140,
+    "Q_max_m3_h": 9,
+    "notas": "Intercambiador de placas SOLDADAS (brazed), placas 316/316L, soldadura de cobre. AREA NO PUBLICADA como escalar: se configura por numero de placas segun el duty -> configurable. Envolvente IMPRESA por modelo (pag. 1 de la product sheet, Product No.100000000): n_placas_max = 140 (numero maximo de placas, cota del area configurable) y Q_max_m3_h = 9 ('Max flow' de esta variante). La presion/temperatura de diseño SWEP solo se publican como DIAGRAMA de derating PED/UL (curva P-T en pag. 2), no como escalar; por la regla de la casa (no leer de una grafica) no se transcriben P_max_bar/T_max_C. GRANULARIDAD = MODELO: los limites son de este tamaño. Placas 316/316L; material de orden: omitido."
+   },
+   "fuente": "https://www.swepgroup.com/content/dam/swep/product-datasheets/SWEP-B25-en.pdf",
+   "fecha_consulta": "2026-07-24",
+   "granularidad": "modelo"
+  },
+  {
+   "marca": "SWEP",
+   "modelo": "B65",
+   "eq_type": "Heat exch. — flat plate",
+   "S_no_publicado": "configurable",
+   "params": {
+    "n_placas_max": 361,
+    "Q_max_m3_h": 155.5,
+    "notas": "Intercambiador de placas SOLDADAS (brazed), placas 316/316L, soldadura de cobre. AREA NO PUBLICADA como escalar: se configura por numero de placas segun el duty -> configurable. Envolvente IMPRESA por modelo (pag. 1 de la product sheet, Product No.100000002): n_placas_max = 361 (numero maximo de placas, cota del area configurable) y Q_max_m3_h = 155.5 ('Max flow' de esta variante). La presion/temperatura de diseño SWEP solo se publican como DIAGRAMA de derating PED/UL (curva P-T en pag. 2), no como escalar; por la regla de la casa (no leer de una grafica) no se transcriben P_max_bar/T_max_C. GRANULARIDAD = MODELO: los limites son de este tamaño. Placas 316/316L; material de orden: omitido."
+   },
+   "fuente": "https://www.swepgroup.com/content/dam/swep/product-datasheets/SWEP-B65-en.pdf",
+   "fecha_consulta": "2026-07-24",
+   "granularidad": "modelo"
+  },
+  {
+   "marca": "SWEP",
+   "modelo": "B427",
+   "eq_type": "Heat exch. — flat plate",
+   "S_no_publicado": "configurable",
+   "params": {
+    "n_placas_max": 420,
+    "Q_max_m3_h": 155.5,
+    "notas": "Intercambiador de placas SOLDADAS (brazed), placas 316/316L, soldadura de cobre. AREA NO PUBLICADA como escalar: se configura por numero de placas segun el duty -> configurable. Envolvente IMPRESA por modelo (pag. 1 de la product sheet, Product No.100000016): n_placas_max = 420 (numero maximo de placas, cota del area configurable) y Q_max_m3_h = 155.5 ('Max flow' de esta variante). La presion/temperatura de diseño SWEP solo se publican como DIAGRAMA de derating PED/UL (curva P-T en pag. 2), no como escalar; por la regla de la casa (no leer de una grafica) no se transcriben P_max_bar/T_max_C. GRANULARIDAD = MODELO: los limites son de este tamaño. Placas 316/316L; material de orden: omitido."
+   },
+   "fuente": "https://www.swepgroup.com/content/dam/swep/product-datasheets/SWEP-B427-en.pdf",
+   "fecha_consulta": "2026-07-24",
+   "granularidad": "modelo"
   }
  ]
 }
