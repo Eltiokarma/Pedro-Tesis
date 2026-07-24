@@ -1542,6 +1542,195 @@
    },
    "fuente": "https://www.lewa.com/fileadmin/0_downloadcenter/2_product_information/D1-450_LEWA_ecodos_en.pdf",
    "fecha_consulta": "2026-07-24"
+  },
+  {
+   "marca": "Koflo",
+   "modelo": "SHR-2-12 (serie SHR, 2 in NPT, 12 elementos)",
+   "eq_type": "Mixer — static",
+   "S_no_publicado": "otra_magnitud",
+   "params": {
+    "P_max_bar": 61.9,
+    "material": "SS316",
+    "notas": "Mezclador estatico en linea, serie SHR. VOLUMEN NO PUBLICADO: Koflo publica diametro nominal, numero de elementos, longitud, peso y MAWP por modelo, nunca un holdup en m3; de ahi S_no_publicado=otra_magnitud. Tabla de especificaciones de la pagina oficial, fila SHR-2-12: Pipe Dia. MNPT Ends 2 in, Pipe OD 2.375 in, Pipe ID 2.067 in, Number of Elements 12, Length 35.00 in, Weight 13.30 lb, Pressure Rating* 898 psig. Nota al pie de esa misma tabla: 'Maximum Allowable Working Pressure (MAWP). Calculations per ASME B31.3.' 898 psig = 61.9 bar. Carcasa de tuberia Schedule 40S 316/L S/S y elementos helicoidales 316/L S/S removibles para limpieza (de ahi material=SS316). La pagina NO publica temperatura maxima ni Kv: la caida de presion depende de caudal y viscosidad y Koflo la calcula por aplicacion. Plano acotado oficial del mismo modelo (solo dimensiones, sin presion): https://www.koflo.com/drawings/pdf/kd-955.pdf (KD-955 rev 1, 10/2/2024). VERIFICADO fila por fila en la tabla de la pagina oficial (el codigo de modelo de 2\" se confunde con el de 1/2\" en una busqueda ingenua: 2-80-4-12-2 vs 1/2-80-4-12-2, se desambiguo por limite de token)."
+   },
+   "fuente": "https://www.koflo.com/static-mixers/stock-static-mixers/shr-series-stainless-static-mixers/",
+   "fecha_consulta": "2026-07-24",
+   "granularidad": "modelo"
+  },
+  {
+   "marca": "Koflo",
+   "modelo": "2-80-4-12-2 (PVC gris Sch 80, 2 in NPT, 12 elementos)",
+   "eq_type": "Mixer — static",
+   "S_no_publicado": "otra_magnitud",
+   "params": {
+    "P_max_bar": 13.8,
+    "T_max_C": 48.9,
+    "notas": "Mezclador estatico en linea de PVC gris Schedule 80 con elementos Koflo Blade de PVC y extremos NPT macho. VOLUMEN NO PUBLICADO: la tabla oficial da diametro, elementos, longitud, peso, presion y temperatura, no un holdup en m3. Tabla de la pagina oficial, fila 2-80-4-12-2: Pipe Dia. MNPT Ends 2 in, Number of Elements 12, Length 33 in, Weight 3.40 lb, Max. Working Pressure (PSI @ 75 F) = 200, Max. Working Temperature (F) = 120. Conversiones: 200 psi = 13.8 bar, 120 F = 48.9 C. P y T salen de la MISMA fila del modelo; la presion esta referida a 75 F (23.9 C) y decae con la temperatura. MATERIAL OMITIDO a proposito: PVC no es una clave de MATERIAL_FACTORS. Kv no publicado; la pagina enlaza un grafico de caida de presion (drawings/pdf-charts/Stock Gray- Pressure Graph.pdf). VERIFICADO fila por fila en la tabla de la pagina oficial (el codigo de modelo de 2\" se confunde con el de 1/2\" en una busqueda ingenua: 2-80-4-12-2 vs 1/2-80-4-12-2, se desambiguo por limite de token)."
+   },
+   "fuente": "https://www.koflo.com/static-mixers/stock-static-mixers/stock-gray-pvc-static-mixers/",
+   "fecha_consulta": "2026-07-24",
+   "granularidad": "modelo"
+  },
+  {
+   "marca": "Koflo",
+   "modelo": "1-80-10-12-2 (Kynar PVDF Sch 80, 1 in NPT, 12 elementos)",
+   "eq_type": "Mixer — static",
+   "S_no_publicado": "otra_magnitud",
+   "params": {
+    "P_max_bar": 14.8,
+    "T_max_C": 115.6,
+    "notas": "Mezclador estatico en linea de Kynar PVDF Schedule 80 con elementos Koflo Blade de PVDF solido y extremos NPT macho mecanizados. VOLUMEN NO PUBLICADO: la tabla da tamano, elementos, longitud, peso, presion y temperatura, no holdup. Tabla de la pagina oficial, fila 1-80-10-12-2: Pipe Dia. MNPT Ends 1 in, Number of Elements 12, Length 15 in, Weight 0.75 lb, Max. Working Pressure (PSI @ 75 F) = 215, Max. Working Temperature (F) = 240. Conversiones: 215 psi = 14.8 bar (referida a 75 F = 23.9 C), 240 F = 115.6 C. MATERIAL OMITIDO: PVDF/Kynar no es clave de MATERIAL_FACTORS. Variante de resistencia quimica con techo termico muy por encima del PVC. Kv no publicado. VERIFICADO fila por fila en la tabla de la pagina oficial (el codigo de modelo de 2\" se confunde con el de 1/2\" en una busqueda ingenua: 2-80-4-12-2 vs 1/2-80-4-12-2, se desambiguo por limite de token)."
+   },
+   "fuente": "https://www.koflo.com/static-mixers/stock-static-mixers/stock-solid-kynar-static-mixers/",
+   "fecha_consulta": "2026-07-24",
+   "granularidad": "modelo"
+  },
+  {
+   "marca": "Koflo",
+   "modelo": "1-80-8P-12-2 (PFA Sch 80, 1 in NPT, 12 elementos)",
+   "eq_type": "Mixer — static",
+   "S_no_publicado": "otra_magnitud",
+   "params": {
+    "P_max_bar": 11.0,
+    "T_max_C": 204.4,
+    "notas": "Mezclador estatico en linea de PFA Schedule 80 con elementos Koflo Blade de PFA solido y extremos NPT macho mecanizados. VOLUMEN NO PUBLICADO: la tabla da tamano, elementos, longitud, peso, presion y temperatura, no holdup. Tabla de la pagina oficial, fila 1-80-8P-12-2: Pipe Dia. MNPT Ends 1 in, Number of Elements 12, Length 15 in, Weight 0.75 lb, Max. Working Pressure (PSI) @ 70 F = 159, Max. Working Temperature (F) = 400. Conversiones: 159 psi = 11.0 bar (referida a 70 F = 21.1 C), 400 F = 204.4 C. MATERIAL OMITIDO: PFA no es clave de MATERIAL_FACTORS. Es la variante de mayor temperatura del catalogo en stock de Koflo, para servicios muy corrosivos. Kv no publicado. VERIFICADO fila por fila en la tabla de la pagina oficial (el codigo de modelo de 2\" se confunde con el de 1/2\" en una busqueda ingenua: 2-80-4-12-2 vs 1/2-80-4-12-2, se desambiguo por limite de token)."
+   },
+   "fuente": "https://www.koflo.com/static-mixers/stock-static-mixers/pfa-static-mixers/",
+   "fecha_consulta": "2026-07-24",
+   "granularidad": "modelo"
+  },
+  {
+   "marca": "HRS Heat Exchangers",
+   "modelo": "C Series 55 140/12",
+   "eq_type": "Heat exch. — fixed tube",
+   "S": 12.3,
+   "params": {
+    "P_max_bar": 10,
+    "T_max_C": 185,
+    "notas": "Intercambiador multitubular (tubo y carcasa) de tubos rectos. S = AREA DE SUPERFICIE publicada por modelo: 12.3 m2 (columna 'Surface Area', tabla RANGE, pag. 1, hoja PDC23061UK). OJO — CONDICION DEL AREA: el fabricante suministra longitudes 0.7/1/1.5/2/3/6 m y advierte 'the surface area and volumes shown are for 6m length models': este S es el de la variante de 6 m, no un techo del modelo. Envolvente impresa: 10 bar / 185 C tanto en lado servicio como producto. Conexiones DN80 (servicio) / DN125 (producto). TIPO DE CABEZAL: el documento NO imprime codigo TEMA; se clasifica como tubo fijo porque describe placa tubular con brida y fuelles para absorber la dilatacion diferencial entre carcasa y tubos — que es justamente el recurso de una construccion de placas FIJAS. Es una inferencia de ingenieria declarada, no un dato impreso. Material no declarado en la tabla: omitido."
+   },
+   "fuente": "https://www.hrs-heatexchangers.com/wp-content/uploads/2024/01/HRS-C-Series-datasheet-2023-1.pdf",
+   "fecha_consulta": "2026-07-24"
+  },
+  {
+   "marca": "HRS Heat Exchangers",
+   "modelo": "C Series 85 168/12",
+   "eq_type": "Heat exch. — fixed tube",
+   "S": 19,
+   "params": {
+    "P_max_bar": 10,
+    "T_max_C": 185,
+    "notas": "Intercambiador multitubular (tubo y carcasa) de tubos rectos. S = AREA DE SUPERFICIE publicada por modelo: 19 m2 (columna 'Surface Area', tabla RANGE, pag. 1, hoja PDC23061UK). OJO — CONDICION DEL AREA: el fabricante suministra longitudes 0.7/1/1.5/2/3/6 m y advierte 'the surface area and volumes shown are for 6m length models': este S es el de la variante de 6 m, no un techo del modelo. Envolvente impresa: 10 bar / 185 C tanto en lado servicio como producto. Conexiones DN100 (servicio) / DN150 (producto). TIPO DE CABEZAL: el documento NO imprime codigo TEMA; se clasifica como tubo fijo porque describe placa tubular con brida y fuelles para absorber la dilatacion diferencial entre carcasa y tubos — que es justamente el recurso de una construccion de placas FIJAS. Es una inferencia de ingenieria declarada, no un dato impreso. Material no declarado en la tabla: omitido."
+   },
+   "fuente": "https://www.hrs-heatexchangers.com/wp-content/uploads/2024/01/HRS-C-Series-datasheet-2023-1.pdf",
+   "fecha_consulta": "2026-07-24"
+  },
+  {
+   "marca": "HRS Heat Exchangers",
+   "modelo": "C Series 151 219/12",
+   "eq_type": "Heat exch. — fixed tube",
+   "S": 33.8,
+   "params": {
+    "P_max_bar": 10,
+    "T_max_C": 185,
+    "notas": "Intercambiador multitubular (tubo y carcasa) de tubos rectos. S = AREA DE SUPERFICIE publicada por modelo: 33.8 m2 (columna 'Surface Area', tabla RANGE, pag. 1, hoja PDC23061UK). OJO — CONDICION DEL AREA: el fabricante suministra longitudes 0.7/1/1.5/2/3/6 m y advierte 'the surface area and volumes shown are for 6m length models': este S es el de la variante de 6 m, no un techo del modelo. Envolvente impresa: 10 bar / 185 C tanto en lado servicio como producto. Conexiones DN125 (servicio) / DN200 (producto). TIPO DE CABEZAL: el documento NO imprime codigo TEMA; se clasifica como tubo fijo porque describe placa tubular con brida y fuelles para absorber la dilatacion diferencial entre carcasa y tubos — que es justamente el recurso de una construccion de placas FIJAS. Es una inferencia de ingenieria declarada, no un dato impreso. Material no declarado en la tabla: omitido."
+   },
+   "fuente": "https://www.hrs-heatexchangers.com/wp-content/uploads/2024/01/HRS-C-Series-datasheet-2023-1.pdf",
+   "fecha_consulta": "2026-07-24"
+  },
+  {
+   "marca": "HRS Heat Exchangers",
+   "modelo": "C Series 253 273/12",
+   "eq_type": "Heat exch. — fixed tube",
+   "S": 56.6,
+   "params": {
+    "P_max_bar": 10,
+    "T_max_C": 185,
+    "notas": "Intercambiador multitubular (tubo y carcasa) de tubos rectos. S = AREA DE SUPERFICIE publicada por modelo: 56.6 m2 (columna 'Surface Area', tabla RANGE, pag. 1, hoja PDC23061UK). OJO — CONDICION DEL AREA: el fabricante suministra longitudes 0.7/1/1.5/2/3/6 m y advierte 'the surface area and volumes shown are for 6m length models': este S es el de la variante de 6 m, no un techo del modelo. Envolvente impresa: 10 bar / 185 C tanto en lado servicio como producto. Conexiones DN150 (servicio) / DN250 (producto). TIPO DE CABEZAL: el documento NO imprime codigo TEMA; se clasifica como tubo fijo porque describe placa tubular con brida y fuelles para absorber la dilatacion diferencial entre carcasa y tubos — que es justamente el recurso de una construccion de placas FIJAS. Es una inferencia de ingenieria declarada, no un dato impreso. Material no declarado en la tabla: omitido."
+   },
+   "fuente": "https://www.hrs-heatexchangers.com/wp-content/uploads/2024/01/HRS-C-Series-datasheet-2023-1.pdf",
+   "fecha_consulta": "2026-07-24"
+  },
+  {
+   "marca": "Mersen (GAB Neumann)",
+   "modelo": "CORRESIC-SR SR40-30-14",
+   "eq_type": "Heat exch. — fixed tube",
+   "S": 27.3,
+   "params": {
+    "P_max_bar": 6,
+    "T_max_C": 180,
+    "notas": "Intercambiador de carcasa y tubos de CARBURO DE SILICIO (SiC), para servicios muy corrosivos. S = 'Transfer Area' publicada: 27.3 m2 (tabla pags. 2-3, version 08/2025), fila DN400 / longitud 3 m / tubo O14 mm. Aqui la longitud va DENTRO del codigo de modelo (SR + DN en cm - longitud en dm - diametro de tubo), asi que el area SI es un escalar del modelo, no de una variante. Verificado por coordenadas de columna: la tabla tiene columnas dobles O14/O19 y un volcado lineal las mezcla (la variante O19 de esta fila es distinta). Envolvente impresa: -1 a +6 bar (+10 bar en variante opcional) y -10 a +180 C (+220 C opcional). TIPO DE CABEZAL: el documento no imprime codigo TEMA; tubos sellados en placas tubulares. Material SiC: no esta en el vocabulario de materiales del repo -> omitido."
+   },
+   "fuente": "https://www.mersen.com/sites/default/files/medias/files/2025-12/DSSR1-EN%20SiC%20Shell%20%26%20Tube%20Heat%20Exchanger%20-%20SR%20Series.pdf",
+   "fecha_consulta": "2026-07-24"
+  },
+  {
+   "marca": "Mersen (GAB Neumann)",
+   "modelo": "CORRESIC-SR SR50-30-14",
+   "eq_type": "Heat exch. — fixed tube",
+   "S": 42.5,
+   "params": {
+    "P_max_bar": 6,
+    "T_max_C": 180,
+    "notas": "Intercambiador de carcasa y tubos de CARBURO DE SILICIO (SiC), para servicios muy corrosivos. S = 'Transfer Area' publicada: 42.5 m2 (tabla pags. 2-3, version 08/2025), fila DN500 / longitud 3 m / tubo O14 mm. Aqui la longitud va DENTRO del codigo de modelo (SR + DN en cm - longitud en dm - diametro de tubo), asi que el area SI es un escalar del modelo, no de una variante. Verificado por coordenadas de columna: la tabla tiene columnas dobles O14/O19 y un volcado lineal las mezcla (la variante O19 de esta fila es distinta). Envolvente impresa: -1 a +6 bar (+10 bar en variante opcional) y -10 a +180 C (+220 C opcional). TIPO DE CABEZAL: el documento no imprime codigo TEMA; tubos sellados en placas tubulares. Material SiC: no esta en el vocabulario de materiales del repo -> omitido."
+   },
+   "fuente": "https://www.mersen.com/sites/default/files/medias/files/2025-12/DSSR1-EN%20SiC%20Shell%20%26%20Tube%20Heat%20Exchanger%20-%20SR%20Series.pdf",
+   "fecha_consulta": "2026-07-24"
+  },
+  {
+   "marca": "Mersen (GAB Neumann)",
+   "modelo": "CORRESIC-SR SR50-45-14",
+   "eq_type": "Heat exch. — fixed tube",
+   "S": 65.5,
+   "params": {
+    "P_max_bar": 6,
+    "T_max_C": 180,
+    "notas": "Intercambiador de carcasa y tubos de CARBURO DE SILICIO (SiC), para servicios muy corrosivos. S = 'Transfer Area' publicada: 65.5 m2 (tabla pags. 2-3, version 08/2025), fila DN500 / longitud 4.5 m / tubo O14 mm. Aqui la longitud va DENTRO del codigo de modelo (SR + DN en cm - longitud en dm - diametro de tubo), asi que el area SI es un escalar del modelo, no de una variante. Verificado por coordenadas de columna: la tabla tiene columnas dobles O14/O19 y un volcado lineal las mezcla (la variante O19 de esta fila es distinta). Envolvente impresa: -1 a +6 bar (+10 bar en variante opcional) y -10 a +180 C (+220 C opcional). TIPO DE CABEZAL: el documento no imprime codigo TEMA; tubos sellados en placas tubulares. Material SiC: no esta en el vocabulario de materiales del repo -> omitido."
+   },
+   "fuente": "https://www.mersen.com/sites/default/files/medias/files/2025-12/DSSR1-EN%20SiC%20Shell%20%26%20Tube%20Heat%20Exchanger%20-%20SR%20Series.pdf",
+   "fecha_consulta": "2026-07-24"
+  },
+  {
+   "marca": "Xylem (Standard Xchange)",
+   "modelo": "Century C500 (TEMA AES/BES)",
+   "eq_type": "Heat exch. — floating head",
+   "S_no_publicado": "configurable",
+   "granularidad": "modelo",
+   "params": {
+    "P_max_bar": 20.7,
+    "T_max_C": 343,
+    "notas": "AREA NO PUBLICADA: los intercambiadores de cabezal flotante son de INGENIERIA A PEDIDO — el area la fija el diseño termico de cada servicio, no un catalogo. Se reviso el mercado (Xylem/Standard Xchange, Funke, Kelvion, API Heat Transfer, Alfa Laval Olmi, Mersen) y NINGUN fabricante publica un area por modelo para esta clase: Xylem clasifica esta linea como 'custom-engineered' y su folleto no menciona m2 ni una sola vez; API Heat Transfer lo dice literalmente ('every unit is designed to your exact operating conditions, not adapted from a catalog'); Funke publica estos modelos en 'Individual solutions' y remite las dimensiones a hojas que no publica. Por eso: configurable + envolvente. Esto NO es una carencia del catalogo, es la leccion: hay clases de equipo que solo existen a pedido. Modelo: cabezal flotante interno con anillo partido (TEMA AES o BES), pag. 9 del folleto 104-44 (ago-2018). Envolvente impresa: lado carcasa 75-300 psi (517-2068 kPa) -> P_max_bar=20.7 = 2068 kPa, el LIMITE MAS RESTRICTIVO; el lado tubos llega a 450 psi (3102 kPa = 31.0 bar). Temperatura -20 a 650 F = -29 a 343 C. Carcasas estandar de 6 a 42 in (a medida hasta 60 in)."
+   },
+   "fuente": "https://www.xylem.com/siteassets/brand/standard-xchange/resources/brochure/104-44_century-series.pdf",
+   "fecha_consulta": "2026-07-24"
+  },
+  {
+   "marca": "Xylem (Standard Xchange)",
+   "modelo": "Century C400 (TEMA AET/BET)",
+   "eq_type": "Heat exch. — floating head",
+   "S_no_publicado": "configurable",
+   "granularidad": "modelo",
+   "params": {
+    "P_max_bar": 20.7,
+    "T_max_C": 343,
+    "notas": "AREA NO PUBLICADA: los intercambiadores de cabezal flotante son de INGENIERIA A PEDIDO — el area la fija el diseño termico de cada servicio, no un catalogo. Se reviso el mercado (Xylem/Standard Xchange, Funke, Kelvion, API Heat Transfer, Alfa Laval Olmi, Mersen) y NINGUN fabricante publica un area por modelo para esta clase: Xylem clasifica esta linea como 'custom-engineered' y su folleto no menciona m2 ni una sola vez; API Heat Transfer lo dice literalmente ('every unit is designed to your exact operating conditions, not adapted from a catalog'); Funke publica estos modelos en 'Individual solutions' y remite las dimensiones a hojas que no publica. Por eso: configurable + envolvente. Esto NO es una carencia del catalogo, es la leccion: hay clases de equipo que solo existen a pedido. Modelo: cabezal flotante interno apernado, tipo pull-through (TEMA AET o BET), pag. 8 del folleto 104-44. Misma envolvente impresa que el C500: carcasa hasta 2068 kPa (20.7 bar, valor cargado), tubos hasta 3102 kPa (31.0 bar), -29 a 343 C."
+   },
+   "fuente": "https://www.xylem.com/siteassets/brand/standard-xchange/resources/brochure/104-44_century-series.pdf",
+   "fecha_consulta": "2026-07-24"
+  },
+  {
+   "marca": "Funke",
+   "modelo": "Serie CP (TEMA BEW/AEW)",
+   "eq_type": "Heat exch. — floating head",
+   "S_no_publicado": "configurable",
+   "granularidad": "modelo",
+   "params": {
+    "P_max_bar": 41,
+    "T_max_C": 250,
+    "notas": "AREA NO PUBLICADA: los intercambiadores de cabezal flotante son de INGENIERIA A PEDIDO — el area la fija el diseño termico de cada servicio, no un catalogo. Se reviso el mercado (Xylem/Standard Xchange, Funke, Kelvion, API Heat Transfer, Alfa Laval Olmi, Mersen) y NINGUN fabricante publica un area por modelo para esta clase: Xylem clasifica esta linea como 'custom-engineered' y su folleto no menciona m2 ni una sola vez; API Heat Transfer lo dice literalmente ('every unit is designed to your exact operating conditions, not adapted from a catalog'); Funke publica estos modelos en 'Individual solutions' y remite las dimensiones a hojas que no publica. Por eso: configurable + envolvente. Esto NO es una carencia del catalogo, es la leccion: hay clases de equipo que solo existen a pedido. Modelo: placa tubular flotante sellada exteriormente (TEMA BEW; AEW), pag. 11 del folleto 'Shell-and-tube heat exchangers' 0813 E. Envolvente impresa: 41 bar y 250 C en AMBOS lados (carcasa y tubos). Funke publica el rango de superficie de toda la gama (0,11 a 2000 m2) pero NO por modelo. Uso tipico: enfriador de aceite / doble pared."
+   },
+   "fuente": "https://www.funke.de/media/b_funke/downloads/broschueren/funke_shell_tube_he_en.pdf",
+   "fecha_consulta": "2026-07-24"
   }
  ]
 }
