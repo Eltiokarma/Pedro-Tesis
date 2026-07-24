@@ -253,11 +253,22 @@ overrides bajo una identidad. Piezas nuevas necesarias:
 
    **Semántica del S comercial** (`data/equipos_comerciales.json`): S es la
    **capacidad nominal o máxima publicada del modelo** en la S_unit de su
-   eq_type — la ENVOLVENTE, no un punto de operación. La verificación es
-   `S_requerido <= S_modelo`; el cociente `S_requerido / S_modelo` es el
-   ratio de utilización. S no basta: `P_max_bar`, `T_max_C`, `Q_max_m3_h`,
-   `head_max_m` son dimensiones adicionales de la misma envolvente — la
-   verificación completa es un AND de desigualdades.
+   eq_type — la ENVOLVENTE, no un punto de operación. Desde el esquema v2
+   hay DOS caminos de verificación, y el segundo no es un error ni un caso
+   degradado:
+
+   **Con `S`:** verificación escalar. `sobrediseño = (S_declarado −
+   S_requerido)/S_requerido`, warning si negativo. Sin cambios. S no
+   basta: `P_max_bar`, `T_max_C`, `Q_max_m3_h`, `head_max_m` son
+   dimensiones adicionales de la misma envolvente — la verificación
+   completa es un AND de desigualdades.
+
+   **Con `S_no_publicado`:** verificación por envolvente. AND de
+   desigualdades sobre los params presentes (P_max, T_max, Q_max,
+   head_max…). El sobrediseño **NO es calculable** — no hay escalar de
+   tamaño contra el cual compararse. Ese es un tercer estado legítimo de
+   la ficha: *"verificado por envolvente, sobredimensionamiento no
+   determinable"*. No mostrarlo como campo vacío ni como advertencia.
 
    **Restricción dura**: el S del catálogo comercial NUNCA se escribe en
    `Block.S`. `Block.S` sigue viniendo del sizing del simulador; el S

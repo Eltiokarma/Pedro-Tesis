@@ -39,7 +39,22 @@ import equipment_costs as ec
 
 _PATH = os.path.join(_PARENT, "data", "equipos_comerciales.json")
 
-_REQUERIDOS = ("marca", "modelo", "eq_type", "S", "fuente", "fecha_consulta")
+_REQUERIDOS = ("marca", "modelo", "eq_type", "fuente", "fecha_consulta")
+
+# ESQUEMA v2: el tamaño es un XOR estricto — exactamente uno de:
+#   · "S": capacidad escalar nominal/máxima publicada (verificación escalar
+#     + rango del tipo), o
+#   · "S_no_publicado": motivo declarado de por qué el fabricante no
+#     publica un techo escalar.  Vocabulario CERRADO:
+_MOTIVOS_SIN_S = {
+    "configurable",         # el tamaño se arma por pedido (PHE: nº placas)
+    "punto_de_operacion",   # el escalar depende del duty point (bomba: kW eje)
+    "otra_magnitud",        # el fabricante publica otra base no mapeada a S_unit
+}
+# Sin S, la entrada debe verificar ALGO: al menos una dimensión de
+# envolvente de estas (la verificación pasa a ser un AND de desigualdades).
+_ENVOLVENTE_MIN = ("Q_max_m3_h", "head_max_m", "P_max_bar", "T_max_C",
+                   "n_placas_max")
 
 # Parámetros opcionales admitidos y su tipo (overrides que el modo
 # selección vuelca al Block; deben mapear a ganchos existentes).
@@ -78,7 +93,6 @@ class TestCatalogoComercial(unittest.TestCase):
             self.assertIn(e["eq_type"], ec.EQUIPMENT_DATA,
                           f"{etiqueta}: eq_type '{e['eq_type']}' no existe "
                           f"en el catálogo genérico")
-            self.assertGreater(float(e["S"]), 0.0, etiqueta)
             self.assertTrue(str(e["fuente"]).startswith("http"),
                             f"{etiqueta}: fuente debe ser URL del fabricante")
             self.assertRegex(str(e["fecha_consulta"]), r"^\d{4}-\d{2}-\d{2}$",
@@ -93,10 +107,42 @@ class TestCatalogoComercial(unittest.TestCase):
                 self.assertIn(mat, ec.MATERIAL_FACTORS,
                               f"{etiqueta}: material '{mat}' sin FM")
 
+    def test_xor_S_o_motivo(self):
+        """XOR estricto (esquema v2): exactamente uno de S / S_no_publicado.
+        Ni ambos ni ninguno — falla ruidosamente, no pasa por omisión."""
+        for e in _cargar()["equipos"]:
+            etiqueta = f"{e.get('marca')} {e.get('modelo')}"
+            tiene_S = "S" in e
+            tiene_motivo = "S_no_publicado" in e
+            self.assertFalse(
+                tiene_S and tiene_motivo,
+                f"{etiqueta}: lleva S y S_no_publicado A LA VEZ")
+            self.assertTrue(
+                tiene_S or tiene_motivo,
+                f"{etiqueta}: no lleva NI S NI S_no_publicado")
+            if tiene_S:
+                self.assertGreater(float(e["S"]), 0.0, etiqueta)
+            else:
+                self.assertIn(
+                    e["S_no_publicado"], _MOTIVOS_SIN_S,
+                    f"{etiqueta}: motivo '{e['S_no_publicado']}' fuera del "
+                    f"vocabulario cerrado {sorted(_MOTIVOS_SIN_S)}")
+                envolvente = [k for k in _ENVOLVENTE_MIN
+                              if k in (e.get("params") or {})]
+                self.assertTrue(
+                    envolvente,
+                    f"{etiqueta}: sin S y sin ninguna dimensión de "
+                    f"envolvente {_ENVOLVENTE_MIN} — no verifica nada, "
+                    f"no entra")
+
     def test_S_dentro_de_rango_del_tipo(self):
         """S fuera de [S_min, S_max] del eq_type es casi siempre error de
-        unidad (kg/h donde va kg/s). El gate viejo sólo pedía S > 0."""
+        unidad (kg/h donde va kg/s). El gate viejo sólo pedía S > 0.
+        Las entradas sin S (S_no_publicado, esquema v2) se saltean: su
+        validación vive en test_xor_S_o_motivo."""
         for e in _cargar()["equipos"]:
+            if "S" not in e:
+                continue
             etiqueta = f"{e.get('marca')} {e.get('modelo')}"
             spec = ec.EQUIPMENT_DATA.get(e["eq_type"], {})
             s_min = spec.get("S_min")

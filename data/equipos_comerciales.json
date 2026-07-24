@@ -1,6 +1,6 @@
 {
  "schema": 1,
- "nota": "Catalogo semilla de equipos comerciales (marca/modelo) para el modo seleccion de las Fichas Tecnicas. Cada entrada esta verificada contra el PDF/pagina oficial del fabricante (ver docs/BRIEF_CATALOGO_COMERCIAL.md). SEMANTICA DE S: capacidad NOMINAL O MAXIMA PUBLICADA del modelo, en la S_unit del eq_type generico -- es la ENVOLVENTE del modelo, no un punto de operacion. El modo seleccion verifica S_requerido (simulacion) <= S del modelo. Categorias ausentes a proposito: 'Heat exch. — flat plate' y 'Pump — centrifugal' no admiten un S defendible (ver seccion 'Categorias sin S publicado' del brief). El gate tests/test_equipos_comerciales.py valida el esquema de todo lo que entre.",
+ "nota": "Catalogo semilla de equipos comerciales (marca/modelo) para el modo seleccion de las Fichas Tecnicas. Cada entrada esta verificada contra el PDF/pagina oficial del fabricante (ver docs/BRIEF_CATALOGO_COMERCIAL.md). SEMANTICA DE S: capacidad NOMINAL O MAXIMA PUBLICADA del modelo, en la S_unit del eq_type generico -- es la ENVOLVENTE del modelo, no un punto de operacion. El modo seleccion verifica S_requerido (simulacion) <= S del modelo. Categorias ausentes a proposito: 'Mixer — impeller' no admite ni S ni envolvente expresable en _PARAMS_OK (ver seccion 'Categorias sin S publicado' del brief). El gate tests/test_equipos_comerciales.py valida el esquema de todo lo que entre. ESQUEMA v2: una entrada lleva 'S' (capacidad escalar publicada) O BIEN 'S_no_publicado' con el motivo documentado, nunca ambos. Sin S, la entrada debe traer al menos un parametro de envolvente y se verifica solo por esas dimensiones.",
  "equipos": [
   {
    "marca": "Atlas Copco",
@@ -202,6 +202,97 @@
     "notas": "S = potencia de salida maxima publicada del modelo (kW), envolvente de serie. P_max_bar = presion de vapor vivo de entrada, bar(a). T_max_C = temperatura de vapor vivo. rpm = velocidad maxima. Datos de la tabla 'Performance data overview' del portfolio Siemens (pp. 84-85) contrastada con la ficha de detalle del modelo. Multietapa, hasta 12 etapas, condensacion o contrapresion. No API. Herencia Murray."
    },
    "fuente": "https://assets.new.siemens.com/siemens/assets/api/uuid:6ff783f7-dc10-41ab-83b7-c42817643306/siemens-steam-turbine-portfolio.pdf",
+   "fecha_consulta": "2026-07-23"
+  },
+  {
+   "marca": "Kaeser",
+   "modelo": "CSD 90",
+   "eq_type": "Compressor — rotary",
+   "S": 44.74,
+   "params": {
+    "P_max_bar": 12.07,
+    "Q_max_m3_h": 584.5,
+    "notas": "Tornillo lubricado monoetapa, perfil SIGMA, accionamiento directo 1:1. S = 'Rated Motor Power' publicada por modelo: 60 hp -> 44.74 kW (1 hp = 0.7457 kW). Kaeser publica la potencia SOLO en hp; el kW es conversion de unidad, no estimacion. P_max_bar = 175 psig -> 12.07 bar(g), variante de presion mas alta del modelo. Q_max_m3_h = 344 acfm a 100 psig -> 584.5 m3/h (1 cfm = 1.699 m3/h); a la presion maxima el caudal baja. Caudal certificado CAGI/ISO 1217. Tension 460/575 V 3ph 60 Hz. Material no declarado: omitido."
+   },
+   "fuente": "https://us.kaeser.com/download.ashx?id=tcm%3A46-160753",
+   "fecha_consulta": "2026-07-23"
+  },
+  {
+   "marca": "Kaeser",
+   "modelo": "CSD 110",
+   "eq_type": "Compressor — rotary",
+   "S": 55.93,
+   "params": {
+    "P_max_bar": 14.96,
+    "Q_max_m3_h": 696.6,
+    "notas": "Tornillo lubricado monoetapa, perfil SIGMA, accionamiento directo 1:1. S = 'Rated Motor Power' publicada por modelo: 75 hp -> 55.93 kW (1 hp = 0.7457 kW). Kaeser publica la potencia SOLO en hp; el kW es conversion de unidad, no estimacion. P_max_bar = 217 psig -> 14.96 bar(g), variante de presion mas alta del modelo. Q_max_m3_h = 410 acfm a 100 psig -> 696.6 m3/h (1 cfm = 1.699 m3/h); a la presion maxima el caudal baja. Caudal certificado CAGI/ISO 1217. Tension 460/575 V 3ph 60 Hz. Material no declarado: omitido."
+   },
+   "fuente": "https://us.kaeser.com/download.ashx?id=tcm%3A46-160753",
+   "fecha_consulta": "2026-07-23"
+  },
+  {
+   "marca": "Kaeser",
+   "modelo": "CSD 130",
+   "eq_type": "Compressor — rotary",
+   "S": 74.57,
+   "params": {
+    "P_max_bar": 14.96,
+    "Q_max_m3_h": 892.0,
+    "notas": "Tornillo lubricado monoetapa, perfil SIGMA, accionamiento directo 1:1. S = 'Rated Motor Power' publicada por modelo: 100 hp -> 74.57 kW (1 hp = 0.7457 kW). Kaeser publica la potencia SOLO en hp; el kW es conversion de unidad, no estimacion. P_max_bar = 217 psig -> 14.96 bar(g), variante de presion mas alta del modelo. Q_max_m3_h = 525 acfm a 100 psig -> 892.0 m3/h (1 cfm = 1.699 m3/h); a la presion maxima el caudal baja. Caudal certificado CAGI/ISO 1217. Tension 460/575 V 3ph 60 Hz. Material no declarado: omitido."
+   },
+   "fuente": "https://us.kaeser.com/download.ashx?id=tcm%3A46-160753",
+   "fecha_consulta": "2026-07-23"
+  },
+  {
+   "marca": "Kaeser",
+   "modelo": "CSD 175",
+   "eq_type": "Compressor — rotary",
+   "S": 93.21,
+   "params": {
+    "P_max_bar": 14.96,
+    "Q_max_m3_h": 1192.7,
+    "notas": "Tornillo lubricado monoetapa, perfil SIGMA, accionamiento directo 1:1. S = 'Rated Motor Power' publicada por modelo: 125 hp -> 93.21 kW (1 hp = 0.7457 kW). Kaeser publica la potencia SOLO en hp; el kW es conversion de unidad, no estimacion. P_max_bar = 217 psig -> 14.96 bar(g), variante de presion mas alta del modelo. Q_max_m3_h = 702 acfm a 100 psig -> 1192.7 m3/h (1 cfm = 1.699 m3/h); a la presion maxima el caudal baja. Caudal certificado CAGI/ISO 1217. Tension 460/575 V 3ph 60 Hz. Material no declarado: omitido."
+   },
+   "fuente": "https://us.kaeser.com/download.ashx?id=tcm%3A46-160753",
+   "fecha_consulta": "2026-07-23"
+  },
+  {
+   "marca": "Alfa Laval",
+   "modelo": "M10 — bastidor FM (PED)",
+   "eq_type": "Heat exch. — flat plate",
+   "S_no_publicado": "configurable",
+   "params": {
+    "P_max_bar": 10.0,
+    "T_max_C": 180,
+    "notas": "Intercambiador de placas con juntas, linea Industrial. AREA NO PUBLICADA: el area de transferencia se configura por numero de placas y la fija el ingeniero termico segun el duty, por eso no hay S. El leaflet tampoco publica n_placas_max ni area por placa, asi que el area sigue sin ser verificable; lo que SI verifica esta entrada es la envolvente de presion y temperatura del bastidor. Placas disponibles 316/316L, 316Ti, 904L, 254, C-22, C-276, C-2000, B-3, G-30, 400, 625, 825, Alloy 33, Ni, Ti, TiPd -- el material es una eleccion de pedido, no un atributo del modelo: omitido. Conexiones DN100. Canal libre 2.6 mm (placa B) o 4.0 mm (placa M). Variante de bastidor mas comun. Presion y temperatura de diseno mecanico."
+   },
+   "fuente": "https://www.alfalaval.com/globalassets/documents/products/heat-transfer/plate-heat-exchangers/gasketed-plate-and-frame-heat-exchangers/industrial/m10_productleaflet_pct00099en.pdf",
+   "fecha_consulta": "2026-07-23"
+  },
+  {
+   "marca": "Alfa Laval",
+   "modelo": "M10 — bastidor FG (PED)",
+   "eq_type": "Heat exch. — flat plate",
+   "S_no_publicado": "configurable",
+   "params": {
+    "P_max_bar": 16.0,
+    "T_max_C": 180,
+    "notas": "Intercambiador de placas con juntas, linea Industrial. AREA NO PUBLICADA: el area de transferencia se configura por numero de placas y la fija el ingeniero termico segun el duty, por eso no hay S. El leaflet tampoco publica n_placas_max ni area por placa, asi que el area sigue sin ser verificable; lo que SI verifica esta entrada es la envolvente de presion y temperatura del bastidor. Placas disponibles 316/316L, 316Ti, 904L, 254, C-22, C-276, C-2000, B-3, G-30, 400, 625, 825, Alloy 33, Ni, Ti, TiPd -- el material es una eleccion de pedido, no un atributo del modelo: omitido. Conexiones DN100. Canal libre 2.6 mm (placa B) o 4.0 mm (placa M). El bastidor FG esta ademas aprobado para 12 barg / 200 C, lo que permite usarlo en sistemas de vapor sin valvulas de seguridad."
+   },
+   "fuente": "https://www.alfalaval.com/globalassets/documents/products/heat-transfer/plate-heat-exchangers/gasketed-plate-and-frame-heat-exchangers/industrial/m10_productleaflet_pct00099en.pdf",
+   "fecha_consulta": "2026-07-23"
+  },
+  {
+   "marca": "Alfa Laval",
+   "modelo": "M10 — bastidor FD (ASME)",
+   "eq_type": "Heat exch. — flat plate",
+   "S_no_publicado": "configurable",
+   "params": {
+    "P_max_bar": 26.8,
+    "T_max_C": 250,
+    "notas": "Intercambiador de placas con juntas, linea Industrial. AREA NO PUBLICADA: el area de transferencia se configura por numero de placas y la fija el ingeniero termico segun el duty, por eso no hay S. El leaflet tampoco publica n_placas_max ni area por placa, asi que el area sigue sin ser verificable; lo que SI verifica esta entrada es la envolvente de presion y temperatura del bastidor. Placas disponibles 316/316L, 316Ti, 904L, 254, C-22, C-276, C-2000, B-3, G-30, 400, 625, 825, Alloy 33, Ni, Ti, TiPd -- el material es una eleccion de pedido, no un atributo del modelo: omitido. Conexiones DN100. Canal libre 2.6 mm (placa B) o 4.0 mm (placa M). Bastidor de mayor presion del modelo. P y T de la MISMA fila del leaflet (FD, ASME): no se cruzaron maximos de variantes distintas."
+   },
+   "fuente": "https://www.alfalaval.com/globalassets/documents/products/heat-transfer/plate-heat-exchangers/gasketed-plate-and-frame-heat-exchangers/industrial/m10_productleaflet_pct00099en.pdf",
    "fecha_consulta": "2026-07-23"
   }
  ]

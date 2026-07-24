@@ -62,27 +62,46 @@ cociente `S_requerido / S_modelo` es el ratio de utilización.
 dimensiones adicionales de la misma envolvente. La verificación completa
 es un AND de desigualdades.
 
-### Categorías sin S publicado — NO reintentar
+### Categorías sin S publicado — esquema v2 (`S_no_publicado`)
 
-`Heat exch. — flat plate` y `Pump — centrifugal` NO entran al catálogo.
-El fabricante no publica un techo por modelo: en un PHE el área se
-configura por número de placas y la fija el ingeniero térmico según el
-duty; en una bomba centrífuga el kW al eje es del punto de operación.
-Para habilitar PHE hace falta `n_placas_max` (ya previsto en `_PARAMS_OK`)
-× área por placa, ninguno de los dos publicado. Conseguirlo del fabricante
-o del manual de servicio. **Mientras tanto: no cargar un "tamaño
-representativo" ni un número de distribuidor.**
+Desde el esquema v2, una entrada sin S escalar publicado **SÍ entra** al
+catálogo declarando el motivo (vocabulario CERRADO) y aportando al menos
+una dimensión de envolvente (`Q_max_m3_h`, `head_max_m`, `P_max_bar`,
+`T_max_C`, `n_placas_max`). Los tres motivos, con su ejemplo:
+
+- **`"configurable"`** — el tamaño se arma por pedido y no hay techo por
+  modelo. Ejemplo: `Heat exch. — flat plate` (Alfa Laval M10): el área se
+  configura por número de placas y la fija el ingeniero térmico según el
+  duty; la entrada verifica la envolvente P/T del bastidor (FM 10 bar /
+  FG 16 bar / FD 26.8 bar). **Ya NO está vetada.**
+- **`"punto_de_operacion"`** — el escalar existe pero depende del duty
+  point, no del modelo. Ejemplo: `Pump — centrifugal` / `Pump — positive
+  displacement`: el kW al eje sale de la curva en el punto de operación;
+  la entrada verifica `Q_max_m3_h` / `head_max_m` / `P_max_bar` del
+  modelo. **Ya NO están vetadas.**
+- **`"otra_magnitud"`** — el fabricante publica su capacidad en una base
+  que no mapea a la S_unit del tipo genérico. Ejemplo hipotético: un
+  ciclón especificado por diámetro de cuerpo en vez de caudal.
+
+Sigue vigente la regla dura: **no cargar un "tamaño representativo" ni un
+número de distribuidor** — sin S publicado, la entrada va por
+`S_no_publicado` + envolvente, nunca por un S inventado.
+
+**`Mixer — impeller`: sigue vetado, con motivo nuevo.** Su envolvente
+natural es el PAR (N·m), y `_PARAMS_OK` no tiene campo de par. No le
+falta S: le falta vocabulario. Habilitarlo requiere un param nuevo, y eso
+es otro ciclo.
 
 ### Modelos objetivo (3-5 por categoría basta para la tesis)
 
 | Categoría (eq_type) | Candidatos |
 |---|---|
-| HX placas (`Heat exch. — flat plate`) | ⛔ **NO cargar** — ver "Categorías sin S publicado". Se reabre solo con `n_placas_max` × área/placa de fuente oficial |
+| HX placas (`Heat exch. — flat plate`) | Vía `S_no_publicado: "configurable"` + envolvente P/T del bastidor. Cargados: Alfa Laval M10 FM/FG/FD. Candidatos: SWEP B-series; GEA VT-series |
 | HX casco-tubo (`Heat exch. — fixed tube` / `floating head`) | Kelvion, HRS Funke — series estándar con área nominal |
-| Bomba centrífuga (`Pump — centrifugal`) | ⛔ **NO cargar** — ver "Categorías sin S publicado" (el kW al eje es del punto de operación, no del modelo) |
+| Bomba centrífuga (`Pump — centrifugal`) | Vía `S_no_publicado: "punto_de_operacion"` + envolvente (`Q_max_m3_h`, `head_max_m`). Candidatos: Grundfos NK/NB; KSB Etanorm; Sulzer AHLSTAR |
 | Bomba desplazamiento (+`Pump — positive displacement`) | NETZSCH NEMO; Viking gear |
 | Compresor tornillo (`Compressor — rotary`) | Atlas Copco GA 30-90; Kaeser CSD |
-| Agitador (`Mixer — impeller`) | EKATO, Chemineer serie 20, SPX Lightnin (kW de accionamiento) |
+| Agitador (`Mixer — impeller`) | ⛔ **Vetado** — su envolvente natural es el PAR (N·m) y `_PARAMS_OK` no tiene campo de par; habilitar requiere param nuevo (otro ciclo) |
 | Turbina vapor (`Turbine — steam`) | Siemens SST-040/060 (kW, presiones de entrada) |
 | Caldera (`Boiler — fire tube`) | Cleaver-Brooks CB, Bosch UL-S — **S en kg/s** (S_unit del tipo). Las designaciones del fabricante vienen en kg/h (UL-S 1250 = 1250 kg/h): **dividir por 3600**. Sin la conversión, un UL-S 28000 entra 1400× fuera de rango y el costeo devuelve basura. |
 
