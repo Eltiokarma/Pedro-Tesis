@@ -430,6 +430,12 @@ EQUIPMENT_PORTS = {
     "Fan — axial":                  COMPRESSOR_PORTS,
     "Fan — centrifugal radial":     COMPRESSOR_PORTS,
 
+    # Turbinas/expansores: mismos puertos que compresor (succión/descarga);
+    # la dirección del trabajo la da P_out < P_in (duty < 0).
+    "Turbine — steam":              COMPRESSOR_PORTS,
+    "Turbine — gas (axial)":        COMPRESSOR_PORTS,
+    "Turbine — radial expander":    COMPRESSOR_PORTS,
+
     "Reactor — autoclave":          REACTOR_PORTS,
     "Reactor — jacketed agitated":  REACTOR_PORTS,
     "Reactor — jacketed non-agit.": REACTOR_PORTS,
@@ -453,6 +459,7 @@ EQUIPMENT_PORTS = {
     "Crystallizer":                 SOLIDS_PORTS,
 
     # Mixers / splitters
+    "Mixer — impeller":              MIXER_PORTS,
     "Mixer — inline":                MIXER_PORTS,
     "Mixer — static":                MIXER_PORTS,
     "Splitter — flow divider":       SPLITTER_PORTS,
@@ -494,6 +501,10 @@ ISA_PREFIX = {
     "Heat exch. — kettle reboiler": "E",
     "Heat exch. — WHB packaged":      "E",
     "Heat exch. — WHB field erected": "E",
+    # Condensadores: hueco preexistente detectado por el gate de cadena
+    # (test_equipment_catalog_chain) — caían al prefijo default.
+    "Heat exch. — condenser shell-tube": "E",
+    "Heat exch. — condenser air-cooled": "E",
 
     "Pump — centrifugal":           "P",
     "Pump — positive displacement": "P",
@@ -505,6 +516,10 @@ ISA_PREFIX = {
     "Compressor — rotary":          "K",
     "Fan — axial":                  "FN",
     "Fan — centrifugal radial":     "FN",
+
+    "Turbine — steam":              "TB",
+    "Turbine — gas (axial)":        "TB",
+    "Turbine — radial expander":    "TB",
 
     "Reactor — autoclave":          "R",
     "Reactor — jacketed agitated":  "R",
@@ -534,6 +549,7 @@ ISA_PREFIX = {
     "Packing — structured":         "PK",
 
     # Mixers / splitters
+    "Mixer — impeller":              "MX",
     "Mixer — inline":                "MX",
     "Mixer — static":                "MX",
     "Splitter — flow divider":       "SP",
@@ -950,6 +966,9 @@ ELECTRICAL_EQUIPMENT = {
     "Compressor — axial", "Compressor — centrifugal",
     "Compressor — reciprocating", "Compressor — rotary",
     "Fan — axial", "Fan — centrifugal radial",
+    # Turbinas: duty NEGATIVO = potencia eléctrica GENERADA →
+    # autoselect_heat_source ya lo mapea a electricity_generated (revenue).
+    "Turbine — steam", "Turbine — gas (axial)", "Turbine — radial expander",
 }
 
 

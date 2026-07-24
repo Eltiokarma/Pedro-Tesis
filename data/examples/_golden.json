@@ -8,6 +8,15 @@
   "overall_status": "ok",
   "sum_duty": -103.417728
  },
+ "agitated_blend": {
+  "ISBL": 135004.91,
+  "energy_errors": 0,
+  "mass_errors": 0,
+  "n_blocks": 3,
+  "n_streams": 5,
+  "overall_status": "ok",
+  "sum_duty": 0.929658
+ },
  "air_sep": {
   "ISBL": 2269553.86,
   "energy_errors": 0,
@@ -232,6 +241,15 @@
   "n_streams": 6,
   "overall_status": "ok",
   "sum_duty": 311.978039
+ },
+ "gas_expander": {
+  "ISBL": 4237363.84,
+  "energy_errors": 0,
+  "mass_errors": 0,
+  "n_blocks": 3,
+  "n_streams": 4,
+  "overall_status": "ok",
+  "sum_duty": 552.722326
  },
  "gas_sweet": {
   "ISBL": 12579750.37,
@@ -502,6 +520,15 @@
   "n_streams": 7,
   "overall_status": "warning",
   "sum_duty": -850.348483
+ },
+ "steam_turbine": {
+  "ISBL": 1919916.05,
+  "energy_errors": 0,
+  "mass_errors": 0,
+  "n_blocks": 1,
+  "n_streams": 2,
+  "overall_status": "ok",
+  "sum_duty": -686.949574
  },
  "sugar": {
   "ISBL": 56135033.11,

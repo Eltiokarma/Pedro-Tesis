@@ -447,7 +447,7 @@ _P_TOL = 0.05   # bar — tolerancia para "P creada"
 def _is_rotative(eq):
     e = (eq or "").lower()
     return ("pump" in e or "compressor" in e or "fan" in e or "bomba" in e
-            or "blower" in e or "soplador" in e)
+            or "blower" in e or "soplador" in e or "turbin" in e)
 
 
 def _is_column_like(eq):

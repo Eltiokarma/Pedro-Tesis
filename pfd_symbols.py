@@ -945,6 +945,11 @@ EQ_TYPE_TO_SYMBOL: Dict[str, str] = {
     'Compressor — axial': 'compressor-centrifugal',
     'Compressor — reciprocating': 'compressor-reciprocating',
     'Compressor — rotary': 'compressor-centrifugal',
+    # Turbinas: proxy del compresor (misma familia rotativa) hasta que el
+    # ciclo 5 de Design entregue la silueta propia (trapecio expansor).
+    'Turbine — steam': 'compressor-centrifugal',
+    'Turbine — gas (axial)': 'compressor-centrifugal',
+    'Turbine — radial expander': 'compressor-centrifugal',
     'Reactor — autoclave': 'reactor-cstr',
     'Reactor — jacketed agitated': 'reactor-cstr',
     'Reactor — jacketed non-agit.': 'reactor-fixed-bed',
@@ -965,6 +970,7 @@ EQ_TYPE_TO_SYMBOL: Dict[str, str] = {
     'Tray — valve': 'column-tray',
     # Mixers / splitters / nuevos separadores / válvulas — reuso de
     # SVGs del catálogo lib-symbols (ya parseados arriba).
+    'Mixer — impeller':                'mixer-static',     # proxy ciclo 5
     'Mixer — inline':                  'mixer-inline',
     'Mixer — static':                  'mixer-static',
     'Splitter — flow divider':         'mixer-inline',     # proxy

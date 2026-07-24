@@ -97,7 +97,8 @@ def _is_vessel_flash(eq_type: str) -> bool:
 
 def _is_pump_compressor(eq_type: str) -> bool:
     t = (eq_type or "").lower()
-    return "pump" in t or "compress" in t or "bomba" in t or "compresor" in t
+    return ("pump" in t or "compress" in t or "bomba" in t
+            or "compresor" in t or "turbin" in t)
 
 def _is_mixer(eq_type: str) -> bool:
     t = (eq_type or "").lower()
@@ -1503,7 +1504,7 @@ class BlockInspectorPanel(QWidget):
                 l.addWidget(self._diag_placeholder_card(
                     "Curva característica (típica)",
                     f"inspector_evidence no disponible: {exc}"))
-        if "compressor" in eqs_low or "fan" in eqs_low:
+        if "compressor" in eqs_low or "fan" in eqs_low or "turbin" in eqs_low:
             try:
                 import inspector_evidence as _ev
                 l.addWidget(self._figure_card(
@@ -2536,7 +2537,7 @@ class BlockInspectorPanel(QWidget):
         if _is_hx(eq_type):
             items.append("Diagrama T-Q → Termodinámica")
         low = (eq_type or "").lower()
-        if "compressor" in low or "fan" in low:
+        if "compressor" in low or "fan" in low or "turbin" in low:
             items.append("Diagrama de compresión → Termodinámica")
         return "\n".join(f"· {it}" for it in items)
 

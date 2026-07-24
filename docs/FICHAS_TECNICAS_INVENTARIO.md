@@ -17,7 +17,7 @@ función y línea de origen.
 
 | Capa | Módulo | Qué aporta a la ficha | Forma |
 |---|---|---|---|
-| Catálogo | `equipment_costs.EQUIPMENT_DATA` (56 eq_types) | categoría, S_param/S_unit, rango de validez, correlación, fuente bibliográfica | dict estático |
+| Catálogo | `equipment_costs.EQUIPMENT_DATA` (60 eq_types) | categoría, S_param/S_unit, rango de validez, correlación, fuente bibliográfica | dict estático |
 | Modelo | `flowsheet_model.Block/Stream` | specs declaradas (T_op, P_op, η, reacciones, LK/HK, fracciones…), corrientes conectadas | dataclass serializada |
 | Solver | `flowsheet_solver` | resultados runtime: `_hx_diagnostics`, `_flash_diagnostics`, `_wh_result`, `_column_*`, `_Q_reb/_Q_cond`, `_n_stages`, `_whb_diagnostics`, duty, T/P efectivas | atributos `b._*` (NO serializados) |
 | Sizing | `equipment_sizing` (19 sizers) + `equipment_design` (pump/compressor) | parámetro S por tipo + dicts ricos de rotativos | float en `b.S` + dicts |
@@ -37,7 +37,7 @@ inspector + export por equipo).
 
 ## 2. Inventario por capa
 
-### 2.1 Catálogo — los 56 eq_types (`equipment_costs.py:102-419`)
+### 2.1 Catálogo — los 60 eq_types (`equipment_costs.py`)
 
 Cada entrada Turton: `K1,K2,K3, S_param, S_unit, S_min, S_max, categoria,
 correlation, source`. Las dos WHB usan Sinnott: `a,b,n, installation_factor,
@@ -47,6 +47,7 @@ P_range_bar, notes` (`Ce = a + b·S^n`, GBP 2010, método de Hand).
 |---|---|---|
 | Heat exchangers (13) | fixed tube, U-tube, floating head, kettle reboiler, double pipe, multiple pipe, air cooler, condenser shell-tube, condenser air-cooled, flat plate, spiral plate, WHB packaged†, WHB field erected† | área m² († kg/h vapor) |
 | Compressors (4) | centrifugal, axial, reciprocating, rotary | kW |
+| Turbines (3) | steam, gas (axial), radial expander — formalizan la convención "compresor con P_out<P_in = turbina"; duty<0 = genera (revenue) | kW (fluid power) |
 | Pumps (3) | centrifugal, positive displacement, reciprocating | kW (shaft) |
 | Vessels (4) | horizontal, vertical, Tower (column shell), Decanter — gravity | m³ |
 | Storage (2) | cone roof, floating roof | m³ |
@@ -55,7 +56,7 @@ P_range_bar, notes` (`Ce = a + b·S^n`, GBP 2010, método de Hand).
 | Solids / sep. (6) | Crystallizer m³, Dryer — drum m², Evaporator — vertical m², Filter — belt m², Centrifuge disc stack m³ / decanter m³/h, Cyclone m³/s | varía |
 | Fans / blowers (2) | centrifugal radial, axial | m³/s |
 | Trays / packing (4) | Tray sieve/valve m², Packing random/structured m³ | varía |
-| Mixers / splitters (3) | Mixer inline/static m³, Splitter kg/s | varía |
+| Mixers / splitters (4) | Mixer impeller kW (agitador, sizer P/V de Walas), inline/static m³, Splitter kg/s | varía |
 | Valves (3) | control globe, relief, 3-way | m³/h |
 | Utilities (4) | Boiler fire/water tube kg/s vapor, Cooling tower induced/natural MW | varía |
 
@@ -275,7 +276,8 @@ notas suma el veredicto de rating.
 | Valve | ΔP, C_v, VF salida (alerta flasheo) |
 | Mixer / splitter | entradas/salidas con cierre / fracciones efectivas |
 | Cooling tower | duty MW, makeup/blowdown/evaporación |
-| **Fallback genérico (los 56)** | identidad + condiciones + corrientes + S + material + costo — garantiza cobertura total desde el día uno |
+| Turbina / expansor | ratio de expansión, T entrada/descarga, W generada, η isentrópica (evidencia `_expander_case` ya cubre los tipos formales Turbine) |
+| **Fallback genérico (los 60)** | identidad + condiciones + corrientes + S + material + costo — garantiza cobertura total desde el día uno |
 
 Secciones transversales en toda ficha: balances de masa/energía con cierre
 (`mass/energy_balance_metrics`) y, si hay reacción, balance de átomos.

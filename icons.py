@@ -476,6 +476,9 @@ EQ_TYPE_TO_ICON.update({
     "Pump — reciprocating":              "eq-pump",
     "Fan — centrifugal radial":          "eq-fan-centrifugal",
     "Fan — axial":                       "eq-fan-axial",
+    "Turbine — steam":                   "eq-expander",
+    "Turbine — gas (axial)":             "eq-expander",
+    "Turbine — radial expander":         "eq-expander",
 
     # Reactors
     "Reactor — autoclave":               "eq-reactor-autoclave",
@@ -490,6 +493,7 @@ EQ_TYPE_TO_ICON.update({
     "Packing — structured":              "eq-packing-structured",
 
     # Mixers / splitters
+    "Mixer — impeller":                  "eq-mixer",
     "Mixer — inline":                    "eq-mixer",
     "Mixer — static":                    "eq-mixer-static",
     "Splitter — flow divider":           "eq-splitter",

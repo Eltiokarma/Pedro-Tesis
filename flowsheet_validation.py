@@ -76,6 +76,11 @@ PORT_FLUID_TYPES = {
     "Fan — axial":              {"succion": "gas", "descarga": "gas"},
     "Fan — centrifugal radial": {"succion": "gas", "descarga": "gas"},
 
+    # ---- Turbinas / expansores: solo gas/vapor (expanden gas) ----
+    "Turbine — steam":           {"succion": "gas", "descarga": "gas"},
+    "Turbine — gas (axial)":     {"succion": "gas", "descarga": "gas"},
+    "Turbine — radial expander": {"succion": "gas", "descarga": "gas"},
+
     # ---- Heat exchangers de proceso: agnósticos ('any') ----
     # los HX shell-and-tube genéricos pueden manejar cualquier fluido
     "Heat exch. — U-tube":         {"tube_in": "any", "tube_out": "any",
