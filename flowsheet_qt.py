@@ -1055,6 +1055,54 @@ class BlockEditDialog(QDialog):
         rot_layout.addRow("", hint_rot)
         layout.addRow(self.gb_rot)
 
+        # ---- Equipo comercial (modo selección de Fichas Técnicas) ----
+        # Visible solo si el tipo tiene catálogo (5 de 60 hoy; el caso
+        # dominante es ingeniería a pedido y NO muestra el grupo).  El
+        # veredicto de verificación vive en la sección Ficha técnica del
+        # inspector; acá solo se declara marca|modelo al crear/editar.
+        try:
+            import datasheet as _ds
+            _entradas_com = _ds.entradas_para(block.eq_type)
+        except Exception:
+            _entradas_com = []
+        self.gb_comercial = QGroupBox("Equipo comercial (ficha técnica)")
+        self.gb_comercial.setVisible(bool(_entradas_com))
+        com_layout = QFormLayout(self.gb_comercial)
+        self.comercial_combo = QComboBox()
+        self.comercial_combo.addItem("(sin equipo declarado)", "")
+        try:
+            import equipment_costs as _ec_com
+            _s_unit_com = _ec_com.EQUIPMENT_DATA.get(
+                block.eq_type, {}).get("S_unit", "")
+        except Exception:
+            _s_unit_com = ""
+        for _e in _entradas_com:
+            if "S" in _e:
+                _txt = (f"{_e['marca']} · {_e['modelo']} — "
+                        f"{_e['S']:g} {_s_unit_com}")
+            else:
+                _gran = _e.get("granularidad", "")
+                _suf = ("envolvente de familia" if _gran == "familia"
+                        else "envolvente del modelo")
+                _txt = f"{_e['marca']} · {_e['modelo']} — {_suf}"
+            self.comercial_combo.addItem(_txt, f"{_e['marca']}|{_e['modelo']}")
+        _cur_com = getattr(block, "equipo_comercial", "") or ""
+        _idx_com = self.comercial_combo.findData(_cur_com) if _cur_com else 0
+        self.comercial_combo.setCurrentIndex(max(0, _idx_com))
+        com_layout.addRow("Marca · modelo:", self.comercial_combo)
+        hint_com = QLabel(
+            "Declara el equipo real a instalar.  La verificación "
+            "(requerido vs instalado, envolvente P/T/caudal) vive en la "
+            "sección <b>Ficha técnica</b> del inspector.  El S del "
+            "catálogo NUNCA pisa el S del proceso."
+        )
+        hint_com.setStyleSheet(f"color: {_tokens.TOK['ink_soft']}; "
+                               f"font-size: {_tokens.FONT_HINT[1]}pt;")
+        hint_com.setTextFormat(Qt.RichText)
+        hint_com.setWordWrap(True)
+        com_layout.addRow("", hint_com)
+        layout.addRow(self.gb_comercial)
+
         # ─── Reactividad (Fase 8 — predictor de reacciones) ─────────
         # Aparece SIEMPRE (es opt-in via toggle). Lee de
         # block.feed_analysis_cache si el predictor corrio.
@@ -1334,6 +1382,11 @@ class BlockEditDialog(QDialog):
         self.block.n = int(self.n_edit.value())
         self.block.duty = float(self.duty_edit.value())
         self.block.duty_locked = bool(self.duty_lock.isChecked())
+        # Equipo comercial declarado (solo si el grupo aplica al tipo;
+        # si está oculto no se toca — preserva lo que hubiera).
+        if self.gb_comercial.isVisible() or self.comercial_combo.count() > 1:
+            data = self.comercial_combo.currentData()
+            self.block.equipo_comercial = data if data else ""
         heat = self.heat_combo.currentText()
         self.block.heat_source = "" if heat == "(auto)" else heat
         # heat_of_reaction (sólo si visible, i.e. reactor)
