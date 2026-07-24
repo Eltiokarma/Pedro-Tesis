@@ -1,0 +1,275 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<meta name="design_doc_mode" content="canvas">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  *{box-sizing:border-box}
+  body{margin:0;background:#f6f3ec;color:#1a1714;font-family:'IBM Plex Sans',sans-serif;-webkit-font-smoothing:antialiased}
+  a{color:#0d6e78;text-decoration:none}
+  a:hover{color:#064951;text-decoration:underline}
+  p{text-wrap:pretty}
+</style>
+</helmet>
+
+<div style="min-height:100vh;padding:44px 52px 56px">
+<div style="width:996px;margin:0 auto">
+
+  <!-- ══ HEADER ══ -->
+  <div style="margin-bottom:36px">
+    <div style="margin-bottom:9px;font:600 11px 'IBM Plex Mono';letter-spacing:2.5px;color:#0d6e78;text-transform:uppercase">Artboard 5f · Ficha Técnica</div>
+    <h1 style="margin:0 0 10px;font:600 26px 'IBM Plex Sans';color:#1a1714">Selector de equipo comercial</h1>
+    <p style="margin:0;max-width:740px;font:400 13.5px 'IBM Plex Sans';color:#6b6256;line-height:1.6">Modo selección: el usuario declara qué equipo comercial real piensa instalar y la ficha verifica lo que el proceso <em>exige</em> contra lo que ese equipo <em>aguanta</em>. <b style="color:#1a1714;font-weight:600">El caso dominante es «no aplica»</b> — 55 de 60 tipos son ingeniería a pedido. El selector es la excepción, no la regla, y su ausencia no es un hueco por llenar.</p>
+  </div>
+
+  <!-- ══ ROW 1 · ANTES DE DECLARAR ══ -->
+  <div style="display:flex;align-items:center;gap:14px;margin:0 0 18px">
+    <span style="font:600 10px 'IBM Plex Sans';letter-spacing:2px;color:#948a7c;text-transform:uppercase">Antes de declarar</span>
+    <span style="flex:1;height:1px;background:#e6e0d0"></span>
+  </div>
+
+  <div style="display:flex;gap:32px;flex-wrap:wrap;margin-bottom:44px">
+
+    <!-- 1 · sin catálogo (dominante) -->
+    <div style="width:300px">
+      <div style="display:flex;align-items:center;gap:9px;margin-bottom:7px">
+        <span style="font:600 10px 'IBM Plex Mono';color:#fff;background:#0d6e78;border-radius:5px;padding:2px 7px">5f.1</span>
+        <span style="font:600 13px 'IBM Plex Sans';color:#1a1714">Tipo sin catálogo</span>
+        <span style="margin-left:auto;font:600 9px 'IBM Plex Sans';letter-spacing:.8px;color:#6b6253;background:#ede7d6;border-radius:5px;padding:2px 7px;text-transform:uppercase">Dominante</span>
+      </div>
+      <p style="margin:0 0 12px;font:400 11px 'IBM Plex Sans';color:#948a7c;line-height:1.45">Ingeniería a pedido. No va selector: una afirmación tranquila de que no corresponde — no un control deshabilitado ni un campo vacío.</p>
+
+      <div style="background:#fff;border:1px solid #e6e0d0;border-radius:12px;padding:16px">
+        <div style="display:flex;align-items:baseline;gap:8px">
+          <span style="font:600 10px 'IBM Plex Sans';letter-spacing:1.5px;color:#1a1714;text-transform:uppercase">Equipo comercial</span>
+          <span style="font:400 11px 'IBM Plex Sans';color:#948a7c">Reactor CSTR</span>
+        </div>
+        <div style="margin-top:13px;background:#f1ede4;border:1px solid #efeadd;border-left:3px solid #d4ccb8;border-radius:8px;padding:14px">
+          <div style="font:500 12px 'IBM Plex Sans';color:#1a1714;margin-bottom:5px">Ingeniería a pedido</div>
+          <p style="margin:0;font:400 11px 'IBM Plex Sans';color:#6b6256;line-height:1.55">Los reactores se dimensionan a medida. Ningún fabricante publica tamaños de catálogo para este tipo, así que no hay equipo comercial que declarar.</p>
+        </div>
+      </div>
+    </div>
+
+    <!-- 2 · con catálogo, sin declarar (dropdown) -->
+    <div style="width:300px">
+      <div style="display:flex;align-items:center;gap:9px;margin-bottom:7px">
+        <span style="font:600 10px 'IBM Plex Mono';color:#fff;background:#0d6e78;border-radius:5px;padding:2px 7px">5f.2</span>
+        <span style="font:600 13px 'IBM Plex Sans';color:#1a1714">Con catálogo, sin declarar</span>
+      </div>
+      <p style="margin:0 0 12px;font:400 11px 'IBM Plex Sans';color:#948a7c;line-height:1.45">Selector activo y vacío. Invitación, no reproche. Los modelos se agrupan por fabricante.</p>
+
+      <div style="background:#fff;border:1px solid #e6e0d0;border-radius:12px;padding:16px">
+        <div style="display:flex;align-items:baseline;gap:8px;margin-bottom:11px">
+          <span style="font:600 10px 'IBM Plex Sans';letter-spacing:1.5px;color:#1a1714;text-transform:uppercase">Equipo comercial</span>
+          <span style="font:400 11px 'IBM Plex Sans';color:#948a7c">Compresor rotativo · 14 modelos</span>
+        </div>
+
+        <div style="display:flex;align-items:center;gap:8px;height:36px;padding:0 11px;background:#fff;border:1.5px solid #d4ebed;border-radius:8px;cursor:pointer">
+          <span style="flex:1;font:400 12px 'IBM Plex Sans';color:#bab2a3;font-style:italic">Seleccionar equipo…</span>
+          <span style="color:#0d6e78;font-size:11px">▾</span>
+        </div>
+
+        <div style="margin-top:6px;background:#fff;border:1px solid #d4ccb8;border-radius:8px;box-shadow:0 10px 26px rgba(26,23,20,.13);overflow:hidden">
+          <div style="padding:8px 12px 4px;font:600 9px 'IBM Plex Sans';letter-spacing:1.2px;color:#948a7c;text-transform:uppercase;background:#faf8f2;border-bottom:1px solid #f1ede4">Atlas Copco · 10</div>
+          <div style="padding:7px 12px;display:flex;justify-content:space-between;align-items:baseline;background:#eaf4f5"><span style="font:500 11.5px 'IBM Plex Mono';color:#064951">GA 90</span><span style="font:400 10px 'IBM Plex Mono';color:#6b6256">90 kW</span></div>
+          <div style="padding:7px 12px;display:flex;justify-content:space-between;align-items:baseline"><span style="font:500 11.5px 'IBM Plex Mono';color:#1a1714">GA 110</span><span style="font:400 10px 'IBM Plex Mono';color:#948a7c">110 kW</span></div>
+          <div style="padding:7px 12px;display:flex;justify-content:space-between;align-items:baseline"><span style="font:500 11.5px 'IBM Plex Mono';color:#1a1714">GA 132</span><span style="font:400 10px 'IBM Plex Mono';color:#948a7c">132 kW</span></div>
+          <div style="padding:7px 12px;font:400 10.5px 'IBM Plex Sans';color:#bab2a3;font-style:italic">+ 7 modelos más</div>
+          <div style="padding:8px 12px 4px;font:600 9px 'IBM Plex Sans';letter-spacing:1.2px;color:#948a7c;text-transform:uppercase;background:#faf8f2;border-top:1px solid #f1ede4;border-bottom:1px solid #f1ede4">Kaeser · 4</div>
+          <div style="padding:7px 12px;display:flex;justify-content:space-between;align-items:baseline"><span style="font:500 11.5px 'IBM Plex Mono';color:#1a1714">CSD 125</span><span style="font:400 10px 'IBM Plex Mono';color:#948a7c">75 kW</span></div>
+          <div style="padding:7px 12px;display:flex;justify-content:space-between;align-items:baseline"><span style="font:500 11.5px 'IBM Plex Mono';color:#1a1714">CSD 130</span><span style="font:400 10px 'IBM Plex Mono';color:#948a7c">75 kW</span></div>
+          <div style="padding:7px 12px 9px;font:400 10.5px 'IBM Plex Sans';color:#bab2a3;font-style:italic">+ 2 modelos más</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- 2b · un solo modelo -->
+    <div style="width:300px">
+      <div style="display:flex;align-items:center;gap:9px;margin-bottom:7px">
+        <span style="font:600 10px 'IBM Plex Mono';color:#fff;background:#7a8a52;border-radius:5px;padding:2px 7px">5f.2b</span>
+        <span style="font:600 13px 'IBM Plex Sans';color:#1a1714">Un solo modelo</span>
+      </div>
+      <p style="margin:0 0 12px;font:400 11px 'IBM Plex Sans';color:#948a7c;line-height:1.45">Es real, y un desplegable de un ítem se ve ridículo. Se ofrece directo como afirmación con acción.</p>
+
+      <div style="background:#fff;border:1px solid #e6e0d0;border-radius:12px;padding:16px">
+        <div style="display:flex;align-items:baseline;gap:8px;margin-bottom:11px">
+          <span style="font:600 10px 'IBM Plex Sans';letter-spacing:1.5px;color:#1a1714;text-transform:uppercase">Equipo comercial</span>
+          <span style="font:400 11px 'IBM Plex Sans';color:#948a7c">Bomba desplaz. positivo</span>
+        </div>
+        <div style="font:600 9px 'IBM Plex Sans';letter-spacing:1.2px;color:#948a7c;text-transform:uppercase;margin-bottom:6px">Único en catálogo</div>
+        <div style="display:flex;align-items:center;gap:10px;padding:11px 12px;background:#fff;border:1px solid #e6e0d0;border-radius:8px">
+          <div style="flex:1;display:flex;flex-direction:column;line-height:1.25">
+            <span style="font:500 12px 'IBM Plex Mono';color:#1a1714">NEMO L.Cap</span>
+            <span style="font:400 10px 'IBM Plex Sans';color:#948a7c">NETZSCH · cavidad progresiva</span>
+          </div>
+          <span style="padding:6px 13px;background:#0d6e78;color:#fff;border-radius:6px;font:600 11px 'IBM Plex Sans';cursor:pointer">Declarar</span>
+        </div>
+        <p style="margin:9px 0 0;font:400 10.5px 'IBM Plex Sans';color:#948a7c;line-height:1.45">Un solo fabricante publica esta gama — sin desplegable de un ítem.</p>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- ══ ROW 2 · VERIFICACIÓN SEGÚN EL EQUIPO ══ -->
+  <div style="display:flex;align-items:center;gap:14px;margin:0 0 18px">
+    <span style="font:600 10px 'IBM Plex Sans';letter-spacing:2px;color:#948a7c;text-transform:uppercase">Verificación según el equipo declarado</span>
+    <span style="flex:1;height:1px;background:#e6e0d0"></span>
+  </div>
+
+  <div style="display:flex;gap:32px;flex-wrap:wrap;margin-bottom:8px">
+
+    <!-- 3 · escalar -->
+    <div style="width:300px">
+      <div style="display:flex;align-items:center;gap:9px;margin-bottom:7px">
+        <span style="font:600 10px 'IBM Plex Mono';color:#fff;background:#0d6e78;border-radius:5px;padding:2px 7px">5f.3</span>
+        <span style="font:600 13px 'IBM Plex Sans';color:#1a1714">Verificación escalar</span>
+      </div>
+      <p style="margin:0 0 12px;font:400 11px 'IBM Plex Sans';color:#948a7c;line-height:1.45">El modelo publica un tamaño exacto (GA 90 = 90 kW). Hay <b style="color:#6b6256;font-weight:600">ratio de utilización</b>, y un 13% de sobredimensionamiento grosero hay que verlo.</p>
+
+      <div style="background:#fff;border:1px solid #e6e0d0;border-radius:12px;padding:16px">
+        <div style="display:flex;align-items:center;gap:8px;height:36px;padding:0 11px;background:#fff;border:1px solid #d4ccb8;border-radius:8px;margin-bottom:12px">
+          <div style="flex:1;display:flex;flex-direction:column;line-height:1.2">
+            <span style="font:500 12px 'IBM Plex Mono';color:#1a1714">GA 90</span>
+            <span style="font:400 9.5px 'IBM Plex Sans';color:#948a7c">Atlas Copco · compresor rotativo</span>
+          </div>
+          <span style="color:#948a7c;font-size:11px">▾</span>
+        </div>
+
+        <div style="display:flex;align-items:center;gap:8px;margin-bottom:13px">
+          <span style="display:inline-flex;align-items:center;gap:6px;padding:3px 10px;background:#e6f0df;border-radius:6px;font:600 10.5px 'IBM Plex Sans';letter-spacing:.4px;color:#4d8742"><span style="width:7px;height:7px;border-radius:50%;background:#4d8742"></span>APTO</span>
+          <span style="font:400 10.5px 'IBM Plex Sans';color:#948a7c">el proceso entra</span>
+        </div>
+
+        <div style="display:flex;gap:10px;margin-bottom:13px">
+          <div style="flex:1;background:#f1ede4;border-radius:7px;padding:8px 10px">
+            <div style="font:600 9px 'IBM Plex Sans';letter-spacing:.8px;color:#948a7c;text-transform:uppercase">Requerido</div>
+            <div style="font:500 14px 'IBM Plex Mono';color:#1a1714">12 kW</div>
+          </div>
+          <div style="flex:1;background:#f1ede4;border-radius:7px;padding:8px 10px">
+            <div style="font:600 9px 'IBM Plex Sans';letter-spacing:.8px;color:#948a7c;text-transform:uppercase">Instalado</div>
+            <div style="font:500 14px 'IBM Plex Mono';color:#1a1714">90 kW</div>
+          </div>
+        </div>
+
+        <div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:5px">
+          <span style="font:400 10.5px 'IBM Plex Sans';color:#6b6256">Utilización</span>
+          <span style="font:600 15px 'IBM Plex Mono';color:#b8841a">13%</span>
+        </div>
+        <div style="height:8px;background:#ece6d8;border-radius:4px;overflow:hidden">
+          <div style="width:13%;height:100%;background:#b8841a;border-radius:4px"></div>
+        </div>
+        <p style="margin:8px 0 0;font:400 10.5px 'IBM Plex Sans';color:#a06e14;line-height:1.45">Sobredimensionado: 87% de la capacidad queda sin usar.</p>
+
+        <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;margin-top:13px;padding-top:11px;border-top:1px solid #efeadd">
+          <span style="font:600 9px 'IBM Plex Sans';letter-spacing:1px;color:#948a7c;text-transform:uppercase">Fuente</span>
+          <a href="https://www.atlascopco.com/es-pe/compressors/products/oil-injected-rotary-screw-compressors" target="_blank" style="font:400 11px 'IBM Plex Sans'">datasheet GA 90 ↗</a>
+          <span style="font:400 9.5px 'IBM Plex Mono';color:#bab2a3">· consultado 12 May 2026</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- 4 · envolvente de modelo -->
+    <div style="width:300px">
+      <div style="display:flex;align-items:center;gap:9px;margin-bottom:7px">
+        <span style="font:600 10px 'IBM Plex Mono';color:#fff;background:#0d6e78;border-radius:5px;padding:2px 7px">5f.4</span>
+        <span style="font:600 13px 'IBM Plex Sans';color:#1a1714">Envolvente de modelo</span>
+      </div>
+      <p style="margin:0 0 12px;font:400 11px 'IBM Plex Sans';color:#948a7c;line-height:1.45">Sin tamaño escalar (el área depende del nº de placas). Se verifican varias desigualdades a la vez. <b style="color:#6b6256;font-weight:600">No hay ratio</b> — su ausencia es una propiedad del equipo.</p>
+
+      <div style="background:#fff;border:1px solid #e6e0d0;border-radius:12px;padding:16px">
+        <div style="display:flex;align-items:center;gap:8px;height:36px;padding:0 11px;background:#fff;border:1px solid #d4ccb8;border-radius:8px;margin-bottom:12px">
+          <div style="flex:1;display:flex;flex-direction:column;line-height:1.2">
+            <span style="font:500 12px 'IBM Plex Mono';color:#1a1714">M10 — bastidor FD (ASME)</span>
+            <span style="font:400 9.5px 'IBM Plex Sans';color:#948a7c">Alfa Laval · intercambiador de placas</span>
+          </div>
+          <span style="color:#948a7c;font-size:11px">▾</span>
+        </div>
+
+        <div style="margin-bottom:11px">
+          <span style="display:inline-flex;align-items:center;gap:6px;padding:3px 10px;background:#e6f0df;border-radius:6px;font:600 10.5px 'IBM Plex Sans';letter-spacing:.4px;color:#4d8742"><span style="width:7px;height:7px;border-radius:50%;background:#4d8742"></span>DENTRO DE ENVOLVENTE</span>
+        </div>
+
+        <div>
+          <div style="display:flex;align-items:baseline;gap:8px;padding:7px 0;border-bottom:1px solid #efeadd"><span style="color:#4d8742;font:700 12px 'IBM Plex Sans';width:12px;text-align:center">✓</span><span style="flex:1;font:400 11px 'IBM Plex Sans';color:#6b6256">Presión</span><span style="font:500 11px 'IBM Plex Mono';color:#1a1714">8 ≤ 16 bar</span></div>
+          <div style="display:flex;align-items:baseline;gap:8px;padding:7px 0;border-bottom:1px solid #efeadd"><span style="color:#4d8742;font:700 12px 'IBM Plex Sans';width:12px;text-align:center">✓</span><span style="flex:1;font:400 11px 'IBM Plex Sans';color:#6b6256">Temperatura</span><span style="font:500 11px 'IBM Plex Mono';color:#1a1714">120 ≤ 180 °C</span></div>
+          <div style="display:flex;align-items:baseline;gap:8px;padding:7px 0"><span style="color:#4d8742;font:700 12px 'IBM Plex Sans';width:12px;text-align:center">✓</span><span style="flex:1;font:400 11px 'IBM Plex Sans';color:#6b6256">Caudal</span><span style="font:500 11px 'IBM Plex Mono';color:#1a1714">45 ≤ 120 m³/h</span></div>
+        </div>
+
+        <div style="margin-top:12px;background:#f1ede4;border-radius:8px;padding:11px">
+          <p style="margin:0;font:400 10.5px 'IBM Plex Sans';color:#6b6256;line-height:1.5"><b style="color:#1a1714;font-weight:600">Sin ratio de utilización.</b> El M10 no publica un tamaño escalar contra el cual medir; se verifica contra los límites del modelo concreto.</p>
+        </div>
+
+        <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;margin-top:13px;padding-top:11px;border-top:1px solid #efeadd">
+          <span style="font:600 9px 'IBM Plex Sans';letter-spacing:1px;color:#948a7c;text-transform:uppercase">Fuente</span>
+          <a href="https://www.alfalaval.com/products/heat-transfer/plate-heat-exchangers/gasketed-plate-and-frame-heat-exchangers/industrial-line/" target="_blank" style="font:400 11px 'IBM Plex Sans'">M10 product sheet ↗</a>
+          <span style="font:400 9.5px 'IBM Plex Mono';color:#bab2a3">· consultado 03 Abr 2026</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- 5 · verificación débil -->
+    <div style="width:300px">
+      <div style="display:flex;align-items:center;gap:9px;margin-bottom:7px">
+        <span style="font:600 10px 'IBM Plex Mono';color:#fff;background:#b8841a;border-radius:5px;padding:2px 7px">5f.5</span>
+        <span style="font:600 13px 'IBM Plex Sans';color:#1a1714">Verificación débil</span>
+      </div>
+      <p style="margin:0 0 12px;font:400 11px 'IBM Plex Sans';color:#948a7c;line-height:1.45">Mismo mecanismo que 5f.4, lectura opuesta. Los límites son de toda la <em>familia</em>, no del tamaño. <b style="color:#6b6256;font-weight:600">No puede verse como un tilde verde</b> — no está mal, está poco verificado.</p>
+
+      <div style="background:#fff;border:1px solid #e6e0d0;border-radius:12px;padding:16px">
+        <div style="display:flex;align-items:center;gap:8px;height:36px;padding:0 11px;background:#fff;border:1px solid #d4ccb8;border-radius:8px;margin-bottom:12px">
+          <div style="flex:1;display:flex;flex-direction:column;line-height:1.2">
+            <span style="font:500 12px 'IBM Plex Mono';color:#1a1714">NEMO L.Cap</span>
+            <span style="font:400 9.5px 'IBM Plex Sans';color:#948a7c">NETZSCH · bomba de cavidad progresiva</span>
+          </div>
+          <span style="color:#948a7c;font-size:11px">▾</span>
+        </div>
+
+        <div style="display:flex;align-items:center;gap:7px;flex-wrap:wrap;margin-bottom:11px">
+          <span style="display:inline-flex;align-items:center;gap:6px;padding:3px 10px;background:transparent;border:1px dashed #b8841a;border-radius:6px;font:600 10.5px 'IBM Plex Sans';letter-spacing:.4px;color:#b8841a"><span style="width:7px;height:7px;border-radius:50%;border:1.5px solid #b8841a;background:transparent"></span>VERIFICACIÓN DÉBIL</span>
+          <span style="padding:2px 7px;background:#f5e1d0;border-radius:5px;font:600 9px 'IBM Plex Sans';letter-spacing:.5px;color:#c26329;text-transform:uppercase">Confianza baja</span>
+        </div>
+
+        <div>
+          <div style="display:flex;align-items:baseline;gap:8px;padding:7px 0;border-bottom:1px solid #efeadd"><span style="color:#bab2a3;font:700 12px 'IBM Plex Sans';width:12px;text-align:center">✓</span><span style="flex:1;font:400 11px 'IBM Plex Sans';color:#948a7c">Presión</span><span style="font:500 11px 'IBM Plex Mono';color:#6b6256">6 ≤ 20 bar</span><span style="font:400 8.5px 'IBM Plex Sans';color:#b8841a;letter-spacing:.3px">FAMILIA</span></div>
+          <div style="display:flex;align-items:baseline;gap:8px;padding:7px 0;border-bottom:1px solid #efeadd"><span style="color:#bab2a3;font:700 12px 'IBM Plex Sans';width:12px;text-align:center">✓</span><span style="flex:1;font:400 11px 'IBM Plex Sans';color:#948a7c">Caudal</span><span style="font:500 11px 'IBM Plex Mono';color:#6b6256">40 ≤ 1000 m³/h</span><span style="font:400 8.5px 'IBM Plex Sans';color:#b8841a;letter-spacing:.3px">FAMILIA</span></div>
+          <div style="display:flex;align-items:baseline;gap:8px;padding:7px 0"><span style="color:#bab2a3;font:700 12px 'IBM Plex Sans';width:12px;text-align:center">✓</span><span style="flex:1;font:400 11px 'IBM Plex Sans';color:#948a7c">Temperatura</span><span style="font:500 11px 'IBM Plex Mono';color:#6b6256">60 ≤ 120 °C</span><span style="font:400 8.5px 'IBM Plex Sans';color:#b8841a;letter-spacing:.3px">FAMILIA</span></div>
+        </div>
+
+        <div style="margin-top:12px;background:#f4ecd1;border-radius:8px;padding:11px">
+          <p style="margin:0;font:400 10.5px 'IBM Plex Sans';color:#8a6412;line-height:1.5">Los límites <b style="font-weight:600">1000 m³/h · 20 bar</b> son de toda la gama NEMO, no del tamaño L.Cap. Casi cualquier proceso entra: el resultado confirma poco.</p>
+        </div>
+
+        <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;margin-top:13px;padding-top:11px;border-top:1px solid #efeadd">
+          <span style="font:600 9px 'IBM Plex Sans';letter-spacing:1px;color:#948a7c;text-transform:uppercase">Fuente</span>
+          <a href="https://www.netzsch-pumpen.com/en/products/progressing-cavity-pumps/nemo-progressing-cavity-pump/" target="_blank" style="font:400 11px 'IBM Plex Sans'">gama NEMO ↗</a>
+          <span style="font:400 9.5px 'IBM Plex Mono';color:#bab2a3">· nivel familia · 19 Jun 2026</span>
+        </div>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- comparación 4 vs 5 -->
+  <p style="margin:2px 0 0;max-width:640px;font:400 11px 'IBM Plex Sans';color:#948a7c;line-height:1.5">5f.4 y 5f.5 usan el mismo mecanismo de desigualdades. La distinción visual es el problema central: verde macizo con tildes plenos (confirma) frente a insignia hueca punteada con tildes atenuados (admite que casi no verifica). Nunca rojo — no es un error.</p>
+
+  <!-- ══ TRAZABILIDAD ══ -->
+  <div style="margin-top:38px;max-width:760px;display:flex;gap:13px;align-items:flex-start;background:#fff;border:1px solid #e6e0d0;border-radius:10px;padding:15px 18px">
+    <span style="flex:none;width:26px;height:26px;border-radius:7px;background:#eaf4f5;border:1px solid #d4ebed;color:#0d6e78;display:flex;align-items:center;justify-content:center;font-size:14px">↗</span>
+    <p style="margin:0;font:400 11.5px 'IBM Plex Sans';color:#6b6256;line-height:1.55"><b style="color:#1a1714;font-weight:600">Trazabilidad — no negociable.</b> Cada entrada del catálogo lleva <code style="font-family:'IBM Plex Mono';font-size:10.5px;background:#f1ede4;border-radius:4px;padding:1px 5px">fuente</code> (documento oficial del fabricante) y <code style="font-family:'IBM Plex Mono';font-size:10.5px;background:#f1ede4;border-radius:4px;padding:1px 5px">fecha_consulta</code>. La fuente es siempre alcanzable desde la ficha: todo número carga su procedencia.</p>
+  </div>
+
+</div>
+</div>
+</x-dc>
+</body>
+</html>
