@@ -1,0 +1,5 @@
+{
+ "schema": 1,
+ "nota": "Catálogo semilla de equipos comerciales (marca/modelo) para el modo selección de las Fichas Técnicas. VACÍO por diseño: cada entrada requiere verificación contra el PDF oficial del fabricante (ver docs/BRIEF_CATALOGO_COMERCIAL.md). El gate tests/test_equipos_comerciales.py valida el esquema de todo lo que entre.",
+ "equipos": []
+}
