@@ -2217,6 +2217,16 @@ class BlockInspectorPanel(QWidget):
     #  FICHA TÉCNICA — modo selección (artboard 5f)
     # ────────────────────────────────────────────────────
 
+    def _ficha_subheader(self, parent_lay, texto):
+        h = QLabel(texto.upper())
+        h.setFont(qfont(FONT_LABEL))
+        h.setStyleSheet(f"color:{TOK['ink_mute']};letter-spacing:1px;"
+                        f"margin-top:6px;")
+        parent_lay.addWidget(h)
+
+    _ORIGEN_GLIFO = {"declarado": "▪", "calculado": "◦",
+                     "tipico": "≈", "estimado": "~", "pendiente": "…"}
+
     def _ficha_row(self, parent_lay, label, value, mute=False):
         row = QHBoxLayout()
         l1 = QLabel(label); l1.setFont(qfont(FONT_HINT))
@@ -2392,6 +2402,96 @@ class BlockInspectorPanel(QWidget):
             hint.setStyleSheet(f"color:{TOK['ink_ghost']};")
             hint.setWordWrap(True)
             l.addWidget(hint)
+
+        # ── La ficha completa (contrato §4) — para TODO tipo, con o sin
+        #    catálogo comercial: el fallback genérico del agregador
+        #    garantiza contenido en los 60 tipos ──
+        try:
+            spec = ds.datasheet_spec(b, self.fs)
+        except Exception as exc:
+            err = QLabel(f"ficha no disponible: {exc}")
+            err.setFont(qfont(FONT_HINT)); err.setWordWrap(True)
+            l.addWidget(err)
+            return sect
+
+        ident = spec.get("identidad", {})
+        self._ficha_subheader(l, "Identidad")
+        n_par = ident.get("n_paralelo", 1)
+        self._ficha_row(l, "Equipo",
+                        f"{ident.get('tag', '')} · {ident.get('eq_type', '')}"
+                        + (f" · ×{n_par}" if n_par > 1 else ""))
+        if ident.get("categoria"):
+            self._ficha_row(l, "Categoría", ident["categoria"], mute=True)
+
+        cond = spec.get("condiciones", {})
+        self._ficha_subheader(l, "Condiciones de operación")
+        if cond.get("T_op_C") is not None:
+            self._ficha_row(l, "T operación", f"{cond['T_op_C']:g} °C")
+        if cond.get("P_op_bar") is not None:
+            self._ficha_row(l, "P operación", f"{cond['P_op_bar']:g} bar")
+        if cond.get("duty_kW"):
+            self._ficha_row(l, "Duty", f"{cond['duty_kW']:g} kW")
+        if cond.get("delta_p_bar"):
+            self._ficha_row(l, "ΔP equipo", f"{cond['delta_p_bar']:g} bar")
+        if cond.get("fases"):
+            self._ficha_row(l, "Fases", " · ".join(cond["fases"]), mute=True)
+
+        campos = spec.get("diseno", [])
+        if campos:
+            self._ficha_subheader(l, "Diseño")
+            for c in campos:
+                glifo = self._ORIGEN_GLIFO.get(c.get("origen", ""), "")
+                unidad = f" {c['unit']}" if c.get("unit") else ""
+                self._ficha_row(
+                    l, f"{glifo} {c['label']}".strip(),
+                    f"{c['value']}{unidad}",
+                    mute=(c.get("origen") in ("tipico", "estimado")))
+
+        mat = spec.get("materiales", {})
+        if mat.get("material"):
+            self._ficha_subheader(l, "Materiales")
+            self._ficha_row(
+                l, "Material",
+                f"{mat['material']} · FM {mat.get('FM', 1.0):g} · "
+                f"{mat.get('origen', '')}",
+                mute=(mat.get("origen") == "estimado"))
+
+        aux = spec.get("auxiliares", [])
+        if aux:
+            self._ficha_subheader(l, "Servicios auxiliares")
+            for a in aux:
+                flecha = "→" if a["direccion"] == "out" else "←"
+                srv = a["utility"] or a["fase"]
+                lazo = f" (lazo {a['lazo']})" if a.get("lazo") else ""
+                self._ficha_row(l, a["puerto"], f"{flecha} {srv}{lazo}",
+                                mute=True)
+
+        cos = spec.get("costos", {})
+        if cos:
+            self._ficha_subheader(l, "Costos (bare module)")
+            self._ficha_row(l, f"Cp ({cos.get('year_target', '')})",
+                            f"${cos.get('Cp_target', 0):,.0f}")
+            self._ficha_row(l, "CBM",
+                            f"${cos.get('CBM', 0):,.0f} · "
+                            f"FBM {cos.get('FBM', 0):g}")
+            if cos.get("source"):
+                self._ficha_row(l, "Correlación",
+                                f"{cos.get('correlacion', '')} · "
+                                f"{cos['source']}", mute=True)
+
+        notas = spec.get("notas", {})
+        for w in notas.get("warnings", []):
+            wl = QLabel(f"⚠ {w}")
+            wl.setFont(qfont(FONT_HINT)); wl.setWordWrap(True)
+            wl.setStyleSheet(f"color:{TOK['amber']};")
+            l.addWidget(wl)
+        if notas.get("pendiente_detalle"):
+            pd = QLabel("Ingeniería de detalle pendiente (fuera del alcance "
+                        "conceptual): " + ", ".join(notas["pendiente_detalle"])
+                        + ".")
+            pd.setFont(qfont(FONT_HINT)); pd.setWordWrap(True)
+            pd.setStyleSheet(f"color:{TOK['ink_ghost']};")
+            l.addWidget(pd)
         return sect
 
     def _section_utility(self, b, eq_type) -> QFrame:

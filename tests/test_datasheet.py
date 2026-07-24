@@ -226,6 +226,34 @@ class TestSeccionFichaQt(unittest.TestCase):
         textos = " ".join(l.text() for l in sect.findChildren(QLabel))
         self.assertIn("Ingeniería a pedido", textos)
 
+    def test_ficha_completa_para_todo_tipo(self):
+        """La ficha renderiza contenido (condiciones, diseño, materiales,
+        costos, pendiente de detalle) para TODO tipo — con o sin catálogo
+        comercial.  Pedido 2026-07: 'ver esto en todos los equipos de
+        todos los ejemplos'."""
+        from PySide6.QtWidgets import QLabel
+        fs = Flowsheet()
+        b = Block(id=1, name="R-1", eq_type="Reactor — CSTR (agitado)",
+                  S=2.0, duty=150.0, T_op_K=473.15, P_op_bar=5.0,
+                  reactor_mode="cstr")
+        fs.blocks = {1: b}
+        fs.streams = {
+            10: Stream(id=10, name="in", src=0, dst=1, mass_flow=9000.0,
+                       composition={"water": 1.0}, main_component="water",
+                       temperature=180.0, pressure_bar=5.0, phase="liquid"),
+            11: Stream(id=11, name="out", src=1, dst=0, mass_flow=9000.0,
+                       composition={"water": 1.0}, main_component="water",
+                       temperature=200.0, pressure_bar=5.0, phase="liquid"),
+        }
+        sect = self._panel(fs, b)._section_ficha(b, b.eq_type)
+        textos = " ".join(l.text() for l in sect.findChildren(QLabel))
+        for esperado in ("CONDICIONES DE OPERACIÓN", "DISEÑO",
+                        "MATERIALES", "COSTOS (BARE MODULE)", "CBM",
+                        "Ingeniería de detalle pendiente"):
+            self.assertIn(esperado, textos,
+                          f"la ficha de un tipo sin catálogo debe mostrar "
+                          f"'{esperado}'")
+
     def test_selector_poblado(self):
         from PySide6.QtWidgets import QComboBox
         fs, b = _fs_rotary(equipo="")
