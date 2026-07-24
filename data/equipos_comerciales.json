@@ -852,6 +852,393 @@
    "fuente": "https://pumps-systems.netzsch.com/_Resources/Persistent/2/7/a/0/27a04a2ab026fb274b707ad012e7c614d8b5a810/NETZSCH%20NEMO%C2%AE%20Progressing%20Cavity%20Pumps%20EN.pdf",
    "fecha_consulta": "2026-07-24",
    "granularidad": "familia"
+  },
+  {
+   "marca": "Ariel",
+   "modelo": "JGE",
+   "eq_type": "Compressor — reciprocating",
+   "S": 2394,
+   "params": {
+    "rpm": 1500,
+    "notas": "Compresor reciprocante separable de proceso. S = potencia maxima nominal del frame (config. de mayor numero de cilindros): 3210 BHP = 2394 kW impresos en la tabla de ratings (pag. 1); 3210x0.7457=2394 kW confirma. rpm = velocidad maxima. Carrera 4.5 in/114 mm, carga de biela total 60,000 lb/267 kN. Hoja JGE/JGK/JGT (A-22747). Presion de descarga no impresa en la hoja (depende de la aplicacion): omitida. Material no declarado: omitido."
+   },
+   "fuente": "https://www.arielcorp.com/content/dam/ariel-corp/documents/product-spec-sheets/JGEKT_10.24.2018.pdf.coredownload.pdf",
+   "fecha_consulta": "2026-07-24"
+  },
+  {
+   "marca": "Ariel",
+   "modelo": "JGT",
+   "eq_type": "Compressor — reciprocating",
+   "S": 2908,
+   "params": {
+    "rpm": 1500,
+    "notas": "Compresor reciprocante separable de proceso. S = potencia maxima nominal del frame (config. de mayor numero de cilindros): 3900 BHP = 2908 kW impresos en la tabla de ratings (pag. 1); 3900x0.7457=2908 kW confirma. rpm = velocidad maxima. Carrera 4.5 in/114 mm, carga de biela total 74,000 lb/329 kN. Hoja JGE/JGK/JGT (A-22747). Presion de descarga no impresa en la hoja (depende de la aplicacion): omitida. Material no declarado: omitido."
+   },
+   "fuente": "https://www.arielcorp.com/content/dam/ariel-corp/documents/product-spec-sheets/JGEKT_10.24.2018.pdf.coredownload.pdf",
+   "fecha_consulta": "2026-07-24"
+  },
+  {
+   "marca": "Ariel",
+   "modelo": "JGJ",
+   "eq_type": "Compressor — reciprocating",
+   "S": 1387,
+   "params": {
+    "rpm": 1800,
+    "notas": "Compresor reciprocante separable de proceso. S = potencia maxima nominal del frame (config. de mayor numero de cilindros): 1860 BHP = 1387 kW impresos en la tabla de ratings (pag. 1); 1860x0.7457=1387 kW confirma. rpm = velocidad maxima. Carrera 3.5 in/89 mm, carga de biela total 42,000 lb/187 kN. Hoja JGR/JGJ (A-22744). Presion de descarga no impresa en la hoja (depende de la aplicacion): omitida. Material no declarado: omitido."
+   },
+   "fuente": "https://www.arielcorp.com/content/dam/ariel-corp/documents/product-spec-sheets/JGRJ_10.24.2018.pdf.coredownload.pdf",
+   "fecha_consulta": "2026-07-24"
+  },
+  {
+   "marca": "Siemens Energy",
+   "modelo": "Dresser-Rand 5HOS2",
+   "eq_type": "Compressor — reciprocating",
+   "S": 1790,
+   "params": {
+    "rpm": 1500,
+    "notas": "Compresor reciprocante separable de proceso. S = potencia maxima nominal del frame (config. de mayor numero de cilindros): 2400 BHP = 1790 kW impresos en la tabla de ratings (pag. 1); 2400x0.7457=1790 kW confirma. rpm = velocidad maxima. Carrera 5 in/127 mm, 2 cilindros, carga de biela combinada 60,000 lb/267 kN. Hoja Dresser-Rand HOS (jun-2021). Presion de descarga no impresa en la hoja (depende de la aplicacion): omitida. Material no declarado: omitido."
+   },
+   "fuente": "https://assets.siemens-energy.com/dam/89766c13-8a07-4210-9742-b05000a7c55b/HOS-Specification-Sheet-June-2021-pdf_Original%20file.pdf",
+   "fecha_consulta": "2026-07-24"
+  },
+  {
+   "marca": "Siemens Energy",
+   "modelo": "Dresser-Rand 7HOS2",
+   "eq_type": "Compressor — reciprocating",
+   "S": 1641,
+   "params": {
+    "rpm": 1000,
+    "notas": "Compresor reciprocante separable de proceso. S = potencia maxima nominal del frame (config. de mayor numero de cilindros): 2200 BHP = 1641 kW impresos en la tabla de ratings (pag. 1); 2200x0.7457=1641 kW confirma. rpm = velocidad maxima. Carrera 7 in/178 mm, 2 cilindros. Hoja Dresser-Rand HOS (jun-2021). Presion de descarga no impresa en la hoja (depende de la aplicacion): omitida. Material no declarado: omitido."
+   },
+   "fuente": "https://assets.siemens-energy.com/dam/89766c13-8a07-4210-9742-b05000a7c55b/HOS-Specification-Sheet-June-2021-pdf_Original%20file.pdf",
+   "fecha_consulta": "2026-07-24"
+  },
+  {
+   "marca": "Siemens Energy",
+   "modelo": "Dresser-Rand 6HOS4",
+   "eq_type": "Compressor — reciprocating",
+   "S": 2983,
+   "params": {
+    "rpm": 1200,
+    "notas": "Compresor reciprocante separable de proceso. S = potencia maxima nominal del frame (config. de mayor numero de cilindros): 4000 BHP = 2983 kW impresos en la tabla de ratings (pag. 1); 4000x0.7457=2983 kW confirma. rpm = velocidad maxima. Carrera 6 in/152 mm, 4 cilindros. Hoja Dresser-Rand HOS (jun-2021). Presion de descarga no impresa en la hoja (depende de la aplicacion): omitida. Material no declarado: omitido."
+   },
+   "fuente": "https://assets.siemens-energy.com/dam/89766c13-8a07-4210-9742-b05000a7c55b/HOS-Specification-Sheet-June-2021-pdf_Original%20file.pdf",
+   "fecha_consulta": "2026-07-24"
+  },
+  {
+   "marca": "Sodeca",
+   "modelo": "CMR-1135-2T IE3",
+   "eq_type": "Fan — centrifugal radial",
+   "S": 2.167,
+   "params": {
+    "rpm": 2910,
+    "notas": "Ventilador centrifugo de media presion, alabes curvados hacia atras (serie CMR), pag. 193. S = caudal MAXIMO de aire publicado por modelo: 7800 m3/h = 7800/3600 = 2.167 m3/s (columna 'Maximum flow rate' del catalogo). rpm = velocidad; potencia instalada 2.2 kW. La presion estatica maxima solo aparece en las curvas caracteristicas (no como escalar) -> P_max no se transcribe. Material no declarado: omitido."
+   },
+   "fuente": "https://www.sodeca.com/files/catalogs/en/CT01_Centrifugs_2018_EN.pdf",
+   "fecha_consulta": "2026-07-24"
+  },
+  {
+   "marca": "Sodeca",
+   "modelo": "CMR-1650-2T IE3",
+   "eq_type": "Fan — centrifugal radial",
+   "S": 5.236,
+   "params": {
+    "rpm": 2945,
+    "notas": "Ventilador centrifugo de media presion (serie CMR), pag. 193. S = caudal MAXIMO de aire publicado por modelo: 18850 m3/h = 18850/3600 = 5.236 m3/s (columna 'Maximum flow rate' del catalogo). rpm = velocidad; potencia instalada 11.0 kW. La presion estatica maxima solo aparece en las curvas caracteristicas (no como escalar) -> P_max no se transcribe. Material no declarado: omitido."
+   },
+   "fuente": "https://www.sodeca.com/files/catalogs/en/CT01_Centrifugs_2018_EN.pdf",
+   "fecha_consulta": "2026-07-24"
+  },
+  {
+   "marca": "Sodeca",
+   "modelo": "CMR-2380-4T IE3",
+   "eq_type": "Fan — centrifugal radial",
+   "S": 13.333,
+   "params": {
+    "rpm": 1470,
+    "notas": "Ventilador centrifugo de media presion (serie CMR), pag. 193. S = caudal MAXIMO de aire publicado por modelo: 48000 m3/h = 48000/3600 = 13.333 m3/s (columna 'Maximum flow rate' del catalogo). rpm = velocidad; potencia instalada 22.0 kW. La presion estatica maxima solo aparece en las curvas caracteristicas (no como escalar) -> P_max no se transcribe. Material no declarado: omitido."
+   },
+   "fuente": "https://www.sodeca.com/files/catalogs/en/CT01_Centrifugs_2018_EN.pdf",
+   "fecha_consulta": "2026-07-24"
+  },
+  {
+   "marca": "Sodeca",
+   "modelo": "HFW-56-4T-1 IE3",
+   "eq_type": "Fan — axial",
+   "S": 3.125,
+   "params": {
+    "rpm": 1420,
+    "notas": "Ventilador axial tubular (serie HFW), pag. 28. Angulo de alabe 22 grados. S = caudal MAXIMO de aire publicado por modelo: 11250 m3/h = 11250/3600 = 3.125 m3/s (columna 'Maximum flow rate' del catalogo). rpm = velocidad; potencia instalada 0.75 kW. La presion estatica maxima solo aparece en las curvas caracteristicas (no como escalar) -> P_max no se transcribe. Material no declarado: omitido."
+   },
+   "fuente": "https://www.sodeca.com/files/catalogs/en/CT07_Helicoidales_Tejado_2019_EN.pdf",
+   "fecha_consulta": "2026-07-24"
+  },
+  {
+   "marca": "Sodeca",
+   "modelo": "HFW-63-4T-4 IE3",
+   "eq_type": "Fan — axial",
+   "S": 6.736,
+   "params": {
+    "rpm": 1440,
+    "notas": "Ventilador axial tubular (serie HFW), pag. 28. Angulo de alabe 38 grados. S = caudal MAXIMO de aire publicado por modelo: 24250 m3/h = 24250/3600 = 6.736 m3/s (columna 'Maximum flow rate' del catalogo). rpm = velocidad; potencia instalada 3.0 kW. La presion estatica maxima solo aparece en las curvas caracteristicas (no como escalar) -> P_max no se transcribe. Material no declarado: omitido."
+   },
+   "fuente": "https://www.sodeca.com/files/catalogs/en/CT07_Helicoidales_Tejado_2019_EN.pdf",
+   "fecha_consulta": "2026-07-24"
+  },
+  {
+   "marca": "Sodeca",
+   "modelo": "HFW-90-4T-4 IE3",
+   "eq_type": "Fan — axial",
+   "S": 9.333,
+   "params": {
+    "rpm": 1440,
+    "notas": "Ventilador axial tubular (serie HFW), pag. 28. Angulo de alabe 8 grados. S = caudal MAXIMO de aire publicado por modelo: 33600 m3/h = 33600/3600 = 9.333 m3/s (columna 'Maximum flow rate' del catalogo). rpm = velocidad; potencia instalada 3.0 kW. La presion estatica maxima solo aparece en las curvas caracteristicas (no como escalar) -> P_max no se transcribe. Material no declarado: omitido."
+   },
+   "fuente": "https://www.sodeca.com/files/catalogs/en/CT07_Helicoidales_Tejado_2019_EN.pdf",
+   "fecha_consulta": "2026-07-24"
+  },
+  {
+   "marca": "Samson",
+   "modelo": "Type 3241 DN25 PN40",
+   "eq_type": "Valve — control globe",
+   "S_no_publicado": "otra_magnitud",
+   "params": {
+    "P_max_bar": 40,
+    "T_max_C": 220,
+    "notas": "Valvula de control de globo. El fabricante publica la capacidad como Kvs (m3/h·bar^-0.5) -> no mapea al S_unit del tipo (m3/h) -> otra_magnitud. Envolvente verificable IMPRESA: P_max_bar = 40 (cuerpo PN40) y T_max_C = 220 (config. estandar). Kvs 0.4-10 (DN25, tapon estandar, isoporcentual; tabla Kvs T 8000-3 pag. 4). Cuerpo acero fundido 1.0619, PN 10 a 40 (hoja T 8015). Serie con sello metalico llega a +450 C. La presion admisible a temperatura sigue el diagrama P-T (grafica, no escalar) -> no se lee de ahi. Material no declarado: omitido."
+   },
+   "fuente": "https://www.samsongroup.com/document/t80150en.pdf",
+   "fecha_consulta": "2026-07-24",
+   "granularidad": "modelo"
+  },
+  {
+   "marca": "Samson",
+   "modelo": "Type 3241 DN50 PN40",
+   "eq_type": "Valve — control globe",
+   "S_no_publicado": "otra_magnitud",
+   "params": {
+    "P_max_bar": 40,
+    "T_max_C": 220,
+    "notas": "Valvula de control de globo. El fabricante publica la capacidad como Kvs (m3/h·bar^-0.5) -> no mapea al S_unit del tipo (m3/h) -> otra_magnitud. Envolvente verificable IMPRESA: P_max_bar = 40 (cuerpo PN40) y T_max_C = 220 (config. estandar). Kvs hasta 40 (DN50, asiento 48 mm; T 8000-3 pag. 4). PN 10 a 40, -10 a +220 C estandar (hoja T 8015). La presion admisible a temperatura sigue el diagrama P-T (grafica, no escalar) -> no se lee de ahi. Material no declarado: omitido."
+   },
+   "fuente": "https://www.samsongroup.com/document/t80150en.pdf",
+   "fecha_consulta": "2026-07-24",
+   "granularidad": "modelo"
+  },
+  {
+   "marca": "Samson",
+   "modelo": "Type 3241 DN80 PN40",
+   "eq_type": "Valve — control globe",
+   "S_no_publicado": "otra_magnitud",
+   "params": {
+    "P_max_bar": 40,
+    "T_max_C": 220,
+    "notas": "Valvula de control de globo. El fabricante publica la capacidad como Kvs (m3/h·bar^-0.5) -> no mapea al S_unit del tipo (m3/h) -> otra_magnitud. Envolvente verificable IMPRESA: P_max_bar = 40 (cuerpo PN40) y T_max_C = 220 (config. estandar). Kvs hasta 80 (DN80, asiento 80 mm; T 8000-3 pag. 4). PN 10 a 40, -10 a +220 C (hoja T 8015). La presion admisible a temperatura sigue el diagrama P-T (grafica, no escalar) -> no se lee de ahi. Material no declarado: omitido."
+   },
+   "fuente": "https://www.samsongroup.com/document/t80150en.pdf",
+   "fecha_consulta": "2026-07-24",
+   "granularidad": "modelo"
+  },
+  {
+   "marca": "Emerson Fisher",
+   "modelo": "easy-e ET NPS2 / DN50",
+   "eq_type": "Valve — control globe",
+   "S_no_publicado": "otra_magnitud",
+   "params": {
+    "P_max_bar": 40,
+    "T_max_C": 232,
+    "notas": "Valvula de control de globo. El fabricante publica la capacidad como Cv -> no mapea al S_unit del tipo (m3/h) -> otra_magnitud. Envolvente verificable IMPRESA: P_max_bar = 40 (cuerpo PN40) y T_max_C = 232 (config. estandar). Cv 59.7 (NPS2=DN50, trim full-size isoporcentual; Tabla 17 pag. 22, boletin ET D100022X012). Construcciones PN16/25/40/63/100 y CL150/300/600 (Tabla 3). T hasta 316 C con anillos PEEK. La presion admisible a temperatura sigue el diagrama P-T (grafica, no escalar) -> no se lee de ahi. Material no declarado: omitido."
+   },
+   "fuente": "https://www.emerson.com/is/content/emerson/en/final-control/flow-controls/documents/d100022x012-bulletin-et-eat-and-etr-sliding-stem-control-valves-fisher.pdf",
+   "fecha_consulta": "2026-07-24",
+   "granularidad": "modelo"
+  },
+  {
+   "marca": "Emerson Fisher",
+   "modelo": "easy-e ET NPS3 / DN80",
+   "eq_type": "Valve — control globe",
+   "S_no_publicado": "otra_magnitud",
+   "params": {
+    "P_max_bar": 40,
+    "T_max_C": 232,
+    "notas": "Valvula de control de globo. El fabricante publica la capacidad como Cv -> no mapea al S_unit del tipo (m3/h) -> otra_magnitud. Envolvente verificable IMPRESA: P_max_bar = 40 (cuerpo PN40) y T_max_C = 232 (config. estandar). Cv 136 (NPS3=DN80; Tabla 17 pag. 22, boletin ET D100022X012). PN16-100 / CL150-600. 232 C = 450 F estandar. La presion admisible a temperatura sigue el diagrama P-T (grafica, no escalar) -> no se lee de ahi. Material no declarado: omitido."
+   },
+   "fuente": "https://www.emerson.com/is/content/emerson/en/final-control/flow-controls/documents/d100022x012-bulletin-et-eat-and-etr-sliding-stem-control-valves-fisher.pdf",
+   "fecha_consulta": "2026-07-24",
+   "granularidad": "modelo"
+  },
+  {
+   "marca": "Emerson Fisher",
+   "modelo": "easy-e ET NPS4 / DN100",
+   "eq_type": "Valve — control globe",
+   "S_no_publicado": "otra_magnitud",
+   "params": {
+    "P_max_bar": 40,
+    "T_max_C": 232,
+    "notas": "Valvula de control de globo. El fabricante publica la capacidad como Cv -> no mapea al S_unit del tipo (m3/h) -> otra_magnitud. Envolvente verificable IMPRESA: P_max_bar = 40 (cuerpo PN40) y T_max_C = 232 (config. estandar). Cv 224 (NPS4=DN100; Tabla 17 pag. 22, boletin ET D100022X012). PN16-100 / CL150-600. La presion admisible a temperatura sigue el diagrama P-T (grafica, no escalar) -> no se lee de ahi. Material no declarado: omitido."
+   },
+   "fuente": "https://www.emerson.com/is/content/emerson/en/final-control/flow-controls/documents/d100022x012-bulletin-et-eat-and-etr-sliding-stem-control-valves-fisher.pdf",
+   "fecha_consulta": "2026-07-24",
+   "granularidad": "modelo"
+  },
+  {
+   "marca": "GEA",
+   "modelo": "MSE 100",
+   "eq_type": "Centrifuge — disc stack",
+   "S_no_publicado": "otra_magnitud",
+   "params": {
+    "Q_max_m3_h": 30,
+    "notas": "Separadora/clarificadora centrifuga de discos (disc-stack). El fabricante publica CAPACIDAD HIDRAULICA (throughput), no el volumen de tambor en m3 -> otra_magnitud. Q_max_m3_h = 30 = caudal maximo publicado del modelo. Clarificadora de leche; rango impreso 15,000-30,000 l/h -> maximo 30,000/1000=30 m3/h (tabla 'Machine types', pag. 22, doc B_DA-19-07-0010 EN). rpm no impreso: omitido. Material no declarado: omitido."
+   },
+   "fuente": "https://www.gea.com/assets/170233/",
+   "fecha_consulta": "2026-07-24",
+   "granularidad": "modelo"
+  },
+  {
+   "marca": "GEA",
+   "modelo": "MSE 350",
+   "eq_type": "Centrifuge — disc stack",
+   "S_no_publicado": "otra_magnitud",
+   "params": {
+    "Q_max_m3_h": 75,
+    "notas": "Separadora/clarificadora centrifuga de discos (disc-stack). El fabricante publica CAPACIDAD HIDRAULICA (throughput), no el volumen de tambor en m3 -> otra_magnitud. Q_max_m3_h = 75 = caudal maximo publicado del modelo. Clarificadora de leche; rango 55,000-75,000 l/h -> 75 m3/h (pag. 22). rpm no impreso: omitido. Material no declarado: omitido."
+   },
+   "fuente": "https://www.gea.com/assets/170233/",
+   "fecha_consulta": "2026-07-24",
+   "granularidad": "modelo"
+  },
+  {
+   "marca": "GEA",
+   "modelo": "CSE 400",
+   "eq_type": "Centrifuge — disc stack",
+   "S_no_publicado": "otra_magnitud",
+   "params": {
+    "Q_max_m3_h": 45,
+    "notas": "Separadora/clarificadora centrifuga de discos (disc-stack). El fabricante publica CAPACIDAD HIDRAULICA (throughput), no el volumen de tambor en m3 -> otra_magnitud. Q_max_m3_h = 45 = caudal maximo publicado del modelo. Clarificadora de eliminacion bacteriana; rango 30,000-45,000 l/h -> 45 m3/h (pag. 22). rpm no impreso: omitido. Material no declarado: omitido."
+   },
+   "fuente": "https://www.gea.com/assets/170233/",
+   "fecha_consulta": "2026-07-24",
+   "granularidad": "modelo"
+  },
+  {
+   "marca": "Alfa Laval",
+   "modelo": "MBPX 810",
+   "eq_type": "Centrifuge — disc stack",
+   "S_no_publicado": "otra_magnitud",
+   "params": {
+    "Q_max_m3_h": 10,
+    "rpm": 7488,
+    "notas": "Separadora/clarificadora centrifuga de discos (disc-stack). El fabricante publica CAPACIDAD HIDRAULICA (throughput), no el volumen de tambor en m3 -> otra_magnitud. Q_max_m3_h = 10 = caudal maximo publicado del modelo. Separadora solids-ejecting; throughput max 10 m3/h (pag. 2). Aplicaciones: bacterias/enzimas/cultivos/vacunas. Bowl 15 l. Material no declarado: omitido."
+   },
+   "fuente": "https://www.alfalaval.com/globalassets/documents/products/separation/centrifugal-separators/disc-stack-separators/mbpx-810sgv-pchs00021en_mbpx-810.pdf",
+   "fecha_consulta": "2026-07-24",
+   "granularidad": "modelo"
+  },
+  {
+   "marca": "Alfa Laval",
+   "modelo": "PX 80",
+   "eq_type": "Centrifuge — disc stack",
+   "S_no_publicado": "otra_magnitud",
+   "params": {
+    "Q_max_m3_h": 20,
+    "rpm": 5120,
+    "notas": "Separadora/clarificadora centrifuga de discos (disc-stack). El fabricante publica CAPACIDAD HIDRAULICA (throughput), no el volumen de tambor en m3 -> otra_magnitud. Q_max_m3_h = 20 = caudal maximo publicado del modelo. Separadora disc-stack solids-ejecting; throughput max 20 m3/h (pag. 2). Refinacion de aceites y grasas. Material no declarado: omitido."
+   },
+   "fuente": "https://www.alfalaval.com/globalassets/documents/products/separation/centrifugal-separators/disc-stack-separators/px-80-disc-stack-centrifuge.pdf",
+   "fecha_consulta": "2026-07-24",
+   "granularidad": "modelo"
+  },
+  {
+   "marca": "Alfa Laval",
+   "modelo": "VO 5",
+   "eq_type": "Centrifuge — disc stack",
+   "S_no_publicado": "otra_magnitud",
+   "params": {
+    "Q_max_m3_h": 6,
+    "rpm": 8400,
+    "notas": "Separadora/clarificadora centrifuga de discos (disc-stack). El fabricante publica CAPACIDAD HIDRAULICA (throughput), no el volumen de tambor en m3 -> otra_magnitud. Q_max_m3_h = 6 = caudal maximo publicado del modelo. Separadora disc-stack; throughput max 6 m3/h (pag. 2). Aceites/grasas. Bowl 6 l; rpm 8375/8400 (50/60 Hz). Material no declarado: omitido."
+   },
+   "fuente": "https://www.alfalaval.com/globalassets/documents/products/separation/centrifugal-separators/disc-stack-separators/alfa-laval-disc-stack-separator_vo5.pdf",
+   "fecha_consulta": "2026-07-24",
+   "granularidad": "modelo"
+  },
+  {
+   "marca": "EVAPCO",
+   "modelo": "AT 14-2E4",
+   "eq_type": "Cooling tower — induced draft",
+   "S_no_publicado": "otra_magnitud",
+   "params": {
+    "Q_max_m3_h": 22.5,
+    "notas": "Torre de enfriamiento de tiro INDUCIDO. El fabricante publica TONELAJE NOMINAL a condiciones de referencia (95->85 F, bulbo humedo 78 F), no MW ni caudal directo -> otra_magnitud. Q_max_m3_h = caudal de agua nominal derivado por la DEFINICION IMPRESA del fabricante (1 ton nominal = 3 USGPM): 33 ton x 3 = 99 gpm x 0.2271 = 22.5 m3/h. Tonelaje nominal 33 (pag. 3); contraflujo tiro inducido; motor de ventilador 2 HP. Bulletin AT21ENG. Material no declarado: omitido."
+   },
+   "fuente": "https://www.evapco.com/sites/evapco.com/files/2021-10/AT21ENG%201021.pdf",
+   "fecha_consulta": "2026-07-24",
+   "granularidad": "modelo"
+  },
+  {
+   "marca": "EVAPCO",
+   "modelo": "AT 17-2J9",
+   "eq_type": "Cooling tower — induced draft",
+   "S_no_publicado": "otra_magnitud",
+   "params": {
+    "Q_max_m3_h": 116.5,
+    "notas": "Torre de enfriamiento de tiro INDUCIDO. El fabricante publica TONELAJE NOMINAL a condiciones de referencia (95->85 F, bulbo humedo 78 F), no MW ni caudal directo -> otra_magnitud. Q_max_m3_h = caudal de agua nominal derivado por la DEFINICION IMPRESA del fabricante (1 ton nominal = 3 USGPM): 171 ton x 3 = 513 gpm x 0.2271 = 116.5 m3/h. Tonelaje nominal 171 (pag. 5); motor 15 HP. Bulletin AT21ENG. Material no declarado: omitido."
+   },
+   "fuente": "https://www.evapco.com/sites/evapco.com/files/2021-10/AT21ENG%201021.pdf",
+   "fecha_consulta": "2026-07-24",
+   "granularidad": "modelo"
+  },
+  {
+   "marca": "EVAPCO",
+   "modelo": "AT 27-2J24",
+   "eq_type": "Cooling tower — induced draft",
+   "S_no_publicado": "otra_magnitud",
+   "params": {
+    "Q_max_m3_h": 279.3,
+    "notas": "Torre de enfriamiento de tiro INDUCIDO. El fabricante publica TONELAJE NOMINAL a condiciones de referencia (95->85 F, bulbo humedo 78 F), no MW ni caudal directo -> otra_magnitud. Q_max_m3_h = caudal de agua nominal derivado por la DEFINICION IMPRESA del fabricante (1 ton nominal = 3 USGPM): 410 ton x 3 = 1230 gpm x 0.2271 = 279.3 m3/h. Tonelaje nominal 410 (pag. 8); motor (2)x15 HP. Bulletin AT21ENG. Material no declarado: omitido."
+   },
+   "fuente": "https://www.evapco.com/sites/evapco.com/files/2021-10/AT21ENG%201021.pdf",
+   "fecha_consulta": "2026-07-24",
+   "granularidad": "modelo"
+  },
+  {
+   "marca": "BAC",
+   "modelo": "Series 3000 XES3E-8518-05G",
+   "eq_type": "Cooling tower — induced draft",
+   "S_no_publicado": "otra_magnitud",
+   "params": {
+    "Q_max_m3_h": 116.5,
+    "notas": "Torre de enfriamiento de tiro INDUCIDO. El fabricante publica TONELAJE NOMINAL a condiciones de referencia (95->85 F, bulbo humedo 78 F), no MW ni caudal directo -> otra_magnitud. Q_max_m3_h = caudal de agua nominal derivado por la DEFINICION IMPRESA del fabricante (1 ton nominal = 3 USGPM): 171 ton x 3 = 513 gpm x 0.2271 = 116.5 m3/h. Tonelaje nominal 171 (pag. C18); flujo cruzado, ventilador axial tiro inducido; motor 3 HP. Product & Application Handbook Vol. VI. Material no declarado: omitido."
+   },
+   "fuente": "https://baltimoreaircoil.com/download_api_endpoint/6026/C015_PAHBvi_3000_ED_20231020.pdf",
+   "fecha_consulta": "2026-07-24",
+   "granularidad": "modelo"
+  },
+  {
+   "marca": "BAC",
+   "modelo": "Series 3000 S3E-8518-05L",
+   "eq_type": "Cooling tower — induced draft",
+   "S_no_publicado": "otra_magnitud",
+   "params": {
+    "Q_max_m3_h": 199.6,
+    "notas": "Torre de enfriamiento de tiro INDUCIDO. El fabricante publica TONELAJE NOMINAL a condiciones de referencia (95->85 F, bulbo humedo 78 F), no MW ni caudal directo -> otra_magnitud. Q_max_m3_h = caudal de agua nominal derivado por la DEFINICION IMPRESA del fabricante (1 ton nominal = 3 USGPM): 293 ton x 3 = 879 gpm x 0.2271 = 199.6 m3/h. Tonelaje nominal 293 (pag. C16); motor 15 HP. Handbook Vol. VI. Material no declarado: omitido."
+   },
+   "fuente": "https://baltimoreaircoil.com/download_api_endpoint/6026/C015_PAHBvi_3000_ED_20231020.pdf",
+   "fecha_consulta": "2026-07-24",
+   "granularidad": "modelo"
+  },
+  {
+   "marca": "BAC",
+   "modelo": "Series 3000 S3E-1424-14T",
+   "eq_type": "Cooling tower — induced draft",
+   "S_no_publicado": "otra_magnitud",
+   "params": {
+    "Q_max_m3_h": 887.7,
+    "notas": "Torre de enfriamiento de tiro INDUCIDO. El fabricante publica TONELAJE NOMINAL a condiciones de referencia (95->85 F, bulbo humedo 78 F), no MW ni caudal directo -> otra_magnitud. Q_max_m3_h = caudal de agua nominal derivado por la DEFINICION IMPRESA del fabricante (1 ton nominal = 3 USGPM): 1303 ton x 3 = 3909 gpm x 0.2271 = 887.7 m3/h. Tonelaje nominal 1303 (pag. C17); motor 100 HP; accionamiento por engranaje. Handbook Vol. VI. Material no declarado: omitido."
+   },
+   "fuente": "https://baltimoreaircoil.com/download_api_endpoint/6026/C015_PAHBvi_3000_ED_20231020.pdf",
+   "fecha_consulta": "2026-07-24",
+   "granularidad": "modelo"
   }
  ]
 }
