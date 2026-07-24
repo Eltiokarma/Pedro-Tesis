@@ -21,7 +21,11 @@
    ],
    "por_que": "Dos recipientes del mismo volumen pueden ser equipos completamente distintos si cambian el fluido, la presion o la temperatura. Por eso no existe una talla de catalogo: existe una hoja de datos por servicio. Si hay recipientes de catalogo (los de aire comprimido, ASME, con volumen nominal impreso), pero son de SERVICIO DE AIRE: acero al carbono con imprimacion de taller, sin sobreespesor quimico ni internos. No son base valida para un separador o un KO drum de proceso.",
    "como_se_compra": "Se emite una VESSEL DATA SHEET (presion y temperatura de diseno, fluido, volumen, boquillas, internos, sobreespesor de corrosion, codigo aplicable) y los talleres cotizan contra esa hoja. El recipiente llega con placa ASME y su libro de datos; no tiene numero de catalogo.",
-   "normas": ["ASME BPVC Seccion VIII Div. 1", "NACE MR0175 / ISO 15156 (servicio amargo)", "ASME B16.5 (bridas)"]
+   "normas": [
+    "ASME BPVC Seccion VIII Div. 1",
+    "NACE MR0175 / ISO 15156 (servicio amargo)",
+    "ASME B16.5 (bridas)"
+   ]
   },
   "Vessel — horizontal": {
    "titulo": "SE MANDA A HACER A LA MEDIDA",
@@ -33,7 +37,11 @@
    ],
    "por_que": "Igual que el vertical: el volumen no define el equipo. La orientacion horizontal se elige justamente por un requisito de proceso (mayor area de separacion, o limitacion de altura), y eso ya es diseno a medida.",
    "como_se_compra": "Vessel data sheet + cotizacion de taller. El documento de compra es la especificacion, no un modelo.",
-   "normas": ["ASME BPVC Seccion VIII Div. 1", "Metodo de Zick (soportes de silleta)", "NACE MR0175 / ISO 15156"]
+   "normas": [
+    "ASME BPVC Seccion VIII Div. 1",
+    "Metodo de Zick (soportes de silleta)",
+    "NACE MR0175 / ISO 15156"
+   ]
   },
   "Tower (column shell)": {
    "titulo": "SE MANDA A HACER A LA MEDIDA",
@@ -45,7 +53,11 @@
    ],
    "por_que": "La columna es el resultado de un calculo de separacion (etapas de equilibrio) acoplado a un calculo hidraulico. Cambiar la alimentacion o la pureza pedida cambia el diametro y la altura. No hay tallas: hay diseno.",
    "como_se_compra": "El licenciante o el ingeniero de proceso fija etapas y condiciones; el proveedor de internos (Sulzer Chemtech, Koch-Glitsch y similares) hace el diseno hidraulico y garantiza la capacidad; un taller de recipientes fabrica la envolvente contra la hoja de datos.",
-   "normas": ["ASME BPVC Seccion VIII Div. 1", "Correlaciones de inundacion (Fair) para platos", "ASCE / normativa local de viento y sismo para el faldon"]
+   "normas": [
+    "ASME BPVC Seccion VIII Div. 1",
+    "Correlaciones de inundacion (Fair) para platos",
+    "ASCE / normativa local de viento y sismo para el faldon"
+   ]
   },
   "Fired heater — non-reformer": {
    "titulo": "SE ERIGE EN CAMPO, A LA MEDIDA",
@@ -57,7 +69,10 @@
    ],
    "por_que": "Un horno de proceso es una estructura de acero y refractario construida alrededor de un serpentin disenado para un fluido concreto. Se erige en campo pieza por pieza; no existe un modelo de catalogo que se entregue en un camion.",
    "como_se_compra": "Se licita por especificacion (duty, fluido, presion, temperatura de entrada y salida, combustible, limites de flux y de emisiones). El fabricante disena el serpentin y la camara, y lo monta en sitio.",
-   "normas": ["API 560 (hornos de fuego directo para refineria)", "API 530 (calculo de espesor de tubos)"]
+   "normas": [
+    "API 560 (hornos de fuego directo para refineria)",
+    "API 530 (calculo de espesor de tubos)"
+   ]
   },
   "Fired heater — reformer": {
    "titulo": "SE ERIGE EN CAMPO, A LA MEDIDA",
@@ -69,7 +84,11 @@
    ],
    "por_que": "El reformador es el corazon de una planta de hidrogeno o amoniaco y se disena junto con el catalizador y el balance de la planta entera. Es un equipo de licencia, no de catalogo.",
    "como_se_compra": "Va dentro del paquete del licenciante de la tecnologia; se contrata por ingenieria, suministro y montaje en campo.",
-   "normas": ["API 560", "API 530", "Especificaciones del licenciante de la tecnologia"]
+   "normas": [
+    "API 560",
+    "API 530",
+    "Especificaciones del licenciante de la tecnologia"
+   ]
   },
   "Cooling tower — natural draft": {
    "titulo": "ES OBRA CIVIL: SE PROYECTA PARA EL SITIO",
@@ -80,7 +99,10 @@
    ],
    "por_que": "Es una estructura de hormigon construida en el emplazamiento, dimensionada para el clima de ese sitio. No existe un modelo de catalogo, del mismo modo que no existe un catalogo de puentes.",
    "como_se_compra": "Se contrata como proyecto de ingenieria civil mas el suministro del relleno y los distribuidores. Las torres que SI son de catalogo son las de tiro mecanico en paquete, que en el simulador viven en otro tipo.",
-   "normas": ["CTI (Cooling Technology Institute) para el comportamiento termico", "Normativa de hormigon y viento del emplazamiento"]
+   "normas": [
+    "CTI (Cooling Technology Institute) para el comportamiento termico",
+    "Normativa de hormigon y viento del emplazamiento"
+   ]
   },
   "Heat exch. — WHB field erected": {
    "titulo": "SE ERIGE EN CAMPO, A LA MEDIDA",
@@ -91,7 +113,10 @@
    ],
    "por_que": "Por definicion se erige en campo: llega por partes y se monta. Su hermano en paquete (WHB packaged) es el que puede tener series.",
    "como_se_compra": "Por especificacion de proceso, con ingenieria y montaje en sitio.",
-   "normas": ["ASME BPVC Seccion I o VIII segun el servicio", "TEMA para el haz tubular"]
+   "normas": [
+    "ASME BPVC Seccion I o VIII segun el servicio",
+    "TEMA para el haz tubular"
+   ]
   },
   "Splitter — flow divider": {
    "titulo": "NO ES UN EQUIPO QUE SE COMPRE POR MODELO",
@@ -101,7 +126,10 @@
    ],
    "por_que": "El divisor de flujo existe en el diagrama para repartir corrientes, pero fisicamente es tuberia y accesorios. No hay fabricante que publique modelos de 'divisor de flujo'.",
    "como_se_compra": "Como material de tuberia (accesorios, bridas y valvulas), dentro del presupuesto de piping y no como equipo mayor.",
-   "normas": ["ASME B31.3 (tuberia de proceso)", "ASME B16.9 (accesorios)"]
+   "normas": [
+    "ASME B31.3 (tuberia de proceso)",
+    "ASME B16.9 (accesorios)"
+   ]
   },
   "Mixer — impeller": {
    "titulo": "SI HAY CATALOGO, PERO ESTE SIMULADOR AUN NO PUEDE VERIFICARLO",
@@ -112,7 +140,10 @@
    ],
    "por_que": "No es que el mercado no publique: es que al simulador le falta vocabulario para verificarlo con honestidad. Cargar el agitador solo por potencia daria un APTO que no confirma nada.",
    "como_se_compra": "Por hoja de datos de agitacion: volumen, densidad y viscosidad del fluido, tipo de rodete, velocidad y par requerido; el fabricante selecciona reductor y eje.",
-   "normas": ["Criterios de potencia por unidad de volumen y numero de bombeo del rodete", "AGMA para el reductor"]
+   "normas": [
+    "Criterios de potencia por unidad de volumen y numero de bombeo del rodete",
+    "AGMA para el reductor"
+   ]
   },
   "Ambient": {
    "titulo": "NO ES UN EQUIPO",
@@ -123,6 +154,137 @@
    "por_que": "Existe para cerrar el balance del diagrama, igual que un nodo de referencia en un circuito. No es un equipo del catalogo de costos.",
    "como_se_compra": "No aplica.",
    "normas": []
+  },
+  "Heat exch. — air cooler": {
+   "titulo": "SE DISENA A LA MEDIDA DEL SITIO",
+   "que_fija_el_tamano": [
+    "AREA: sale del diseno termico contra el AIRE AMBIENTE del emplazamiento. El acercamiento tipico al bulbo seco (8-14 C) decide cuanta superficie hace falta, y ese aire cambia con el sitio y la estacion: el mismo servicio necesita mas area en Talara que en Cusco.",
+    "GEOMETRIA: numero de filas de tubos aletados, paso de aleta, largo del haz y numero de ventiladores. Son grados de libertad del disenador, no tallas de una lista.",
+    "TIRO: forzado (ventilador debajo) o inducido (encima) cambia el comportamiento frente a recirculacion de aire caliente y la temperatura que ve el ventilador."
+   ],
+   "por_que": "Lo que SI tiene catalogo son los aeroenfriadores de refrigeracion (dry coolers): equipos de agua o glicol que publican CAPACIDAD EN kW a condiciones de referencia, no area, y que no son de servicio de proceso. Para un enfriador de aire de planta, el area es un resultado del diseno termico, no un dato de catalogo.",
+   "como_se_compra": "Por hoja de datos segun API 661 / ISO 13706: duty, fluido, temperaturas de entrada y salida, temperatura de diseno del aire y perdida de carga admisible. El fabricante disena el haz y garantiza el comportamiento termico.",
+   "normas": [
+    "API 661 / ISO 13706 (aeroenfriadores para servicio de petroleo)",
+    "ASME BPVC Seccion VIII para los cabezales"
+   ]
+  },
+  "Heat exch. — condenser air-cooled": {
+   "titulo": "SE DISENA A LA MEDIDA DEL SITIO",
+   "que_fija_el_tamano": [
+    "AREA: la fija el calor latente a retirar y la temperatura del aire ambiente de diseno. Ademas la condensacion ocurre a temperatura casi constante, asi que el perfil termico y el subenfriamiento se disenan para cada servicio.",
+    "INCONDENSABLES: su presencia degrada mucho el coeficiente y obliga a prever venteo; eso cambia el arreglo de pasos y por lo tanto el area.",
+    "GEOMETRIA Y TIRO: filas de tubos aletados, ventiladores y tipo de tiro, igual que en un aeroenfriador."
+   ],
+   "por_que": "El area es un resultado del diseno termico frente al aire del sitio, no una talla publicada. Los condensadores de catalogo pertenecen al mundo de la refrigeracion y se publican por capacidad en kW a condiciones de referencia: otra magnitud y otro servicio.",
+   "como_se_compra": "Por hoja de datos segun API 661 / ISO 13706, declarando composicion del vapor, incondensables y presion de condensacion.",
+   "normas": [
+    "API 661 / ISO 13706",
+    "ASME BPVC Seccion VIII"
+   ]
+  },
+  "Evaporator — vertical": {
+   "titulo": "SE DISENA A LA MEDIDA DEL PRODUCTO",
+   "que_fija_el_tamano": [
+    "AREA: sale del balance de energia dividido por U y por la diferencia de temperatura util. Y U depende del REGIMEN elegido (pelicula descendente, circulacion forzada, termosifon) y del ensuciamiento del producto.",
+    "ELEVACION DEL PUNTO DE EBULLICION: al concentrarse, la solucion hierve por encima del agua pura y ese incremento se COME la diferencia de temperatura disponible; en multiples efectos hay que descontarlo efecto por efecto.",
+    "NUMERO DE EFECTOS: es una decision economica, no tecnica — mas efectos ahorran vapor pero multiplican superficie. Ese balance depende del precio local de la energia.",
+    "SENSIBILIDAD DEL PRODUCTO: tiempo de residencia y temperatura maxima admisible (leche, jugos, farmacos) limitan el diseno tanto como la termodinamica."
+   ],
+   "por_que": "Dos evaporadores de la misma area pueden ser inservibles el uno para el trabajo del otro: manda el producto. Por eso los fabricantes ofrecen ENSAYOS EN PLANTA PILOTO antes de dimensionar, en vez de vender por catalogo.",
+   "como_se_compra": "Por especificacion de proceso, normalmente con pruebas piloto previas con el producto real del cliente para medir U, ensuciamiento y calidad final.",
+   "normas": [
+    "ASME BPVC Seccion VIII",
+    "TEMA para el haz tubular",
+    "Normativa sanitaria (3-A, EHEDG) en alimentos y farma"
+   ]
+  },
+  "Heat exch. — WHB packaged": {
+   "titulo": "A ESTE TAMANO YA NO HAY PAQUETE: SE DISENA",
+   "que_fija_el_tamano": [
+    "SUPERFICIE: la fija el calor a recuperar y el ACERCAMIENTO (pinch) elegido en el extremo frio; apretar el pinch ahorra combustible pero dispara la superficie.",
+    "CIRCULACION Y DOMO: el domo, los bajantes y los ascendentes se disenan para la circulacion natural del agua a la presion de vapor pedida.",
+    "GAS DE PROCESO: su composicion decide el material y la velocidad admisible (erosion con particulas, punto de rocio acido con azufre).",
+    "DILATACION DIFERENCIAL: con gases muy calientes, el diseno lo gobierna la expansion entre carcasa y tubos y la proteccion de la placa tubular."
+   ],
+   "por_que": "DATO CONCRETO: las calderas de recuperacion que SI se venden en paquete llegan hasta unos 4.100 kg/h de vapor (por ejemplo la Bosch HRSB, ocho versiones estandarizadas). Esta clase del simulador arranca en 5.000 kg/h: justo por encima del techo del catalogo. Es decir, al tamano que representa este bloque ya se salio del mundo del paquete y se entro en el del diseno a medida.",
+   "como_se_compra": "Por especificacion termica y mecanica; el fabricante disena el banco y el circuito de agua-vapor para ese gas concreto.",
+   "normas": [
+    "ASME BPVC Seccion I (calderas)",
+    "TEMA para el haz tubular"
+   ]
+  },
+  "Reactor — jacketed non-agit.": {
+   "titulo": "SE MANDA A HACER A LA MEDIDA",
+   "que_fija_el_tamano": [
+    "VOLUMEN: lo fija la cinetica y el tiempo de residencia de la reaccion, no una talla.",
+    "CAMISA: el area de intercambio de la camisa (o el serpentin de medio tubo) se disena para el calor de reaccion — el punto critico es poder RETIRAR el calor en el peor momento, no en el promedio.",
+    "ESPESOR: ASME VIII para el recipiente Y para la camisa, que tiene su propia presion de diseno."
+   ],
+   "por_que": "Los reactores vidriados que SI tienen catalogo vienen con agitacion de serie (los Pfaudler AE traen impulsor y deflector; los De Dietrich CTJ traen motor). Un reactor encamisado SIN agitador es una configuracion pedida a proposito, y sin agitacion el coeficiente de transferencia interior cae mucho: hay que compensarlo con mas area o mas salto termico, que es diseno.",
+   "como_se_compra": "Por hoja de datos con presion y temperatura de recipiente y camisa, servicio, y el perfil de calor a retirar.",
+   "normas": [
+    "ASME BPVC Seccion VIII Div. 1",
+    "DIN 28136 (reactores esmaltados)"
+   ]
+  },
+  "Heat exch. — kettle reboiler": {
+   "titulo": "SE DISENA A LA MEDIDA",
+   "que_fija_el_tamano": [
+    "AREA: sale del duty de rehervido, pero con un techo duro: el FLUX CRITICO de ebullicion. Si se supera, se forma pelicula de vapor, el coeficiente se desploma y la superficie se seca (burnout). Se disena con margen por debajo de ese flux.",
+    "DIAMETRO DE CARCASA: en un kettle la carcasa se agranda respecto a un casco-tubo normal para dejar espacio de desprendimiento de vapor sobre el haz, y evitar arrastre de liquido hacia la columna.",
+    "TIPO TEMA K: el rehervidor de caldera es justamente el tipo K de TEMA; su geometria la fija el servicio de la columna a la que sirve."
+   ],
+   "por_que": "El area no se elige de una lista: es el resultado de un calculo de ebullicion acoplado a la columna. Cambiar el reflujo o la presion de la torre cambia el rehervidor.",
+   "como_se_compra": "Por hoja de datos termica (duty, composicion, presion, salto disponible) contra TEMA y ASME; el fabricante hace el diseno termomecanico.",
+   "normas": [
+    "TEMA (tipo K)",
+    "ASME BPVC Seccion VIII Div. 1"
+   ]
+  },
+  "Reactor — autoclave": {
+   "titulo": "SE MANDA A HACER A LA MEDIDA",
+   "que_fija_el_tamano": [
+    "ESPESOR: en alta presion el espesor crece con P*R, y a partir de cierto punto la pared monolitica deja de ser viable: se pasa a forjados, multicapa o zunchado.",
+    "CIERRE: la tapa deja de ser una brida corriente y pasa a cierres rapidos o de barras; es el punto critico del diseno y del mantenimiento.",
+    "SERVICIO: alta presion mas temperatura mas medio corrosivo suele exigir revestimiento o aleaciones; la seleccion es especifica de la reaccion."
+   ],
+   "por_que": "Los autoclaves DE CATALOGO existen, pero en escala de laboratorio y planta piloto (litros). En el rango industrial que representa este bloque, cada equipo se disena y certifica para su presion y su servicio.",
+   "como_se_compra": "Por hoja de datos con presion y temperatura de diseno, ciclos previstos (fatiga) y medio; se fabrica y certifica contra codigo.",
+   "normas": [
+    "ASME BPVC Seccion VIII Div. 1 y Div. 2",
+    "Analisis de fatiga por ciclos cuando aplica"
+   ]
+  },
+  "Storage tank — cone roof": {
+   "titulo": "SE ERIGE EN CAMPO, VIROLA POR VIROLA",
+   "que_fija_el_tamano": [
+    "ESPESOR POR VIROLA: API 650 calcula CADA anillo por la altura de liquido que soporta encima (metodo del pie o de punto variable). Por eso un tanque es mas grueso abajo que arriba: no es una pieza, es una escalera de espesores.",
+    "TECHO CONICO Y VENTEO: el techo se disena para presion interna muy baja y necesita venteo dimensionado por API 2000 para llenado, vaciado y respiracion termica. Un tanque sin venteo correcto se colapsa al vaciarlo.",
+    "FONDO Y ASENTAMIENTO: la cimentacion y el asentamiento admisible son parte del diseno; el tanque se comporta como una estructura apoyada en el terreno del sitio."
+   ],
+   "por_que": "Se sueldan en campo, chapa por chapa, sobre una cimentacion hecha para ese terreno. No llegan en un camion como una unidad de catalogo.",
+   "como_se_compra": "Por proyecto: especificacion API 650 mas obra civil de cimentacion; se contrata fabricacion y montaje en sitio.",
+   "normas": [
+    "API 650 (tanques soldados de almacenamiento)",
+    "API 2000 (venteo)",
+    "API 653 para inspeccion en servicio"
+   ]
+  },
+  "Storage tank — floating roof": {
+   "titulo": "SE ERIGE EN CAMPO, VIROLA POR VIROLA",
+   "que_fija_el_tamano": [
+    "ESPESOR POR VIROLA: igual que el de techo conico, cada anillo por API 650 segun la columna de liquido que aguanta.",
+    "EL TECHO FLOTANTE TIENE UNA RAZON: flota sobre el liquido para ELIMINAR el espacio de vapor. Se usa con productos volatiles para recortar las perdidas por evaporacion y las emisiones, no por capricho constructivo.",
+    "SELLOS: el sello primario y el secundario entre techo y pared son el corazon del diseno y lo que fija la emision real; se eligen por producto y por normativa ambiental.",
+    "DRENAJE Y PONTONES: el techo debe evacuar agua de lluvia y mantener flotabilidad con pontones aun con uno inundado."
+   ],
+   "por_que": "Es una estructura soldada en sitio con un techo movil disenado para un producto concreto y una normativa de emisiones concreta. No hay tallas de catalogo.",
+   "como_se_compra": "Por proyecto contra API 650 (Anexo C o H segun techo flotante externo o interno) mas los requisitos ambientales locales.",
+   "normas": [
+    "API 650 y sus anexos de techo flotante",
+    "Normativa local de emisiones de COV"
+   ]
   }
  }
 }
