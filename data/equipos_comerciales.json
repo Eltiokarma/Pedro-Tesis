@@ -1,0 +1,381 @@
+{
+ "schema": 1,
+ "nota": "Catalogo semilla de equipos comerciales (marca/modelo) para el modo seleccion de las Fichas Tecnicas. Cada entrada esta verificada contra el PDF/pagina oficial del fabricante (ver docs/BRIEF_CATALOGO_COMERCIAL.md). SEMANTICA DE S: capacidad NOMINAL O MAXIMA PUBLICADA del modelo, en la S_unit del eq_type generico -- es la ENVOLVENTE del modelo, no un punto de operacion. El modo seleccion verifica S_requerido (simulacion) <= S del modelo. Categorias ausentes a proposito: 'Mixer — impeller' no admite ni S ni envolvente expresable en _PARAMS_OK (ver seccion 'Categorias sin S publicado' del brief). El gate tests/test_equipos_comerciales.py valida el esquema de todo lo que entre. ESQUEMA v2: una entrada lleva 'S' (capacidad escalar publicada) O BIEN 'S_no_publicado' con el motivo documentado, nunca ambos. Sin S, la entrada debe traer al menos un parametro de envolvente y se verifica solo por esas dimensiones.",
+ "equipos": [
+  {
+   "marca": "Atlas Copco",
+   "modelo": "GA 30+",
+   "eq_type": "Compressor — rotary",
+   "S": 30,
+   "params": {
+    "P_max_bar": 13,
+    "Q_max_m3_h": 366,
+    "notas": "Tornillo lubricado. S = potencia de motor instalada (kW), publicada por modelo. P_max_bar = variante de 13 bar(e); la serie ofrece variantes 7.5 / 8.5 / 10.5 / 13 bar(e). Q_max = FAD máx. de la variante 7.5 bar a 50 Hz (6.1 m3/min = 366 m3/h, ISO 1217 Anexo C ed.4:2009); a 13 bar el FAD baja a 4.6 m3/min. Ambiente máx. 46 C estándar (55 C versión HAV) — es límite ambiental, no de proceso. Material no declarado en el leaflet: omitido."
+   },
+   "fuente": "https://www.atlascopco.com/content/dam/atlas-copco/compressor-technique/industrial-air/documents/leaflets/compressors/g--ga---ga-vsd-ipm-wuxi-2022/ga-range-wuxi-2022/GA30-90_Wuxi_EN.pdf",
+   "fecha_consulta": "2026-07-23"
+  },
+  {
+   "marca": "Atlas Copco",
+   "modelo": "GA 45",
+   "eq_type": "Compressor — rotary",
+   "S": 45,
+   "params": {
+    "P_max_bar": 13,
+    "Q_max_m3_h": 498,
+    "notas": "Tornillo lubricado. S = potencia de motor instalada (kW). Q_max = FAD variante 7.5 bar, 50 Hz (8.3 m3/min); a 13 bar baja a 6.3 m3/min. Variantes 7.5 / 8.5 / 10.5 / 13 bar(e). Material no declarado: omitido."
+   },
+   "fuente": "https://www.atlascopco.com/content/dam/atlas-copco/compressor-technique/industrial-air/documents/leaflets/compressors/g--ga---ga-vsd-ipm-wuxi-2022/ga-range-wuxi-2022/GA30-90_Wuxi_EN.pdf",
+   "fecha_consulta": "2026-07-23"
+  },
+  {
+   "marca": "Atlas Copco",
+   "modelo": "GA 55+",
+   "eq_type": "Compressor — rotary",
+   "S": 55,
+   "params": {
+    "P_max_bar": 13,
+    "Q_max_m3_h": 738,
+    "notas": "Tornillo lubricado, motor IE4. S = potencia de motor instalada (kW). Q_max = FAD variante 7.5 bar, 50 Hz (12.3 m3/min); a 13 bar baja a 8.8 m3/min. Material no declarado: omitido."
+   },
+   "fuente": "https://www.atlascopco.com/content/dam/atlas-copco/compressor-technique/industrial-air/documents/leaflets/compressors/g--ga---ga-vsd-ipm-wuxi-2022/ga-range-wuxi-2022/GA30-90_Wuxi_EN.pdf",
+   "fecha_consulta": "2026-07-23"
+  },
+  {
+   "marca": "Atlas Copco",
+   "modelo": "GA 75",
+   "eq_type": "Compressor — rotary",
+   "S": 75,
+   "params": {
+    "P_max_bar": 13,
+    "Q_max_m3_h": 864,
+    "notas": "Tornillo lubricado, motor IE3. S = potencia de motor instalada (kW). Q_max = FAD variante 7.5 bar, 50 Hz (14.4 m3/min); a 13 bar baja a 10.8 m3/min. Material no declarado: omitido."
+   },
+   "fuente": "https://www.atlascopco.com/content/dam/atlas-copco/compressor-technique/industrial-air/documents/leaflets/compressors/g--ga---ga-vsd-ipm-wuxi-2022/ga-range-wuxi-2022/GA30-90_Wuxi_EN.pdf",
+   "fecha_consulta": "2026-07-23"
+  },
+  {
+   "marca": "Atlas Copco",
+   "modelo": "GA 90",
+   "eq_type": "Compressor — rotary",
+   "S": 90,
+   "params": {
+    "P_max_bar": 13,
+    "Q_max_m3_h": 1050,
+    "notas": "Tornillo lubricado. S = potencia de motor instalada (kW). Q_max = FAD variante 7.5 bar, 50 Hz (17.5 m3/min); a 13 bar baja a 13.3 m3/min. Material no declarado: omitido."
+   },
+   "fuente": "https://www.atlascopco.com/content/dam/atlas-copco/compressor-technique/industrial-air/documents/leaflets/compressors/g--ga---ga-vsd-ipm-wuxi-2022/ga-range-wuxi-2022/GA30-90_Wuxi_EN.pdf",
+   "fecha_consulta": "2026-07-23"
+  },
+  {
+   "marca": "Bosch",
+   "modelo": "UNIVERSAL UL-S 1250",
+   "eq_type": "Boiler — fire tube",
+   "S": 0.347,
+   "params": {
+    "P_max_bar": 30,
+    "T_max_C": 235,
+    "notas": "Pirotubular de tres pasos, vapor saturado. La designación del tipo ES la capacidad en kg/h: 1250 kg/h = 0.3472 kg/s (S en kg/s por S_unit del eq_type — el brief decía kg/h, es un error). Extremo inferior de la serie UL-S (1250 a 28000 kg/h). P_max y T_max son la ENVOLVENTE DE SERIE publicada (hasta 30 bar de presión de seguridad, hasta 235 C), no el rating verificado de este tipo puntual: confirmar contra hoja de datos del pedido. Material no declarado: omitido."
+   },
+   "fuente": "https://www.bosch-industrial.com/global/en/ocs/commercial-industrial/universal-steam-boiler-ul-s-ul-sx-669474-p/",
+   "fecha_consulta": "2026-07-23"
+  },
+  {
+   "marca": "Bosch",
+   "modelo": "UNIVERSAL UL-S 3200",
+   "eq_type": "Boiler — fire tube",
+   "S": 0.889,
+   "params": {
+    "P_max_bar": 30,
+    "T_max_C": 235,
+    "notas": "Pirotubular de tres pasos, vapor saturado. 3200 kg/h = 0.8889 kg/s. Tipo citado explícitamente en la hoja de dimensiones principales UL-S de Bosch (o348714v272). P_max y T_max = envolvente de serie, no rating del tipo. Material no declarado: omitido."
+   },
+   "fuente": "https://www.bosch-industrial.com/global/en/ocs/commercial-industrial/universal-steam-boiler-ul-s-ul-sx-669474-p/",
+   "fecha_consulta": "2026-07-23"
+  },
+  {
+   "marca": "Bosch",
+   "modelo": "UNIVERSAL UL-S 28000",
+   "eq_type": "Boiler — fire tube",
+   "S": 7.778,
+   "params": {
+    "P_max_bar": 30,
+    "T_max_C": 235,
+    "notas": "Pirotubular de tres pasos, vapor saturado. 28000 kg/h = 7.7778 kg/s. Extremo superior de la serie UL-S; según Bosch este tipo lleva 2 toberas de desalinización. P_max y T_max = envolvente de serie. Material no declarado: omitido."
+   },
+   "fuente": "https://www.bosch-industrial.com/global/en/ocs/commercial-industrial/universal-steam-boiler-ul-s-ul-sx-669474-p/",
+   "fecha_consulta": "2026-07-23"
+  },
+  {
+   "marca": "Siemens Energy",
+   "modelo": "Dresser-Rand RLA/RLVA",
+   "eq_type": "Turbine — steam",
+   "S": 745,
+   "params": {
+    "P_max_bar": 47,
+    "T_max_C": 440,
+    "rpm": 6000,
+    "notas": "S = potencia de salida maxima publicada del modelo (kW), envolvente de serie. P_max_bar = presion de vapor vivo de entrada, bar(a). T_max_C = temperatura de vapor vivo. rpm = velocidad maxima. Datos de la tabla 'Performance data overview' del portfolio Siemens (pp. 84-85) contrastada con la ficha de detalle del modelo. Monoetapa, cumple API 611. Rango de giro 4300-6000 rpm; se declara el maximo. La ficha de detalle da contrapresion <=12 bar(a) y la tabla resumen 22 bar(a): CONFLICTO INTERNO en el propio documento, por eso no se carga contrapresion."
+   },
+   "fuente": "https://assets.new.siemens.com/siemens/assets/api/uuid:6ff783f7-dc10-41ab-83b7-c42817643306/siemens-steam-turbine-portfolio.pdf",
+   "fecha_consulta": "2026-07-23"
+  },
+  {
+   "marca": "Siemens Energy",
+   "modelo": "Dresser-Rand RLH",
+   "eq_type": "Turbine — steam",
+   "S": 1865,
+   "params": {
+    "P_max_bar": 97,
+    "T_max_C": 482,
+    "rpm": 6000,
+    "notas": "S = potencia de salida maxima publicada del modelo (kW), envolvente de serie. P_max_bar = presion de vapor vivo de entrada, bar(a). T_max_C = temperatura de vapor vivo. rpm = velocidad maxima. Datos de la tabla 'Performance data overview' del portfolio Siemens (pp. 84-85) contrastada con la ficha de detalle del modelo. Monoetapa, cumple API 611. Herencia COPPUS."
+   },
+   "fuente": "https://assets.new.siemens.com/siemens/assets/api/uuid:6ff783f7-dc10-41ab-83b7-c42817643306/siemens-steam-turbine-portfolio.pdf",
+   "fecha_consulta": "2026-07-23"
+  },
+  {
+   "marca": "Siemens Energy",
+   "modelo": "Dresser-Rand C",
+   "eq_type": "Turbine — steam",
+   "S": 2500,
+   "params": {
+    "P_max_bar": 120,
+    "T_max_C": 520,
+    "rpm": 8500,
+    "notas": "S = potencia de salida maxima publicada del modelo (kW), envolvente de serie. P_max_bar = presion de vapor vivo de entrada, bar(a). T_max_C = temperatura de vapor vivo. rpm = velocidad maxima. Datos de la tabla 'Performance data overview' del portfolio Siemens (pp. 84-85) contrastada con la ficha de detalle del modelo. Monoetapa, engranaje integral o accionamiento directo, rotor en voladizo. API 611/612 con excepciones. Presion de entrada: 120 bar(a) en ficha de detalle vs 121 bar(a) en tabla resumen; se toma el valor conservador."
+   },
+   "fuente": "https://assets.new.siemens.com/siemens/assets/api/uuid:6ff783f7-dc10-41ab-83b7-c42817643306/siemens-steam-turbine-portfolio.pdf",
+   "fecha_consulta": "2026-07-23"
+  },
+  {
+   "marca": "Siemens Energy",
+   "modelo": "Dresser-Rand GAF",
+   "eq_type": "Turbine — steam",
+   "S": 3500,
+   "params": {
+    "P_max_bar": 49,
+    "T_max_C": 440,
+    "rpm": 6000,
+    "notas": "S = potencia de salida maxima publicada del modelo (kW), envolvente de serie. P_max_bar = presion de vapor vivo de entrada, bar(a). T_max_C = temperatura de vapor vivo. rpm = velocidad maxima. Datos de la tabla 'Performance data overview' del portfolio Siemens (pp. 84-85) contrastada con la ficha de detalle del modelo. Multietapa, max 6 etapas, condensacion o contrapresion. API 611/612. Herencia Terry."
+   },
+   "fuente": "https://assets.new.siemens.com/siemens/assets/api/uuid:6ff783f7-dc10-41ab-83b7-c42817643306/siemens-steam-turbine-portfolio.pdf",
+   "fecha_consulta": "2026-07-23"
+  },
+  {
+   "marca": "Siemens Energy",
+   "modelo": "Dresser-Rand 2TA",
+   "eq_type": "Turbine — steam",
+   "S": 3640,
+   "params": {
+    "P_max_bar": 104,
+    "T_max_C": 530,
+    "rpm": 12500,
+    "notas": "S = potencia de salida maxima publicada del modelo (kW), envolvente de serie. P_max_bar = presion de vapor vivo de entrada, bar(a). T_max_C = temperatura de vapor vivo. rpm = velocidad maxima. Datos de la tabla 'Performance data overview' del portfolio Siemens (pp. 84-85) contrastada con la ficha de detalle del modelo. Monoetapa entre cojinetes, carcasa partida horizontal. API 611/612."
+   },
+   "fuente": "https://assets.new.siemens.com/siemens/assets/api/uuid:6ff783f7-dc10-41ab-83b7-c42817643306/siemens-steam-turbine-portfolio.pdf",
+   "fecha_consulta": "2026-07-23"
+  },
+  {
+   "marca": "Siemens Energy",
+   "modelo": "Dresser-Rand AVTTW/GTW",
+   "eq_type": "Turbine — steam",
+   "S": 4500,
+   "params": {
+    "P_max_bar": 125,
+    "T_max_C": 550,
+    "rpm": 14500,
+    "notas": "S = potencia de salida maxima publicada del modelo (kW), envolvente de serie. P_max_bar = presion de vapor vivo de entrada, bar(a). T_max_C = temperatura de vapor vivo. rpm = velocidad maxima. Datos de la tabla 'Performance data overview' del portfolio Siemens (pp. 84-85) contrastada con la ficha de detalle del modelo. Monoetapa en voladizo, engranaje integral o directo. API 611 con comentarios."
+   },
+   "fuente": "https://assets.new.siemens.com/siemens/assets/api/uuid:6ff783f7-dc10-41ab-83b7-c42817643306/siemens-steam-turbine-portfolio.pdf",
+   "fecha_consulta": "2026-07-23"
+  },
+  {
+   "marca": "Siemens Energy",
+   "modelo": "Dresser-Rand K",
+   "eq_type": "Turbine — steam",
+   "S": 4850,
+   "params": {
+    "P_max_bar": 28.5,
+    "T_max_C": 389,
+    "rpm": 10000,
+    "notas": "S = potencia de salida maxima publicada del modelo (kW), envolvente de serie. P_max_bar = presion de vapor vivo de entrada, bar(a). T_max_C = temperatura de vapor vivo. rpm = velocidad maxima. Datos de la tabla 'Performance data overview' del portfolio Siemens (pp. 84-85) contrastada con la ficha de detalle del modelo. Multietapa, hasta 12 etapas, condensacion o contrapresion. No API. Herencia Murray."
+   },
+   "fuente": "https://assets.new.siemens.com/siemens/assets/api/uuid:6ff783f7-dc10-41ab-83b7-c42817643306/siemens-steam-turbine-portfolio.pdf",
+   "fecha_consulta": "2026-07-23"
+  },
+  {
+   "marca": "Kaeser",
+   "modelo": "CSD 90",
+   "eq_type": "Compressor — rotary",
+   "S": 44.74,
+   "params": {
+    "P_max_bar": 12.07,
+    "Q_max_m3_h": 584.5,
+    "notas": "Tornillo lubricado monoetapa, perfil SIGMA, accionamiento directo 1:1. S = 'Rated Motor Power' publicada por modelo: 60 hp -> 44.74 kW (1 hp = 0.7457 kW). Kaeser publica la potencia SOLO en hp; el kW es conversion de unidad, no estimacion. P_max_bar = 175 psig -> 12.07 bar(g), variante de presion mas alta del modelo. Q_max_m3_h = 344 acfm a 100 psig -> 584.5 m3/h (1 cfm = 1.699 m3/h); a la presion maxima el caudal baja. Caudal certificado CAGI/ISO 1217. Tension 460/575 V 3ph 60 Hz. Material no declarado: omitido."
+   },
+   "fuente": "https://us.kaeser.com/download.ashx?id=tcm%3A46-160753",
+   "fecha_consulta": "2026-07-23"
+  },
+  {
+   "marca": "Kaeser",
+   "modelo": "CSD 110",
+   "eq_type": "Compressor — rotary",
+   "S": 55.93,
+   "params": {
+    "P_max_bar": 14.96,
+    "Q_max_m3_h": 696.6,
+    "notas": "Tornillo lubricado monoetapa, perfil SIGMA, accionamiento directo 1:1. S = 'Rated Motor Power' publicada por modelo: 75 hp -> 55.93 kW (1 hp = 0.7457 kW). Kaeser publica la potencia SOLO en hp; el kW es conversion de unidad, no estimacion. P_max_bar = 217 psig -> 14.96 bar(g), variante de presion mas alta del modelo. Q_max_m3_h = 410 acfm a 100 psig -> 696.6 m3/h (1 cfm = 1.699 m3/h); a la presion maxima el caudal baja. Caudal certificado CAGI/ISO 1217. Tension 460/575 V 3ph 60 Hz. Material no declarado: omitido."
+   },
+   "fuente": "https://us.kaeser.com/download.ashx?id=tcm%3A46-160753",
+   "fecha_consulta": "2026-07-23"
+  },
+  {
+   "marca": "Kaeser",
+   "modelo": "CSD 130",
+   "eq_type": "Compressor — rotary",
+   "S": 74.57,
+   "params": {
+    "P_max_bar": 14.96,
+    "Q_max_m3_h": 892.0,
+    "notas": "Tornillo lubricado monoetapa, perfil SIGMA, accionamiento directo 1:1. S = 'Rated Motor Power' publicada por modelo: 100 hp -> 74.57 kW (1 hp = 0.7457 kW). Kaeser publica la potencia SOLO en hp; el kW es conversion de unidad, no estimacion. P_max_bar = 217 psig -> 14.96 bar(g), variante de presion mas alta del modelo. Q_max_m3_h = 525 acfm a 100 psig -> 892.0 m3/h (1 cfm = 1.699 m3/h); a la presion maxima el caudal baja. Caudal certificado CAGI/ISO 1217. Tension 460/575 V 3ph 60 Hz. Material no declarado: omitido."
+   },
+   "fuente": "https://us.kaeser.com/download.ashx?id=tcm%3A46-160753",
+   "fecha_consulta": "2026-07-23"
+  },
+  {
+   "marca": "Kaeser",
+   "modelo": "CSD 175",
+   "eq_type": "Compressor — rotary",
+   "S": 93.21,
+   "params": {
+    "P_max_bar": 14.96,
+    "Q_max_m3_h": 1192.7,
+    "notas": "Tornillo lubricado monoetapa, perfil SIGMA, accionamiento directo 1:1. S = 'Rated Motor Power' publicada por modelo: 125 hp -> 93.21 kW (1 hp = 0.7457 kW). Kaeser publica la potencia SOLO en hp; el kW es conversion de unidad, no estimacion. P_max_bar = 217 psig -> 14.96 bar(g), variante de presion mas alta del modelo. Q_max_m3_h = 702 acfm a 100 psig -> 1192.7 m3/h (1 cfm = 1.699 m3/h); a la presion maxima el caudal baja. Caudal certificado CAGI/ISO 1217. Tension 460/575 V 3ph 60 Hz. Material no declarado: omitido."
+   },
+   "fuente": "https://us.kaeser.com/download.ashx?id=tcm%3A46-160753",
+   "fecha_consulta": "2026-07-23"
+  },
+  {
+   "marca": "Alfa Laval",
+   "modelo": "M10 — bastidor FM (PED)",
+   "eq_type": "Heat exch. — flat plate",
+   "S_no_publicado": "configurable",
+   "params": {
+    "P_max_bar": 10.0,
+    "T_max_C": 180,
+    "notas": "Intercambiador de placas con juntas, linea Industrial. AREA NO PUBLICADA: el area de transferencia se configura por numero de placas y la fija el ingeniero termico segun el duty, por eso no hay S. El leaflet tampoco publica n_placas_max ni area por placa, asi que el area sigue sin ser verificable; lo que SI verifica esta entrada es la envolvente de presion y temperatura del bastidor. Placas disponibles 316/316L, 316Ti, 904L, 254, C-22, C-276, C-2000, B-3, G-30, 400, 625, 825, Alloy 33, Ni, Ti, TiPd -- el material es una eleccion de pedido, no un atributo del modelo: omitido. Conexiones DN100. Canal libre 2.6 mm (placa B) o 4.0 mm (placa M). Variante de bastidor mas comun. Presion y temperatura de diseno mecanico."
+   },
+   "fuente": "https://www.alfalaval.com/globalassets/documents/products/heat-transfer/plate-heat-exchangers/gasketed-plate-and-frame-heat-exchangers/industrial/m10_productleaflet_pct00099en.pdf",
+   "fecha_consulta": "2026-07-23",
+   "granularidad": "modelo"
+  },
+  {
+   "marca": "Alfa Laval",
+   "modelo": "M10 — bastidor FG (PED)",
+   "eq_type": "Heat exch. — flat plate",
+   "S_no_publicado": "configurable",
+   "params": {
+    "P_max_bar": 16.0,
+    "T_max_C": 180,
+    "notas": "Intercambiador de placas con juntas, linea Industrial. AREA NO PUBLICADA: el area de transferencia se configura por numero de placas y la fija el ingeniero termico segun el duty, por eso no hay S. El leaflet tampoco publica n_placas_max ni area por placa, asi que el area sigue sin ser verificable; lo que SI verifica esta entrada es la envolvente de presion y temperatura del bastidor. Placas disponibles 316/316L, 316Ti, 904L, 254, C-22, C-276, C-2000, B-3, G-30, 400, 625, 825, Alloy 33, Ni, Ti, TiPd -- el material es una eleccion de pedido, no un atributo del modelo: omitido. Conexiones DN100. Canal libre 2.6 mm (placa B) o 4.0 mm (placa M). El bastidor FG esta ademas aprobado para 12 barg / 200 C, lo que permite usarlo en sistemas de vapor sin valvulas de seguridad."
+   },
+   "fuente": "https://www.alfalaval.com/globalassets/documents/products/heat-transfer/plate-heat-exchangers/gasketed-plate-and-frame-heat-exchangers/industrial/m10_productleaflet_pct00099en.pdf",
+   "fecha_consulta": "2026-07-23",
+   "granularidad": "modelo"
+  },
+  {
+   "marca": "Alfa Laval",
+   "modelo": "M10 — bastidor FD (ASME)",
+   "eq_type": "Heat exch. — flat plate",
+   "S_no_publicado": "configurable",
+   "params": {
+    "P_max_bar": 26.8,
+    "T_max_C": 250,
+    "notas": "Intercambiador de placas con juntas, linea Industrial. AREA NO PUBLICADA: el area de transferencia se configura por numero de placas y la fija el ingeniero termico segun el duty, por eso no hay S. El leaflet tampoco publica n_placas_max ni area por placa, asi que el area sigue sin ser verificable; lo que SI verifica esta entrada es la envolvente de presion y temperatura del bastidor. Placas disponibles 316/316L, 316Ti, 904L, 254, C-22, C-276, C-2000, B-3, G-30, 400, 625, 825, Alloy 33, Ni, Ti, TiPd -- el material es una eleccion de pedido, no un atributo del modelo: omitido. Conexiones DN100. Canal libre 2.6 mm (placa B) o 4.0 mm (placa M). Bastidor de mayor presion del modelo. P y T de la MISMA fila del leaflet (FD, ASME): no se cruzaron maximos de variantes distintas."
+   },
+   "fuente": "https://www.alfalaval.com/globalassets/documents/products/heat-transfer/plate-heat-exchangers/gasketed-plate-and-frame-heat-exchangers/industrial/m10_productleaflet_pct00099en.pdf",
+   "fecha_consulta": "2026-07-23",
+   "granularidad": "modelo"
+  },
+  {
+   "marca": "Atlas Copco",
+   "modelo": "GA 37",
+   "eq_type": "Compressor — rotary",
+   "S": 37,
+   "params": {
+    "P_max_bar": 13,
+    "Q_max_m3_h": 414.0,
+    "notas": "Tornillo lubricado. S = potencia de motor instalada (kW), publicada por modelo. Variantes de presion 7.5 / 8.5 / 10.5 / 13 bar(e); P_max_bar = la mas alta. Q_max = FAD de la variante 7.5 bar a 50 Hz (6.9 m3/min); a 13 bar baja a 5.3 m3/min. FAD segun ISO 1217 Anexo C ed.4:2009. Material no declarado: omitido."
+   },
+   "fuente": "https://www.atlascopco.com/content/dam/atlas-copco/compressor-technique/industrial-air/documents/leaflets/compressors/g--ga---ga-vsd-ipm-wuxi-2022/ga-range-wuxi-2022/GA30-90_Wuxi_EN.pdf",
+   "fecha_consulta": "2026-07-23"
+  },
+  {
+   "marca": "Atlas Copco",
+   "modelo": "GA 37+",
+   "eq_type": "Compressor — rotary",
+   "S": 37,
+   "params": {
+    "P_max_bar": 13,
+    "Q_max_m3_h": 444.0,
+    "notas": "Tornillo lubricado. S = potencia de motor instalada (kW), publicada por modelo. Variantes de presion 7.5 / 8.5 / 10 / 13 bar(e); P_max_bar = la mas alta. Q_max = FAD de la variante 7.5 bar a 50 Hz (7.4 m3/min); a 13 bar baja a 5.3 m3/min. FAD segun ISO 1217 Anexo C ed.4:2009. Material no declarado: omitido."
+   },
+   "fuente": "https://www.atlascopco.com/content/dam/atlas-copco/compressor-technique/industrial-air/documents/leaflets/compressors/g--ga---ga-vsd-ipm-wuxi-2022/ga-range-wuxi-2022/GA30-90_Wuxi_EN.pdf",
+   "fecha_consulta": "2026-07-23"
+  },
+  {
+   "marca": "Atlas Copco",
+   "modelo": "GA 45+",
+   "eq_type": "Compressor — rotary",
+   "S": 45,
+   "params": {
+    "P_max_bar": 13,
+    "Q_max_m3_h": 540.0,
+    "notas": "Tornillo lubricado. S = potencia de motor instalada (kW), publicada por modelo. Variantes de presion 7.5 / 8.5 / 10 / 13 bar(e); P_max_bar = la mas alta. Q_max = FAD de la variante 7.5 bar a 50 Hz (9.0 m3/min); a 13 bar baja a 6.3 m3/min. FAD segun ISO 1217 Anexo C ed.4:2009. Material no declarado: omitido."
+   },
+   "fuente": "https://www.atlascopco.com/content/dam/atlas-copco/compressor-technique/industrial-air/documents/leaflets/compressors/g--ga---ga-vsd-ipm-wuxi-2022/ga-range-wuxi-2022/GA30-90_Wuxi_EN.pdf",
+   "fecha_consulta": "2026-07-23"
+  },
+  {
+   "marca": "Atlas Copco",
+   "modelo": "GA 55",
+   "eq_type": "Compressor — rotary",
+   "S": 55,
+   "params": {
+    "P_max_bar": 13,
+    "Q_max_m3_h": 696.0,
+    "notas": "Tornillo lubricado. S = potencia de motor instalada (kW), publicada por modelo. Variantes de presion 7.5 / 8.5 / 10.5 / 13 bar(e); P_max_bar = la mas alta. Q_max = FAD de la variante 7.5 bar a 50 Hz (11.6 m3/min); a 13 bar baja a 8.4 m3/min. FAD segun ISO 1217 Anexo C ed.4:2009. Material no declarado: omitido."
+   },
+   "fuente": "https://www.atlascopco.com/content/dam/atlas-copco/compressor-technique/industrial-air/documents/leaflets/compressors/g--ga---ga-vsd-ipm-wuxi-2022/ga-range-wuxi-2022/GA30-90_Wuxi_EN.pdf",
+   "fecha_consulta": "2026-07-23"
+  },
+  {
+   "marca": "Atlas Copco",
+   "modelo": "GA 75+",
+   "eq_type": "Compressor — rotary",
+   "S": 75,
+   "params": {
+    "P_max_bar": 13,
+    "Q_max_m3_h": 924.0,
+    "notas": "Tornillo lubricado. S = potencia de motor instalada (kW), publicada por modelo. Variantes de presion 7.5 / 8.5 / 10.5 / 13 bar(e); P_max_bar = la mas alta. Q_max = FAD de la variante 7.5 bar a 50 Hz (15.4 m3/min); a 13 bar baja a 11.2 m3/min. FAD segun ISO 1217 Anexo C ed.4:2009. Material no declarado: omitido."
+   },
+   "fuente": "https://www.atlascopco.com/content/dam/atlas-copco/compressor-technique/industrial-air/documents/leaflets/compressors/g--ga---ga-vsd-ipm-wuxi-2022/ga-range-wuxi-2022/GA30-90_Wuxi_EN.pdf",
+   "fecha_consulta": "2026-07-23"
+  },
+  {
+   "marca": "NETZSCH",
+   "modelo": "NEMO L.Cap",
+   "eq_type": "Pump — positive displacement",
+   "S_no_publicado": "punto_de_operacion",
+   "params": {
+    "Q_max_m3_h": 1000,
+    "P_max_bar": 20,
+    "notas": "Bomba de cavidad progresiva. NETZSCH declara que el caudal es proporcional a la velocidad de rotacion, asi que el tamano ES el punto de operacion y no hay kW por modelo. GRANULARIDAD = FAMILIA: 1000 m3/h y 20 bar son la envolvente de la FAMILIA L.Cap (versiones simple, doble y vertical), no de un tamano concreto. La verificacion contra esta entrada es debil: casi cualquier duty entra. Sustituir por la envolvente del tamano especifico en cuanto se consiga. Material no declarado: omitido."
+   },
+   "fuente": "https://pumps-systems.netzsch.com/en-US/products-and-accessories/nemo-progressing-cavity-pumps/nemo-l-cap-progressing-cavity-pump",
+   "fecha_consulta": "2026-07-23",
+   "granularidad": "familia"
+  }
+ ]
+}

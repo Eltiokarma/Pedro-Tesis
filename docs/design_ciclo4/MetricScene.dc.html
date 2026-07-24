@@ -1,0 +1,231 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+</helmet>
+<div style="width:100%; font-family:'IBM Plex Sans',sans-serif;">
+
+  <!-- section header: title + register-separated pills -->
+  <div style="display:flex; align-items:center; flex-wrap:wrap; gap:8px; padding:0 2px 10px;">
+    <span style="font-family:'IBM Plex Sans',sans-serif; font-size:15px; font-weight:600; color:var(--ink); margin-right:4px;">{{ title }}</span>
+    <sc-for list="{{ pills }}" as="p" hint-placeholder-count="1">
+      <span style="{{ p.style }}">
+        <span style="width:7px; height:7px; border-radius:50%; background:currentColor; flex:none;"></span>
+        <span>{{ p.text }}</span>
+      </span>
+    </sc-for>
+  </div>
+
+  <!-- metric grid -->
+  <div style="display:grid; grid-template-columns:repeat(3,1fr); gap:8px;">
+    <sc-for list="{{ cards }}" as="c" hint-placeholder-count="6">
+      <div style="{{ c.cardStyle }}">
+        <sc-if value="{{ c.flag }}" hint-placeholder-val="{{ false }}">
+          <span style="{{ c.flagStyle }}">{{ c.flagText }}</span>
+        </sc-if>
+        <span style="font-size:10px; font-weight:600; letter-spacing:.5px; text-transform:uppercase; color:var(--ink-soft);">{{ c.label }}</span>
+        <span style="display:flex; align-items:baseline; gap:5px;">
+          <span style="{{ c.valueStyle }}">{{ c.value }}</span>
+          <sc-if value="{{ c.unit }}" hint-placeholder-val="{{ false }}">
+            <span style="font-family:'IBM Plex Mono',monospace; font-size:11px; color:var(--ink-soft);">{{ c.unit }}</span>
+          </sc-if>
+        </span>
+        <sc-if value="{{ c.sub }}" hint-placeholder-val="{{ false }}">
+          <span style="font-size:11px; color:var(--ink-mute); line-height:1.35; text-wrap:pretty;">{{ c.sub }}</span>
+        </sc-if>
+        <sc-if value="{{ c.scale }}" hint-placeholder-val="{{ false }}">
+          <div style="margin-top:6px;">
+            <div style="display:flex; height:9px; border-radius:5px; overflow:hidden; position:relative;">
+              <sc-for list="{{ c.scale.bands }}" as="b" hint-placeholder-count="3">
+                <div style="{{ b.style }}"></div>
+              </sc-for>
+              <div style="{{ c.scale.markerStyle }}"></div>
+            </div>
+            <div style="display:flex; justify-content:space-between; margin-top:3px;">
+              <sc-for list="{{ c.scale.ticks }}" as="t" hint-placeholder-count="3">
+                <span style="{{ t.style }}">{{ t.label }}</span>
+              </sc-for>
+            </div>
+          </div>
+        </sc-if>
+      </div>
+    </sc-for>
+  </div>
+
+  <!-- balance bars (bug-2 fix): value in its own right cell, never clipped -->
+  <sc-if value="{{ hasBars }}" hint-placeholder-val="{{ false }}">
+    <div style="margin-top:12px; display:flex; flex-direction:column; gap:9px; padding:2px;">
+      <sc-for list="{{ bars }}" as="bar" hint-placeholder-count="2">
+        <div style="display:flex; align-items:center; gap:12px;">
+          <span style="flex:none; width:38px; font-size:10px; font-weight:600; letter-spacing:.6px; color:var(--ink-mute);">{{ bar.label }}</span>
+          <div style="flex:1; min-width:0; height:8px; border-radius:4px; background:var(--bg-sunk); overflow:hidden;">
+            <div style="{{ bar.fillStyle }}"></div>
+          </div>
+          <span style="flex:none; font-family:'IBM Plex Mono',monospace; font-size:12.5px; font-weight:600; color:var(--ink); text-align:right; white-space:nowrap;">{{ bar.value }}</span>
+        </div>
+      </sc-for>
+    </div>
+  </sc-if>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;$preview&quot;:{&quot;width&quot;:520,&quot;height&quot;:360},&quot;variant&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;options&quot;:[&quot;pump&quot;,&quot;whb&quot;,&quot;valve&quot;,&quot;balance&quot;],&quot;default&quot;:&quot;pump&quot;,&quot;tsType&quot;:&quot;string&quot;}}">
+class Component extends DCLogic {
+  _kind(k) {
+    const m = {
+      spec:['--spec','--spec-bg','--spec-ribbon'], auto:['--ink','--auto-bg','--auto-ribbon'],
+      ok:['--green','--green-bg','--green'], warn:['--amber','--amber-bg','--amber'],
+      alert:['--orange','--orange-bg','--orange'], danger:['--danger','--danger-bg','--danger'],
+      accent:['--accent','--accent-tint','--accent'], info:['--spec','--spec-bg','--spec'],
+      neutral:['--ink','--bg-sunk','--ink-soft'], sinnott:['--sinnott-ink','--sinnott-bg','--sinnott-ribbon'],
+    };
+    return m[k] || m.neutral;
+  }
+
+  _data() {
+    const pump = {
+      title: 'Bomba · P-302',
+      pills: [
+        {text:'Riesgo de cavitación · margen −8.19 m', kind:'danger'},
+      ],
+      cards: [
+        {label:'N_s (US)', value:'8003', unit:'@ 3550 rpm', state:'accent', span:2,
+         sub:'Rodete Francis / flujo mixto — Perry 8ª fig. 10-32',
+         scale:{marker:8003, max:12000, bands:[
+           {label:'radial', to:4000, kind:'cool'},
+           {label:'mixto', to:9000, kind:'accent'},
+           {label:'axial', to:12000, kind:'warm'},
+         ]}},
+        {label:'Margen cav.', value:'−8.19', unit:'m', state:'danger', flag:'⚠',
+         sub:'NPSHa − NPSHr < 0'},
+        {label:'Q', value:'655.08', unit:'m³/h', state:'auto'},
+        {label:'Head', value:'20.9', unit:'m', state:'auto'},
+        {label:'W hyd', value:'36.39', unit:'kW', state:'auto'},
+        {label:'W shaft', value:'48.52', unit:'kW', state:'auto', sub:'η_h = 0.75'},
+        {label:'W elec', value:'51.08', unit:'kW', state:'auto'},
+        {label:'NPSHa', value:'9.68', unit:'m', state:'spec', sub:'disponible'},
+        {label:'NPSHr est.', value:'17.87', unit:'m', state:'auto', sub:'requerido'},
+      ],
+    };
+
+    const whb = {
+      title: 'Intercambiador · WHB field-erected',
+      pills: [
+        {text:'Sinnott — riguroso', kind:'sinnott'},
+      ],
+      cards: [
+        {label:'Caudal de vapor', value:'65 959', unit:'kg/h', state:'sinnott', span:2, flag:'HP',
+         sub:'WHB field-erected · 66 t/h — Sinnott, Coulson & Richardson vol. 6'},
+        {label:'F corrección', value:'1.00', unit:'', state:'spec', sub:'Bowman (1940)'},
+        {label:'Caliente', value:'850 → 330', unit:'°C', state:'neutral', sub:'lado proceso'},
+        {label:'Frío', value:'250 → 250', unit:'°C', state:'neutral', sub:'servicio'},
+        {label:'ΔT LMTD', value:'258.1', unit:'°C', state:'accent'},
+        {label:'Approach', value:'80.0', unit:'°C', state:'auto'},
+        {label:'U usado', value:'120', unit:'W/m²·K', state:'auto', sub:'rango por servicio'},
+      ],
+    };
+
+    const valve = {
+      title: 'Válvula 3-way · líquido',
+      pills: [],
+      cards: [
+        {label:'C_v (líq.)', value:'41.3', unit:'gpm/√psi', state:'spec', span:3,
+         sub:'Crane TP-410 ec. 3-16:  C_v = Q[gpm]·√(SG / ΔP[psi])  ·  1 gpm agua @ 1 psi ⇒ C_v = 1'},
+      ],
+    };
+
+    const balance = {
+      title: 'Balance de masa',
+      pills: [{text:'cierra', kind:'ok'}],
+      cards: [
+        {label:'Σ IN', value:'5 600 000.0', unit:'tm/año', state:'spec'},
+        {label:'Σ OUT', value:'5 600 000.0', unit:'tm/año', state:'spec'},
+        {label:'ΔM', value:'+0.0', unit:'tm/año', state:'ok', flag:'cierra'},
+      ],
+      bars: [
+        {label:'IN', frac:1.0, value:'5 600 000.0', kind:'spec'},
+        {label:'OUT', frac:1.0, value:'5 600 000.0', kind:'alert'},
+      ],
+    };
+
+    return {pump, whb, valve, balance}[this.props.variant] || pump;
+  }
+
+  renderVals() {
+    const d = this._data();
+    const mono = "'IBM Plex Mono',monospace";
+
+    const pills = (d.pills || []).map(p => {
+      const [ink,bg] = this._kind(p.kind);
+      return {text:p.text, style:
+        `display:inline-flex; align-items:center; gap:6px; padding:3px 10px; border-radius:7px; `
+        + `background:var(${bg}); color:var(${ink}); font-size:11px; font-weight:600; letter-spacing:.2px;`};
+    });
+
+    const cards = (d.cards || []).map(c => {
+      const [ink,bg,ribbon] = this._kind(c.state);
+      const semantic = ['ok','warn','alert','danger','spec','accent','sinnott','info'].includes(c.state);
+      const valueColor = semantic ? `var(${ink})` : 'var(--ink)';
+      const span = c.span || 1;
+      const cardStyle = `position:relative; display:flex; flex-direction:column; gap:3px; `
+        + `background:var(--bg-elev); border:1px solid var(--line); border-radius:8px; `
+        + `padding:9px 12px 10px 15px; min-height:58px; box-shadow: inset 3px 0 0 var(${ribbon}); `
+        + `grid-column: span ${span};`;
+      const valueStyle = `font-family:${mono}; font-size:16px; font-weight:600; color:${valueColor}; letter-spacing:-.2px;`;
+
+      const out = {
+        label:c.label, value:c.value, unit:c.unit || '', sub:c.sub || '',
+        cardStyle, valueStyle,
+        flag: !!c.flag, scale:null,
+      };
+      if (c.flag) {
+        const [fink,fbg] = this._kind(c.state);
+        out.flagText = c.flag;
+        out.flagStyle = `position:absolute; top:8px; right:9px; padding:1px 7px; border-radius:6px; `
+          + `background:var(${fbg}); color:var(${fink}); font-size:9px; font-weight:700; letter-spacing:.4px;`;
+      }
+      if (c.scale) {
+        const s = c.scale;
+        let prev = 0;
+        const bands = s.bands.map(b => {
+          const w = (b.to - prev) / s.max * 100; prev = b.to;
+          const [bink,bbg] = this._kind(b.kind);
+          return {style:`width:${w}%; background:var(${bbg});`};
+        });
+        // ticks at band boundaries
+        const ticks = s.bands.map((b,i) => ({
+          label: b.label,
+          style:`font-size:9px; font-weight:600; letter-spacing:.3px; color:var(--ink-soft);`
+            + (i===1?'text-align:center;':(i===2?'text-align:right;':'')),
+        }));
+        const markerPct = s.marker / s.max * 100;
+        out.scale = {
+          bands, ticks,
+          markerStyle:`position:absolute; top:-2px; bottom:-2px; left:calc(${markerPct}% - 1px); `
+            + `width:2px; background:var(--ink); box-shadow:0 0 0 1.5px var(--bg-elev);`,
+        };
+      }
+      return out;
+    });
+
+    const bars = (d.bars || []).map(b => {
+      const [ink,bg,fill] = this._kind(b.kind);
+      return {label:b.label, value:b.value,
+        fillStyle:`height:100%; width:${Math.round(b.frac*100)}%; border-radius:4px; background:var(${fill});`};
+    });
+
+    return {
+      title:d.title, pills, cards,
+      bars, hasBars: bars.length > 0,
+    };
+  }
+}
+</script>
+</body>
+</html>

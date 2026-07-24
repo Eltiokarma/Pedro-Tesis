@@ -123,6 +123,19 @@ class HXBubble(QFrame):
         self._density = density
         self._refresh_body()
 
+    def set_zoom_degraded(self, on: bool):
+        """Degradación de la escala compacta (ciclo 4, 4e): a zoom <
+        BUBBLE_COLLAPSE_ZOOM la burbuja queda en tag + chip de estado
+        (el cuerpo a esa escala es ilegible y la densidad manda).  La
+        densidad elegida por el user no se toca — al volver el zoom se
+        restituye."""
+        on = bool(on)
+        if on == getattr(self, "_zoom_degraded", False):
+            return
+        self._zoom_degraded = on
+        self._body.setVisible(not on)
+        self._density_btn.setVisible(not on)
+
     def attachment_point(self, leader_from: QPoint) -> QPoint:
         x, y, w, h = self.x(), self.y(), self.width(), self.height()
         cx, cy = x + w / 2, y + h / 2
@@ -332,6 +345,8 @@ class HXLeaderOverlay(QWidget):
     def paintEvent(self, ev):
         if not self._links:
             return
+        if self.width() <= 0 or self.height() <= 0:
+            return   # widget 0×0 (thrash de layout) → QPainter(self) no activaría
         p = QPainter(self); p.setRenderHint(QPainter.Antialiasing, True)
         for src, dst, state, status in self._links:
             self._paint_one(p, src, dst, state, status)
@@ -477,6 +492,18 @@ class HXBubbleManager:
     def _refresh_leaders(self):
         if not self._bubbles:
             self.leader_overlay.set_links([]); return
+        # Degradación 4e (misma regla que stream_bubbles)
+        try:
+            import tokens as _tokens
+            zoom = abs(self.view.transform().m11()) or 1.0
+            degraded = zoom < _tokens.BUBBLE_COLLAPSE_ZOOM
+        except Exception:
+            degraded = False
+        for bub in self._bubbles.values():
+            try:
+                bub.set_zoom_degraded(degraded)
+            except Exception:
+                pass
         for bid, bub in self._bubbles.items():
             b = self._get_block(bid)
             if b is not None:

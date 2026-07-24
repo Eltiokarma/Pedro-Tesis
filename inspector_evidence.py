@@ -260,6 +260,90 @@ def stoich_table_text(block, fs) -> Optional[str]:
     return "\n".join(L)
 
 
+def stoich_book_spec(block, fs) -> Optional[dict]:
+    """Spec de «tabla de libro» (Design ciclo 4, 4a) para la tabla
+    estequiométrica — misma fuente que stoich_table(), estructurada
+    para book_table.BookTable.  Decisiones del bundle: (A) limitante =
+    pill accent + ribbon de fila · (I) inerte = pill neutral + especie
+    en ink_mute · «Cambio» negativo = tinta neutra + ↓ (consumo, no
+    error) · procedencia de X = vocabulario sudoku ▪/◦."""
+    d = stoich_table(block, fs)
+    if d is None:
+        return None
+    con_x = d["X"] is not None
+    columns = [
+        {"label": "Especie", "align": "left"},
+        {"label": "ν/|ν_A|", "align": "right"},
+        {"label": "F_i0", "align": "right"},
+        {"label": "θ_i", "align": "right"},
+    ]
+    if con_x:
+        columns += [{"label": "Cambio", "align": "right"},
+                    {"label": "F_i(X)", "align": "right"}]
+    rows = []
+    for r in d["rows"]:
+        badge = None
+        ribbon = None
+        muted = False
+        if r["es_limitante"]:
+            badge = {"text": "A", "kind": "accent"}
+            ribbon = "accent"
+        elif r["es_inerte"]:
+            badge = {"text": "I", "kind": "neutral"}
+            muted = True
+        cells = [
+            {"t": r["formula"], "badge": badge},
+            {"t": f"{r['nu_norm']:+.2f}"},
+            {"t": f"{r['F0_kmol_h']:.4g}"},
+            {"t": f"{(r['theta'] if r['theta'] is not None else 0):.3f}"},
+        ]
+        if con_x:
+            c = r["cambio_kmol_h"]
+            cells.append({"t": f"{c:+.4g}",
+                          "dir": ("down" if c < 0 else
+                                  "up" if c > 0 else None),
+                          "neutral": c == 0})
+            cells.append({"t": f"{r['F_X_kmol_h']:.4g}"})
+        rows.append({"cells": cells, "ribbon": ribbon, "muted": muted})
+    chips = [
+        {"label": "δ = Σν/|ν_A|", "value": f"{d['delta']:+.3f}",
+         "kind": "neutral"},
+        {"label": "ε = y_A0·δ", "value": f"{d['epsilon']:+.4f}",
+         "kind": "neutral"},
+        {"label": "y_A0", "value": f"{d['y_A0']:.3f}", "kind": "neutral"},
+    ]
+    provenance = None
+    note = None
+    if con_x:
+        declarada = d["X_origin"] == "declarada"
+        provenance = {
+            "pre": f"Conversión X = {d['X']:.3f}",
+            "glyph": "▪" if declarada else "◦",
+            "label": "declarada" if declarada else "alcanzada (solver)",
+            "kind": "spec" if declarada else "neutral",
+        }
+    else:
+        note = "X sin resolver — F_i(X) = F_i0 + (ν_i/|ν_A|)·F_A0·X"
+    ctx = [("Reacción", d["rxn_label"]),
+           ("Base", f"1 mol {d['limitante_formula']} (limitante)"),
+           ("F_A0", f"{d['F_A0_kmol_h']:.4g} kmol/h")]
+    if d["n_rxns"] > 1:
+        note = ((note + "   ·   ") if note else "") + \
+            f"primera de {d['n_rxns']} reacciones activas (tabla por reacción)"
+    return {
+        "kicker": "Tabla estequiométrica · Fogler §3.4",
+        "context": ctx,
+        "columns": columns,
+        "rows": rows,
+        "chips": chips,
+        "provenance": provenance,
+        "note": note,
+        "warn": (f"sin MW en thermo_db (excluidos): {', '.join(d['sin_mw'])}"
+                 if d["sin_mw"] else None),
+        "source": "Fogler, Elements of CRE 4ª ed., §3.4 (tablas 3-3/3-5)",
+    }
+
+
 def flash_split_table(block) -> Optional[dict]:
     """Reparto por componente del flash TP — la tabla que imprime
     ChemSep (equilibrium-stage): z_i, x_i, y_i, K_i y V/F molares,
@@ -297,6 +381,167 @@ def flash_split_table_text(block) -> Optional[str]:
     L.append("Fuente: Seader/Henley, Sep. Process Principles §4 · "
              "Smith-Van Ness-Abbott §12")
     return "\n".join(L)
+
+
+def flash_book_spec(block) -> Optional[dict]:
+    """Spec de «tabla de libro» del reparto del flash (Design ciclo 4,
+    4a) — misma fuente que flash_split_table().  K_i codificado en el
+    eje frío/cálido (K>1 ↑ vapor · K<1 ↓ líquido, solo tinta + glifo);
+    la fila Σ es footer visual."""
+    d = flash_split_table(block)
+    if d is None:
+        return None
+    columns = [
+        {"label": "Comp.", "align": "left"},
+        {"label": "z_i", "align": "right"},
+        {"label": "x_i", "align": "right"},
+        {"label": "y_i", "align": "right"},
+        {"label": "K_i", "align": "right"},
+    ]
+    orden = sorted(range(len(d["names"])),
+                   key=lambda i: -d["K"][i])          # volátil primero
+    rows = []
+    for i in orden:
+        rows.append({"cells": [
+            {"t": d["names"][i]},
+            {"t": f"{d['z'][i]:.4f}"},
+            {"t": f"{d['x'][i]:.4f}"},
+            {"t": f"{d['y'][i]:.4f}"},
+            {"t": f"{d['K'][i]:.4g}",
+             "K": "up" if d["K"][i] >= 1.0 else "down"},
+        ]})
+    rows.append({"sigma": True, "cells": [
+        {"t": "Σ"},
+        {"t": f"{sum(d['z']):.4f}"},
+        {"t": f"{sum(d['x']):.4f}"},
+        {"t": f"{sum(d['y']):.4f}"},
+        {"t": "—", "neutral": True},
+    ]})
+    chips = [{"label": "V/F", "value": f"{d['V_frac']:.4f}", "kind": "cool"}]
+    if d.get("nonvolatiles"):
+        chips.append({"label": "no-volátil → líq.",
+                      "value": ", ".join(d["nonvolatiles"]),
+                      "kind": "neutral"})
+    return {
+        "kicker": "Reparto del flash · estilo ChemSep",
+        "context": [("Flash TP · T", f"{d['T_K'] - 273.15:.1f} °C"),
+                    ("P", f"{d['P_bar']:.3f} bar"),
+                    ("V/F", f"{d['V_frac']:.4f} molar")],
+        "columns": columns,
+        "rows": rows,
+        "chips": chips,
+        "provenance": None,
+        "note": ("K_i = γ_i(NRTL)·P_sat,i/P · Rachford-Rice C-componente"
+                 "   ·   K>1 ↑ vapor · K<1 ↓ líquido"),
+        "warn": None,
+        "source": ("Seader/Henley, Sep. Process Principles §4 · "
+                   "Smith-Van Ness-Abbott §12"),
+    }
+
+
+def wh_stage_book_spec(block, fs) -> Optional[dict]:
+    """Spec de «tabla de libro» de las etapas Wang-Henke (Design ciclo
+    4, 4a — estreno): etapa | T | x_LK | y_LK | L | V, con feed stage
+    marcado (FEED · accent) y condensador/reboiler diferenciados
+    (COND · cool / REB · warm).  Misma fuente que el perfil
+    tray-by-tray graficado (block._wh_result) — el toggle tabla ↔
+    figura del inspector no recomputa nada.
+
+    Solo para columnas con Wang-Henke convergido: NUNCA etiquetamos
+    McCabe como WH (el fallback binario no tiene L/V por etapa)."""
+    try:
+        wh = getattr(block, "_wh_result", None)
+        if not (wh and isinstance(wh, dict) and wh.get("converged")):
+            return None
+        T_K = wh.get("T_profile") or []
+        x_prof = wh.get("x_profile") or []
+        y_prof = wh.get("y_profile") or []
+        L_prof = wh.get("L_profile") or []
+        V_prof = wh.get("V_profile") or []
+        if not T_K or not x_prof or len(T_K) != len(x_prof):
+            return None
+        import tray_profile as _tp
+        comps = _tp._wh_comps(block, fs)
+        LK = getattr(block, "column_LK", "") or "LK"
+        lk = comps.index(LK) if (comps and LK in comps) else None
+        if lk is None:
+            return None
+        N = len(T_K)
+        n_feed = int(wh.get("feed_stage") or max(1, N // 2))
+        # L/V del solver vienen en las unidades molares de F (kmol/s
+        # desde solve_columns) → kmol/h para el libro.
+        KMOL_S_TO_H = 3600.0
+
+        def _lv(prof, k):
+            try:
+                v = float(prof[k]) * KMOL_S_TO_H
+            except (IndexError, TypeError, ValueError):
+                return None
+            return v
+
+        rows = []
+        for k in range(N):
+            stage = k + 1
+            badge = None
+            ribbon = None
+            if stage == 1:
+                badge = {"text": "COND", "kind": "cool"}
+                ribbon = "cool"
+            elif stage == N:
+                badge = {"text": "REB", "kind": "warm"}
+                ribbon = "warm"
+            elif stage == n_feed:
+                badge = {"text": "FEED", "kind": "accent"}
+                ribbon = "accent"
+            x_lk = float(x_prof[k][lk]) if lk < len(x_prof[k]) else 0.0
+            y_lk = (float(y_prof[k][lk])
+                    if (k < len(y_prof) and lk < len(y_prof[k])) else None)
+            L = _lv(L_prof, k)
+            V = _lv(V_prof, k)
+            cells = [
+                {"t": str(stage), "badge": badge},
+                {"t": f"{float(T_K[k]) - 273.15:.1f}"},
+                {"t": f"{x_lk:.3f}"},
+                {"t": f"{y_lk:.3f}" if y_lk is not None
+                 else "—", "neutral": y_lk is None},
+                {"t": f"{L:.1f}" if (L is not None and L > 1e-9)
+                 else "—", "neutral": not (L and L > 1e-9)},
+                {"t": f"{V:.1f}" if (V is not None and V > 1e-9)
+                 else "—", "neutral": not (V and V > 1e-9)},
+            ]
+            rows.append({"cells": cells, "ribbon": ribbon})
+        ctx = [("LK", LK), ("N", str(N)), ("Feed", f"etapa {n_feed}")]
+        def _q(x):
+            return (f"{x / 1000.0:+.2f} MW" if abs(x) >= 1000.0
+                    else f"{x:+.1f} kW")
+        q_c = wh.get("Q_cond_kW")
+        q_r = wh.get("Q_reb_kW")
+        if q_c is not None:
+            ctx.append(("Q_cond", _q(q_c)))
+        if q_r is not None:
+            ctx.append(("Q_reb", _q(q_r)))
+        return {
+            "kicker": "Etapas de columna · Wang-Henke (MESH)",
+            "context": ctx,
+            "columns": [
+                {"label": "Etapa", "align": "left"},
+                {"label": "T [°C]", "align": "right"},
+                {"label": "x_LK", "align": "right"},
+                {"label": "y_LK", "align": "right"},
+                {"label": "L [kmol/h]", "align": "right"},
+                {"label": "V [kmol/h]", "align": "right"},
+            ],
+            "rows": rows,
+            "chips": [],
+            "provenance": None,
+            "note": ("Tabla ↔ figura comparten el perfil tray-by-tray "
+                     "(misma fuente de datos: _wh_result)."),
+            "warn": None,
+            "source": "Seader/Henley §10 (Wang-Henke MESH) · "
+                      "perfil tray-by-tray",
+        }
+    except Exception:
+        return None
 
 
 def hx_text(block) -> Optional[str]:
@@ -956,7 +1201,7 @@ def _expander_case(block, fs) -> Optional[dict]:
 def compressor_text(block, fs) -> Optional[str]:
     try:
         eq = (block.eq_type or "").lower()
-        if not ("compressor" in eq or "fan" in eq):
+        if not ("compressor" in eq or "fan" in eq or "turbin" in eq):
             return None
         import equipment_design as _ed
         cs = _ed.design_compressor_for_block(block, fs)
@@ -2100,6 +2345,24 @@ def hx_metrics(block) -> Optional[dict]:
                     "figure": None, "warnings": []}
             return None
         metrics = []
+        # Identidad de selección del WHB (4b): caudal de vapor generado
+        # — ES la variable de dimensionado/costeo Sinnott (S en kg/h),
+        # tarjeta sinnott span 2 con la variante en el flag.
+        eq = (block.eq_type or "").lower()
+        if "whb" in eq:
+            S = float(getattr(block, "S", 0.0) or 0.0)
+            if S > 0:
+                variante = ("field erected" if "field" in eq
+                            else "packaged")
+                metrics.append({
+                    "key": "steam", "label": "Caudal de vapor",
+                    "value": f"{S:,.0f}".replace(",", " "),
+                    "unit": "kg/h", "state": "sinnott", "span": 2,
+                    "flag": "HP",
+                    "sub": (f"WHB {variante} — dimensionado por caudal "
+                            f"de vapor · Sinnott (Coulson & Richardson "
+                            f"vol. 6)"),
+                })
         Th_i = hxd.get("T_h_in"); Th_o = hxd.get("T_h_out")
         Tc_i = hxd.get("T_c_in"); Tc_o = hxd.get("T_c_out")
         if Th_i is not None and Th_o is not None:
@@ -2483,6 +2746,17 @@ def valve_metrics(block, fs) -> Optional[dict]:
              "state": "danger" if vf > 0 else "auto",
              "sub": out.phase},
         ]
+        # Identidad de selección (4b): C_v de Crane como métrica rica —
+        # tarjeta spec a lo ancho con la ecuación citada en el sub.
+        cv = _valve_cv_liquid(feed, P_in, P_out)
+        if cv is not None:
+            metrics.append({
+                "key": "Cv", "label": "C_v (líq.)",
+                "value": f"{cv:.1f}", "unit": "gpm/√psi",
+                "state": "spec", "span": 3,
+                "sub": ("Crane TP-410 ec. 3-16: C_v = Q[gpm]·√(SG/ΔP[psi])"
+                        " · 1 gpm agua @ 1 psi ⇒ C_v = 1"),
+            })
         warnings = []
         if vf > 0.0:
             warnings.append("La expansión genera flasheo (VF > 0): "
@@ -2649,24 +2923,229 @@ def pump_metrics(block, fs) -> Optional[dict]:
         if margin is not None:
             metrics.append({"key": "margin", "label": "Margen cav.",
                             "value": f"{margin:.2f}", "unit": "m",
-                            "state": "danger" if margin < 1.0 else "ok"})
+                            "state": "danger" if margin < 1.0 else "ok",
+                            "flag": "⚠" if margin < 0 else None,
+                            "sub": ("NPSHa − NPSHr < 0" if margin < 0
+                                    else None)})
             if margin < 1.0:
-                status.append({"text": "Riesgo cavitación", "kind": "danger"})
-        # Velocidad específica + rodete (Frente E, libros): Perry 8ª
-        # fig. 10-32 — también en el camino rico, no solo en el texto.
+                # Registro SEMÁNTICO (4b): la alerta vive en la banda de
+                # encabezado con el margen — grita, pide acción.  No
+                # compite con la métrica didáctica de abajo.
+                status.append({"text": f"Riesgo de cavitación · margen "
+                                       f"{margin:.2f} m",
+                               "kind": "danger"})
+        # Registro DIDÁCTICO (4b): N_s como MetricCard accent span 2 con
+        # la escala de clasificación de Perry 8ª fig. 10-32 y el marcador
+        # en el valor — la regla completa va en el sub (que fluye).
         ns = ps.get("Ns_us")
         if ns is not None:
-            metrics.append({"key": "Ns", "label": "N_s (US)",
-                            "value": f"{ns:.0f}",
-                            "unit": f"@ {ps.get('N_rpm', 3550):.0f} rpm",
-                            "state": "info",
-                            "sub": "Perry fig. 10-32"})
             imp = ps.get("impeller_type") or ""
-            if imp:
-                kind = "warn" if "fuera de rango" in imp else "accent"
-                status.append({"text": f"Rodete {imp}", "kind": kind})
+            metrics.append({
+                "key": "Ns", "label": "N_s (US)",
+                "value": f"{ns:.0f}",
+                "unit": f"@ {ps.get('N_rpm', 3550):.0f} rpm",
+                "state": "accent", "span": 2,
+                "sub": (f"Rodete {imp} — Perry 8ª fig. 10-32"
+                        if imp else "Perry 8ª fig. 10-32"),
+                "scale": {"marker": float(ns), "min": 0.0, "max": 12000.0,
+                          "bands": [
+                              {"label": "radial", "to": 4000,
+                               "kind": "cool"},
+                              {"label": "mixto", "to": 9000,
+                               "kind": "accent"},
+                              {"label": "axial", "to": 12000,
+                               "kind": "warm"},
+                          ]},
+            })
+            if imp and "fuera de rango" in imp:
+                status.append({"text": f"Rodete {imp}", "kind": "warn"})
         return {"status": status, "metrics": metrics, "gauges": gauges,
                 "figure": None, "warnings": []}
+    except Exception:
+        return None
+
+
+# Nombres de elemento (español) para la tabla de átomos (4f)
+_ELEMENT_NAME = {
+    "H": "Hidrógeno", "C": "Carbono", "N": "Nitrógeno", "O": "Oxígeno",
+    "S": "Azufre", "Cl": "Cloro", "Na": "Sodio", "K": "Potasio",
+    "Ca": "Calcio", "Mg": "Magnesio", "Si": "Silicio", "Al": "Aluminio",
+    "Fe": "Hierro", "P": "Fósforo", "F": "Flúor", "Br": "Bromo",
+    "I": "Yodo", "B": "Boro", "Ar": "Argón", "He": "Helio",
+}
+
+_SUBSCRIPT = str.maketrans("0123456789", "₀₁₂₃₄₅₆₇₈₉")
+
+
+def _formula_subscript(name: str) -> str:
+    """Fórmula del componente con dígitos en subíndice (CH4 → CH₄) para
+    la lectura didáctica.  Cae al nombre si no hay fórmula en thermo_db."""
+    try:
+        import thermo_db as _td
+        c = _td.get(name)
+        f = getattr(c, "formula", "") if c is not None else ""
+        if f:
+            return f.translate(_SUBSCRIPT)
+    except Exception:
+        pass
+    return name
+
+
+def atom_balance_book_spec(block, fs) -> Optional[dict]:
+    """Spec de «balance de átomos en pantalla» (Design ciclo 4, 4f) —
+    la superficie propia del chequeo de conservación elemental que hoy
+    solo vive como el chip «✓ átomos» del header.
+
+    Reusa el motor `audit_examples_components` (misma fuente que el
+    chip y el gate): reparte la masa de cada componente por fracción de
+    fórmula (n_E·A_E / Σ n·A), así la suma elemental reproduce EXACTO
+    la masa del componente.  Los valores se leen en base ATÓMO-MOLAR
+    (kmol átomo/h) — la decisión del bundle: cuadra con la tabla
+    estequiométrica y hace el «×n» exacto; el cierre es equivalente al
+    de masa.  Aplica a reactores (la química conserva átomos aunque
+    rompa el balance por especie).
+
+    Devuelve None cuando el bloque no es evaluable (sin in/out, sin
+    composición, o componente no-traza sin fórmula parseable) — no se
+    fabrica un desbalance falso.
+    """
+    try:
+        import audit_examples_components as _ax
+        from flowsheet_model import SEC_PER_YEAR, TM_TO_KG
+
+        if getattr(block, "auto_aux", False):
+            return None
+        ins = [s for s in fs.streams.values()
+               if s.dst == block.id and s.src != -1 and s.dst != -1
+               and s.mass_flow > 0]
+        outs = [s for s in fs.streams.values()
+                if s.src == block.id and s.src != -1 and s.dst != -1
+                and s.mass_flow > 0]
+        if not ins or not outs:
+            return None
+
+        # Masa por componente en cada lado (tm/año).
+        comp_in, comp_out = {}, {}
+        for s in ins:
+            for c, m in _ax._stream_component_mass(s).items():
+                comp_in[c] = comp_in.get(c, 0.0) + m
+        for s in outs:
+            for c, m in _ax._stream_component_mass(s).items():
+                comp_out[c] = comp_out.get(c, 0.0) + m
+        if not comp_in or not comp_out:
+            return None
+        block_flow = max(sum(comp_in.values()), sum(comp_out.values()))
+        if block_flow <= 0:
+            return None
+        # Stream con masa pero sin composición → no evaluable (fabricaría
+        # un desbalance falso), mismo criterio que audit_block_elements.
+        for s in ins + outs:
+            if not _ax._stream_component_mass(s) and \
+                    s.mass_flow >= _ax.TRACE_FRAC * block_flow:
+                return None
+
+        # tm/año de elemento → kmol átomo/h.  kg/h = tm_yr·TM_TO_KG/
+        # SEC_PER_YEAR·3600; kmol átomo/h = kg/h / A_E.
+        def _mol(mass_el_tm_yr, A):
+            return mass_el_tm_yr * TM_TO_KG / SEC_PER_YEAR * 3600.0 / A
+
+        # Reparte un lado en {elemento: kmol/h total} y {elemento:
+        # [(componente, n_E, kmol/h)]} de procedencia molecular.
+        def _side(comp_masses):
+            totals, prov = {}, {}
+            for c, m in comp_masses.items():
+                counts = _ax._formula_for(c)
+                if counts is None:
+                    if m >= _ax.TRACE_FRAC * block_flow:
+                        return None, None       # no-traza sin fórmula
+                    continue
+                for el, n in counts.items():
+                    A = _ax._ATOMIC_MASS[el]
+                    mass_el = m * (n * A) / sum(
+                        nn * _ax._ATOMIC_MASS[ee] for ee, nn in counts.items())
+                    mol = _mol(mass_el, A)
+                    totals[el] = totals.get(el, 0.0) + mol
+                    prov.setdefault(el, []).append((c, n, mol))
+            return totals, prov
+
+        in_tot, in_prov = _side(comp_in)
+        out_tot, out_prov = _side(comp_out)
+        if in_tot is None or out_tot is None:
+            return None
+
+        # kmol átomo/h de referencia para la tolerancia (traza/relativa)
+        flow_mol = _mol(block_flow, min(_ax._ATOMIC_MASS.values()))
+        elements = []
+        any_bad = False
+        for el in sorted(set(in_tot) | set(out_tot)):
+            mi, mo = in_tot.get(el, 0.0), out_tot.get(el, 0.0)
+            # Traza (mismo criterio del motor, en base molar)
+            A = _ax._ATOMIC_MASS[el]
+            trace_mol = _mol(_ax.TRACE_FRAC * block_flow, A)
+            if max(mi, mo) < trace_mol:
+                continue
+            d = abs(mi - mo)
+            rel = d / max(mi, mo, 1e-9)
+            closes = rel < _ax.TOL_REL
+            # Crítico: Δ > 5 % del flujo del bloque (en masa, como el motor)
+            crit_mol = _mol(_ax.CRIT_FRAC * block_flow, A)
+            critical = (not closes) and d > crit_mol
+            if not closes:
+                any_bad = True
+
+            def _mols(prov_list):
+                out = []
+                for c, n, mol in sorted(prov_list or [],
+                                        key=lambda t: -t[2]):
+                    if mol < trace_mol:
+                        continue
+                    out.append({"f": _formula_subscript(c),
+                                "c": f"×{n}", "v": f"{mol:.2f}"})
+                return out
+
+            elements.append({
+                "sym": el,
+                "name": _ELEMENT_NAME.get(el, el),
+                "A": f"{A:.3f}",
+                "in_total": f"{mi:.2f}",
+                "out_total": f"{mo:.2f}",
+                "delta": f"{d:.2f}",
+                "closes": closes,
+                "critical": critical,
+                "in_mols": _mols(in_prov.get(el)),
+                "out_mols": _mols(out_prov.get(el)),
+            })
+        if not elements:
+            return None
+
+        rxn = None
+        for rid in (getattr(block, "reactions", None) or []):
+            try:
+                import reactions_db as _rdb
+                r = _rdb.get(rid)
+                if r is not None:
+                    rxn = r.name or r.id
+                    break
+            except Exception:
+                pass
+        ctx = [("Bloque", f"{block.name} · "
+                f"{(block.eq_type or '').split('—')[0].strip() or 'bloque'}")]
+        if rxn:
+            ctx.append(("Reacción", rxn))
+        ctx.append(("Base", "kmol átomo/h"))
+        return {
+            "kicker": "Balance de átomos · conservación elemental",
+            "chip_ok": not any_bad,
+            "context": ctx,
+            "elements": elements,
+            "note": ("Los átomos se conservan aunque haya reacción — cada "
+                     "molécula se reparte en sus elementos por n_E·A_E / "
+                     "Σ(n·A).  El chip «✓ átomos» del header lo resume; "
+                     "esta tabla lo abre."),
+            "source": ("audit_examples_components.audit_block_elements — "
+                       "chequeo elemental C/H/O/N/S (tol 1 % rel · "
+                       "CRÍTICO si Δ > 5 % del flujo)"),
+        }
     except Exception:
         return None
 
@@ -2887,7 +3366,7 @@ def compressor_metrics(block, fs) -> Optional[dict]:
     """Estructurado de compressor_text(). Misma fuente (equipment_design)."""
     try:
         eq = (block.eq_type or "").lower()
-        if not ("compressor" in eq or "fan" in eq):
+        if not ("compressor" in eq or "fan" in eq or "turbin" in eq):
             return None
         import equipment_design as _ed
         cs = _ed.design_compressor_for_block(block, fs)

@@ -138,7 +138,31 @@ class AnnotationItem(QGraphicsTextItem):
             self.data["x"] = float(self.pos().x())
             self.data["y"] = float(self.pos().y())
             self._sync_guide()
+        elif change == QGraphicsItem.ItemSelectedHasChanged:
+            # El ◆ de ancla solo se ve con la nota seleccionada (4d)
+            self._sync_guide()
         return super().itemChange(change, value)
+
+    def _anchor_scene_pos(self):
+        """Posición actual del elemento anclado (centro del bloque /
+        corriente) o None si el ancla no resuelve.  El ancla se guarda
+        como (id + offset relativo), NUNCA coordenada absoluta — al
+        mover el bloque la guía se re-dibuja siguiéndolo (4d)."""
+        anchor = self.data.get("guide_anchor")
+        if not anchor or self.editor is None:
+            return None
+        try:
+            sc = self.editor.scene
+            items = (sc.block_items if anchor.get("kind") == "block"
+                     else sc.stream_items)
+            it = items.get(int(anchor.get("id", -1)))
+            if it is None:
+                return None
+            c = it.sceneBoundingRect().center()
+            off = anchor.get("offset") or [0.0, 0.0]
+            return (c.x() + float(off[0]), c.y() + float(off[1]))
+        except Exception:
+            return None
 
     def mousePressEvent(self, event):
         if (event.button() == Qt.LeftButton and self.editor is not None
@@ -148,6 +172,11 @@ class AnnotationItem(QGraphicsTextItem):
         super().mousePressEvent(event)
 
     def _sync_guide(self):
+        # Ancla viva (4d): si la guía está anclada a un bloque/corriente,
+        # el destino se recomputa de la posición ACTUAL del elemento.
+        anchored = self._anchor_scene_pos()
+        if anchored is not None:
+            self.data["guide"] = [anchored[0], anchored[1]]
         guide = self.data.get("guide")
         sc = self.scene()
         if not guide or sc is None:
@@ -155,6 +184,7 @@ class AnnotationItem(QGraphicsTextItem):
                 if self._guide_item.scene() is not None:
                     self._guide_item.scene().removeItem(self._guide_item)
                 self._guide_item = None
+            self._sync_anchor_dot(None)
             return
         if self._guide_item is None or self._guide_item.scene() is not sc:
             self._guide_item = QGraphicsLineItem()
@@ -168,12 +198,47 @@ class AnnotationItem(QGraphicsTextItem):
         br = self.sceneBoundingRect()
         self._guide_item.setLine(br.center().x(), br.center().y(),
                                  float(guide[0]), float(guide[1]))
+        self._sync_anchor_dot(guide if anchored is not None else None)
+
+    def _sync_anchor_dot(self, guide_xy):
+        """◆ Ø5 `accent` en el extremo anclado, visible SOLO con la nota
+        seleccionada — muestra que la guía *está* anclada (spec 4d).
+        Sin cambio de estilo de la guía (la recta del ciclo 3 queda)."""
+        sc = self.scene()
+        show = (guide_xy is not None and sc is not None
+                and self.isSelected())
+        dot = getattr(self, "_anchor_dot", None)
+        if not show:
+            if dot is not None and dot.scene() is not None:
+                dot.scene().removeItem(dot)
+            self._anchor_dot = None
+            return
+        from PySide6.QtGui import QPolygonF, QBrush
+        from PySide6.QtWidgets import QGraphicsPolygonItem
+        r = 2.5      # Ø5
+        x, y = float(guide_xy[0]), float(guide_xy[1])
+        poly = QPolygonF([QPointF(x, y - r), QPointF(x + r, y),
+                          QPointF(x, y + r), QPointF(x - r, y)])
+        if dot is None or dot.scene() is not sc:
+            dot = QGraphicsPolygonItem()
+            dot.setZValue(Z_ANNOTATION)
+            dot.setAcceptedMouseButtons(Qt.NoButton)
+            sc.addItem(dot)
+            self._anchor_dot = dot
+        dot.setPolygon(poly)
+        dot.setPen(QPen(Qt.NoPen))
+        dot.setBrush(QBrush(QColor(_tokens.TOK["accent"])))
 
     def remove_guide_item(self):
         if self._guide_item is not None:
             if self._guide_item.scene() is not None:
                 self._guide_item.scene().removeItem(self._guide_item)
             self._guide_item = None
+        dot = getattr(self, "_anchor_dot", None)
+        if dot is not None:
+            if dot.scene() is not None:
+                dot.scene().removeItem(dot)
+            self._anchor_dot = None
 
     # ── menú contextual ───────────────────────────────────────
     def contextMenuEvent(self, event):
@@ -226,6 +291,7 @@ class AnnotationItem(QGraphicsTextItem):
             self.data["pill"] = not self.data.get("pill")
         elif kind == "guide_off":
             self.data["guide"] = None
+            self.data["guide_anchor"] = None
         elif kind == "guide_on":
             # El próximo click en el canvas fija el destino de la guía
             ed._annotation_awaiting_guide = self

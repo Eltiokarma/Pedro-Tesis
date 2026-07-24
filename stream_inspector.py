@@ -42,6 +42,7 @@ from block_inspector import (
     TOK, ROW_PAD, SECT_GAP, PANEL_W,
     SpecField, _PrefsBus,
 )
+from tokens import PANEL_MIN, dock_default_width
 
 
 # ════════════════════════════════════════════════════════
@@ -304,6 +305,8 @@ class _DashArrow(QFrame):
         self._color = color or QColor(TOK["accent"])
 
     def paintEvent(self, ev):
+        if self.width() <= 0 or self.height() <= 0:
+            return   # widget 0×0 (thrash de layout) → QPainter(self) no activaría
         p = QPainter(self); p.setRenderHint(QPainter.Antialiasing, True)
         pen = QPen(self._color, 2)
         pen.setStyle(Qt.CustomDashLine); pen.setDashPattern([6, 4])
@@ -966,10 +969,12 @@ class StreamInspectorPanel(QWidget):
         self._comp_lay = QVBoxLayout(self._comp_table)
         self._comp_lay.setContentsMargins(0, 0, 0, 0); self._comp_lay.setSpacing(0)
 
-        # header row
+        # header row — la columna de 14px al arranque es la procedencia
+        # POR COMPONENTE (Design ciclo 4, 4d): ▪ declarado / ◦ deducido
         hdr = QFrame()
         hl = QHBoxLayout(hdr); hl.setContentsMargins(12, 8, 12, 8); hl.setSpacing(10)
         for txt, w, align in [
+            ("", 14, Qt.AlignLeft),
             ("", 12, Qt.AlignLeft),
             ("COMPONENTE", 120, Qt.AlignLeft),
             ("FRACCIÓN", 80, Qt.AlignLeft),
@@ -1070,12 +1075,38 @@ class StreamInspectorPanel(QWidget):
             row = self._build_comp_row(i, name, float(frac), colors[i % len(colors)])
             self._comp_rows_wrap.addWidget(row)
 
+    def _comp_provenance(self, name: str):
+        """(glifo, token, término) de procedencia POR COMPONENTE (Design
+        ciclo 4, 4d — deuda 3b del ciclo 3).  Fuente: el dict opcional
+        `stream._comp_provenance` {componente: 'declared'|'derived'} si
+        el solver lo publica (caso mixto); si no, cae al lock de la
+        corriente entera (composition_locked → todo declarado)."""
+        s = self.stream
+        per_comp = getattr(s, "_comp_provenance", None) or {}
+        origin = per_comp.get(name)
+        if origin is None:
+            origin = ("declared"
+                      if bool(getattr(s, "composition_locked", False))
+                      else "derived")
+        if origin == "declared":
+            return ("▪", "spec", "declarado — lo puso el usuario")
+        return ("◦", "ink_mute", "deducido — lo propagó el solver")
+
     def _build_comp_row(self, idx, name, frac, color):
         row = QFrame()
         rl = QHBoxLayout(row); rl.setContentsMargins(12, 8, 12, 8); rl.setSpacing(10)
         row.setStyleSheet(
             f"QFrame {{ border-bottom:1px solid {TOK['line_soft']}; }}"
         )
+        # marca sudoku por componente (14px, antes del dot de color)
+        glyph, tok, tip = self._comp_provenance(name)
+        proc = QLabel(glyph)
+        proc.setFont(QFont(pfd_fonts.MONO, int(FONT_LABEL[1]),
+                           QFont.DemiBold))
+        proc.setFixedWidth(14)
+        proc.setStyleSheet(f"color:{TOK[tok]}; border:0;")
+        proc.setToolTip(tip)
+        rl.addWidget(proc)
         # color dot
         dot = QLabel(); dot.setFixedSize(10, 10)
         dot.setStyleSheet(f"background:{color}; border-radius:5px;")
@@ -1670,7 +1701,10 @@ class StreamInspectorDock(QDockWidget):
             QDockWidget.DockWidgetFloatable |
             QDockWidget.DockWidgetClosable
         )
-        self.setMinimumWidth(PANEL_W)
+        # Mínimo reducido (ver BlockInspectorDock / tokens.PANEL_MIN): la
+        # ventana entra en pantallas chicas; el ancho por defecto sigue siendo
+        # PANEL_W vía resizeDocks en show_for().
+        self.setMinimumWidth(PANEL_MIN)
         empty_tb = QWidget(self); empty_tb.setFixedHeight(0)
         self.setTitleBarWidget(empty_tb)
 
@@ -1686,6 +1720,13 @@ class StreamInspectorDock(QDockWidget):
                                on_save=on_save, on_cancel=on_cancel)
         self.show()
         self.raise_()
+        # Ancho por defecto = PANEL_W en pantallas grandes, acotado en chicas.
+        try:
+            mw = self.parent()
+            if mw is not None and hasattr(mw, "resizeDocks"):
+                mw.resizeDocks([self], [dock_default_width(mw)], Qt.Horizontal)
+        except Exception:
+            pass
 
     def refresh_calc(self):
         """FASE 3.5 — refresca la sección 'Propiedades [calculado]' tras un

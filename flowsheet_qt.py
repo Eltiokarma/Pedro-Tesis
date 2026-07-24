@@ -989,7 +989,8 @@ class BlockEditDialog(QDialog):
         is_pump_or_compr = ("pump" in block.eq_type.lower()
                              or "bomba" in block.eq_type.lower()
                              or "compressor" in block.eq_type.lower()
-                             or "fan" in block.eq_type.lower())
+                             or "fan" in block.eq_type.lower()
+                             or "turbin" in block.eq_type.lower())
         self.gb_rot = QGroupBox("Equipo rotativo (bomba / compresor)")
         self.gb_rot.setVisible(is_pump_or_compr)
         rot_layout = QFormLayout(self.gb_rot)
@@ -1024,9 +1025,15 @@ class BlockEditDialog(QDialog):
         self.rot_eta.setRange(0.3, 0.95); self.rot_eta.setDecimals(3)
         self.rot_eta.setSingleStep(0.05)
         # Default por tipo de equipo
-        eta_default = 0.70 if "compressor" in block.eq_type.lower() else 0.75
+        eq_low_rot = block.eq_type.lower()
+        if "turbin" in eq_low_rot:
+            eta_default = 0.85     # turbinas tienden a η más alta (solver)
+        elif "compressor" in eq_low_rot:
+            eta_default = 0.70
+        else:
+            eta_default = 0.75
         self.rot_eta.setValue(getattr(block, "efficiency", 0) or eta_default)
-        if "compressor" in block.eq_type.lower():
+        if "compressor" in eq_low_rot or "turbin" in eq_low_rot:
             label_eta = "η isentrópica:"
         else:
             label_eta = "η hidráulica:"
@@ -1318,6 +1325,10 @@ class BlockEditDialog(QDialog):
         name = self.name_edit.text().strip()
         if name:
             self.block.name = name
+        # Este campo es el tamaño del PROCESO (sizing).  Si algún día el modo
+        # selección de Fichas Técnicas escribe acá el S de un modelo comercial,
+        # el costeo Turton usa el techo del bastidor → CAPEX inflado.  El equipo
+        # comercial va en Block.equipo_comercial.  Ver test_equipos_comerciales.py.
         self.block.S = float(self.s_edit.value())
         self.block.n = int(self.n_edit.value())
         self.block.duty = float(self.duty_edit.value())
@@ -4366,6 +4377,71 @@ class StreamItem(QGraphicsPathItem):
             return None
         return col_at(T_in), col_at(T_out)
 
+    # ── Gradiente térmico en corrientes de PROCESO (ciclo 4, 4d) ──
+    # Eje acordado con Design: GLOBAL por proyecto — T_min/T_max de
+    # todas las corrientes de proceso, escala lineal
+    # service_cold_deep → ink_ghost (medio neutro) → service_hot_deep.
+    # El medio neutro lo separa del eje de servicio (que usa el par
+    # pale/deep POR CORRIENTE del lazo).
+
+    PROC_GRAD_MIN_DT = 1.0    # °C: bajo esto el cambio es ruido, no señal
+
+    def _process_axis(self):
+        """(T_min, T_max) del eje global del proyecto — sobre TODAS las
+        corrientes de proceso (feed/internal/product) con masa.  None si
+        el proyecto es isotérmico (span nulo)."""
+        temps = []
+        for o in self.fs.streams.values():
+            if (o.role or "internal") not in ("feed", "internal",
+                                              "product"):
+                continue
+            if getattr(o, "auto_aux", False):
+                continue
+            temps.append(float(getattr(o, "temperature", 25.0) or 25.0))
+        if len(temps) < 2:
+            return None
+        tmin, tmax = min(temps), max(temps)
+        if (tmax - tmin) <= 1e-6:
+            return None
+        return tmin, tmax
+
+    def _process_color_at(self, T, tmin, tmax):
+        f = (T - tmin) / (tmax - tmin)
+        f = 0.0 if f < 0.0 else (1.0 if f > 1.0 else f)
+        cold = QColor(_tokens.TOK["service_cold_deep"])
+        mid = QColor(_tokens.TOK["ink_ghost"])
+        hot = QColor(_tokens.TOK["service_hot_deep"])
+        if f < 0.5:
+            return _lerp_color(cold, mid, f * 2.0)
+        return _lerp_color(mid, hot, (f - 0.5) * 2.0)
+
+    def _process_gradient_colors(self):
+        """(color_T_in, color_T_out) del gradiente de proceso, o None.
+        Igual que el de servicio: el color de salida es el de la
+        siguiente corriente de PROCESO que sale del bloque destino (la
+        T a la que se llega).  Solo tinta cuando el bloque destino
+        realmente cambia la T (>1 °C) — si no, la corriente conserva el
+        color de su rol (el lenguaje del ciclo 2 no se pisa)."""
+        s = self.model
+        axis = self._process_axis()
+        if axis is None:
+            return None
+        tmin, tmax = axis
+        T_in = float(getattr(s, "temperature", 25.0) or 25.0)
+        T_out = T_in
+        if s.dst and s.dst > 0:
+            for o in self.fs.streams.values():
+                if (o.src == s.dst and o.id != s.id
+                        and (o.role or "internal") in ("feed", "internal",
+                                                       "product")
+                        and not getattr(o, "auto_aux", False)):
+                    T_out = float(getattr(o, "temperature", T_in) or T_in)
+                    break
+        if abs(T_out - T_in) <= self.PROC_GRAD_MIN_DT:
+            return None
+        return (self._process_color_at(T_in, tmin, tmax),
+                self._process_color_at(T_out, tmin, tmax))
+
     # Umbrales del artboard 3d: bajo estos, el banding es ruido y se
     # pinta sólido medio (service_hot/cold).
     GRAD_MIN_ZOOM = 0.6
@@ -4377,7 +4453,7 @@ class StreamItem(QGraphicsPathItem):
             super().paint(painter, option, widget)
             return
         import math
-        pts, c_in, c_out = grad
+        pts, c_in, c_out, c_solid = grad
         zoom = abs(painter.transform().m11()) or 1.0
         # Longitud acumulada del path (todos los segmentos + jumpers)
         segs = []
@@ -4389,11 +4465,10 @@ class StreamItem(QGraphicsPathItem):
             total += d
         if zoom < self.GRAD_MIN_ZOOM or total * zoom < self.GRAD_MIN_PX \
                 or total <= 0:
-            # Sólido medio: el tono base del servicio, no el gradiente
+            # Sólido medio: el tono base (servicio) o el color del rol
+            # (proceso, ciclo 4) — el banding a esta escala es ruido.
             pen = QPen(self.pen())
-            is_hot, _, _ = self._utility_loop_info()
-            pen.setColor(QColor(COLOR_UTIL_HOT if is_hot
-                                else COLOR_UTIL_COLD))
+            pen.setColor(QColor(c_solid))
             painter.setPen(pen)
             painter.drawPath(self.path())
             return
@@ -4894,9 +4969,27 @@ class StreamItem(QGraphicsPathItem):
                 grad = None
             if grad is not None:
                 c_in, c_out = grad
+                is_hot, _, _ = self._utility_loop_info()
+                c_solid = QColor(COLOR_UTIL_HOT if is_hot
+                                 else COLOR_UTIL_COLD)
                 self._service_grad = (list(pts), QColor(c_in),
-                                      QColor(c_out))
+                                      QColor(c_out), c_solid)
                 # La flecha hereda el color de LLEGADA (deep).
+                color = QColor(c_out)
+        elif role in ("feed", "internal", "product") \
+                and self._status not in ("error", "warning"):
+            # Gradiente térmico de PROCESO (ciclo 4, 4d): eje global del
+            # proyecto, solo cuando el bloque destino cambia la T.  El
+            # semáforo mantiene prioridad; el sólido de fallback es el
+            # color del ROL (el lenguaje del ciclo 2 no se pisa).
+            try:
+                grad = self._process_gradient_colors()
+            except Exception:
+                grad = None
+            if grad is not None:
+                c_in, c_out = grad
+                self._service_grad = (list(pts), QColor(c_in),
+                                      QColor(c_out), QColor(color))
                 color = QColor(c_out)
 
         pen = QPen(color, width)
@@ -5614,7 +5707,7 @@ class _PaperFrame(QGraphicsItemGroup):
 
     def __init__(self, project_title="PFD", area="100",
                  drawing_no="PFD-100-001", rev="A", date=None,
-                 legend_collapsed=False):
+                 legend_collapsed=False, revisions=None):
         super().__init__()
         self.setZValue(-100)
         # decorativo puro: no participa del hit-testing (rubber band);
@@ -5624,7 +5717,11 @@ class _PaperFrame(QGraphicsItemGroup):
         self._project_title = project_title
         self._area          = area
         self._drawing_no    = drawing_no
-        self._rev           = rev
+        self._revisions     = list(revisions or [])
+        # El REV del cuadro de título refleja la última revisión △N
+        # registrada (ciclo 4, 4d); sin cuadro, el rev por parámetro.
+        self._rev = (self._revisions[-1].get("rev", rev)
+                     if self._revisions else rev)
         self._legend_collapsed = bool(legend_collapsed)
         self.legend_chevron_rect = None   # QRectF en coords de escena
         if date is None:
@@ -5643,6 +5740,7 @@ class _PaperFrame(QGraphicsItemGroup):
         self._build_frame()
         self._build_legend()
         self._build_title_block()
+        self._build_revisions_block()
 
     # ---------- helpers ----------
     def _add_rect(self, x, y, w, h, stroke_w=1.0, fill=None, parent=None):
@@ -5698,7 +5796,8 @@ class _PaperFrame(QGraphicsItemGroup):
         bw = 460
         bx = W - 500                      # alineada con el cuadro de título
         collapsed = self._legend_collapsed
-        bh = 26 if collapsed else 140     # +22: fila PROCEDENCIA (3b)
+        # +22: fila PROCEDENCIA (3b) · +22: fila T PROCESO (ciclo 4, 4d)
+        bh = 26 if collapsed else 162
         by = H - 160 - bh - 6
 
         # tipografía de documento — escala de plano (excepción 2g)
@@ -5806,6 +5905,26 @@ class _PaperFrame(QGraphicsItemGroup):
             self._add_text(px + 10, ry4, lbl.split(" — ")[0], f_item)
             px += 10 + 7 * len(lbl.split(" — ")[0]) + 22
 
+        # ── T de proceso · eje global (ciclo 4, 4d) — fila nueva ──
+        # cold_deep → ink_ghost (medio neutro) → hot_deep, lineal sobre
+        # T_min/T_max de las corrientes de proceso del proyecto.  El
+        # medio neutro lo separa del eje de servicio (pale/deep).
+        ry5 = by + 138
+        self._add_line(bx + 12, ry5 - 6, bx + bw - 12, ry5 - 6, 0.4)
+        self._add_text(bx + 12, ry5, "T PROCESO · eje global", f_grp,
+                       color=SOFT)
+        gx, gw, gh = bx + 148, 150, 8
+        grad = QLinearGradient(gx, 0, gx + gw, 0)
+        grad.setColorAt(0.0, QColor(T["service_cold_deep"]))
+        grad.setColorAt(0.5, QColor(T["ink_ghost"]))
+        grad.setColorAt(1.0, QColor(T["service_hot_deep"]))
+        bar = QGraphicsRectItem(gx, ry5 + 1, gw, gh, self)
+        bar.setBrush(QBrush(grad))
+        bar.setPen(QPen(Qt.NoPen))
+        bar.setAcceptedMouseButtons(Qt.NoButton)
+        self._add_text(gx - 34, ry5 + 1, "T mín", f_item, color=SOFT)
+        self._add_text(gx + gw + 6, ry5 + 1, "T máx", f_item, color=SOFT)
+
     def _build_title_block(self):
         BLACK = self._BLACK
         SOFT  = self._SOFT
@@ -5853,6 +5972,64 @@ class _PaperFrame(QGraphicsItemGroup):
         self._add_text(bx + 312, by + 100, "DIBUJÓ",   f_label, color=SOFT)
         self._add_text(bx + 350, by + 100, "—",        f_val_mono)
 
+    def _build_revisions_block(self):
+        """Cuadro de revisiones △N (Design ciclo 4, 4d — deuda 3c del
+        bundle ciclo 3): bloque formal rev. A/B/C con fecha, a la
+        izquierda del cuadro de título (convención de plano; crece
+        hacia arriba).  La última revisión lleva la marca △ en danger
+        — la misma tinta «Revisión △» de la herramienta de anotación,
+        que es la que enlaza el elemento cambiado a esta fila.
+
+        Solo se dibuja si el flowsheet registró revisiones (el marco
+        sin historial no muestra un cuadro vacío)."""
+        revs = self._revisions
+        if not revs:
+            return
+        BLACK = self._BLACK
+        SOFT  = self._SOFT
+        W, H  = self.PAPER_W, self.PAPER_H
+        # Geometría: columnas REV 34 · DESCRIPCIÓN flexible · FECHA 66
+        # · POR 44 (spec del bundle), filas de 16, header 16.
+        bw = 310
+        row_h, hdr_h = 16, 16
+        bh = hdr_h + row_h * len(revs)
+        bx = W - 500 - bw - 10
+        by = H - 40 - bh                  # fondo alineado con el marco
+        cols = (34, bw - 34 - 66 - 44, 66, 44)
+        f_hdr = QFont(self._mono, 6, QFont.Bold)
+        f_hdr.setLetterSpacing(QFont.AbsoluteSpacing, 0.5)
+        f_cell = QFont(self._mono, 7)
+        f_rev  = QFont(self._mono, 7, QFont.Bold)
+
+        self._add_rect(bx, by, bw, bh, stroke_w=1.0, fill=self._PAPER)
+        # header
+        self._add_line(bx, by + hdr_h, bx + bw, by + hdr_h, 0.8)
+        x = bx
+        for label, cw in zip(("REV", "DESCRIPCIÓN", "FECHA", "POR"), cols):
+            self._add_text(x + 6, by + 3, label, f_hdr, color=SOFT)
+            x += cw
+        # separadores verticales
+        x = bx
+        for cw in cols[:-1]:
+            x += cw
+            self._add_line(x, by, x, by + bh, 0.5)
+        # filas (orden cronológico; la última = vigente, marcada △)
+        for i, r in enumerate(revs):
+            ry = by + hdr_h + i * row_h
+            if i > 0:
+                self._add_line(bx, ry, bx + bw, ry, 0.4)
+            last = (i == len(revs) - 1)
+            rev_txt = f"△{r.get('rev', '?')}" if last else \
+                str(r.get("rev", "?"))
+            rev_col = (QColor(_tokens.TOK["danger"]) if last else BLACK)
+            self._add_text(bx + 6, ry + 2, rev_txt, f_rev, color=rev_col)
+            self._add_text(bx + cols[0] + 6, ry + 2,
+                           str(r.get("desc", ""))[:38], f_cell)
+            self._add_text(bx + cols[0] + cols[1] + 6, ry + 2,
+                           str(r.get("date", "")), f_cell)
+            self._add_text(bx + cols[0] + cols[1] + cols[2] + 6, ry + 2,
+                           str(r.get("by", "")), f_cell)
+
 
 # ======================================================
 
@@ -5876,11 +6053,17 @@ class FlowsheetScene(QGraphicsScene):
         cuadro de título).  Se posiciona en (0, 0)."""
         if visible:
             if self.paper_frame is None:
+                # Cuadro de revisiones △N (ciclo 4, 4d): vive en el
+                # modelo (Flowsheet.revisions) y se dibuja en el marco.
+                ed = getattr(self, "editor", None)
+                revs = list(getattr(getattr(ed, "fs", None),
+                                    "revisions", []) or [])
                 self.paper_frame = _PaperFrame(
                     project_title=project_title,
                     area=area, drawing_no=drawing_no,
                     legend_collapsed=getattr(
                         self, "_legend_collapsed", False),
+                    revisions=revs,
                 )
                 self.paper_frame.setPos(0, 0)
                 self.addItem(self.paper_frame)
@@ -5921,8 +6104,25 @@ class FlowsheetScene(QGraphicsScene):
             waiting = getattr(ed, "_annotation_awaiting_guide", None)
             if waiting is not None:
                 before = ed.begin_action()
-                waiting.data["guide"] = [event.scenePos().x(),
-                                         event.scenePos().y()]
+                sp = event.scenePos()
+                waiting.data["guide"] = [sp.x(), sp.y()]
+                # Anclaje (ciclo 4, 4d): si el click cae sobre un bloque
+                # o una corriente, la guía se ancla a ese elemento con
+                # offset relativo — al moverlo, la guía lo sigue.
+                waiting.data["guide_anchor"] = None
+                for it in self.items(sp):
+                    kind = None
+                    if isinstance(it, BlockItem):
+                        kind, eid = "block", it.model.id
+                    elif isinstance(it, StreamItem):
+                        kind, eid = "stream", it.model.id
+                    if kind is not None:
+                        c = it.sceneBoundingRect().center()
+                        waiting.data["guide_anchor"] = {
+                            "kind": kind, "id": int(eid),
+                            "offset": [sp.x() - c.x(), sp.y() - c.y()],
+                        }
+                        break
                 waiting._sync_guide()
                 ed._annotation_awaiting_guide = None
                 ed.end_action("guía de anotación", before)
@@ -6534,6 +6734,10 @@ class FlowsheetMainWindow(QMainWindow):
         self._annotations_visibility_action.triggered.connect(
             self.set_annotations_visible)
         m_view.addAction(self._annotations_visibility_action)
+        # Cuadro de revisiones △N (ciclo 4, 4d): registrar una revisión
+        # formal (rev. A/B/C con fecha) que se dibuja en el Marco PFD.
+        m_view.addAction(_ac("Registrar revisión △N…",
+                             self.action_add_revision))
         # Tabla de corrientes — acción de PRIMER NIVEL (antes solo vivía en
         # "Docks legacy").  Reusa la acción robusta del toolbar.
         if getattr(self, "_streams_table_action", None) is not None:
@@ -7286,8 +7490,17 @@ class FlowsheetMainWindow(QMainWindow):
         if hasattr(self, "_paper_action"):
             self._paper_action.setChecked(True)
 
-        self.view.zoom_reset()
-        self._center_view_on_blocks()
+        # Encuadrar TODO el diagrama en la vista: a zoom 1:1 (zoom_reset)
+        # los ejemplos anchos —y más aún tras _expand_block_spacing(1.7)—
+        # no entraban en el viewport y los equipos de los bordes quedaban
+        # fuera de cuadro ("no se veían algunos equipos").  zoom_fit encaja
+        # el bounding box de bloques con margen, mismo criterio que la ruta
+        # `--open`.  Fallback defensivo al centrado 1:1 si algo falla.
+        try:
+            self.view.zoom_fit()
+        except Exception:
+            self.view.zoom_reset()
+            self._center_view_on_blocks()
         # El chip del topbar conservaba el estado del diagrama anterior
         # ("convergido" de otro flowsheet) — el ejemplo recién cargado
         # todavía no se resolvió.
@@ -7360,6 +7573,46 @@ class FlowsheetMainWindow(QMainWindow):
         """Muestra/oculta el papel de dibujo PFD (marco + cuadro de
         título + leyenda)."""
         self.scene.set_paper_visible(checked)
+
+    def action_add_revision(self):
+        """Registra una revisión △N formal (Design ciclo 4, 4d): rev.
+        A/B/C automática + descripción + iniciales + fecha de hoy.
+        Vive en Flowsheet.revisions (persistida y con undo) y se dibuja
+        en el Marco PFD — pantalla y export."""
+        from PySide6.QtWidgets import QInputDialog
+        revs = getattr(self.fs, "revisions", None)
+        if revs is None:
+            self.fs.revisions = revs = []
+        n = len(revs)
+        letter = chr(ord("A") + n) if n < 26 else f"Z{n - 25}"
+        desc, ok = QInputDialog.getText(
+            self, f"Revisión △{letter}",
+            "Descripción del cambio (p.ej. «+ WHB E-201»):",
+            text="Emisión" if n == 0 else "")
+        if not ok or not desc.strip():
+            return
+        prev_by = revs[-1].get("by", "") if revs else ""
+        by, ok = QInputDialog.getText(
+            self, f"Revisión △{letter}", "Iniciales (POR):",
+            text=prev_by)
+        if not ok:
+            return
+        import datetime
+        before = self.begin_action()
+        revs.append({"rev": letter, "desc": desc.strip(),
+                     "date": datetime.date.today().strftime("%d-%m"),
+                     "by": (by or "—").strip()[:4]})
+        self._mark_dirty()
+        # Rebuild del marco si está visible (el cuadro vive ahí)
+        pf = self.scene.paper_frame
+        if pf is not None and pf.isVisible():
+            title, area, dwg = (pf._project_title, pf._area,
+                                pf._drawing_no)
+            self.scene.removeItem(pf)
+            self.scene.paper_frame = None
+            self.scene.set_paper_visible(True, project_title=title,
+                                         area=area, drawing_no=dwg)
+        self.end_action(f"Revisión △{letter}", before)
 
     def action_dof(self):
         """Análisis estructural de grados de libertad (DOF audit).
@@ -8660,6 +8913,14 @@ class FlowsheetMainWindow(QMainWindow):
             self._bubble_manager._refresh_leaders()
         if getattr(self, "_hx_bubble_manager", None) is not None:
             self._hx_bubble_manager._refresh_leaders()
+        # Guías de anotación ancladas (ciclo 4, 4d): siguen al bloque/
+        # corriente que se movió.
+        for a in getattr(self, "_annotation_items", []):
+            if a.data.get("guide_anchor"):
+                try:
+                    a._sync_guide()
+                except Exception:
+                    pass
 
     def _schedule_stream_reanchor(self):
         """Re-ancla TODOS los streams en el PRÓXIMO ciclo del event-loop.

@@ -1543,7 +1543,8 @@ def _solve_energy_iteration(fs, tol_T=0.5, skipped=None):
         #     ineficiencia ~1-3 °C, despreciable a P < 100 bar).
         if _ep_mod.is_electrical_equipment(b.eq_type):
             eq_lower = b.eq_type.lower()
-            if "compressor" in eq_lower or "fan" in eq_lower:
+            if ("compressor" in eq_lower or "fan" in eq_lower
+                    or "turbin" in eq_lower):
                 _propagate_T_compressor_isentropic(
                     b, fs, propagated, skipped, tol_T)
             elif "pump" in eq_lower:

@@ -45,6 +45,7 @@ from PySide6.QtWidgets import (
 )
 
 import pfd_fonts
+import tokens as _tokens
 from block_inspector import TOK
 
 
@@ -173,6 +174,22 @@ class StreamBubble(QFrame):
         self._collapsed = bool(collapsed)
         self._collapse_btn.setText("▾" if self._collapsed else "▴")
         self._refresh_body()
+
+    def set_zoom_degraded(self, on: bool):
+        """Degradación de la escala compacta (ciclo 4, 4e): a zoom
+        < BUBBLE_COLLAPSE_ZOOM la burbuja colapsa a solo número + dot
+        de fase — con 50+ burbujas la densidad manda.  El estado del
+        user (collapsed, toggles) no se toca: al volver el zoom la
+        burbuja se restituye tal cual estaba."""
+        on = bool(on)
+        if on == getattr(self, "_zoom_degraded", False):
+            return
+        self._zoom_degraded = on
+        for wdg in (self._name_lbl, self._proc_lbl, self._collapse_btn,
+                    self._more_btn, self._close_btn):
+            wdg.setVisible(not on)
+        self._refresh_body()
+        self.adjustSize()
 
     def set_show_composition(self, on: bool):
         self._show_composition = bool(on)
@@ -332,6 +349,21 @@ class StreamBubble(QFrame):
             w = it.widget()
             if w:
                 w.setParent(None); w.deleteLater()
+
+        if getattr(self, "_zoom_degraded", False):
+            # Degradación 4e: SOLO el número (ṁ) — el dot de fase queda
+            # en el header (chip).  Escala compacta oficial: Mono 9/600.
+            m_txt = f"{self._mdot_kg_s:.2f}" if self._mdot_kg_s else "—"
+            mini = QLabel(self._body)
+            mini.setTextFormat(Qt.RichText)
+            mini.setText(
+                f'<span style="color:{TOK["ink"]};font-size:'
+                f'{_tokens.COMPACT_VALUE_PX}pt;font-weight:600;'
+                f'font-family:\'{pfd_fonts.MONO}\';">{m_txt}</span>'
+                f'<span style="color:{TOK["ink_soft"]};font-size:'
+                f'{_tokens.COMPACT_LABEL_PX}pt;"> kg/s</span>')
+            lay.addWidget(mini, 0, 0, 1, 3)
+            return
 
         if self._collapsed:
             # T + ṁ inline
@@ -538,6 +570,8 @@ class LeaderOverlay(QWidget):
     def paintEvent(self, ev):
         if not self._links:
             return
+        if self.width() <= 0 or self.height() <= 0:
+            return   # widget 0×0 (thrash de layout) → QPainter(self) no activaría
         p = QPainter(self)
         p.setRenderHint(QPainter.Antialiasing, True)
         for src, dst, state in self._links:
@@ -826,6 +860,18 @@ class BubbleManager:
         if not self._bubbles:
             self.leader_overlay.set_links([])
             return
+        # Degradación 4e: a zoom < BUBBLE_COLLAPSE_ZOOM las burbujas
+        # colapsan a solo número + dot de fase (densidad de 50+ manda).
+        try:
+            zoom = abs(self.view.transform().m11()) or 1.0
+        except Exception:
+            zoom = 1.0
+        degraded = zoom < _tokens.BUBBLE_COLLAPSE_ZOOM
+        for bub in self._bubbles.values():
+            try:
+                bub.set_zoom_degraded(degraded)
+            except Exception:
+                pass
         # Re-posicionar primero para que el midpoint cambie y la burbuja
         # lo siga (pan/zoom)
         for sid, bub in self._bubbles.items():

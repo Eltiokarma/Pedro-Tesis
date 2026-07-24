@@ -523,6 +523,36 @@
    "archivo": "blower.json"
   },
   {
+   "clave": "steam_turbine",
+   "label": "Turbina de vapor (letdown 40→4 bar)",
+   "categoria": "Física",
+   "nombre": "Turbina de vapor",
+   "capa": "Utilidades",
+   "codigo_pfd": "PFD-TB-001",
+   "builder": "",
+   "archivo": "steam_turbine.json"
+  },
+  {
+   "clave": "gas_expander",
+   "label": "Tren de turboexpansión (K → TB axial → TB radial)",
+   "categoria": "Física",
+   "nombre": "Tren de turboexpansión",
+   "capa": "Utilidades",
+   "codigo_pfd": "PFD-TB-002",
+   "builder": "",
+   "archivo": "gas_expander.json"
+  },
+  {
+   "clave": "agitated_blend",
+   "label": "Tanque agitado de mezcla (bombas + impeller)",
+   "categoria": "Física",
+   "nombre": "Tanque agitado",
+   "capa": "Utilidades",
+   "codigo_pfd": "PFD-MX-001",
+   "builder": "",
+   "archivo": "agitated_blend.json"
+  },
+  {
    "clave": "feed_effluent",
    "label": "Intercambio feed-efluente (HX 4 puertos, lazo térmico)",
    "categoria": "Física",

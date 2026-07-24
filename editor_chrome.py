@@ -1184,6 +1184,8 @@ class _ToolButton(QToolButton):
         drag.exec(Qt.CopyAction)
 
     def paintEvent(self, ev):
+        if self.width() <= 0 or self.height() <= 0:
+            return   # widget 0×0 (thrash de layout) → QPainter(self) no activaría
         # Pintar el fondo (vía stylesheet) primero
         from PySide6.QtWidgets import QStyleOption, QStyle
         opt = QStyleOption(); opt.initFrom(self)
@@ -1779,6 +1781,9 @@ EQ_TYPE_TO_ISA: Dict[str, str] = {
     "Compressor — centrifugal": "compresor",
     "Compressor — reciprocating": "compresor_recip",
     "Compressor — rotary": "compresor",
+    "Turbine — steam": "compresor",
+    "Turbine — gas (axial)": "compresor",
+    "Turbine — radial expander": "compresor",
     "Cooling tower — induced draft": "torre_enf",
     "Cooling tower — natural draft": "torre_nat",
     "Crystallizer": "cristalizador",
@@ -1804,6 +1809,7 @@ EQ_TYPE_TO_ISA: Dict[str, str] = {
     "Heat exch. — kettle reboiler": "hx_kettle",
     "Heat exch. — multiple pipe": "hx",
     "Heat exch. — spiral plate": "hx_placa",
+    "Mixer — impeller": "mezclador",
     "Mixer — inline": "mezclador",
     "Mixer — static": "mezclador",
     "Packing — random": "empaque",

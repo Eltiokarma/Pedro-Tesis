@@ -53,7 +53,7 @@ import equipment_costs as eq
 
 import tokens as _tokens
 from tokens import (
-    TOK, PANEL_W,
+    TOK, PANEL_W, PANEL_MIN, dock_default_width,
     qfont, FONT_TITLE, FONT_UI, FONT_VALUE, FONT_HINT, FONT_LABEL,
     THEME_LIGHT, THEME_DARK, ACCENTS, ACCENTS_DARK, DENSITIES,
     current_prefs, apply_preferences, _PrefsBus, _PREFS, _PREFS_PATH,
@@ -97,7 +97,8 @@ def _is_vessel_flash(eq_type: str) -> bool:
 
 def _is_pump_compressor(eq_type: str) -> bool:
     t = (eq_type or "").lower()
-    return "pump" in t or "compress" in t or "bomba" in t or "compresor" in t
+    return ("pump" in t or "compress" in t or "bomba" in t
+            or "compresor" in t or "turbin" in t)
 
 def _is_mixer(eq_type: str) -> bool:
     t = (eq_type or "").lower()
@@ -1503,7 +1504,7 @@ class BlockInspectorPanel(QWidget):
                 l.addWidget(self._diag_placeholder_card(
                     "Curva característica (típica)",
                     f"inspector_evidence no disponible: {exc}"))
-        if "compressor" in eqs_low or "fan" in eqs_low:
+        if "compressor" in eqs_low or "fan" in eqs_low or "turbin" in eqs_low:
             try:
                 import inspector_evidence as _ev
                 l.addWidget(self._figure_card(
@@ -1841,14 +1842,83 @@ class BlockInspectorPanel(QWidget):
             import inspector_evidence as _ev
             l.addWidget(self._figure_card(
                 "McCabe-Thiele", _ev.mccabe_figure(b, self.fs)))
-            l.addWidget(self._figure_card(
-                "Perfil tray-by-tray", _ev.profile_figure(b, self.fs)))
+            # Perfil tray-by-tray: figura, con toggle a la tabla de
+            # etapas Wang-Henke (Design ciclo 4, 4a — misma fuente de
+            # datos, _wh_result; el toggle no recomputa nada).
+            fig_card = self._figure_card(
+                "Perfil tray-by-tray", _ev.profile_figure(b, self.fs))
+            wh_spec = None
+            try:
+                wh_spec = _ev.wh_stage_book_spec(b, self.fs)
+            except Exception:
+                wh_spec = None
+            if wh_spec:
+                l.addWidget(self._profile_toggle(fig_card, wh_spec))
+            else:
+                l.addWidget(fig_card)
         except Exception as exc:
             l.addWidget(self._diag_placeholder_card(
                 "Figuras de columna",
                 f"inspector_evidence no disponible: {exc}"))
 
         return sect
+
+    def _profile_toggle(self, fig_card, wh_spec) -> QFrame:
+        """Toggle Figura ↔ Tabla del perfil de columna (artboard 4a):
+        segmentado de 2 botones sobre un stack — ambos consumen el
+        MISMO _wh_result (nada se recomputa al alternar)."""
+        from PySide6.QtWidgets import QStackedWidget, QPushButton
+        wrap = QFrame()
+        wl = QVBoxLayout(wrap)
+        wl.setContentsMargins(0, 0, 0, 0); wl.setSpacing(6)
+
+        seg = QFrame()
+        seg.setStyleSheet(
+            f"QFrame {{ background:{TOK['bg_elev']}; "
+            f"border:1px solid {TOK['line_strong']}; border-radius:6px; }}")
+        sl = QHBoxLayout(seg)
+        sl.setContentsMargins(2, 2, 2, 2); sl.setSpacing(1)
+        stack = QStackedWidget()
+        stack.addWidget(fig_card)
+        try:
+            from book_table import BookTable
+            stack.addWidget(BookTable(wh_spec))
+        except Exception:
+            return fig_card    # sin widget de tabla → figura sola
+
+        def _btn_style(active: bool) -> str:
+            if active:
+                return (f"QPushButton {{ background:{TOK['accent']}; "
+                        f"color:{TOK['bg_elev']}; border:0; "
+                        f"border-radius:4px; padding:3px 12px; }}")
+            return (f"QPushButton {{ background:transparent; "
+                    f"color:{TOK['ink_mute']}; border:0; "
+                    f"border-radius:4px; padding:3px 12px; }} "
+                    f"QPushButton:hover {{ background:{TOK['bg_mute']}; "
+                    f"color:{TOK['ink']}; }}")
+
+        btns = []
+
+        def _pick(idx: int):
+            stack.setCurrentIndex(idx)
+            for i, bt in enumerate(btns):
+                bt.setStyleSheet(_btn_style(i == idx))
+
+        for i, txt in enumerate(("Figura", "Tabla")):
+            bt = QPushButton(txt)
+            bt.setCursor(Qt.PointingHandCursor)
+            bt.setFont(qfont(FONT_LABEL))
+            bt.clicked.connect(lambda _=False, i=i: _pick(i))
+            btns.append(bt)
+            sl.addWidget(bt)
+        _pick(0)
+        seg_row = QHBoxLayout()
+        seg_row.setContentsMargins(0, 0, 0, 0)
+        seg_row.addWidget(seg)
+        seg_row.addStretch(1)
+        wl.addLayout(seg_row)
+        wl.addWidget(stack)
+        return wrap
 
     def _section_flash(self, b, eq_type) -> QFrame:
         """Flash isotérmico VLE — Vessels y flash drums."""
@@ -2285,7 +2355,31 @@ class BlockInspectorPanel(QWidget):
             ("Balance de energía",     lambda: _ev.energy_balance_metrics(b, fs),
                                        lambda: _ev.energy_balance_text(b, fs)),
         ]
+        # Tablas de libro (Design ciclo 4, 4a): el componente BookTable
+        # reemplaza el render monoespaciado — el *_text queda de
+        # fallback si el widget no puede construirse.
+        book_specs = {
+            "Tabla estequiométrica (Fogler §3.4)":
+                lambda: _ev.stoich_book_spec(b, fs),
+            "Flash — reparto por componente (x/y/K)":
+                lambda: _ev.flash_book_spec(b),
+        }
         for title, metrics_fn, text_fn in evidence_specs:
+            bk_fn = book_specs.get(title)
+            if bk_fn is not None:
+                spec = None
+                try:
+                    spec = bk_fn()
+                except Exception:
+                    spec = None
+                if spec:
+                    try:
+                        from book_table import BookTable
+                        l.addWidget(BookTable(spec))
+                        any_added = True
+                        continue
+                    except Exception:
+                        pass   # cae al fallback de texto
             m = None
             try:
                 m = metrics_fn()
@@ -2305,6 +2399,23 @@ class BlockInspectorPanel(QWidget):
             if txt:
                 l.addWidget(self._diag_text_card(title, txt))
                 any_added = True
+
+        # 1b) Balance de átomos (Design ciclo 4, 4f): superficie propia
+        # del chequeo elemental C/H/O/N/S — expansión del chip «✓ átomos»
+        # del header (chip → tabla, patrón DOF → diálogo).  Aplica a
+        # reactores (la química conserva átomos aunque rompa el balance
+        # por especie).
+        try:
+            atom_spec = _ev.atom_balance_book_spec(b, fs)
+        except Exception:
+            atom_spec = None
+        if atom_spec:
+            try:
+                from book_table import AtomBalanceCard
+                l.addWidget(AtomBalanceCard(atom_spec))
+                any_added = True
+            except Exception:
+                pass
 
         # 2) Figuras — viven en sus secciones temáticas (lazy al abrir
         #    cada sección).  Acá solo el ÍNDICE de qué hay y dónde, para
@@ -2379,7 +2490,8 @@ class BlockInspectorPanel(QWidget):
         for m in metrics.get("metrics") or []:
             grid.add(MetricCard(**{k: v for k, v in m.items()
                                    if k in ("key", "label", "value", "unit",
-                                            "state", "sub", "flag", "span")}))
+                                            "state", "sub", "flag", "span",
+                                            "scale")}))
             any_grid = True
         for g in metrics.get("gauges") or []:
             kw = {k: v for k, v in g.items()
@@ -2425,7 +2537,7 @@ class BlockInspectorPanel(QWidget):
         if _is_hx(eq_type):
             items.append("Diagrama T-Q → Termodinámica")
         low = (eq_type or "").lower()
-        if "compressor" in low or "fan" in low:
+        if "compressor" in low or "fan" in low or "turbin" in low:
             items.append("Diagrama de compresión → Termodinámica")
         return "\n".join(f"· {it}" for it in items)
 
@@ -2692,6 +2804,10 @@ class BlockInspectorPanel(QWidget):
 
         f = self._fields
         # ─── Identidad ───
+        # S es el tamaño del PROCESO (sizing).  Si algún día el modo selección
+        # de Fichas Técnicas escribe acá el S de un modelo comercial, el costeo
+        # Turton usa el techo del bastidor → CAPEX inflado.  El equipo comercial
+        # va en Block.equipo_comercial.  Ver test_equipos_comerciales.py.
         if "S" in f:
             try: b.S = float(self._parse_num(f["S"].value()))
             except Exception: pass
@@ -2868,7 +2984,11 @@ class BlockInspectorDock(QDockWidget):
             QDockWidget.DockWidgetFloatable |
             QDockWidget.DockWidgetClosable
         )
-        self.setMinimumWidth(PANEL_W)
+        # Mínimo REDUCIDO (PANEL_MIN) para que la ventana quepa en pantallas
+        # chicas; el ancho por defecto sigue siendo PANEL_W vía resizeDocks
+        # en show_for().  (Antes el mínimo era PANEL_W y forzaba la ventana
+        # más grande que la pantalla → setGeometry warning + equipos tapados.)
+        self.setMinimumWidth(PANEL_MIN)
         # title bar custom — el panel ya tiene su propio header con
         # tag/close, así que escondemos el de Qt para no duplicar.
         # Mantenemos un widget vacío como title para permitir drag.
@@ -2886,6 +3006,14 @@ class BlockInspectorDock(QDockWidget):
                               open_advanced=open_advanced)
         self.show()
         self.raise_()
+        # Ancho por defecto = PANEL_W en pantallas grandes, acotado en chicas.
+        # Se aplica tras show() para que el dock ya esté acoplado a la ventana.
+        try:
+            mw = self.parent()
+            if mw is not None and hasattr(mw, "resizeDocks"):
+                mw.resizeDocks([self], [dock_default_width(mw)], Qt.Horizontal)
+        except Exception:
+            pass
 
 
 # ════════════════════════════════════════════════════════

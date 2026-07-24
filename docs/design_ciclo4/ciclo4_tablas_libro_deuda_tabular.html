@@ -1,0 +1,578 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  *{ box-sizing:border-box; }
+  body{ margin:0; background:#e7e1d3; }
+  a{ color:#0d6e78; text-decoration:none; }
+  a:hover{ color:#064951; text-decoration:underline; }
+</style>
+</helmet>
+<div style="font-family:'IBM Plex Sans',sans-serif; color:#1a1714; background:#e7e1d3; padding:44px 24px 80px; -webkit-font-smoothing:antialiased;">
+<div style="max-width:1160px; margin:0 auto;">
+
+  <!-- ═══ MASTHEAD ═══ -->
+  <div style="display:flex; align-items:flex-start; gap:16px; margin-bottom:8px;">
+    <div style="width:44px; height:44px; border-radius:12px; background:#0d6e78; color:#fbfaf6; display:flex; align-items:center; justify-content:center; font-size:20px; font-weight:700; flex:none;">◆</div>
+    <div>
+      <div style="font-size:11px; font-weight:600; letter-spacing:2px; text-transform:uppercase; color:#948a7c;">Rediseño del frontend · fase Design</div>
+      <h1 style="font-size:30px; font-weight:700; margin:2px 0 0; letter-spacing:-.4px;">Ciclo 4 — tablas de libro + deuda tabular</h1>
+    </div>
+  </div>
+  <p style="font-size:14px; line-height:1.6; color:#6b6256; max-width:760px; margin:6px 0 0;">
+    Bundle de artboards y specs dibujables (px · pt · tokens) en respuesta a <code style="background:#f1ede4; border-radius:4px; padding:1px 5px; font-size:12px;">docs/PROMPT_DESIGN_CICLO4.md</code>.
+    Simulador de procesos químicos PySide6/Qt · UI en español. Cada pieza va en par <strong>claro / oscuro</strong>; los valores salen de <code style="background:#f1ede4; border-radius:4px; padding:1px 5px; font-size:12px;">tokens.py</code> (paleta viva, FONT_*, strokes) — el mecanismo es del equipo, acá van las decisiones visuales.
+  </p>
+
+  <!-- identity recap -->
+  <div style="display:flex; flex-wrap:wrap; gap:8px; margin:18px 0 6px;">
+    <span style="display:inline-flex; align-items:center; gap:7px; padding:5px 11px; border-radius:8px; background:#fbfaf6; border:1px solid #e6e0d0; font-size:12px; color:#6b6256;"><span style="width:12px;height:12px;border-radius:3px;background:#f6f3ec;border:1px solid #d4ccb8;"></span>papel cálido</span>
+    <span style="display:inline-flex; align-items:center; gap:7px; padding:5px 11px; border-radius:8px; background:#fbfaf6; border:1px solid #e6e0d0; font-size:12px; color:#6b6256;"><span style="width:12px;height:12px;border-radius:3px;background:#0d6e78;"></span>acento teal</span>
+    <span style="display:inline-flex; align-items:center; gap:7px; padding:5px 11px; border-radius:8px; background:#fbfaf6; border:1px solid #e6e0d0; font-size:12px; color:#6b6256;"><span style="width:12px;height:12px;border-radius:3px;background:#3548b4;"></span>spec índigo</span>
+    <span style="display:inline-flex; align-items:center; gap:7px; padding:5px 11px; border-radius:8px; background:#fbfaf6; border:1px solid #e6e0d0; font-size:12px; color:#6b6256;">IBM Plex Sans / Mono</span>
+    <span style="display:inline-flex; align-items:center; gap:7px; padding:5px 11px; border-radius:8px; background:#fbfaf6; border:1px solid #e6e0d0; font-size:12px; color:#6b6256;">warning/error = color + símbolo</span>
+  </div>
+
+  <!-- ═══════════════════════════════════════════════ 4a ═══ -->
+  <section style="background:#fbfaf6; border:1px solid #e6e0d0; border-radius:16px; padding:26px 28px; margin:24px 0 22px;">
+    <div style="display:flex; align-items:center; gap:12px;">
+      <span style="display:inline-flex; align-items:center; justify-content:center; min-width:44px; height:26px; padding:0 10px; border-radius:7px; background:#0d6e78; color:#fbfaf6; font-size:13px; font-weight:700; letter-spacing:.5px;">4a</span>
+      <h2 style="font-size:20px; font-weight:700; margin:0;">«Tabla de libro» como componente del sistema</h2>
+    </div>
+    <p style="font-size:13.5px; line-height:1.6; color:#6b6256; margin:12px 0 18px; max-width:820px;">
+      Tres tablas viven hoy como <code style="background:#f1ede4; border-radius:4px; padding:1px 5px;">&lt;pre&gt;</code> monoespaciado dentro de una tarjeta genérica — con fuente proporcional alrededor, el alineado por espacios tiembla. La solución es que la tabla <strong>SEA un componente</strong>: <code style="background:#f1ede4; border-radius:4px; padding:1px 5px;">&lt;table&gt;</code> real con columnas tabulares, filas destacables, chips de escalares derivados y la cita al pie. Un solo componente, tres instancias.
+    </p>
+
+    <!-- pair: stoich -->
+    <div style="font-size:11px; font-weight:700; letter-spacing:1px; text-transform:uppercase; color:#948a7c; margin:4px 0 8px;">Instancia 1 · Tabla estequiométrica (Fogler §3.4) — todo reactor con reacción</div>
+    <div style="display:grid; grid-template-columns:1fr 1fr; gap:16px; margin-bottom:20px;">
+      <div style="{{ L }}"><div style="position:relative; background:var(--bg); border:1px solid var(--line-strong); border-radius:14px; padding:18px;">
+        <span style="position:absolute; top:9px; right:14px; font-size:9px; font-weight:700; letter-spacing:1px; color:var(--ink-ghost);">CLARO</span>
+        <dc-import name="BookTable" variant="stoich" hint-size="100%,430px"></dc-import>
+      </div></div>
+      <div style="{{ D }}"><div style="position:relative; background:var(--bg); border:1px solid var(--line-strong); border-radius:14px; padding:18px;">
+        <span style="position:absolute; top:9px; right:14px; font-size:9px; font-weight:700; letter-spacing:1px; color:var(--ink-ghost);">OSCURO</span>
+        <dc-import name="BookTable" variant="stoich" hint-size="100%,430px"></dc-import>
+      </div></div>
+    </div>
+
+    <!-- pair: flash -->
+    <div style="font-size:11px; font-weight:700; letter-spacing:1px; text-transform:uppercase; color:#948a7c; margin:4px 0 8px;">Instancia 2 · Reparto del flash x/y/K (estilo ChemSep) — todo vessel con flash</div>
+    <div style="display:grid; grid-template-columns:1fr 1fr; gap:16px; margin-bottom:20px;">
+      <div style="{{ L }}"><div style="position:relative; background:var(--bg); border:1px solid var(--line-strong); border-radius:14px; padding:18px;">
+        <span style="position:absolute; top:9px; right:14px; font-size:9px; font-weight:700; letter-spacing:1px; color:var(--ink-ghost);">CLARO</span>
+        <dc-import name="BookTable" variant="flash" hint-size="100%,360px"></dc-import>
+      </div></div>
+      <div style="{{ D }}"><div style="position:relative; background:var(--bg); border:1px solid var(--line-strong); border-radius:14px; padding:18px;">
+        <span style="position:absolute; top:9px; right:14px; font-size:9px; font-weight:700; letter-spacing:1px; color:var(--ink-ghost);">OSCURO</span>
+        <dc-import name="BookTable" variant="flash" hint-size="100%,360px"></dc-import>
+      </div></div>
+    </div>
+
+    <!-- pair: wh -->
+    <div style="font-size:11px; font-weight:700; letter-spacing:1px; text-transform:uppercase; color:#948a7c; margin:4px 0 8px;">Instancia 3 · Etapas de columna Wang-Henke — <span style="color:#c26329;">estreno (hoy no existe)</span></div>
+    <div style="display:grid; grid-template-columns:1fr 1fr; gap:16px; margin-bottom:18px;">
+      <div style="{{ L }}"><div style="position:relative; background:var(--bg); border:1px solid var(--line-strong); border-radius:14px; padding:18px;">
+        <span style="position:absolute; top:9px; right:14px; font-size:9px; font-weight:700; letter-spacing:1px; color:var(--ink-ghost);">CLARO</span>
+        <dc-import name="BookTable" variant="wh" hint-size="100%,480px"></dc-import>
+      </div></div>
+      <div style="{{ D }}"><div style="position:relative; background:var(--bg); border:1px solid var(--line-strong); border-radius:14px; padding:18px;">
+        <span style="position:absolute; top:9px; right:14px; font-size:9px; font-weight:700; letter-spacing:1px; color:var(--ink-ghost);">OSCURO</span>
+        <dc-import name="BookTable" variant="wh" hint-size="100%,480px"></dc-import>
+      </div></div>
+    </div>
+
+    <!-- anatomy spec -->
+    <div style="background:#f1ede4; border:1px solid #e6e0d0; border-radius:12px; padding:18px 20px;">
+      <div style="font-size:11px; font-weight:700; letter-spacing:1px; text-transform:uppercase; color:#0d6e78; margin-bottom:12px;">Anatomía · valores exactos</div>
+      <div style="display:grid; grid-template-columns:1fr 1fr; gap:10px 28px; font-size:12.5px; line-height:1.5; color:#3a352e;">
+        <div><strong>Contenedor</strong> — <code>bg_elev</code>, borde 1px <code>line</code>, radius 10, overflow hidden.</div>
+        <div><strong>Kicker</strong> — FONT_LABEL (Sans 10/600) upper, tracking 1.2px, <code>ink_soft</code>; banda <code>bg_mute</code>, dot <code>accent</code> Ø6, borde inf. <code>line</code>.</div>
+        <div><strong>Strip de contexto</strong> — banda <code>bg_sunk</code>, pad 11/14; pares FONT_LABEL upper + valor FONT_VALUE (Mono 12); gap 6/18.</div>
+        <div><strong>Tabla</strong> — <code>&lt;table&gt;</code> real. Celdas FONT_VALUE Mono 12.5 con <code>tabular-nums</code>; numéricas derecha, especie izq. (600); filas pad 5/6, borde <code>line_soft</code>.</div>
+        <div><strong>Encabezado</strong> — FONT_LABEL upper <code>ink_soft</code>, borde inf. <code>line_strong</code>.</div>
+        <div><strong>Fila destacable (A / feed / cond / reb)</strong> — ribbon 3px izq. (box-shadow inset) en el color del rol; pill en la 1ª celda (tint/ink, 9px/700).</div>
+        <div><strong>Inerte (I)</strong> — pill <code>tag_bg</code>/<code>tag_ink</code>; especie en <code>ink_mute</code>.</div>
+        <div><strong>Fila Σ</strong> — footer visual: borde sup. 1.5px <code>line_strong</code>, fondo <code>bg_sunk</code>, peso 700.</div>
+        <div><strong>Chips derivados (δ, ε, V/F)</strong> — pill tint/ink, label Mono 11/600 + valor Mono 12/600, radius 7.</div>
+        <div><strong>Fuente</strong> — pie estándar: banda <code>bg_mute</code>, borde sup. <code>line_soft</code>, glifo ▤ + FONT_HINT <code>ink_soft</code>.</div>
+      </div>
+    </div>
+
+    <!-- decisions -->
+    <div style="font-size:11px; font-weight:700; letter-spacing:1px; text-transform:uppercase; color:#948a7c; margin:18px 0 8px;">Decisiones (las que el prompt deja a Design)</div>
+    <div style="display:flex; flex-direction:column; gap:7px;">
+      <div style="font-size:13px; line-height:1.5; color:#3a352e;"><span style="color:#0d6e78; font-weight:700;">→</span> <strong>«Columnas que bailan» resuelto en la raíz:</strong> la tabla es <code>&lt;table&gt;</code> con <code>tabular-nums</code>, no <code>&lt;pre&gt;</code> dentro de fuente proporcional.</div>
+      <div style="font-size:13px; line-height:1.5; color:#3a352e;"><span style="color:#0d6e78; font-weight:700;">→</span> <strong>«Cambio» negativo = tinta neutra + signo + ↓</strong> (<code>ink_mute</code>), NO el rojo semántico — acá el negativo es <em>consumo</em>, no error. El rojo queda reservado al desbalance del solver.</div>
+      <div style="font-size:13px; line-height:1.5; color:#3a352e;"><span style="color:#0d6e78; font-weight:700;">→</span> <strong>K_i codificado en el eje frío/cálido existente:</strong> K&gt;1 (↑ vapor) = <code>service_hot_deep</code>; K&lt;1 (↓ líquido) = <code>service_cold_deep</code>. Solo tinta + glifo, sin fondo — el fondo competiría con el ribbon de fila.</div>
+      <div style="font-size:13px; line-height:1.5; color:#3a352e;"><span style="color:#0d6e78; font-weight:700;">→</span> <strong>Procedencia de X = vocabulario sudoku:</strong> pill <code>▪ declarada</code> (spec) vs <code>◦ alcanzada (solver)</code> (auto) — pariente directo del spec/auto ya definido.</div>
+      <div style="font-size:13px; line-height:1.5; color:#3a352e;"><span style="color:#0d6e78; font-weight:700;">→</span> <strong>WH: tabla ↔ figura por toggle</strong>, misma fuente de datos que el perfil tray-by-tray ya graficado (no se recomputa nada).</div>
+    </div>
+  </section>
+
+  <!-- ═══════════════════════════════════════════════ 4f ═══ -->
+  <section style="background:#fbfaf6; border:1px solid #e6e0d0; border-radius:16px; padding:26px 28px; margin:0 0 22px;">
+    <div style="display:flex; align-items:center; gap:12px;">
+      <span style="display:inline-flex; align-items:center; justify-content:center; min-width:44px; height:26px; padding:0 10px; border-radius:7px; background:#4d8742; color:#fbfaf6; font-size:13px; font-weight:700;">4f</span>
+      <h2 style="font-size:20px; font-weight:700; margin:0;">Balance de átomos en pantalla · conservación elemental</h2>
+    </div>
+    <p style="font-size:13.5px; line-height:1.6; color:#6b6256; margin:12px 0 18px; max-width:820px;">
+      El motor ya audita la conservación de átomos por bloque (<code style="background:#f1ede4; border-radius:4px; padding:1px 5px;">audit_block_elements</code>) — hoy solo vive como el chip «✓ átomos» del header. Se le da <strong>superficie propia</strong>: una tabla de libro por elemento (C/H/O/N/S) que muestra Σ IN, Σ OUT y Δ, y <strong>abre las moléculas de las que viene cada átomo</strong>. Aplica también a reactores (la química conserva átomos aunque rompa el balance por especie). Misma familia visual que 4a.
+    </p>
+
+    <div style="font-size:11px; font-weight:700; letter-spacing:1px; text-transform:uppercase; color:#948a7c; margin:4px 0 8px;">Escena · R-101 (SMR) — átomos con procedencia molecular</div>
+    <div style="display:grid; grid-template-columns:1fr 1fr; gap:16px; margin-bottom:18px;">
+      <div style="{{ L }}"><div style="position:relative; background:var(--bg); border:1px solid var(--line-strong); border-radius:14px; padding:18px;">
+        <span style="position:absolute; top:9px; right:14px; font-size:9px; font-weight:700; letter-spacing:1px; color:var(--ink-ghost);">CLARO</span>
+        <dc-import name="AtomBalance" variant="smr" hint-size="100%,540px"></dc-import>
+      </div></div>
+      <div style="{{ D }}"><div style="position:relative; background:var(--bg); border:1px solid var(--line-strong); border-radius:14px; padding:18px;">
+        <span style="position:absolute; top:9px; right:14px; font-size:9px; font-weight:700; letter-spacing:1px; color:var(--ink-ghost);">OSCURO</span>
+        <dc-import name="AtomBalance" variant="smr" hint-size="100%,540px"></dc-import>
+      </div></div>
+    </div>
+
+    <div style="background:#f1ede4; border:1px solid #e6e0d0; border-radius:12px; padding:18px 20px;">
+      <div style="font-size:11px; font-weight:700; letter-spacing:1px; text-transform:uppercase; color:#0d6e78; margin-bottom:12px;">Anatomía · valores exactos</div>
+      <div style="display:grid; grid-template-columns:1fr 1fr; gap:10px 28px; font-size:12.5px; line-height:1.5; color:#3a352e;">
+        <div><strong>Contenedor y footer</strong> — idénticos a la tabla de libro (4a): <code>bg_elev</code>, kicker + strip de contexto + fuente al pie. Kicker con dot <code>green</code> y chip «✓ átomos» a la derecha.</div>
+        <div><strong>Fila de elemento</strong> — grid 5-col: badge <code>accent_tint</code>/<code>accent</code> (símbolo Mono 13/700) + nombre + A_E · Σ IN · Σ OUT · Δ · dot de cierre. Valores Mono 12.5/600 <code>tabular-nums</code>.</div>
+        <div><strong>Δ y cierre</strong> — Δ en <code>ink_mute</code> si cierra (&lt;1% rel), <code>danger</code> si no; dot Ø9 <code>green</code> / <code>danger</code>. Mismo umbral del motor (CRÍTICO si Δ &gt; 5 % del flujo).</div>
+        <div><strong>Procedencia molecular</strong> — bajo cada elemento, dos cajas <code>bg_mute</code>: <span style="color:#3548b4;">IN · viene de</span> / <span style="color:#c26329;">OUT · va a</span>, con chips <code>formula ×n valor</code> — las moléculas de las que viene el átomo.</div>
+      </div>
+    </div>
+
+    <div style="font-size:11px; font-weight:700; letter-spacing:1px; text-transform:uppercase; color:#948a7c; margin:18px 0 8px;">Decisiones</div>
+    <div style="display:flex; flex-direction:column; gap:7px;">
+      <div style="font-size:13px; line-height:1.5; color:#3a352e;"><span style="color:#0d6e78; font-weight:700;">→</span> <strong>Base átomo-molar (kmol átomo/h), no masa:</strong> el motor cierra en masa (fracción de fórmula), pero la lectura didáctica es en moles de átomo — cuadra con la tabla estequiométrica de arriba y hace el «×n» exacto. El cierre es equivalente.</div>
+      <div style="font-size:13px; line-height:1.5; color:#3a352e;"><span style="color:#0d6e78; font-weight:700;">→</span> <strong>Reactores incluidos:</strong> es el único chequeo que corre <em>a través</em> de la química — donde el balance por especie se saltea, el atómico caza reacciones mal balanceadas u outputs escritos a mano.</div>
+      <div style="font-size:13px; line-height:1.5; color:#3a352e;"><span style="color:#0d6e78; font-weight:700;">→</span> <strong>El chip «✓ átomos» del header queda como resumen colapsado</strong> y esta tabla es su expansión (patrón chip → tabla, igual que DOF → diálogo).</div>
+      <div style="font-size:13px; line-height:1.5; color:#3a352e;"><span style="color:#0d6e78; font-weight:700;">→</span> <strong>Sin fórmula parseable</strong> (pseudo-cortes 'Mix', crudo) el elemento no es evaluable: la fila no aparece y el bloque cae al balance de masa total — no se fabrica un desbalance falso.</div>
+    </div>
+  </section>
+
+  <!-- ═══════════════════════════════════════════════ 4b ═══ -->
+  <section style="background:#fbfaf6; border:1px solid #e6e0d0; border-radius:16px; padding:26px 28px; margin:0 0 22px;">
+    <div style="display:flex; align-items:center; gap:12px;">
+      <span style="display:inline-flex; align-items:center; justify-content:center; min-width:44px; height:26px; padding:0 10px; border-radius:7px; background:#0d6e78; color:#fbfaf6; font-size:13px; font-weight:700;">4b</span>
+      <h2 style="font-size:20px; font-weight:700; margin:0;">Identidades de selección como métricas ricas</h2>
+    </div>
+    <p style="font-size:13.5px; line-height:1.6; color:#6b6256; margin:12px 0 18px; max-width:820px;">
+      N_s con tipo de rodete (Perry), C_v de Crane, caudal de vapor del WHB: hoy son líneas de texto. Entran al sistema como <strong>MetricCard</strong> con escala de clasificación. La escena de prueba es la P-302 de <code style="background:#f1ede4; border-radius:4px; padding:1px 5px;">cw_natural</code>: N_s=8003 (mixto) <em>con</em> warning de cavitación al lado — la pregunta es cómo conviven sin competir.
+    </p>
+
+    <div style="font-size:11px; font-weight:700; letter-spacing:1px; text-transform:uppercase; color:#948a7c; margin:4px 0 8px;">Escena · P-302 (N_s didáctico + alerta de cavitación)</div>
+    <div style="display:grid; grid-template-columns:1fr 1fr; gap:16px; margin-bottom:18px;">
+      <div style="{{ L }}"><div style="position:relative; background:var(--bg); border:1px solid var(--line-strong); border-radius:14px; padding:18px;">
+        <span style="position:absolute; top:9px; right:14px; font-size:9px; font-weight:700; letter-spacing:1px; color:var(--ink-ghost);">CLARO</span>
+        <dc-import name="MetricScene" variant="pump" hint-size="100%,380px"></dc-import>
+      </div></div>
+      <div style="{{ D }}"><div style="position:relative; background:var(--bg); border:1px solid var(--line-strong); border-radius:14px; padding:18px;">
+        <span style="position:absolute; top:9px; right:14px; font-size:9px; font-weight:700; letter-spacing:1px; color:var(--ink-ghost);">OSCURO</span>
+        <dc-import name="MetricScene" variant="pump" hint-size="100%,380px"></dc-import>
+      </div></div>
+    </div>
+
+    <!-- C_v + WHB steam -->
+    <div style="font-size:11px; font-weight:700; letter-spacing:1px; text-transform:uppercase; color:#948a7c; margin:4px 0 8px;">Otras identidades · C_v de válvula · vapor del WHB</div>
+    <div style="display:grid; grid-template-columns:1fr 1fr; gap:16px; margin-bottom:18px;">
+      <div style="{{ L }}"><div style="background:var(--bg); border:1px solid var(--line-strong); border-radius:14px; padding:18px; display:flex; flex-direction:column; gap:14px;">
+        <dc-import name="MetricScene" variant="valve" hint-size="100%,120px"></dc-import>
+        <dc-import name="MetricScene" variant="whb" hint-size="100%,300px"></dc-import>
+      </div></div>
+      <div style="{{ D }}"><div style="background:var(--bg); border:1px solid var(--line-strong); border-radius:14px; padding:18px; display:flex; flex-direction:column; gap:14px;">
+        <dc-import name="MetricScene" variant="valve" hint-size="100%,120px"></dc-import>
+        <dc-import name="MetricScene" variant="whb" hint-size="100%,300px"></dc-import>
+      </div></div>
+    </div>
+
+    <div style="background:#f1ede4; border:1px solid #e6e0d0; border-radius:12px; padding:18px 20px;">
+      <div style="font-size:11px; font-weight:700; letter-spacing:1px; text-transform:uppercase; color:#0d6e78; margin-bottom:12px;">La convivencia alerta ↔ identidad (la pregunta del prompt)</div>
+      <div style="display:grid; grid-template-columns:1fr 1fr; gap:14px; font-size:12.5px; line-height:1.55; color:#3a352e;">
+        <div style="border-left:3px solid #b8453a; padding-left:12px;"><strong style="color:#b8453a;">Alerta = registro semántico.</strong> La cavitación vive en la <em>banda de encabezado</em> de la sección: pill <code>danger</code> + símbolo ⚠, margen −8.19 m. Grita, pide acción, es de solo-lectura crítica.</div>
+        <div style="border-left:3px solid #0d6e78; padding-left:12px;"><strong style="color:#0d6e78;">Identidad = registro didáctico.</strong> N_s vive como <em>MetricCard accent</em> en la grilla, span 2, con su escala radial·mixto·axial y el marcador en 8003. La regla de Perry va en el sub (que fluye).</div>
+      </div>
+      <p style="font-size:12.5px; line-height:1.55; color:#3a352e; margin:12px 0 0;">No compiten porque ocupan <strong>registros, colores y jerarquías distintos</strong>: banner vs tarjeta, <code>danger</code> vs <code>accent</code>, atención vs consulta. La misma bomba puede tener la métrica más rica del panel y la alerta más fuerte sin ruido.</p>
+    </div>
+
+    <div style="background:#f1ede4; border:1px solid #e6e0d0; border-radius:12px; padding:18px 20px; margin-top:12px;">
+      <div style="font-size:11px; font-weight:700; letter-spacing:1px; text-transform:uppercase; color:#0d6e78; margin-bottom:12px;">MetricCard · spec (y arreglo del bug «sub recortado»)</div>
+      <div style="display:grid; grid-template-columns:1fr 1fr; gap:10px 28px; font-size:12.5px; line-height:1.5; color:#3a352e;">
+        <div><strong>Layout</strong> — <span style="color:#c26329;">flex column, NO posición absoluta.</span> El sub es una fila propia que fluye; la tarjeta crece. min-height 58, radius 8, pad 9/12/10/15.</div>
+        <div><strong>Ribbon</strong> — 3px izq. (box-shadow inset) por <code>state</code>: spec→<code>spec_ribbon</code>, auto→<code>auto_ribbon</code>, ok→<code>green</code>, warn→<code>amber</code>, alert→<code>orange</code>, danger→<code>danger</code>, accent→<code>accent</code>, sinnott→<code>sinnott_ribbon</code>.</div>
+        <div><strong>Jerarquía</strong> — label FONT_LABEL upper <code>ink_soft</code> · valor Mono 16/600 (tinta semántica si el state lo es) · unidad Mono 11 <code>ink_soft</code> baseline · sub FONT_HINT 11 <code>ink_mute</code>, <code>text-wrap:pretty</code>, hasta 2 líneas.</div>
+        <div><strong>Escala de clasificación</strong> — barra 9px, 3 bandas (<code>service_cold_pale</code> / <code>accent_tint</code> / <code>service_hot_pale</code>), marcador línea 2px <code>ink</code> con halo <code>bg_elev</code>; ticks 9px/600 <code>ink_soft</code>.</div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ═══════════════════════════════════════════════ 4c ═══ -->
+  <section style="background:#fbfaf6; border:1px solid #e6e0d0; border-radius:16px; padding:26px 28px; margin:0 0 22px;">
+    <div style="display:flex; align-items:center; gap:12px;">
+      <span style="display:inline-flex; align-items:center; justify-content:center; min-width:44px; height:26px; padding:0 10px; border-radius:7px; background:#0d6e78; color:#fbfaf6; font-size:13px; font-weight:700;">4c</span>
+      <h2 style="font-size:20px; font-weight:700; margin:0;">streams_table + stream_inspector · pasada formal</h2>
+    </div>
+    <p style="font-size:13.5px; line-height:1.6; color:#6b6256; margin:12px 0 18px; max-width:820px;">
+      Nunca tuvieron artboard: la micro-tipografía de celda (valor 10pt + unidad 8pt) y los tags de path estaban anotados como excepción «hasta que exista artboard». Este es el artboard — se define la escala definitiva y la procedencia sudoku entra a la celda.
+    </p>
+
+    <div style="font-size:11px; font-weight:700; letter-spacing:1px; text-transform:uppercase; color:#948a7c; margin:4px 0 8px;">Filas de corriente · escala de celda definitiva + sudoku de masa</div>
+    <div style="display:grid; grid-template-columns:1fr 1fr; gap:16px; margin-bottom:18px;">
+      <!-- LIGHT streams -->
+      <div style="{{ L }}"><div style="position:relative; background:var(--bg-elev); border:1px solid var(--line-strong); border-radius:14px; overflow:hidden;">
+        <span style="position:absolute; top:9px; right:14px; font-size:9px; font-weight:700; letter-spacing:1px; color:var(--ink-ghost); z-index:2;">CLARO</span>
+        <div style="{{ streamsHeaderStyle }}">
+          <span style="width:44px;">#</span><span style="flex:2;">TAG · ROL</span><span style="flex:2;">FLUJO</span><span style="flex:none; width:78px; text-align:right;">T · P</span>
+        </div>
+        <div style="{{ streamRowStyle }}">
+          <span style="{{ numPillStyle }}">7<span style="{{ phaseDotVap }}"></span></span>
+          <div style="flex:2; min-width:0;">
+            <div style="font-family:'IBM Plex Mono',monospace; font-size:12px; font-weight:600; color:var(--ink);">S-syngas-hot</div>
+            <span style="{{ rolePillProduct }}">PRODUCT</span>
+          </div>
+          <div style="flex:2; min-width:0;">
+            <div style="display:flex; align-items:baseline; gap:4px;">
+              <span style="{{ sudokuTorn }}">↻</span>
+              <span style="font-family:'IBM Plex Mono',monospace; font-size:12px; font-weight:600; color:var(--ink-soft);">4 370.0</span>
+              <span style="font-size:10px; font-weight:600; color:var(--ink-soft);">tm/año</span>
+              <span style="font-size:9px; font-style:italic; color:var(--auto-ink);">auto</span>
+            </div>
+            <div style="{{ massBarTrack }}"><div style="{{ massBarFillAuto }}"></div></div>
+          </div>
+          <div style="flex:none; width:78px; text-align:right;">
+            <div><span style="font-family:'IBM Plex Mono',monospace; font-size:12px; font-weight:600; color:var(--ink);">826.9</span><span style="font-size:10px; color:var(--ink-soft);"> °C</span></div>
+            <div><span style="font-family:'IBM Plex Mono',monospace; font-size:12px; font-weight:500; color:var(--ink);">25.00</span><span style="font-size:10px; color:var(--ink-soft);"> bar</span></div>
+          </div>
+        </div>
+        <div style="{{ streamRowStyleLast }}">
+          <span style="{{ numPillStyle }}">3<span style="{{ phaseDotLiq }}"></span></span>
+          <div style="flex:2; min-width:0;">
+            <div style="font-family:'IBM Plex Mono',monospace; font-size:12px; font-weight:600; color:var(--ink);">S-agua-BFW</div>
+            <span style="{{ rolePillFeed }}">FEED</span>
+          </div>
+          <div style="flex:2; min-width:0;">
+            <div style="display:flex; align-items:baseline; gap:4px;">
+              <span style="{{ sudokuLocked }}">▪</span>
+              <span style="font-family:'IBM Plex Mono',monospace; font-size:12px; font-weight:600; color:var(--ink);">900 000.0</span>
+              <span style="font-size:10px; font-weight:600; color:var(--ink-soft);">tm/año</span>
+            </div>
+            <div style="{{ massBarTrack }}"><div style="{{ massBarFillLocked }}"></div></div>
+          </div>
+          <div style="flex:none; width:78px; text-align:right;">
+            <div><span style="font-family:'IBM Plex Mono',monospace; font-size:12px; font-weight:600; color:var(--ink);">105.0</span><span style="font-size:10px; color:var(--ink-soft);"> °C</span></div>
+            <div><span style="font-family:'IBM Plex Mono',monospace; font-size:12px; font-weight:500; color:var(--ink-soft);">25.00</span><span style="font-size:10px; color:var(--ink-soft);"> bar</span></div>
+          </div>
+        </div>
+      </div></div>
+      <!-- DARK streams -->
+      <div style="{{ D }}"><div style="position:relative; background:var(--bg-elev); border:1px solid var(--line-strong); border-radius:14px; overflow:hidden;">
+        <span style="position:absolute; top:9px; right:14px; font-size:9px; font-weight:700; letter-spacing:1px; color:var(--ink-ghost); z-index:2;">OSCURO</span>
+        <div style="{{ streamsHeaderStyle }}">
+          <span style="width:44px;">#</span><span style="flex:2;">TAG · ROL</span><span style="flex:2;">FLUJO</span><span style="flex:none; width:78px; text-align:right;">T · P</span>
+        </div>
+        <div style="{{ streamRowStyle }}">
+          <span style="{{ numPillStyle }}">7<span style="{{ phaseDotVap }}"></span></span>
+          <div style="flex:2; min-width:0;">
+            <div style="font-family:'IBM Plex Mono',monospace; font-size:12px; font-weight:600; color:var(--ink);">S-syngas-hot</div>
+            <span style="{{ rolePillProduct }}">PRODUCT</span>
+          </div>
+          <div style="flex:2; min-width:0;">
+            <div style="display:flex; align-items:baseline; gap:4px;">
+              <span style="{{ sudokuTorn }}">↻</span>
+              <span style="font-family:'IBM Plex Mono',monospace; font-size:12px; font-weight:600; color:var(--ink-soft);">4 370.0</span>
+              <span style="font-size:10px; font-weight:600; color:var(--ink-soft);">tm/año</span>
+              <span style="font-size:9px; font-style:italic; color:var(--auto-ink);">auto</span>
+            </div>
+            <div style="{{ massBarTrack }}"><div style="{{ massBarFillAuto }}"></div></div>
+          </div>
+          <div style="flex:none; width:78px; text-align:right;">
+            <div><span style="font-family:'IBM Plex Mono',monospace; font-size:12px; font-weight:600; color:var(--ink);">826.9</span><span style="font-size:10px; color:var(--ink-soft);"> °C</span></div>
+            <div><span style="font-family:'IBM Plex Mono',monospace; font-size:12px; font-weight:500; color:var(--ink);">25.00</span><span style="font-size:10px; color:var(--ink-soft);"> bar</span></div>
+          </div>
+        </div>
+        <div style="{{ streamRowStyleLast }}">
+          <span style="{{ numPillStyle }}">3<span style="{{ phaseDotLiq }}"></span></span>
+          <div style="flex:2; min-width:0;">
+            <div style="font-family:'IBM Plex Mono',monospace; font-size:12px; font-weight:600; color:var(--ink);">S-agua-BFW</div>
+            <span style="{{ rolePillFeed }}">FEED</span>
+          </div>
+          <div style="flex:2; min-width:0;">
+            <div style="display:flex; align-items:baseline; gap:4px;">
+              <span style="{{ sudokuLocked }}">▪</span>
+              <span style="font-family:'IBM Plex Mono',monospace; font-size:12px; font-weight:600; color:var(--ink);">900 000.0</span>
+              <span style="font-size:10px; font-weight:600; color:var(--ink-soft);">tm/año</span>
+            </div>
+            <div style="{{ massBarTrack }}"><div style="{{ massBarFillLocked }}"></div></div>
+          </div>
+          <div style="flex:none; width:78px; text-align:right;">
+            <div><span style="font-family:'IBM Plex Mono',monospace; font-size:12px; font-weight:600; color:var(--ink);">105.0</span><span style="font-size:10px; color:var(--ink-soft);"> °C</span></div>
+            <div><span style="font-family:'IBM Plex Mono',monospace; font-size:12px; font-weight:500; color:var(--ink-soft);">25.00</span><span style="font-size:10px; color:var(--ink-soft);"> bar</span></div>
+          </div>
+        </div>
+      </div></div>
+    </div>
+
+    <div style="background:#f1ede4; border:1px solid #e6e0d0; border-radius:12px; padding:18px 20px;">
+      <div style="font-size:11px; font-weight:700; letter-spacing:1px; text-transform:uppercase; color:#0d6e78; margin-bottom:12px;">Decisiones de la pasada</div>
+      <div style="display:grid; grid-template-columns:1fr 1fr; gap:10px 28px; font-size:12.5px; line-height:1.5; color:#3a352e;">
+        <div><strong>Escala de celda definitiva</strong> — valor <strong>FONT_VALUE</strong> (Mono 11.5≈12px/600) · unidad <strong>FONT_LABEL</strong> (Sans 10) <code>ink_soft</code>. Sube el 8pt suelto al sistema. Es la misma escala de las cards; no hay «tamaño de celda» aparte.</div>
+        <div><strong>Jerarquía valor/unidad</strong> — el valor domina por familia mono + peso 600; la unidad es sans, menor, baseline-alineada, gap 4px. <code>auto</code> = itálica <code>auto_ink</code>.</div>
+        <div><strong>Path</strong> — <code>src.port → dst.port</code> en FONT_LABEL (10) Mono <code>ink_mute</code>; flecha glifo-ícono 12px <code>ink_soft</code> (sube desde 9pt libre).</div>
+        <div><strong>Procedencia sudoku en la celda</strong> — se extiende de «solo P» a la MASA: <code style="color:#3548b4;">▪</code> locked (spec) · <code style="color:#6b6256;">◦</code> derivada · <code style="color:#6d5a9c;">↻</code> torn (phase_2ph), al borde de arranque de la celda de flujo. Mismo glifo/tinta que la burbuja on-canvas.</div>
+        <div><strong>Densidades</strong> — fila 44/52/60px (compact/cozy/comfy), pad vert. 8/10/13; number pill Ø32; barra de masa 6px; strip de composición 8px.</div>
+        <div><strong>T · P apilados</strong> — T Mono 12/600, P Mono 12/500; unidad FONT_LABEL <code>ink_soft</code>; tinta <code>ink</code> si locked / <code>ink_soft</code> si auto (P de S-3 es auto acá).</div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ═══════════════════════════════════════════════ 4d ═══ -->
+  <section style="background:#fbfaf6; border:1px solid #e6e0d0; border-radius:16px; padding:26px 28px; margin:0 0 22px;">
+    <div style="display:flex; align-items:center; gap:12px;">
+      <span style="display:inline-flex; align-items:center; justify-content:center; min-width:44px; height:26px; padding:0 10px; border-radius:7px; background:#c26329; color:#fbfaf6; font-size:13px; font-weight:700;">4d</span>
+      <h2 style="font-size:20px; font-weight:700; margin:0;">Deuda ⚡ del bundle ciclo 3 (bloque A)</h2>
+    </div>
+    <p style="font-size:13.5px; line-height:1.6; color:#6b6256; margin:12px 0 18px; max-width:820px;">Cinco pendientes que el propio bundle anotó. Acá van resueltos o cerrados con criterio.</p>
+
+    <div style="display:grid; grid-template-columns:1fr 1fr; gap:14px;">
+
+      <!-- procedencia por componente -->
+      <div style="border:1px solid #e6e0d0; border-radius:12px; padding:16px 18px; background:#f1ede4;">
+        <div style="font-size:13px; font-weight:700; margin-bottom:6px;">Procedencia POR componente</div>
+        <p style="font-size:12.5px; line-height:1.5; color:#3a352e; margin:0 0 12px;">Excede la pill on-canvas → va al inspector. Cada componente lleva su marca sudoku a la izquierda del nombre, con tooltip: en la tabla de Composición del stream_inspector (columna nueva de 14px antes del dot de color) y junto a la especie en la tabla de libro.</p>
+        <div style="{{ L }}"><div style="background:var(--bg-elev); border:1px solid var(--line); border-radius:8px; overflow:hidden;">
+          <div style="display:flex; align-items:center; gap:10px; padding:7px 12px; border-bottom:1px solid var(--line-soft);">
+            <span style="{{ sudokuLocked }}">▪</span><span style="width:9px;height:9px;border-radius:50%;background:var(--phase-liq);"></span>
+            <span style="font-family:'IBM Plex Mono',monospace; font-size:12px; color:var(--ink); flex:1;">H₂O</span>
+            <span style="font-family:'IBM Plex Mono',monospace; font-size:12px; color:var(--ink);">0.7460</span>
+            <span style="font-size:10px; color:var(--spec-ink);">declarado</span>
+          </div>
+          <div style="display:flex; align-items:center; gap:10px; padding:7px 12px;">
+            <span style="{{ sudokuDerived }}">◦</span><span style="width:9px;height:9px;border-radius:50%;background:var(--orange);"></span>
+            <span style="font-family:'IBM Plex Mono',monospace; font-size:12px; color:var(--ink); flex:1;">CH₄</span>
+            <span style="font-family:'IBM Plex Mono',monospace; font-size:12px; color:var(--ink);">0.2540</span>
+            <span style="font-size:10px; color:var(--ink-mute);">deducido</span>
+          </div>
+        </div></div>
+      </div>
+
+      <!-- cuadro de revisiones -->
+      <div style="border:1px solid #e6e0d0; border-radius:12px; padding:16px 18px; background:#f1ede4;">
+        <div style="font-size:13px; font-weight:700; margin-bottom:6px;">Cuadro de revisiones △N (export)</div>
+        <p style="font-size:12.5px; line-height:1.5; color:#3a352e; margin:0 0 12px;">Bloque formal rev. A/B/C con fecha, en la esquina inferior del PFD exportado (title-block de plano). La marca △ <code>danger</code> sobre el elemento cambiado enlaza a la fila.</p>
+        <div style="{{ L }}"><div style="background:var(--bg-elev); border:1px solid var(--line-strong); border-radius:6px; overflow:hidden; font-family:'IBM Plex Mono',monospace;">
+          <div style="display:grid; grid-template-columns:34px 1fr 66px 44px; font-size:9px; font-weight:700; letter-spacing:.5px; color:var(--ink-soft); background:var(--bg-mute); border-bottom:1px solid var(--line-strong);">
+            <span style="padding:5px 8px;">REV</span><span style="padding:5px 8px;">DESCRIPCIÓN</span><span style="padding:5px 8px;">FECHA</span><span style="padding:5px 8px;">POR</span>
+          </div>
+          <div style="display:grid; grid-template-columns:34px 1fr 66px 44px; font-size:10px; color:var(--ink); border-bottom:1px solid var(--line-soft);">
+            <span style="padding:5px 8px; font-weight:700;">A</span><span style="padding:5px 8px;">Emisión</span><span style="padding:5px 8px;">05-07</span><span style="padding:5px 8px;">PC</span>
+          </div>
+          <div style="display:grid; grid-template-columns:34px 1fr 66px 44px; font-size:10px; color:var(--ink); border-bottom:1px solid var(--line-soft);">
+            <span style="padding:5px 8px; font-weight:700;">B</span><span style="padding:5px 8px;">+ WHB E-201</span><span style="padding:5px 8px;">18-07</span><span style="padding:5px 8px;">PC</span>
+          </div>
+          <div style="display:grid; grid-template-columns:34px 1fr 66px 44px; font-size:10px; color:var(--ink);">
+            <span style="padding:5px 8px; font-weight:700; color:var(--danger);">△C</span><span style="padding:5px 8px;">Reflujo R-101</span><span style="padding:5px 8px;">22-07</span><span style="padding:5px 8px;">PC</span>
+          </div>
+        </div></div>
+      </div>
+
+      <!-- anclaje de notas -->
+      <div style="border:1px solid #e6e0d0; border-radius:12px; padding:16px 18px; background:#f1ede4;">
+        <div style="font-size:13px; font-weight:700; margin-bottom:6px;">Anclaje de notas al bloque / corriente</div>
+        <p style="font-size:12.5px; line-height:1.5; color:#3a352e; margin:0;">Decisión: el ancla se guarda como <code>(block_id / stream_id + offset relativo)</code>, no coordenada absoluta — al mover el bloque, la guía se re-dibuja siguiéndolo. Sin cambio de estilo (la guía recta del ciclo 3 se conserva); solo comportamiento. El extremo anclado muestra un ◆ Ø5 <code>accent</code> al seleccionar la nota, para que se vea que <em>está</em> anclada.</p>
+      </div>
+
+      <!-- gradiente térmico proceso -->
+      <div style="border:1px solid #e6e0d0; border-radius:12px; padding:16px 18px; background:#f1ede4;">
+        <div style="font-size:13px; font-weight:700; margin-bottom:6px;">Gradiente térmico en corrientes de PROCESO</div>
+        <p style="font-size:12.5px; line-height:1.5; color:#3a352e; margin:0 0 12px;">Eje de T de referencia acordado: <strong>eje global por proyecto</strong> — T_min / T_max de todas las corrientes de proceso, escala lineal con <code>service_cold_deep</code> → <code>ink_ghost</code> (medio neutro) → <code>service_hot_deep</code>. El medio neutro lo separa del servicio (que usa el par pale/deep por corriente). Nueva banda en la leyenda del Marco PFD.</p>
+        <div style="{{ L }}"><div style="background:var(--bg-elev); border:1px solid var(--line); border-radius:8px; padding:12px;">
+          <div style="height:12px; border-radius:6px; background:linear-gradient(90deg, var(--service-cold-deep), var(--ink-ghost), var(--service-hot-deep));"></div>
+          <div style="display:flex; justify-content:space-between; margin-top:5px; font-family:'IBM Plex Mono',monospace; font-size:10px; color:var(--ink-soft);"><span>T_min 25 °C</span><span style="color:var(--ink-mute);">T proceso · eje global</span><span>T_max 1123 °C</span></div>
+        </div></div>
+      </div>
+    </div>
+
+    <!-- sieve/valve + mixer closure -->
+    <div style="margin-top:14px; border:1px solid #d4ccb8; border-radius:12px; padding:14px 18px; background:#fbfaf6; display:flex; gap:12px; align-items:flex-start;">
+      <span style="flex:none; margin-top:1px; font-size:14px; color:#4d8742;">✓</span>
+      <div style="font-size:12.5px; line-height:1.55; color:#3a352e;"><strong>Sieve vs valve a 22px y mixer dynamic — CERRADOS.</strong> Ratifico el criterio del bundle: a 22px el rasgo downcomer/cheurón es textura invisible → <strong>no diferenciar en el badge</strong> (el glifo on-canvas de 60px ya los distingue, ciclo 3). Mixer dynamic <strong>no está en el catálogo</strong> → no se dibuja glifo muerto; si algún día entra, glifo propio. Cero trabajo nuevo.</div>
+    </div>
+  </section>
+
+  <!-- ═══════════════════════════════════════════════ 4e ═══ -->
+  <section style="background:#fbfaf6; border:1px solid #e6e0d0; border-radius:16px; padding:26px 28px; margin:0 0 22px;">
+    <div style="display:flex; align-items:center; gap:12px;">
+      <span style="display:inline-flex; align-items:center; justify-content:center; min-width:44px; height:26px; padding:0 10px; border-radius:7px; background:#0d6e78; color:#fbfaf6; font-size:13px; font-weight:700;">4e</span>
+      <h2 style="font-size:20px; font-weight:700; margin:0;">Burbujas compactas · ratificar la excepción</h2>
+    </div>
+    <p style="font-size:13.5px; line-height:1.6; color:#6b6256; margin:12px 0 18px; max-width:820px;">
+      <code style="background:#f1ede4; border-radius:4px; padding:1px 5px;">stream_bubbles</code> / <code style="background:#f1ede4; border-radius:4px; padding:1px 5px;">hx_bubbles</code> usan micro-tipografía 7–10pt con 50+ burbujas en pantalla. <strong>Decisión: se ratifica como «escala de tarjeta compacta on-canvas», documentada — NO migra a FONT_LABEL/VALUE.</strong>
+    </p>
+
+    <div style="display:grid; grid-template-columns:1fr 1fr; gap:16px; margin-bottom:18px;">
+      <div style="{{ L }}"><div style="position:relative; background:var(--canvas-bg); border:1px solid var(--line-strong); border-radius:14px; padding:26px; min-height:120px; display:flex; gap:16px; align-items:center; justify-content:center;">
+        <span style="position:absolute; top:9px; right:14px; font-size:9px; font-weight:700; letter-spacing:1px; color:var(--ink-ghost);">CLARO · sobre lienzo</span>
+        <div style="{{ bubbleStyle }}">
+          <div style="{{ bubbleLabelStyle }}">S-7 · VAP</div>
+          <div style="{{ bubbleValStyle }}">4 370 <span style="font-weight:400; color:var(--ink-soft);">tm/año</span></div>
+        </div>
+        <div style="{{ bubbleStyle }}">
+          <div style="{{ bubbleLabelStyle }}">E-201 · WHB</div>
+          <div style="{{ bubbleValStyle }}">−36.6 <span style="font-weight:400; color:var(--ink-soft);">MW</span></div>
+        </div>
+      </div></div>
+      <div style="{{ D }}"><div style="position:relative; background:var(--canvas-bg); border:1px solid var(--line-strong); border-radius:14px; padding:26px; min-height:120px; display:flex; gap:16px; align-items:center; justify-content:center;">
+        <span style="position:absolute; top:9px; right:14px; font-size:9px; font-weight:700; letter-spacing:1px; color:var(--ink-ghost);">OSCURO · sobre lienzo</span>
+        <div style="{{ bubbleStyle }}">
+          <div style="{{ bubbleLabelStyle }}">S-7 · VAP</div>
+          <div style="{{ bubbleValStyle }}">4 370 <span style="font-weight:400; color:var(--ink-soft);">tm/año</span></div>
+        </div>
+        <div style="{{ bubbleStyle }}">
+          <div style="{{ bubbleLabelStyle }}">E-201 · WHB</div>
+          <div style="{{ bubbleValStyle }}">−36.6 <span style="font-weight:400; color:var(--ink-soft);">MW</span></div>
+        </div>
+      </div></div>
+    </div>
+
+    <div style="background:#f1ede4; border:1px solid #e6e0d0; border-radius:12px; padding:18px 20px;">
+      <div style="font-size:11px; font-weight:700; letter-spacing:1px; text-transform:uppercase; color:#0d6e78; margin-bottom:12px;">Escala de tarjeta compacta on-canvas (oficializada)</div>
+      <div style="display:grid; grid-template-columns:1fr 1fr; gap:10px 28px; font-size:12.5px; line-height:1.5; color:#3a352e;">
+        <div><strong>Valores</strong> — valor Mono 9px/600 · etiqueta Sans 8px/600 upper · unidad Sans 8px/400 <code>ink_soft</code>. Mínimo del sistema on-canvas: 7px.</div>
+        <div><strong>Pill</strong> — fondo <code>label_bg</code> al 88%, radius 8, pad 4/8, borde <code>line</code>.</div>
+        <div><strong>Regla que la justifica</strong> — <em>físico fijo = sistema tipográfico</em> (celda de tabla 4c, no zooma → FONT_VALUE/LABEL); <em>escala con la escena = escala compacta on-canvas</em> (la burbuja zooma como los labels de plano).</div>
+        <div><strong>Degradación</strong> — a zoom &lt; 0.5 la burbuja colapsa a solo número + dot de fase (la densidad de 50+ manda). Es una 4ª escala documentada, no un tamaño suelto.</div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ═══════════════════════════════════════════════ BUGS ═══ -->
+  <section style="background:#fbfaf6; border:1px solid #e6e0d0; border-radius:16px; padding:26px 28px; margin:0 0 22px;">
+    <h2 style="font-size:18px; font-weight:700; margin:0 0 4px;">Defectos de las capturas · arreglados de paso</h2>
+    <p style="font-size:13px; color:#6b6256; margin:0 0 18px;">Los tres que el prompt marca en <code style="background:#f1ede4; border-radius:4px; padding:1px 5px;">design4_*.png</code>.</p>
+
+    <div style="display:flex; flex-direction:column; gap:8px; margin-bottom:18px;">
+      <div style="display:flex; gap:10px; font-size:13px; line-height:1.5; color:#3a352e;"><span style="flex:none; width:22px; height:22px; border-radius:6px; background:#e6f0df; color:#4d8742; display:flex; align-items:center; justify-content:center; font-weight:700; font-size:12px;">1</span><div><strong>Columnas que bailan</strong> (stoich/flash) — resuelto en 4a: la tabla es <code>&lt;table&gt;</code> con <code>tabular-nums</code>, no <code>&lt;pre&gt;</code> en fuente proporcional.</div></div>
+      <div style="display:flex; gap:10px; font-size:13px; line-height:1.5; color:#3a352e;"><span style="flex:none; width:22px; height:22px; border-radius:6px; background:#e6f0df; color:#4d8742; display:flex; align-items:center; justify-content:center; font-weight:700; font-size:12px;">2</span><div><strong>Barras de balance recortadas</strong> («00000.0») — nueva DeltaBar: <code>[label 38px] · [track flex, min-width:0] · [valor celda propia, auto, derecha]</code>. El valor vive fuera de la barra → nunca se recorta.</div></div>
+      <div style="display:flex; gap:10px; font-size:13px; line-height:1.5; color:#3a352e;"><span style="flex:none; width:22px; height:22px; border-radius:6px; background:#e6f0df; color:#4d8742; display:flex; align-items:center; justify-content:center; font-weight:700; font-size:12px;">3</span><div><strong>Sub de MetricCard recortado</strong> («Perry fig. 10-32») — la card pasa a <code>flex column</code>: el sub es fila propia que fluye y la tarjeta crece (ya no posición absoluta a <code>h−16</code>). Visible en 4b.</div></div>
+    </div>
+
+    <div style="font-size:11px; font-weight:700; letter-spacing:1px; text-transform:uppercase; color:#948a7c; margin:4px 0 8px;">Bug 2 · balance de masa corregido (IN/OUT sin recorte)</div>
+    <div style="display:grid; grid-template-columns:1fr 1fr; gap:16px;">
+      <div style="{{ L }}"><div style="position:relative; background:var(--bg); border:1px solid var(--line-strong); border-radius:14px; padding:18px;">
+        <span style="position:absolute; top:9px; right:14px; font-size:9px; font-weight:700; letter-spacing:1px; color:var(--ink-ghost);">CLARO</span>
+        <dc-import name="MetricScene" variant="balance" hint-size="100%,180px"></dc-import>
+      </div></div>
+      <div style="{{ D }}"><div style="position:relative; background:var(--bg); border:1px solid var(--line-strong); border-radius:14px; padding:18px;">
+        <span style="position:absolute; top:9px; right:14px; font-size:9px; font-weight:700; letter-spacing:1px; color:var(--ink-ghost);">OSCURO</span>
+        <dc-import name="MetricScene" variant="balance" hint-size="100%,180px"></dc-import>
+      </div></div>
+    </div>
+  </section>
+
+  <!-- ═══════════════════════════════════════════════ ⚡ LIST ═══ -->
+  <section style="background:#2b2620; border:1px solid #3d372e; border-radius:16px; padding:26px 28px; margin:0 0 10px;">
+    <div style="display:flex; align-items:center; gap:10px; margin-bottom:6px;">
+      <span style="font-size:18px;">⚡</span>
+      <h2 style="font-size:18px; font-weight:700; margin:0; color:#efe7d6;">Dejado fuera · con su razón</h2>
+    </div>
+    <p style="font-size:13px; color:#a89e8f; margin:0 0 16px;">Lo que Design decide NO hacer este ciclo, para que el equipo no lo espere.</p>
+    <div style="display:grid; grid-template-columns:1fr 1fr; gap:10px 22px;">
+      <div style="font-size:12.5px; line-height:1.5; color:#d8cfbf; border-left:2px solid #6f6759; padding-left:12px;"><strong style="color:#efe7d6;">Rate-based / Maxwell-Stefan en WH.</strong> Fuera de alcance de la tesis (proyecto en sí; no cambia balance/economía). La tabla WH es equilibrium-stage.</div>
+      <div style="font-size:12.5px; line-height:1.5; color:#d8cfbf; border-left:2px solid #6f6759; padding-left:12px;"><strong style="color:#efe7d6;">K_i con fondo tintado.</strong> Solo tinta + ↑↓ — un fondo competiría con el ribbon de fila. La codificación térmica ya se lee.</div>
+      <div style="font-size:12.5px; line-height:1.5; color:#d8cfbf; border-left:2px solid #6f6759; padding-left:12px;"><strong style="color:#efe7d6;">Migrar burbujas a FONT_VALUE/LABEL.</strong> Rompería la densidad de 50+ burbujas. Se oficializa la escala compacta en su lugar (4e).</div>
+      <div style="font-size:12.5px; line-height:1.5; color:#d8cfbf; border-left:2px solid #6f6759; padding-left:12px;"><strong style="color:#efe7d6;">Sieve/valve · mixer dynamic en badge 22px.</strong> Rasgo invisible a esa escala; el glifo 60px ya diferencia. Cerrado (4d).</div>
+      <div style="font-size:12.5px; line-height:1.5; color:#d8cfbf; border-left:2px solid #6f6759; padding-left:12px;"><strong style="color:#efe7d6;">△N con historial versionado / firmas.</strong> El MVP es rev. A/B/C manual con fecha; el versionado editable es ingeniería, no diseño.</div>
+      <div style="font-size:12.5px; line-height:1.5; color:#d8cfbf; border-left:2px solid #6f6759; padding-left:12px;"><strong style="color:#efe7d6;">Souders-Brown · k real por composición.</strong> Mueven goldens → backlog de ingeniería con bandera (protocolo rho_ref), no de diseño.</div>
+    </div>
+  </section>
+
+  <p style="font-size:12px; color:#948a7c; margin:18px 2px 0;">Entregable montable por el equipo: evidence_specs, kit (MetricCard flex-column, DeltaBar 3-celdas), componente tabla-de-libro y tabla WH nueva. Valores exactos en cada spec-block. Par claro/oscuro por <code style="background:#f1ede4; border-radius:4px; padding:1px 5px;">var()</code> — todo respira tema y acento.</p>
+
+</div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{}">
+class Component extends DCLogic {
+  renderVals() {
+    const L = {
+      '--bg':'#f6f3ec','--bg-elev':'#ffffff','--bg-mute':'#f1ede4','--bg-sunk':'#ece6d8',
+      '--line':'#e6e0d0','--line-strong':'#d4ccb8','--line-soft':'#efeadd',
+      '--ink':'#1a1714','--ink-mute':'#6b6256','--ink-soft':'#948a7c','--ink-ghost':'#bab2a3',
+      '--accent':'#0d6e78','--accent-deep':'#064951','--accent-soft':'#d4ebed','--accent-tint':'#eaf4f5',
+      '--spec':'#3548b4','--spec-ink':'#2a3a9a','--spec-bg':'#eef1ff','--spec-ribbon':'#4a5dcc',
+      '--auto-bg':'#f3efe5','--auto-ink':'#918878','--auto-ribbon':'#c9c0ad',
+      '--green':'#4d8742','--green-bg':'#e6f0df','--amber':'#b8841a','--amber-bg':'#f4ecd1',
+      '--orange':'#c26329','--orange-bg':'#f5e1d0','--danger':'#b8453a','--danger-bg':'#f3dcd8',
+      '--tag-bg':'#ede7d6','--tag-ink':'#6b6253',
+      '--phase-liq':'#2f6690','--phase-vap':'#c47a1e','--phase-gas':'#8a8172','--phase-2ph':'#6d5a9c',
+      '--canvas-bg':'#fbfaf6',
+      '--service-hot':'#d5501f','--service-hot-pale':'#f4c8a8','--service-hot-deep':'#a8320f',
+      '--service-cold':'#2b8fc4','--service-cold-pale':'#bfe0f0','--service-cold-deep':'#125f88',
+      '--sinnott':'#6e3aa6','--sinnott-ink':'#4a2873','--sinnott-bg':'#efebf7','--sinnott-ribbon':'#8a5cc0',
+    };
+    const D = {
+      '--bg':'#16130f','--bg-elev':'#1f1b16','--bg-mute':'#26211b','--bg-sunk':'#110e0a',
+      '--line':'#2f2920','--line-strong':'#3f3830','--line-soft':'#251f18',
+      '--ink':'#efe7d6','--ink-mute':'#a59a89','--ink-soft':'#6f6759','--ink-ghost':'#4a4438',
+      '--accent':'#5dc1cc','--accent-deep':'#92dde4','--accent-soft':'#1f3a3d','--accent-tint':'#1a2b2d',
+      '--spec':'#92a0ef','--spec-ink':'#b4befa','--spec-bg':'#20254a','--spec-ribbon':'#8294f5',
+      '--auto-bg':'#221d16','--auto-ink':'#8a8170','--auto-ribbon':'#463f33',
+      '--green':'#85b274','--green-bg':'#1f2a1d','--amber':'#d8aa3a','--amber-bg':'#2e2618',
+      '--orange':'#d18a55','--orange-bg':'#2e2118','--danger':'#d97262','--danger-bg':'#2e1a17',
+      '--tag-bg':'#2a241d','--tag-ink':'#a59a89',
+      '--phase-liq':'#6fa8d6','--phase-vap':'#e0a94e','--phase-gas':'#b3a892','--phase-2ph':'#a795d6',
+      '--canvas-bg':'#221d15',
+      '--service-hot':'#e88a5a','--service-hot-pale':'#5a3320','--service-hot-deep':'#f0a877',
+      '--service-cold':'#63b8e0','--service-cold-pale':'#1e3a4a','--service-cold-deep':'#8fcdec',
+      '--sinnott':'#b598e0','--sinnott-ink':'#d3befa','--sinnott-bg':'#2a2535','--sinnott-ribbon':'#9978c9',
+    };
+
+    // ── shared style strings for the bespoke streams table (4c) ──
+    const mono = "'IBM Plex Mono',monospace";
+    const streamsHeaderStyle = "display:flex; align-items:center; gap:14px; padding:22px 16px 8px; background:var(--bg); border-bottom:1px solid var(--line); font-family:'IBM Plex Sans',sans-serif; font-size:9.5px; font-weight:600; letter-spacing:1.2px; color:var(--ink-soft);";
+    const rowBase = "display:flex; align-items:center; gap:14px; padding:10px 16px; background:transparent;";
+    const streamRowStyle = rowBase + " border-bottom:1px solid var(--line-soft); border-left:3px solid transparent;";
+    const streamRowStyleLast = rowBase + " border-left:3px solid var(--accent);";
+    const numPillStyle = "position:relative; flex:none; width:32px; height:32px; border-radius:50%; background:var(--bg-elev); border:1px solid var(--line-strong); color:var(--ink); font-family:"+mono+"; font-size:12px; font-weight:600; display:flex; align-items:center; justify-content:center;";
+    const phaseDotBase = "position:absolute; right:-1px; bottom:-1px; width:11px; height:11px; border-radius:50%; border:2px solid var(--bg-elev);";
+    const phaseDotVap = phaseDotBase + " background:var(--phase-vap);";
+    const phaseDotLiq = phaseDotBase + " background:var(--phase-liq);";
+    const rolePillBase = "display:inline-block; margin-top:3px; padding:1px 8px; border-radius:9px; font-size:9px; font-weight:700; letter-spacing:.6px;";
+    const rolePillProduct = rolePillBase + " background:var(--orange-bg); color:var(--orange);";
+    const rolePillFeed = rolePillBase + " background:var(--green-bg); color:var(--green);";
+    const massBarTrack = "margin-top:5px; height:6px; border-radius:3px; background:var(--bg-sunk); overflow:hidden;";
+    const massBarFillAuto = "height:100%; width:22%; border-radius:3px; background:var(--auto-ribbon);";
+    const massBarFillLocked = "height:100%; width:100%; border-radius:3px; background:var(--spec-ribbon);";
+    const sudokuBase = "font-family:"+mono+"; font-size:11px; font-weight:700; line-height:1;";
+    const sudokuLocked = sudokuBase + " color:var(--spec);";
+    const sudokuDerived = sudokuBase + " color:var(--ink-mute);";
+    const sudokuTorn = sudokuBase + " color:var(--phase-2ph);";
+
+    // ── compact bubble (4e) ──
+    const bubbleStyle = "background:var(--label-bg, rgba(255,255,255,.9)); background:color-mix(in srgb, var(--bg-elev) 90%, transparent); border:1px solid var(--line); border-radius:8px; padding:5px 10px; box-shadow:0 1px 2px rgba(0,0,0,.12);";
+    const bubbleLabelStyle = "font-family:'IBM Plex Sans',sans-serif; font-size:8px; font-weight:600; letter-spacing:.4px; text-transform:uppercase; color:var(--ink-soft);";
+    const bubbleValStyle = "font-family:"+mono+"; font-size:11px; font-weight:600; color:var(--ink); margin-top:1px;";
+
+    return {
+      L, D,
+      streamsHeaderStyle, streamRowStyle, streamRowStyleLast, numPillStyle,
+      phaseDotVap, phaseDotLiq, rolePillProduct, rolePillFeed,
+      massBarTrack, massBarFillAuto, massBarFillLocked,
+      sudokuLocked, sudokuDerived, sudokuTorn,
+      bubbleStyle, bubbleLabelStyle, bubbleValStyle,
+    };
+  }
+}
+</script>
+</body>
+</html>

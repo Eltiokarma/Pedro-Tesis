@@ -206,6 +206,23 @@ EQUIPMENT_DATA = {
              S_param="Power", S_unit="kW",
              S_min=18,  S_max=950,  categoria="Compressors"),
 
+    # -------- TURBINES / EXPANDERS --------
+    # Formalizan la convención "compresor con P_out < P_in = turbina":
+    # mismo motor isentrópico del solver, duty < 0 (genera).  S = potencia
+    # generada |W| en kW (Turton A.1, fluid power).
+    "Turbine — steam":
+        dict(K1=2.6259, K2=1.4398, K3=-0.1776,
+             S_param="Fluid power", S_unit="kW",
+             S_min=70,  S_max=7500, categoria="Turbines"),
+    "Turbine — gas (axial)":
+        dict(K1=2.7051, K2=1.4398, K3=-0.1776,
+             S_param="Fluid power", S_unit="kW",
+             S_min=100, S_max=4000, categoria="Turbines"),
+    "Turbine — radial expander":
+        dict(K1=2.2476, K2=1.4965, K3=-0.1618,
+             S_param="Fluid power", S_unit="kW",
+             S_min=100, S_max=1500, categoria="Turbines"),
+
     # -------- PUMPS --------
     "Pump — centrifugal":
         dict(K1=3.3892, K2=0.0536, K3=0.1538,
@@ -335,6 +352,13 @@ EQUIPMENT_DATA = {
              S_min=0.03, S_max=628, categoria="Trays / packing"),
 
     # -------- MIXERS / SPLITTERS --------
+    # Agitador mecánico de tanque (Turton A.1, Mixers: impeller).
+    # S = potencia del impulsor [kW] — a diferencia de inline/static
+    # (volumen), por eso su sizer propio (size_agitator).
+    "Mixer — impeller":
+        dict(K1=3.8511, K2=0.7009, K3=-0.0003,
+             S_param="Power", S_unit="kW",
+             S_min=5, S_max=150, categoria="Mixers / splitters"),
     "Mixer — inline":
         dict(K1=3.4974, K2=0.4485, K3=0.1074,
              S_param="Volume", S_unit="m³",

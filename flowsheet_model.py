@@ -114,6 +114,19 @@ class Block:
     # mediante heurística (S > 0 → locked, ver from_dict).
     S_locked: bool = False
 
+    # Referencia al catálogo data/equipos_comerciales.json — modo selección
+    # de las Fichas Técnicas.  Formato "marca|modelo"; "" = sin equipo
+    # declarado (default, reproduce el comportamiento previo exacto).
+    # La clave completa del catálogo es (marca, modelo, eq_type) y eq_type
+    # ya está en este mismo Block, así que no se duplica.
+    #
+    # NUNCA derivar Block.S de este campo.  El S del catálogo es la
+    # ENVOLVENTE del modelo comercial; Block.S es el tamaño que exige el
+    # proceso y sale del sizing.  Volcar el primero en el segundo hace que
+    # el costeo Turton use el techo del bastidor y el CAPEX salga inflado
+    # en toda la planta.
+    equipo_comercial: str = ""
+
     # ---- HIDRÁULICA: ΔP a través del bloque ----
     # Positivo si el bloque SUMA presión (bomba, compresor).
     # Negativo si la PIERDE (HX, columna, válvula, filter).
@@ -661,8 +674,16 @@ class Flowsheet:
     # precedencia sobre este valor embebido en el flowsheet.
     econ_overrides: Dict[str, float] = field(default_factory=dict)
     # Anotaciones de plano (ciclo 3, 3c): notas de texto sobre el lienzo.
-    # {"id", "x", "y", "text", "style", "tint", "pill", "guide"}
+    # {"id", "x", "y", "text", "style", "tint", "pill", "guide",
+    #  "guide_anchor"} — guide_anchor (ciclo 4, 4d): la guía se ancla a
+    # un bloque/corriente y lo sigue al moverse:
+    #  {"kind": "block"|"stream", "id": int, "offset": [dx, dy]}
     annotations: List[Dict] = field(default_factory=list)
+    # Cuadro de revisiones △N del plano (ciclo 4, 4d — deuda 3c del
+    # bundle ciclo 3): rev. A/B/C manual con fecha, dibujado como
+    # title-block en el Marco PFD (pantalla y export).
+    # {"rev": "A", "desc": str, "date": "dd-mm", "by": str}
+    revisions: List[Dict] = field(default_factory=list)
 
     def new_id(self):
         v = self._next_id
@@ -683,6 +704,7 @@ class Flowsheet:
             "fixed_overrides": dict(self.fixed_overrides),
             "econ_overrides":  dict(self.econ_overrides),
             "annotations":     [dict(a) for a in self.annotations],
+            "revisions":       [dict(r) for r in self.revisions],
         }
 
     @staticmethod
@@ -726,4 +748,5 @@ class Flowsheet:
         fs.fixed_overrides = dict(d.get("fixed_overrides", {}))
         fs.econ_overrides  = dict(d.get("econ_overrides", {}))
         fs.annotations     = [dict(a) for a in d.get("annotations", [])]
+        fs.revisions       = [dict(r) for r in d.get("revisions", [])]
         return fs
