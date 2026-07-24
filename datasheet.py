@@ -39,6 +39,13 @@ _CATALOGO_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)),
                               "data", "equipos_comerciales.json")
 _catalogo_cache = None
 
+# Por qué ciertos tipos NO tienen catálogo comercial.  La ausencia no es un
+# hueco de datos: es un hecho de la ingeniería de procesos (el tamaño lo fija
+# el duty, no una talla), y el simulador lo ENSEÑA en vez de esconderlo.
+_A_PEDIDO_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)),
+                              "data", "equipos_a_pedido.json")
+_a_pedido_cache = None
+
 # Campos mecánicos que el simulador NO determina, por familia gruesa —
 # van como lista corta "ingeniería de detalle pendiente", nunca celdas
 # vacías (estimación conceptual Class 4/5, AACE).
@@ -75,6 +82,31 @@ def entradas_para(eq_type: str) -> List[dict]:
     """Entradas del catálogo comercial que parametrizan este eq_type."""
     return [e for e in load_catalogo().get("equipos", [])
             if e.get("eq_type") == eq_type]
+
+
+def load_a_pedido(force: bool = False) -> dict:
+    """Carga (cacheada, defensiva) de data/equipos_a_pedido.json."""
+    global _a_pedido_cache
+    if _a_pedido_cache is None or force:
+        try:
+            with open(_A_PEDIDO_PATH, encoding="utf-8") as f:
+                _a_pedido_cache = json.load(f)
+        except Exception:
+            _a_pedido_cache = {"schema": 1, "generico": {}, "motivos": {}}
+    return _a_pedido_cache
+
+
+def motivo_a_pedido(eq_type: str) -> dict:
+    """Por qué este eq_type no tiene catálogo comercial.
+
+    Devuelve el motivo específico del tipo si está documentado, y si no el
+    genérico — nunca None: un tipo sin catálogo SIEMPRE debe poder explicar
+    por qué, para que el estudiante lea la razón de ingeniería y no un
+    espacio vacío.  Quien decide CUÁNDO mostrarlo es la UI (lo muestra
+    cuando entradas_para(eq_type) viene vacío)."""
+    d = load_a_pedido()
+    m = (d.get("motivos") or {}).get(eq_type)
+    return dict(m) if m else dict(d.get("generico") or {})
 
 
 def clave_de(entrada: dict) -> str:

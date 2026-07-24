@@ -1,0 +1,128 @@
+{
+ "schema": 1,
+ "nota": "Por que ciertos tipos de equipo NO tienen catalogo comercial. Cada entrada explica QUE FIJA EL TAMANO (la ingenieria), POR QUE no hay modelos de catalogo, y COMO SE COMPRA REALMENTE en un proyecto. La ausencia de catalogo no es un hueco de datos: es un hecho de la ingenieria de procesos, y el simulador lo ensena en vez de esconderlo. La UI muestra este texto en la seccion Ficha tecnica cuando el tipo no tiene ninguna entrada en data/equipos_comerciales.json. El gate tests/test_equipos_a_pedido.py valida el esquema y que los eq_type existan.",
+ "generico": {
+  "titulo": "SE MANDA A HACER A LA MEDIDA",
+  "que_fija_el_tamano": [
+   "El tamano lo fija el DUTY del proceso (caudal, presion, temperatura, propiedades del fluido), no un catalogo de tallas."
+  ],
+  "por_que": "Ningun fabricante publica tamanos de catalogo para este tipo: cada unidad se disena contra las condiciones de un servicio concreto.",
+  "como_se_compra": "El ingeniero emite una HOJA DE DATOS con las condiciones de diseno y los talleres cotizan contra ella. El documento de compra es una especificacion, no un numero de modelo.",
+  "normas": []
+ },
+ "motivos": {
+  "Vessel — vertical": {
+   "titulo": "SE MANDA A HACER A LA MEDIDA",
+   "que_fija_el_tamano": [
+    "DIAMETRO: la velocidad maxima de arrastre. Souders-Brown, v_max = K*raiz((rho_L - rho_V)/rho_V); el diametro sale de que el vapor suba mas lento que esa velocidad para que la gota caiga.",
+    "ALTURA: el tiempo de retencion de liquido entre niveles (tipico 5-10 min de inventario operable) mas el espacio de desenganche sobre el nivel alto.",
+    "ESPESOR DE PARED: ASME BPVC Seccion VIII Div. 1 (UG-27): t = P*R/(S*E - 0,6*P) + sobreespesor de corrosion. Depende de presion, radio, material, eficiencia de junta y corrosion previstas.",
+    "METALURGIA: la fija el FLUIDO, no el tamano. Servicio amargo con H2S exige materiales NACE MR0175/ISO 15156; acidos exigen inoxidables o aleaciones; servicio criogenico exige acero de baja temperatura; servicio sanitario exige SS316 con acabado limpiable."
+   ],
+   "por_que": "Dos recipientes del mismo volumen pueden ser equipos completamente distintos si cambian el fluido, la presion o la temperatura. Por eso no existe una talla de catalogo: existe una hoja de datos por servicio. Si hay recipientes de catalogo (los de aire comprimido, ASME, con volumen nominal impreso), pero son de SERVICIO DE AIRE: acero al carbono con imprimacion de taller, sin sobreespesor quimico ni internos. No son base valida para un separador o un KO drum de proceso.",
+   "como_se_compra": "Se emite una VESSEL DATA SHEET (presion y temperatura de diseno, fluido, volumen, boquillas, internos, sobreespesor de corrosion, codigo aplicable) y los talleres cotizan contra esa hoja. El recipiente llega con placa ASME y su libro de datos; no tiene numero de catalogo.",
+   "normas": ["ASME BPVC Seccion VIII Div. 1", "NACE MR0175 / ISO 15156 (servicio amargo)", "ASME B16.5 (bridas)"]
+  },
+  "Vessel — horizontal": {
+   "titulo": "SE MANDA A HACER A LA MEDIDA",
+   "que_fija_el_tamano": [
+    "DIAMETRO Y LONGITUD: la separacion liquido-vapor y el inventario. En horizontal el area de interfase es mucho mayor, asi que la relacion L/D (tipico 2,5 a 5) se elige por el tiempo de decantacion, no por una talla estandar.",
+    "ESPESOR DE PARED: ASME BPVC Seccion VIII Div. 1 (UG-27), funcion de presion, radio, material y sobreespesor de corrosion.",
+    "SILLETAS Y SOPORTES: se calculan por el metodo de Zick para la carga del recipiente lleno; dependen de la longitud y del peso de operacion.",
+    "METALURGIA: la fija el fluido (NACE en servicio amargo, inoxidables en acidos, acero de baja temperatura en criogenia)."
+   ],
+   "por_que": "Igual que el vertical: el volumen no define el equipo. La orientacion horizontal se elige justamente por un requisito de proceso (mayor area de separacion, o limitacion de altura), y eso ya es diseno a medida.",
+   "como_se_compra": "Vessel data sheet + cotizacion de taller. El documento de compra es la especificacion, no un modelo.",
+   "normas": ["ASME BPVC Seccion VIII Div. 1", "Metodo de Zick (soportes de silleta)", "NACE MR0175 / ISO 15156"]
+  },
+  "Tower (column shell)": {
+   "titulo": "SE MANDA A HACER A LA MEDIDA",
+   "que_fija_el_tamano": [
+    "DIAMETRO: la hidraulica de la etapa. Se dimensiona para operar al 70-85 % de la velocidad de inundacion (flooding); por debajo del 50 % los platos gotean y pierden eficiencia.",
+    "ALTURA: el numero de etapas teoricas dividido por la eficiencia, por el espaciamiento de platos (tipico 0,45-0,60 m). En columnas de relleno, altura = N etapas x HETP.",
+    "INTERNOS: platos (perforados, de valvula, de campana) o relleno (estructurado o aleatorio) con sus distribuidores y colectores. Los disena el proveedor de internos para ese servicio.",
+    "ESPESOR Y FALDON: ASME VIII para la envolvente, mas cargas de viento y sismo por la altura (una columna alta es una estructura, no solo un recipiente)."
+   ],
+   "por_que": "La columna es el resultado de un calculo de separacion (etapas de equilibrio) acoplado a un calculo hidraulico. Cambiar la alimentacion o la pureza pedida cambia el diametro y la altura. No hay tallas: hay diseno.",
+   "como_se_compra": "El licenciante o el ingeniero de proceso fija etapas y condiciones; el proveedor de internos (Sulzer Chemtech, Koch-Glitsch y similares) hace el diseno hidraulico y garantiza la capacidad; un taller de recipientes fabrica la envolvente contra la hoja de datos.",
+   "normas": ["ASME BPVC Seccion VIII Div. 1", "Correlaciones de inundacion (Fair) para platos", "ASCE / normativa local de viento y sismo para el faldon"]
+  },
+  "Fired heater — non-reformer": {
+   "titulo": "SE ERIGE EN CAMPO, A LA MEDIDA",
+   "que_fija_el_tamano": [
+    "DUTY Y REPARTO RADIANTE/CONVECTIVO: cuanto calor entra por radiacion en la camara y cuanto por conveccion en el banco superior.",
+    "FLUX TERMICO PERMITIDO EN TUBOS: el limite de densidad de flujo (kW/m2) que soporta el fluido sin coquizarse fija la superficie de tubo y por lo tanto el tamano del horno (API 560).",
+    "ESPESOR Y VIDA DE TUBOS: se calcula por API 530, con temperatura de pared y creep del material.",
+    "QUEMADORES Y TIRO: numero y tipo de quemadores, tiro natural o forzado, control de NOx y altura de chimenea."
+   ],
+   "por_que": "Un horno de proceso es una estructura de acero y refractario construida alrededor de un serpentin disenado para un fluido concreto. Se erige en campo pieza por pieza; no existe un modelo de catalogo que se entregue en un camion.",
+   "como_se_compra": "Se licita por especificacion (duty, fluido, presion, temperatura de entrada y salida, combustible, limites de flux y de emisiones). El fabricante disena el serpentin y la camara, y lo monta en sitio.",
+   "normas": ["API 560 (hornos de fuego directo para refineria)", "API 530 (calculo de espesor de tubos)"]
+  },
+  "Fired heater — reformer": {
+   "titulo": "SE ERIGE EN CAMPO, A LA MEDIDA",
+   "que_fija_el_tamano": [
+    "CARGA DE CATALIZADOR Y CINETICA: el numero y largo de los tubos reformadores sale de la conversion pedida y del volumen de catalizador, no de una talla.",
+    "FLUX TERMICO Y TEMPERATURA DE PARED DE TUBO: el reformado trabaja al limite del material (tubos de aleacion colada centrifugada, HP-Nb y similares); el flux permitido fija cuantos tubos hacen falta.",
+    "CONFIGURACION DE QUEMADORES: de techo, de pared lateral o terraza, segun el perfil de temperatura que exija la reaccion.",
+    "TREN DE CONVECCION: recuperacion de calor en varios servicios (vapor, precalentamiento, aire) integrada al horno."
+   ],
+   "por_que": "El reformador es el corazon de una planta de hidrogeno o amoniaco y se disena junto con el catalizador y el balance de la planta entera. Es un equipo de licencia, no de catalogo.",
+   "como_se_compra": "Va dentro del paquete del licenciante de la tecnologia; se contrata por ingenieria, suministro y montaje en campo.",
+   "normas": ["API 560", "API 530", "Especificaciones del licenciante de la tecnologia"]
+  },
+  "Cooling tower — natural draft": {
+   "titulo": "ES OBRA CIVIL: SE PROYECTA PARA EL SITIO",
+   "que_fija_el_tamano": [
+    "TIRO POR CHIMENEA: no hay ventilador. El aire sube por diferencia de densidad entre el aire humedo caliente de dentro y el ambiente; ese tiro depende de la ALTURA de la torre (tipicamente 100-200 m).",
+    "CARGA TERMICA Y BULBO HUMEDO DEL SITIO: la temperatura de bulbo humedo del lugar fija el acercamiento (approach) alcanzable y con ello el tamano del relleno.",
+    "ESTRUCTURA HIPERBOLOIDE DE HORMIGON: la forma no es estetica, es estructural (superficie reglada que resiste viento con poco espesor)."
+   ],
+   "por_que": "Es una estructura de hormigon construida en el emplazamiento, dimensionada para el clima de ese sitio. No existe un modelo de catalogo, del mismo modo que no existe un catalogo de puentes.",
+   "como_se_compra": "Se contrata como proyecto de ingenieria civil mas el suministro del relleno y los distribuidores. Las torres que SI son de catalogo son las de tiro mecanico en paquete, que en el simulador viven en otro tipo.",
+   "normas": ["CTI (Cooling Technology Institute) para el comportamiento termico", "Normativa de hormigon y viento del emplazamiento"]
+  },
+  "Heat exch. — WHB field erected": {
+   "titulo": "SE ERIGE EN CAMPO, A LA MEDIDA",
+   "que_fija_el_tamano": [
+    "CAUDAL Y TEMPERATURA DEL GAS DE PROCESO: la superficie sale del calor a recuperar y del acercamiento pedido.",
+    "CIRCULACION Y CALIDAD DEL VAPOR: el domo, los bajantes y los ascendentes se disenan para la circulacion natural del agua.",
+    "DILATACION TERMICA: en gases muy calientes el diseno lo gobierna la expansion diferencial y la proteccion de la placa tubular."
+   ],
+   "por_que": "Por definicion se erige en campo: llega por partes y se monta. Su hermano en paquete (WHB packaged) es el que puede tener series.",
+   "como_se_compra": "Por especificacion de proceso, con ingenieria y montaje en sitio.",
+   "normas": ["ASME BPVC Seccion I o VIII segun el servicio", "TEMA para el haz tubular"]
+  },
+  "Splitter — flow divider": {
+   "titulo": "NO ES UN EQUIPO QUE SE COMPRE POR MODELO",
+   "que_fija_el_tamano": [
+    "Es un punto de reparto de caudal: en la planta real es una TE o un manifold de tuberia con sus valvulas de regulacion.",
+    "El diametro lo fija el criterio de velocidad de linea de la tuberia, no una talla de equipo."
+   ],
+   "por_que": "El divisor de flujo existe en el diagrama para repartir corrientes, pero fisicamente es tuberia y accesorios. No hay fabricante que publique modelos de 'divisor de flujo'.",
+   "como_se_compra": "Como material de tuberia (accesorios, bridas y valvulas), dentro del presupuesto de piping y no como equipo mayor.",
+   "normas": ["ASME B31.3 (tuberia de proceso)", "ASME B16.9 (accesorios)"]
+  },
+  "Mixer — impeller": {
+   "titulo": "SI HAY CATALOGO, PERO ESTE SIMULADOR AUN NO PUEDE VERIFICARLO",
+   "que_fija_el_tamano": [
+    "Este caso es DISTINTO al resto: agitadores comerciales existen y se publican (Ekato, Chemineer, Lightnin y otros).",
+    "El problema es la magnitud: la envolvente real de un agitador es el PAR (N*m) que aguanta su reductor y su eje, no solo la potencia.",
+    "El esquema de verificacion de este catalogo todavia no tiene un campo de par, asi que una entrada aqui no podria comprobar lo que de verdad limita al equipo."
+   ],
+   "por_que": "No es que el mercado no publique: es que al simulador le falta vocabulario para verificarlo con honestidad. Cargar el agitador solo por potencia daria un APTO que no confirma nada.",
+   "como_se_compra": "Por hoja de datos de agitacion: volumen, densidad y viscosidad del fluido, tipo de rodete, velocidad y par requerido; el fabricante selecciona reductor y eje.",
+   "normas": ["Criterios de potencia por unidad de volumen y numero de bombeo del rodete", "AGMA para el reductor"]
+  },
+  "Ambient": {
+   "titulo": "NO ES UN EQUIPO",
+   "que_fija_el_tamano": [
+    "Es una CONDICION DE FRONTERA del diagrama: representa el ambiente y ancla las corrientes conectadas a presion atmosferica.",
+    "No tiene tamano, no tiene costo y no se compra."
+   ],
+   "por_que": "Existe para cerrar el balance del diagrama, igual que un nodo de referencia en un circuito. No es un equipo del catalogo de costos.",
+   "como_se_compra": "No aplica.",
+   "normas": []
+  }
+ }
+}
