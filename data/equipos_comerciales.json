@@ -364,20 +364,6 @@
    "fecha_consulta": "2026-07-23"
   },
   {
-   "marca": "NETZSCH",
-   "modelo": "NEMO L.Cap",
-   "eq_type": "Pump — positive displacement",
-   "S_no_publicado": "punto_de_operacion",
-   "params": {
-    "Q_max_m3_h": 1000,
-    "P_max_bar": 20,
-    "notas": "Bomba de cavidad progresiva. NETZSCH declara que el caudal es proporcional a la velocidad de rotacion, asi que el tamano ES el punto de operacion y no hay kW por modelo. GRANULARIDAD = FAMILIA: 1000 m3/h y 20 bar son la envolvente de la FAMILIA L.Cap (versiones simple, doble y vertical), no de un tamano concreto. La verificacion contra esta entrada es debil: casi cualquier duty entra. Sustituir por la envolvente del tamano especifico en cuanto se consiga. Material no declarado: omitido."
-   },
-   "fuente": "https://pumps-systems.netzsch.com/en-US/products-and-accessories/nemo-progressing-cavity-pumps/nemo-l-cap-progressing-cavity-pump",
-   "fecha_consulta": "2026-07-23",
-   "granularidad": "familia"
-  },
-  {
    "marca": "Grundfos",
    "modelo": "NK 32-125.1",
    "eq_type": "Pump — centrifugal",
@@ -460,20 +446,6 @@
    "fuente": "https://api.grundfos.com/literature/Grundfosliterature-970667.pdf",
    "fecha_consulta": "2026-07-24",
    "granularidad": "modelo"
-  },
-  {
-   "marca": "KSB",
-   "modelo": "Etanorm (serie)",
-   "eq_type": "Pump — centrifugal",
-   "S_no_publicado": "punto_de_operacion",
-   "params": {
-    "P_max_bar": 16,
-    "T_max_C": 140,
-    "notas": "Bomba centrifuga monoetapa de voluta, back pull-out, segun EN 733. SIN S ESCALAR: el kW al eje sale de la curva en el punto de operacion -> motivo punto_de_operacion. GRANULARIDAD = FAMILIA: esta entrada representa la SERIE Etanorm completa, no un tamano (ETN succion-descarga-impulsor). Envolvente de la serie segun la pagina oficial KSB: caudal hasta 2321 m3/h, altura hasta 160 m, presion de trabajo <= 16 bar, temperatura del fluido hasta 140 C (rango -30 a +140 C en el type series booklet). Se cargan solo P_max_bar y T_max_C como envolvente porque son limites reales que aplican a CADA tamano y no se inflan con el miembro mas grande; el Q de familia (2321 m3/h lo fija el tamano mayor) daria verificacion DEBIL, por eso no se carga como parametro (misma leccion que la NEMO L.Cap). SUSTITUIR por envolventes POR TAMANO (065-040-160 ... 200-150-400, con limite de velocidad y diametro de impulsor por tamano del booklet) en cuanto se consiga la URL oficial del type series booklet KSB (hoy solo accesible via distribuidores). Material a pedido (fundicion/bronce/inox): omitido."
-   },
-   "fuente": "https://www.ksb.com/en-at/lc/etanorm/E04B",
-   "fecha_consulta": "2026-07-24",
-   "granularidad": "familia"
   },
   {
    "marca": "Elliott Group",
@@ -762,6 +734,124 @@
    "fuente": "https://www.swepgroup.com/content/dam/swep/product-datasheets/SWEP-B427-en.pdf",
    "fecha_consulta": "2026-07-24",
    "granularidad": "modelo"
+  },
+  {
+   "marca": "KSB",
+   "modelo": "Etanorm 065-040-160",
+   "eq_type": "Pump — centrifugal",
+   "S_no_publicado": "punto_de_operacion",
+   "params": {
+    "P_max_bar": 16,
+    "T_max_C": 140,
+    "rpm": 4400,
+    "notas": "Bomba centrifuga monoetapa de voluta, back pull-out, EN 733 (ETN succion-descarga-diametro de impulsor). SIN S ESCALAR: el kW al eje depende del punto de operacion -> punto_de_operacion. GRANULARIDAD = MODELO: los limites son de ESTE tamaño, de la Table 19 'Technical data (SI units)', pag. 22-23 del Type Series Booklet Etanorm (EU/ME/NA) 1311.5/13-EN: diametro de impulsor max 174 mm, limite de velocidad max 4400 rpm (min 500 rpm). Envolvente verificable IMPRESA que aplica a cada tamaño (Table 1): P_max_bar <= 16, T -30 a +140 C; la serie cubre Q <= 1930 m3/h (50 Hz) / 2321 (60 Hz) y H <= 160 m. La envolvente hidraulica Q/H por tamaño es la CURVA (selection chart), no un escalar impreso -> no se transcribe (regla de la casa). Documento oficial via Downloads de la pagina E04B (KSB OCC disfile, documentNumber=1311.5 version=13). Material a pedido: omitido."
+   },
+   "fuente": "https://www.ksb.com/en-global/lc/etanorm/E04B",
+   "fecha_consulta": "2026-07-24",
+   "granularidad": "modelo"
+  },
+  {
+   "marca": "KSB",
+   "modelo": "Etanorm 080-065-160",
+   "eq_type": "Pump — centrifugal",
+   "S_no_publicado": "punto_de_operacion",
+   "params": {
+    "P_max_bar": 16,
+    "T_max_C": 140,
+    "rpm": 3900,
+    "notas": "Bomba centrifuga monoetapa de voluta, back pull-out, EN 733 (ETN succion-descarga-diametro de impulsor). SIN S ESCALAR: el kW al eje depende del punto de operacion -> punto_de_operacion. GRANULARIDAD = MODELO: los limites son de ESTE tamaño, de la Table 19 'Technical data (SI units)', pag. 22-23 del Type Series Booklet Etanorm (EU/ME/NA) 1311.5/13-EN: diametro de impulsor max 174 mm, limite de velocidad max 3900 rpm (min 500 rpm). Envolvente verificable IMPRESA que aplica a cada tamaño (Table 1): P_max_bar <= 16, T -30 a +140 C; la serie cubre Q <= 1930 m3/h (50 Hz) / 2321 (60 Hz) y H <= 160 m. La envolvente hidraulica Q/H por tamaño es la CURVA (selection chart), no un escalar impreso -> no se transcribe (regla de la casa). Documento oficial via Downloads de la pagina E04B (KSB OCC disfile, documentNumber=1311.5 version=13). Material a pedido: omitido."
+   },
+   "fuente": "https://www.ksb.com/en-global/lc/etanorm/E04B",
+   "fecha_consulta": "2026-07-24",
+   "granularidad": "modelo"
+  },
+  {
+   "marca": "KSB",
+   "modelo": "Etanorm 100-080-200",
+   "eq_type": "Pump — centrifugal",
+   "S_no_publicado": "punto_de_operacion",
+   "params": {
+    "P_max_bar": 16,
+    "T_max_C": 140,
+    "rpm": 3600,
+    "notas": "Bomba centrifuga monoetapa de voluta, back pull-out, EN 733 (ETN succion-descarga-diametro de impulsor). SIN S ESCALAR: el kW al eje depende del punto de operacion -> punto_de_operacion. GRANULARIDAD = MODELO: los limites son de ESTE tamaño, de la Table 19 'Technical data (SI units)', pag. 22-23 del Type Series Booklet Etanorm (EU/ME/NA) 1311.5/13-EN: diametro de impulsor max 219 mm, limite de velocidad max 3600 rpm (min 500 rpm). Envolvente verificable IMPRESA que aplica a cada tamaño (Table 1): P_max_bar <= 16, T -30 a +140 C; la serie cubre Q <= 1930 m3/h (50 Hz) / 2321 (60 Hz) y H <= 160 m. La envolvente hidraulica Q/H por tamaño es la CURVA (selection chart), no un escalar impreso -> no se transcribe (regla de la casa). Documento oficial via Downloads de la pagina E04B (KSB OCC disfile, documentNumber=1311.5 version=13). Material a pedido: omitido."
+   },
+   "fuente": "https://www.ksb.com/en-global/lc/etanorm/E04B",
+   "fecha_consulta": "2026-07-24",
+   "granularidad": "modelo"
+  },
+  {
+   "marca": "KSB",
+   "modelo": "Etanorm 125-100-250",
+   "eq_type": "Pump — centrifugal",
+   "S_no_publicado": "punto_de_operacion",
+   "params": {
+    "P_max_bar": 16,
+    "T_max_C": 140,
+    "rpm": 3600,
+    "notas": "Bomba centrifuga monoetapa de voluta, back pull-out, EN 733 (ETN succion-descarga-diametro de impulsor). SIN S ESCALAR: el kW al eje depende del punto de operacion -> punto_de_operacion. GRANULARIDAD = MODELO: los limites son de ESTE tamaño, de la Table 19 'Technical data (SI units)', pag. 22-23 del Type Series Booklet Etanorm (EU/ME/NA) 1311.5/13-EN: diametro de impulsor max 269 mm, limite de velocidad max 3600 rpm (min 500 rpm). Envolvente verificable IMPRESA que aplica a cada tamaño (Table 1): P_max_bar <= 16, T -30 a +140 C; la serie cubre Q <= 1930 m3/h (50 Hz) / 2321 (60 Hz) y H <= 160 m. La envolvente hidraulica Q/H por tamaño es la CURVA (selection chart), no un escalar impreso -> no se transcribe (regla de la casa). Documento oficial via Downloads de la pagina E04B (KSB OCC disfile, documentNumber=1311.5 version=13). Material a pedido: omitido."
+   },
+   "fuente": "https://www.ksb.com/en-global/lc/etanorm/E04B",
+   "fecha_consulta": "2026-07-24",
+   "granularidad": "modelo"
+  },
+  {
+   "marca": "KSB",
+   "modelo": "Etanorm 150-125-315",
+   "eq_type": "Pump — centrifugal",
+   "S_no_publicado": "punto_de_operacion",
+   "params": {
+    "P_max_bar": 16,
+    "T_max_C": 140,
+    "rpm": 1900,
+    "notas": "Bomba centrifuga monoetapa de voluta, back pull-out, EN 733 (ETN succion-descarga-diametro de impulsor). SIN S ESCALAR: el kW al eje depende del punto de operacion -> punto_de_operacion. GRANULARIDAD = MODELO: los limites son de ESTE tamaño, de la Table 19 'Technical data (SI units)', pag. 22-23 del Type Series Booklet Etanorm (EU/ME/NA) 1311.5/13-EN: diametro de impulsor max 334 mm, limite de velocidad max 1900 rpm (min 500 rpm). Envolvente verificable IMPRESA que aplica a cada tamaño (Table 1): P_max_bar <= 16, T -30 a +140 C; la serie cubre Q <= 1930 m3/h (50 Hz) / 2321 (60 Hz) y H <= 160 m. La envolvente hidraulica Q/H por tamaño es la CURVA (selection chart), no un escalar impreso -> no se transcribe (regla de la casa). Documento oficial via Downloads de la pagina E04B (KSB OCC disfile, documentNumber=1311.5 version=13). Material a pedido: omitido."
+   },
+   "fuente": "https://www.ksb.com/en-global/lc/etanorm/E04B",
+   "fecha_consulta": "2026-07-24",
+   "granularidad": "modelo"
+  },
+  {
+   "marca": "KSB",
+   "modelo": "Etanorm 200-150-400",
+   "eq_type": "Pump — centrifugal",
+   "S_no_publicado": "punto_de_operacion",
+   "params": {
+    "P_max_bar": 16,
+    "T_max_C": 140,
+    "rpm": 1800,
+    "notas": "Bomba centrifuga monoetapa de voluta, back pull-out, EN 733 (ETN succion-descarga-diametro de impulsor). SIN S ESCALAR: el kW al eje depende del punto de operacion -> punto_de_operacion. GRANULARIDAD = MODELO: los limites son de ESTE tamaño, de la Table 19 'Technical data (SI units)', pag. 22-23 del Type Series Booklet Etanorm (EU/ME/NA) 1311.5/13-EN: diametro de impulsor max 419 mm, limite de velocidad max 1800 rpm (min 500 rpm). Envolvente verificable IMPRESA que aplica a cada tamaño (Table 1): P_max_bar <= 16, T -30 a +140 C; la serie cubre Q <= 1930 m3/h (50 Hz) / 2321 (60 Hz) y H <= 160 m. La envolvente hidraulica Q/H por tamaño es la CURVA (selection chart), no un escalar impreso -> no se transcribe (regla de la casa). Documento oficial via Downloads de la pagina E04B (KSB OCC disfile, documentNumber=1311.5 version=13). Material a pedido: omitido."
+   },
+   "fuente": "https://www.ksb.com/en-global/lc/etanorm/E04B",
+   "fecha_consulta": "2026-07-24",
+   "granularidad": "modelo"
+  },
+  {
+   "marca": "NETZSCH",
+   "modelo": "NEMO SY",
+   "eq_type": "Pump — positive displacement",
+   "S_no_publicado": "punto_de_operacion",
+   "params": {
+    "Q_max_m3_h": 500,
+    "P_max_bar": 48,
+    "notas": "Bomba de cavidad progresiva (alojamiento de cojinetes, accionamiento universal). SIN S ESCALAR: el kW al eje depende del punto de operacion -> punto_de_operacion. GRANULARIDAD = FAMILIA: Q_max 500 m3/h y P_max 48 bar (estandar; hasta 240 bar en version alta presion) son la envolvente del MODELO-SERIE NEMO SY (el maximo lo fija el tamaño NM mas grande de la linea, no un tamaño concreto) -> verificacion debil. NETZSCH NO publica en web los maximos POR TAMAÑO individual (viven en el software de seleccion / hoja del pedido); esta es la mejor granularidad con fuente oficial, y mejora la vieja entrada 'NEMO L.Cap' (que cruzaba versiones) por un modelo concreto y ordenable. Folleto oficial 'NEMO Progressing Cavity Pumps EN', pag. 7. Sustituir por envolvente por tamaño si se consigue. Material a pedido: omitido."
+   },
+   "fuente": "https://pumps-systems.netzsch.com/_Resources/Persistent/2/7/a/0/27a04a2ab026fb274b707ad012e7c614d8b5a810/NETZSCH%20NEMO%C2%AE%20Progressing%20Cavity%20Pumps%20EN.pdf",
+   "fecha_consulta": "2026-07-24",
+   "granularidad": "familia"
+  },
+  {
+   "marca": "NETZSCH",
+   "modelo": "NEMO BY",
+   "eq_type": "Pump — positive displacement",
+   "S_no_publicado": "punto_de_operacion",
+   "params": {
+    "Q_max_m3_h": 400,
+    "P_max_bar": 24,
+    "notas": "Bomba de cavidad progresiva (diseño en bloque, motor bridado directo). SIN S ESCALAR: el kW al eje depende del punto de operacion -> punto_de_operacion. GRANULARIDAD = FAMILIA: Q_max 400 m3/h y P_max 24 bar son la envolvente del MODELO-SERIE NEMO BY (el maximo lo fija el tamaño NM mas grande de la linea, no un tamaño concreto) -> verificacion debil. NETZSCH NO publica en web los maximos POR TAMAÑO individual (viven en el software de seleccion / hoja del pedido); esta es la mejor granularidad con fuente oficial, y mejora la vieja entrada 'NEMO L.Cap' (que cruzaba versiones) por un modelo concreto y ordenable. Folleto oficial 'NEMO Progressing Cavity Pumps EN', pag. 7. Sustituir por envolvente por tamaño si se consigue. Material a pedido: omitido."
+   },
+   "fuente": "https://pumps-systems.netzsch.com/_Resources/Persistent/2/7/a/0/27a04a2ab026fb274b707ad012e7c614d8b5a810/NETZSCH%20NEMO%C2%AE%20Progressing%20Cavity%20Pumps%20EN.pdf",
+   "fecha_consulta": "2026-07-24",
+   "granularidad": "familia"
   }
  ]
 }
