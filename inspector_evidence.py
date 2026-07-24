@@ -1201,7 +1201,7 @@ def _expander_case(block, fs) -> Optional[dict]:
 def compressor_text(block, fs) -> Optional[str]:
     try:
         eq = (block.eq_type or "").lower()
-        if not ("compressor" in eq or "fan" in eq):
+        if not ("compressor" in eq or "fan" in eq or "turbin" in eq):
             return None
         import equipment_design as _ed
         cs = _ed.design_compressor_for_block(block, fs)
@@ -3366,7 +3366,7 @@ def compressor_metrics(block, fs) -> Optional[dict]:
     """Estructurado de compressor_text(). Misma fuente (equipment_design)."""
     try:
         eq = (block.eq_type or "").lower()
-        if not ("compressor" in eq or "fan" in eq):
+        if not ("compressor" in eq or "fan" in eq or "turbin" in eq):
             return None
         import equipment_design as _ed
         cs = _ed.design_compressor_for_block(block, fs)

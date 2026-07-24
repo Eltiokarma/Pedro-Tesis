@@ -474,6 +474,20 @@ def size_compressor(block, fs) -> Optional[float]:
     return max(W, 5.0)
 
 
+def size_turbine(block, fs) -> Optional[float]:
+    """Turbina/expansor: S = |W| generada [kW] (Turton A.1, fluid power).
+
+    El duty lo computa el solver con la MISMA expansión isentrópica que
+    la convención histórica "compresor con P_out < P_in = turbina"
+    (_propagate_T_compressor_isentropic, rama TURBINA): duty < 0 = genera.
+    Aquí solo se toma el valor absoluto como parámetro de costeo."""
+    duty = getattr(block, "duty", 0.0) or 0.0
+    W = abs(duty)
+    if W <= 0:
+        return None
+    return max(W, 70.0)     # piso = S_min de steam turbine (Turton)
+
+
 def size_tower(block, fs) -> Optional[float]:
     """V = π·D²/4 · H para columnas de destilación.
 
@@ -661,6 +675,32 @@ def size_mixer_splitter(block, fs) -> Optional[float]:
     if rho <= 0:
         return None
     return max((m_s / rho) * TAU_MIXER_S, 0.05)    # m³
+
+
+# Agitador mecánico (Mixer — impeller): S = potencia del impulsor [kW].
+#   P = (P/V típico) · V,  V = Q·τ del tanque de mezcla.
+# P/V (Walas, Chemical Process Equipment §10; Sinnott & Towler §10):
+#   suave 0.1-0.3 · vigorosa 0.5-1.0 · dispersión/reacción 1.5-2.0 kW/m³.
+AGITATOR_KW_PER_M3 = 0.5    # agitación vigorosa media (default honesto)
+AGITATOR_TAU_S = 600.0      # tanque de mezcla ~10 min de residencia
+
+
+def size_agitator(block, fs) -> Optional[float]:
+    """Mixer — impeller: potencia del impulsor [kW] desde el volumen del
+    tanque (Q·τ) por la regla P/V de Walas.  A diferencia del resto de la
+    categoría 'Mixers / splitters' (volumen o flujo), su base Turton es
+    Power — por eso vive en SIZER_BY_EQTYPE."""
+    ins = [s for s in fs.streams.values() if s.dst == block.id]
+    if not ins:
+        return None
+    m_s = _flow_kg_s(sum(s.mass_flow for s in ins))
+    if m_s <= 0:
+        return None
+    rho = _rho_estimate(ins[0])
+    if rho <= 0:
+        return None
+    V_m3 = (m_s / rho) * AGITATOR_TAU_S
+    return max(V_m3 * AGITATOR_KW_PER_M3, 5.0)     # kW; piso = S_min Turton
 
 
 TAU_CENTRIFUGE_S = 60.0     # residencia en el bowl de una centrífuga [s]
@@ -866,6 +906,7 @@ SIZER_BY_CAT = {
     "Reactors":          size_reactor,
     "Pumps":             size_pump,
     "Compressors":       size_compressor,
+    "Turbines":          size_turbine,
     "Vessels":           size_vessel,
     "Towers":            size_tower,
     "Storage":           size_storage_tank,
@@ -889,6 +930,7 @@ SIZER_BY_CAT = {
 # tiene sizer aplicable → se deja sin dimensionar (lo reporta el warning
 # de bloque sin costo).
 SIZER_BY_EQTYPE = {
+    "Mixer — impeller":               size_agitator,
     "Heat exch. — WHB packaged":      size_whb,
     "Heat exch. — WHB field erected": size_whb,
     "Evaporator — vertical":          size_evaporator,

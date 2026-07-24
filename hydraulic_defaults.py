@@ -59,7 +59,7 @@ _DP_RULES = [
 def _is_rotative(eq_type: str) -> bool:
     e = (eq_type or "").lower()
     return ("pump" in e or "compressor" in e or "bomba" in e
-            or "fan" in e or "blower" in e)
+            or "fan" in e or "blower" in e or "turbin" in e)
 
 
 def _typical_dp(b) -> Optional[float]:

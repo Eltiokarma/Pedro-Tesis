@@ -114,6 +114,19 @@ class Block:
     # mediante heurística (S > 0 → locked, ver from_dict).
     S_locked: bool = False
 
+    # Referencia al catálogo data/equipos_comerciales.json — modo selección
+    # de las Fichas Técnicas.  Formato "marca|modelo"; "" = sin equipo
+    # declarado (default, reproduce el comportamiento previo exacto).
+    # La clave completa del catálogo es (marca, modelo, eq_type) y eq_type
+    # ya está en este mismo Block, así que no se duplica.
+    #
+    # NUNCA derivar Block.S de este campo.  El S del catálogo es la
+    # ENVOLVENTE del modelo comercial; Block.S es el tamaño que exige el
+    # proceso y sale del sizing.  Volcar el primero en el segundo hace que
+    # el costeo Turton use el techo del bastidor y el CAPEX salga inflado
+    # en toda la planta.
+    equipo_comercial: str = ""
+
     # ---- HIDRÁULICA: ΔP a través del bloque ----
     # Positivo si el bloque SUMA presión (bomba, compresor).
     # Negativo si la PIERDE (HX, columna, válvula, filter).

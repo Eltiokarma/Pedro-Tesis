@@ -990,7 +990,8 @@ class BlockEditDialog(QDialog):
         is_pump_or_compr = ("pump" in block.eq_type.lower()
                              or "bomba" in block.eq_type.lower()
                              or "compressor" in block.eq_type.lower()
-                             or "fan" in block.eq_type.lower())
+                             or "fan" in block.eq_type.lower()
+                             or "turbin" in block.eq_type.lower())
         self.gb_rot = QGroupBox("Equipo rotativo (bomba / compresor)")
         self.gb_rot.setVisible(is_pump_or_compr)
         rot_layout = QFormLayout(self.gb_rot)
@@ -1025,9 +1026,15 @@ class BlockEditDialog(QDialog):
         self.rot_eta.setRange(0.3, 0.95); self.rot_eta.setDecimals(3)
         self.rot_eta.setSingleStep(0.05)
         # Default por tipo de equipo
-        eta_default = 0.70 if "compressor" in block.eq_type.lower() else 0.75
+        eq_low_rot = block.eq_type.lower()
+        if "turbin" in eq_low_rot:
+            eta_default = 0.85     # turbinas tienden a η más alta (solver)
+        elif "compressor" in eq_low_rot:
+            eta_default = 0.70
+        else:
+            eta_default = 0.75
         self.rot_eta.setValue(getattr(block, "efficiency", 0) or eta_default)
-        if "compressor" in block.eq_type.lower():
+        if "compressor" in eq_low_rot or "turbin" in eq_low_rot:
             label_eta = "η isentrópica:"
         else:
             label_eta = "η hidráulica:"
@@ -1319,6 +1326,10 @@ class BlockEditDialog(QDialog):
         name = self.name_edit.text().strip()
         if name:
             self.block.name = name
+        # Este campo es el tamaño del PROCESO (sizing).  Si algún día el modo
+        # selección de Fichas Técnicas escribe acá el S de un modelo comercial,
+        # el costeo Turton usa el techo del bastidor → CAPEX inflado.  El equipo
+        # comercial va en Block.equipo_comercial.  Ver test_equipos_comerciales.py.
         self.block.S = float(self.s_edit.value())
         self.block.n = int(self.n_edit.value())
         self.block.duty = float(self.duty_edit.value())

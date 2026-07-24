@@ -97,7 +97,8 @@ def _is_vessel_flash(eq_type: str) -> bool:
 
 def _is_pump_compressor(eq_type: str) -> bool:
     t = (eq_type or "").lower()
-    return "pump" in t or "compress" in t or "bomba" in t or "compresor" in t
+    return ("pump" in t or "compress" in t or "bomba" in t
+            or "compresor" in t or "turbin" in t)
 
 def _is_mixer(eq_type: str) -> bool:
     t = (eq_type or "").lower()
@@ -163,6 +164,7 @@ def _sections_for(eq_type: str) -> List[str]:
     if _has_special_mode(eq_type):
         secs.append("especial")
     secs.append("sizing")
+    secs.append("ficha")
     secs.append("utility")
     secs.append("economia")
     secs.append("diagnostico")
@@ -783,6 +785,7 @@ class _InspectorSidebar(QFrame):
         "flash":       "Flash VLE",
         "especial":    "Modo especial",
         "sizing":      "Sizing",
+        "ficha":       "Ficha técnica",
         "utility":     "Utility",
         "economia":    "Economía",
         "diagnostico": "Diagnóstico",
@@ -795,6 +798,7 @@ class _InspectorSidebar(QFrame):
         "flash":       "V",
         "especial":    "★",
         "sizing":      "□",
+        "ficha":       "▤",
         "utility":     "♨",
         "economia":    "$",
         "diagnostico": "i",
@@ -1275,6 +1279,7 @@ class BlockInspectorPanel(QWidget):
             "flash":       self._section_flash,
             "especial":    self._section_especial,
             "sizing":      self._section_sizing,
+            "ficha":       self._section_ficha,
             "utility":     self._section_utility,
             "economia":    self._section_economia,
             "diagnostico": self._section_diagnostico,
@@ -1503,7 +1508,7 @@ class BlockInspectorPanel(QWidget):
                 l.addWidget(self._diag_placeholder_card(
                     "Curva característica (típica)",
                     f"inspector_evidence no disponible: {exc}"))
-        if "compressor" in eqs_low or "fan" in eqs_low:
+        if "compressor" in eqs_low or "fan" in eqs_low or "turbin" in eqs_low:
             try:
                 import inspector_evidence as _ev
                 l.addWidget(self._figure_card(
@@ -2208,6 +2213,187 @@ class BlockInspectorPanel(QWidget):
 
         return sect
 
+    # ────────────────────────────────────────────────────
+    #  FICHA TÉCNICA — modo selección (artboard 5f)
+    # ────────────────────────────────────────────────────
+
+    def _ficha_row(self, parent_lay, label, value, mute=False):
+        row = QHBoxLayout()
+        l1 = QLabel(label); l1.setFont(qfont(FONT_HINT))
+        l1.setStyleSheet(f"color:{TOK['ink_mute']};")
+        l1.setMinimumWidth(140)
+        l2 = QLabel(value); l2.setFont(qfont(FONT_VALUE))
+        l2.setStyleSheet(
+            f"color:{TOK['ink_mute'] if mute else TOK['ink']};")
+        l2.setWordWrap(True)
+        row.addWidget(l1); row.addWidget(l2, 1)
+        parent_lay.addLayout(row)
+
+    def _ficha_veredicto_card(self, v) -> QFrame:
+        """Tarjeta del veredicto según el estado (5f.3/5f.4/5f.5).
+        Débil de familia: NUNCA verde macizo, NUNCA rojo — insignia
+        atenuada punteada (está poco verificado, no mal)."""
+        estado = v.get("estado")
+        if estado == "escalar":
+            titulo = "APTO — el proceso entra" if v.get("apto") else \
+                     "NO ENTRA — el proceso excede el modelo"
+            color = TOK['green'] if v.get("apto") else TOK['danger']
+            borde = f"2px solid {color}"
+        elif estado == "envolvente_modelo":
+            ok = v.get("apto")
+            titulo = ("DENTRO DE ENVOLVENTE" if ok
+                      else "FUERA DE ENVOLVENTE" if ok is False
+                      else "ENVOLVENTE SIN EVALUAR")
+            color = (TOK['green'] if ok
+                     else TOK['danger'] if ok is False else TOK['ink_mute'])
+            borde = f"2px solid {color}"
+        elif estado == "debil_familia":
+            titulo = "VERIFICACIÓN DÉBIL — confianza baja"
+            color = TOK['ink_mute']
+            borde = f"2px dashed {TOK['line_strong']}"
+        elif estado == "desconocido":
+            titulo = "REFERENCIA INVÁLIDA"
+            color = TOK['amber']
+            borde = f"2px solid {TOK['amber']}"
+        else:
+            return QFrame()
+
+        card = QFrame()
+        card.setStyleSheet(
+            f"QFrame{{background:{TOK['bg_sunk']};border:{borde};"
+            f"border-radius:8px;}} QLabel{{border:none;background:none;}}")
+        lay = QVBoxLayout(card)
+        lay.setContentsMargins(12, 10, 12, 10); lay.setSpacing(6)
+        t = QLabel(titulo); t.setFont(qfont(FONT_LABEL))
+        t.setStyleSheet(f"color:{color};")
+        lay.addWidget(t)
+
+        if estado == "escalar" and v.get("utilizacion") is not None:
+            self._ficha_row(lay, "Requerido",
+                            f"{v['S_requerido']:g} {v['S_unit']}")
+            self._ficha_row(lay, "Instalado",
+                            f"{v['S_modelo']:g} {v['S_unit']}")
+            self._ficha_row(lay, "Utilización",
+                            f"{v['utilizacion'] * 100:.0f}%")
+        for c in v.get("checks", []):
+            marca = "✓" if c["ok"] else "✗"
+            tag = "  · FAMILIA" if c.get("familia") else ""
+            self._ficha_row(
+                lay, f"{marca} {c['label']}",
+                f"{c['requerido']:g} ≤ {c['limite']:g} {c['unidad']}{tag}",
+                mute=c.get("familia", False))
+        if v.get("mensaje"):
+            m = QLabel(v["mensaje"]); m.setFont(qfont(FONT_HINT))
+            m.setStyleSheet(f"color:{TOK['ink_mute']};")
+            m.setWordWrap(True)
+            lay.addWidget(m)
+        # Trazabilidad — no negociable: fuente + fecha siempre visibles.
+        if v.get("fuente"):
+            src = QLabel(f"▤ <a href=\"{v['fuente']}\">fuente del "
+                         f"fabricante</a> · consultado "
+                         f"{v.get('fecha_consulta', '')}")
+            src.setFont(qfont(FONT_HINT))
+            src.setOpenExternalLinks(True)
+            src.setStyleSheet(f"color:{TOK['ink_ghost']};")
+            lay.addWidget(src)
+        return card
+
+    def _section_ficha(self, b, eq_type) -> QFrame:
+        """Sección Ficha técnica: selector de equipo comercial (5f) +
+        veredicto de verificación.  Los datos vienen de datasheet.py
+        (Qt-free); acá solo se renderizan."""
+        sect = QFrame()
+        l = QVBoxLayout(sect); l.setContentsMargins(0, 0, 0, 0); l.setSpacing(8)
+        l.addLayout(self._section_header(
+            "Ficha técnica",
+            help_text="Modo selección: declarar el equipo comercial real y "
+                      "verificar lo que el proceso exige contra lo que ese "
+                      "equipo aguanta.  El S del catálogo NUNCA pisa el S "
+                      "del proceso."
+        ))
+        try:
+            import datasheet as ds
+        except Exception as exc:
+            err = QLabel(f"datasheet no disponible: {exc}")
+            err.setFont(qfont(FONT_HINT)); err.setWordWrap(True)
+            l.addWidget(err)
+            return sect
+
+        entradas = ds.entradas_para(eq_type)
+
+        # ── Selector (5f.1 / 5f.2 / 5f.2b) ──
+        if not entradas:
+            # 5f.1 — afirmación tranquila, NO control deshabilitado
+            na = QLabel("Ingeniería a pedido — ningún fabricante publica "
+                        "tamaños de catálogo para este tipo, así que no "
+                        "hay equipo comercial que declarar.")
+            na.setFont(qfont(FONT_HINT))
+            na.setStyleSheet(f"color:{TOK['ink_mute']};")
+            na.setWordWrap(True)
+            l.addWidget(na)
+        else:
+            cb = QComboBox()
+            cb.addItem("Seleccionar equipo…", "")
+            spec_cat = None
+            try:
+                import equipment_costs as _ec
+                spec_cat = _ec.EQUIPMENT_DATA.get(eq_type, {})
+            except Exception:
+                pass
+            s_unit = (spec_cat or {}).get("S_unit", "")
+            # agrupados por fabricante (orden del catálogo); en QComboBox
+            # plano el grupo se lee como prefijo "Marca · Modelo"
+            for e in entradas:
+                if "S" in e:
+                    texto = f"{e['marca']} · {e['modelo']} — {e['S']:g} {s_unit}"
+                else:
+                    gran = e.get("granularidad", "")
+                    sufijo = ("envolvente de familia" if gran == "familia"
+                              else "envolvente del modelo")
+                    texto = f"{e['marca']} · {e['modelo']} — {sufijo}"
+                cb.addItem(texto, ds.clave_de(e))
+            cur = getattr(b, "equipo_comercial", "") or ""
+            idx = cb.findData(cur) if cur else 0
+            cb.setCurrentIndex(max(0, idx))
+            cb.setStyleSheet(self._combo_style())
+            self._extras["equipo_comercial"] = cb
+
+            def _on_equipo(_i):
+                b.equipo_comercial = cb.currentData() or ""
+                from PySide6.QtCore import QTimer
+                QTimer.singleShot(0, lambda:
+                                  self._build_section_content("ficha"))
+            cb.currentIndexChanged.connect(_on_equipo)
+
+            fila = QHBoxLayout()
+            lbl = QLabel(f"Equipo comercial · {len(entradas)} "
+                         f"modelo{'s' if len(entradas) != 1 else ''}")
+            lbl.setFont(qfont(FONT_HINT))
+            lbl.setStyleSheet(f"color:{TOK['ink_mute']};")
+            lbl.setMinimumWidth(140)
+            fila.addWidget(lbl); fila.addWidget(cb, 1)
+            wrap = QFrame(); wrap.setLayout(fila)
+            l.addWidget(wrap)
+
+        # ── Veredicto ──
+        try:
+            v = ds.verificacion(b, self.fs)
+        except Exception as exc:
+            v = {"estado": "no_aplica", "mensaje": f"verificación no "
+                 f"disponible: {exc}"}
+        if v.get("estado") in ("escalar", "envolvente_modelo",
+                               "debil_familia", "desconocido"):
+            l.addWidget(self._ficha_veredicto_card(v))
+        elif v.get("estado") == "sin_declarar" and entradas:
+            hint = QLabel("Al declarar un modelo, la ficha verifica "
+                          "requerido vs instalado (escalar o por "
+                          "envolvente, según lo que el fabricante publica).")
+            hint.setFont(qfont(FONT_HINT))
+            hint.setStyleSheet(f"color:{TOK['ink_ghost']};")
+            hint.setWordWrap(True)
+            l.addWidget(hint)
+        return sect
+
     def _section_utility(self, b, eq_type) -> QFrame:
         sect = QFrame()
         l = QVBoxLayout(sect); l.setContentsMargins(0, 0, 0, 0); l.setSpacing(8)
@@ -2536,7 +2722,7 @@ class BlockInspectorPanel(QWidget):
         if _is_hx(eq_type):
             items.append("Diagrama T-Q → Termodinámica")
         low = (eq_type or "").lower()
-        if "compressor" in low or "fan" in low:
+        if "compressor" in low or "fan" in low or "turbin" in low:
             items.append("Diagrama de compresión → Termodinámica")
         return "\n".join(f"· {it}" for it in items)
 
@@ -2803,6 +2989,10 @@ class BlockInspectorPanel(QWidget):
 
         f = self._fields
         # ─── Identidad ───
+        # S es el tamaño del PROCESO (sizing).  Si algún día el modo selección
+        # de Fichas Técnicas escribe acá el S de un modelo comercial, el costeo
+        # Turton usa el techo del bastidor → CAPEX inflado.  El equipo comercial
+        # va en Block.equipo_comercial.  Ver test_equipos_comerciales.py.
         if "S" in f:
             try: b.S = float(self._parse_num(f["S"].value()))
             except Exception: pass
@@ -2948,6 +3138,13 @@ class BlockInspectorPanel(QWidget):
             cb = self._extras["heat_source"]
             data = cb.currentData()
             b.heat_source = data if data else ""
+        # ─── Ficha técnica: equipo comercial declarado ───
+        # (el combo también escribe en vivo al cambiar; esto lo hace
+        # idempotente en el pase de apply)
+        if "equipo_comercial" in self._extras:
+            cb = self._extras["equipo_comercial"]
+            data = cb.currentData()
+            b.equipo_comercial = data if data else ""
 
     @staticmethod
     def _parse_num(s: str) -> str:
