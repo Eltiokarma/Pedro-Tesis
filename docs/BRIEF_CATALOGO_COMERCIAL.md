@@ -87,6 +87,27 @@ Sigue vigente la regla dura: **no cargar un "tamaño representativo" ni un
 número de distribuidor** — sin S publicado, la entrada va por
 `S_no_publicado` + envolvente, nunca por un S inventado.
 
+**Granularidad de la envolvente** (campo `granularidad`, obligatorio en
+toda entrada sin S; prohibido con S — un S escalar ya es de un modelo
+nombrado). Vocabulario cerrado:
+
+- `"modelo"` — los límites son del tamaño/bastidor concreto (los M10
+  FM/FG/FD: cada bastidor con su P/T propia).
+- `"familia"` — los límites son del RANGO COMPLETO de la serie. Modo de
+  fallo, con caso vivo: **NETZSCH NEMO L.Cap** publica 1000 m³/h y
+  20 bar, pero son la envolvente de la familia entera (versiones simple,
+  doble y vertical), no de un tamaño — la fija el miembro más grande,
+  así que casi cualquier duty la satisface y la verificación es DÉBIL:
+  un APTO contra esa entrada no confirma nada. Por eso `"familia"` exige
+  `params.notas` explicando por qué no se consiguió la envolvente del
+  tamaño, y la entrada debe sustituirse en cuanto se consiga.
+
+**Entre dos fabricantes equivalentes, preferir el que publica en la
+unidad del repo.** Bosch publica vapor en kg/h → conversión limpia a
+kg/s. Cleaver-Brooks publica en BHP → convertir a kg/s reales a presión
+de operación exige corrección de entalpía, o sea una estimación donde no
+había ninguna. La conversión indirecta mete suposiciones.
+
 **`Mixer — impeller`: sigue vetado, con motivo nuevo.** Su envolvente
 natural es el PAR (N·m), y `_PARAMS_OK` no tiene campo de par. No le
 falta S: le falta vocabulario. Habilitarlo requiere un param nuevo, y eso

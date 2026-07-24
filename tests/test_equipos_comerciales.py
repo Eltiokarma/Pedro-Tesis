@@ -56,6 +56,13 @@ _MOTIVOS_SIN_S = {
 _ENVOLVENTE_MIN = ("Q_max_m3_h", "head_max_m", "P_max_bar", "T_max_C",
                    "n_placas_max")
 
+# Granularidad de la envolvente (obligatoria en toda entrada sin S):
+#   · "modelo"  — los límites son del tamaño/bastidor concreto nombrado.
+#   · "familia" — los límites son del rango completo de la serie.
+# Vocabulario CERRADO.  Prohibida en entradas con S (un S escalar ya es de
+# un modelo nombrado; no hay ambigüedad de familia que declarar).
+_GRANULARIDADES = {"modelo", "familia"}
+
 # Parámetros opcionales admitidos y su tipo (overrides que el modo
 # selección vuelca al Block; deben mapear a ganchos existentes).
 _PARAMS_OK = {
@@ -134,6 +141,42 @@ class TestCatalogoComercial(unittest.TestCase):
                     f"{etiqueta}: sin S y sin ninguna dimensión de "
                     f"envolvente {_ENVOLVENTE_MIN} — no verifica nada, "
                     f"no entra")
+
+    def test_granularidad(self):
+        """Regla de granularidad (va junto con el XOR del esquema v2).
+
+        Motivo: una envolvente de FAMILIA la fija el miembro más grande
+        del rango, así que casi cualquier duty la satisface.  La entrada
+        pasa el esquema y no verifica nada — falso positivo, que es peor
+        que no tener entrada.  El gate no puede detectar esto por formato;
+        solo puede exigir que se declare: obligatoria sin S, prohibida con
+        S, y si es "familia" las notas deben explicar por qué no se
+        consiguió la envolvente del tamaño."""
+        for e in _cargar()["equipos"]:
+            etiqueta = f"{e.get('marca')} {e.get('modelo')}"
+            if "S" in e:
+                self.assertNotIn(
+                    "granularidad", e,
+                    f"{etiqueta}: granularidad PROHIBIDA con S (un S "
+                    f"escalar ya es de un modelo nombrado)")
+                continue
+            if "S_no_publicado" not in e:
+                continue    # forma inválida: la reporta test_xor_S_o_motivo
+            self.assertIn(
+                "granularidad", e,
+                f"{etiqueta}: granularidad OBLIGATORIA en toda entrada "
+                f"con S_no_publicado")
+            self.assertIn(
+                e["granularidad"], _GRANULARIDADES,
+                f"{etiqueta}: granularidad '{e['granularidad']}' fuera "
+                f"del vocabulario cerrado {sorted(_GRANULARIDADES)}")
+            if e["granularidad"] == "familia":
+                notas = (e.get("params") or {}).get("notas", "")
+                self.assertTrue(
+                    str(notas).strip(),
+                    f"{etiqueta}: granularidad=familia sin params.notas — "
+                    f"una cota de familia sin explicación de por qué no "
+                    f"se consiguió la del tamaño no entra")
 
     def test_S_dentro_de_rango_del_tipo(self):
         """S fuera de [S_min, S_max] del eq_type es casi siempre error de

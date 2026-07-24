@@ -270,6 +270,15 @@ overrides bajo una identidad. Piezas nuevas necesarias:
    la ficha: *"verificado por envolvente, sobredimensionamiento no
    determinable"*. No mostrarlo como campo vacío ni como advertencia.
 
+   La verificación por envolvente tiene además DOS calidades, según el
+   campo `granularidad` de la entrada, y la ficha debe distinguirlas:
+
+   - `granularidad: "modelo"` → *"verificado por envolvente del modelo"*.
+   - `granularidad: "familia"` → *"verificación DÉBIL: la envolvente es
+     del rango completo, no de este tamaño. Un resultado APTO aquí no
+     confirma que el equipo sea adecuado."* No renderizar como tilde
+     verde.
+
    **Restricción dura**: el S del catálogo comercial NUNCA se escribe en
    `Block.S`. `Block.S` sigue viniendo del sizing del simulador; el S
    comercial entra solo a la verificación y a la ficha. Volcarlo al bloque

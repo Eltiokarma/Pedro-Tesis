@@ -267,7 +267,8 @@
     "notas": "Intercambiador de placas con juntas, linea Industrial. AREA NO PUBLICADA: el area de transferencia se configura por numero de placas y la fija el ingeniero termico segun el duty, por eso no hay S. El leaflet tampoco publica n_placas_max ni area por placa, asi que el area sigue sin ser verificable; lo que SI verifica esta entrada es la envolvente de presion y temperatura del bastidor. Placas disponibles 316/316L, 316Ti, 904L, 254, C-22, C-276, C-2000, B-3, G-30, 400, 625, 825, Alloy 33, Ni, Ti, TiPd -- el material es una eleccion de pedido, no un atributo del modelo: omitido. Conexiones DN100. Canal libre 2.6 mm (placa B) o 4.0 mm (placa M). Variante de bastidor mas comun. Presion y temperatura de diseno mecanico."
    },
    "fuente": "https://www.alfalaval.com/globalassets/documents/products/heat-transfer/plate-heat-exchangers/gasketed-plate-and-frame-heat-exchangers/industrial/m10_productleaflet_pct00099en.pdf",
-   "fecha_consulta": "2026-07-23"
+   "fecha_consulta": "2026-07-23",
+   "granularidad": "modelo"
   },
   {
    "marca": "Alfa Laval",
@@ -280,7 +281,8 @@
     "notas": "Intercambiador de placas con juntas, linea Industrial. AREA NO PUBLICADA: el area de transferencia se configura por numero de placas y la fija el ingeniero termico segun el duty, por eso no hay S. El leaflet tampoco publica n_placas_max ni area por placa, asi que el area sigue sin ser verificable; lo que SI verifica esta entrada es la envolvente de presion y temperatura del bastidor. Placas disponibles 316/316L, 316Ti, 904L, 254, C-22, C-276, C-2000, B-3, G-30, 400, 625, 825, Alloy 33, Ni, Ti, TiPd -- el material es una eleccion de pedido, no un atributo del modelo: omitido. Conexiones DN100. Canal libre 2.6 mm (placa B) o 4.0 mm (placa M). El bastidor FG esta ademas aprobado para 12 barg / 200 C, lo que permite usarlo en sistemas de vapor sin valvulas de seguridad."
    },
    "fuente": "https://www.alfalaval.com/globalassets/documents/products/heat-transfer/plate-heat-exchangers/gasketed-plate-and-frame-heat-exchangers/industrial/m10_productleaflet_pct00099en.pdf",
-   "fecha_consulta": "2026-07-23"
+   "fecha_consulta": "2026-07-23",
+   "granularidad": "modelo"
   },
   {
    "marca": "Alfa Laval",
@@ -293,7 +295,87 @@
     "notas": "Intercambiador de placas con juntas, linea Industrial. AREA NO PUBLICADA: el area de transferencia se configura por numero de placas y la fija el ingeniero termico segun el duty, por eso no hay S. El leaflet tampoco publica n_placas_max ni area por placa, asi que el area sigue sin ser verificable; lo que SI verifica esta entrada es la envolvente de presion y temperatura del bastidor. Placas disponibles 316/316L, 316Ti, 904L, 254, C-22, C-276, C-2000, B-3, G-30, 400, 625, 825, Alloy 33, Ni, Ti, TiPd -- el material es una eleccion de pedido, no un atributo del modelo: omitido. Conexiones DN100. Canal libre 2.6 mm (placa B) o 4.0 mm (placa M). Bastidor de mayor presion del modelo. P y T de la MISMA fila del leaflet (FD, ASME): no se cruzaron maximos de variantes distintas."
    },
    "fuente": "https://www.alfalaval.com/globalassets/documents/products/heat-transfer/plate-heat-exchangers/gasketed-plate-and-frame-heat-exchangers/industrial/m10_productleaflet_pct00099en.pdf",
+   "fecha_consulta": "2026-07-23",
+   "granularidad": "modelo"
+  },
+  {
+   "marca": "Atlas Copco",
+   "modelo": "GA 37",
+   "eq_type": "Compressor — rotary",
+   "S": 37,
+   "params": {
+    "P_max_bar": 13,
+    "Q_max_m3_h": 414.0,
+    "notas": "Tornillo lubricado. S = potencia de motor instalada (kW), publicada por modelo. Variantes de presion 7.5 / 8.5 / 10.5 / 13 bar(e); P_max_bar = la mas alta. Q_max = FAD de la variante 7.5 bar a 50 Hz (6.9 m3/min); a 13 bar baja a 5.3 m3/min. FAD segun ISO 1217 Anexo C ed.4:2009. Material no declarado: omitido."
+   },
+   "fuente": "https://www.atlascopco.com/content/dam/atlas-copco/compressor-technique/industrial-air/documents/leaflets/compressors/g--ga---ga-vsd-ipm-wuxi-2022/ga-range-wuxi-2022/GA30-90_Wuxi_EN.pdf",
    "fecha_consulta": "2026-07-23"
+  },
+  {
+   "marca": "Atlas Copco",
+   "modelo": "GA 37+",
+   "eq_type": "Compressor — rotary",
+   "S": 37,
+   "params": {
+    "P_max_bar": 13,
+    "Q_max_m3_h": 444.0,
+    "notas": "Tornillo lubricado. S = potencia de motor instalada (kW), publicada por modelo. Variantes de presion 7.5 / 8.5 / 10 / 13 bar(e); P_max_bar = la mas alta. Q_max = FAD de la variante 7.5 bar a 50 Hz (7.4 m3/min); a 13 bar baja a 5.3 m3/min. FAD segun ISO 1217 Anexo C ed.4:2009. Material no declarado: omitido."
+   },
+   "fuente": "https://www.atlascopco.com/content/dam/atlas-copco/compressor-technique/industrial-air/documents/leaflets/compressors/g--ga---ga-vsd-ipm-wuxi-2022/ga-range-wuxi-2022/GA30-90_Wuxi_EN.pdf",
+   "fecha_consulta": "2026-07-23"
+  },
+  {
+   "marca": "Atlas Copco",
+   "modelo": "GA 45+",
+   "eq_type": "Compressor — rotary",
+   "S": 45,
+   "params": {
+    "P_max_bar": 13,
+    "Q_max_m3_h": 540.0,
+    "notas": "Tornillo lubricado. S = potencia de motor instalada (kW), publicada por modelo. Variantes de presion 7.5 / 8.5 / 10 / 13 bar(e); P_max_bar = la mas alta. Q_max = FAD de la variante 7.5 bar a 50 Hz (9.0 m3/min); a 13 bar baja a 6.3 m3/min. FAD segun ISO 1217 Anexo C ed.4:2009. Material no declarado: omitido."
+   },
+   "fuente": "https://www.atlascopco.com/content/dam/atlas-copco/compressor-technique/industrial-air/documents/leaflets/compressors/g--ga---ga-vsd-ipm-wuxi-2022/ga-range-wuxi-2022/GA30-90_Wuxi_EN.pdf",
+   "fecha_consulta": "2026-07-23"
+  },
+  {
+   "marca": "Atlas Copco",
+   "modelo": "GA 55",
+   "eq_type": "Compressor — rotary",
+   "S": 55,
+   "params": {
+    "P_max_bar": 13,
+    "Q_max_m3_h": 696.0,
+    "notas": "Tornillo lubricado. S = potencia de motor instalada (kW), publicada por modelo. Variantes de presion 7.5 / 8.5 / 10.5 / 13 bar(e); P_max_bar = la mas alta. Q_max = FAD de la variante 7.5 bar a 50 Hz (11.6 m3/min); a 13 bar baja a 8.4 m3/min. FAD segun ISO 1217 Anexo C ed.4:2009. Material no declarado: omitido."
+   },
+   "fuente": "https://www.atlascopco.com/content/dam/atlas-copco/compressor-technique/industrial-air/documents/leaflets/compressors/g--ga---ga-vsd-ipm-wuxi-2022/ga-range-wuxi-2022/GA30-90_Wuxi_EN.pdf",
+   "fecha_consulta": "2026-07-23"
+  },
+  {
+   "marca": "Atlas Copco",
+   "modelo": "GA 75+",
+   "eq_type": "Compressor — rotary",
+   "S": 75,
+   "params": {
+    "P_max_bar": 13,
+    "Q_max_m3_h": 924.0,
+    "notas": "Tornillo lubricado. S = potencia de motor instalada (kW), publicada por modelo. Variantes de presion 7.5 / 8.5 / 10.5 / 13 bar(e); P_max_bar = la mas alta. Q_max = FAD de la variante 7.5 bar a 50 Hz (15.4 m3/min); a 13 bar baja a 11.2 m3/min. FAD segun ISO 1217 Anexo C ed.4:2009. Material no declarado: omitido."
+   },
+   "fuente": "https://www.atlascopco.com/content/dam/atlas-copco/compressor-technique/industrial-air/documents/leaflets/compressors/g--ga---ga-vsd-ipm-wuxi-2022/ga-range-wuxi-2022/GA30-90_Wuxi_EN.pdf",
+   "fecha_consulta": "2026-07-23"
+  },
+  {
+   "marca": "NETZSCH",
+   "modelo": "NEMO L.Cap",
+   "eq_type": "Pump — positive displacement",
+   "S_no_publicado": "punto_de_operacion",
+   "params": {
+    "Q_max_m3_h": 1000,
+    "P_max_bar": 20,
+    "notas": "Bomba de cavidad progresiva. NETZSCH declara que el caudal es proporcional a la velocidad de rotacion, asi que el tamano ES el punto de operacion y no hay kW por modelo. GRANULARIDAD = FAMILIA: 1000 m3/h y 20 bar son la envolvente de la FAMILIA L.Cap (versiones simple, doble y vertical), no de un tamano concreto. La verificacion contra esta entrada es debil: casi cualquier duty entra. Sustituir por la envolvente del tamano especifico en cuanto se consiga. Material no declarado: omitido."
+   },
+   "fuente": "https://pumps-systems.netzsch.com/en-US/products-and-accessories/nemo-progressing-cavity-pumps/nemo-l-cap-progressing-cavity-pump",
+   "fecha_consulta": "2026-07-23",
+   "granularidad": "familia"
   }
  ]
 }
