@@ -126,6 +126,48 @@ es otro ciclo.
 | Turbina vapor (`Turbine — steam`) | Siemens SST-040/060 (kW, presiones de entrada) |
 | Caldera (`Boiler — fire tube`) | Cleaver-Brooks CB, Bosch UL-S — **S en kg/s** (S_unit del tipo). Las designaciones del fabricante vienen en kg/h (UL-S 1250 = 1250 kg/h): **dividir por 3600**. Sin la conversión, un UL-S 28000 entra 1400× fuera de rango y el costeo devuelve basura. |
 
+### PLAN 6× — «que se sienta y viva la ingeniería» (lote 4+)
+
+Objetivo pedagógico (2026-07): **≥6 opciones por tipo catalogable**, de
+≥2 fabricantes por tipo, para que el estudiante compare proveedores
+reales al declarar. La economía de la cosecha es POR SERIE, no por
+modelo: un leaflet de Atlas Copco rindió 10 entradas, el portfolio
+Siemens 7, una hoja Kaeser 4. Meta total ≈ 60-80 entradas ≈ **15-25
+documentos** de fabricante.
+
+**Completar los 5 tipos existentes hasta ≥6 y ≥2 marcas:**
+
+| Tipo (hoy) | Falta | Fuentes objetivo |
+|---|---|---|
+| Compressor — rotary (14 ✓) | 2ª marca ya hay (AC+Kaeser) — completo | — |
+| Turbine — steam (7, 1 marca) | +1 marca | Elliott (serie YR, PDF único), TGM, Howden/KK&K |
+| Boiler — fire tube (3, 1 marca) | +3, +1 marca | Viessmann Vitomax (serie completa en 1 doc), Bono/Cannon; Cleaver-Brooks solo con la conversión BHP documentada |
+| Heat exch. — flat plate (3, 1 marca) | +3, +1 marca | SWEP B-series (rangos P/T por bastidor), GEA VT/NT, Kelvion NX — todos vía `S_no_publicado: "configurable"` |
+| Pump — positive displacement (1, 1 marca) | +5, +1 marca | SEEPEX BN (envolventes POR TAMAÑO — reemplaza la NEMO de familia), Viking gear (Q/P por modelo), Verder Verderflex |
+
+**Categorías NUEVAS que honestamente tienen catálogo** (abrirlas suma
+selectores en muchos ejemplos):
+
+| Tipo nuevo | Vía | Fuentes objetivo | Ejemplos que ganan selector |
+|---|---|---|---|
+| `Valve — control globe` | `S_no_publicado: "otra_magnitud"` + envolvente (el fabricante publica Cv por tamaño; Cv no mapea a S=m³/h) o S por Cv→caudal documentado | Samson 241/3241 (tabla Cv completa en 1 hoja), Fisher easy-e ED | letdown, cw_natural |
+| `Centrifuge — disc stack` | S (m³?) o envolvente Q_max | GEA (separadores leche — ¡leche_gloria!), Alfa Laval | leche_gloria |
+| `Centrifuge — decanter` | envolvente Q_max | Flottweg C-series, GEA | — |
+| `Fan — centrifugal radial` / `axial` | S = m³/s publicado por modelo | Sodeca, S&P, Greenheck (curvas con caudal máx.) | blower, cw_natural |
+| `Compressor — reciprocating` | S kW por modelo | Ariel JG (serie en 1 doc), Ingersoll Rand | ldpe |
+| `Cooling tower — induced draft` (paquete) | envolvente duty/caudal | Evapco AT, Baltimore Aircoil | cooling, cw_loop |
+| `Pump — centrifugal` | `"punto_de_operacion"` + envolvente Q/H | Grundfos NK/NB (rangos por modelo), KSB Etanorm | ~30 bombas en todo el set |
+
+Con esto, la cobertura de instancias con selector en los 64 ejemplos
+pasa de 5 bloques a decenas (todas las bombas centrífugas, fans,
+válvulas de control, torres). Sigue honestamente a pedido: reactores,
+columnas, vessels, casco-tubo, hornos — y eso también es lección.
+
+**Reglas del lote (sin cambios)**: solo documentos oficiales, esquema
+v2 + granularidad (preferir SIEMPRE envolvente por tamaño; familia solo
+con nota y para reemplazar), unidad del repo, sin números de
+distribuidor. El gate valida todo lo que entre.
+
 ### Entrega y verificación
 
 1. Rellenar `data/equipos_comerciales.json` (mantener `schema: 1`).
