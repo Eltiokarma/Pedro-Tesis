@@ -245,5 +245,52 @@ class TestSeccionFichaQt(unittest.TestCase):
         self.assertIn("fuente del", textos)   # trazabilidad no negociable
 
 
+class TestDialogoEquipoComercialQt(unittest.TestCase):
+    """Auditoría 2026-07: el selector también vive en el diálogo de
+    crear/editar bloque (BlockEditDialog) — el usuario esperaba la opción
+    al crear el equipo, no solo en la sección Ficha del inspector."""
+
+    @classmethod
+    def setUpClass(cls):
+        if not _QT_REAL:                              # pragma: no cover
+            raise unittest.SkipTest("PySide6 real no disponible")
+        from PySide6.QtWidgets import QApplication
+        cls.app = QApplication.instance() or QApplication([])
+
+    def test_dialogo_con_catalogo_ofrece_selector(self):
+        import flowsheet_qt as fq
+        b = Block(id=1, name="K-1", eq_type="Compressor — rotary", S=12.0)
+        dlg = fq.BlockEditDialog(None, b)
+        self.assertFalse(dlg.gb_comercial.isHidden(),
+                         "tipo con catálogo debe mostrar el grupo")
+        self.assertEqual(dlg.comercial_combo.count(), 15)  # placeholder+14
+        idx = dlg.comercial_combo.findData("Atlas Copco|GA 90")
+        self.assertGreater(idx, 0)
+        dlg.comercial_combo.setCurrentIndex(idx)
+        dlg.apply_to_model()
+        self.assertEqual(b.equipo_comercial, "Atlas Copco|GA 90")
+
+    def test_dialogo_sin_catalogo_oculta_grupo(self):
+        import flowsheet_qt as fq
+        b = Block(id=1, name="R-1", eq_type="Reactor — CSTR (agitado)",
+                  S=2.0)
+        dlg = fq.BlockEditDialog(None, b)
+        self.assertTrue(dlg.gb_comercial.isHidden(),
+                        "ingeniería a pedido: el grupo no aparece")
+        dlg.apply_to_model()
+        self.assertEqual(b.equipo_comercial, "")
+
+    def test_dialogo_preserva_declarado(self):
+        import flowsheet_qt as fq
+        b = Block(id=1, name="TB-1", eq_type="Turbine — steam", S=700.0,
+                  equipo_comercial="Siemens Energy|Dresser-Rand RLA/RLVA")
+        dlg = fq.BlockEditDialog(None, b)
+        self.assertEqual(dlg.comercial_combo.currentData(),
+                         "Siemens Energy|Dresser-Rand RLA/RLVA")
+        dlg.apply_to_model()
+        self.assertEqual(b.equipo_comercial,
+                         "Siemens Energy|Dresser-Rand RLA/RLVA")
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)
