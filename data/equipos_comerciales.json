@@ -1847,6 +1847,258 @@
    },
    "fuente": "https://prod-assets.ingersollrandproducts.cn/IRP-En-Brochure-high-pressure-compressors-High-Pressure-Reciprocating-and-Centrifugal-Compressors-65-8000-cfm-20-2350-hp.pdf",
    "fecha_consulta": "2026-07-24"
+  },
+  {
+   "marca": "Pfaudler",
+   "modelo": "DIN AE 100",
+   "eq_type": "Reactor — jacketed agitated",
+   "S": 0.1,
+   "params": {
+    "P_max_bar": 6,
+    "T_max_C": 200,
+    "material": "Glass-lined",
+    "notas": "Reactor vidriado (esmaltado) de la serie DIN AE, dos partes, con agitador tipo impulsor y deflector de serie. S = VOLUMEN NOMINAL del tamano: 100 L = 100/1000 = 0.1 m3, que coincide con el S_unit del tipo. La designacion del modelo ES el volumen nominal (mismo criterio ya usado con las calderas Bosch UL-S, donde el tipo es el kg/h). Escalera estandar impresa de la serie: 63/100/160/250/400/630/1000 L (el AE 63 = 0.063 m3 queda por debajo del S_min del tipo y no se carga). Envolvente impresa, verbatim: 'the admissible operating pressure INSIDE THE REACTOR AND INSIDE THE JACKET is -1/+6 bar' y 'the admissible operating temperature is -25/+200 C' -> P_max_bar=6 aplica al recipiente, no solo a la camisa, y admite vacio pleno (-1 bar). Construido segun DIN 28136-3. Material: vidriado (esmalte tipo WWG), clave 'Glass-lined' del repo."
+   },
+   "fuente": "https://www.gmmpfaudler.com/uploads/files/A_Pfaudler-DIN-AE-Reactors-622-4E.pdf",
+   "fecha_consulta": "2026-07-24"
+  },
+  {
+   "marca": "Pfaudler",
+   "modelo": "DIN AE 160",
+   "eq_type": "Reactor — jacketed agitated",
+   "S": 0.16,
+   "params": {
+    "P_max_bar": 6,
+    "T_max_C": 200,
+    "material": "Glass-lined",
+    "notas": "Reactor vidriado (esmaltado) de la serie DIN AE, dos partes, con agitador tipo impulsor y deflector de serie. S = VOLUMEN NOMINAL del tamano: 160 L = 160/1000 = 0.16 m3, que coincide con el S_unit del tipo. La designacion del modelo ES el volumen nominal (mismo criterio ya usado con las calderas Bosch UL-S, donde el tipo es el kg/h). Escalera estandar impresa de la serie: 63/100/160/250/400/630/1000 L (el AE 63 = 0.063 m3 queda por debajo del S_min del tipo y no se carga). Envolvente impresa, verbatim: 'the admissible operating pressure INSIDE THE REACTOR AND INSIDE THE JACKET is -1/+6 bar' y 'the admissible operating temperature is -25/+200 C' -> P_max_bar=6 aplica al recipiente, no solo a la camisa, y admite vacio pleno (-1 bar). Construido segun DIN 28136-3. Material: vidriado (esmalte tipo WWG), clave 'Glass-lined' del repo."
+   },
+   "fuente": "https://www.gmmpfaudler.com/uploads/files/A_Pfaudler-DIN-AE-Reactors-622-4E.pdf",
+   "fecha_consulta": "2026-07-24"
+  },
+  {
+   "marca": "Pfaudler",
+   "modelo": "DIN AE 250",
+   "eq_type": "Reactor — jacketed agitated",
+   "S": 0.25,
+   "params": {
+    "P_max_bar": 6,
+    "T_max_C": 200,
+    "material": "Glass-lined",
+    "notas": "Reactor vidriado (esmaltado) de la serie DIN AE, dos partes, con agitador tipo impulsor y deflector de serie. S = VOLUMEN NOMINAL del tamano: 250 L = 250/1000 = 0.25 m3, que coincide con el S_unit del tipo. La designacion del modelo ES el volumen nominal (mismo criterio ya usado con las calderas Bosch UL-S, donde el tipo es el kg/h). Escalera estandar impresa de la serie: 63/100/160/250/400/630/1000 L (el AE 63 = 0.063 m3 queda por debajo del S_min del tipo y no se carga). Envolvente impresa, verbatim: 'the admissible operating pressure INSIDE THE REACTOR AND INSIDE THE JACKET is -1/+6 bar' y 'the admissible operating temperature is -25/+200 C' -> P_max_bar=6 aplica al recipiente, no solo a la camisa, y admite vacio pleno (-1 bar). Construido segun DIN 28136-3. Material: vidriado (esmalte tipo WWG), clave 'Glass-lined' del repo."
+   },
+   "fuente": "https://www.gmmpfaudler.com/uploads/files/A_Pfaudler-DIN-AE-Reactors-622-4E.pdf",
+   "fecha_consulta": "2026-07-24"
+  },
+  {
+   "marca": "Pfaudler",
+   "modelo": "DIN AE 400",
+   "eq_type": "Reactor — jacketed agitated",
+   "S": 0.4,
+   "params": {
+    "P_max_bar": 6,
+    "T_max_C": 200,
+    "material": "Glass-lined",
+    "notas": "Reactor vidriado (esmaltado) de la serie DIN AE, dos partes, con agitador tipo impulsor y deflector de serie. S = VOLUMEN NOMINAL del tamano: 400 L = 400/1000 = 0.4 m3, que coincide con el S_unit del tipo. La designacion del modelo ES el volumen nominal (mismo criterio ya usado con las calderas Bosch UL-S, donde el tipo es el kg/h). Escalera estandar impresa de la serie: 63/100/160/250/400/630/1000 L (el AE 63 = 0.063 m3 queda por debajo del S_min del tipo y no se carga). Envolvente impresa, verbatim: 'the admissible operating pressure INSIDE THE REACTOR AND INSIDE THE JACKET is -1/+6 bar' y 'the admissible operating temperature is -25/+200 C' -> P_max_bar=6 aplica al recipiente, no solo a la camisa, y admite vacio pleno (-1 bar). Construido segun DIN 28136-3. Material: vidriado (esmalte tipo WWG), clave 'Glass-lined' del repo."
+   },
+   "fuente": "https://www.gmmpfaudler.com/uploads/files/A_Pfaudler-DIN-AE-Reactors-622-4E.pdf",
+   "fecha_consulta": "2026-07-24"
+  },
+  {
+   "marca": "Pfaudler",
+   "modelo": "DIN AE 630",
+   "eq_type": "Reactor — jacketed agitated",
+   "S": 0.63,
+   "params": {
+    "P_max_bar": 6,
+    "T_max_C": 200,
+    "material": "Glass-lined",
+    "notas": "Reactor vidriado (esmaltado) de la serie DIN AE, dos partes, con agitador tipo impulsor y deflector de serie. S = VOLUMEN NOMINAL del tamano: 630 L = 630/1000 = 0.63 m3, que coincide con el S_unit del tipo. La designacion del modelo ES el volumen nominal (mismo criterio ya usado con las calderas Bosch UL-S, donde el tipo es el kg/h). Escalera estandar impresa de la serie: 63/100/160/250/400/630/1000 L (el AE 63 = 0.063 m3 queda por debajo del S_min del tipo y no se carga). Envolvente impresa, verbatim: 'the admissible operating pressure INSIDE THE REACTOR AND INSIDE THE JACKET is -1/+6 bar' y 'the admissible operating temperature is -25/+200 C' -> P_max_bar=6 aplica al recipiente, no solo a la camisa, y admite vacio pleno (-1 bar). Construido segun DIN 28136-3. Material: vidriado (esmalte tipo WWG), clave 'Glass-lined' del repo."
+   },
+   "fuente": "https://www.gmmpfaudler.com/uploads/files/A_Pfaudler-DIN-AE-Reactors-622-4E.pdf",
+   "fecha_consulta": "2026-07-24"
+  },
+  {
+   "marca": "Pfaudler",
+   "modelo": "DIN AE 1000",
+   "eq_type": "Reactor — jacketed agitated",
+   "S": 1.0,
+   "params": {
+    "P_max_bar": 6,
+    "T_max_C": 200,
+    "material": "Glass-lined",
+    "notas": "Reactor vidriado (esmaltado) de la serie DIN AE, dos partes, con agitador tipo impulsor y deflector de serie. S = VOLUMEN NOMINAL del tamano: 1000 L = 1000/1000 = 1.0 m3, que coincide con el S_unit del tipo. La designacion del modelo ES el volumen nominal (mismo criterio ya usado con las calderas Bosch UL-S, donde el tipo es el kg/h). Escalera estandar impresa de la serie: 63/100/160/250/400/630/1000 L (el AE 63 = 0.063 m3 queda por debajo del S_min del tipo y no se carga). Envolvente impresa, verbatim: 'the admissible operating pressure INSIDE THE REACTOR AND INSIDE THE JACKET is -1/+6 bar' y 'the admissible operating temperature is -25/+200 C' -> P_max_bar=6 aplica al recipiente, no solo a la camisa, y admite vacio pleno (-1 bar). Construido segun DIN 28136-3. Material: vidriado (esmalte tipo WWG), clave 'Glass-lined' del repo."
+   },
+   "fuente": "https://www.gmmpfaudler.com/uploads/files/A_Pfaudler-DIN-AE-Reactors-622-4E.pdf",
+   "fecha_consulta": "2026-07-24"
+  },
+  {
+   "marca": "Pfaudler",
+   "modelo": "RT-32-100 (ASME)",
+   "eq_type": "Reactor — jacketed agitated",
+   "S": 0.379,
+   "params": {
+    "P_max_bar": 10.34,
+    "T_max_C": 232,
+    "material": "Glass-lined",
+    "notas": "Reactor vidriado ASME de la serie RT (con accionamiento, agitador y deflector; la propia tabla pesa el conjunto 'W/Drive, Agit, Baffle'). S = capacidad publicada del modelo: 100 galones = 100 x 0.0037854 = 0.379 m3. P_max_bar = presion de diseno INTERNA impresa para este tamano: 150 psig / 14.5038 = 10.34 bar (la tabla la da como '150/FV', es decir 150 psig o vacio pleno). OJO: la camisa tiene otro valor en la misma tabla y no se cruza. T_max_C = 232 = 450 F, temperatura a la que la tabla declara esas presiones. Material vidriado -> 'Glass-lined'."
+   },
+   "fuente": "https://www.gmmpfaudler.com/uploads/files/A_Pfaudler-DIN-AE-Reactors-622-4E.pdf",
+   "fecha_consulta": "2026-07-24"
+  },
+  {
+   "marca": "Pfaudler",
+   "modelo": "RT-40-200 (ASME)",
+   "eq_type": "Reactor — jacketed agitated",
+   "S": 0.757,
+   "params": {
+    "P_max_bar": 6.9,
+    "T_max_C": 232,
+    "material": "Glass-lined",
+    "notas": "Reactor vidriado ASME de la serie RT (con accionamiento, agitador y deflector; la propia tabla pesa el conjunto 'W/Drive, Agit, Baffle'). S = capacidad publicada del modelo: 200 galones = 200 x 0.0037854 = 0.757 m3. P_max_bar = presion de diseno INTERNA impresa para este tamano: 100 psig / 14.5038 = 6.9 bar (la tabla la da como '100/FV', es decir 100 psig o vacio pleno). OJO: la camisa tiene otro valor en la misma tabla y no se cruza. T_max_C = 232 = 450 F, temperatura a la que la tabla declara esas presiones. Material vidriado -> 'Glass-lined'."
+   },
+   "fuente": "https://www.gmmpfaudler.com/uploads/files/A_Pfaudler-DIN-AE-Reactors-622-4E.pdf",
+   "fecha_consulta": "2026-07-24"
+  },
+  {
+   "marca": "De Dietrich",
+   "modelo": "CTJ-30",
+   "eq_type": "Reactor — jacketed agitated",
+   "S": 0.114,
+   "params": {
+    "P_max_bar": 6.21,
+    "T_max_C": 260,
+    "material": "Glass-lined",
+    "notas": "Reactor vidriado de tapa embridada/abrazada, serie CTJ (la tabla de modelos trae columna de motor en HP: viene con agitacion). S = volumen nominal del modelo: 30 galones = 30 x 0.0037854 = 0.114 m3. El numero del modelo ES el volumen en galones — la serie se publica como 'Volumes from 5 to 2,000 gallons' y la escalera de modelos impresa es CTJ-5/10/20/30/50/100/200...; el pie de la figura dice 'Drawing represents a CTJ100 reactor'. Es lectura de la designacion, no una estimacion (mismo criterio que Bosch UL-S). Envolvente impresa de la serie: 'Pressures from full vacuum to 90/150 psig' -> se carga el valor CONSERVADOR 90 psig / 14.5038 = 6.21 bar, porque el folleto no aclara cual de los dos corresponde al recipiente y cual a la camisa; el par completo queda documentado aca. 'Temperatures from -20 F to 500 F' -> T_max_C = 260 (500 F). Material vidriado."
+   },
+   "fuente": "https://www.ddpsinc.com/hubfs/glass-lined-vessels-brochure-2023.pdf",
+   "fecha_consulta": "2026-07-24"
+  },
+  {
+   "marca": "De Dietrich",
+   "modelo": "CTJ-50",
+   "eq_type": "Reactor — jacketed agitated",
+   "S": 0.189,
+   "params": {
+    "P_max_bar": 6.21,
+    "T_max_C": 260,
+    "material": "Glass-lined",
+    "notas": "Reactor vidriado de tapa embridada/abrazada, serie CTJ (la tabla de modelos trae columna de motor en HP: viene con agitacion). S = volumen nominal del modelo: 50 galones = 50 x 0.0037854 = 0.189 m3. El numero del modelo ES el volumen en galones — la serie se publica como 'Volumes from 5 to 2,000 gallons' y la escalera de modelos impresa es CTJ-5/10/20/30/50/100/200...; el pie de la figura dice 'Drawing represents a CTJ100 reactor'. Es lectura de la designacion, no una estimacion (mismo criterio que Bosch UL-S). Envolvente impresa de la serie: 'Pressures from full vacuum to 90/150 psig' -> se carga el valor CONSERVADOR 90 psig / 14.5038 = 6.21 bar, porque el folleto no aclara cual de los dos corresponde al recipiente y cual a la camisa; el par completo queda documentado aca. 'Temperatures from -20 F to 500 F' -> T_max_C = 260 (500 F). Material vidriado."
+   },
+   "fuente": "https://www.ddpsinc.com/hubfs/glass-lined-vessels-brochure-2023.pdf",
+   "fecha_consulta": "2026-07-24"
+  },
+  {
+   "marca": "De Dietrich",
+   "modelo": "CTJ-100",
+   "eq_type": "Reactor — jacketed agitated",
+   "S": 0.379,
+   "params": {
+    "P_max_bar": 6.21,
+    "T_max_C": 260,
+    "material": "Glass-lined",
+    "notas": "Reactor vidriado de tapa embridada/abrazada, serie CTJ (la tabla de modelos trae columna de motor en HP: viene con agitacion). S = volumen nominal del modelo: 100 galones = 100 x 0.0037854 = 0.379 m3. El numero del modelo ES el volumen en galones — la serie se publica como 'Volumes from 5 to 2,000 gallons' y la escalera de modelos impresa es CTJ-5/10/20/30/50/100/200...; el pie de la figura dice 'Drawing represents a CTJ100 reactor'. Es lectura de la designacion, no una estimacion (mismo criterio que Bosch UL-S). Envolvente impresa de la serie: 'Pressures from full vacuum to 90/150 psig' -> se carga el valor CONSERVADOR 90 psig / 14.5038 = 6.21 bar, porque el folleto no aclara cual de los dos corresponde al recipiente y cual a la camisa; el par completo queda documentado aca. 'Temperatures from -20 F to 500 F' -> T_max_C = 260 (500 F). Material vidriado."
+   },
+   "fuente": "https://www.ddpsinc.com/hubfs/glass-lined-vessels-brochure-2023.pdf",
+   "fecha_consulta": "2026-07-24"
+  },
+  {
+   "marca": "De Dietrich",
+   "modelo": "CTJ-200",
+   "eq_type": "Reactor — jacketed agitated",
+   "S": 0.757,
+   "params": {
+    "P_max_bar": 6.21,
+    "T_max_C": 260,
+    "material": "Glass-lined",
+    "notas": "Reactor vidriado de tapa embridada/abrazada, serie CTJ (la tabla de modelos trae columna de motor en HP: viene con agitacion). S = volumen nominal del modelo: 200 galones = 200 x 0.0037854 = 0.757 m3. El numero del modelo ES el volumen en galones — la serie se publica como 'Volumes from 5 to 2,000 gallons' y la escalera de modelos impresa es CTJ-5/10/20/30/50/100/200...; el pie de la figura dice 'Drawing represents a CTJ100 reactor'. Es lectura de la designacion, no una estimacion (mismo criterio que Bosch UL-S). Envolvente impresa de la serie: 'Pressures from full vacuum to 90/150 psig' -> se carga el valor CONSERVADOR 90 psig / 14.5038 = 6.21 bar, porque el folleto no aclara cual de los dos corresponde al recipiente y cual a la camisa; el par completo queda documentado aca. 'Temperatures from -20 F to 500 F' -> T_max_C = 260 (500 F). Material vidriado."
+   },
+   "fuente": "https://www.ddpsinc.com/hubfs/glass-lined-vessels-brochure-2023.pdf",
+   "fecha_consulta": "2026-07-24"
+  },
+  {
+   "marca": "Pfaudler",
+   "modelo": "DIN AE 250",
+   "eq_type": "Reactor — CSTR (agitado)",
+   "S": 0.25,
+   "params": {
+    "P_max_bar": 6,
+    "T_max_C": 200,
+    "material": "Glass-lined",
+    "notas": "MISMO EQUIPO FISICO que un reactor encamisado con agitacion: un CSTR es un tanque agitado operado en CONTINUO, no una familia distinta de equipo. Por eso lo que se compra para este bloque es exactamente un reactor vidriado con agitador, y se ofrece aqui con los mismos datos verificados. Lo que cambia es el modo de operacion (alimentacion y descarga continuas, con rebose o control de nivel), no el recipiente. S = volumen nominal 250 L = 0.25 m3. Envolvente impresa: 'the admissible operating pressure inside the reactor and inside the jacket is -1/+6 bar' y '-25/+200 C'. Serie DIN 28136-3, con agitador de impulsor y deflector de serie."
+   },
+   "fuente": "https://www.gmmpfaudler.com/uploads/files/A_Pfaudler-DIN-AE-Reactors-622-4E.pdf",
+   "fecha_consulta": "2026-07-24"
+  },
+  {
+   "marca": "Pfaudler",
+   "modelo": "DIN AE 630",
+   "eq_type": "Reactor — CSTR (agitado)",
+   "S": 0.63,
+   "params": {
+    "P_max_bar": 6,
+    "T_max_C": 200,
+    "material": "Glass-lined",
+    "notas": "MISMO EQUIPO FISICO que un reactor encamisado con agitacion: un CSTR es un tanque agitado operado en CONTINUO, no una familia distinta de equipo. Por eso lo que se compra para este bloque es exactamente un reactor vidriado con agitador, y se ofrece aqui con los mismos datos verificados. Lo que cambia es el modo de operacion (alimentacion y descarga continuas, con rebose o control de nivel), no el recipiente. S = volumen nominal 630 L = 0.63 m3. Envolvente impresa: 'the admissible operating pressure inside the reactor and inside the jacket is -1/+6 bar' y '-25/+200 C'. Serie DIN 28136-3, con agitador de impulsor y deflector de serie."
+   },
+   "fuente": "https://www.gmmpfaudler.com/uploads/files/A_Pfaudler-DIN-AE-Reactors-622-4E.pdf",
+   "fecha_consulta": "2026-07-24"
+  },
+  {
+   "marca": "Pfaudler",
+   "modelo": "DIN AE 1000",
+   "eq_type": "Reactor — CSTR (agitado)",
+   "S": 1.0,
+   "params": {
+    "P_max_bar": 6,
+    "T_max_C": 200,
+    "material": "Glass-lined",
+    "notas": "MISMO EQUIPO FISICO que un reactor encamisado con agitacion: un CSTR es un tanque agitado operado en CONTINUO, no una familia distinta de equipo. Por eso lo que se compra para este bloque es exactamente un reactor vidriado con agitador, y se ofrece aqui con los mismos datos verificados. Lo que cambia es el modo de operacion (alimentacion y descarga continuas, con rebose o control de nivel), no el recipiente. S = volumen nominal 1000 L = 1.0 m3. Envolvente impresa: 'the admissible operating pressure inside the reactor and inside the jacket is -1/+6 bar' y '-25/+200 C'. Serie DIN 28136-3, con agitador de impulsor y deflector de serie."
+   },
+   "fuente": "https://www.gmmpfaudler.com/uploads/files/A_Pfaudler-DIN-AE-Reactors-622-4E.pdf",
+   "fecha_consulta": "2026-07-24"
+  },
+  {
+   "marca": "De Dietrich",
+   "modelo": "CTJ-50",
+   "eq_type": "Reactor — CSTR (agitado)",
+   "S": 0.189,
+   "params": {
+    "P_max_bar": 6.21,
+    "T_max_C": 260,
+    "material": "Glass-lined",
+    "notas": "MISMO EQUIPO FISICO que un reactor encamisado con agitacion: un CSTR es un tanque agitado operado en CONTINUO, no una familia distinta de equipo. Por eso lo que se compra para este bloque es exactamente un reactor vidriado con agitador, y se ofrece aqui con los mismos datos verificados. Lo que cambia es el modo de operacion (alimentacion y descarga continuas, con rebose o control de nivel), no el recipiente. S = volumen nominal 50 galones = 50 x 0.0037854 = 0.189 m3 (el numero del modelo es el volumen; la serie se publica 'from 5 to 2,000 gallons'). Envolvente impresa 'full vacuum to 90/150 psig' -> se carga el conservador 90 psig = 6.21 bar; '-20 F to 500 F' -> 260 C."
+   },
+   "fuente": "https://www.ddpsinc.com/hubfs/glass-lined-vessels-brochure-2023.pdf",
+   "fecha_consulta": "2026-07-24"
+  },
+  {
+   "marca": "De Dietrich",
+   "modelo": "CTJ-100",
+   "eq_type": "Reactor — CSTR (agitado)",
+   "S": 0.379,
+   "params": {
+    "P_max_bar": 6.21,
+    "T_max_C": 260,
+    "material": "Glass-lined",
+    "notas": "MISMO EQUIPO FISICO que un reactor encamisado con agitacion: un CSTR es un tanque agitado operado en CONTINUO, no una familia distinta de equipo. Por eso lo que se compra para este bloque es exactamente un reactor vidriado con agitador, y se ofrece aqui con los mismos datos verificados. Lo que cambia es el modo de operacion (alimentacion y descarga continuas, con rebose o control de nivel), no el recipiente. S = volumen nominal 100 galones = 100 x 0.0037854 = 0.379 m3 (el numero del modelo es el volumen; la serie se publica 'from 5 to 2,000 gallons'). Envolvente impresa 'full vacuum to 90/150 psig' -> se carga el conservador 90 psig = 6.21 bar; '-20 F to 500 F' -> 260 C."
+   },
+   "fuente": "https://www.ddpsinc.com/hubfs/glass-lined-vessels-brochure-2023.pdf",
+   "fecha_consulta": "2026-07-24"
+  },
+  {
+   "marca": "De Dietrich",
+   "modelo": "CTJ-200",
+   "eq_type": "Reactor — CSTR (agitado)",
+   "S": 0.757,
+   "params": {
+    "P_max_bar": 6.21,
+    "T_max_C": 260,
+    "material": "Glass-lined",
+    "notas": "MISMO EQUIPO FISICO que un reactor encamisado con agitacion: un CSTR es un tanque agitado operado en CONTINUO, no una familia distinta de equipo. Por eso lo que se compra para este bloque es exactamente un reactor vidriado con agitador, y se ofrece aqui con los mismos datos verificados. Lo que cambia es el modo de operacion (alimentacion y descarga continuas, con rebose o control de nivel), no el recipiente. S = volumen nominal 200 galones = 200 x 0.0037854 = 0.757 m3 (el numero del modelo es el volumen; la serie se publica 'from 5 to 2,000 gallons'). Envolvente impresa 'full vacuum to 90/150 psig' -> se carga el conservador 90 psig = 6.21 bar; '-20 F to 500 F' -> 260 C."
+   },
+   "fuente": "https://www.ddpsinc.com/hubfs/glass-lined-vessels-brochure-2023.pdf",
+   "fecha_consulta": "2026-07-24"
   }
  ]
 }

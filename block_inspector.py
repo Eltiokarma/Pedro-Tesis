@@ -2308,6 +2308,51 @@ class BlockInspectorPanel(QWidget):
             lay.addWidget(src)
         return card
 
+    def _callout_a_pedido(self, motivo: dict) -> QFrame:
+        """Aviso PROMINENTE para los tipos sin catálogo comercial.
+
+        No es un mensaje de error ni una disculpa: es la lección.  Dice qué
+        fija el tamaño de verdad (la física y el código), por qué no existen
+        modelos de catálogo, y cómo se compra el equipo en un proyecto real.
+        El contenido vive en data/equipos_a_pedido.json; acá solo se pinta."""
+        box = QFrame(); box.setObjectName("aPedido")
+        box.setStyleSheet(
+            f"#aPedido {{ background: {TOK['amber_bg']}; "
+            f"border: 1px solid {TOK['amber']}; "
+            f"border-left: 4px solid {TOK['amber']}; border-radius: 6px; }}"
+        )
+        v = QVBoxLayout(box)
+        v.setContentsMargins(12, 10, 12, 11); v.setSpacing(7)
+
+        def _texto(txt, *, bold=False, mute=False, font=FONT_HINT):
+            q = QLabel(txt); f = qfont(font); f.setBold(bold)
+            q.setFont(f); q.setWordWrap(True)
+            q.setStyleSheet(
+                f"color:{TOK['ink_mute'] if mute else TOK['ink']};")
+            return q
+
+        tit = _texto(motivo.get("titulo") or "SE MANDA A HACER A LA MEDIDA",
+                     bold=True, font=FONT_LABEL)
+        tit.setStyleSheet(f"color:{TOK['amber']}; letter-spacing:0.6px;")
+        v.addWidget(tit)
+
+        for razon in (motivo.get("que_fija_el_tamano") or []):
+            v.addWidget(_texto(f"·  {razon}"))
+
+        if motivo.get("por_que"):
+            v.addWidget(_texto(motivo["por_que"], mute=True))
+
+        if motivo.get("como_se_compra"):
+            v.addWidget(_texto("CÓMO SE COMPRA DE VERDAD",
+                               bold=True, font=FONT_LABEL))
+            v.addWidget(_texto(motivo["como_se_compra"], mute=True))
+
+        normas = motivo.get("normas") or []
+        if normas:
+            v.addWidget(_texto("SEGÚN", bold=True, font=FONT_LABEL))
+            v.addWidget(_texto(" · ".join(normas), mute=True))
+        return box
+
     def _section_ficha(self, b, eq_type) -> QFrame:
         """Sección Ficha técnica: selector de equipo comercial (5f) +
         veredicto de verificación.  Los datos vienen de datasheet.py
@@ -2333,14 +2378,12 @@ class BlockInspectorPanel(QWidget):
 
         # ── Selector (5f.1 / 5f.2 / 5f.2b) ──
         if not entradas:
-            # 5f.1 — afirmación tranquila, NO control deshabilitado
-            na = QLabel("Ingeniería a pedido — ningún fabricante publica "
-                        "tamaños de catálogo para este tipo, así que no "
-                        "hay equipo comercial que declarar.")
-            na.setFont(qfont(FONT_HINT))
-            na.setStyleSheet(f"color:{TOK['ink_mute']};")
-            na.setWordWrap(True)
-            l.addWidget(na)
+            # 5f.1 — la ausencia de catálogo NO es un hueco de datos: es un
+            # hecho de la ingeniería (el tamaño lo fija el duty, no una
+            # talla).  Se dice FUERTE y CON RAZONES, para que el estudiante
+            # aprenda por qué este equipo se manda a hacer en vez de
+            # encontrar un desplegable vacío.
+            l.addWidget(self._callout_a_pedido(ds.motivo_a_pedido(eq_type)))
         else:
             cb = QComboBox()
             cb.addItem("Seleccionar equipo…", "")
