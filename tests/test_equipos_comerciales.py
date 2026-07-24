@@ -13,6 +13,15 @@ docs/BRIEF_CATALOGO_COMERCIAL.md) llegue bien formada:
   · fuente = URL del documento OFICIAL del fabricante + fecha_consulta —
     la regla de la casa: ningún número sin procedencia.
 
+RESTRICCIÓN DURA para todo consumidor futuro de este catálogo (hoy este
+gate es el único): el S comercial es la ENVOLVENTE del modelo (capacidad
+nominal/máxima publicada) y **NUNCA se escribe en Block.S**.  Block.S
+sigue viniendo del sizing del simulador; el S comercial entra solo a la
+verificación del modo selección (S_requerido <= S_modelo, AND con
+P_max/T_max/Q_max/head_max) y a la visualización de la ficha.  Volcarlo
+al bloque haría que el costeo Turton use el techo del bastidor y el
+CAPEX salga inflado sistemáticamente en toda la planta.
+
 USO:
     python -m unittest tests.test_equipos_comerciales -v
 """
@@ -83,6 +92,26 @@ class TestCatalogoComercial(unittest.TestCase):
             if mat:
                 self.assertIn(mat, ec.MATERIAL_FACTORS,
                               f"{etiqueta}: material '{mat}' sin FM")
+
+    def test_S_dentro_de_rango_del_tipo(self):
+        """S fuera de [S_min, S_max] del eq_type es casi siempre error de
+        unidad (kg/h donde va kg/s). El gate viejo sólo pedía S > 0."""
+        for e in _cargar()["equipos"]:
+            etiqueta = f"{e.get('marca')} {e.get('modelo')}"
+            spec = ec.EQUIPMENT_DATA.get(e["eq_type"], {})
+            s_min = spec.get("S_min")
+            s_max = spec.get("S_max")
+            if s_min is None or s_max is None:
+                continue    # correlaciones sin rango declarado (p.ej. Sinnott)
+            S = float(e["S"])
+            self.assertGreaterEqual(
+                S, s_min,
+                f"{etiqueta}: S={S:g} {spec.get('S_unit', '')} < S_min="
+                f"{s_min:g} del tipo — ¿error de unidad?")
+            self.assertLessEqual(
+                S, s_max,
+                f"{etiqueta}: S={S:g} {spec.get('S_unit', '')} > S_max="
+                f"{s_max:g} del tipo — ¿error de unidad?")
 
     def test_sin_duplicados(self):
         vistos = set()

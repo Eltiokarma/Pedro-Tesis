@@ -21,22 +21,23 @@ agregar una entrada al array `equipos` de `data/equipos_comerciales.json`.
 
 ```json
 {
-  "marca": "Alfa Laval",
-  "modelo": "M10",
-  "eq_type": "Heat exch. — flat plate",
-  "S": 72.5,
+  "marca": "Atlas Copco",
+  "modelo": "GA 30+",
+  "eq_type": "Compressor — rotary",
+  "S": 30,
   "params": {
-    "U_W_m2K": 4500,
-    "material": "SS316",
-    "P_max_bar": 16,
-    "T_max_C": 180,
-    "Q_max_m3_h": 180,
-    "notas": "placas AISI 316, juntas NBR/EPDM"
+    "P_max_bar": 13,
+    "Q_max_m3_h": 366,
+    "notas": "Tornillo lubricado. S = potencia de motor instalada (kW). ..."
   },
-  "fuente": "https://www.alfalaval.com/...m10.pdf",
-  "fecha_consulta": "2026-07-24"
+  "fuente": "https://www.atlascopco.com/...GA30-90_Wuxi_EN.pdf",
+  "fecha_consulta": "2026-07-23"
 }
 ```
+
+(Entrada real del catálogo, abreviada. El ejemplo anterior usaba un PHE
+`Heat exch. — flat plate` — retirado: esa categoría no admite un S
+defendible, ver "Categorías sin S publicado".)
 
 Reglas duras (cultura del repo):
 - `eq_type` debe ser una clave EXACTA de `equipment_costs.EQUIPMENT_DATA`
@@ -51,18 +52,39 @@ Reglas duras (cultura del repo):
 - `material` con las claves del repo: CS, SS304, SS316, Ni, Monel,
   Hastelloy, Inconel, Titanium, Cu, Glass-lined, Tantalum, CS galv.
 
+### Qué significa S en una entrada comercial
+
+`S` es la **capacidad nominal o máxima publicada del modelo** en la
+`S_unit` de su `eq_type` — la ENVOLVENTE, no un punto de operación.
+La verificación del modo selección es `S_requerido <= S_modelo`, y el
+cociente `S_requerido / S_modelo` es el ratio de utilización.
+`S` no basta: `P_max_bar`, `T_max_C`, `Q_max_m3_h`, `head_max_m` son
+dimensiones adicionales de la misma envolvente. La verificación completa
+es un AND de desigualdades.
+
+### Categorías sin S publicado — NO reintentar
+
+`Heat exch. — flat plate` y `Pump — centrifugal` NO entran al catálogo.
+El fabricante no publica un techo por modelo: en un PHE el área se
+configura por número de placas y la fija el ingeniero térmico según el
+duty; en una bomba centrífuga el kW al eje es del punto de operación.
+Para habilitar PHE hace falta `n_placas_max` (ya previsto en `_PARAMS_OK`)
+× área por placa, ninguno de los dos publicado. Conseguirlo del fabricante
+o del manual de servicio. **Mientras tanto: no cargar un "tamaño
+representativo" ni un número de distribuidor.**
+
 ### Modelos objetivo (3-5 por categoría basta para la tesis)
 
 | Categoría (eq_type) | Candidatos |
 |---|---|
-| HX placas (`Heat exch. — flat plate`) | Alfa Laval M6 / M10 / T21; SWEP B-series; GEA VT-series |
+| HX placas (`Heat exch. — flat plate`) | ⛔ **NO cargar** — ver "Categorías sin S publicado". Se reabre solo con `n_placas_max` × área/placa de fuente oficial |
 | HX casco-tubo (`Heat exch. — fixed tube` / `floating head`) | Kelvion, HRS Funke — series estándar con área nominal |
-| Bomba centrífuga (`Pump — centrifugal`) | Grundfos NK/NB (punto nominal Q/H/η); KSB Etanorm; Sulzer AHLSTAR |
+| Bomba centrífuga (`Pump — centrifugal`) | ⛔ **NO cargar** — ver "Categorías sin S publicado" (el kW al eje es del punto de operación, no del modelo) |
 | Bomba desplazamiento (+`Pump — positive displacement`) | NETZSCH NEMO; Viking gear |
 | Compresor tornillo (`Compressor — rotary`) | Atlas Copco GA 30-90; Kaeser CSD |
 | Agitador (`Mixer — impeller`) | EKATO, Chemineer serie 20, SPX Lightnin (kW de accionamiento) |
 | Turbina vapor (`Turbine — steam`) | Siemens SST-040/060 (kW, presiones de entrada) |
-| Caldera (`Boiler — fire tube`) | Cleaver-Brooks CB, Bosch UL-S (kg/h vapor, bar) |
+| Caldera (`Boiler — fire tube`) | Cleaver-Brooks CB, Bosch UL-S — **S en kg/s** (S_unit del tipo). Las designaciones del fabricante vienen en kg/h (UL-S 1250 = 1250 kg/h): **dividir por 3600**. Sin la conversión, un UL-S 28000 entra 1400× fuera de rango y el costeo devuelve basura. |
 
 ### Entrega y verificación
 

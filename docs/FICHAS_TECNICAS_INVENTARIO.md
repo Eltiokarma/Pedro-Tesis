@@ -250,6 +250,20 @@ overrides bajo una identidad. Piezas nuevas necesarias:
    `sobrediseño = (S_declarado − S_requerido) / S_requerido`, con umbral de
    warning si es negativo (el S_requerido sale del sizer actual, que sigue
    corriendo aunque S esté locked).
+
+   **Semántica del S comercial** (`data/equipos_comerciales.json`): S es la
+   **capacidad nominal o máxima publicada del modelo** en la S_unit de su
+   eq_type — la ENVOLVENTE, no un punto de operación. La verificación es
+   `S_requerido <= S_modelo`; el cociente `S_requerido / S_modelo` es el
+   ratio de utilización. S no basta: `P_max_bar`, `T_max_C`, `Q_max_m3_h`,
+   `head_max_m` son dimensiones adicionales de la misma envolvente — la
+   verificación completa es un AND de desigualdades.
+
+   **Restricción dura**: el S del catálogo comercial NUNCA se escribe en
+   `Block.S`. `Block.S` sigue viniendo del sizing del simulador; el S
+   comercial entra solo a la verificación y a la ficha. Volcarlo al bloque
+   haría que el costeo Turton use el techo del bastidor e infle el CAPEX
+   sistemáticamente.
 3. Opcional (fase posterior): catálogo `data/equipos_comerciales.json` con
    entradas {marca, modelo, eq_type, parámetros} para poblar la selección
    con un click en lugar de tipear overrides. La ficha solo consume los
