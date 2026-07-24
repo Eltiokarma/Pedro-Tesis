@@ -364,18 +364,1489 @@
    "fecha_consulta": "2026-07-23"
   },
   {
-   "marca": "NETZSCH",
-   "modelo": "NEMO L.Cap",
+   "marca": "Grundfos",
+   "modelo": "NK 32-125.1",
+   "eq_type": "Pump — centrifugal",
+   "S_no_publicado": "punto_de_operacion",
+   "params": {
+    "P_max_bar": 16,
+    "T_max_C": 140,
+    "notas": "Bomba centrifuga monoetapa de voluta, aspiracion axial, a eje libre (NK, acoplamiento largo), segun EN 733 / ISO 2858. SIN S ESCALAR: el kW al eje sale de la curva en el punto de operacion (recorte de impulsor + duty), no hay potencia por modelo -> motivo punto_de_operacion. La envolvente hidraulica (Q/H) del tamano es la CURVA caracteristica publicada del data booklet, no un escalar impreso, por eso Q_max/head_max NO se transcriben (regla de la casa: no leer de una grafica). Lo que SI verifica esta entrada es la envolvente MECANICA impresa por tamano: P_max_bar = presion nominal de brida PN 16 (los tamanos con brida hasta DN 150 incl. estan marcados PN 16 y admiten 16 bar, pag. 5 del booklet). T_max_C = 140 C, extremo alto del rango de temperatura del liquido de la serie (-25 a +140 C, pag. 32); el maximo real depende del cierre mecanico. Tamano: DNd 32 / DNs 50 mm, impulsor nominal 125 mm (recortes 100/110/121/140 mm). Motor por tamano P2 = 0.75-2.2 kW segun recorte. La serie NB/NK cubre 2-2000 m3/h y 2-160 m (pag. 5). Material a pedido (fundicion / inox / bronce): omitido."
+   },
+   "fuente": "https://api.grundfos.com/literature/Grundfosliterature-970667.pdf",
+   "fecha_consulta": "2026-07-24",
+   "granularidad": "modelo"
+  },
+  {
+   "marca": "Grundfos",
+   "modelo": "NK 50-160",
+   "eq_type": "Pump — centrifugal",
+   "S_no_publicado": "punto_de_operacion",
+   "params": {
+    "P_max_bar": 16,
+    "T_max_C": 140,
+    "notas": "Bomba centrifuga monoetapa de voluta, aspiracion axial, a eje libre (NK, acoplamiento largo), segun EN 733 / ISO 2858. SIN S ESCALAR: el kW al eje sale de la curva en el punto de operacion (recorte de impulsor + duty), no hay potencia por modelo -> motivo punto_de_operacion. La envolvente hidraulica (Q/H) del tamano es la CURVA caracteristica publicada del data booklet, no un escalar impreso, por eso Q_max/head_max NO se transcriben (regla de la casa: no leer de una grafica). Lo que SI verifica esta entrada es la envolvente MECANICA impresa por tamano: P_max_bar = presion nominal de brida PN 16 (los tamanos con brida hasta DN 150 incl. estan marcados PN 16 y admiten 16 bar, pag. 5 del booklet). T_max_C = 140 C, extremo alto del rango de temperatura del liquido de la serie (-25 a +140 C, pag. 32); el maximo real depende del cierre mecanico. Tamano: DNd 50 / DNs 65 mm, impulsor nominal 160 mm (recortes 136/150/167/177 mm). Motor por tamano P2 = 5.5-15 kW segun recorte. La serie NB/NK cubre 2-2000 m3/h y 2-160 m (pag. 5). Material a pedido (fundicion / inox / bronce): omitido."
+   },
+   "fuente": "https://api.grundfos.com/literature/Grundfosliterature-970667.pdf",
+   "fecha_consulta": "2026-07-24",
+   "granularidad": "modelo"
+  },
+  {
+   "marca": "Grundfos",
+   "modelo": "NK 65-160",
+   "eq_type": "Pump — centrifugal",
+   "S_no_publicado": "punto_de_operacion",
+   "params": {
+    "P_max_bar": 16,
+    "T_max_C": 140,
+    "notas": "Bomba centrifuga monoetapa de voluta, aspiracion axial, a eje libre (NK, acoplamiento largo), segun EN 733 / ISO 2858. SIN S ESCALAR: el kW al eje sale de la curva en el punto de operacion (recorte de impulsor + duty), no hay potencia por modelo -> motivo punto_de_operacion. La envolvente hidraulica (Q/H) del tamano es la CURVA caracteristica publicada del data booklet, no un escalar impreso, por eso Q_max/head_max NO se transcriben (regla de la casa: no leer de una grafica). Lo que SI verifica esta entrada es la envolvente MECANICA impresa por tamano: P_max_bar = presion nominal de brida PN 16 (los tamanos con brida hasta DN 150 incl. estan marcados PN 16 y admiten 16 bar, pag. 5 del booklet). T_max_C = 140 C, extremo alto del rango de temperatura del liquido de la serie (-25 a +140 C, pag. 32); el maximo real depende del cierre mecanico. Tamano: DNd 65 / DNs 80 mm, impulsor nominal 160 mm (recortes 143/157/173/177 mm). Motor por tamano P2 = 7.5-18.5 kW segun recorte. La serie NB/NK cubre 2-2000 m3/h y 2-160 m (pag. 5). Material a pedido (fundicion / inox / bronce): omitido."
+   },
+   "fuente": "https://api.grundfos.com/literature/Grundfosliterature-970667.pdf",
+   "fecha_consulta": "2026-07-24",
+   "granularidad": "modelo"
+  },
+  {
+   "marca": "Grundfos",
+   "modelo": "NK 65-250",
+   "eq_type": "Pump — centrifugal",
+   "S_no_publicado": "punto_de_operacion",
+   "params": {
+    "P_max_bar": 16,
+    "T_max_C": 140,
+    "notas": "Bomba centrifuga monoetapa de voluta, aspiracion axial, a eje libre (NK, acoplamiento largo), segun EN 733 / ISO 2858. SIN S ESCALAR: el kW al eje sale de la curva en el punto de operacion (recorte de impulsor + duty), no hay potencia por modelo -> motivo punto_de_operacion. La envolvente hidraulica (Q/H) del tamano es la CURVA caracteristica publicada del data booklet, no un escalar impreso, por eso Q_max/head_max NO se transcriben (regla de la casa: no leer de una grafica). Lo que SI verifica esta entrada es la envolvente MECANICA impresa por tamano: P_max_bar = presion nominal de brida PN 16 (los tamanos con brida hasta DN 150 incl. estan marcados PN 16 y admiten 16 bar, pag. 5 del booklet). T_max_C = 140 C, extremo alto del rango de temperatura del liquido de la serie (-25 a +140 C, pag. 32); el maximo real depende del cierre mecanico. Tamano: DNd 65 / DNs 80 mm, impulsor nominal 250 mm (recortes 223/238/251/269 mm). Motor por tamano P2 = 30-55 kW segun recorte. La serie NB/NK cubre 2-2000 m3/h y 2-160 m (pag. 5). Material a pedido (fundicion / inox / bronce): omitido."
+   },
+   "fuente": "https://api.grundfos.com/literature/Grundfosliterature-970667.pdf",
+   "fecha_consulta": "2026-07-24",
+   "granularidad": "modelo"
+  },
+  {
+   "marca": "Grundfos",
+   "modelo": "NK 80-200",
+   "eq_type": "Pump — centrifugal",
+   "S_no_publicado": "punto_de_operacion",
+   "params": {
+    "P_max_bar": 16,
+    "T_max_C": 140,
+    "notas": "Bomba centrifuga monoetapa de voluta, aspiracion axial, a eje libre (NK, acoplamiento largo), segun EN 733 / ISO 2858. SIN S ESCALAR: el kW al eje sale de la curva en el punto de operacion (recorte de impulsor + duty), no hay potencia por modelo -> motivo punto_de_operacion. La envolvente hidraulica (Q/H) del tamano es la CURVA caracteristica publicada del data booklet, no un escalar impreso, por eso Q_max/head_max NO se transcriben (regla de la casa: no leer de una grafica). Lo que SI verifica esta entrada es la envolvente MECANICA impresa por tamano: P_max_bar = presion nominal de brida PN 16 (los tamanos con brida hasta DN 150 incl. estan marcados PN 16 y admiten 16 bar, pag. 5 del booklet). T_max_C = 140 C, extremo alto del rango de temperatura del liquido de la serie (-25 a +140 C, pag. 32); el maximo real depende del cierre mecanico. Tamano: DNd 80 / DNs 100 mm, impulsor nominal 200 mm (recortes 171/188/200/211 mm). Motor por tamano P2 = 22-45 kW segun recorte. La serie NB/NK cubre 2-2000 m3/h y 2-160 m (pag. 5). Material a pedido (fundicion / inox / bronce): omitido."
+   },
+   "fuente": "https://api.grundfos.com/literature/Grundfosliterature-970667.pdf",
+   "fecha_consulta": "2026-07-24",
+   "granularidad": "modelo"
+  },
+  {
+   "marca": "Grundfos",
+   "modelo": "NK 100-200",
+   "eq_type": "Pump — centrifugal",
+   "S_no_publicado": "punto_de_operacion",
+   "params": {
+    "P_max_bar": 16,
+    "T_max_C": 140,
+    "notas": "Bomba centrifuga monoetapa de voluta, aspiracion axial, a eje libre (NK, acoplamiento largo), segun EN 733 / ISO 2858. SIN S ESCALAR: el kW al eje sale de la curva en el punto de operacion (recorte de impulsor + duty), no hay potencia por modelo -> motivo punto_de_operacion. La envolvente hidraulica (Q/H) del tamano es la CURVA caracteristica publicada del data booklet, no un escalar impreso, por eso Q_max/head_max NO se transcriben (regla de la casa: no leer de una grafica). Lo que SI verifica esta entrada es la envolvente MECANICA impresa por tamano: P_max_bar = presion nominal de brida PN 16 (los tamanos con brida hasta DN 150 incl. estan marcados PN 16 y admiten 16 bar, pag. 5 del booklet). T_max_C = 140 C, extremo alto del rango de temperatura del liquido de la serie (-25 a +140 C, pag. 32); el maximo real depende del cierre mecanico. Tamano: DNd 100 / DNs 125 mm, impulsor nominal 200 mm (recortes 170/181/192/203 mm). Motor por tamano P2 = 30-55 kW segun recorte. La serie NB/NK cubre 2-2000 m3/h y 2-160 m (pag. 5). Material a pedido (fundicion / inox / bronce): omitido."
+   },
+   "fuente": "https://api.grundfos.com/literature/Grundfosliterature-970667.pdf",
+   "fecha_consulta": "2026-07-24",
+   "granularidad": "modelo"
+  },
+  {
+   "marca": "Elliott Group",
+   "modelo": "PYR",
+   "eq_type": "Turbine — steam",
+   "S": 150,
+   "params": {
+    "P_max_bar": 45,
+    "T_max_C": 400,
+    "rpm": 5000,
+    "notas": "Turbina de vapor monoetapa de impulso (serie YR, monovalvula). S = potencia maxima publicada del frame en kW, impresa en par hp/kW en la tabla de especificaciones por frame (pag. 6 del folleto 'Single-Stage Steam Turbines', Elliott/Ebara TUR.3001.0819): 200 hp = 150 kW (1 hp = 0.7457 kW). P_max_bar = presion inicial de vapor vivo, bar(g) (la tabla la da en psig/bar; OJO: las entradas Siemens del catalogo usan bar(a) de entrada, aqui es MANOMETRICA). T_max_C = temperatura inicial de vapor. rpm = velocidad maxima del frame. Diseñada segun API 611 (estandar) / API 612 (opcional). Material no declarado: omitido."
+   },
+   "fuente": "https://www.elliott-turbo.com/Files/Admin/company-literature-steam-turbines/yr-steam-turbines.pdf",
+   "fecha_consulta": "2026-07-24"
+  },
+  {
+   "marca": "Elliott Group",
+   "modelo": "AYR",
+   "eq_type": "Turbine — steam",
+   "S": 560,
+   "params": {
+    "P_max_bar": 48,
+    "T_max_C": 440,
+    "rpm": 7064,
+    "notas": "Turbina de vapor monoetapa de impulso (serie YR, monovalvula). S = potencia maxima publicada del frame en kW, impresa en par hp/kW en la tabla de especificaciones por frame (pag. 6 del folleto 'Single-Stage Steam Turbines', Elliott/Ebara TUR.3001.0819): 750 hp = 560 kW (1 hp = 0.7457 kW). P_max_bar = presion inicial de vapor vivo, bar(g) (la tabla la da en psig/bar; OJO: las entradas Siemens del catalogo usan bar(a) de entrada, aqui es MANOMETRICA). T_max_C = temperatura inicial de vapor. rpm = velocidad maxima del frame. Diseñada segun API 611 (estandar) / API 612 (opcional). Material no declarado: omitido."
+   },
+   "fuente": "https://www.elliott-turbo.com/Files/Admin/company-literature-steam-turbines/yr-steam-turbines.pdf",
+   "fecha_consulta": "2026-07-24"
+  },
+  {
+   "marca": "Elliott Group",
+   "modelo": "BYR",
+   "eq_type": "Turbine — steam",
+   "S": 1044,
+   "params": {
+    "P_max_bar": 48,
+    "T_max_C": 482,
+    "rpm": 6675,
+    "notas": "Turbina de vapor monoetapa de impulso (serie YR, monovalvula). S = potencia maxima publicada del frame en kW, impresa en par hp/kW en la tabla de especificaciones por frame (pag. 6 del folleto 'Single-Stage Steam Turbines', Elliott/Ebara TUR.3001.0819): 1400 hp = 1044 kW (1 hp = 0.7457 kW). P_max_bar = presion inicial de vapor vivo, bar(g) (la tabla la da en psig/bar; OJO: las entradas Siemens del catalogo usan bar(a) de entrada, aqui es MANOMETRICA). T_max_C = temperatura inicial de vapor. rpm = velocidad maxima del frame. Diseñada segun API 611 (estandar) / API 612 (opcional). Escape a vacio-100 psig. Material no declarado: omitido."
+   },
+   "fuente": "https://www.elliott-turbo.com/Files/Admin/company-literature-steam-turbines/yr-steam-turbines.pdf",
+   "fecha_consulta": "2026-07-24"
+  },
+  {
+   "marca": "Elliott Group",
+   "modelo": "BYRH / BYRHH",
+   "eq_type": "Turbine — steam",
+   "S": 2610,
+   "params": {
+    "P_max_bar": 62,
+    "T_max_C": 482,
+    "rpm": 7090,
+    "notas": "Turbina de vapor monoetapa de impulso (serie YR, monovalvula). S = potencia maxima publicada del frame en kW, impresa en par hp/kW en la tabla de especificaciones por frame (pag. 6 del folleto 'Single-Stage Steam Turbines', Elliott/Ebara TUR.3001.0819): 3500 hp = 2610 kW (1 hp = 0.7457 kW). P_max_bar = presion inicial de vapor vivo, bar(g) (la tabla la da en psig/bar; OJO: las entradas Siemens del catalogo usan bar(a) de entrada, aqui es MANOMETRICA). T_max_C = temperatura inicial de vapor. rpm = velocidad maxima del frame. Diseñada segun API 611 (estandar) / API 612 (opcional). Material no declarado: omitido."
+   },
+   "fuente": "https://www.elliott-turbo.com/Files/Admin/company-literature-steam-turbines/yr-steam-turbines.pdf",
+   "fecha_consulta": "2026-07-24"
+  },
+  {
+   "marca": "Elliott Group",
+   "modelo": "DYR / DYRH / DYRM / DYRN",
+   "eq_type": "Turbine — steam",
+   "S": 4027,
+   "params": {
+    "P_max_bar": 62,
+    "T_max_C": 482,
+    "rpm": 5770,
+    "notas": "Turbina de vapor monoetapa de impulso (serie YR, monovalvula). S = potencia maxima publicada del frame en kW, impresa en par hp/kW en la tabla de especificaciones por frame (pag. 6 del folleto 'Single-Stage Steam Turbines', Elliott/Ebara TUR.3001.0819): 5400 hp = 4027 kW (1 hp = 0.7457 kW). P_max_bar = presion inicial de vapor vivo, bar(g) (la tabla la da en psig/bar; OJO: las entradas Siemens del catalogo usan bar(a) de entrada, aqui es MANOMETRICA). T_max_C = temperatura inicial de vapor. rpm = velocidad maxima del frame. Diseñada segun API 611 (estandar) / API 612 (opcional). Tope de la serie YR monoetapa; la MYR multietapa (10 440 kW) queda fuera del rango del tipo. Material no declarado: omitido."
+   },
+   "fuente": "https://www.elliott-turbo.com/Files/Admin/company-literature-steam-turbines/yr-steam-turbines.pdf",
+   "fecha_consulta": "2026-07-24"
+  },
+  {
+   "marca": "Viessmann",
+   "modelo": "Vitomax 200-HS (M75) tam. 1",
+   "eq_type": "Boiler — fire tube",
+   "S": 1.389,
+   "params": {
+    "P_max_bar": 25,
+    "notas": "Caldera pirotubular de vapor de alta presion, tres pasos (Grossraumwasserraum / shell boiler de tres pasos, confirmado en la guia tecnica). S = caudal masico nominal de vapor con gas natural del tamaño 1: 5.0 t/h = 5.0*1000/3600 = 1.389 kg/s (S_unit del tipo = kg/s). Condiciones generales impresas: agua de alimentacion 102 C, 100% carga, O2 3% vol, altitud <500 m. P_max_bar = 25 = presion de operacion ADMISIBLE MAXIMA DE LA SERIE (rango 6-25 bar del type M75), NO el rating de este tamaño puntual: para tamaño B en adelante el maximo baja de 25 bar segun el tubo de llama, y el limite de aplicacion de tubo liso impreso va de 18 bar (tam. 1) a 10 bar (tam. 8) — confirmar contra la hoja de datos del pedido. Datasheet Viessmann 5834810 GB 9/2018. T de vapor saturado no impresa por tamaño: omitida. Material no declarado: omitido."
+   },
+   "fuente": "https://cdn0.scrvt.com/2828ebc457efab95be01dd36047e3b52/8fde0b1cea96b7c1/22e104ceb3e7/Vitomax-HS-Technical-Data.PDF",
+   "fecha_consulta": "2026-07-24"
+  },
+  {
+   "marca": "Viessmann",
+   "modelo": "Vitomax 200-HS (M75) tam. 3",
+   "eq_type": "Boiler — fire tube",
+   "S": 1.944,
+   "params": {
+    "P_max_bar": 25,
+    "notas": "Caldera pirotubular de vapor de alta presion, tres pasos (Grossraumwasserraum / shell boiler de tres pasos, confirmado en la guia tecnica). S = caudal masico nominal de vapor con gas natural del tamaño 3: 7.0 t/h = 7.0*1000/3600 = 1.944 kg/s (S_unit del tipo = kg/s). Condiciones generales impresas: agua de alimentacion 102 C, 100% carga, O2 3% vol, altitud <500 m. P_max_bar = 25 = presion de operacion ADMISIBLE MAXIMA DE LA SERIE (rango 6-25 bar del type M75), NO el rating de este tamaño puntual: para tamaño B en adelante el maximo baja de 25 bar segun el tubo de llama, y el limite de aplicacion de tubo liso impreso va de 18 bar (tam. 1) a 10 bar (tam. 8) — confirmar contra la hoja de datos del pedido. Datasheet Viessmann 5834810 GB 9/2018. T de vapor saturado no impresa por tamaño: omitida. Material no declarado: omitido."
+   },
+   "fuente": "https://cdn0.scrvt.com/2828ebc457efab95be01dd36047e3b52/8fde0b1cea96b7c1/22e104ceb3e7/Vitomax-HS-Technical-Data.PDF",
+   "fecha_consulta": "2026-07-24"
+  },
+  {
+   "marca": "Viessmann",
+   "modelo": "Vitomax 200-HS (M75) tam. 5",
+   "eq_type": "Boiler — fire tube",
+   "S": 2.778,
+   "params": {
+    "P_max_bar": 25,
+    "notas": "Caldera pirotubular de vapor de alta presion, tres pasos (Grossraumwasserraum / shell boiler de tres pasos, confirmado en la guia tecnica). S = caudal masico nominal de vapor con gas natural del tamaño 5: 10.0 t/h = 10.0*1000/3600 = 2.778 kg/s (S_unit del tipo = kg/s). Condiciones generales impresas: agua de alimentacion 102 C, 100% carga, O2 3% vol, altitud <500 m. P_max_bar = 25 = presion de operacion ADMISIBLE MAXIMA DE LA SERIE (rango 6-25 bar del type M75), NO el rating de este tamaño puntual: para tamaño B en adelante el maximo baja de 25 bar segun el tubo de llama, y el limite de aplicacion de tubo liso impreso va de 18 bar (tam. 1) a 10 bar (tam. 8) — confirmar contra la hoja de datos del pedido. Datasheet Viessmann 5834810 GB 9/2018. T de vapor saturado no impresa por tamaño: omitida. Material no declarado: omitido."
+   },
+   "fuente": "https://cdn0.scrvt.com/2828ebc457efab95be01dd36047e3b52/8fde0b1cea96b7c1/22e104ceb3e7/Vitomax-HS-Technical-Data.PDF",
+   "fecha_consulta": "2026-07-24"
+  },
+  {
+   "marca": "Viessmann",
+   "modelo": "Vitomax 200-HS (M75) tam. 8",
+   "eq_type": "Boiler — fire tube",
+   "S": 4.444,
+   "params": {
+    "P_max_bar": 25,
+    "notas": "Caldera pirotubular de vapor de alta presion, tres pasos (Grossraumwasserraum / shell boiler de tres pasos, confirmado en la guia tecnica). S = caudal masico nominal de vapor con gas natural del tamaño 8: 16.0 t/h = 16.0*1000/3600 = 4.444 kg/s (S_unit del tipo = kg/s). Condiciones generales impresas: agua de alimentacion 102 C, 100% carga, O2 3% vol, altitud <500 m. P_max_bar = 25 = presion de operacion ADMISIBLE MAXIMA DE LA SERIE (rango 6-25 bar del type M75), NO el rating de este tamaño puntual: para tamaño B en adelante el maximo baja de 25 bar segun el tubo de llama, y el limite de aplicacion de tubo liso impreso va de 18 bar (tam. 1) a 10 bar (tam. 8) — confirmar contra la hoja de datos del pedido. Datasheet Viessmann 5834810 GB 9/2018. T de vapor saturado no impresa por tamaño: omitida. Material no declarado: omitido."
+   },
+   "fuente": "https://cdn0.scrvt.com/2828ebc457efab95be01dd36047e3b52/8fde0b1cea96b7c1/22e104ceb3e7/Vitomax-HS-Technical-Data.PDF",
+   "fecha_consulta": "2026-07-24"
+  },
+  {
+   "marca": "Viessmann",
+   "modelo": "Vitomax 200-HS (M75) tam. C",
+   "eq_type": "Boiler — fire tube",
+   "S": 6.667,
+   "params": {
+    "P_max_bar": 25,
+    "notas": "Caldera pirotubular de vapor de alta presion, tres pasos (Grossraumwasserraum / shell boiler de tres pasos, confirmado en la guia tecnica). S = caudal masico nominal de vapor con gas natural del tamaño C: 24.0 t/h = 24.0*1000/3600 = 6.667 kg/s (S_unit del tipo = kg/s). Condiciones generales impresas: agua de alimentacion 102 C, 100% carga, O2 3% vol, altitud <500 m. P_max_bar = 25 = presion de operacion ADMISIBLE MAXIMA DE LA SERIE (rango 6-25 bar del type M75), NO el rating de este tamaño puntual: para tamaño B en adelante el maximo baja de 25 bar segun el tubo de llama, y el limite de aplicacion de tubo liso impreso va de 18 bar (tam. 1) a 10 bar (tam. 8) — confirmar contra la hoja de datos del pedido. Datasheet Viessmann 5834810 GB 9/2018. T de vapor saturado no impresa por tamaño: omitida. Material no declarado: omitido."
+   },
+   "fuente": "https://cdn0.scrvt.com/2828ebc457efab95be01dd36047e3b52/8fde0b1cea96b7c1/22e104ceb3e7/Vitomax-HS-Technical-Data.PDF",
+   "fecha_consulta": "2026-07-24"
+  },
+  {
+   "marca": "Viessmann",
+   "modelo": "Vitomax 200-HS (M75) tam. G",
+   "eq_type": "Boiler — fire tube",
+   "S": 8.75,
+   "params": {
+    "P_max_bar": 25,
+    "notas": "Caldera pirotubular de vapor de alta presion, tres pasos (Grossraumwasserraum / shell boiler de tres pasos, confirmado en la guia tecnica). S = caudal masico nominal de vapor con gas natural del tamaño G: 31.5 t/h = 31.5*1000/3600 = 8.75 kg/s (S_unit del tipo = kg/s). Condiciones generales impresas: agua de alimentacion 102 C, 100% carga, O2 3% vol, altitud <500 m. P_max_bar = 25 = presion de operacion ADMISIBLE MAXIMA DE LA SERIE (rango 6-25 bar del type M75), NO el rating de este tamaño puntual: para tamaño B en adelante el maximo baja de 25 bar segun el tubo de llama, y el limite de aplicacion de tubo liso impreso va de 18 bar (tam. 1) a 10 bar (tam. 8) — confirmar contra la hoja de datos del pedido. Datasheet Viessmann 5834810 GB 9/2018. T de vapor saturado no impresa por tamaño: omitida. Material no declarado: omitido."
+   },
+   "fuente": "https://cdn0.scrvt.com/2828ebc457efab95be01dd36047e3b52/8fde0b1cea96b7c1/22e104ceb3e7/Vitomax-HS-Technical-Data.PDF",
+   "fecha_consulta": "2026-07-24"
+  },
+  {
+   "marca": "Viking Pump",
+   "modelo": "H124C",
    "eq_type": "Pump — positive displacement",
    "S_no_publicado": "punto_de_operacion",
    "params": {
-    "Q_max_m3_h": 1000,
-    "P_max_bar": 20,
-    "notas": "Bomba de cavidad progresiva. NETZSCH declara que el caudal es proporcional a la velocidad de rotacion, asi que el tamano ES el punto de operacion y no hay kW por modelo. GRANULARIDAD = FAMILIA: 1000 m3/h y 20 bar son la envolvente de la FAMILIA L.Cap (versiones simple, doble y vertical), no de un tamano concreto. La verificacion contra esta entrada es debil: casi cualquier duty entra. Sustituir por la envolvente del tamano especifico en cuanto se consiga. Material no declarado: omitido."
+    "Q_max_m3_h": 3.4,
+    "P_max_bar": 14,
+    "rpm": 1750,
+    "notas": "Bomba rotativa de engranaje interno (Universal Product Line, fundicion). SIN S ESCALAR: el kW al eje depende del punto de operacion (caudal x DP x viscosidad), Viking no publica kW por modelo -> punto_de_operacion ('operates at any point on the curve'). GRANULARIDAD = MODELO: Q_max_m3_h 3.4 es el caudal maximo IMPRESO de ESTE tamaño (15 gpm, 15*0.2271=3.4 m3/h; el catalogo ya imprime 3.4 m3/h) a velocidad maxima 1750 rpm, conexion 1.5\" NPT. P_max_bar = 14 (200 psig / 14 bar) es el rating de la LINEA Universal fundicion, comun a todos los tamaños (no inflado por el mayor). Catalogo oficial 'Viking Pump Product Catalog' Form 5000, pag. 18 (PDF: cdn.bfldr.com/FMWE0LVS/at/fv8gtm7jb9cssqv68t8r5jm8/Form_5000_ProductCatalog.pdf). Material no declarado: omitido."
    },
-   "fuente": "https://pumps-systems.netzsch.com/en-US/products-and-accessories/nemo-progressing-cavity-pumps/nemo-l-cap-progressing-cavity-pump",
-   "fecha_consulta": "2026-07-23",
+   "fuente": "https://www.vikingpump.com/library/product-catalog",
+   "fecha_consulta": "2026-07-24",
+   "granularidad": "modelo"
+  },
+  {
+   "marca": "Viking Pump",
+   "modelo": "K124C",
+   "eq_type": "Pump — positive displacement",
+   "S_no_publicado": "punto_de_operacion",
+   "params": {
+    "Q_max_m3_h": 18,
+    "P_max_bar": 14,
+    "rpm": 780,
+    "notas": "Bomba rotativa de engranaje interno (Universal Product Line, fundicion). SIN S ESCALAR: el kW al eje depende del punto de operacion (caudal x DP x viscosidad), Viking no publica kW por modelo -> punto_de_operacion ('operates at any point on the curve'). GRANULARIDAD = MODELO: Q_max_m3_h 18 es el caudal maximo IMPRESO de ESTE tamaño (80 gpm, 80*0.2271=18.2 m3/h; el catalogo ya imprime 18 m3/h) a velocidad maxima 780 rpm, conexion 2\" NPT. P_max_bar = 14 (200 psig / 14 bar) es el rating de la LINEA Universal fundicion, comun a todos los tamaños (no inflado por el mayor). Catalogo oficial 'Viking Pump Product Catalog' Form 5000, pag. 18 (PDF: cdn.bfldr.com/FMWE0LVS/at/fv8gtm7jb9cssqv68t8r5jm8/Form_5000_ProductCatalog.pdf). Material no declarado: omitido."
+   },
+   "fuente": "https://www.vikingpump.com/library/product-catalog",
+   "fecha_consulta": "2026-07-24",
+   "granularidad": "modelo"
+  },
+  {
+   "marca": "Viking Pump",
+   "modelo": "L124C",
+   "eq_type": "Pump — positive displacement",
+   "S_no_publicado": "punto_de_operacion",
+   "params": {
+    "Q_max_m3_h": 31,
+    "P_max_bar": 14,
+    "rpm": 640,
+    "notas": "Bomba rotativa de engranaje interno (Universal Product Line, fundicion). SIN S ESCALAR: el kW al eje depende del punto de operacion (caudal x DP x viscosidad), Viking no publica kW por modelo -> punto_de_operacion ('operates at any point on the curve'). GRANULARIDAD = MODELO: Q_max_m3_h 31 es el caudal maximo IMPRESO de ESTE tamaño (135 gpm, 135*0.2271=30.7 m3/h; el catalogo ya imprime 31 m3/h) a velocidad maxima 640 rpm, conexion 2\" NPT. P_max_bar = 14 (200 psig / 14 bar) es el rating de la LINEA Universal fundicion, comun a todos los tamaños (no inflado por el mayor). Catalogo oficial 'Viking Pump Product Catalog' Form 5000, pag. 18 (PDF: cdn.bfldr.com/FMWE0LVS/at/fv8gtm7jb9cssqv68t8r5jm8/Form_5000_ProductCatalog.pdf). Material no declarado: omitido."
+   },
+   "fuente": "https://www.vikingpump.com/library/product-catalog",
+   "fecha_consulta": "2026-07-24",
+   "granularidad": "modelo"
+  },
+  {
+   "marca": "Viking Pump",
+   "modelo": "LS124C",
+   "eq_type": "Pump — positive displacement",
+   "S_no_publicado": "punto_de_operacion",
+   "params": {
+    "Q_max_m3_h": 45,
+    "P_max_bar": 14,
+    "rpm": 640,
+    "notas": "Bomba rotativa de engranaje interno (Universal Product Line, fundicion). SIN S ESCALAR: el kW al eje depende del punto de operacion (caudal x DP x viscosidad), Viking no publica kW por modelo -> punto_de_operacion ('operates at any point on the curve'). GRANULARIDAD = MODELO: Q_max_m3_h 45 es el caudal maximo IMPRESO de ESTE tamaño (200 gpm, 200*0.2271=45.4 m3/h; el catalogo ya imprime 45 m3/h) a velocidad maxima 640 rpm, conexion 3\" brida. P_max_bar = 14 (200 psig / 14 bar) es el rating de la LINEA Universal fundicion, comun a todos los tamaños (no inflado por el mayor). Catalogo oficial 'Viking Pump Product Catalog' Form 5000, pag. 18 (PDF: cdn.bfldr.com/FMWE0LVS/at/fv8gtm7jb9cssqv68t8r5jm8/Form_5000_ProductCatalog.pdf). Material no declarado: omitido."
+   },
+   "fuente": "https://www.vikingpump.com/library/product-catalog",
+   "fecha_consulta": "2026-07-24",
+   "granularidad": "modelo"
+  },
+  {
+   "marca": "Viking Pump",
+   "modelo": "Q124C",
+   "eq_type": "Pump — positive displacement",
+   "S_no_publicado": "punto_de_operacion",
+   "params": {
+    "Q_max_m3_h": 68,
+    "P_max_bar": 14,
+    "rpm": 520,
+    "notas": "Bomba rotativa de engranaje interno (Universal Product Line, fundicion). SIN S ESCALAR: el kW al eje depende del punto de operacion (caudal x DP x viscosidad), Viking no publica kW por modelo -> punto_de_operacion ('operates at any point on the curve'). GRANULARIDAD = MODELO: Q_max_m3_h 68 es el caudal maximo IMPRESO de ESTE tamaño (300 gpm, 300*0.2271=68.1 m3/h; el catalogo ya imprime 68 m3/h) a velocidad maxima 520 rpm, conexion 4\" brida. P_max_bar = 14 (200 psig / 14 bar) es el rating de la LINEA Universal fundicion, comun a todos los tamaños (no inflado por el mayor). Catalogo oficial 'Viking Pump Product Catalog' Form 5000, pag. 18 (PDF: cdn.bfldr.com/FMWE0LVS/at/fv8gtm7jb9cssqv68t8r5jm8/Form_5000_ProductCatalog.pdf). Material no declarado: omitido."
+   },
+   "fuente": "https://www.vikingpump.com/library/product-catalog",
+   "fecha_consulta": "2026-07-24",
+   "granularidad": "modelo"
+  },
+  {
+   "marca": "Viking Pump",
+   "modelo": "QS124C",
+   "eq_type": "Pump — positive displacement",
+   "S_no_publicado": "punto_de_operacion",
+   "params": {
+    "Q_max_m3_h": 114,
+    "P_max_bar": 14,
+    "rpm": 520,
+    "notas": "Bomba rotativa de engranaje interno (Universal Product Line, fundicion). SIN S ESCALAR: el kW al eje depende del punto de operacion (caudal x DP x viscosidad), Viking no publica kW por modelo -> punto_de_operacion ('operates at any point on the curve'). GRANULARIDAD = MODELO: Q_max_m3_h 114 es el caudal maximo IMPRESO de ESTE tamaño (500 gpm, 500*0.2271=113.5 m3/h; el catalogo ya imprime 114 m3/h) a velocidad maxima 520 rpm, conexion 6\" brida. P_max_bar = 14 (200 psig / 14 bar) es el rating de la LINEA Universal fundicion, comun a todos los tamaños (no inflado por el mayor). Catalogo oficial 'Viking Pump Product Catalog' Form 5000, pag. 18 (PDF: cdn.bfldr.com/FMWE0LVS/at/fv8gtm7jb9cssqv68t8r5jm8/Form_5000_ProductCatalog.pdf). Material no declarado: omitido."
+   },
+   "fuente": "https://www.vikingpump.com/library/product-catalog",
+   "fecha_consulta": "2026-07-24",
+   "granularidad": "modelo"
+  },
+  {
+   "marca": "SWEP",
+   "modelo": "B16",
+   "eq_type": "Heat exch. — flat plate",
+   "S_no_publicado": "configurable",
+   "params": {
+    "n_placas_max": 50,
+    "Q_max_m3_h": 16.9,
+    "notas": "Intercambiador de placas SOLDADAS (brazed), placas 316 SS, soldadura inox. AREA NO PUBLICADA como escalar: se configura por numero de placas segun el duty -> configurable. Envolvente IMPRESA por modelo (pag. 1 de la product sheet, Product No.100000077): n_placas_max = 50 (numero maximo de placas, cota del area configurable) y Q_max_m3_h = 16.9 ('Max flow' de esta variante). La presion/temperatura de diseño SWEP solo se publican como DIAGRAMA de derating PED/UL (curva P-T en pag. 2), no como escalar; por la regla de la casa (no leer de una grafica) no se transcriben P_max_bar/T_max_C. GRANULARIDAD = MODELO: los limites son de este tamaño. Placas 316/316L; material de orden: omitido."
+   },
+   "fuente": "https://www.swepgroup.com/content/dam/swep/product-datasheets/SWEP-B16-en.pdf",
+   "fecha_consulta": "2026-07-24",
+   "granularidad": "modelo"
+  },
+  {
+   "marca": "SWEP",
+   "modelo": "B25",
+   "eq_type": "Heat exch. — flat plate",
+   "S_no_publicado": "configurable",
+   "params": {
+    "n_placas_max": 140,
+    "Q_max_m3_h": 9,
+    "notas": "Intercambiador de placas SOLDADAS (brazed), placas 316/316L, soldadura de cobre. AREA NO PUBLICADA como escalar: se configura por numero de placas segun el duty -> configurable. Envolvente IMPRESA por modelo (pag. 1 de la product sheet, Product No.100000000): n_placas_max = 140 (numero maximo de placas, cota del area configurable) y Q_max_m3_h = 9 ('Max flow' de esta variante). La presion/temperatura de diseño SWEP solo se publican como DIAGRAMA de derating PED/UL (curva P-T en pag. 2), no como escalar; por la regla de la casa (no leer de una grafica) no se transcriben P_max_bar/T_max_C. GRANULARIDAD = MODELO: los limites son de este tamaño. Placas 316/316L; material de orden: omitido."
+   },
+   "fuente": "https://www.swepgroup.com/content/dam/swep/product-datasheets/SWEP-B25-en.pdf",
+   "fecha_consulta": "2026-07-24",
+   "granularidad": "modelo"
+  },
+  {
+   "marca": "SWEP",
+   "modelo": "B65",
+   "eq_type": "Heat exch. — flat plate",
+   "S_no_publicado": "configurable",
+   "params": {
+    "n_placas_max": 361,
+    "Q_max_m3_h": 155.5,
+    "notas": "Intercambiador de placas SOLDADAS (brazed), placas 316/316L, soldadura de cobre. AREA NO PUBLICADA como escalar: se configura por numero de placas segun el duty -> configurable. Envolvente IMPRESA por modelo (pag. 1 de la product sheet, Product No.100000002): n_placas_max = 361 (numero maximo de placas, cota del area configurable) y Q_max_m3_h = 155.5 ('Max flow' de esta variante). La presion/temperatura de diseño SWEP solo se publican como DIAGRAMA de derating PED/UL (curva P-T en pag. 2), no como escalar; por la regla de la casa (no leer de una grafica) no se transcriben P_max_bar/T_max_C. GRANULARIDAD = MODELO: los limites son de este tamaño. Placas 316/316L; material de orden: omitido."
+   },
+   "fuente": "https://www.swepgroup.com/content/dam/swep/product-datasheets/SWEP-B65-en.pdf",
+   "fecha_consulta": "2026-07-24",
+   "granularidad": "modelo"
+  },
+  {
+   "marca": "SWEP",
+   "modelo": "B427",
+   "eq_type": "Heat exch. — flat plate",
+   "S_no_publicado": "configurable",
+   "params": {
+    "n_placas_max": 420,
+    "Q_max_m3_h": 155.5,
+    "notas": "Intercambiador de placas SOLDADAS (brazed), placas 316/316L, soldadura de cobre. AREA NO PUBLICADA como escalar: se configura por numero de placas segun el duty -> configurable. Envolvente IMPRESA por modelo (pag. 1 de la product sheet, Product No.100000016): n_placas_max = 420 (numero maximo de placas, cota del area configurable) y Q_max_m3_h = 155.5 ('Max flow' de esta variante). La presion/temperatura de diseño SWEP solo se publican como DIAGRAMA de derating PED/UL (curva P-T en pag. 2), no como escalar; por la regla de la casa (no leer de una grafica) no se transcriben P_max_bar/T_max_C. GRANULARIDAD = MODELO: los limites son de este tamaño. Placas 316/316L; material de orden: omitido."
+   },
+   "fuente": "https://www.swepgroup.com/content/dam/swep/product-datasheets/SWEP-B427-en.pdf",
+   "fecha_consulta": "2026-07-24",
+   "granularidad": "modelo"
+  },
+  {
+   "marca": "KSB",
+   "modelo": "Etanorm 065-040-160",
+   "eq_type": "Pump — centrifugal",
+   "S_no_publicado": "punto_de_operacion",
+   "params": {
+    "P_max_bar": 16,
+    "T_max_C": 140,
+    "rpm": 4400,
+    "notas": "Bomba centrifuga monoetapa de voluta, back pull-out, EN 733 (ETN succion-descarga-diametro de impulsor). SIN S ESCALAR: el kW al eje depende del punto de operacion -> punto_de_operacion. GRANULARIDAD = MODELO: los limites son de ESTE tamaño, de la Table 19 'Technical data (SI units)', pag. 22-23 del Type Series Booklet Etanorm (EU/ME/NA) 1311.5/13-EN: diametro de impulsor max 174 mm, limite de velocidad max 4400 rpm (min 500 rpm). Envolvente verificable IMPRESA que aplica a cada tamaño (Table 1): P_max_bar <= 16, T -30 a +140 C; la serie cubre Q <= 1930 m3/h (50 Hz) / 2321 (60 Hz) y H <= 160 m. La envolvente hidraulica Q/H por tamaño es la CURVA (selection chart), no un escalar impreso -> no se transcribe (regla de la casa). Documento oficial via Downloads de la pagina E04B (KSB OCC disfile, documentNumber=1311.5 version=13). Material a pedido: omitido."
+   },
+   "fuente": "https://www.ksb.com/en-global/lc/etanorm/E04B",
+   "fecha_consulta": "2026-07-24",
+   "granularidad": "modelo"
+  },
+  {
+   "marca": "KSB",
+   "modelo": "Etanorm 080-065-160",
+   "eq_type": "Pump — centrifugal",
+   "S_no_publicado": "punto_de_operacion",
+   "params": {
+    "P_max_bar": 16,
+    "T_max_C": 140,
+    "rpm": 3900,
+    "notas": "Bomba centrifuga monoetapa de voluta, back pull-out, EN 733 (ETN succion-descarga-diametro de impulsor). SIN S ESCALAR: el kW al eje depende del punto de operacion -> punto_de_operacion. GRANULARIDAD = MODELO: los limites son de ESTE tamaño, de la Table 19 'Technical data (SI units)', pag. 22-23 del Type Series Booklet Etanorm (EU/ME/NA) 1311.5/13-EN: diametro de impulsor max 174 mm, limite de velocidad max 3900 rpm (min 500 rpm). Envolvente verificable IMPRESA que aplica a cada tamaño (Table 1): P_max_bar <= 16, T -30 a +140 C; la serie cubre Q <= 1930 m3/h (50 Hz) / 2321 (60 Hz) y H <= 160 m. La envolvente hidraulica Q/H por tamaño es la CURVA (selection chart), no un escalar impreso -> no se transcribe (regla de la casa). Documento oficial via Downloads de la pagina E04B (KSB OCC disfile, documentNumber=1311.5 version=13). Material a pedido: omitido."
+   },
+   "fuente": "https://www.ksb.com/en-global/lc/etanorm/E04B",
+   "fecha_consulta": "2026-07-24",
+   "granularidad": "modelo"
+  },
+  {
+   "marca": "KSB",
+   "modelo": "Etanorm 100-080-200",
+   "eq_type": "Pump — centrifugal",
+   "S_no_publicado": "punto_de_operacion",
+   "params": {
+    "P_max_bar": 16,
+    "T_max_C": 140,
+    "rpm": 3600,
+    "notas": "Bomba centrifuga monoetapa de voluta, back pull-out, EN 733 (ETN succion-descarga-diametro de impulsor). SIN S ESCALAR: el kW al eje depende del punto de operacion -> punto_de_operacion. GRANULARIDAD = MODELO: los limites son de ESTE tamaño, de la Table 19 'Technical data (SI units)', pag. 22-23 del Type Series Booklet Etanorm (EU/ME/NA) 1311.5/13-EN: diametro de impulsor max 219 mm, limite de velocidad max 3600 rpm (min 500 rpm). Envolvente verificable IMPRESA que aplica a cada tamaño (Table 1): P_max_bar <= 16, T -30 a +140 C; la serie cubre Q <= 1930 m3/h (50 Hz) / 2321 (60 Hz) y H <= 160 m. La envolvente hidraulica Q/H por tamaño es la CURVA (selection chart), no un escalar impreso -> no se transcribe (regla de la casa). Documento oficial via Downloads de la pagina E04B (KSB OCC disfile, documentNumber=1311.5 version=13). Material a pedido: omitido."
+   },
+   "fuente": "https://www.ksb.com/en-global/lc/etanorm/E04B",
+   "fecha_consulta": "2026-07-24",
+   "granularidad": "modelo"
+  },
+  {
+   "marca": "KSB",
+   "modelo": "Etanorm 125-100-250",
+   "eq_type": "Pump — centrifugal",
+   "S_no_publicado": "punto_de_operacion",
+   "params": {
+    "P_max_bar": 16,
+    "T_max_C": 140,
+    "rpm": 3600,
+    "notas": "Bomba centrifuga monoetapa de voluta, back pull-out, EN 733 (ETN succion-descarga-diametro de impulsor). SIN S ESCALAR: el kW al eje depende del punto de operacion -> punto_de_operacion. GRANULARIDAD = MODELO: los limites son de ESTE tamaño, de la Table 19 'Technical data (SI units)', pag. 22-23 del Type Series Booklet Etanorm (EU/ME/NA) 1311.5/13-EN: diametro de impulsor max 269 mm, limite de velocidad max 3600 rpm (min 500 rpm). Envolvente verificable IMPRESA que aplica a cada tamaño (Table 1): P_max_bar <= 16, T -30 a +140 C; la serie cubre Q <= 1930 m3/h (50 Hz) / 2321 (60 Hz) y H <= 160 m. La envolvente hidraulica Q/H por tamaño es la CURVA (selection chart), no un escalar impreso -> no se transcribe (regla de la casa). Documento oficial via Downloads de la pagina E04B (KSB OCC disfile, documentNumber=1311.5 version=13). Material a pedido: omitido."
+   },
+   "fuente": "https://www.ksb.com/en-global/lc/etanorm/E04B",
+   "fecha_consulta": "2026-07-24",
+   "granularidad": "modelo"
+  },
+  {
+   "marca": "KSB",
+   "modelo": "Etanorm 150-125-315",
+   "eq_type": "Pump — centrifugal",
+   "S_no_publicado": "punto_de_operacion",
+   "params": {
+    "P_max_bar": 16,
+    "T_max_C": 140,
+    "rpm": 1900,
+    "notas": "Bomba centrifuga monoetapa de voluta, back pull-out, EN 733 (ETN succion-descarga-diametro de impulsor). SIN S ESCALAR: el kW al eje depende del punto de operacion -> punto_de_operacion. GRANULARIDAD = MODELO: los limites son de ESTE tamaño, de la Table 19 'Technical data (SI units)', pag. 22-23 del Type Series Booklet Etanorm (EU/ME/NA) 1311.5/13-EN: diametro de impulsor max 334 mm, limite de velocidad max 1900 rpm (min 500 rpm). Envolvente verificable IMPRESA que aplica a cada tamaño (Table 1): P_max_bar <= 16, T -30 a +140 C; la serie cubre Q <= 1930 m3/h (50 Hz) / 2321 (60 Hz) y H <= 160 m. La envolvente hidraulica Q/H por tamaño es la CURVA (selection chart), no un escalar impreso -> no se transcribe (regla de la casa). Documento oficial via Downloads de la pagina E04B (KSB OCC disfile, documentNumber=1311.5 version=13). Material a pedido: omitido."
+   },
+   "fuente": "https://www.ksb.com/en-global/lc/etanorm/E04B",
+   "fecha_consulta": "2026-07-24",
+   "granularidad": "modelo"
+  },
+  {
+   "marca": "KSB",
+   "modelo": "Etanorm 200-150-400",
+   "eq_type": "Pump — centrifugal",
+   "S_no_publicado": "punto_de_operacion",
+   "params": {
+    "P_max_bar": 16,
+    "T_max_C": 140,
+    "rpm": 1800,
+    "notas": "Bomba centrifuga monoetapa de voluta, back pull-out, EN 733 (ETN succion-descarga-diametro de impulsor). SIN S ESCALAR: el kW al eje depende del punto de operacion -> punto_de_operacion. GRANULARIDAD = MODELO: los limites son de ESTE tamaño, de la Table 19 'Technical data (SI units)', pag. 22-23 del Type Series Booklet Etanorm (EU/ME/NA) 1311.5/13-EN: diametro de impulsor max 419 mm, limite de velocidad max 1800 rpm (min 500 rpm). Envolvente verificable IMPRESA que aplica a cada tamaño (Table 1): P_max_bar <= 16, T -30 a +140 C; la serie cubre Q <= 1930 m3/h (50 Hz) / 2321 (60 Hz) y H <= 160 m. La envolvente hidraulica Q/H por tamaño es la CURVA (selection chart), no un escalar impreso -> no se transcribe (regla de la casa). Documento oficial via Downloads de la pagina E04B (KSB OCC disfile, documentNumber=1311.5 version=13). Material a pedido: omitido."
+   },
+   "fuente": "https://www.ksb.com/en-global/lc/etanorm/E04B",
+   "fecha_consulta": "2026-07-24",
+   "granularidad": "modelo"
+  },
+  {
+   "marca": "NETZSCH",
+   "modelo": "NEMO SY",
+   "eq_type": "Pump — positive displacement",
+   "S_no_publicado": "punto_de_operacion",
+   "params": {
+    "Q_max_m3_h": 500,
+    "P_max_bar": 48,
+    "notas": "Bomba de cavidad progresiva (alojamiento de cojinetes, accionamiento universal). SIN S ESCALAR: el kW al eje depende del punto de operacion -> punto_de_operacion. GRANULARIDAD = FAMILIA: Q_max 500 m3/h y P_max 48 bar (estandar; hasta 240 bar en version alta presion) son la envolvente del MODELO-SERIE NEMO SY (el maximo lo fija el tamaño NM mas grande de la linea, no un tamaño concreto) -> verificacion debil. NETZSCH NO publica en web los maximos POR TAMAÑO individual (viven en el software de seleccion / hoja del pedido); esta es la mejor granularidad con fuente oficial, y mejora la vieja entrada 'NEMO L.Cap' (que cruzaba versiones) por un modelo concreto y ordenable. Folleto oficial 'NEMO Progressing Cavity Pumps EN', pag. 7. Sustituir por envolvente por tamaño si se consigue. Material a pedido: omitido."
+   },
+   "fuente": "https://pumps-systems.netzsch.com/_Resources/Persistent/2/7/a/0/27a04a2ab026fb274b707ad012e7c614d8b5a810/NETZSCH%20NEMO%C2%AE%20Progressing%20Cavity%20Pumps%20EN.pdf",
+   "fecha_consulta": "2026-07-24",
    "granularidad": "familia"
+  },
+  {
+   "marca": "NETZSCH",
+   "modelo": "NEMO BY",
+   "eq_type": "Pump — positive displacement",
+   "S_no_publicado": "punto_de_operacion",
+   "params": {
+    "Q_max_m3_h": 400,
+    "P_max_bar": 24,
+    "notas": "Bomba de cavidad progresiva (diseño en bloque, motor bridado directo). SIN S ESCALAR: el kW al eje depende del punto de operacion -> punto_de_operacion. GRANULARIDAD = FAMILIA: Q_max 400 m3/h y P_max 24 bar son la envolvente del MODELO-SERIE NEMO BY (el maximo lo fija el tamaño NM mas grande de la linea, no un tamaño concreto) -> verificacion debil. NETZSCH NO publica en web los maximos POR TAMAÑO individual (viven en el software de seleccion / hoja del pedido); esta es la mejor granularidad con fuente oficial, y mejora la vieja entrada 'NEMO L.Cap' (que cruzaba versiones) por un modelo concreto y ordenable. Folleto oficial 'NEMO Progressing Cavity Pumps EN', pag. 7. Sustituir por envolvente por tamaño si se consigue. Material a pedido: omitido."
+   },
+   "fuente": "https://pumps-systems.netzsch.com/_Resources/Persistent/2/7/a/0/27a04a2ab026fb274b707ad012e7c614d8b5a810/NETZSCH%20NEMO%C2%AE%20Progressing%20Cavity%20Pumps%20EN.pdf",
+   "fecha_consulta": "2026-07-24",
+   "granularidad": "familia"
+  },
+  {
+   "marca": "Ariel",
+   "modelo": "JGE",
+   "eq_type": "Compressor — reciprocating",
+   "S": 2394,
+   "params": {
+    "rpm": 1500,
+    "notas": "Compresor reciprocante separable de proceso. S = potencia maxima nominal del frame (config. de mayor numero de cilindros): 3210 BHP = 2394 kW impresos en la tabla de ratings (pag. 1); 3210x0.7457=2394 kW confirma. rpm = velocidad maxima. Carrera 4.5 in/114 mm, carga de biela total 60,000 lb/267 kN. Hoja JGE/JGK/JGT (A-22747). Presion de descarga no impresa en la hoja (depende de la aplicacion): omitida. Material no declarado: omitido."
+   },
+   "fuente": "https://www.arielcorp.com/content/dam/ariel-corp/documents/product-spec-sheets/JGEKT_10.24.2018.pdf.coredownload.pdf",
+   "fecha_consulta": "2026-07-24"
+  },
+  {
+   "marca": "Ariel",
+   "modelo": "JGT",
+   "eq_type": "Compressor — reciprocating",
+   "S": 2908,
+   "params": {
+    "rpm": 1500,
+    "notas": "Compresor reciprocante separable de proceso. S = potencia maxima nominal del frame (config. de mayor numero de cilindros): 3900 BHP = 2908 kW impresos en la tabla de ratings (pag. 1); 3900x0.7457=2908 kW confirma. rpm = velocidad maxima. Carrera 4.5 in/114 mm, carga de biela total 74,000 lb/329 kN. Hoja JGE/JGK/JGT (A-22747). Presion de descarga no impresa en la hoja (depende de la aplicacion): omitida. Material no declarado: omitido."
+   },
+   "fuente": "https://www.arielcorp.com/content/dam/ariel-corp/documents/product-spec-sheets/JGEKT_10.24.2018.pdf.coredownload.pdf",
+   "fecha_consulta": "2026-07-24"
+  },
+  {
+   "marca": "Ariel",
+   "modelo": "JGJ",
+   "eq_type": "Compressor — reciprocating",
+   "S": 1387,
+   "params": {
+    "rpm": 1800,
+    "notas": "Compresor reciprocante separable de proceso. S = potencia maxima nominal del frame (config. de mayor numero de cilindros): 1860 BHP = 1387 kW impresos en la tabla de ratings (pag. 1); 1860x0.7457=1387 kW confirma. rpm = velocidad maxima. Carrera 3.5 in/89 mm, carga de biela total 42,000 lb/187 kN. Hoja JGR/JGJ (A-22744). Presion de descarga no impresa en la hoja (depende de la aplicacion): omitida. Material no declarado: omitido."
+   },
+   "fuente": "https://www.arielcorp.com/content/dam/ariel-corp/documents/product-spec-sheets/JGRJ_10.24.2018.pdf.coredownload.pdf",
+   "fecha_consulta": "2026-07-24"
+  },
+  {
+   "marca": "Siemens Energy",
+   "modelo": "Dresser-Rand 5HOS2",
+   "eq_type": "Compressor — reciprocating",
+   "S": 1790,
+   "params": {
+    "rpm": 1500,
+    "notas": "Compresor reciprocante separable de proceso. S = potencia maxima nominal del frame (config. de mayor numero de cilindros): 2400 BHP = 1790 kW impresos en la tabla de ratings (pag. 1); 2400x0.7457=1790 kW confirma. rpm = velocidad maxima. Carrera 5 in/127 mm, 2 cilindros, carga de biela combinada 60,000 lb/267 kN. Hoja Dresser-Rand HOS (jun-2021). Presion de descarga no impresa en la hoja (depende de la aplicacion): omitida. Material no declarado: omitido."
+   },
+   "fuente": "https://assets.siemens-energy.com/dam/89766c13-8a07-4210-9742-b05000a7c55b/HOS-Specification-Sheet-June-2021-pdf_Original%20file.pdf",
+   "fecha_consulta": "2026-07-24"
+  },
+  {
+   "marca": "Siemens Energy",
+   "modelo": "Dresser-Rand 7HOS2",
+   "eq_type": "Compressor — reciprocating",
+   "S": 1641,
+   "params": {
+    "rpm": 1000,
+    "notas": "Compresor reciprocante separable de proceso. S = potencia maxima nominal del frame (config. de mayor numero de cilindros): 2200 BHP = 1641 kW impresos en la tabla de ratings (pag. 1); 2200x0.7457=1641 kW confirma. rpm = velocidad maxima. Carrera 7 in/178 mm, 2 cilindros. Hoja Dresser-Rand HOS (jun-2021). Presion de descarga no impresa en la hoja (depende de la aplicacion): omitida. Material no declarado: omitido."
+   },
+   "fuente": "https://assets.siemens-energy.com/dam/89766c13-8a07-4210-9742-b05000a7c55b/HOS-Specification-Sheet-June-2021-pdf_Original%20file.pdf",
+   "fecha_consulta": "2026-07-24"
+  },
+  {
+   "marca": "Siemens Energy",
+   "modelo": "Dresser-Rand 6HOS4",
+   "eq_type": "Compressor — reciprocating",
+   "S": 2983,
+   "params": {
+    "rpm": 1200,
+    "notas": "Compresor reciprocante separable de proceso. S = potencia maxima nominal del frame (config. de mayor numero de cilindros): 4000 BHP = 2983 kW impresos en la tabla de ratings (pag. 1); 4000x0.7457=2983 kW confirma. rpm = velocidad maxima. Carrera 6 in/152 mm, 4 cilindros. Hoja Dresser-Rand HOS (jun-2021). Presion de descarga no impresa en la hoja (depende de la aplicacion): omitida. Material no declarado: omitido."
+   },
+   "fuente": "https://assets.siemens-energy.com/dam/89766c13-8a07-4210-9742-b05000a7c55b/HOS-Specification-Sheet-June-2021-pdf_Original%20file.pdf",
+   "fecha_consulta": "2026-07-24"
+  },
+  {
+   "marca": "Sodeca",
+   "modelo": "CMR-1135-2T IE3",
+   "eq_type": "Fan — centrifugal radial",
+   "S": 2.167,
+   "params": {
+    "rpm": 2910,
+    "notas": "Ventilador centrifugo de media presion, alabes curvados hacia atras (serie CMR), pag. 193. S = caudal MAXIMO de aire publicado por modelo: 7800 m3/h = 7800/3600 = 2.167 m3/s (columna 'Maximum flow rate' del catalogo). rpm = velocidad; potencia instalada 2.2 kW. La presion estatica maxima solo aparece en las curvas caracteristicas (no como escalar) -> P_max no se transcribe. Material no declarado: omitido."
+   },
+   "fuente": "https://www.sodeca.com/files/catalogs/en/CT01_Centrifugs_2018_EN.pdf",
+   "fecha_consulta": "2026-07-24"
+  },
+  {
+   "marca": "Sodeca",
+   "modelo": "CMR-1650-2T IE3",
+   "eq_type": "Fan — centrifugal radial",
+   "S": 5.236,
+   "params": {
+    "rpm": 2945,
+    "notas": "Ventilador centrifugo de media presion (serie CMR), pag. 193. S = caudal MAXIMO de aire publicado por modelo: 18850 m3/h = 18850/3600 = 5.236 m3/s (columna 'Maximum flow rate' del catalogo). rpm = velocidad; potencia instalada 11.0 kW. La presion estatica maxima solo aparece en las curvas caracteristicas (no como escalar) -> P_max no se transcribe. Material no declarado: omitido."
+   },
+   "fuente": "https://www.sodeca.com/files/catalogs/en/CT01_Centrifugs_2018_EN.pdf",
+   "fecha_consulta": "2026-07-24"
+  },
+  {
+   "marca": "Sodeca",
+   "modelo": "CMR-2380-4T IE3",
+   "eq_type": "Fan — centrifugal radial",
+   "S": 13.333,
+   "params": {
+    "rpm": 1470,
+    "notas": "Ventilador centrifugo de media presion (serie CMR), pag. 193. S = caudal MAXIMO de aire publicado por modelo: 48000 m3/h = 48000/3600 = 13.333 m3/s (columna 'Maximum flow rate' del catalogo). rpm = velocidad; potencia instalada 22.0 kW. La presion estatica maxima solo aparece en las curvas caracteristicas (no como escalar) -> P_max no se transcribe. Material no declarado: omitido."
+   },
+   "fuente": "https://www.sodeca.com/files/catalogs/en/CT01_Centrifugs_2018_EN.pdf",
+   "fecha_consulta": "2026-07-24"
+  },
+  {
+   "marca": "Sodeca",
+   "modelo": "HFW-56-4T-1 IE3",
+   "eq_type": "Fan — axial",
+   "S": 3.125,
+   "params": {
+    "rpm": 1420,
+    "notas": "Ventilador axial tubular (serie HFW), pag. 28. Angulo de alabe 22 grados. S = caudal MAXIMO de aire publicado por modelo: 11250 m3/h = 11250/3600 = 3.125 m3/s (columna 'Maximum flow rate' del catalogo). rpm = velocidad; potencia instalada 0.75 kW. La presion estatica maxima solo aparece en las curvas caracteristicas (no como escalar) -> P_max no se transcribe. Material no declarado: omitido."
+   },
+   "fuente": "https://www.sodeca.com/files/catalogs/en/CT07_Helicoidales_Tejado_2019_EN.pdf",
+   "fecha_consulta": "2026-07-24"
+  },
+  {
+   "marca": "Sodeca",
+   "modelo": "HFW-63-4T-4 IE3",
+   "eq_type": "Fan — axial",
+   "S": 6.736,
+   "params": {
+    "rpm": 1440,
+    "notas": "Ventilador axial tubular (serie HFW), pag. 28. Angulo de alabe 38 grados. S = caudal MAXIMO de aire publicado por modelo: 24250 m3/h = 24250/3600 = 6.736 m3/s (columna 'Maximum flow rate' del catalogo). rpm = velocidad; potencia instalada 3.0 kW. La presion estatica maxima solo aparece en las curvas caracteristicas (no como escalar) -> P_max no se transcribe. Material no declarado: omitido."
+   },
+   "fuente": "https://www.sodeca.com/files/catalogs/en/CT07_Helicoidales_Tejado_2019_EN.pdf",
+   "fecha_consulta": "2026-07-24"
+  },
+  {
+   "marca": "Sodeca",
+   "modelo": "HFW-90-4T-4 IE3",
+   "eq_type": "Fan — axial",
+   "S": 9.333,
+   "params": {
+    "rpm": 1440,
+    "notas": "Ventilador axial tubular (serie HFW), pag. 28. Angulo de alabe 8 grados. S = caudal MAXIMO de aire publicado por modelo: 33600 m3/h = 33600/3600 = 9.333 m3/s (columna 'Maximum flow rate' del catalogo). rpm = velocidad; potencia instalada 3.0 kW. La presion estatica maxima solo aparece en las curvas caracteristicas (no como escalar) -> P_max no se transcribe. Material no declarado: omitido."
+   },
+   "fuente": "https://www.sodeca.com/files/catalogs/en/CT07_Helicoidales_Tejado_2019_EN.pdf",
+   "fecha_consulta": "2026-07-24"
+  },
+  {
+   "marca": "Samson",
+   "modelo": "Type 3241 DN25 PN40",
+   "eq_type": "Valve — control globe",
+   "S_no_publicado": "otra_magnitud",
+   "params": {
+    "P_max_bar": 40,
+    "T_max_C": 220,
+    "notas": "Valvula de control de globo. El fabricante publica la capacidad como Kvs (m3/h·bar^-0.5) -> no mapea al S_unit del tipo (m3/h) -> otra_magnitud. Envolvente verificable IMPRESA: P_max_bar = 40 (cuerpo PN40) y T_max_C = 220 (config. estandar). Kvs 0.4-10 (DN25, tapon estandar, isoporcentual; tabla Kvs T 8000-3 pag. 4). Cuerpo acero fundido 1.0619, PN 10 a 40 (hoja T 8015). Serie con sello metalico llega a +450 C. La presion admisible a temperatura sigue el diagrama P-T (grafica, no escalar) -> no se lee de ahi. Material no declarado: omitido."
+   },
+   "fuente": "https://www.samsongroup.com/document/t80150en.pdf",
+   "fecha_consulta": "2026-07-24",
+   "granularidad": "modelo"
+  },
+  {
+   "marca": "Samson",
+   "modelo": "Type 3241 DN50 PN40",
+   "eq_type": "Valve — control globe",
+   "S_no_publicado": "otra_magnitud",
+   "params": {
+    "P_max_bar": 40,
+    "T_max_C": 220,
+    "notas": "Valvula de control de globo. El fabricante publica la capacidad como Kvs (m3/h·bar^-0.5) -> no mapea al S_unit del tipo (m3/h) -> otra_magnitud. Envolvente verificable IMPRESA: P_max_bar = 40 (cuerpo PN40) y T_max_C = 220 (config. estandar). Kvs hasta 40 (DN50, asiento 48 mm; T 8000-3 pag. 4). PN 10 a 40, -10 a +220 C estandar (hoja T 8015). La presion admisible a temperatura sigue el diagrama P-T (grafica, no escalar) -> no se lee de ahi. Material no declarado: omitido."
+   },
+   "fuente": "https://www.samsongroup.com/document/t80150en.pdf",
+   "fecha_consulta": "2026-07-24",
+   "granularidad": "modelo"
+  },
+  {
+   "marca": "Samson",
+   "modelo": "Type 3241 DN80 PN40",
+   "eq_type": "Valve — control globe",
+   "S_no_publicado": "otra_magnitud",
+   "params": {
+    "P_max_bar": 40,
+    "T_max_C": 220,
+    "notas": "Valvula de control de globo. El fabricante publica la capacidad como Kvs (m3/h·bar^-0.5) -> no mapea al S_unit del tipo (m3/h) -> otra_magnitud. Envolvente verificable IMPRESA: P_max_bar = 40 (cuerpo PN40) y T_max_C = 220 (config. estandar). Kvs hasta 80 (DN80, asiento 80 mm; T 8000-3 pag. 4). PN 10 a 40, -10 a +220 C (hoja T 8015). La presion admisible a temperatura sigue el diagrama P-T (grafica, no escalar) -> no se lee de ahi. Material no declarado: omitido."
+   },
+   "fuente": "https://www.samsongroup.com/document/t80150en.pdf",
+   "fecha_consulta": "2026-07-24",
+   "granularidad": "modelo"
+  },
+  {
+   "marca": "Emerson Fisher",
+   "modelo": "easy-e ET NPS2 / DN50",
+   "eq_type": "Valve — control globe",
+   "S_no_publicado": "otra_magnitud",
+   "params": {
+    "P_max_bar": 40,
+    "T_max_C": 232,
+    "notas": "Valvula de control de globo. El fabricante publica la capacidad como Cv -> no mapea al S_unit del tipo (m3/h) -> otra_magnitud. Envolvente verificable IMPRESA: P_max_bar = 40 (cuerpo PN40) y T_max_C = 232 (config. estandar). Cv 59.7 (NPS2=DN50, trim full-size isoporcentual; Tabla 17 pag. 22, boletin ET D100022X012). Construcciones PN16/25/40/63/100 y CL150/300/600 (Tabla 3). T hasta 316 C con anillos PEEK. La presion admisible a temperatura sigue el diagrama P-T (grafica, no escalar) -> no se lee de ahi. Material no declarado: omitido."
+   },
+   "fuente": "https://www.emerson.com/is/content/emerson/en/final-control/flow-controls/documents/d100022x012-bulletin-et-eat-and-etr-sliding-stem-control-valves-fisher.pdf",
+   "fecha_consulta": "2026-07-24",
+   "granularidad": "modelo"
+  },
+  {
+   "marca": "Emerson Fisher",
+   "modelo": "easy-e ET NPS3 / DN80",
+   "eq_type": "Valve — control globe",
+   "S_no_publicado": "otra_magnitud",
+   "params": {
+    "P_max_bar": 40,
+    "T_max_C": 232,
+    "notas": "Valvula de control de globo. El fabricante publica la capacidad como Cv -> no mapea al S_unit del tipo (m3/h) -> otra_magnitud. Envolvente verificable IMPRESA: P_max_bar = 40 (cuerpo PN40) y T_max_C = 232 (config. estandar). Cv 136 (NPS3=DN80; Tabla 17 pag. 22, boletin ET D100022X012). PN16-100 / CL150-600. 232 C = 450 F estandar. La presion admisible a temperatura sigue el diagrama P-T (grafica, no escalar) -> no se lee de ahi. Material no declarado: omitido."
+   },
+   "fuente": "https://www.emerson.com/is/content/emerson/en/final-control/flow-controls/documents/d100022x012-bulletin-et-eat-and-etr-sliding-stem-control-valves-fisher.pdf",
+   "fecha_consulta": "2026-07-24",
+   "granularidad": "modelo"
+  },
+  {
+   "marca": "Emerson Fisher",
+   "modelo": "easy-e ET NPS4 / DN100",
+   "eq_type": "Valve — control globe",
+   "S_no_publicado": "otra_magnitud",
+   "params": {
+    "P_max_bar": 40,
+    "T_max_C": 232,
+    "notas": "Valvula de control de globo. El fabricante publica la capacidad como Cv -> no mapea al S_unit del tipo (m3/h) -> otra_magnitud. Envolvente verificable IMPRESA: P_max_bar = 40 (cuerpo PN40) y T_max_C = 232 (config. estandar). Cv 224 (NPS4=DN100; Tabla 17 pag. 22, boletin ET D100022X012). PN16-100 / CL150-600. La presion admisible a temperatura sigue el diagrama P-T (grafica, no escalar) -> no se lee de ahi. Material no declarado: omitido."
+   },
+   "fuente": "https://www.emerson.com/is/content/emerson/en/final-control/flow-controls/documents/d100022x012-bulletin-et-eat-and-etr-sliding-stem-control-valves-fisher.pdf",
+   "fecha_consulta": "2026-07-24",
+   "granularidad": "modelo"
+  },
+  {
+   "marca": "GEA",
+   "modelo": "MSE 100",
+   "eq_type": "Centrifuge — disc stack",
+   "S_no_publicado": "otra_magnitud",
+   "params": {
+    "Q_max_m3_h": 30,
+    "notas": "Separadora/clarificadora centrifuga de discos (disc-stack). El fabricante publica CAPACIDAD HIDRAULICA (throughput), no el volumen de tambor en m3 -> otra_magnitud. Q_max_m3_h = 30 = caudal maximo publicado del modelo. Clarificadora de leche; rango impreso 15,000-30,000 l/h -> maximo 30,000/1000=30 m3/h (tabla 'Machine types', pag. 22, doc B_DA-19-07-0010 EN). rpm no impreso: omitido. Material no declarado: omitido."
+   },
+   "fuente": "https://www.gea.com/assets/170233/",
+   "fecha_consulta": "2026-07-24",
+   "granularidad": "modelo"
+  },
+  {
+   "marca": "GEA",
+   "modelo": "MSE 350",
+   "eq_type": "Centrifuge — disc stack",
+   "S_no_publicado": "otra_magnitud",
+   "params": {
+    "Q_max_m3_h": 75,
+    "notas": "Separadora/clarificadora centrifuga de discos (disc-stack). El fabricante publica CAPACIDAD HIDRAULICA (throughput), no el volumen de tambor en m3 -> otra_magnitud. Q_max_m3_h = 75 = caudal maximo publicado del modelo. Clarificadora de leche; rango 55,000-75,000 l/h -> 75 m3/h (pag. 22). rpm no impreso: omitido. Material no declarado: omitido."
+   },
+   "fuente": "https://www.gea.com/assets/170233/",
+   "fecha_consulta": "2026-07-24",
+   "granularidad": "modelo"
+  },
+  {
+   "marca": "GEA",
+   "modelo": "CSE 400",
+   "eq_type": "Centrifuge — disc stack",
+   "S_no_publicado": "otra_magnitud",
+   "params": {
+    "Q_max_m3_h": 45,
+    "notas": "Separadora/clarificadora centrifuga de discos (disc-stack). El fabricante publica CAPACIDAD HIDRAULICA (throughput), no el volumen de tambor en m3 -> otra_magnitud. Q_max_m3_h = 45 = caudal maximo publicado del modelo. Clarificadora de eliminacion bacteriana; rango 30,000-45,000 l/h -> 45 m3/h (pag. 22). rpm no impreso: omitido. Material no declarado: omitido."
+   },
+   "fuente": "https://www.gea.com/assets/170233/",
+   "fecha_consulta": "2026-07-24",
+   "granularidad": "modelo"
+  },
+  {
+   "marca": "Alfa Laval",
+   "modelo": "MBPX 810",
+   "eq_type": "Centrifuge — disc stack",
+   "S_no_publicado": "otra_magnitud",
+   "params": {
+    "Q_max_m3_h": 10,
+    "rpm": 7488,
+    "notas": "Separadora/clarificadora centrifuga de discos (disc-stack). El fabricante publica CAPACIDAD HIDRAULICA (throughput), no el volumen de tambor en m3 -> otra_magnitud. Q_max_m3_h = 10 = caudal maximo publicado del modelo. Separadora solids-ejecting; throughput max 10 m3/h (pag. 2). Aplicaciones: bacterias/enzimas/cultivos/vacunas. Bowl 15 l. Material no declarado: omitido."
+   },
+   "fuente": "https://www.alfalaval.com/globalassets/documents/products/separation/centrifugal-separators/disc-stack-separators/mbpx-810sgv-pchs00021en_mbpx-810.pdf",
+   "fecha_consulta": "2026-07-24",
+   "granularidad": "modelo"
+  },
+  {
+   "marca": "Alfa Laval",
+   "modelo": "PX 80",
+   "eq_type": "Centrifuge — disc stack",
+   "S_no_publicado": "otra_magnitud",
+   "params": {
+    "Q_max_m3_h": 20,
+    "rpm": 5120,
+    "notas": "Separadora/clarificadora centrifuga de discos (disc-stack). El fabricante publica CAPACIDAD HIDRAULICA (throughput), no el volumen de tambor en m3 -> otra_magnitud. Q_max_m3_h = 20 = caudal maximo publicado del modelo. Separadora disc-stack solids-ejecting; throughput max 20 m3/h (pag. 2). Refinacion de aceites y grasas. Material no declarado: omitido."
+   },
+   "fuente": "https://www.alfalaval.com/globalassets/documents/products/separation/centrifugal-separators/disc-stack-separators/px-80-disc-stack-centrifuge.pdf",
+   "fecha_consulta": "2026-07-24",
+   "granularidad": "modelo"
+  },
+  {
+   "marca": "Alfa Laval",
+   "modelo": "VO 5",
+   "eq_type": "Centrifuge — disc stack",
+   "S_no_publicado": "otra_magnitud",
+   "params": {
+    "Q_max_m3_h": 6,
+    "rpm": 8400,
+    "notas": "Separadora/clarificadora centrifuga de discos (disc-stack). El fabricante publica CAPACIDAD HIDRAULICA (throughput), no el volumen de tambor en m3 -> otra_magnitud. Q_max_m3_h = 6 = caudal maximo publicado del modelo. Separadora disc-stack; throughput max 6 m3/h (pag. 2). Aceites/grasas. Bowl 6 l; rpm 8375/8400 (50/60 Hz). Material no declarado: omitido."
+   },
+   "fuente": "https://www.alfalaval.com/globalassets/documents/products/separation/centrifugal-separators/disc-stack-separators/alfa-laval-disc-stack-separator_vo5.pdf",
+   "fecha_consulta": "2026-07-24",
+   "granularidad": "modelo"
+  },
+  {
+   "marca": "EVAPCO",
+   "modelo": "AT 14-2E4",
+   "eq_type": "Cooling tower — induced draft",
+   "S_no_publicado": "otra_magnitud",
+   "params": {
+    "Q_max_m3_h": 22.5,
+    "notas": "Torre de enfriamiento de tiro INDUCIDO. El fabricante publica TONELAJE NOMINAL a condiciones de referencia (95->85 F, bulbo humedo 78 F), no MW ni caudal directo -> otra_magnitud. Q_max_m3_h = caudal de agua nominal derivado por la DEFINICION IMPRESA del fabricante (1 ton nominal = 3 USGPM): 33 ton x 3 = 99 gpm x 0.2271 = 22.5 m3/h. Tonelaje nominal 33 (pag. 3); contraflujo tiro inducido; motor de ventilador 2 HP. Bulletin AT21ENG. Material no declarado: omitido."
+   },
+   "fuente": "https://www.evapco.com/sites/evapco.com/files/2021-10/AT21ENG%201021.pdf",
+   "fecha_consulta": "2026-07-24",
+   "granularidad": "modelo"
+  },
+  {
+   "marca": "EVAPCO",
+   "modelo": "AT 17-2J9",
+   "eq_type": "Cooling tower — induced draft",
+   "S_no_publicado": "otra_magnitud",
+   "params": {
+    "Q_max_m3_h": 116.5,
+    "notas": "Torre de enfriamiento de tiro INDUCIDO. El fabricante publica TONELAJE NOMINAL a condiciones de referencia (95->85 F, bulbo humedo 78 F), no MW ni caudal directo -> otra_magnitud. Q_max_m3_h = caudal de agua nominal derivado por la DEFINICION IMPRESA del fabricante (1 ton nominal = 3 USGPM): 171 ton x 3 = 513 gpm x 0.2271 = 116.5 m3/h. Tonelaje nominal 171 (pag. 5); motor 15 HP. Bulletin AT21ENG. Material no declarado: omitido."
+   },
+   "fuente": "https://www.evapco.com/sites/evapco.com/files/2021-10/AT21ENG%201021.pdf",
+   "fecha_consulta": "2026-07-24",
+   "granularidad": "modelo"
+  },
+  {
+   "marca": "EVAPCO",
+   "modelo": "AT 27-2J24",
+   "eq_type": "Cooling tower — induced draft",
+   "S_no_publicado": "otra_magnitud",
+   "params": {
+    "Q_max_m3_h": 279.3,
+    "notas": "Torre de enfriamiento de tiro INDUCIDO. El fabricante publica TONELAJE NOMINAL a condiciones de referencia (95->85 F, bulbo humedo 78 F), no MW ni caudal directo -> otra_magnitud. Q_max_m3_h = caudal de agua nominal derivado por la DEFINICION IMPRESA del fabricante (1 ton nominal = 3 USGPM): 410 ton x 3 = 1230 gpm x 0.2271 = 279.3 m3/h. Tonelaje nominal 410 (pag. 8); motor (2)x15 HP. Bulletin AT21ENG. Material no declarado: omitido."
+   },
+   "fuente": "https://www.evapco.com/sites/evapco.com/files/2021-10/AT21ENG%201021.pdf",
+   "fecha_consulta": "2026-07-24",
+   "granularidad": "modelo"
+  },
+  {
+   "marca": "BAC",
+   "modelo": "Series 3000 XES3E-8518-05G",
+   "eq_type": "Cooling tower — induced draft",
+   "S_no_publicado": "otra_magnitud",
+   "params": {
+    "Q_max_m3_h": 116.5,
+    "notas": "Torre de enfriamiento de tiro INDUCIDO. El fabricante publica TONELAJE NOMINAL a condiciones de referencia (95->85 F, bulbo humedo 78 F), no MW ni caudal directo -> otra_magnitud. Q_max_m3_h = caudal de agua nominal derivado por la DEFINICION IMPRESA del fabricante (1 ton nominal = 3 USGPM): 171 ton x 3 = 513 gpm x 0.2271 = 116.5 m3/h. Tonelaje nominal 171 (pag. C18); flujo cruzado, ventilador axial tiro inducido; motor 3 HP. Product & Application Handbook Vol. VI. Material no declarado: omitido."
+   },
+   "fuente": "https://baltimoreaircoil.com/download_api_endpoint/6026/C015_PAHBvi_3000_ED_20231020.pdf",
+   "fecha_consulta": "2026-07-24",
+   "granularidad": "modelo"
+  },
+  {
+   "marca": "BAC",
+   "modelo": "Series 3000 S3E-8518-05L",
+   "eq_type": "Cooling tower — induced draft",
+   "S_no_publicado": "otra_magnitud",
+   "params": {
+    "Q_max_m3_h": 199.6,
+    "notas": "Torre de enfriamiento de tiro INDUCIDO. El fabricante publica TONELAJE NOMINAL a condiciones de referencia (95->85 F, bulbo humedo 78 F), no MW ni caudal directo -> otra_magnitud. Q_max_m3_h = caudal de agua nominal derivado por la DEFINICION IMPRESA del fabricante (1 ton nominal = 3 USGPM): 293 ton x 3 = 879 gpm x 0.2271 = 199.6 m3/h. Tonelaje nominal 293 (pag. C16); motor 15 HP. Handbook Vol. VI. Material no declarado: omitido."
+   },
+   "fuente": "https://baltimoreaircoil.com/download_api_endpoint/6026/C015_PAHBvi_3000_ED_20231020.pdf",
+   "fecha_consulta": "2026-07-24",
+   "granularidad": "modelo"
+  },
+  {
+   "marca": "BAC",
+   "modelo": "Series 3000 S3E-1424-14T",
+   "eq_type": "Cooling tower — induced draft",
+   "S_no_publicado": "otra_magnitud",
+   "params": {
+    "Q_max_m3_h": 887.7,
+    "notas": "Torre de enfriamiento de tiro INDUCIDO. El fabricante publica TONELAJE NOMINAL a condiciones de referencia (95->85 F, bulbo humedo 78 F), no MW ni caudal directo -> otra_magnitud. Q_max_m3_h = caudal de agua nominal derivado por la DEFINICION IMPRESA del fabricante (1 ton nominal = 3 USGPM): 1303 ton x 3 = 3909 gpm x 0.2271 = 887.7 m3/h. Tonelaje nominal 1303 (pag. C17); motor 100 HP; accionamiento por engranaje. Handbook Vol. VI. Material no declarado: omitido."
+   },
+   "fuente": "https://baltimoreaircoil.com/download_api_endpoint/6026/C015_PAHBvi_3000_ED_20231020.pdf",
+   "fecha_consulta": "2026-07-24",
+   "granularidad": "modelo"
+  },
+  {
+   "marca": "Casals",
+   "modelo": "AATZC 800",
+   "eq_type": "Fan — centrifugal radial",
+   "S": 8.847,
+   "params": {
+    "rpm": 2000,
+    "notas": "Ventilador centrifugo de alta presion, turbina de PALA RECTA ABIERTA (radial) de simple aspiracion, a transmision. rpm es el tope del rango publicado 950/2000 (a transmision; el caudal maximo corresponde al tope). S = caudal MAXIMO de aire publicado por modelo: 31.850 m3/h = 31.850/3600 = 8.847 m3/s (tabla de la pag. 285, catalogo tecnico CV032025, 50 Hz). Que la columna 'Air flow' ES el maximo se confirma porque los mismos modelos aparecen en otra tabla del mismo catalogo bajo el encabezado 'Max Air flow m3/h' con valores identicos. Potencia nominal 7,50-55,00 kW. La presion estatica maxima no se publica por modelo (solo curvas) -> no se transcribe. Material no declarado: omitido."
+   },
+   "fuente": "https://www.casals.com/assets/uploads/cat_pdf/ccf5d-casals-industrial-fans-catalogue.pdf",
+   "fecha_consulta": "2026-07-24"
+  },
+  {
+   "marca": "Casals",
+   "modelo": "AATZC 1000",
+   "eq_type": "Fan — centrifugal radial",
+   "S": 13.931,
+   "params": {
+    "rpm": 1600,
+    "notas": "Ventilador centrifugo de alta presion, pala recta abierta, a transmision. rpm = tope del rango 800/1600. S = caudal MAXIMO de aire publicado por modelo: 50.150 m3/h = 50.150/3600 = 13.931 m3/s (tabla de la pag. 285, catalogo tecnico CV032025, 50 Hz). Que la columna 'Air flow' ES el maximo se confirma porque los mismos modelos aparecen en otra tabla del mismo catalogo bajo el encabezado 'Max Air flow m3/h' con valores identicos. Potencia nominal 11,00-90,00 kW. La presion estatica maxima no se publica por modelo (solo curvas) -> no se transcribe. Material no declarado: omitido."
+   },
+   "fuente": "https://www.casals.com/assets/uploads/cat_pdf/ccf5d-casals-industrial-fans-catalogue.pdf",
+   "fecha_consulta": "2026-07-24"
+  },
+  {
+   "marca": "Casals",
+   "modelo": "AATZC 1250",
+   "eq_type": "Fan — centrifugal radial",
+   "S": 19.817,
+   "params": {
+    "rpm": 1250,
+    "notas": "Ventilador centrifugo de alta presion, pala recta abierta, a transmision. rpm = tope del rango 650/1250. S = caudal MAXIMO de aire publicado por modelo: 71.340 m3/h = 71.340/3600 = 19.817 m3/s (tabla de la pag. 285, catalogo tecnico CV032025, 50 Hz). Que la columna 'Air flow' ES el maximo se confirma porque los mismos modelos aparecen en otra tabla del mismo catalogo bajo el encabezado 'Max Air flow m3/h' con valores identicos. Potencia nominal 15,00-132,00 kW. La presion estatica maxima no se publica por modelo (solo curvas) -> no se transcribe. Material no declarado: omitido."
+   },
+   "fuente": "https://www.casals.com/assets/uploads/cat_pdf/ccf5d-casals-industrial-fans-catalogue.pdf",
+   "fecha_consulta": "2026-07-24"
+  },
+  {
+   "marca": "Casals",
+   "modelo": "HH-2 71 T4 2,2kW",
+   "eq_type": "Fan — axial",
+   "S": 6.764,
+   "params": {
+    "rpm": 1435,
+    "notas": "Ventilador helicoidal tubular de camisa larga, motor externo, helice de fundicion de aluminio de angulo variable. S = caudal MAXIMO de aire publicado por modelo: 24.350 m3/h = 24.350/3600 = 6.764 m3/s (tabla de la pag. 348, catalogo tecnico CV032025, 50 Hz). Que la columna 'Air flow' ES el maximo se confirma porque los mismos modelos aparecen en otra tabla del mismo catalogo bajo el encabezado 'Max Air flow m3/h' con valores identicos. Potencia 2,20 kW. La presion estatica maxima no se publica por modelo (solo curvas) -> no se transcribe. Material no declarado: omitido."
+   },
+   "fuente": "https://www.casals.com/assets/uploads/cat_pdf/ccf5d-casals-industrial-fans-catalogue.pdf",
+   "fecha_consulta": "2026-07-24"
+  },
+  {
+   "marca": "Casals",
+   "modelo": "HH-2 80 T4 4kW",
+   "eq_type": "Fan — axial",
+   "S": 9.772,
+   "params": {
+    "rpm": 1440,
+    "notas": "Ventilador helicoidal tubular de camisa larga, motor externo, helice de aluminio de angulo variable. S = caudal MAXIMO de aire publicado por modelo: 35.180 m3/h = 35.180/3600 = 9.772 m3/s (tabla de la pag. 348, catalogo tecnico CV032025, 50 Hz). Que la columna 'Air flow' ES el maximo se confirma porque los mismos modelos aparecen en otra tabla del mismo catalogo bajo el encabezado 'Max Air flow m3/h' con valores identicos. Potencia 4,00 kW. La presion estatica maxima no se publica por modelo (solo curvas) -> no se transcribe. Material no declarado: omitido."
+   },
+   "fuente": "https://www.casals.com/assets/uploads/cat_pdf/ccf5d-casals-industrial-fans-catalogue.pdf",
+   "fecha_consulta": "2026-07-24"
+  },
+  {
+   "marca": "Casals",
+   "modelo": "HH-2 90 T4 5,5kW",
+   "eq_type": "Fan — axial",
+   "S": 12.603,
+   "params": {
+    "rpm": 1460,
+    "notas": "Ventilador helicoidal tubular de camisa larga, motor externo, helice de aluminio de angulo variable. S = caudal MAXIMO de aire publicado por modelo: 45.370 m3/h = 45.370/3600 = 12.603 m3/s (tabla de la pag. 348, catalogo tecnico CV032025, 50 Hz). Que la columna 'Air flow' ES el maximo se confirma porque los mismos modelos aparecen en otra tabla del mismo catalogo bajo el encabezado 'Max Air flow m3/h' con valores identicos. Potencia 5,50 kW. La presion estatica maxima no se publica por modelo (solo curvas) -> no se transcribe. Material no declarado: omitido."
+   },
+   "fuente": "https://www.casals.com/assets/uploads/cat_pdf/ccf5d-casals-industrial-fans-catalogue.pdf",
+   "fecha_consulta": "2026-07-24"
+  },
+  {
+   "marca": "LESER",
+   "modelo": "Type 526 API orificio D, 1\"Dx2\" Class 150x150",
+   "eq_type": "Valve — relief",
+   "S_no_publicado": "otra_magnitud",
+   "granularidad": "modelo",
+   "params": {
+    "P_max_bar": 19.7,
+    "T_max_C": 427,
+    "notas": "Valvula de seguridad/alivio bridada API 526. El fabricante publica LETRA DE ORIFICIO y CAPACIDAD CERTIFICADA (kg/h de vapor, mn3/h de aire), no un caudal en m3/h -> otra_magnitud. Orificio API D: d0=14.0 mm, A0=154 mm2. P_max_bar=19.7 = presion de tarado MAXIMA a -29..38 C (cuerpo WCB 1.0619, Class 150x150; pag. 24); baja a 12.8 bar a 232 C y 5.5 bar a 427 C. T_max_C=427 = escalon de temperatura mas alto impreso para WCB. Capacidad certificada AD 2000-A2: vapor 450 kg/h y aire 567 mn3/h a 10 bar de tarado (pags. 90 y 92). Presion y temperatura son ENVOLVENTE, no un punto simultaneo. Material no cargado (WCB): no esta en el vocabulario del repo."
+   },
+   "fuente": "https://www.leser.com/-/media/files/catalogue/english/api_extended_catalog_en.pdf",
+   "fecha_consulta": "2026-07-24"
+  },
+  {
+   "marca": "LESER",
+   "modelo": "Type 526 API orificio F, 1.5\"Fx2\" Class 300x150",
+   "eq_type": "Valve — relief",
+   "S_no_publicado": "otra_magnitud",
+   "granularidad": "modelo",
+   "params": {
+    "P_max_bar": 51.0,
+    "T_max_C": 427,
+    "notas": "Valvula de seguridad API 526. otra_magnitud (publica orificio + capacidad certificada). Orificio API F: d0=18.0 mm, A0=254 mm2. P_max_bar=51.0 a -29..38 C (WCB, Class 300x150; pag. 32); 42.4 bar a 232 C; 28.3 bar a 427 C. Capacidad AD 2000-A2: vapor 1323 kg/h, aire 1665 mn3/h a 10 bar de tarado (pags. 90 y 92). Envolvente, no punto simultaneo."
+   },
+   "fuente": "https://www.leser.com/-/media/files/catalogue/english/api_extended_catalog_en.pdf",
+   "fecha_consulta": "2026-07-24"
+  },
+  {
+   "marca": "LESER",
+   "modelo": "Type 526 API orificio G, 1.5\"Gx3\" Class 600x150",
+   "eq_type": "Valve — relief",
+   "S_no_publicado": "otra_magnitud",
+   "granularidad": "modelo",
+   "params": {
+    "P_max_bar": 102.1,
+    "T_max_C": 427,
+    "notas": "Valvula de seguridad API 526. otra_magnitud. Orificio API G: d0=22.5 mm, A0=398 mm2. P_max_bar=102.1 a -29..38 C (WCB, Class 600x150; pag. 36); 85.2 bar a 232 C; 56.9 bar a 427 C. Capacidad AD 2000-A2: vapor 2068 kg/h, aire 2601 mn3/h a 10 bar de tarado. Envolvente, no punto simultaneo."
+   },
+   "fuente": "https://www.leser.com/-/media/files/catalogue/english/api_extended_catalog_en.pdf",
+   "fecha_consulta": "2026-07-24"
+  },
+  {
+   "marca": "LESER",
+   "modelo": "Type 441/442 DIN High Performance, DN20x32 PN16",
+   "eq_type": "Valve — relief",
+   "S_no_publicado": "otra_magnitud",
+   "granularidad": "modelo",
+   "params": {
+    "P_max_bar": 16,
+    "T_max_C": 300,
+    "notas": "Valvula de seguridad DIN de carrera completa (full-lift). otra_magnitud: LESER publica geometria de orificio y capacidad certificada, no caudal en m3/h. SIN letra API: orificio real d0=18 mm, A0=254 mm2 (pag. 15). P_max_bar=16 = presion de tarado maxima (bridas PN16/PN16, cuerpo 0.6025); rango de tarado desde 0.1 barg. T_max_C=300 segun DIN EN (min -10 C). La envolvente de la FAMILIA (0.1-300 bar, -270 a 550 C, DN20-400) es mas amplia: estos valores son los de ESTE modelo."
+   },
+   "fuente": "https://www.leser.com/-/media/files/catalogue/english/leser-safety-relief-valve-high_performance_catalog_en_07_2016.pdf",
+   "fecha_consulta": "2026-07-24"
+  },
+  {
+   "marca": "Samson",
+   "modelo": "Type 3244 DN25 PN40 (Kvs 10)",
+   "eq_type": "Valve — 3-way",
+   "S_no_publicado": "otra_magnitud",
+   "granularidad": "modelo",
+   "params": {
+    "T_max_C": 220,
+    "notas": "Valvula de control de TRES VIAS (mezcladora/distribuidora). El fabricante publica Kvs (m3/h·bar^-0.5), que no es el caudal en m3/h del S_unit -> otra_magnitud (mismo criterio que las de globo). Kvs disponibles en DN25: 2/4/6.3/10 (max 10), asiento 24 mm, carrera 15 mm (Tabla 3, pag. 4). Equivalente ANSI NPS1: Cv 2.3/5/7.5/12. P_max_bar=40 = rating de cuerpo PN40 (la hoja imprime 'Pressure rating PN 10, 16, 25, 40'); T_max_C=220 = cuerpo sin seccion aislante (-10 a +220 C). Con seccion aislante/fuelle la familia llega a +400/+550 C. La presion admisible A TEMPERATURA sigue el diagrama P-T (hoja T 8000-2): es grafica, no se lee. Caracteristica lineal, rangeabilidad 50:1, fuga clase I. Hoja T 8026 EN.",
+    "P_max_bar": 40
+   },
+   "fuente": "https://www.samsongroup.com/document/t80260en.pdf",
+   "fecha_consulta": "2026-07-24"
+  },
+  {
+   "marca": "Samson",
+   "modelo": "Type 3244 DN50 PN40 (Kvs 40)",
+   "eq_type": "Valve — 3-way",
+   "S_no_publicado": "otra_magnitud",
+   "granularidad": "modelo",
+   "params": {
+    "T_max_C": 220,
+    "notas": "Valvula de control de tres vias. otra_magnitud (publica Kvs). Kvs disponibles en DN50: 6.3/10/16 (asiento 31 mm), 25 (38 mm), 40 (48 mm); max 40, carrera 15 mm (Tabla 3, pag. 4). Equivalente ANSI NPS2: Cv 47. P_max_bar=40 (PN40), T_max_C=220 (cuerpo sin seccion aislante). Dp maximo admisible con p2=0 y actuador de 350 cm2: 5/22.5/35 bar segun rango de resorte. Derateo P-T por hoja T 8000-2 (grafica). Hoja T 8026 EN.",
+    "P_max_bar": 40
+   },
+   "fuente": "https://www.samsongroup.com/document/t80260en.pdf",
+   "fecha_consulta": "2026-07-24"
+  },
+  {
+   "marca": "Samson",
+   "modelo": "Type 3253 DN40 PN160 (Kvs 25)",
+   "eq_type": "Valve — 3-way",
+   "S_no_publicado": "otra_magnitud",
+   "granularidad": "modelo",
+   "params": {
+    "T_max_C": 220,
+    "notas": "Valvula de control de tres vias, serie 250 (alta presion). otra_magnitud (publica Kvs). DN40 -> Kvs 25, asiento 38 mm, carrera 15 mm (Tabla 3, pag. 5). P_max_bar=160 = tope del rating de cuerpo impreso 'Pressure rating PN 16 to 160'; T_max_C=220 = cuerpo sin seccion aislante (hasta +350 C con empaquetadura de alta temperatura; -196 a +550 C con seccion aislante/fuelle segun material). Escalera Kvs de la serie: DN15=4, DN25=8, DN40=25, DN50=40, DN80=100, DN100=160. Constantes de dimensionamiento FL=0.95, xT=0.75. Derateo P-T por T 8000-2. Hoja T 8055 EN (DIN).",
+    "P_max_bar": 160
+   },
+   "fuente": "https://www.samsongroup.com/document/t80550en.pdf",
+   "fecha_consulta": "2026-07-24"
+  },
+  {
+   "marca": "Samson",
+   "modelo": "Type 3253 ANSI NPS1.5 (Cv 30 / Kvs 25)",
+   "eq_type": "Valve — 3-way",
+   "S_no_publicado": "otra_magnitud",
+   "granularidad": "modelo",
+   "params": {
+    "T_max_C": 220,
+    "notas": "Valvula de control de tres vias, version ANSI. otra_magnitud (publica Cv/Kvs). NPS1.5 -> Cv 30, Kvs 25, asiento 1.5 in (38 mm), carrera 0.59 in (15 mm); con Class 900-2500 baja a Cv 26 / Kvs 22 (Tabla 3, pag. 5). P_max_bar OMITIDO A PROPOSITO: esta hoja solo imprime la CLASE ASME (150 a 900, hasta 2500 a pedido) y remite al diagrama P-T de la hoja T 8000-2; no hay cifra en bar impresa, y no se convierte una clase a bar por cuenta propia. T_max_C=220 = 428 F, cuerpo sin seccion aislante (SAMSON imprime ambas unidades; advierte que los limites no son conversion directa). Hoja T 8056 EN (ANSI)."
+   },
+   "fuente": "https://www.samsongroup.com/document/t80560en.pdf",
+   "fecha_consulta": "2026-07-24"
+  },
+  {
+   "marca": "Flottweg",
+   "modelo": "Z4E",
+   "eq_type": "Centrifuge — decanter",
+   "S": 35,
+   "params": {
+    "Q_max_m3_h": 35,
+    "notas": "Decanter (centrifuga decantadora de tornillo). S = 'Max. hydraulic capacity' publicada del modelo: 35 m3/h (tabla 'Technical data of Flottweg decanters and Tricanters', pag. 15) — coincide con S_unit del tipo (m3/h), asi que entra como S escalar. Motor de tambor 45 kW, motor de tornillo (Simp Drive) 15 kW; fuerza G Z4E-4 = 4140 x g. Nota al pie del fabricante: datos basados en agua, orientativos, dependen de temperatura/material/densidad. Velocidad de tambor no impresa: omitida. Valor corroborado en un segundo folleto oficial (Stahl-EN, pag. 11). Material no cargado: el folleto cita Duplex 1.4463 y 1.4571 (mas de uno)."
+   },
+   "fuente": "https://www.flottweg.com/fileadmin/user_upload/data/pdf-downloads/Mining-EN.pdf",
+   "fecha_consulta": "2026-07-24"
+  },
+  {
+   "marca": "Flottweg",
+   "modelo": "Z5E",
+   "eq_type": "Centrifuge — decanter",
+   "S": 60,
+   "params": {
+    "Q_max_m3_h": 60,
+    "notas": "Decanter. S = capacidad hidraulica maxima publicada: 60 m3/h (pag. 15). Motor de tambor 90 kW, tornillo 55 kW; fuerza G Z5E-4 = 3620 x g. Datos orientativos segun nota del fabricante. Velocidad de tambor no impresa. Corroborado en Stahl-EN pag. 11."
+   },
+   "fuente": "https://www.flottweg.com/fileadmin/user_upload/data/pdf-downloads/Mining-EN.pdf",
+   "fecha_consulta": "2026-07-24"
+  },
+  {
+   "marca": "Flottweg",
+   "modelo": "Z6E",
+   "eq_type": "Centrifuge — decanter",
+   "S": 80,
+   "params": {
+    "Q_max_m3_h": 80,
+    "notas": "Decanter. S = capacidad hidraulica maxima publicada: 80 m3/h (pag. 15). Motor de tambor 132 kW, tornillo 110 kW; fuerza G Z6E-4 = 3550 x g. Datos orientativos. Velocidad de tambor no impresa. Corroborado en Stahl-EN pag. 11."
+   },
+   "fuente": "https://www.flottweg.com/fileadmin/user_upload/data/pdf-downloads/Mining-EN.pdf",
+   "fecha_consulta": "2026-07-24"
+  },
+  {
+   "marca": "Flottweg",
+   "modelo": "X4E-4 (Xelletor)",
+   "eq_type": "Centrifuge — decanter",
+   "S": 50,
+   "params": {
+    "Q_max_m3_h": 50,
+    "notas": "Decanter de la serie Xelletor. La capacidad se imprime como RANGO 20-50 m3/h; se toma el MAXIMO (50) como S, segun la regla de usar un tamano representativo documentado. Motor de tambor 22-30 kW, tornillo 7.5-11 kW (pag. 13, tabla 'Technical Data of the Flottweg Xelletor-Series'). Nota del fabricante: 'the listed figures are merely guidelines'. Velocidad de tambor no impresa."
+   },
+   "fuente": "https://www.flottweg.com/fileadmin/user_upload/data/pdf-downloads/Klaerschlamm-EN.pdf",
+   "fecha_consulta": "2026-07-24"
+  },
+  {
+   "marca": "Wanner Engineering",
+   "modelo": "Hydra-Cell D35 / G35 (D/G-35-X)",
+   "eq_type": "Pump — reciprocating",
+   "S_no_publicado": "punto_de_operacion",
+   "granularidad": "modelo",
+   "params": {
+    "P_max_bar": 103,
+    "Q_max_m3_h": 8.28,
+    "rpm": 1050,
+    "notas": "Bomba de desplazamiento positivo de diafragmas multiples. SIN S ESCALAR: la hoja no imprime potencia nominal por modelo, solo una FORMULA para calcular el HP requerido (HP = gpm x psi/1460 + ...) -> calcularla seria inventar un dato; motivo punto_de_operacion. Envolvente impresa (pag. 2): P_max_bar=103 (1500 psi, cabezales metalicos, a 700 rpm) y Q_max_m3_h=8.28 (138 l/min = 36.5 gpm; 138x60/1000=8.28 m3/h) a 1050 rpm y 1200 psi. OJO: caudal maximo y presion maxima NO son simultaneos (el maximo caudal es a 1050 rpm/83 bar; los 103 bar son a 700 rpm). Presion de entrada max 250 psi (17 bar); temperatura max 250 F (121 C); solidos hasta 800 micras. Manual D35-991-2400B. Material: la hoja solo dice 'metallic heads', sin aleacion concreta -> omitido."
+   },
+   "fuente": "https://www.hydra-cell.com/pdf/D35-991-2400B_HR.pdf",
+   "fecha_consulta": "2026-07-24"
+  },
+  {
+   "marca": "ProMinent",
+   "modelo": "Sigma/2 Basic S2Ba, tipo 16130 SST",
+   "eq_type": "Pump — reciprocating",
+   "S_no_publicado": "punto_de_operacion",
+   "granularidad": "modelo",
+   "params": {
+    "P_max_bar": 16,
+    "Q_max_m3_h": 0.124,
+    "rpm": 198,
+    "notas": "Bomba dosificadora de diafragma accionada por motor. SIN S ESCALAR: el manual dice explicitamente en 14.5 'Motor data: refer to the nameplate' -> no hay kW por modelo; punto_de_operacion. Envolvente impresa (pag. 45, 14.1 Performance data, tabla 50 Hz): P_max_bar=16 (contrapresion maxima) y caudal 124 l/h = 124/1000 = 0.124 m3/h; rpm=198 golpes/min (carrera). A 60 Hz la tabla da 16 bar / 148 l/h / 238 golpes/min. Volumen de carrera 10.9 ml. Valores referidos a agua a 20 C, reproducibilidad +-2%. Material: la hoja cita dos aleaciones distintas (cabezal 1.4404, conector 1.4581) -> omitido."
+   },
+   "fuente": "https://www.prominent.com/resources/OperatingInstructions/English/9543/985908-BA-SI-063-01-14-EN-Motorpumpe-Sigma-2-S2Ba-EN.pdf",
+   "fecha_consulta": "2026-07-24"
+  },
+  {
+   "marca": "LEWA",
+   "modelo": "ecodos LED",
+   "eq_type": "Pump — reciprocating",
+   "S_no_publicado": "punto_de_operacion",
+   "granularidad": "modelo",
+   "params": {
+    "Q_max_m3_h": 0.17,
+    "P_max_bar": 10,
+    "notas": "Bomba dosificadora de diafragma de accionamiento mecanico. SIN S ESCALAR: LEWA no publica potencia nominal por tamano (el kW al eje depende del punto de operacion) -> punto_de_operacion. Envolvente impresa (pag. 16, 'At a glance. Technical data.'): caudal maximo a 50 Hz 170 l/h = 170/1000 = 0.17 m3/h y presion de operacion 10 bar. IMPORTANTE: la presion es la de la fila de CABEZAL DE ACERO INOXIDABLE; el documento imprime filas distintas por material de cabezal (PVC-H, PVDF, PP, 1.4435) con presiones diferentes, y no se cruzan. Escalera completa a 50 Hz: LEB 16 / LEC 52 / LED 170 / LEE 336 / LEF 520 / LEG 1460 l/h. Temperatura de operacion -10/+80 C. Material no cargado: el cabezal inox del doc (1.4435/316L) se documenta aqui, no en el campo."
+   },
+   "fuente": "https://www.lewa.com/fileadmin/0_downloadcenter/2_product_information/D1-450_LEWA_ecodos_en.pdf",
+   "fecha_consulta": "2026-07-24"
+  },
+  {
+   "marca": "LEWA",
+   "modelo": "ecodos LEE",
+   "eq_type": "Pump — reciprocating",
+   "S_no_publicado": "punto_de_operacion",
+   "granularidad": "modelo",
+   "params": {
+    "Q_max_m3_h": 0.336,
+    "P_max_bar": 7.5,
+    "notas": "Bomba dosificadora de diafragma de accionamiento mecanico. SIN S ESCALAR: LEWA no publica potencia nominal por tamano (el kW al eje depende del punto de operacion) -> punto_de_operacion. Envolvente impresa (pag. 16, 'At a glance. Technical data.'): caudal maximo a 50 Hz 336 l/h = 336/1000 = 0.336 m3/h y presion de operacion 7.5 bar. IMPORTANTE: la presion es la de la fila de CABEZAL DE ACERO INOXIDABLE; el documento imprime filas distintas por material de cabezal (PVC-H, PVDF, PP, 1.4435) con presiones diferentes, y no se cruzan. Escalera completa a 50 Hz: LEB 16 / LEC 52 / LED 170 / LEE 336 / LEF 520 / LEG 1460 l/h. Temperatura de operacion -10/+80 C. Material no cargado: el cabezal inox del doc (1.4435/316L) se documenta aqui, no en el campo."
+   },
+   "fuente": "https://www.lewa.com/fileadmin/0_downloadcenter/2_product_information/D1-450_LEWA_ecodos_en.pdf",
+   "fecha_consulta": "2026-07-24"
+  },
+  {
+   "marca": "LEWA",
+   "modelo": "ecodos LEG",
+   "eq_type": "Pump — reciprocating",
+   "S_no_publicado": "punto_de_operacion",
+   "granularidad": "modelo",
+   "params": {
+    "Q_max_m3_h": 1.46,
+    "P_max_bar": 5,
+    "notas": "Bomba dosificadora de diafragma de accionamiento mecanico. SIN S ESCALAR: LEWA no publica potencia nominal por tamano (el kW al eje depende del punto de operacion) -> punto_de_operacion. Envolvente impresa (pag. 16, 'At a glance. Technical data.'): caudal maximo a 50 Hz 1460 l/h = 1460/1000 = 1.46 m3/h y presion de operacion 5 bar. IMPORTANTE: la presion es la de la fila de CABEZAL DE ACERO INOXIDABLE; el documento imprime filas distintas por material de cabezal (PVC-H, PVDF, PP, 1.4435) con presiones diferentes, y no se cruzan. Escalera completa a 50 Hz: LEB 16 / LEC 52 / LED 170 / LEE 336 / LEF 520 / LEG 1460 l/h. Temperatura de operacion -10/+80 C. Material no cargado: el cabezal inox del doc (1.4435/316L) se documenta aqui, no en el campo."
+   },
+   "fuente": "https://www.lewa.com/fileadmin/0_downloadcenter/2_product_information/D1-450_LEWA_ecodos_en.pdf",
+   "fecha_consulta": "2026-07-24"
+  },
+  {
+   "marca": "Koflo",
+   "modelo": "SHR-2-12 (serie SHR, 2 in NPT, 12 elementos)",
+   "eq_type": "Mixer — static",
+   "S_no_publicado": "otra_magnitud",
+   "params": {
+    "P_max_bar": 61.9,
+    "material": "SS316",
+    "notas": "Mezclador estatico en linea, serie SHR. VOLUMEN NO PUBLICADO: Koflo publica diametro nominal, numero de elementos, longitud, peso y MAWP por modelo, nunca un holdup en m3; de ahi S_no_publicado=otra_magnitud. Tabla de especificaciones de la pagina oficial, fila SHR-2-12: Pipe Dia. MNPT Ends 2 in, Pipe OD 2.375 in, Pipe ID 2.067 in, Number of Elements 12, Length 35.00 in, Weight 13.30 lb, Pressure Rating* 898 psig. Nota al pie de esa misma tabla: 'Maximum Allowable Working Pressure (MAWP). Calculations per ASME B31.3.' 898 psig = 61.9 bar. Carcasa de tuberia Schedule 40S 316/L S/S y elementos helicoidales 316/L S/S removibles para limpieza (de ahi material=SS316). La pagina NO publica temperatura maxima ni Kv: la caida de presion depende de caudal y viscosidad y Koflo la calcula por aplicacion. Plano acotado oficial del mismo modelo (solo dimensiones, sin presion): https://www.koflo.com/drawings/pdf/kd-955.pdf (KD-955 rev 1, 10/2/2024). VERIFICADO fila por fila en la tabla de la pagina oficial (el codigo de modelo de 2\" se confunde con el de 1/2\" en una busqueda ingenua: 2-80-4-12-2 vs 1/2-80-4-12-2, se desambiguo por limite de token)."
+   },
+   "fuente": "https://www.koflo.com/static-mixers/stock-static-mixers/shr-series-stainless-static-mixers/",
+   "fecha_consulta": "2026-07-24",
+   "granularidad": "modelo"
+  },
+  {
+   "marca": "Koflo",
+   "modelo": "2-80-4-12-2 (PVC gris Sch 80, 2 in NPT, 12 elementos)",
+   "eq_type": "Mixer — static",
+   "S_no_publicado": "otra_magnitud",
+   "params": {
+    "P_max_bar": 13.8,
+    "T_max_C": 48.9,
+    "notas": "Mezclador estatico en linea de PVC gris Schedule 80 con elementos Koflo Blade de PVC y extremos NPT macho. VOLUMEN NO PUBLICADO: la tabla oficial da diametro, elementos, longitud, peso, presion y temperatura, no un holdup en m3. Tabla de la pagina oficial, fila 2-80-4-12-2: Pipe Dia. MNPT Ends 2 in, Number of Elements 12, Length 33 in, Weight 3.40 lb, Max. Working Pressure (PSI @ 75 F) = 200, Max. Working Temperature (F) = 120. Conversiones: 200 psi = 13.8 bar, 120 F = 48.9 C. P y T salen de la MISMA fila del modelo; la presion esta referida a 75 F (23.9 C) y decae con la temperatura. MATERIAL OMITIDO a proposito: PVC no es una clave de MATERIAL_FACTORS. Kv no publicado; la pagina enlaza un grafico de caida de presion (drawings/pdf-charts/Stock Gray- Pressure Graph.pdf). VERIFICADO fila por fila en la tabla de la pagina oficial (el codigo de modelo de 2\" se confunde con el de 1/2\" en una busqueda ingenua: 2-80-4-12-2 vs 1/2-80-4-12-2, se desambiguo por limite de token)."
+   },
+   "fuente": "https://www.koflo.com/static-mixers/stock-static-mixers/stock-gray-pvc-static-mixers/",
+   "fecha_consulta": "2026-07-24",
+   "granularidad": "modelo"
+  },
+  {
+   "marca": "Koflo",
+   "modelo": "1-80-10-12-2 (Kynar PVDF Sch 80, 1 in NPT, 12 elementos)",
+   "eq_type": "Mixer — static",
+   "S_no_publicado": "otra_magnitud",
+   "params": {
+    "P_max_bar": 14.8,
+    "T_max_C": 115.6,
+    "notas": "Mezclador estatico en linea de Kynar PVDF Schedule 80 con elementos Koflo Blade de PVDF solido y extremos NPT macho mecanizados. VOLUMEN NO PUBLICADO: la tabla da tamano, elementos, longitud, peso, presion y temperatura, no holdup. Tabla de la pagina oficial, fila 1-80-10-12-2: Pipe Dia. MNPT Ends 1 in, Number of Elements 12, Length 15 in, Weight 0.75 lb, Max. Working Pressure (PSI @ 75 F) = 215, Max. Working Temperature (F) = 240. Conversiones: 215 psi = 14.8 bar (referida a 75 F = 23.9 C), 240 F = 115.6 C. MATERIAL OMITIDO: PVDF/Kynar no es clave de MATERIAL_FACTORS. Variante de resistencia quimica con techo termico muy por encima del PVC. Kv no publicado. VERIFICADO fila por fila en la tabla de la pagina oficial (el codigo de modelo de 2\" se confunde con el de 1/2\" en una busqueda ingenua: 2-80-4-12-2 vs 1/2-80-4-12-2, se desambiguo por limite de token)."
+   },
+   "fuente": "https://www.koflo.com/static-mixers/stock-static-mixers/stock-solid-kynar-static-mixers/",
+   "fecha_consulta": "2026-07-24",
+   "granularidad": "modelo"
+  },
+  {
+   "marca": "Koflo",
+   "modelo": "1-80-8P-12-2 (PFA Sch 80, 1 in NPT, 12 elementos)",
+   "eq_type": "Mixer — static",
+   "S_no_publicado": "otra_magnitud",
+   "params": {
+    "P_max_bar": 11.0,
+    "T_max_C": 204.4,
+    "notas": "Mezclador estatico en linea de PFA Schedule 80 con elementos Koflo Blade de PFA solido y extremos NPT macho mecanizados. VOLUMEN NO PUBLICADO: la tabla da tamano, elementos, longitud, peso, presion y temperatura, no holdup. Tabla de la pagina oficial, fila 1-80-8P-12-2: Pipe Dia. MNPT Ends 1 in, Number of Elements 12, Length 15 in, Weight 0.75 lb, Max. Working Pressure (PSI) @ 70 F = 159, Max. Working Temperature (F) = 400. Conversiones: 159 psi = 11.0 bar (referida a 70 F = 21.1 C), 400 F = 204.4 C. MATERIAL OMITIDO: PFA no es clave de MATERIAL_FACTORS. Es la variante de mayor temperatura del catalogo en stock de Koflo, para servicios muy corrosivos. Kv no publicado. VERIFICADO fila por fila en la tabla de la pagina oficial (el codigo de modelo de 2\" se confunde con el de 1/2\" en una busqueda ingenua: 2-80-4-12-2 vs 1/2-80-4-12-2, se desambiguo por limite de token)."
+   },
+   "fuente": "https://www.koflo.com/static-mixers/stock-static-mixers/pfa-static-mixers/",
+   "fecha_consulta": "2026-07-24",
+   "granularidad": "modelo"
+  },
+  {
+   "marca": "HRS Heat Exchangers",
+   "modelo": "C Series 55 140/12",
+   "eq_type": "Heat exch. — fixed tube",
+   "S": 12.3,
+   "params": {
+    "P_max_bar": 10,
+    "T_max_C": 185,
+    "notas": "Intercambiador multitubular (tubo y carcasa) de tubos rectos. S = AREA DE SUPERFICIE publicada por modelo: 12.3 m2 (columna 'Surface Area', tabla RANGE, pag. 1, hoja PDC23061UK). OJO — CONDICION DEL AREA: el fabricante suministra longitudes 0.7/1/1.5/2/3/6 m y advierte 'the surface area and volumes shown are for 6m length models': este S es el de la variante de 6 m, no un techo del modelo. Envolvente impresa: 10 bar / 185 C tanto en lado servicio como producto. Conexiones DN80 (servicio) / DN125 (producto). TIPO DE CABEZAL: el documento NO imprime codigo TEMA; se clasifica como tubo fijo porque describe placa tubular con brida y fuelles para absorber la dilatacion diferencial entre carcasa y tubos — que es justamente el recurso de una construccion de placas FIJAS. Es una inferencia de ingenieria declarada, no un dato impreso. Material no declarado en la tabla: omitido."
+   },
+   "fuente": "https://www.hrs-heatexchangers.com/wp-content/uploads/2024/01/HRS-C-Series-datasheet-2023-1.pdf",
+   "fecha_consulta": "2026-07-24"
+  },
+  {
+   "marca": "HRS Heat Exchangers",
+   "modelo": "C Series 85 168/12",
+   "eq_type": "Heat exch. — fixed tube",
+   "S": 19,
+   "params": {
+    "P_max_bar": 10,
+    "T_max_C": 185,
+    "notas": "Intercambiador multitubular (tubo y carcasa) de tubos rectos. S = AREA DE SUPERFICIE publicada por modelo: 19 m2 (columna 'Surface Area', tabla RANGE, pag. 1, hoja PDC23061UK). OJO — CONDICION DEL AREA: el fabricante suministra longitudes 0.7/1/1.5/2/3/6 m y advierte 'the surface area and volumes shown are for 6m length models': este S es el de la variante de 6 m, no un techo del modelo. Envolvente impresa: 10 bar / 185 C tanto en lado servicio como producto. Conexiones DN100 (servicio) / DN150 (producto). TIPO DE CABEZAL: el documento NO imprime codigo TEMA; se clasifica como tubo fijo porque describe placa tubular con brida y fuelles para absorber la dilatacion diferencial entre carcasa y tubos — que es justamente el recurso de una construccion de placas FIJAS. Es una inferencia de ingenieria declarada, no un dato impreso. Material no declarado en la tabla: omitido."
+   },
+   "fuente": "https://www.hrs-heatexchangers.com/wp-content/uploads/2024/01/HRS-C-Series-datasheet-2023-1.pdf",
+   "fecha_consulta": "2026-07-24"
+  },
+  {
+   "marca": "HRS Heat Exchangers",
+   "modelo": "C Series 151 219/12",
+   "eq_type": "Heat exch. — fixed tube",
+   "S": 33.8,
+   "params": {
+    "P_max_bar": 10,
+    "T_max_C": 185,
+    "notas": "Intercambiador multitubular (tubo y carcasa) de tubos rectos. S = AREA DE SUPERFICIE publicada por modelo: 33.8 m2 (columna 'Surface Area', tabla RANGE, pag. 1, hoja PDC23061UK). OJO — CONDICION DEL AREA: el fabricante suministra longitudes 0.7/1/1.5/2/3/6 m y advierte 'the surface area and volumes shown are for 6m length models': este S es el de la variante de 6 m, no un techo del modelo. Envolvente impresa: 10 bar / 185 C tanto en lado servicio como producto. Conexiones DN125 (servicio) / DN200 (producto). TIPO DE CABEZAL: el documento NO imprime codigo TEMA; se clasifica como tubo fijo porque describe placa tubular con brida y fuelles para absorber la dilatacion diferencial entre carcasa y tubos — que es justamente el recurso de una construccion de placas FIJAS. Es una inferencia de ingenieria declarada, no un dato impreso. Material no declarado en la tabla: omitido."
+   },
+   "fuente": "https://www.hrs-heatexchangers.com/wp-content/uploads/2024/01/HRS-C-Series-datasheet-2023-1.pdf",
+   "fecha_consulta": "2026-07-24"
+  },
+  {
+   "marca": "HRS Heat Exchangers",
+   "modelo": "C Series 253 273/12",
+   "eq_type": "Heat exch. — fixed tube",
+   "S": 56.6,
+   "params": {
+    "P_max_bar": 10,
+    "T_max_C": 185,
+    "notas": "Intercambiador multitubular (tubo y carcasa) de tubos rectos. S = AREA DE SUPERFICIE publicada por modelo: 56.6 m2 (columna 'Surface Area', tabla RANGE, pag. 1, hoja PDC23061UK). OJO — CONDICION DEL AREA: el fabricante suministra longitudes 0.7/1/1.5/2/3/6 m y advierte 'the surface area and volumes shown are for 6m length models': este S es el de la variante de 6 m, no un techo del modelo. Envolvente impresa: 10 bar / 185 C tanto en lado servicio como producto. Conexiones DN150 (servicio) / DN250 (producto). TIPO DE CABEZAL: el documento NO imprime codigo TEMA; se clasifica como tubo fijo porque describe placa tubular con brida y fuelles para absorber la dilatacion diferencial entre carcasa y tubos — que es justamente el recurso de una construccion de placas FIJAS. Es una inferencia de ingenieria declarada, no un dato impreso. Material no declarado en la tabla: omitido."
+   },
+   "fuente": "https://www.hrs-heatexchangers.com/wp-content/uploads/2024/01/HRS-C-Series-datasheet-2023-1.pdf",
+   "fecha_consulta": "2026-07-24"
+  },
+  {
+   "marca": "Mersen (GAB Neumann)",
+   "modelo": "CORRESIC-SR SR40-30-14",
+   "eq_type": "Heat exch. — fixed tube",
+   "S": 27.3,
+   "params": {
+    "P_max_bar": 6,
+    "T_max_C": 180,
+    "notas": "Intercambiador de carcasa y tubos de CARBURO DE SILICIO (SiC), para servicios muy corrosivos. S = 'Transfer Area' publicada: 27.3 m2 (tabla pags. 2-3, version 08/2025), fila DN400 / longitud 3 m / tubo O14 mm. Aqui la longitud va DENTRO del codigo de modelo (SR + DN en cm - longitud en dm - diametro de tubo), asi que el area SI es un escalar del modelo, no de una variante. Verificado por coordenadas de columna: la tabla tiene columnas dobles O14/O19 y un volcado lineal las mezcla (la variante O19 de esta fila es distinta). Envolvente impresa: -1 a +6 bar (+10 bar en variante opcional) y -10 a +180 C (+220 C opcional). TIPO DE CABEZAL: el documento no imprime codigo TEMA; tubos sellados en placas tubulares. Material SiC: no esta en el vocabulario de materiales del repo -> omitido."
+   },
+   "fuente": "https://www.mersen.com/sites/default/files/medias/files/2025-12/DSSR1-EN%20SiC%20Shell%20%26%20Tube%20Heat%20Exchanger%20-%20SR%20Series.pdf",
+   "fecha_consulta": "2026-07-24"
+  },
+  {
+   "marca": "Mersen (GAB Neumann)",
+   "modelo": "CORRESIC-SR SR50-30-14",
+   "eq_type": "Heat exch. — fixed tube",
+   "S": 42.5,
+   "params": {
+    "P_max_bar": 6,
+    "T_max_C": 180,
+    "notas": "Intercambiador de carcasa y tubos de CARBURO DE SILICIO (SiC), para servicios muy corrosivos. S = 'Transfer Area' publicada: 42.5 m2 (tabla pags. 2-3, version 08/2025), fila DN500 / longitud 3 m / tubo O14 mm. Aqui la longitud va DENTRO del codigo de modelo (SR + DN en cm - longitud en dm - diametro de tubo), asi que el area SI es un escalar del modelo, no de una variante. Verificado por coordenadas de columna: la tabla tiene columnas dobles O14/O19 y un volcado lineal las mezcla (la variante O19 de esta fila es distinta). Envolvente impresa: -1 a +6 bar (+10 bar en variante opcional) y -10 a +180 C (+220 C opcional). TIPO DE CABEZAL: el documento no imprime codigo TEMA; tubos sellados en placas tubulares. Material SiC: no esta en el vocabulario de materiales del repo -> omitido."
+   },
+   "fuente": "https://www.mersen.com/sites/default/files/medias/files/2025-12/DSSR1-EN%20SiC%20Shell%20%26%20Tube%20Heat%20Exchanger%20-%20SR%20Series.pdf",
+   "fecha_consulta": "2026-07-24"
+  },
+  {
+   "marca": "Mersen (GAB Neumann)",
+   "modelo": "CORRESIC-SR SR50-45-14",
+   "eq_type": "Heat exch. — fixed tube",
+   "S": 65.5,
+   "params": {
+    "P_max_bar": 6,
+    "T_max_C": 180,
+    "notas": "Intercambiador de carcasa y tubos de CARBURO DE SILICIO (SiC), para servicios muy corrosivos. S = 'Transfer Area' publicada: 65.5 m2 (tabla pags. 2-3, version 08/2025), fila DN500 / longitud 4.5 m / tubo O14 mm. Aqui la longitud va DENTRO del codigo de modelo (SR + DN en cm - longitud en dm - diametro de tubo), asi que el area SI es un escalar del modelo, no de una variante. Verificado por coordenadas de columna: la tabla tiene columnas dobles O14/O19 y un volcado lineal las mezcla (la variante O19 de esta fila es distinta). Envolvente impresa: -1 a +6 bar (+10 bar en variante opcional) y -10 a +180 C (+220 C opcional). TIPO DE CABEZAL: el documento no imprime codigo TEMA; tubos sellados en placas tubulares. Material SiC: no esta en el vocabulario de materiales del repo -> omitido."
+   },
+   "fuente": "https://www.mersen.com/sites/default/files/medias/files/2025-12/DSSR1-EN%20SiC%20Shell%20%26%20Tube%20Heat%20Exchanger%20-%20SR%20Series.pdf",
+   "fecha_consulta": "2026-07-24"
+  },
+  {
+   "marca": "Xylem (Standard Xchange)",
+   "modelo": "Century C500 (TEMA AES/BES)",
+   "eq_type": "Heat exch. — floating head",
+   "S_no_publicado": "configurable",
+   "granularidad": "modelo",
+   "params": {
+    "P_max_bar": 20.7,
+    "T_max_C": 343,
+    "notas": "AREA NO PUBLICADA: los intercambiadores de cabezal flotante son de INGENIERIA A PEDIDO — el area la fija el diseño termico de cada servicio, no un catalogo. Se reviso el mercado (Xylem/Standard Xchange, Funke, Kelvion, API Heat Transfer, Alfa Laval Olmi, Mersen) y NINGUN fabricante publica un area por modelo para esta clase: Xylem clasifica esta linea como 'custom-engineered' y su folleto no menciona m2 ni una sola vez; API Heat Transfer lo dice literalmente ('every unit is designed to your exact operating conditions, not adapted from a catalog'); Funke publica estos modelos en 'Individual solutions' y remite las dimensiones a hojas que no publica. Por eso: configurable + envolvente. Esto NO es una carencia del catalogo, es la leccion: hay clases de equipo que solo existen a pedido. Modelo: cabezal flotante interno con anillo partido (TEMA AES o BES), pag. 9 del folleto 104-44 (ago-2018). Envolvente impresa: lado carcasa 75-300 psi (517-2068 kPa) -> P_max_bar=20.7 = 2068 kPa, el LIMITE MAS RESTRICTIVO; el lado tubos llega a 450 psi (3102 kPa = 31.0 bar). Temperatura -20 a 650 F = -29 a 343 C. Carcasas estandar de 6 a 42 in (a medida hasta 60 in)."
+   },
+   "fuente": "https://www.xylem.com/siteassets/brand/standard-xchange/resources/brochure/104-44_century-series.pdf",
+   "fecha_consulta": "2026-07-24"
+  },
+  {
+   "marca": "Xylem (Standard Xchange)",
+   "modelo": "Century C400 (TEMA AET/BET)",
+   "eq_type": "Heat exch. — floating head",
+   "S_no_publicado": "configurable",
+   "granularidad": "modelo",
+   "params": {
+    "P_max_bar": 20.7,
+    "T_max_C": 343,
+    "notas": "AREA NO PUBLICADA: los intercambiadores de cabezal flotante son de INGENIERIA A PEDIDO — el area la fija el diseño termico de cada servicio, no un catalogo. Se reviso el mercado (Xylem/Standard Xchange, Funke, Kelvion, API Heat Transfer, Alfa Laval Olmi, Mersen) y NINGUN fabricante publica un area por modelo para esta clase: Xylem clasifica esta linea como 'custom-engineered' y su folleto no menciona m2 ni una sola vez; API Heat Transfer lo dice literalmente ('every unit is designed to your exact operating conditions, not adapted from a catalog'); Funke publica estos modelos en 'Individual solutions' y remite las dimensiones a hojas que no publica. Por eso: configurable + envolvente. Esto NO es una carencia del catalogo, es la leccion: hay clases de equipo que solo existen a pedido. Modelo: cabezal flotante interno apernado, tipo pull-through (TEMA AET o BET), pag. 8 del folleto 104-44. Misma envolvente impresa que el C500: carcasa hasta 2068 kPa (20.7 bar, valor cargado), tubos hasta 3102 kPa (31.0 bar), -29 a 343 C."
+   },
+   "fuente": "https://www.xylem.com/siteassets/brand/standard-xchange/resources/brochure/104-44_century-series.pdf",
+   "fecha_consulta": "2026-07-24"
+  },
+  {
+   "marca": "Funke",
+   "modelo": "Serie CP (TEMA BEW/AEW)",
+   "eq_type": "Heat exch. — floating head",
+   "S_no_publicado": "configurable",
+   "granularidad": "modelo",
+   "params": {
+    "P_max_bar": 41,
+    "T_max_C": 250,
+    "notas": "AREA NO PUBLICADA: los intercambiadores de cabezal flotante son de INGENIERIA A PEDIDO — el area la fija el diseño termico de cada servicio, no un catalogo. Se reviso el mercado (Xylem/Standard Xchange, Funke, Kelvion, API Heat Transfer, Alfa Laval Olmi, Mersen) y NINGUN fabricante publica un area por modelo para esta clase: Xylem clasifica esta linea como 'custom-engineered' y su folleto no menciona m2 ni una sola vez; API Heat Transfer lo dice literalmente ('every unit is designed to your exact operating conditions, not adapted from a catalog'); Funke publica estos modelos en 'Individual solutions' y remite las dimensiones a hojas que no publica. Por eso: configurable + envolvente. Esto NO es una carencia del catalogo, es la leccion: hay clases de equipo que solo existen a pedido. Modelo: placa tubular flotante sellada exteriormente (TEMA BEW; AEW), pag. 11 del folleto 'Shell-and-tube heat exchangers' 0813 E. Envolvente impresa: 41 bar y 250 C en AMBOS lados (carcasa y tubos). Funke publica el rango de superficie de toda la gama (0,11 a 2000 m2) pero NO por modelo. Uso tipico: enfriador de aceite / doble pared."
+   },
+   "fuente": "https://www.funke.de/media/b_funke/downloads/broschueren/funke_shell_tube_he_en.pdf",
+   "fecha_consulta": "2026-07-24"
+  },
+  {
+   "marca": "Atlas Copco",
+   "modelo": "ZH 450+ (2 etapas)",
+   "eq_type": "Compressor — centrifugal",
+   "S": 450,
+   "params": {
+    "P_max_bar": 5.5,
+    "Q_max_m3_h": 7387,
+    "notas": "Turbocompresor centrifugo exento de aceite, 2 etapas. S = 'Installed motor power' = 450 kW, columna escalar impresa por modelo (tabla de la pag. 19, leaflet ZH/ZH+ 355-3150 kW, 2935 0716 00, Atlas Copco Airpower NV). Q_max_m3_h = 7387 = FAD maximo del modelo, que ocurre a la presion MAS BAJA de su tabla (3.5 bar(g)); P_max_bar = 5.5 = presion mas alta con valor publicado para este modelo, donde el FAD BAJA a 5652 m3/h. Es decir: caudal maximo y presion maxima NO son simultaneos (mismo criterio ya usado en las entradas GA de tornillo). Ambos valores salen de la MISMA fila/tabla (2 etapas): no se cruzaron configuraciones distintas — el mismo modelo aparece tambien en la tabla de la otra configuracion de etapas con envolvente diferente. FAD segun ASME PTC10 / ISO 5389; condiciones de referencia impresas: entrada 1 bar(a), 35 C, 60% HR, agua de refrigeracion 26.7 C. Velocidad no publicada: omitida. Material no declarado: omitido."
+   },
+   "fuente": "https://www.atlascopco.com/content/dam/atlas-copco/compressor-technique/oil-free-air/documents/ZH%20&%20ZH+%20series%20(355-3150%20kW)_EN.pdf",
+   "fecha_consulta": "2026-07-24"
+  },
+  {
+   "marca": "Atlas Copco",
+   "modelo": "ZH 800+ (2 etapas)",
+   "eq_type": "Compressor — centrifugal",
+   "S": 800,
+   "params": {
+    "P_max_bar": 5.5,
+    "Q_max_m3_h": 14904,
+    "notas": "Turbocompresor centrifugo exento de aceite, 2 etapas. S = 'Installed motor power' = 800 kW, columna escalar impresa por modelo (tabla de la pag. 19, leaflet ZH/ZH+ 355-3150 kW, 2935 0716 00, Atlas Copco Airpower NV). Q_max_m3_h = 14904 = FAD maximo del modelo, que ocurre a la presion MAS BAJA de su tabla (2.5 bar(g)); P_max_bar = 5.5 = presion mas alta con valor publicado para este modelo, donde el FAD BAJA a 10181 m3/h. Es decir: caudal maximo y presion maxima NO son simultaneos (mismo criterio ya usado en las entradas GA de tornillo). Ambos valores salen de la MISMA fila/tabla (2 etapas): no se cruzaron configuraciones distintas — el mismo modelo aparece tambien en la tabla de la otra configuracion de etapas con envolvente diferente. FAD segun ASME PTC10 / ISO 5389; condiciones de referencia impresas: entrada 1 bar(a), 35 C, 60% HR, agua de refrigeracion 26.7 C. Velocidad no publicada: omitida. Material no declarado: omitido."
+   },
+   "fuente": "https://www.atlascopco.com/content/dam/atlas-copco/compressor-technique/oil-free-air/documents/ZH%20&%20ZH+%20series%20(355-3150%20kW)_EN.pdf",
+   "fecha_consulta": "2026-07-24"
+  },
+  {
+   "marca": "Atlas Copco",
+   "modelo": "ZH 630+ (3 etapas)",
+   "eq_type": "Compressor — centrifugal",
+   "S": 630,
+   "params": {
+    "P_max_bar": 13,
+    "Q_max_m3_h": 7427,
+    "notas": "Turbocompresor centrifugo exento de aceite, 3 etapas. S = 'Installed motor power' = 630 kW, columna escalar impresa por modelo (tabla de la pag. 20, leaflet ZH/ZH+ 355-3150 kW, 2935 0716 00, Atlas Copco Airpower NV). Q_max_m3_h = 7427 = FAD maximo del modelo, que ocurre a la presion MAS BAJA de su tabla (7 bar(g)); P_max_bar = 13 = presion mas alta con valor publicado para este modelo, donde el FAD BAJA a 5548 m3/h. Es decir: caudal maximo y presion maxima NO son simultaneos (mismo criterio ya usado en las entradas GA de tornillo). Ambos valores salen de la MISMA fila/tabla (3 etapas): no se cruzaron configuraciones distintas — el mismo modelo aparece tambien en la tabla de la otra configuracion de etapas con envolvente diferente. FAD segun ASME PTC10 / ISO 5389; condiciones de referencia impresas: entrada 1 bar(a), 35 C, 60% HR, agua de refrigeracion 26.7 C. Velocidad no publicada: omitida. Material no declarado: omitido."
+   },
+   "fuente": "https://www.atlascopco.com/content/dam/atlas-copco/compressor-technique/oil-free-air/documents/ZH%20&%20ZH+%20series%20(355-3150%20kW)_EN.pdf",
+   "fecha_consulta": "2026-07-24"
+  },
+  {
+   "marca": "Atlas Copco",
+   "modelo": "ZH 1000+ (3 etapas)",
+   "eq_type": "Compressor — centrifugal",
+   "S": 1000,
+   "params": {
+    "P_max_bar": 13,
+    "Q_max_m3_h": 12845,
+    "notas": "Turbocompresor centrifugo exento de aceite, 3 etapas. S = 'Installed motor power' = 1000 kW, columna escalar impresa por modelo (tabla de la pag. 20, leaflet ZH/ZH+ 355-3150 kW, 2935 0716 00, Atlas Copco Airpower NV). Q_max_m3_h = 12845 = FAD maximo del modelo, que ocurre a la presion MAS BAJA de su tabla (6 bar(g)); P_max_bar = 13 = presion mas alta con valor publicado para este modelo, donde el FAD BAJA a 9065 m3/h. Es decir: caudal maximo y presion maxima NO son simultaneos (mismo criterio ya usado en las entradas GA de tornillo). Ambos valores salen de la MISMA fila/tabla (3 etapas): no se cruzaron configuraciones distintas — el mismo modelo aparece tambien en la tabla de la otra configuracion de etapas con envolvente diferente. FAD segun ASME PTC10 / ISO 5389; condiciones de referencia impresas: entrada 1 bar(a), 35 C, 60% HR, agua de refrigeracion 26.7 C. Velocidad no publicada: omitida. Material no declarado: omitido."
+   },
+   "fuente": "https://www.atlascopco.com/content/dam/atlas-copco/compressor-technique/oil-free-air/documents/ZH%20&%20ZH+%20series%20(355-3150%20kW)_EN.pdf",
+   "fecha_consulta": "2026-07-24"
+  },
+  {
+   "marca": "Atlas Copco",
+   "modelo": "ZH 1600+ (3 etapas)",
+   "eq_type": "Compressor — centrifugal",
+   "S": 1600,
+   "params": {
+    "P_max_bar": 13,
+    "Q_max_m3_h": 20693,
+    "notas": "Turbocompresor centrifugo exento de aceite, 3 etapas. S = 'Installed motor power' = 1600 kW, columna escalar impresa por modelo (tabla de la pag. 20, leaflet ZH/ZH+ 355-3150 kW, 2935 0716 00, Atlas Copco Airpower NV). Q_max_m3_h = 20693 = FAD maximo del modelo, que ocurre a la presion MAS BAJA de su tabla (6 bar(g)); P_max_bar = 13 = presion mas alta con valor publicado para este modelo, donde el FAD BAJA a 14861 m3/h. Es decir: caudal maximo y presion maxima NO son simultaneos (mismo criterio ya usado en las entradas GA de tornillo). Ambos valores salen de la MISMA fila/tabla (3 etapas): no se cruzaron configuraciones distintas — el mismo modelo aparece tambien en la tabla de la otra configuracion de etapas con envolvente diferente. FAD segun ASME PTC10 / ISO 5389; condiciones de referencia impresas: entrada 1 bar(a), 35 C, 60% HR, agua de refrigeracion 26.7 C. Velocidad no publicada: omitida. Material no declarado: omitido."
+   },
+   "fuente": "https://www.atlascopco.com/content/dam/atlas-copco/compressor-technique/oil-free-air/documents/ZH%20&%20ZH+%20series%20(355-3150%20kW)_EN.pdf",
+   "fecha_consulta": "2026-07-24"
+  },
+  {
+   "marca": "Atlas Copco",
+   "modelo": "ZH 2850 (3 etapas)",
+   "eq_type": "Compressor — centrifugal",
+   "S": 2850,
+   "params": {
+    "P_max_bar": 13,
+    "Q_max_m3_h": 34841,
+    "notas": "Turbocompresor centrifugo exento de aceite, 3 etapas. S = 'Installed motor power' = 2850 kW, columna escalar impresa por modelo (tabla de la pag. 20, leaflet ZH/ZH+ 355-3150 kW, 2935 0716 00, Atlas Copco Airpower NV). Q_max_m3_h = 34841 = FAD maximo del modelo, que ocurre a la presion MAS BAJA de su tabla (7 bar(g)); P_max_bar = 13 = presion mas alta con valor publicado para este modelo, donde el FAD BAJA a 26705 m3/h. Es decir: caudal maximo y presion maxima NO son simultaneos (mismo criterio ya usado en las entradas GA de tornillo). Ambos valores salen de la MISMA fila/tabla (3 etapas): no se cruzaron configuraciones distintas — el mismo modelo aparece tambien en la tabla de la otra configuracion de etapas con envolvente diferente. FAD segun ASME PTC10 / ISO 5389; condiciones de referencia impresas: entrada 1 bar(a), 35 C, 60% HR, agua de refrigeracion 26.7 C. Velocidad no publicada: omitida. Material no declarado: omitido."
+   },
+   "fuente": "https://www.atlascopco.com/content/dam/atlas-copco/compressor-technique/oil-free-air/documents/ZH%20&%20ZH+%20series%20(355-3150%20kW)_EN.pdf",
+   "fecha_consulta": "2026-07-24"
+  },
+  {
+   "marca": "Ingersoll Rand",
+   "modelo": "MSG TURBO-AIR 6040",
+   "eq_type": "Compressor — centrifugal",
+   "S": 1678,
+   "params": {
+    "Q_max_m3_h": 10020,
+    "notas": "Turbocompresor centrifugo de aire. S = 1678 kW, unico modelo de la tabla que IR publica como ESCALAR y no como rango (fila 'MSG TURBO-AIR 6040: 1,678 | 2,250 | 127~167 | 4,500~6,000', pag. 8 del folleto Completes-111-2503-EN, (c) 2025 Ingersoll Rand). Verificacion cruzada exacta: 2250 hp x 0.7457 = 1677.8 kW. Q_max_m3_h = 10020 = tope del rango de caudal impreso 167 m3/min x 60 = 10020 m3/h (la via cfm da 6000 x 1.699 = 10194: los dos pares de unidades estan redondeados por separado en el folleto, se toma el metrico). Presion por modelo NO impresa en este folleto (solo una grafica de envolvente) -> P_max omitida. Material no declarado: omitido."
+   },
+   "fuente": "https://prod-assets.ingersollrandproducts.cn/A-E-111%20Centrifugal%20Air%20Compressor%20TURBO-AIR%20Series_Completes-111-2503-EN.pdf",
+   "fecha_consulta": "2026-07-24"
+  },
+  {
+   "marca": "Ingersoll Rand",
+   "modelo": "MSG TURBO-AIR NX 2500 M4/M5",
+   "eq_type": "Compressor — centrifugal",
+   "S": 950,
+   "params": {
+    "P_max_bar": 41,
+    "Q_max_m3_h": 6800,
+    "notas": "Turbocompresor centrifugo, 100% exento de aceite, refrigerado por agua. ATENCION AL ORIGEN DE S: IR publica la potencia de este modelo como RANGO, no como escalar — '500-1,250 hp (375-950 kW)' (tabla comparativa, pag. 3 del folleto de alta presion 65-8000 cfm / 20-2350 hp). S = 950 kW es el EXTREMO SUPERIOR del rango publicado, que es justamente la 'maxima potencia instalada publicada del modelo' segun la semantica de S del catalogo; el rango completo queda documentado aca. P_max_bar = 41 = 'Up to 600 psig' impreso para las dos columnas centrifugas (600/14.5 = 41.4). Q_max_m3_h = 6800 = tope del rango de caudal impreso (4000 cfm; 4000 x 1.699 = 6796 m3/h, el folleto imprime 6800). Caudal maximo y presion maxima no son simultaneos. Velocidad no publicada. Material no declarado: omitido."
+   },
+   "fuente": "https://prod-assets.ingersollrandproducts.cn/IRP-En-Brochure-high-pressure-compressors-High-Pressure-Reciprocating-and-Centrifugal-Compressors-65-8000-cfm-20-2350-hp.pdf",
+   "fecha_consulta": "2026-07-24"
+  },
+  {
+   "marca": "Ingersoll Rand",
+   "modelo": "MSG TURBO-AIR NX 5000 M4/M5",
+   "eq_type": "Compressor — centrifugal",
+   "S": 1750,
+   "params": {
+    "P_max_bar": 41,
+    "Q_max_m3_h": 13500,
+    "notas": "Turbocompresor centrifugo, 100% exento de aceite, refrigerado por agua. ATENCION AL ORIGEN DE S: IR publica la potencia de este modelo como RANGO, no como escalar — '1,000-2,350 hp (750-1750 kW)' (tabla comparativa, pag. 3 del folleto de alta presion 65-8000 cfm / 20-2350 hp). S = 1750 kW es el EXTREMO SUPERIOR del rango publicado, que es justamente la 'maxima potencia instalada publicada del modelo' segun la semantica de S del catalogo; el rango completo queda documentado aca. P_max_bar = 41 = 'Up to 600 psig' impreso para las dos columnas centrifugas (600/14.5 = 41.4). Q_max_m3_h = 13500 = tope del rango de caudal impreso (8000 cfm; 8000 x 1.699 = 13592 m3/h, el folleto imprime 13500). Caudal maximo y presion maxima no son simultaneos. Velocidad no publicada. Material no declarado: omitido."
+   },
+   "fuente": "https://prod-assets.ingersollrandproducts.cn/IRP-En-Brochure-high-pressure-compressors-High-Pressure-Reciprocating-and-Centrifugal-Compressors-65-8000-cfm-20-2350-hp.pdf",
+   "fecha_consulta": "2026-07-24"
   }
  ]
 }
