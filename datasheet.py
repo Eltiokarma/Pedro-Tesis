@@ -117,6 +117,23 @@ def _eff_P_bar(block, fs) -> Optional[float]:
         return None
 
 
+def _T_max_proceso_C(block, fs) -> Optional[float]:
+    """T MÁXIMA de las corrientes de proceso del bloque (peor caso).
+
+    La envolvente se verifica contra el peor caso, no contra el promedio:
+    una turbina con vapor vivo a 400 °C y descarga a 183 °C promedia
+    291 °C — y un límite de T_max se compara contra los 400 de entrada.
+    (La presión ya lo hace bien: effective_pressure toma el máximo.)"""
+    temps = [float(s.temperature) for s in fs.streams.values()
+             if (s.src == block.id or s.dst == block.id)
+             and not getattr(s, "auto_aux", False)
+             and (s.role or "") not in ("utility", "ambient")
+             and s.temperature is not None]
+    if temps:
+        return max(temps)
+    return _eff_T_C(block, fs)
+
+
 def _q_proceso_m3_h(block, fs) -> Optional[float]:
     """Caudal volumétrico del proceso donde el motor ya lo calcula
     (bomba: Q_m3_h; compresor/fan: Q succión).  None si no computable."""
@@ -152,7 +169,7 @@ def _checks_envolvente(block, fs, params: dict, familia: bool) -> List[dict]:
     se inventa el requerido)."""
     candidatos = [
         ("P_max_bar",  "Presión",     "bar",   _eff_P_bar(block, fs)),
-        ("T_max_C",    "Temperatura", "°C",    _eff_T_C(block, fs)),
+        ("T_max_C",    "Temperatura", "°C",    _T_max_proceso_C(block, fs)),
         ("Q_max_m3_h", "Caudal",      "m³/h",  _q_proceso_m3_h(block, fs)),
         ("head_max_m", "Head",        "m",     _head_proceso_m(block, fs)),
     ]
