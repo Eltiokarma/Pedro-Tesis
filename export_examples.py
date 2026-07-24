@@ -61,11 +61,95 @@ def _compute_isbl(fs):
     return None
 
 
+def _r6(v):
+    """Redondeo a 6 decimales + normalización de -0.0 (un wobble float que
+    cruza el cero no debe flipear el signo del texto hasheado)."""
+    return round(float(v or 0.0), 6) + 0.0
+
+
+def _hash16(items):
+    """sha256 (primeros 16 hex) sobre una lista YA ORDENADA de tuplas
+    serializables.  El orden lo garantiza el caller (por stream.name):
+    reordenar streams no es un cambio físico y no debe mover el hash."""
+    import hashlib
+    txt = json.dumps(items, ensure_ascii=False, separators=(",", ":"))
+    return hashlib.sha256(txt.encode("utf-8")).hexdigest()[:16]
+
+
+def _max_mass_imbalance(fs):
+    """Máximo desbalance RELATIVO de masa por bloque (sin umbral).
+
+    Mismo algoritmo y guards que flowsheet_solver._check_mass_balance,
+    pero devolviendo la MAGNITUD del peor caso en vez del conteo sobre
+    umbral (el solver calcula el número pero lo descarta sub-umbral y lo
+    embebe en strings sobre-umbral; acá se recomputa para no atar el
+    golden al texto de los mensajes)."""
+    worst = 0.0
+    for b in fs.blocks.values():
+        ins = [s for s in fs.streams.values() if s.dst == b.id]
+        outs = [s for s in fs.streams.values() if s.src == b.id]
+        if not ins or not outs:
+            continue
+        if any(s.mass_flow <= 0 for s in ins + outs):
+            continue
+        in_t = sum(s.mass_flow for s in ins)
+        out_t = sum(s.mass_flow for s in outs)
+        rel = abs(in_t - out_t) / max(in_t, out_t, 1e-9)
+        worst = max(worst, rel)
+    return _r6(worst)
+
+
+def _max_energy_imbalance(fs):
+    """Máximo |H_out − H_in − duty| [kW] por bloque, con el mismo helper
+    de entalpía del solver.  CANARIO congelado, no diagnóstico: incluye
+    convenciones de modelado (reactores, cross-exchange) — lo que importa
+    es que se MUEVA cuando T/caudales/duties se muevan.  Defensivo: los
+    bloques sin entalpía resoluble se saltean."""
+    try:
+        from stream_enthalpy import stream_enthalpy_kW
+    except Exception:
+        return None
+    worst = 0.0
+    for b in fs.blocks.values():
+        ins = [s for s in fs.streams.values() if s.dst == b.id]
+        outs = [s for s in fs.streams.values() if s.src == b.id]
+        if not ins or not outs:
+            continue
+        try:
+            h_in = [stream_enthalpy_kW(s) for s in ins]
+            h_out = [stream_enthalpy_kW(s) for s in outs]
+        except Exception:
+            continue
+        if any(h is None for h in h_in + h_out):
+            continue
+        duty = float(getattr(b, "duty", 0.0) or 0.0)
+        err = abs(sum(h_out) - sum(h_in) - duty)
+        worst = max(worst, err)
+    return _r6(worst)
+
+
+# Magnitudes de Stream congeladas por agregado + hash (ampliación 2026-07:
+# de agregados a detección de regresión física — una redistribución
+# compensada de duties o un swap de T entre corrientes deja sum_duty
+# inmóvil; estas claves lo atrapan).
+_STREAM_MAGNITUDES = ("temperature", "pressure_bar", "mass_flow",
+                      "vapor_fraction")
+
+
 def golden(fs, res):
     """Golden values de un flowsheet ya resuelto.  Determinista.
 
     sum_duty es el canario de idempotencia (destapó el bug del recycle de
-    industrial_complete en Fase 0) — permanente en el set."""
+    industrial_complete en Fase 0) — permanente en el set.
+
+    Ampliación (2026-07): por cada magnitud de Stream, un agregado
+    `sum_abs_<x>` (resiste redistribución antisimétrica) y un `hash_<x>`
+    (sha256/16 sobre la lista ordenada por nombre de (name, round(v,6)) —
+    atrapa permutaciones que dejan el agregado inmóvil).  Más
+    `hash_composition` (el chequeo más profundo: deriva de composición) y
+    `max_mass/energy_imbalance` (MAGNITUD del peor desbalance, no conteo:
+    una redistribución +500/−500 kW entre bloques pasa el conteo y
+    sum_duty, pero mueve el cierre por bloque)."""
     g = {
         "overall_status": res.overall_status,
         "n_blocks": len(fs.blocks),
@@ -78,6 +162,21 @@ def golden(fs, res):
     isbl = _compute_isbl(fs)
     if isbl is not None:
         g["ISBL"] = isbl
+
+    streams = sorted(fs.streams.values(), key=lambda s: s.name)
+    for attr in _STREAM_MAGNITUDES:
+        vals = [(s.name, _r6(getattr(s, attr, 0.0))) for s in streams]
+        g[f"sum_abs_{attr}"] = _r6(sum(abs(v) for _, v in vals))
+        g[f"hash_{attr}"] = _hash16(vals)
+    comp_items = []
+    for s in streams:
+        for comp in sorted((s.composition or {})):
+            comp_items.append((s.name, comp, _r6(s.composition[comp])))
+    g["hash_composition"] = _hash16(comp_items)
+    g["max_mass_imbalance"] = _max_mass_imbalance(fs)
+    mei = _max_energy_imbalance(fs)
+    if mei is not None:
+        g["max_energy_imbalance"] = mei
     return g
 
 

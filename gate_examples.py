@@ -58,15 +58,18 @@ def _load_golden_baseline():
 
 def _diff_golden(expected, got):
     """Devuelve lista de (campo, esperado, obtenido) que difieren.
-    sum_duty: tolerancia absoluta estricta (idempotencia).  ISBL:
-    tolerancia relativa (ruido float del costing hidráulico).  El resto:
+    sum_duty, sum_abs_* y max_*_imbalance: tolerancia absoluta estricta
+    (idempotencia).  ISBL: tolerancia relativa (ruido float del costing
+    hidráulico).  hash_*: igualdad EXACTA sin tolerancia (para eso los
+    valores se redondean a 6 decimales antes de hashear).  El resto:
     igualdad exacta."""
     diffs = []
     keys = set(expected) | set(got)
     for k in sorted(keys):
         e = expected.get(k, "<ausente>")
         g = got.get(k, "<ausente>")
-        if k == "sum_duty":
+        if (k == "sum_duty" or k.startswith("sum_abs_")
+                or k.startswith("max_") and k.endswith("_imbalance")):
             try:
                 if abs(float(e) - float(g)) <= _SUMDUTY_TOL_ABS:
                     continue
