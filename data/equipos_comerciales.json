@@ -376,6 +376,104 @@
    "fuente": "https://pumps-systems.netzsch.com/en-US/products-and-accessories/nemo-progressing-cavity-pumps/nemo-l-cap-progressing-cavity-pump",
    "fecha_consulta": "2026-07-23",
    "granularidad": "familia"
+  },
+  {
+   "marca": "Grundfos",
+   "modelo": "NK 32-125.1",
+   "eq_type": "Pump — centrifugal",
+   "S_no_publicado": "punto_de_operacion",
+   "params": {
+    "P_max_bar": 16,
+    "T_max_C": 140,
+    "notas": "Bomba centrifuga monoetapa de voluta, aspiracion axial, a eje libre (NK, acoplamiento largo), segun EN 733 / ISO 2858. SIN S ESCALAR: el kW al eje sale de la curva en el punto de operacion (recorte de impulsor + duty), no hay potencia por modelo -> motivo punto_de_operacion. La envolvente hidraulica (Q/H) del tamano es la CURVA caracteristica publicada del data booklet, no un escalar impreso, por eso Q_max/head_max NO se transcriben (regla de la casa: no leer de una grafica). Lo que SI verifica esta entrada es la envolvente MECANICA impresa por tamano: P_max_bar = presion nominal de brida PN 16 (los tamanos con brida hasta DN 150 incl. estan marcados PN 16 y admiten 16 bar, pag. 5 del booklet). T_max_C = 140 C, extremo alto del rango de temperatura del liquido de la serie (-25 a +140 C, pag. 32); el maximo real depende del cierre mecanico. Tamano: DNd 32 / DNs 50 mm, impulsor nominal 125 mm (recortes 100/110/121/140 mm). Motor por tamano P2 = 0.75-2.2 kW segun recorte. La serie NB/NK cubre 2-2000 m3/h y 2-160 m (pag. 5). Material a pedido (fundicion / inox / bronce): omitido."
+   },
+   "fuente": "https://api.grundfos.com/literature/Grundfosliterature-970667.pdf",
+   "fecha_consulta": "2026-07-24",
+   "granularidad": "modelo"
+  },
+  {
+   "marca": "Grundfos",
+   "modelo": "NK 50-160",
+   "eq_type": "Pump — centrifugal",
+   "S_no_publicado": "punto_de_operacion",
+   "params": {
+    "P_max_bar": 16,
+    "T_max_C": 140,
+    "notas": "Bomba centrifuga monoetapa de voluta, aspiracion axial, a eje libre (NK, acoplamiento largo), segun EN 733 / ISO 2858. SIN S ESCALAR: el kW al eje sale de la curva en el punto de operacion (recorte de impulsor + duty), no hay potencia por modelo -> motivo punto_de_operacion. La envolvente hidraulica (Q/H) del tamano es la CURVA caracteristica publicada del data booklet, no un escalar impreso, por eso Q_max/head_max NO se transcriben (regla de la casa: no leer de una grafica). Lo que SI verifica esta entrada es la envolvente MECANICA impresa por tamano: P_max_bar = presion nominal de brida PN 16 (los tamanos con brida hasta DN 150 incl. estan marcados PN 16 y admiten 16 bar, pag. 5 del booklet). T_max_C = 140 C, extremo alto del rango de temperatura del liquido de la serie (-25 a +140 C, pag. 32); el maximo real depende del cierre mecanico. Tamano: DNd 50 / DNs 65 mm, impulsor nominal 160 mm (recortes 136/150/167/177 mm). Motor por tamano P2 = 5.5-15 kW segun recorte. La serie NB/NK cubre 2-2000 m3/h y 2-160 m (pag. 5). Material a pedido (fundicion / inox / bronce): omitido."
+   },
+   "fuente": "https://api.grundfos.com/literature/Grundfosliterature-970667.pdf",
+   "fecha_consulta": "2026-07-24",
+   "granularidad": "modelo"
+  },
+  {
+   "marca": "Grundfos",
+   "modelo": "NK 65-160",
+   "eq_type": "Pump — centrifugal",
+   "S_no_publicado": "punto_de_operacion",
+   "params": {
+    "P_max_bar": 16,
+    "T_max_C": 140,
+    "notas": "Bomba centrifuga monoetapa de voluta, aspiracion axial, a eje libre (NK, acoplamiento largo), segun EN 733 / ISO 2858. SIN S ESCALAR: el kW al eje sale de la curva en el punto de operacion (recorte de impulsor + duty), no hay potencia por modelo -> motivo punto_de_operacion. La envolvente hidraulica (Q/H) del tamano es la CURVA caracteristica publicada del data booklet, no un escalar impreso, por eso Q_max/head_max NO se transcriben (regla de la casa: no leer de una grafica). Lo que SI verifica esta entrada es la envolvente MECANICA impresa por tamano: P_max_bar = presion nominal de brida PN 16 (los tamanos con brida hasta DN 150 incl. estan marcados PN 16 y admiten 16 bar, pag. 5 del booklet). T_max_C = 140 C, extremo alto del rango de temperatura del liquido de la serie (-25 a +140 C, pag. 32); el maximo real depende del cierre mecanico. Tamano: DNd 65 / DNs 80 mm, impulsor nominal 160 mm (recortes 143/157/173/177 mm). Motor por tamano P2 = 7.5-18.5 kW segun recorte. La serie NB/NK cubre 2-2000 m3/h y 2-160 m (pag. 5). Material a pedido (fundicion / inox / bronce): omitido."
+   },
+   "fuente": "https://api.grundfos.com/literature/Grundfosliterature-970667.pdf",
+   "fecha_consulta": "2026-07-24",
+   "granularidad": "modelo"
+  },
+  {
+   "marca": "Grundfos",
+   "modelo": "NK 65-250",
+   "eq_type": "Pump — centrifugal",
+   "S_no_publicado": "punto_de_operacion",
+   "params": {
+    "P_max_bar": 16,
+    "T_max_C": 140,
+    "notas": "Bomba centrifuga monoetapa de voluta, aspiracion axial, a eje libre (NK, acoplamiento largo), segun EN 733 / ISO 2858. SIN S ESCALAR: el kW al eje sale de la curva en el punto de operacion (recorte de impulsor + duty), no hay potencia por modelo -> motivo punto_de_operacion. La envolvente hidraulica (Q/H) del tamano es la CURVA caracteristica publicada del data booklet, no un escalar impreso, por eso Q_max/head_max NO se transcriben (regla de la casa: no leer de una grafica). Lo que SI verifica esta entrada es la envolvente MECANICA impresa por tamano: P_max_bar = presion nominal de brida PN 16 (los tamanos con brida hasta DN 150 incl. estan marcados PN 16 y admiten 16 bar, pag. 5 del booklet). T_max_C = 140 C, extremo alto del rango de temperatura del liquido de la serie (-25 a +140 C, pag. 32); el maximo real depende del cierre mecanico. Tamano: DNd 65 / DNs 80 mm, impulsor nominal 250 mm (recortes 223/238/251/269 mm). Motor por tamano P2 = 30-55 kW segun recorte. La serie NB/NK cubre 2-2000 m3/h y 2-160 m (pag. 5). Material a pedido (fundicion / inox / bronce): omitido."
+   },
+   "fuente": "https://api.grundfos.com/literature/Grundfosliterature-970667.pdf",
+   "fecha_consulta": "2026-07-24",
+   "granularidad": "modelo"
+  },
+  {
+   "marca": "Grundfos",
+   "modelo": "NK 80-200",
+   "eq_type": "Pump — centrifugal",
+   "S_no_publicado": "punto_de_operacion",
+   "params": {
+    "P_max_bar": 16,
+    "T_max_C": 140,
+    "notas": "Bomba centrifuga monoetapa de voluta, aspiracion axial, a eje libre (NK, acoplamiento largo), segun EN 733 / ISO 2858. SIN S ESCALAR: el kW al eje sale de la curva en el punto de operacion (recorte de impulsor + duty), no hay potencia por modelo -> motivo punto_de_operacion. La envolvente hidraulica (Q/H) del tamano es la CURVA caracteristica publicada del data booklet, no un escalar impreso, por eso Q_max/head_max NO se transcriben (regla de la casa: no leer de una grafica). Lo que SI verifica esta entrada es la envolvente MECANICA impresa por tamano: P_max_bar = presion nominal de brida PN 16 (los tamanos con brida hasta DN 150 incl. estan marcados PN 16 y admiten 16 bar, pag. 5 del booklet). T_max_C = 140 C, extremo alto del rango de temperatura del liquido de la serie (-25 a +140 C, pag. 32); el maximo real depende del cierre mecanico. Tamano: DNd 80 / DNs 100 mm, impulsor nominal 200 mm (recortes 171/188/200/211 mm). Motor por tamano P2 = 22-45 kW segun recorte. La serie NB/NK cubre 2-2000 m3/h y 2-160 m (pag. 5). Material a pedido (fundicion / inox / bronce): omitido."
+   },
+   "fuente": "https://api.grundfos.com/literature/Grundfosliterature-970667.pdf",
+   "fecha_consulta": "2026-07-24",
+   "granularidad": "modelo"
+  },
+  {
+   "marca": "Grundfos",
+   "modelo": "NK 100-200",
+   "eq_type": "Pump — centrifugal",
+   "S_no_publicado": "punto_de_operacion",
+   "params": {
+    "P_max_bar": 16,
+    "T_max_C": 140,
+    "notas": "Bomba centrifuga monoetapa de voluta, aspiracion axial, a eje libre (NK, acoplamiento largo), segun EN 733 / ISO 2858. SIN S ESCALAR: el kW al eje sale de la curva en el punto de operacion (recorte de impulsor + duty), no hay potencia por modelo -> motivo punto_de_operacion. La envolvente hidraulica (Q/H) del tamano es la CURVA caracteristica publicada del data booklet, no un escalar impreso, por eso Q_max/head_max NO se transcriben (regla de la casa: no leer de una grafica). Lo que SI verifica esta entrada es la envolvente MECANICA impresa por tamano: P_max_bar = presion nominal de brida PN 16 (los tamanos con brida hasta DN 150 incl. estan marcados PN 16 y admiten 16 bar, pag. 5 del booklet). T_max_C = 140 C, extremo alto del rango de temperatura del liquido de la serie (-25 a +140 C, pag. 32); el maximo real depende del cierre mecanico. Tamano: DNd 100 / DNs 125 mm, impulsor nominal 200 mm (recortes 170/181/192/203 mm). Motor por tamano P2 = 30-55 kW segun recorte. La serie NB/NK cubre 2-2000 m3/h y 2-160 m (pag. 5). Material a pedido (fundicion / inox / bronce): omitido."
+   },
+   "fuente": "https://api.grundfos.com/literature/Grundfosliterature-970667.pdf",
+   "fecha_consulta": "2026-07-24",
+   "granularidad": "modelo"
+  },
+  {
+   "marca": "KSB",
+   "modelo": "Etanorm (serie)",
+   "eq_type": "Pump — centrifugal",
+   "S_no_publicado": "punto_de_operacion",
+   "params": {
+    "P_max_bar": 16,
+    "T_max_C": 140,
+    "notas": "Bomba centrifuga monoetapa de voluta, back pull-out, segun EN 733. SIN S ESCALAR: el kW al eje sale de la curva en el punto de operacion -> motivo punto_de_operacion. GRANULARIDAD = FAMILIA: esta entrada representa la SERIE Etanorm completa, no un tamano (ETN succion-descarga-impulsor). Envolvente de la serie segun la pagina oficial KSB: caudal hasta 2321 m3/h, altura hasta 160 m, presion de trabajo <= 16 bar, temperatura del fluido hasta 140 C (rango -30 a +140 C en el type series booklet). Se cargan solo P_max_bar y T_max_C como envolvente porque son limites reales que aplican a CADA tamano y no se inflan con el miembro mas grande; el Q de familia (2321 m3/h lo fija el tamano mayor) daria verificacion DEBIL, por eso no se carga como parametro (misma leccion que la NEMO L.Cap). SUSTITUIR por envolventes POR TAMANO (065-040-160 ... 200-150-400, con limite de velocidad y diametro de impulsor por tamano del booklet) en cuanto se consiga la URL oficial del type series booklet KSB (hoy solo accesible via distribuidores). Material a pedido (fundicion/bronce/inox): omitido."
+   },
+   "fuente": "https://www.ksb.com/en-at/lc/etanorm/E04B",
+   "fecha_consulta": "2026-07-24",
+   "granularidad": "familia"
   }
  ]
 }
