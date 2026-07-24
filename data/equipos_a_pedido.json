@@ -2,12 +2,13 @@
  "schema": 1,
  "nota": "Por que ciertos tipos de equipo NO tienen catalogo comercial. Cada entrada explica QUE FIJA EL TAMANO (la ingenieria), POR QUE no hay modelos de catalogo, y COMO SE COMPRA REALMENTE en un proyecto. La ausencia de catalogo no es un hueco de datos: es un hecho de la ingenieria de procesos, y el simulador lo ensena en vez de esconderlo. La UI muestra este texto en la seccion Ficha tecnica cuando el tipo no tiene ninguna entrada en data/equipos_comerciales.json. El gate tests/test_equipos_a_pedido.py valida el esquema y que los eq_type existan.",
  "generico": {
-  "titulo": "SE MANDA A HACER A LA MEDIDA",
+  "titulo": "SIN CATALOGO COMERCIAL CARGADO",
   "que_fija_el_tamano": [
-   "El tamano lo fija el DUTY del proceso (caudal, presion, temperatura, propiedades del fluido), no un catalogo de tallas."
+   "En este tipo el tamano lo fija el DUTY del proceso (caudal, presion, temperatura, propiedades del fluido).",
+   "Todavia no se investigo si existe catalogo comercial publicado para este tipo, o se investigo y no se consiguio una fuente oficial con cifras por modelo."
   ],
-  "por_que": "Ningun fabricante publica tamanos de catalogo para este tipo: cada unidad se disena contra las condiciones de un servicio concreto.",
-  "como_se_compra": "El ingeniero emite una HOJA DE DATOS con las condiciones de diseno y los talleres cotizan contra ella. El documento de compra es una especificacion, no un numero de modelo.",
+  "por_que": "AVISO DE ALCANCE: que aqui no haya opciones NO demuestra que el mercado no las publique. Solo significa que este catalogo aun no las tiene. Los tipos donde SI se comprobo que el equipo se manda a hacer a la medida llevan su explicacion propia, con la fisica y el codigo que lo justifican; este mensaje generico es mas debil a proposito, para no afirmar de mas.",
+  "como_se_compra": "Si finalmente no existe catalogo, se compra por hoja de datos contra las condiciones de diseno. Antes de asumirlo, conviene buscar la documentacion oficial del fabricante.",
   "normas": []
  },
  "motivos": {
@@ -284,6 +285,79 @@
    "normas": [
     "API 650 y sus anexos de techo flotante",
     "Normativa local de emisiones de COV"
+   ]
+  },
+  "Reactor — PFR (tubular)": {
+   "titulo": "SE MANDA A HACER A LA MEDIDA",
+   "que_fija_el_tamano": [
+    "VOLUMEN: es el caudal por el tiempo espacial que la CINETICA exige para la conversion pedida. Cambiar la conversion objetivo cambia el reactor.",
+    "DIAMETRO DE TUBO: es un compromiso. Tubo fino da mucha superficie por unidad de volumen (buena refrigeracion) pero mas caida de presion; por eso las reacciones muy exotermicas van en MULTITUBULARES de muchos tubos delgados refrigerados por camisa.",
+    "CONTROL DEL RUNAWAY: en exotermicas manda el diseno TERMICO sobre el volumetrico — hay que poder retirar el calor en el punto caliente, no en promedio, o la reaccion se dispara.",
+    "CATALIZADOR: si es de lecho fijo, el tamano de particula y la caida de presion condicionan el largo y el diametro."
+   ],
+   "por_que": "El reactor tubular es el resultado de acoplar cinetica, transferencia de calor y caida de presion para UNA reaccion concreta. No hay tallas: cada uno se calcula.",
+   "como_se_compra": "Por especificacion de proceso, casi siempre con la cinetica del licenciante de la tecnologia; el taller fabrica contra esa hoja.",
+   "normas": [
+    "ASME BPVC Seccion VIII Div. 1",
+    "TEMA cuando es multitubular refrigerado"
+   ]
+  },
+  "Crystallizer": {
+   "titulo": "SE DISENA A LA MEDIDA DEL PRODUCTO",
+   "que_fija_el_tamano": [
+    "VOLUMEN: lo fija el TIEMPO DE RESIDENCIA que los cristales necesitan para crecer hasta el tamano pedido, junto con la densidad de magma (solidos en suspension).",
+    "SUPERSATURACION: hay que mantenerla dentro de la zona metaestable. Mucha, nuclea fino y ensucia; poca, no crece. Eso condiciona circulacion, intercambio y evaporacion.",
+    "LA DISTRIBUCION DE TAMANO (CSD) ES EL PRODUCTO: dos cristalizadores del mismo volumen pueden entregar cristales completamente distintos. Se vende el cristal, no el litraje.",
+    "INCRUSTACION: la tendencia del producto a formar costra decide velocidades y limpieza, y con ello la geometria."
+   ],
+   "por_que": "El equipo se disena alrededor del comportamiento de cristalizacion de UNA sustancia, medido en laboratorio o planta piloto. Por eso los fabricantes ensayan el producto antes de dimensionar.",
+   "como_se_compra": "Por especificacion de producto y ensayos previos (curva de solubilidad, cinetica de nucleacion y crecimiento); el fabricante propone tipo (DTB, Oslo, circulacion forzada) y tamano.",
+   "normas": [
+    "ASME BPVC Seccion VIII Div. 1",
+    "Criterios de diseno por tipo (DTB / Oslo / circulacion forzada)"
+   ]
+  },
+  "Decanter — gravity": {
+   "titulo": "SE DISENA A LA MEDIDA",
+   "que_fija_el_tamano": [
+    "LEY DE STOKES: la velocidad de decantacion es v = g*d^2*(rho1-rho2)/(18*mu). Depende del TAMANO DE GOTA y de la viscosidad, o sea del sistema concreto, no del caudal solamente.",
+    "TIEMPO DE RESIDENCIA: el volumen sale de dar tiempo a que la gota recorra la altura de separacion. Emulsiones finas o fluidos viscosos exigen decantadores enormes.",
+    "COALESCENCIA: si las gotas no se unen, no decantan; a veces se agregan platos o medios coalescentes, y eso cambia por completo el dimensionado.",
+    "POSICION DE LA INTERFASE: el diseno debe fijar donde queda la interfase y como se controla, segun las densidades de ese par de fases."
+   ],
+   "por_que": "El mismo caudal puede necesitar un decantador pequeno o uno gigantesco segun lo fina que sea la dispersion. Ese dato es del proceso, no del catalogo.",
+   "como_se_compra": "Por hoja de datos con densidades, viscosidades y caracterizacion de la dispersion; en agua-aceite se sigue la practica API.",
+   "normas": [
+    "API 421 (separadores agua-aceite)",
+    "ASME BPVC Seccion VIII Div. 1"
+   ]
+  },
+  "Compressor — axial": {
+   "titulo": "SE DISENA A LA MEDIDA, INTEGRADO A UN TREN",
+   "que_fija_el_tamano": [
+    "NUMERO DE ETAPAS: cada etapa axial da poca relacion de compresion, asi que el numero de etapas sale de la relacion total pedida; el area de paso, del caudal VOLUMETRICO de entrada.",
+    "AERODINAMICA DE ALABES: los alabes se disenan para el gas concreto (peso molecular, k) y su punto de operacion; por eso el axial tiene un rango util estrecho y necesita alabes guia variables.",
+    "MARGEN DE BOMBEO (SURGE): el axial es mucho mas sensible al bombeo que el centrifugo; el margen de operacion es parte del diseno, no un accesorio."
+   ],
+   "por_que": "Los axiales industriales casi siempre van integrados a un tren mayor (turbina de gas, planta de separacion de aire, soplante de FCC) y se disenan junto con el. Se compran como ingenieria, no como modelo de catalogo.",
+   "como_se_compra": "Por especificacion API 617, con el fabricante haciendo el diseno aerodinamico y las pruebas de comportamiento antes del despacho.",
+   "normas": [
+    "API 617 (compresores axiales y centrifugos para servicio de proceso)"
+   ]
+  },
+  "Cyclone — gas/solid": {
+   "titulo": "SE CALCULA, NO SE ELIGE DE UNA LISTA",
+   "que_fija_el_tamano": [
+    "DIAMETRO: sale del caudal de gas y de la velocidad de entrada elegida (tipico 15-25 m/s). Todas las demas medidas son PROPORCIONES del diametro.",
+    "GEOMETRIA POR RELACIONES: los disenos clasicos (Stairmand de alta eficiencia, Lapple convencional) son juegos de RATIOS respecto al diametro del cuerpo — se escalan al caudal, no se toman de un catalogo de tallas.",
+    "CORTE (d50): el tamano de particula que separa al 50 % depende de la geometria y de las propiedades del gas y del solido. Ese es el dato de proceso que hay que cumplir.",
+    "COMPROMISO DURO: mas eficiencia significa mas caida de presion. Donde se pone ese equilibrio lo decide el proyecto, no el fabricante."
+   ],
+   "por_que": "El ciclon es geometria pura: se dimensiona con correlaciones a partir del caudal y del corte pedido. Existen familias de tamanos estandar, pero la eleccion sigue siendo un calculo de proceso.",
+   "como_se_compra": "Por especificacion (caudal, carga y granulometria del solido, eficiencia y caida de presion admisible); se fabrica en chapa contra esa geometria.",
+   "normas": [
+    "Correlaciones de Stairmand y de Lapple",
+    "ASME BPVC Seccion VIII si trabaja presurizado"
    ]
   }
  }
