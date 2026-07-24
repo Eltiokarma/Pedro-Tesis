@@ -198,11 +198,12 @@ sistema respalda.
 ```python
 {
   "schema": 1,
-  "identidad":  {tag, nombre, eq_type, categoria, servicio, n_paralelo},
+  "identidad":  {tag, nombre, eq_type, categoria, servicio, n_paralelo,
+                 marca?, modelo?, proveedor?},   # equipo comercial (§4.1)
   "condiciones":{T_op_C, P_op_bar, duty_kW, delta_p_bar, fases},      # efectivas (solver)
   "corrientes": {"in": [...], "out": [...]},   # por corriente: nombre, puerto, rol,
                                                # ṁ, T, P, fase, comp. principal, wt% top-N
-  "diseno":     [ {key, label, value, unit, origen, sub?} ],  # por categoría, ver §4.1
+  "diseno":     [ {key, label, value, unit, origen, sub?} ],  # por categoría, ver §4.2
   "materiales": {material, origen_material, FM},
   "auxiliares": [ {utility, puerto, direccion, fase, lazo, consumo?} ],
   "costos":     {correlacion, source, S, S_unit, fuera_rango,
@@ -221,7 +222,43 @@ ASME, tipo TEMA, corrosion allowance): no se muestran como celdas vacías; van
 en `notas.pendiente_detalle` como lista corta fija por categoría — la ficha es
 honesta sobre su alcance conceptual (Class 4/5, AACE).
 
-### 4.1 Campos de `diseno` por categoría (todos ya disponibles o recuperables §3)
+### 4.1 Modo diseño vs modo selección (equipo comercial)
+
+La ficha soporta DOS posturas del mismo motor — **la matemática existente no
+se reemplaza; se invierte qué es entrada y qué es salida**:
+
+- **Modo diseño** (actual): el proceso manda; sizing calcula el equipo
+  requerido (S, head, área…). Todos los campos de diseño llevan
+  `origen=calculado`.
+- **Modo selección (rating)**: el usuario trae un equipo real a la mesa —
+  **marca, modelo, proveedor** — y sus parámetros pasan a `origen=declarado`
+  (S/área/head/η fijados). El motor pasa a **verificar**: requerido vs
+  instalado → % de sobrediseño o warning de subdimensionado. Cambian las
+  variables de entrada en la UI del bloque (lo declarado se edita, lo
+  verificado se muestra) y cambia el veredicto de la ficha.
+
+Ganchos que YA existen para esto (no requiere tocar el solver): `S_locked`,
+`U_override`, `dtlm_override`, `efficiency`, `material` (override),
+`duty_locked`, `n`. "Seleccionar equipo comercial" = empaquetar esos
+overrides bajo una identidad. Piezas nuevas necesarias:
+
+1. Campos en `Block`: `vendor_brand`, `vendor_model`, `vendor_ref`
+   (serializados, opcionales; vacíos = modo diseño, sin cambio de
+   comportamiento).
+2. Comparador requerido-vs-instalado en `datasheet.py`:
+   `sobrediseño = (S_declarado − S_requerido) / S_requerido`, con umbral de
+   warning si es negativo (el S_requerido sale del sizer actual, que sigue
+   corriendo aunque S esté locked).
+3. Opcional (fase posterior): catálogo `data/equipos_comerciales.json` con
+   entradas {marca, modelo, eq_type, parámetros} para poblar la selección
+   con un click en lugar de tipear overrides. La ficha solo consume los
+   campos del Block, así que el catálogo es aditivo.
+
+En la ficha: la identidad muestra marca/modelo cuando existen; la sección
+diseño distingue declarado (▪) de verificado (◦) campo a campo; la sección
+notas suma el veredicto de rating.
+
+### 4.2 Campos de `diseno` por categoría (todos ya disponibles o recuperables §3)
 
 | Categoría | Campos de la ficha |
 |---|---|
@@ -263,9 +300,12 @@ simulador, no un defecto de la ficha.
 
 1. **`datasheet.py`** — agregador Qt-free + recuperación de descartados §3
    (los sizers pasan a poblar un diag como ya hace `size_heat_exchanger`) +
+   campos `vendor_*` en Block + comparador requerido-vs-instalado (§4.1) +
    test que recorre todos los ejemplos y exige ficha válida para cada bloque.
 2. **Sección "Ficha" del inspector** — clave en `_sections_for` + builder,
-   render con `SpecField`/`BookTable`/`MetricCard` según el bundle de Design.
+   render con `SpecField`/`BookTable`/`MetricCard` según el bundle de Design;
+   incluye la UI de selección de equipo comercial (variables de entrada
+   cambian cuando hay marca/modelo declarados).
 3. **Export XLSX** — hoja(s) por equipo extendiendo `write_project_xlsx`.
 4. **Export PDF multipágina** — vía `QPdfWriter` (patrón del export de PFD),
    una ficha por página, encabezado proyecto/tag/rev/fecha; retoma la deuda

@@ -60,6 +60,13 @@ comportamientos visuales**.
    Van como lista corta "Ingeniería de detalle pendiente" — nunca celdas
    vacías. Cada valor lleva su procedencia y su fuente (Turton/Sinnott/
    Perry/Crane ya citadas en el motor).
+4. La ficha tiene DOS posturas (inventario §4.1): **modo diseño** (el motor
+   calcula el equipo requerido — todo `calculado`) y **modo selección**
+   (el usuario trae un equipo comercial real con **marca, modelo,
+   proveedor**; sus parámetros pasan a `declarado` y el motor VERIFICA:
+   % de sobrediseño o warning de subdimensionado). La matemática es la
+   misma; se invierte qué es entrada y qué es salida — y con eso cambian
+   las variables de entrada del bloque y el veredicto de la ficha.
 
 ## Artboards que te pido
 
@@ -73,6 +80,8 @@ mixto/η/rpm + material + costo + warning). Decisiones tuyas:
 - Jerarquía de las 8 secciones del contrato: ¿orden fijo tipo hoja TEMA
   (identidad arriba, condiciones, corrientes como tabla, diseño como grilla
   de métricas, pie de costos/notas)? ¿qué colapsa y qué no?
+- El encabezado en modo selección: cuando hay **marca/modelo/proveedor**
+  declarados, ¿cómo entran a la identidad sin competir con el tag?
 - Cómo conviven los átomos existentes dentro de la ficha: MetricCard para
   el diseño, BookTable para corrientes/tablas, ¿o la ficha pide una
   densidad propia más compacta (registro "documento" vs registro "panel")?
@@ -119,9 +128,32 @@ especial, sizing, utility, economía, diagnóstico — ¿dónde va?), y el flujo
 auto_aux (excluidos) y con equipos sin resolver (ficha con procedencia
 "pendiente" o excluidos)? Especificá el flujo completo.
 
+### 5f — Traer un equipo a la mesa (modo selección / rating)
+
+El flujo completo de declarar un equipo comercial sobre un bloque: el
+usuario pone marca, modelo, proveedor y los parámetros del fabricante
+(área/head/η según categoría) — y las variables de entrada del bloque
+CAMBIAN de registro: lo que era resultado calculado pasa a campo editable
+declarado, y el motor responde con la verificación (requerido vs
+instalado). Decisiones tuyas:
+
+- El formulario de selección: ¿vive en la sección Ficha, en Identidad, o
+  es un diálogo del kit? ¿cómo se ve el estado "sin equipo seleccionado"
+  (modo diseño puro) vs "equipo declarado"?
+- El veredicto de rating: % de sobrediseño como métrica (¿MetricCard con
+  ClassificationScale? ¿pill en el header de la ficha?) y el caso negativo
+  (subdimensionado) — este SÍ es registro semántico de warning/danger.
+- El intercambio declarado↔calculado campo a campo: cuando el usuario fija
+  el área, el área requerida calculada no desaparece — se muestra como
+  referencia de verificación. ¿Cómo se leen ambos números juntos sin
+  ambigüedad? (pariente directo de tu ▪/◦, ahora con dos valores).
+- Escena de prueba: E-101 de `hda` con un shell-tube comercial declarado
+  de área mayor a la requerida (sobrediseño sano) y la P-302 de
+  `cw_natural` con una bomba declarada que NO llega al head (rating falla).
+
 ## Entregable
 
-Como en los ciclos anteriores: bundle HTML con artboards 5a-5e, specs
+Como en los ciclos anteriores: bundle HTML con artboards 5a-5f, specs
 dibujables (valores exactos: pt, px, tokens, espaciados), par light/dark de
 cada pieza de pantalla + versión papel del PDF, y la lista ⚡ de lo que
 decidas dejar fuera con su razón. Nosotros montamos todo después
