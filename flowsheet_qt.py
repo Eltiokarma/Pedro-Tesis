@@ -1325,6 +1325,10 @@ class BlockEditDialog(QDialog):
         name = self.name_edit.text().strip()
         if name:
             self.block.name = name
+        # Este campo es el tamaño del PROCESO (sizing).  Si algún día el modo
+        # selección de Fichas Técnicas escribe acá el S de un modelo comercial,
+        # el costeo Turton usa el techo del bastidor → CAPEX inflado.  El equipo
+        # comercial va en Block.equipo_comercial.  Ver test_equipos_comerciales.py.
         self.block.S = float(self.s_edit.value())
         self.block.n = int(self.n_edit.value())
         self.block.duty = float(self.duty_edit.value())

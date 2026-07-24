@@ -2804,6 +2804,10 @@ class BlockInspectorPanel(QWidget):
 
         f = self._fields
         # ─── Identidad ───
+        # S es el tamaño del PROCESO (sizing).  Si algún día el modo selección
+        # de Fichas Técnicas escribe acá el S de un modelo comercial, el costeo
+        # Turton usa el techo del bastidor → CAPEX inflado.  El equipo comercial
+        # va en Block.equipo_comercial.  Ver test_equipos_comerciales.py.
         if "S" in f:
             try: b.S = float(self._parse_num(f["S"].value()))
             except Exception: pass

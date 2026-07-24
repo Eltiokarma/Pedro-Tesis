@@ -54,7 +54,8 @@ def test_roundtrip_ejemplo_real_solo_agrega_claves_nuevas():
     """Cargar un ejemplo on-disk (sin los campos nuevos) y re-serializar
     sólo AGREGA campos aditivos nuevos; ningún valor original se pierde ni
     cambia."""
-    BLOCK_NEW = {"inline_reaction", "pseudo_cut", "duty_origin"}
+    BLOCK_NEW = {"inline_reaction", "pseudo_cut", "duty_origin",
+                 "equipo_comercial"}
     STREAM_NEW = {"pressure_lock_origin", "split_fraction"}
     path = os.path.join(aec.DATA_DIR, "gas_sweet.json")
     with open(path, encoding="utf-8") as f:
