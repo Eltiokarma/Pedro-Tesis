@@ -1,0 +1,249 @@
+"""
+tests/test_datasheet.py — Ficha Técnica: agregador + modo selección.
+
+Cobertura dura: datasheet_spec() debe producir una ficha válida para CADA
+bloque de CADA ejemplo del catálogo (el fallback genérico garantiza los 60
+tipos).  Y la verificación comercial debe transitar sus seis estados con
+los veredictos del artboard 5f (§4.1 del inventario).
+"""
+import os
+import sys
+import unittest
+
+_PARENT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+if _PARENT not in sys.path:
+    sys.path.insert(0, _PARENT)
+
+import datasheet as ds
+from flowsheet_model import Block, Stream, Flowsheet
+
+# Importar el PySide6 REAL en tiempo de colección: export_examples.
+# _headless_mocks() usa sys.modules.setdefault(), así que si el módulo
+# real ya está cargado los mocks NO lo pisan — sin esto, el test de
+# cobertura (que corre primero y mockea Qt) rompería los smoke Qt.
+os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
+try:
+    import PySide6.QtWidgets as _QtW_real          # noqa: F401
+    _QT_REAL = True
+except Exception:
+    _QT_REAL = False
+
+_SECCIONES = ("identidad", "condiciones", "corrientes", "diseno",
+              "materiales", "auxiliares", "costos", "notas", "verificacion")
+
+
+def _fs_rotary(S=12.0, equipo="", eq_type="Compressor — rotary"):
+    fs = Flowsheet()
+    b = Block(id=1, name="K-1", eq_type=eq_type, S=S,
+              delta_p_bar=6.0, efficiency=0.75, equipo_comercial=equipo)
+    fs.blocks = {1: b}
+    si = Stream(id=10, name="in", src=0, dst=1, mass_flow=8000.0,
+                composition={"nitrogen": 0.79, "oxygen": 0.21},
+                main_component="nitrogen", temperature=25.0,
+                pressure_bar=1.013, phase="gas")
+    so = Stream(id=11, name="out", src=1, dst=0, mass_flow=8000.0,
+                composition={"nitrogen": 0.79, "oxygen": 0.21},
+                main_component="nitrogen", temperature=25.0,
+                pressure_bar=7.0, phase="gas")
+    fs.streams = {10: si, 11: so}
+    return fs, b
+
+
+class TestFichaTodosLosEjemplos(unittest.TestCase):
+    """El fallback genérico cubre TODO bloque de TODO ejemplo."""
+
+    def test_spec_valida_para_cada_bloque(self):
+        from export_examples import _headless_mocks
+        _headless_mocks()
+        import examples_registry as reg
+        import flowsheet_solver as fsv
+        for meta in reg.list_examples():
+            fs = reg.load_example(meta["clave"])
+            fsv.solve(fs)
+            for b in fs.blocks.values():
+                if getattr(b, "auto_aux", False):
+                    continue
+                spec = ds.datasheet_spec(b, fs)
+                for k in _SECCIONES:
+                    self.assertIn(k, spec,
+                                  f"{meta['clave']}/{b.name}: falta '{k}'")
+                self.assertEqual(spec["identidad"]["tag"], b.name)
+                self.assertIn(spec["verificacion"]["estado"],
+                              ("no_aplica", "sin_declarar", "desconocido",
+                               "escalar", "envolvente_modelo",
+                               "debil_familia"),
+                              f"{meta['clave']}/{b.name}")
+
+
+class TestCatalogoHelpers(unittest.TestCase):
+
+    def test_entradas_para_rotary(self):
+        entradas = ds.entradas_para("Compressor — rotary")
+        self.assertGreaterEqual(len(entradas), 10)   # GA ×10 + CSD ×4
+
+    def test_entrada_de_parsea_clave(self):
+        fs, b = _fs_rotary(equipo="Atlas Copco|GA 90")
+        e = ds.entrada_de(b)
+        self.assertIsNotNone(e)
+        self.assertEqual(e["modelo"], "GA 90")
+
+    def test_entrada_de_exige_eq_type(self):
+        """Un 'marca|modelo' de OTRO tipo no resuelve (la clave completa
+        del catálogo es (marca, modelo, eq_type))."""
+        fs, b = _fs_rotary(equipo="Bosch|UNIVERSAL UL-S 1250")
+        self.assertIsNone(ds.entrada_de(b))
+
+
+class TestVerificacion(unittest.TestCase):
+
+    def test_no_aplica(self):
+        fs = Flowsheet()
+        b = Block(id=1, name="R-1", eq_type="Reactor — CSTR (agitado)", S=2.0)
+        fs.blocks = {1: b}; fs.streams = {}
+        v = ds.verificacion(b, fs)
+        self.assertEqual(v["estado"], "no_aplica")
+        self.assertIsNone(v["apto"])
+
+    def test_sin_declarar(self):
+        fs, b = _fs_rotary(equipo="")
+        v = ds.verificacion(b, fs)
+        self.assertEqual(v["estado"], "sin_declarar")
+        self.assertGreaterEqual(v["n_disponibles"], 10)
+
+    def test_desconocido(self):
+        fs, b = _fs_rotary(equipo="Acme|Inexistente 9000")
+        v = ds.verificacion(b, fs)
+        self.assertEqual(v["estado"], "desconocido")
+
+    def test_escalar_apto_con_utilizacion(self):
+        """5f.3: GA 90 sobre un proceso de 12 kW → APTO, utilización 13%."""
+        fs, b = _fs_rotary(S=12.0, equipo="Atlas Copco|GA 90")
+        v = ds.verificacion(b, fs)
+        self.assertEqual(v["estado"], "escalar")
+        self.assertTrue(v["apto"])
+        self.assertAlmostEqual(v["utilizacion"], 12.0 / 90.0, places=3)
+        self.assertIn("Sobredimensionado", v["mensaje"])
+
+    def test_escalar_no_apto(self):
+        fs, b = _fs_rotary(S=120.0, equipo="Atlas Copco|GA 90")
+        v = ds.verificacion(b, fs)
+        self.assertEqual(v["estado"], "escalar")
+        self.assertFalse(v["apto"])
+
+    def test_envolvente_modelo(self):
+        """5f.4: M10 FD — sin ratio, AND de desigualdades del bastidor."""
+        fs = Flowsheet()
+        b = Block(id=1, name="E-1", eq_type="Heat exch. — flat plate",
+                  S=0.0, equipo_comercial="Alfa Laval|M10 — bastidor FD (ASME)")
+        fs.blocks = {1: b}
+        si = Stream(id=10, name="in", src=0, dst=1, mass_flow=50000.0,
+                    composition={"water": 1.0}, main_component="water",
+                    temperature=120.0, pressure_bar=8.0, phase="liquid")
+        so = Stream(id=11, name="out", src=1, dst=0, mass_flow=50000.0,
+                    composition={"water": 1.0}, main_component="water",
+                    temperature=60.0, pressure_bar=7.5, phase="liquid")
+        fs.streams = {10: si, 11: so}
+        v = ds.verificacion(b, fs)
+        self.assertEqual(v["estado"], "envolvente_modelo")
+        self.assertIsNone(v["utilizacion"])
+        self.assertTrue(v["apto"])           # 8 ≤ 26.8 bar · 120 ≤ 250 °C
+        params = {c["param"] for c in v["checks"]}
+        self.assertIn("P_max_bar", params)
+        self.assertIn("T_max_C", params)
+        self.assertFalse(any(c["familia"] for c in v["checks"]))
+
+    def test_envolvente_modelo_violada(self):
+        """El bastidor FM (10 bar) NO aguanta un proceso a 14 bar."""
+        fs = Flowsheet()
+        b = Block(id=1, name="E-1", eq_type="Heat exch. — flat plate",
+                  S=0.0, equipo_comercial="Alfa Laval|M10 — bastidor FM (PED)")
+        fs.blocks = {1: b}
+        si = Stream(id=10, name="in", src=0, dst=1, mass_flow=50000.0,
+                    composition={"water": 1.0}, main_component="water",
+                    temperature=90.0, pressure_bar=14.0, phase="liquid")
+        so = Stream(id=11, name="out", src=1, dst=0, mass_flow=50000.0,
+                    composition={"water": 1.0}, main_component="water",
+                    temperature=60.0, pressure_bar=13.5, phase="liquid")
+        fs.streams = {10: si, 11: so}
+        v = ds.verificacion(b, fs)
+        self.assertEqual(v["estado"], "envolvente_modelo")
+        self.assertFalse(v["apto"])
+
+    def test_debil_familia_nunca_afirma(self):
+        """5f.5: NETZSCH — apto SIEMPRE None (nunca tilde verde), checks
+        marcados FAMILIA."""
+        fs = Flowsheet()
+        b = Block(id=1, name="P-1", eq_type="Pump — positive displacement",
+                  S=0.0, equipo_comercial="NETZSCH|NEMO L.Cap")
+        fs.blocks = {1: b}
+        si = Stream(id=10, name="in", src=0, dst=1, mass_flow=30000.0,
+                    composition={"water": 1.0}, main_component="water",
+                    temperature=40.0, pressure_bar=2.0, phase="liquid")
+        so = Stream(id=11, name="out", src=1, dst=0, mass_flow=30000.0,
+                    composition={"water": 1.0}, main_component="water",
+                    temperature=40.0, pressure_bar=6.0, phase="liquid")
+        fs.streams = {10: si, 11: so}
+        v = ds.verificacion(b, fs)
+        self.assertEqual(v["estado"], "debil_familia")
+        self.assertIsNone(v["apto"])
+        self.assertTrue(v["checks"])
+        self.assertTrue(all(c["familia"] for c in v["checks"]))
+
+    def test_restriccion_block_S_intacto(self):
+        """Declarar un equipo comercial NO toca Block.S (restricción dura)."""
+        fs, b = _fs_rotary(S=12.0, equipo="Atlas Copco|GA 90")
+        ds.datasheet_spec(b, fs)
+        ds.verificacion(b, fs)
+        self.assertEqual(b.S, 12.0)
+
+
+class TestSeccionFichaQt(unittest.TestCase):
+    """Smoke Qt offscreen: la sección Ficha del inspector se construye
+    para los tres escenarios del selector (5f.1 / 5f.2 / con declarado)."""
+
+    @classmethod
+    def setUpClass(cls):
+        if not _QT_REAL:                              # pragma: no cover
+            raise unittest.SkipTest("PySide6 real no disponible")
+        from PySide6.QtWidgets import QApplication
+        cls.app = QApplication.instance() or QApplication([])
+
+    def _panel(self, fs, b):
+        import block_inspector as bi
+        p = bi.BlockInspectorPanel()
+        p.fs = fs
+        p.block = b
+        return p
+
+    def test_sin_catalogo_afirmacion_tranquila(self):
+        from PySide6.QtWidgets import QComboBox, QLabel
+        fs = Flowsheet()
+        b = Block(id=1, name="R-1", eq_type="Reactor — CSTR (agitado)", S=2.0)
+        fs.blocks = {1: b}; fs.streams = {}
+        sect = self._panel(fs, b)._section_ficha(b, b.eq_type)
+        self.assertFalse(sect.findChildren(QComboBox),
+                         "5f.1: sin catálogo NO va selector")
+        textos = " ".join(l.text() for l in sect.findChildren(QLabel))
+        self.assertIn("Ingeniería a pedido", textos)
+
+    def test_selector_poblado(self):
+        from PySide6.QtWidgets import QComboBox
+        fs, b = _fs_rotary(equipo="")
+        sect = self._panel(fs, b)._section_ficha(b, b.eq_type)
+        combos = sect.findChildren(QComboBox)
+        self.assertTrue(combos, "5f.2: con catálogo va selector")
+        cb = combos[0]
+        self.assertGreaterEqual(cb.count(), 15)   # placeholder + 14 rotary
+        self.assertEqual(cb.itemData(0), "")
+
+    def test_declarado_muestra_veredicto(self):
+        from PySide6.QtWidgets import QLabel
+        fs, b = _fs_rotary(S=12.0, equipo="Atlas Copco|GA 90")
+        sect = self._panel(fs, b)._section_ficha(b, b.eq_type)
+        textos = " ".join(l.text() for l in sect.findChildren(QLabel))
+        self.assertIn("APTO", textos)
+        self.assertIn("fuente del", textos)   # trazabilidad no negociable
+
+
+if __name__ == "__main__":
+    unittest.main(verbosity=2)
