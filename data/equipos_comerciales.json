@@ -2204,6 +2204,58 @@
    },
    "fuente": "https://www.ari-armaturen.com/_appl/files_tb/files/450001-2.pdf",
    "fecha_consulta": "2026-07-25"
+  },
+  {
+   "marca": "Wanner Engineering",
+   "modelo": "Hydra-Cell H25-X / G25-X (cabezal metalico)",
+   "eq_type": "Pump — reciprocating",
+   "S_no_publicado": "punto_de_operacion",
+   "granularidad": "modelo",
+   "params": {
+    "P_max_bar": 69,
+    "Q_max_m3_h": 4.542,
+    "rpm": 1050,
+    "T_max_C": 121,
+    "notas": "Bomba de diafragma de desplazamiento positivo, sin sellos. El kW al eje depende del punto de operacion (caudal x presion), no del modelo -> punto_de_operacion, igual que la D35/G35 ya cargada. Pagina oficial del modelo H25/G25. Q_max_m3_h = 4.542 = 75.7 l/min de la fila 'H25-X / G25-X @1000 psig / 69 barg, max rpm 1050, 20.0 gpm, 75.7 lpm' (75.7 x 60 / 1000). La variante H25-E/G25-E gira a 1150 rpm y da 75.9 l/min; se carga la X, mas lenta. P_max_bar = 69 = '1000 psig / 69 barg' de cabezal METALICO; con cabezal no metalico (polipropileno/PVDF) baja a 350 psig / 24 barg. T_max_C = 121 = 'Metallic Heads: 250 F / 121 C', con la advertencia impresa de consultar al fabricante para la seleccion de componentes entre 71 y 121 C; el cabezal no metalico se queda en 60 C. Presion de entrada maxima 250 psig / 17 barg y solidos hasta 800 micras (no mapean a ningun parametro del esquema). Presion, caudal y temperatura son ENVOLVENTE, no un punto simultaneo."
+   },
+   "fuente": "https://wannerpumps.com/pumps/h25/",
+   "fecha_consulta": "2026-07-25"
+  },
+  {
+   "marca": "Centrisys/CNP",
+   "modelo": "CS14-4",
+   "eq_type": "Centrifuge — decanter",
+   "S": 14,
+   "params": {
+    "Q_max_m3_h": 14,
+    "notas": "Decanter (centrifuga decantadora de tornillo) de la serie CS de Centrisys/CNP, fabricante estadounidense. S = extremo SUPERIOR del 'Feed Capacity' publicado por modelo, en los m3/h que imprime el propio fabricante junto al gpm — la unidad coincide con el S_unit del tipo, asi que entra como S escalar. IMPORTANTE, la capacidad es un RANGO, no un punto: el modelo se ofrece con un minimo y un maximo de alimentacion, y S carga el techo (que es la semantica de envolvente del catalogo). Se usan los m3/h IMPRESOS, no una conversion propia del gpm: el fabricante redondea (400 gpm = 90.85 m3/h se publica como 90), y la regla de la casa es no recalcular lo que la fuente ya declara. La tabla rotula la fila 'Feed Capacity*' con un asterisco cuya nota al pie no esta impresa en la pagina; se lee como dependiente del proceso, coherente con la fila 'Cake Dryness: Up to 40% process dependant'. Diametro de tambor, velocidad de tambor y fuerza G NO se publican en esta tabla (a diferencia del folleto de Flottweg): se omiten. La potencia listada es TOTAL INSTALADA (tambor + tornillo + auxiliares), no potencia al eje, por eso no se carga como parametro. Material no declarado por modelo: omitido. Fila CS14-4: Feed Capacity 20-60 gpm (5-14 m3h) -> S = 14. Potencia total instalada 40 HP (30 kW), peso 3 800 lb (1 725 kg), 2 o 3 fases."
+   },
+   "fuente": "https://www.centrisys-cnp.com/equipment/cs-series-dewatering-centrifuge",
+   "fecha_consulta": "2026-07-25"
+  },
+  {
+   "marca": "Centrisys/CNP",
+   "modelo": "CS21-4",
+   "eq_type": "Centrifuge — decanter",
+   "S": 40,
+   "params": {
+    "Q_max_m3_h": 40,
+    "notas": "Decanter (centrifuga decantadora de tornillo) de la serie CS de Centrisys/CNP, fabricante estadounidense. S = extremo SUPERIOR del 'Feed Capacity' publicado por modelo, en los m3/h que imprime el propio fabricante junto al gpm — la unidad coincide con el S_unit del tipo, asi que entra como S escalar. IMPORTANTE, la capacidad es un RANGO, no un punto: el modelo se ofrece con un minimo y un maximo de alimentacion, y S carga el techo (que es la semantica de envolvente del catalogo). Se usan los m3/h IMPRESOS, no una conversion propia del gpm: el fabricante redondea (400 gpm = 90.85 m3/h se publica como 90), y la regla de la casa es no recalcular lo que la fuente ya declara. La tabla rotula la fila 'Feed Capacity*' con un asterisco cuya nota al pie no esta impresa en la pagina; se lee como dependiente del proceso, coherente con la fila 'Cake Dryness: Up to 40% process dependant'. Diametro de tambor, velocidad de tambor y fuerza G NO se publican en esta tabla (a diferencia del folleto de Flottweg): se omiten. La potencia listada es TOTAL INSTALADA (tambor + tornillo + auxiliares), no potencia al eje, por eso no se carga como parametro. Material no declarado por modelo: omitido. Fila CS21-4: Feed Capacity 100-175 gpm (23-40 m3h) -> S = 40. Potencia total instalada 75 HP (56 kW), peso 8 500 lb (3 860 kg), 2 o 3 fases."
+   },
+   "fuente": "https://www.centrisys-cnp.com/equipment/cs-series-dewatering-centrifuge",
+   "fecha_consulta": "2026-07-25"
+  },
+  {
+   "marca": "Centrisys/CNP",
+   "modelo": "CS26-4",
+   "eq_type": "Centrifuge — decanter",
+   "S": 90,
+   "params": {
+    "Q_max_m3_h": 90,
+    "notas": "Decanter (centrifuga decantadora de tornillo) de la serie CS de Centrisys/CNP, fabricante estadounidense. S = extremo SUPERIOR del 'Feed Capacity' publicado por modelo, en los m3/h que imprime el propio fabricante junto al gpm — la unidad coincide con el S_unit del tipo, asi que entra como S escalar. IMPORTANTE, la capacidad es un RANGO, no un punto: el modelo se ofrece con un minimo y un maximo de alimentacion, y S carga el techo (que es la semantica de envolvente del catalogo). Se usan los m3/h IMPRESOS, no una conversion propia del gpm: el fabricante redondea (400 gpm = 90.85 m3/h se publica como 90), y la regla de la casa es no recalcular lo que la fuente ya declara. La tabla rotula la fila 'Feed Capacity*' con un asterisco cuya nota al pie no esta impresa en la pagina; se lee como dependiente del proceso, coherente con la fila 'Cake Dryness: Up to 40% process dependant'. Diametro de tambor, velocidad de tambor y fuerza G NO se publican en esta tabla (a diferencia del folleto de Flottweg): se omiten. La potencia listada es TOTAL INSTALADA (tambor + tornillo + auxiliares), no potencia al eje, por eso no se carga como parametro. Material no declarado por modelo: omitido. Fila CS26-4: Feed Capacity 200-400 gpm (45-90 m3h) -> S = 90. Potencia total instalada 165 HP (123 kW), peso 18 500 lb (8 400 kg), 2 o 3 fases. Es el mayor de la serie que entra en el rango de la correlacion del tipo (S_max = 100 m3/h): los CS30-4 (159 m3/h) y CS44-4 (227 m3/h) quedan FUERA y por eso no se cargan — su costeo seria una extrapolacion."
+   },
+   "fuente": "https://www.centrisys-cnp.com/equipment/cs-series-dewatering-centrifuge",
+   "fecha_consulta": "2026-07-25"
   }
  ]
 }
