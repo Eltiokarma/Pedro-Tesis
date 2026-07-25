@@ -5,6 +5,15 @@
 primer ciclo auditoría→design→implementación, con evidencia, para arrancar
 la próxima auditoría sin redescubrir nada.
 
+> **CERRADO (2026-07-25).** Los ciclos 2 a 5 ejecutaron los ítems A-G de
+> este backlog y los 11 de `AUDITORIA_UI_2.md` §H. La verificación ítem
+> por ítem, con capturas nuevas y censo de código, está en
+> `docs/AUDITORIA_UI_3.md`; la regresión que impide reabrirlos en
+> silencio, en `tests/test_auditoria_ui3.py`. La pregunta abierta de §A
+> («¿los puertos adoptan TOK o paleta técnica propia?») se decidió por
+> **paleta técnica propia con par dark** (artboard 2a). El backlog vivo
+> pasa a ser §2 de la auditoría 3.
+
 ---
 
 ## A. El lienzo no respira el tema (el hallazgo grande) — ALTA

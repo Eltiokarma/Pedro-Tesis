@@ -360,16 +360,34 @@ def write_datasheets_pdf(path, fs, blocks=None, proyecto: str = "",
     W = writer.width()
     H = writer.height()
     M = int(writer.resolution() * 0.6)          # margen ~15 mm
-    TINTA = QColor(26, 26, 26)
-    SUAVE = QColor(120, 120, 120)
-    REGLA = QColor(200, 196, 188)
 
-    f_tag = QFont("Helvetica", 15, QFont.Bold)
-    f_proy = QFont("Helvetica", 8)
-    f_sec = QFont("Helvetica", 8, QFont.Bold)
-    f_lbl = QFont("Helvetica", 8)
-    f_val = QFont("Helvetica", 8)
-    f_pie = QFont("Helvetica", 7)
+    # PAPEL SIEMPRE CLARO — decisión declarada, no accidente (auditoría
+    # UI 2 §A.4.4).  La tinta sale de THEME_LIGHT y NO de TOK: TOK sigue
+    # el tema activo de la app, y con tema oscuro este legajo se
+    # imprimiría en gris sobre negro.  Un PFD y su ficha son documentos
+    # imprimibles; el tema es de la pantalla, no del papel.
+    import tokens as _tok
+    _L = _tok.THEME_LIGHT
+    TINTA = QColor(_L["label_ink"])
+    SUAVE = QColor(_L["ink_mute"])
+    REGLA = QColor(_L["ink_ghost"])
+
+    # Tipografía del PROYECTO, no del PDF: el Marco PFD ya sale en
+    # pfd_fonts (mismo fallback), y el plano y el legajo de fichas son dos
+    # documentos del mismo trabajo — no pueden hablar dos tipografías.
+    import pfd_fonts as _pf
+    _SANS = _pf.SANS if _pf.available() else "Helvetica"
+    _MONO = _pf.MONO if _pf.available() else "Courier"
+    # Los TAMAÑOS son escala de documento impreso, no de UI (la misma
+    # «excepción 2g» del Marco PFD): se miden en la hoja A4 a 300 dpi, no
+    # en la pantalla, así que no salen de los tokens FONT_* — esos rigen
+    # la interfaz.
+    f_tag = QFont(_SANS, 15, QFont.Bold)
+    f_proy = QFont(_SANS, 8)
+    f_sec = QFont(_SANS, 8, QFont.Bold)
+    f_lbl = QFont(_SANS, 8)
+    f_val = QFont(_MONO, 8)
+    f_pie = QFont(_SANS, 7)
 
     rev = _rev_actual(fs)
     total_paginas = len(equipos) + (1 if getattr(fs, "revisions", None) else 0)

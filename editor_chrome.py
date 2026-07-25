@@ -1749,11 +1749,20 @@ class _Overlay(QWidget):
             if (x, y) != (cur.x(), cur.y()):
                 self._palette.move(x, y)
         self._palette.raise_()
-        # Zoom abajo derecha (siempre auto-posicionado contra el border)
+        # Zoom abajo IZQUIERDA. Estuvo abajo-derecha hasta que el ciclo 2
+        # le dio al Marco PFD su leyenda (artboard 2c): esa esquina es del
+        # DOCUMENTO —leyenda, cuadro de título y revisiones△N van ahí por
+        # convención de plano, no por gusto— y el chrome flotante se le
+        # montaba encima.  No se veía en pantallas grandes; a 1280×800 el
+        # widget caía ENTERO sobre la leyenda (medido: 157×34 px de solape,
+        # el control completo).
+        # Se mueve la esquina en vez de esquivar la leyenda en caliente:
+        # una posición que dependa del scroll haría que el control se
+        # desplace mientras el usuario navega el plano.  Abajo-izquierda
+        # está libre siempre (la paleta vive arriba-izquierda).
         self._zoom.adjustSize()
         z = self._zoom.size()
-        self._zoom.move(max(14, vp.width()  - z.width()  - 14),
-                        max(14, vp.height() - z.height() - 14))
+        self._zoom.move(14, max(14, vp.height() - z.height() - 14))
         self._zoom.raise_()
 
 
