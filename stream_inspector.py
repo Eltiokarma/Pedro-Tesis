@@ -847,8 +847,13 @@ class StreamInspectorPanel(QWidget):
                       "Tocá el toggle para alternar spec/auto."))
 
         # Temperatura
+        # CAMPO EDITABLE: se pinta en la unidad activa y se guarda de
+        # vuelta en canónica (ver `_apply` → funits.a_canonica).  Las dos
+        # direcciones tienen que moverse juntas: pintar convertido y
+        # guardar crudo corrompería el dato en silencio.
         T = float(getattr(s, "temperature", 25.0) or 25.0)
-        sf_T = SpecField(value=f"{T:.1f}", unit="°C",
+        u_T = funits.active_unit("temp")
+        sf_T = SpecField(value=f"{funits.conv_temp(T, u_T):.1f}", unit=u_T,
                          state="spec" if getattr(s, "temperature_locked", False) else "auto")
         self._fields["temperature"] = sf_T
         l.addWidget(_form_row("Temperatura", sf_T,
@@ -857,8 +862,9 @@ class StreamInspectorPanel(QWidget):
         # T objetivo (setpoint)
         tt = float(getattr(s, "target_temperature", -999.0) or -999.0)
         has_sp = tt > -273.0
-        sf_tt = SpecField(value=f"{tt:.1f}" if has_sp else "",
-                          unit="°C",
+        sf_tt = SpecField(value=(f"{funits.conv_temp(tt, u_T):.1f}"
+                                 if has_sp else ""),
+                          unit=u_T,
                           state="spec" if has_sp else "empty",
                           placeholder="— sin setpoint")
         self._fields["target_temperature"] = sf_tt
@@ -867,7 +873,9 @@ class StreamInspectorPanel(QWidget):
 
         # Presión
         P = float(getattr(s, "pressure_bar", 1.013) or 1.013)
-        sf_P = SpecField(value=f"{P:.3f}", unit="bar",
+        u_P = funits.active_unit("pressure")
+        sf_P = SpecField(value=f"{funits.conv_pressure(P, u_P):.3f}",
+                         unit=u_P,
                          state="spec" if getattr(s, "pressure_locked", False) else "auto")
         self._fields["pressure_bar"] = sf_P
         l.addWidget(_form_row("Presión", sf_P))
@@ -1124,7 +1132,9 @@ class StreamInspectorPanel(QWidget):
         s = self.stream
         mass = float(s.mass_flow or 0)
         flow = frac * mass
-        flow_lbl = QLabel(f"{flow:,.0f}".replace(",", " "))
+        # El flujo del componente sale del mass_flow del stream
+        # (tm/año): se muestra en la unidad activa, como los demás.
+        flow_lbl = QLabel(funits.fmt_flow(flow))
         flow_lbl.setFont(qfont(FONT_VALUE))
         flow_lbl.setStyleSheet(f"color:{TOK['ink_mute']};")
         flow_lbl.setMinimumWidth(60); flow_lbl.setAlignment(Qt.AlignRight)
@@ -1562,10 +1572,15 @@ class StreamInspectorPanel(QWidget):
                 pass
 
         # ── Termo ──
+        # El usuario escribe en la unidad ACTIVA; el modelo guarda en
+        # canónica (°C, bar).  `a_canonica` es la inversa exacta de lo que
+        # pintó `_build_termo` — si una de las dos cambia sin la otra, el
+        # dato se corrompe sin que nada avise.
         if "temperature" in f:
             v = self._parse_num(f["temperature"].value())
             try:
-                s.temperature = float(v) if v else 25.0
+                s.temperature = (funits.a_canonica_editada(
+                    v, s.temperature, "°C", "{:.1f}") if v else 25.0)
                 s.temperature_locked = (f["temperature"].state() == "spec")
             except Exception:
                 pass
@@ -1574,7 +1589,8 @@ class StreamInspectorPanel(QWidget):
             v = self._parse_num(sf.value())
             try:
                 if sf.state() == "spec" and v:
-                    s.target_temperature = float(v)
+                    s.target_temperature = funits.a_canonica_editada(
+                        v, s.target_temperature, "°C", "{:.1f}")
                 else:
                     s.target_temperature = -999.0
             except Exception:
@@ -1582,7 +1598,8 @@ class StreamInspectorPanel(QWidget):
         if "pressure_bar" in f:
             v = self._parse_num(f["pressure_bar"].value())
             try:
-                s.pressure_bar = float(v) if v else 1.013
+                s.pressure_bar = (funits.a_canonica_editada(
+                    v, s.pressure_bar, "bar", "{:.3f}") if v else 1.013)
                 s.pressure_locked = (f["pressure_bar"].state() == "spec")
             except Exception:
                 pass

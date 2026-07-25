@@ -1,5 +1,27 @@
 # Arranque — cosecha lote 4 (sesión con red abierta)
 
+> **ESTADO 2026-07-25 — META 6× CUMPLIDA.** 173 entradas, **22 de 22 tipos
+> en verde** (≥6 opciones y ≥2 marcas). Lo que sigue vale como registro del
+> método y de las reglas duras, no como lista de pendientes. Lo único que
+> queda abierto es la deuda conocida de `Pump — positive displacement`: dos
+> entradas NETZSCH en `granularidad=familia`, porque el fabricante no
+> publica máximos por tamaño en web (viven en su software de selección).
+>
+> Tres tipos NO se cerraron cosechando más de lo mismo, sino entendiendo
+> por qué el mercado no publica lo que se buscaba — vale la pena leerlo
+> antes de reabrirlos:
+> - **`Mixer — static`**: StaMixCo publica una tabla por modelo, pero la
+>   columna es *burst pressure* (presión de rotura); cargarla como
+>   `P_max_bar` afirmaría que el equipo opera donde revienta. Statiflo y
+>   Kenics dimensionan contra el diámetro de tubería del proyecto. Se cerró
+>   con Storm Mixer, que sí publica presión de trabajo por serie.
+> - **`Heat exch. — floating head`**: ningún fabricante publica m² por
+>   modelo — el área la fija el diseño térmico del servicio. Se cerró con
+>   las series P de Funke por envolvente P/T, no por área.
+> - **`Centrifuge — decanter`**: Alfa Laval publica diámetro y velocidad de
+>   tambor pero NO caudal (Foodec), y Andritz solo el rango de la familia
+>   D2–D12. Se cerró con Centrisys, que publica caudal por modelo.
+
 **Contexto para la sesión nueva:** este documento es el punto de partida
 de la cosecha del catálogo comercial "Plan 6×". La política de red del
 environment ya se abrió, así que ESTA sesión SÍ puede leer los PDFs de
@@ -56,7 +78,18 @@ Prioridad sugerida (mayor impacto pedagógico primero):
 ## Flujo por lote
 
 1. Cosechar N entradas nuevas, appendearlas al array `equipos`.
-2. `python -m unittest tests.test_equipos_comerciales -v` → verde.
+2. `python -m unittest tests.test_equipos_comerciales
+   tests.test_equipos_a_pedido tests.test_datasheet
+   tests.test_ficha_ejemplos_reales -v` → verde.
+   **Los dos últimos NO son opcionales.** El lote 4 los omitió y la
+   cosecha rompió 6 tests sin tocar una línea de motor: retirar
+   `NETZSCH|NEMO L.Cap` y abrir `Reactor — CSTR (agitado)` invalidó
+   fixtures que nombraban esas entradas.  Hoy esos fixtures se resuelven
+   en vivo contra el catálogo (`_tipo_sin_catalogo`, `_entrada_familia`,
+   `_caso_familia`), pero el gate sigue siendo el que avisa.
+   Correrlos **con PySide6 real** (`QT_QPA_PLATFORM=offscreen`): sin Qt,
+   los tests de la sección Ficha y del diálogo se SALTAN y una rotura de
+   UI pasa inadvertida — así se colaron 2 de los 6.
 3. `python tools/preview_catalogo.py` → censo + qué ejemplos ganan
    selector (helper, no toca nada).
 4. `python gate_examples.py` → 64/64 (el catálogo no afecta física, pero

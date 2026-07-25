@@ -342,10 +342,23 @@ simulador, no un defecto de la ficha.
    render con `SpecField`/`BookTable`/`MetricCard` según el bundle de Design;
    incluye la UI de selección de equipo comercial (variables de entrada
    cambian cuando hay marca/modelo declarados).
-3. **Export XLSX** — hoja(s) por equipo extendiendo `write_project_xlsx`.
-4. **Export PDF multipágina** — vía `QPdfWriter` (patrón del export de PFD),
-   una ficha por página, encabezado proyecto/tag/rev/fecha; retoma la deuda
-   4d del ciclo 4 (cuadro de revisiones △N).
+3. ✅ **Export XLSX** — HECHO (2026-07-25). Hoja índice + una hoja por
+   equipo, en `datasheet_export.write_datasheets_xlsx`. **Desvío del plan:
+   NO se extendió `write_project_xlsx`.** Ese libro es el que importa
+   ANA.py y tiene su propio contrato (capital/fixed/variable); meterle
+   hojas de ficha lo volvería dos documentos en uno y ataría el formato de
+   la ficha al del modelo económico. Las fichas viven en su propio libro.
+4. ✅ **Export PDF multipágina** — HECHO (2026-07-25).
+   `datasheet_export.write_datasheets_pdf`: una ficha por página A4,
+   encabezado proyecto · rev △N · fecha, y página final de historial de
+   revisiones cuando el flowsheet tiene alguna (deuda 4d del ciclo 4).
+   Detalle de implementación: `QPdfWriter` directo en vez del `QPrinter`
+   del export de PFD — no hay escena que renderizar, se pinta texto, y así
+   el módulo no depende de `QtPrintSupport`.
+
+   Ver `docs/REDISENO_CICLO5_2026-07.md` para las decisiones (contenido
+   único compartido por ambos formatos) y para el bug que el export
+   destapó en el mensaje del veredicto.
 
 La especificación visual (anatomía de la ficha, jerarquía, papel de export)
 la decide Claude Design: ver `docs/PROMPT_DESIGN_CICLO5_FICHAS.md`.

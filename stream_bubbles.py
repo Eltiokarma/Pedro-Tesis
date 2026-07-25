@@ -46,6 +46,7 @@ from PySide6.QtWidgets import (
 
 import pfd_fonts
 import tokens as _tokens
+import flowsheet_units as funits
 from block_inspector import TOK
 
 
@@ -353,7 +354,7 @@ class StreamBubble(QFrame):
         if getattr(self, "_zoom_degraded", False):
             # Degradación 4e: SOLO el número (ṁ) — el dot de fase queda
             # en el header (chip).  Escala compacta oficial: Mono 9/600.
-            m_txt = f"{self._mdot_kg_s:.2f}" if self._mdot_kg_s else "—"
+            m_txt, m_u = self._m_partes()
             mini = QLabel(self._body)
             mini.setTextFormat(Qt.RichText)
             mini.setText(
@@ -361,21 +362,21 @@ class StreamBubble(QFrame):
                 f'{_tokens.COMPACT_VALUE_PX}pt;font-weight:600;'
                 f'font-family:\'{pfd_fonts.MONO}\';">{m_txt}</span>'
                 f'<span style="color:{TOK["ink_soft"]};font-size:'
-                f'{_tokens.COMPACT_LABEL_PX}pt;"> kg/s</span>')
+                f'{_tokens.COMPACT_LABEL_PX}pt;"> {m_u}</span>')
             lay.addWidget(mini, 0, 0, 1, 3)
             return
 
         if self._collapsed:
             # T + ṁ inline
-            T_txt = f"{self._T_K:.0f}" if self._T_K else "—"
-            m_txt = f"{self._mdot_kg_s:.2f}" if self._mdot_kg_s else "—"
+            T_txt, T_u = self._T_partes()
+            m_txt, _m_u = self._m_partes()
             inline = QLabel(self._body)
             inline.setTextFormat(Qt.RichText)
             soft = TOK["ink_soft"]; ink = TOK["ink"]; mono = pfd_fonts.MONO
             inline.setText(
                 f'<span style="color:{soft};font-size:9px;">T</span> '
                 f'<span style="color:{ink};font-size:10pt;font-family:\'{mono}\';">{T_txt}</span>'
-                f'<span style="color:{soft};font-size:9px;"> K</span>'
+                f'<span style="color:{soft};font-size:9px;"> {T_u}</span>'
                 f'<span style="color:{soft};">  ·  </span>'
                 f'<span style="color:{soft};font-size:9px;">ṁ</span> '
                 f'<span style="color:{ink};font-size:10pt;font-family:\'{mono}\';">{m_txt}</span>'
@@ -418,14 +419,34 @@ class StreamBubble(QFrame):
                 self._add_comp_row(lay, row, name, frac)
                 row += 1
 
+    # ── Unidades: lo que se pinta es lo que el usuario eligió ──────
+    # La burbuja guarda K / bar / kg·s⁻¹ porque son las del solver, y las
+    # imprimía tal cual: con el sistema en Imperial o SI la burbuja seguía
+    # diciendo K y bar mientras el resto del panel ya había cambiado
+    # (auditoría UI 3 §2.1).  Se convierte al pintar, no al guardar — el
+    # dato interno sigue siendo canónico.
+    def _T_partes(self, decimales=1):
+        return funits.partes_canonica(funits.de_kelvin(self._T_K), "°C") \
+            if self._T_K else ("—", funits.unidad_activa_de("°C"))
+
+    def _P_partes(self):
+        return funits.partes_canonica(self._P_bar, "bar") \
+            if self._P_bar else ("—", funits.unidad_activa_de("bar"))
+
+    def _m_partes(self):
+        return funits.partes_canonica(funits.de_kg_s(self._mdot_kg_s),
+                                      "tm/año") \
+            if self._mdot_kg_s else ("—", funits.unidad_activa_de("tm/año"))
+
     def _iter_rows(self):
-        T_txt = f"{self._T_K:.1f}" if self._T_K else "—"
-        P_txt = f"{self._P_bar:.2f}" if self._P_bar else "—"
-        m_txt = f"{self._mdot_kg_s:.2f}" if self._mdot_kg_s else "—"
-        yield ("T",  T_txt, "K")
+        T_txt, T_u = self._T_partes()
+        P_txt, P_u = self._P_partes()
+        m_txt, m_u = self._m_partes()
+        yield ("T",  T_txt, T_u)
         # P con marca de origen (FASE 2/4): 'auto' si la derivó el solver.
-        yield ("P",  P_txt, "bar auto" if (self._P_bar and self._p_auto) else "bar")
-        yield ("ṁ",  m_txt, "kg/s")
+        yield ("P",  P_txt,
+               f"{P_u} auto" if (self._P_bar and self._p_auto) else P_u)
+        yield ("ṁ",  m_txt, m_u)
 
     def _add_row(self, lay, row, label, value, unit):
         k = QLabel(label, self._body)

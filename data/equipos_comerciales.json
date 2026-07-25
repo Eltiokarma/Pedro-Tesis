@@ -2099,6 +2099,249 @@
    },
    "fuente": "https://www.ddpsinc.com/hubfs/glass-lined-vessels-brochure-2023.pdf",
    "fecha_consulta": "2026-07-24"
+  },
+  {
+   "marca": "Spirax Sarco",
+   "modelo": "SV604 DN25 x DN40 (PN40 x PN16)",
+   "eq_type": "Valve — relief",
+   "S_no_publicado": "otra_magnitud",
+   "granularidad": "modelo",
+   "params": {
+    "P_max_bar": 29,
+    "T_max_C": 400,
+    "material": "CS",
+    "notas": "Valvula de seguridad de carrera completa (full lift) bridada, cuerpo de acero al carbono, entrada PN40 / salida PN16 (modelo SV604 de la gama SV60). CAUDAL NO PUBLICADO en la S_unit del tipo: Spirax Sarco publica presion de tarado, tamano y coeficientes de descarga certificados, nunca un caudal en m3/h -> otra_magnitud (mismo criterio que las entradas LESER). Tabla 'Pressure/temperature limits - SV604', bloque 'Body design conditions PN40' del TI-S13-27 CMGT Issue 18, pag. 2. CRITERIO DE P_max_bar: esa tabla da TRES maximos de tarado por tamano segun el fluido (vapor saturado / aire / agua). Se carga el de VAPOR SATURADO por ser el mas restrictivo: la verificacion del modo seleccion compara presiones sin saber el fluido, y tomar el de aire afirmaria de mas en un servicio de vapor. Comunes a todos los tamanos: tarado minimo 0.2 bar g, T -10 a +400 C, sobrepresion 5% en vapor y 10% en liquidos y gas, contrapresion limite 10% del tarado, prueba hidraulica en frio 60 bar g. Presion y temperatura son ENVOLVENTE, no un punto simultaneo. Fila DN25 x DN40: vapor saturado 29 bar g, aire 40 bar g, agua 40 bar g -> P_max_bar = 29."
+   },
+   "fuente": "https://content.spiraxsarco.com/-/media/spiraxsarco/international/documents/en/ti/sv60-ti-s13-27-en.ashx?rev=1ab3092599234870bf80d9a5f99a9add",
+   "fecha_consulta": "2026-07-25"
+  },
+  {
+   "marca": "Spirax Sarco",
+   "modelo": "SV604 DN50 x DN80 (PN40 x PN16)",
+   "eq_type": "Valve — relief",
+   "S_no_publicado": "otra_magnitud",
+   "granularidad": "modelo",
+   "params": {
+    "P_max_bar": 29,
+    "T_max_C": 400,
+    "material": "CS",
+    "notas": "Valvula de seguridad de carrera completa (full lift) bridada, cuerpo de acero al carbono, entrada PN40 / salida PN16 (modelo SV604 de la gama SV60). CAUDAL NO PUBLICADO en la S_unit del tipo: Spirax Sarco publica presion de tarado, tamano y coeficientes de descarga certificados, nunca un caudal en m3/h -> otra_magnitud (mismo criterio que las entradas LESER). Tabla 'Pressure/temperature limits - SV604', bloque 'Body design conditions PN40' del TI-S13-27 CMGT Issue 18, pag. 2. CRITERIO DE P_max_bar: esa tabla da TRES maximos de tarado por tamano segun el fluido (vapor saturado / aire / agua). Se carga el de VAPOR SATURADO por ser el mas restrictivo: la verificacion del modo seleccion compara presiones sin saber el fluido, y tomar el de aire afirmaria de mas en un servicio de vapor. Comunes a todos los tamanos: tarado minimo 0.2 bar g, T -10 a +400 C, sobrepresion 5% en vapor y 10% en liquidos y gas, contrapresion limite 10% del tarado, prueba hidraulica en frio 60 bar g. Presion y temperatura son ENVOLVENTE, no un punto simultaneo. Fila DN50 x DN80: vapor saturado 29 bar g, aire 40 bar g, agua 40 bar g -> P_max_bar = 29."
+   },
+   "fuente": "https://content.spiraxsarco.com/-/media/spiraxsarco/international/documents/en/ti/sv60-ti-s13-27-en.ashx?rev=1ab3092599234870bf80d9a5f99a9add",
+   "fecha_consulta": "2026-07-25"
+  },
+  {
+   "marca": "Spirax Sarco",
+   "modelo": "SV604 DN100 x DN150 (PN40 x PN16)",
+   "eq_type": "Valve — relief",
+   "S_no_publicado": "otra_magnitud",
+   "granularidad": "modelo",
+   "params": {
+    "P_max_bar": 25,
+    "T_max_C": 400,
+    "material": "CS",
+    "notas": "Valvula de seguridad de carrera completa (full lift) bridada, cuerpo de acero al carbono, entrada PN40 / salida PN16 (modelo SV604 de la gama SV60). CAUDAL NO PUBLICADO en la S_unit del tipo: Spirax Sarco publica presion de tarado, tamano y coeficientes de descarga certificados, nunca un caudal en m3/h -> otra_magnitud (mismo criterio que las entradas LESER). Tabla 'Pressure/temperature limits - SV604', bloque 'Body design conditions PN40' del TI-S13-27 CMGT Issue 18, pag. 2. CRITERIO DE P_max_bar: esa tabla da TRES maximos de tarado por tamano segun el fluido (vapor saturado / aire / agua). Se carga el de VAPOR SATURADO por ser el mas restrictivo: la verificacion del modo seleccion compara presiones sin saber el fluido, y tomar el de aire afirmaria de mas en un servicio de vapor. Comunes a todos los tamanos: tarado minimo 0.2 bar g, T -10 a +400 C, sobrepresion 5% en vapor y 10% en liquidos y gas, contrapresion limite 10% del tarado, prueba hidraulica en frio 60 bar g. Presion y temperatura son ENVOLVENTE, no un punto simultaneo. Fila DN100 x DN150: los tres fluidos coinciden en 25 bar g (vapor, aire y agua), asi que aqui no hay eleccion que hacer -> P_max_bar = 25."
+   },
+   "fuente": "https://content.spiraxsarco.com/-/media/spiraxsarco/international/documents/en/ti/sv60-ti-s13-27-en.ashx?rev=1ab3092599234870bf80d9a5f99a9add",
+   "fecha_consulta": "2026-07-25"
+  },
+  {
+   "marca": "Spirax Sarco",
+   "modelo": "SV604 DN150 x DN250 (PN40 x PN16)",
+   "eq_type": "Valve — relief",
+   "S_no_publicado": "otra_magnitud",
+   "granularidad": "modelo",
+   "params": {
+    "P_max_bar": 16,
+    "T_max_C": 400,
+    "material": "CS",
+    "notas": "Valvula de seguridad de carrera completa (full lift) bridada, cuerpo de acero al carbono, entrada PN40 / salida PN16 (modelo SV604 de la gama SV60). CAUDAL NO PUBLICADO en la S_unit del tipo: Spirax Sarco publica presion de tarado, tamano y coeficientes de descarga certificados, nunca un caudal en m3/h -> otra_magnitud (mismo criterio que las entradas LESER). Tabla 'Pressure/temperature limits - SV604', bloque 'Body design conditions PN40' del TI-S13-27 CMGT Issue 18, pag. 2. CRITERIO DE P_max_bar: esa tabla da TRES maximos de tarado por tamano segun el fluido (vapor saturado / aire / agua). Se carga el de VAPOR SATURADO por ser el mas restrictivo: la verificacion del modo seleccion compara presiones sin saber el fluido, y tomar el de aire afirmaria de mas en un servicio de vapor. Comunes a todos los tamanos: tarado minimo 0.2 bar g, T -10 a +400 C, sobrepresion 5% en vapor y 10% en liquidos y gas, contrapresion limite 10% del tarado, prueba hidraulica en frio 60 bar g. Presion y temperatura son ENVOLVENTE, no un punto simultaneo. Fila DN150 x DN250 (el tamano mayor de la gama): los tres fluidos coinciden en 16 bar g -> P_max_bar = 16. El tarado maximo BAJA con el tamano (29 bar hasta DN80, 25 en DN100, 20 en DN125, 16 en DN150): a mayor area de orificio, menos presion aguanta el mismo resorte."
+   },
+   "fuente": "https://content.spiraxsarco.com/-/media/spiraxsarco/international/documents/en/ti/sv60-ti-s13-27-en.ashx?rev=1ab3092599234870bf80d9a5f99a9add",
+   "fecha_consulta": "2026-07-25"
+  },
+  {
+   "marca": "ARI-Armaturen",
+   "modelo": "ARI-STEVI 450 fig. 35.450 DN25 PN40 (Kvs 10)",
+   "eq_type": "Valve — 3-way",
+   "S_no_publicado": "otra_magnitud",
+   "granularidad": "modelo",
+   "params": {
+    "P_max_bar": 40,
+    "T_max_C": 450,
+    "material": "CS",
+    "notas": "Valvula de control de TRES VIAS (forma mezcladora/distribuidora), ARI-STEVI 450/451, figura 35.450: cuerpo de acero moldeado 1.0619+N, PN40. El fabricante publica Kvs (m3/h a 1 bar de caida), que NO es el caudal en m3/h del S_unit del tipo -> otra_magnitud (mismo criterio que las Samson de 3 vias y las de globo). Datos de la hoja ARI-STEVI 450/451 (DN15-150), edicion 02/25: tabla de Kvs y asientos (pag. 5-6) y tabla 'Pressure-temperature-ratings acc. to manufacturers standard' (pag. 2). P_max_bar = 40 = rating del cuerpo a -10..120 C; el mismo cuerpo baja a 35 bar a 200 C, 28 a 300 C, 23.8 a 400 C y 13.1 a 450 C. T_max_C = 450 es el ultimo escalon impreso para 1.0619+N PN40 (a 13.1 bar). Presion y temperatura son ENVOLVENTE, no un punto simultaneo: la admisible A TEMPERATURA sale de esa tabla. Caracteristica lineal/lineal, fuga clase IV segun DIN EN 60534-4. Ojo, magnitud distinta: la 'max. diff. pressure' de la tabla de Kvs es la caida admisible a traves del asiento con el actuador DP32, no el rating del cuerpo. DN25 en funcion de MEZCLA: Kvs estandar 10 m3/h (reducido 6.3), asientos A/B 27/27 mm, carrera 20 mm, caida admisible 40 bar."
+   },
+   "fuente": "https://www.ari-armaturen.com/_appl/files_tb/files/450001-2.pdf",
+   "fecha_consulta": "2026-07-25"
+  },
+  {
+   "marca": "ARI-Armaturen",
+   "modelo": "ARI-STEVI 450 fig. 35.450 DN50 PN40 (Kvs 40)",
+   "eq_type": "Valve — 3-way",
+   "S_no_publicado": "otra_magnitud",
+   "granularidad": "modelo",
+   "params": {
+    "P_max_bar": 40,
+    "T_max_C": 450,
+    "material": "CS",
+    "notas": "Valvula de control de TRES VIAS (forma mezcladora/distribuidora), ARI-STEVI 450/451, figura 35.450: cuerpo de acero moldeado 1.0619+N, PN40. El fabricante publica Kvs (m3/h a 1 bar de caida), que NO es el caudal en m3/h del S_unit del tipo -> otra_magnitud (mismo criterio que las Samson de 3 vias y las de globo). Datos de la hoja ARI-STEVI 450/451 (DN15-150), edicion 02/25: tabla de Kvs y asientos (pag. 5-6) y tabla 'Pressure-temperature-ratings acc. to manufacturers standard' (pag. 2). P_max_bar = 40 = rating del cuerpo a -10..120 C; el mismo cuerpo baja a 35 bar a 200 C, 28 a 300 C, 23.8 a 400 C y 13.1 a 450 C. T_max_C = 450 es el ultimo escalon impreso para 1.0619+N PN40 (a 13.1 bar). Presion y temperatura son ENVOLVENTE, no un punto simultaneo: la admisible A TEMPERATURA sale de esa tabla. Caracteristica lineal/lineal, fuga clase IV segun DIN EN 60534-4. Ojo, magnitud distinta: la 'max. diff. pressure' de la tabla de Kvs es la caida admisible a traves del asiento con el actuador DP32, no el rating del cuerpo. DN50 en funcion de MEZCLA: Kvs estandar 40 m3/h (reducido 25), asientos A/B 51/50 mm, carrera 20 mm, caida admisible 30 bar."
+   },
+   "fuente": "https://www.ari-armaturen.com/_appl/files_tb/files/450001-2.pdf",
+   "fecha_consulta": "2026-07-25"
+  },
+  {
+   "marca": "ARI-Armaturen",
+   "modelo": "ARI-STEVI 450 fig. 35.450 DN100 PN40 (Kvs 160)",
+   "eq_type": "Valve — 3-way",
+   "S_no_publicado": "otra_magnitud",
+   "granularidad": "modelo",
+   "params": {
+    "P_max_bar": 40,
+    "T_max_C": 450,
+    "material": "CS",
+    "notas": "Valvula de control de TRES VIAS (forma mezcladora/distribuidora), ARI-STEVI 450/451, figura 35.450: cuerpo de acero moldeado 1.0619+N, PN40. El fabricante publica Kvs (m3/h a 1 bar de caida), que NO es el caudal en m3/h del S_unit del tipo -> otra_magnitud (mismo criterio que las Samson de 3 vias y las de globo). Datos de la hoja ARI-STEVI 450/451 (DN15-150), edicion 02/25: tabla de Kvs y asientos (pag. 5-6) y tabla 'Pressure-temperature-ratings acc. to manufacturers standard' (pag. 2). P_max_bar = 40 = rating del cuerpo a -10..120 C; el mismo cuerpo baja a 35 bar a 200 C, 28 a 300 C, 23.8 a 400 C y 13.1 a 450 C. T_max_C = 450 es el ultimo escalon impreso para 1.0619+N PN40 (a 13.1 bar). Presion y temperatura son ENVOLVENTE, no un punto simultaneo: la admisible A TEMPERATURA sale de esa tabla. Caracteristica lineal/lineal, fuga clase IV segun DIN EN 60534-4. Ojo, magnitud distinta: la 'max. diff. pressure' de la tabla de Kvs es la caida admisible a traves del asiento con el actuador DP32, no el rating del cuerpo. DN100 en funcion de MEZCLA: Kvs estandar 160 m3/h (reducido 100), asientos A/B 101/95 mm, carrera 30 mm, caida admisible 25 bar. En funcion DISTRIBUIDORA el mismo DN100 da Kvs 95, mas bajo: el Kvs depende de la funcion, no solo del tamano."
+   },
+   "fuente": "https://www.ari-armaturen.com/_appl/files_tb/files/450001-2.pdf",
+   "fecha_consulta": "2026-07-25"
+  },
+  {
+   "marca": "Wanner Engineering",
+   "modelo": "Hydra-Cell H25-X / G25-X (cabezal metalico)",
+   "eq_type": "Pump — reciprocating",
+   "S_no_publicado": "punto_de_operacion",
+   "granularidad": "modelo",
+   "params": {
+    "P_max_bar": 69,
+    "Q_max_m3_h": 4.542,
+    "rpm": 1050,
+    "T_max_C": 121,
+    "notas": "Bomba de diafragma de desplazamiento positivo, sin sellos. El kW al eje depende del punto de operacion (caudal x presion), no del modelo -> punto_de_operacion, igual que la D35/G35 ya cargada. Pagina oficial del modelo H25/G25. Q_max_m3_h = 4.542 = 75.7 l/min de la fila 'H25-X / G25-X @1000 psig / 69 barg, max rpm 1050, 20.0 gpm, 75.7 lpm' (75.7 x 60 / 1000). La variante H25-E/G25-E gira a 1150 rpm y da 75.9 l/min; se carga la X, mas lenta. P_max_bar = 69 = '1000 psig / 69 barg' de cabezal METALICO; con cabezal no metalico (polipropileno/PVDF) baja a 350 psig / 24 barg. T_max_C = 121 = 'Metallic Heads: 250 F / 121 C', con la advertencia impresa de consultar al fabricante para la seleccion de componentes entre 71 y 121 C; el cabezal no metalico se queda en 60 C. Presion de entrada maxima 250 psig / 17 barg y solidos hasta 800 micras (no mapean a ningun parametro del esquema). Presion, caudal y temperatura son ENVOLVENTE, no un punto simultaneo."
+   },
+   "fuente": "https://wannerpumps.com/pumps/h25/",
+   "fecha_consulta": "2026-07-25"
+  },
+  {
+   "marca": "Centrisys/CNP",
+   "modelo": "CS14-4",
+   "eq_type": "Centrifuge — decanter",
+   "S": 14,
+   "params": {
+    "Q_max_m3_h": 14,
+    "notas": "Decanter (centrifuga decantadora de tornillo) de la serie CS de Centrisys/CNP, fabricante estadounidense. S = extremo SUPERIOR del 'Feed Capacity' publicado por modelo, en los m3/h que imprime el propio fabricante junto al gpm — la unidad coincide con el S_unit del tipo, asi que entra como S escalar. IMPORTANTE, la capacidad es un RANGO, no un punto: el modelo se ofrece con un minimo y un maximo de alimentacion, y S carga el techo (que es la semantica de envolvente del catalogo). Se usan los m3/h IMPRESOS, no una conversion propia del gpm: el fabricante redondea (400 gpm = 90.85 m3/h se publica como 90), y la regla de la casa es no recalcular lo que la fuente ya declara. La tabla rotula la fila 'Feed Capacity*' con un asterisco cuya nota al pie no esta impresa en la pagina; se lee como dependiente del proceso, coherente con la fila 'Cake Dryness: Up to 40% process dependant'. Diametro de tambor, velocidad de tambor y fuerza G NO se publican en esta tabla (a diferencia del folleto de Flottweg): se omiten. La potencia listada es TOTAL INSTALADA (tambor + tornillo + auxiliares), no potencia al eje, por eso no se carga como parametro. Material no declarado por modelo: omitido. Fila CS14-4: Feed Capacity 20-60 gpm (5-14 m3h) -> S = 14. Potencia total instalada 40 HP (30 kW), peso 3 800 lb (1 725 kg), 2 o 3 fases."
+   },
+   "fuente": "https://www.centrisys-cnp.com/equipment/cs-series-dewatering-centrifuge",
+   "fecha_consulta": "2026-07-25"
+  },
+  {
+   "marca": "Centrisys/CNP",
+   "modelo": "CS21-4",
+   "eq_type": "Centrifuge — decanter",
+   "S": 40,
+   "params": {
+    "Q_max_m3_h": 40,
+    "notas": "Decanter (centrifuga decantadora de tornillo) de la serie CS de Centrisys/CNP, fabricante estadounidense. S = extremo SUPERIOR del 'Feed Capacity' publicado por modelo, en los m3/h que imprime el propio fabricante junto al gpm — la unidad coincide con el S_unit del tipo, asi que entra como S escalar. IMPORTANTE, la capacidad es un RANGO, no un punto: el modelo se ofrece con un minimo y un maximo de alimentacion, y S carga el techo (que es la semantica de envolvente del catalogo). Se usan los m3/h IMPRESOS, no una conversion propia del gpm: el fabricante redondea (400 gpm = 90.85 m3/h se publica como 90), y la regla de la casa es no recalcular lo que la fuente ya declara. La tabla rotula la fila 'Feed Capacity*' con un asterisco cuya nota al pie no esta impresa en la pagina; se lee como dependiente del proceso, coherente con la fila 'Cake Dryness: Up to 40% process dependant'. Diametro de tambor, velocidad de tambor y fuerza G NO se publican en esta tabla (a diferencia del folleto de Flottweg): se omiten. La potencia listada es TOTAL INSTALADA (tambor + tornillo + auxiliares), no potencia al eje, por eso no se carga como parametro. Material no declarado por modelo: omitido. Fila CS21-4: Feed Capacity 100-175 gpm (23-40 m3h) -> S = 40. Potencia total instalada 75 HP (56 kW), peso 8 500 lb (3 860 kg), 2 o 3 fases."
+   },
+   "fuente": "https://www.centrisys-cnp.com/equipment/cs-series-dewatering-centrifuge",
+   "fecha_consulta": "2026-07-25"
+  },
+  {
+   "marca": "Centrisys/CNP",
+   "modelo": "CS26-4",
+   "eq_type": "Centrifuge — decanter",
+   "S": 90,
+   "params": {
+    "Q_max_m3_h": 90,
+    "notas": "Decanter (centrifuga decantadora de tornillo) de la serie CS de Centrisys/CNP, fabricante estadounidense. S = extremo SUPERIOR del 'Feed Capacity' publicado por modelo, en los m3/h que imprime el propio fabricante junto al gpm — la unidad coincide con el S_unit del tipo, asi que entra como S escalar. IMPORTANTE, la capacidad es un RANGO, no un punto: el modelo se ofrece con un minimo y un maximo de alimentacion, y S carga el techo (que es la semantica de envolvente del catalogo). Se usan los m3/h IMPRESOS, no una conversion propia del gpm: el fabricante redondea (400 gpm = 90.85 m3/h se publica como 90), y la regla de la casa es no recalcular lo que la fuente ya declara. La tabla rotula la fila 'Feed Capacity*' con un asterisco cuya nota al pie no esta impresa en la pagina; se lee como dependiente del proceso, coherente con la fila 'Cake Dryness: Up to 40% process dependant'. Diametro de tambor, velocidad de tambor y fuerza G NO se publican en esta tabla (a diferencia del folleto de Flottweg): se omiten. La potencia listada es TOTAL INSTALADA (tambor + tornillo + auxiliares), no potencia al eje, por eso no se carga como parametro. Material no declarado por modelo: omitido. Fila CS26-4: Feed Capacity 200-400 gpm (45-90 m3h) -> S = 90. Potencia total instalada 165 HP (123 kW), peso 18 500 lb (8 400 kg), 2 o 3 fases. Es el mayor de la serie que entra en el rango de la correlacion del tipo (S_max = 100 m3/h): los CS30-4 (159 m3/h) y CS44-4 (227 m3/h) quedan FUERA y por eso no se cargan — su costeo seria una extrapolacion."
+   },
+   "fuente": "https://www.centrisys-cnp.com/equipment/cs-series-dewatering-centrifuge",
+   "fecha_consulta": "2026-07-25"
+  },
+  {
+   "marca": "Funke",
+   "modelo": "Serie BCP (haz flotante, latón)",
+   "eq_type": "Heat exch. — floating head",
+   "S_no_publicado": "configurable",
+   "granularidad": "modelo",
+   "params": {
+    "P_max_bar": 10,
+    "T_max_C": 150,
+    "notas": "Intercambiador de casco y tubos con PLACA TUBULAR FLOTANTE (sufijo P de la nomenclatura Funke; el folleto lo declara en la tabla de materiales: '1.4571 as a floating tubesheet for the P version', frente al haz fijo de las versiones F). AREA NO PUBLICADA, mismo veredicto que las otras entradas de este tipo: Funke declara mas de 200 tamanos graduados por serie y publica el diagrama de dimensiones, nunca m2 por modelo — el area la fija el diseno termico del servicio. Por eso S_no_publicado = configurable. CRITERIO DE P_max_bar: el folleto publica DOS presiones por serie, 'Max. operating overpressure' de 16 bar en el lado CASCO y 10 bar en el lado TUBOS (prueba 24 y 15 bar respectivamente). Se carga 10 bar, el lado mas debil, porque la verificacion del modo seleccion compara la presion del proceso sin saber por que lado circula: tomar los 16 bar del casco afirmaria de mas en un servicio por tubos. POR QUE granularidad=modelo y no familia: los limites P/T publicados son de la SERIE COMPLETA y son los MISMOS para todos sus tamanos — no son la cota del miembro mas grande, que es el falso positivo contra el que el gate advierte. La envolvente vale exacta para cualquier tamano; lo unico que la serie no fija es el area. Serie BCP: tubos internos de latón CuZn20Al2As / CuNi30Mn1Fe / CuNi10Fe1Mn o 1.4571. T_max_C = 150 (columna BCP de la tabla 'Max. operating temperature'). Es la serie mas caliente de las tres: las de acero se quedan en 110 C. Material NO cargado: el latón no esta en el vocabulario de materiales del repo y mapearlo a Cu seria inventar el factor."
+   },
+   "fuente": "https://www.funke.de/media/b_funke/downloads/broschueren/funke_shell_tube_he_en.pdf",
+   "fecha_consulta": "2026-07-25"
+  },
+  {
+   "marca": "Funke",
+   "modelo": "Serie CCP (haz flotante, acero al carbono)",
+   "eq_type": "Heat exch. — floating head",
+   "S_no_publicado": "configurable",
+   "granularidad": "modelo",
+   "params": {
+    "P_max_bar": 10,
+    "T_max_C": 110,
+    "material": "CS",
+    "notas": "Intercambiador de casco y tubos con PLACA TUBULAR FLOTANTE (sufijo P de la nomenclatura Funke; el folleto lo declara en la tabla de materiales: '1.4571 as a floating tubesheet for the P version', frente al haz fijo de las versiones F). AREA NO PUBLICADA, mismo veredicto que las otras entradas de este tipo: Funke declara mas de 200 tamanos graduados por serie y publica el diagrama de dimensiones, nunca m2 por modelo — el area la fija el diseno termico del servicio. Por eso S_no_publicado = configurable. CRITERIO DE P_max_bar: el folleto publica DOS presiones por serie, 'Max. operating overpressure' de 16 bar en el lado CASCO y 10 bar en el lado TUBOS (prueba 24 y 15 bar respectivamente). Se carga 10 bar, el lado mas debil, porque la verificacion del modo seleccion compara la presion del proceso sin saber por que lado circula: tomar los 16 bar del casco afirmaria de mas en un servicio por tubos. POR QUE granularidad=modelo y no familia: los limites P/T publicados son de la SERIE COMPLETA y son los MISMOS para todos sus tamanos — no son la cota del miembro mas grande, que es el falso positivo contra el que el gate advierte. La envolvente vale exacta para cualquier tamano; lo unico que la serie no fija es el area. Serie CCP: cuerpo de acero al carbono, placa tubular fija P265GH y placa FLOTANTE 1.4571. T_max_C = 110 (columna CCF/P de la tabla de temperatura)."
+   },
+   "fuente": "https://www.funke.de/media/b_funke/downloads/broschueren/funke_shell_tube_he_en.pdf",
+   "fecha_consulta": "2026-07-25"
+  },
+  {
+   "marca": "Funke",
+   "modelo": "Serie SSCP (haz flotante, acero inoxidable)",
+   "eq_type": "Heat exch. — floating head",
+   "S_no_publicado": "configurable",
+   "granularidad": "modelo",
+   "params": {
+    "P_max_bar": 10,
+    "T_max_C": 110,
+    "material": "SS316",
+    "notas": "Intercambiador de casco y tubos con PLACA TUBULAR FLOTANTE (sufijo P de la nomenclatura Funke; el folleto lo declara en la tabla de materiales: '1.4571 as a floating tubesheet for the P version', frente al haz fijo de las versiones F). AREA NO PUBLICADA, mismo veredicto que las otras entradas de este tipo: Funke declara mas de 200 tamanos graduados por serie y publica el diagrama de dimensiones, nunca m2 por modelo — el area la fija el diseno termico del servicio. Por eso S_no_publicado = configurable. CRITERIO DE P_max_bar: el folleto publica DOS presiones por serie, 'Max. operating overpressure' de 16 bar en el lado CASCO y 10 bar en el lado TUBOS (prueba 24 y 15 bar respectivamente). Se carga 10 bar, el lado mas debil, porque la verificacion del modo seleccion compara la presion del proceso sin saber por que lado circula: tomar los 16 bar del casco afirmaria de mas en un servicio por tubos. POR QUE granularidad=modelo y no familia: los limites P/T publicados son de la SERIE COMPLETA y son los MISMOS para todos sus tamanos — no son la cota del miembro mas grande, que es el falso positivo contra el que el gate advierte. La envolvente vale exacta para cualquier tamano; lo unico que la serie no fija es el area. Serie SSCP: acero inoxidable, placas tubulares 1.4571 en la version P. T_max_C = 110 (columna SSCF/P). Material cargado como SS316 con la salvedad de que 1.4571 es en rigor un 316Ti (X6CrNiMoTi17-12-2), el 316 estabilizado con titanio; el repo no tiene clave propia para el 316Ti y SS316 es la equivalencia mas cercana, no una identidad."
+   },
+   "fuente": "https://www.funke.de/media/b_funke/downloads/broschueren/funke_shell_tube_he_en.pdf",
+   "fecha_consulta": "2026-07-25"
+  },
+  {
+   "marca": "Storm Mixer",
+   "modelo": "SMP1F4S (PVC Sch 80, 1 in, bridado, 4 elementos)",
+   "eq_type": "Mixer — static",
+   "S_no_publicado": "otra_magnitud",
+   "granularidad": "modelo",
+   "params": {
+    "P_max_bar": 10,
+    "Q_max_m3_h": 5.0,
+    "notas": "Mezclador estatico en linea de la serie SMP, cuerpo PVC Schedule 80 (hay variante CPVC), elementos excentricos, extremos bridados. VOLUMEN NO PUBLICADO: Storm Mixer publica diametro nominal, numero de elementos, longitud, rango de caudal y presion admisible, nunca un holdup en m3 -> otra_magnitud, el mismo criterio que las entradas Koflo. P_max_bar = 10 de 'PRESSURE RATING: 150 psi (10 bar) at 100 F (38 C)', valida para toda la serie. OJO CON ESA TEMPERATURA: los 38 C son la CONDICION DE REFERENCIA del rating de presion, no un techo termico. El folleto no publica temperatura maxima de servicio y el PVC/CPVC pierde presion admisible al calentarse, asi que T_max_C se OMITE en vez de cargar 38: inventar el techo o la curva de derating seria peor que no declararlo. Q_max_m3_h = extremo superior del 'Flow Range Minimum/Maximum' de la tabla, para el tamano y numero de elementos del modelo. IMPORTANTE, es un caudal RECOMENDADO, no un limite mecanico: el folleto define ese rango como el que 'asegura una caida de presion maxima de 5 psi para quimicos en base agua y buena mezcla'. Conversion US gal -> m3: 1 gpm = 0.2271247 m3/h. El caudal recomendado BAJA al agregar elementos (mas mezcla, mas caida de presion): el mismo 2 in da 90 gpm con 4 elementos y 54 con 8. Por eso el modelo incluye el numero de elementos en el codigo — no es un accesorio, es parte del tamano. Nomenclatura del folleto: SMP + diametro + configuracion de extremos + numero de elementos + tipo de elemento (ejemplo impreso: SMP1F4S). Fila 1 in / 4 elementos: caudal 4.3 a 22 gpm -> Q_max_m3_h = 22 x 0.2271247 = 5.00. Longitud del mezclador 4 in; puerto de inyeccion opcional NPT de 1/2 in."
+   },
+   "fuente": "https://stormmix.com/images/brochures/pvc_static_mixer.pdf",
+   "fecha_consulta": "2026-07-25"
+  },
+  {
+   "marca": "Storm Mixer",
+   "modelo": "SMP2F4S (PVC Sch 80, 2 in, bridado, 4 elementos)",
+   "eq_type": "Mixer — static",
+   "S_no_publicado": "otra_magnitud",
+   "granularidad": "modelo",
+   "params": {
+    "P_max_bar": 10,
+    "Q_max_m3_h": 20.441,
+    "notas": "Mezclador estatico en linea de la serie SMP, cuerpo PVC Schedule 80 (hay variante CPVC), elementos excentricos, extremos bridados. VOLUMEN NO PUBLICADO: Storm Mixer publica diametro nominal, numero de elementos, longitud, rango de caudal y presion admisible, nunca un holdup en m3 -> otra_magnitud, el mismo criterio que las entradas Koflo. P_max_bar = 10 de 'PRESSURE RATING: 150 psi (10 bar) at 100 F (38 C)', valida para toda la serie. OJO CON ESA TEMPERATURA: los 38 C son la CONDICION DE REFERENCIA del rating de presion, no un techo termico. El folleto no publica temperatura maxima de servicio y el PVC/CPVC pierde presion admisible al calentarse, asi que T_max_C se OMITE en vez de cargar 38: inventar el techo o la curva de derating seria peor que no declararlo. Q_max_m3_h = extremo superior del 'Flow Range Minimum/Maximum' de la tabla, para el tamano y numero de elementos del modelo. IMPORTANTE, es un caudal RECOMENDADO, no un limite mecanico: el folleto define ese rango como el que 'asegura una caida de presion maxima de 5 psi para quimicos en base agua y buena mezcla'. Conversion US gal -> m3: 1 gpm = 0.2271247 m3/h. El caudal recomendado BAJA al agregar elementos (mas mezcla, mas caida de presion): el mismo 2 in da 90 gpm con 4 elementos y 54 con 8. Por eso el modelo incluye el numero de elementos en el codigo — no es un accesorio, es parte del tamano. Nomenclatura del folleto: SMP + diametro + configuracion de extremos + numero de elementos + tipo de elemento (ejemplo impreso: SMP1F4S). Fila 2 in / 4 elementos: caudal 18 a 90 gpm -> Q_max_m3_h = 90 x 0.2271247 = 20.441. Longitud del mezclador 7 in; puerto de inyeccion opcional NPT de 1/2 in. El mismo cuerpo de 2 in con 8 elementos baja a 54 gpm recomendados."
+   },
+   "fuente": "https://stormmix.com/images/brochures/pvc_static_mixer.pdf",
+   "fecha_consulta": "2026-07-25"
+  },
+  {
+   "marca": "Storm Mixer",
+   "modelo": "SMP4F4S (PVC Sch 80, 4 in, bridado, 4 elementos)",
+   "eq_type": "Mixer — static",
+   "S_no_publicado": "otra_magnitud",
+   "granularidad": "modelo",
+   "params": {
+    "P_max_bar": 10,
+    "Q_max_m3_h": 79.948,
+    "notas": "Mezclador estatico en linea de la serie SMP, cuerpo PVC Schedule 80 (hay variante CPVC), elementos excentricos, extremos bridados. VOLUMEN NO PUBLICADO: Storm Mixer publica diametro nominal, numero de elementos, longitud, rango de caudal y presion admisible, nunca un holdup en m3 -> otra_magnitud, el mismo criterio que las entradas Koflo. P_max_bar = 10 de 'PRESSURE RATING: 150 psi (10 bar) at 100 F (38 C)', valida para toda la serie. OJO CON ESA TEMPERATURA: los 38 C son la CONDICION DE REFERENCIA del rating de presion, no un techo termico. El folleto no publica temperatura maxima de servicio y el PVC/CPVC pierde presion admisible al calentarse, asi que T_max_C se OMITE en vez de cargar 38: inventar el techo o la curva de derating seria peor que no declararlo. Q_max_m3_h = extremo superior del 'Flow Range Minimum/Maximum' de la tabla, para el tamano y numero de elementos del modelo. IMPORTANTE, es un caudal RECOMENDADO, no un limite mecanico: el folleto define ese rango como el que 'asegura una caida de presion maxima de 5 psi para quimicos en base agua y buena mezcla'. Conversion US gal -> m3: 1 gpm = 0.2271247 m3/h. El caudal recomendado BAJA al agregar elementos (mas mezcla, mas caida de presion): el mismo 2 in da 90 gpm con 4 elementos y 54 con 8. Por eso el modelo incluye el numero de elementos en el codigo — no es un accesorio, es parte del tamano. Nomenclatura del folleto: SMP + diametro + configuracion de extremos + numero de elementos + tipo de elemento (ejemplo impreso: SMP1F4S). Fila 4 in / 4 elementos: caudal 71 a 352 gpm -> Q_max_m3_h = 352 x 0.2271247 = 79.948. Longitud del mezclador 11 in; puerto de inyeccion opcional NPT de 3/4 in."
+   },
+   "fuente": "https://stormmix.com/images/brochures/pvc_static_mixer.pdf",
+   "fecha_consulta": "2026-07-25"
   }
  ]
 }

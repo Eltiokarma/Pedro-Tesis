@@ -237,8 +237,22 @@ def verificacion(block, fs) -> dict:
         "n_disponibles": len(disponibles), "mensaje": "",
     }
     if not disponibles and not (getattr(block, "equipo_comercial", "") or ""):
-        base["mensaje"] = ("Ingeniería a pedido: ningún fabricante publica "
-                          "tamaños de catálogo para este tipo.")
+        # El mensaje sale de equipos_a_pedido.json, NO de una frase fija.
+        # La frase que vivía acá ("ningún fabricante publica tamaños de
+        # catálogo para este tipo") afirmaba de más y ya se había corregido
+        # en el callout de la UI (cosecha 2026-07): para varios de los tipos
+        # que caen acá es FALSA — Solar Turbines sí publica potencia por
+        # modelo de turbina de gas, Andritz sí publica área de filtros de
+        # banda.  El callout quedó honesto y el veredicto no; cualquiera que
+        # leyera `verificacion()["mensaje"]` (el export de fichas, por
+        # ejemplo) seguía recibiendo la afirmación vieja.  Ahora los dos
+        # dicen lo mismo, y lo que dicen depende de si el tipo tiene razón
+        # de ingeniería verificada o solo el genérico débil.
+        motivo = motivo_a_pedido(block.eq_type)
+        partes = [motivo.get("titulo", "").strip()]
+        partes += [r for r in (motivo.get("que_fija_el_tamano") or [])[:1]]
+        base["mensaje"] = " — ".join(p for p in partes if p)
+        base["motivo_a_pedido"] = motivo
         return base
     entrada = entrada_de(block)
     if entrada is None:

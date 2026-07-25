@@ -29,19 +29,41 @@ if _PARENT not in sys.path:
 import datasheet as ds
 from export_examples import golden, _headless_mocks
 
+_P_OP_LECHE_BAR = 180.0   # P de descarga de leche_gloria P-101 (homogeneizador)
+
+
+def _caso_familia():
+    """El caso débil-de-familia, resuelto EN VIVO contra el catálogo.
+
+    Hardcodear el modelo pudre el test: 'NETZSCH|NEMO L.Cap' fue retirada
+    por la cosecha (se sustituyó por NEMO SY/BY, modelos ordenables del
+    folleto oficial) y los tres tests que la nombraban se cayeron sin que
+    el motor cambiara.  Se pide lo que el caso NECESITA — una envolvente
+    de familia de bomba PD cuyo P publicado NO alcanza los ~180 bar del
+    homogeneizador — y se devuelve None si la cosecha ya cerró la deuda de
+    familia (entonces no hay nada que verificar).
+    """
+    for e in ds.entradas_para("Pump — positive displacement"):
+        if (e.get("granularidad") == "familia"
+                and 0 < float((e.get("params") or {}).get("P_max_bar", 0))
+                < _P_OP_LECHE_BAR):
+            return ("leche_gloria", "P-101", ds.clave_de(e),
+                    "debil_familia", None)
+    return None
+
+
 # (clave, tag, 'marca|modelo', estado esperado, apto esperado)
-CASOS = [
+CASOS = [c for c in (
     ("boiler_ft",     "B-101",  "Bosch|UNIVERSAL UL-S 28000",
      "escalar", True),
     ("cw_natural",    "E-303",  "Alfa Laval|M10 — bastidor FG (PED)",
      "envolvente_modelo", True),
-    ("leche_gloria",  "P-101",  "NETZSCH|NEMO L.Cap",
-     "debil_familia", None),
+    _caso_familia(),
     ("solvent_rec",   "K-101",  "Atlas Copco|GA 90",
      "escalar", False),   # AND de envolvente: el FAD del GA 90 no alcanza
     ("steam_turbine", "TB-101", "Siemens Energy|Dresser-Rand RLA/RLVA",
      "escalar", True),
-]
+) if c is not None]
 
 
 def _sudoku(fs):
@@ -127,13 +149,17 @@ class TestEquiposRealesSobreEjemplos(unittest.TestCase):
         self.assertTrue(t_check["ok"])       # 400 ≤ 440 sigue siendo apto
 
     def test_familia_check_violado_sigue_sin_afirmar(self):
-        """leche_gloria P-101 opera a ~180 bar y la familia NEMO publica
-        20: el check FALLA pero el estado débil mantiene apto=None (la
-        decisión de si un fallo a nivel familia es concluyente queda
-        documentada en el reporte de auditoría — hoy NO afirma)."""
+        """leche_gloria P-101 opera a ~180 bar y la familia PD publica
+        mucho menos: el check FALLA pero el estado débil mantiene
+        apto=None (la decisión de si un fallo a nivel familia es
+        concluyente queda documentada en el reporte de auditoría — hoy NO
+        afirma)."""
+        caso = _caso_familia()
+        if caso is None:                                  # pragma: no cover
+            self.skipTest("el catálogo ya no tiene entradas de familia")
         fs = self.reg.load_example("leche_gloria")
         blk = next(b for b in fs.blocks.values() if b.name == "P-101")
-        blk.equipo_comercial = "NETZSCH|NEMO L.Cap"
+        blk.equipo_comercial = caso[2]
         self.fsv.solve(fs)
         v = ds.verificacion(blk, fs)
         self.assertEqual(v["estado"], "debil_familia")

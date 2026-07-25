@@ -16,6 +16,15 @@ from __future__ import annotations
 
 from typing import Optional
 
+# Qt-free igual que el resto del módulo.  Las CONDICIONES DE OPERACIÓN
+# (T_op, P_op) son el mismo dato que muestran la ficha y las burbujas, así
+# que se pintan en la unidad que el usuario eligió — si no, el inspector
+# vuelve a contradecirse a sí mismo entre secciones (auditoría UI 3 §2.1).
+# La memoria de CÁLCULO que sigue más abajo (LMTD, approach, perfiles) se
+# queda en las unidades del cálculo a propósito: es la reproducción de
+# cómo se resolvió, no un dato de lectura.
+import flowsheet_units as funits
+
 
 # ─────────────────────────────────────────────────────────────────────
 #  EVIDENCIA TEXTUAL POR TIPO DE EQUIPO
@@ -56,9 +65,11 @@ def reactor_text(block) -> Optional[str]:
                          f"{block.reactor_conversion * 100:.1f} % del "
                          f"reactivo limitante (declarado)")
         if getattr(block, "T_op_K", 0) and block.T_op_K > 0:
-            lines.append(f"T_op        {block.T_op_K - 273.15:.1f} °C")
+            lines.append("T_op        " + funits.fmt_canonica(
+                block.T_op_K - 273.15, "°C"))
         if getattr(block, "P_op_bar", 0) and block.P_op_bar > 0:
-            lines.append(f"P_op        {block.P_op_bar:.2f} bar")
+            lines.append("P_op        " + funits.fmt_canonica(
+                block.P_op_bar, "bar"))
         if mode in ("pfr", "cstr", "batch") and \
                 getattr(block, "reactor_volume_L", 0) > 0:
             lines.append(f"Volumen     {block.reactor_volume_L:.1f} L")
@@ -589,9 +600,11 @@ def flash_text(block) -> Optional[str]:
             return None
         lines = []
         if block.flash_T_K > 0:
-            lines.append(f"T_op        {block.flash_T_K - 273.15:.1f} °C")
+            lines.append("T_op        " + funits.fmt_canonica(
+                block.flash_T_K - 273.15, "°C"))
         if block.flash_P_bar > 0:
-            lines.append(f"P_op        {block.flash_P_bar:.2f} bar")
+            lines.append("P_op        " + funits.fmt_canonica(
+                block.flash_P_bar, "bar"))
         lines.append("Divide la corriente de entrada en vapor (volátiles) y "
                      "líquido por VLE isotérmico NRTL.")
         return "\n".join(lines)
@@ -623,9 +636,11 @@ def mech_sep_text(block) -> Optional[str]:
         if eff is not None:
             lines.append(f"η recup.    {eff * 100:.1f} %")
         if block.T_op_K > 0:
-            lines.append(f"T_op        {block.T_op_K - 273.15:.1f} °C")
+            lines.append("T_op        " + funits.fmt_canonica(
+                block.T_op_K - 273.15, "°C"))
         if block.P_op_bar > 0:
-            lines.append(f"P_op        {block.P_op_bar:.2f} bar")
+            lines.append("P_op        " + funits.fmt_canonica(
+                block.P_op_bar, "bar"))
         return "\n".join(lines)
     except Exception:
         return None
@@ -2293,13 +2308,13 @@ def reactor_metrics(block) -> Optional[dict]:
                             "value": f"{block.reactor_conversion * 100:.1f}",
                             "unit": "%", "state": "spec"})
         if getattr(block, "T_op_K", 0) and block.T_op_K > 0:
+            _v, _u = funits.partes_canonica(block.T_op_K - 273.15, "°C")
             metrics.append({"key": "T_op", "label": "T_op",
-                            "value": f"{block.T_op_K - 273.15:.1f}",
-                            "unit": "°C", "state": "alert"})
+                            "value": _v, "unit": _u, "state": "alert"})
         if getattr(block, "P_op_bar", 0) and block.P_op_bar > 0:
+            _v, _u = funits.partes_canonica(block.P_op_bar, "bar")
             metrics.append({"key": "P_op", "label": "P_op",
-                            "value": f"{block.P_op_bar:.2f}",
-                            "unit": "bar", "state": "info"})
+                            "value": _v, "unit": _u, "state": "info"})
         if mode in ("pfr", "cstr", "batch") and \
                 getattr(block, "reactor_volume_L", 0) > 0:
             metrics.append({"key": "V", "label": "Volumen",
@@ -2408,13 +2423,13 @@ def flash_metrics(block) -> Optional[dict]:
             return None
         metrics = []
         if block.flash_T_K > 0:
-            metrics.append({"key": "T_op", "label": "T_op",
-                            "value": f"{block.flash_T_K - 273.15:.1f}",
-                            "unit": "°C", "state": "alert"})
+            _v, _u = funits.partes_canonica(block.flash_T_K - 273.15, "°C")
+        metrics.append({"key": "T_op", "label": "T_op",
+                        "value": _v, "unit": _u, "state": "alert"})
         if block.flash_P_bar > 0:
-            metrics.append({"key": "P_op", "label": "P_op",
-                            "value": f"{block.flash_P_bar:.2f}",
-                            "unit": "bar", "state": "info"})
+            _v, _u = funits.partes_canonica(block.flash_P_bar, "bar")
+        metrics.append({"key": "P_op", "label": "P_op",
+                        "value": _v, "unit": _u, "state": "info"})
         return {"status": [], "metrics": metrics, "figure": "flash",
                 "warnings": []}
     except Exception:
@@ -2452,13 +2467,13 @@ def mech_sep_metrics(block) -> Optional[dict]:
                            "value": float(eff), "suffix": "%",
                            "text": f"{eff * 100:.0f}"})
         if block.T_op_K > 0:
+            _v, _u = funits.partes_canonica(block.T_op_K - 273.15, "°C")
             metrics.append({"key": "T_op", "label": "T_op",
-                            "value": f"{block.T_op_K - 273.15:.1f}",
-                            "unit": "°C", "state": "alert"})
+                            "value": _v, "unit": _u, "state": "alert"})
         if block.P_op_bar > 0:
+            _v, _u = funits.partes_canonica(block.P_op_bar, "bar")
             metrics.append({"key": "P_op", "label": "P_op",
-                            "value": f"{block.P_op_bar:.2f}",
-                            "unit": "bar", "state": "info"})
+                            "value": _v, "unit": _u, "state": "info"})
         return {"status": status, "metrics": metrics, "gauges": gauges,
                 "figure": None, "warnings": []}
     except Exception:
