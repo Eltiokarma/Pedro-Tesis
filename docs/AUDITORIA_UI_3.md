@@ -96,19 +96,19 @@ El export de fichas (tandas 3-4, de este mismo día) entró con
   documento impreso (A4 a 300 dpi), la misma «excepción 2g» del Marco PFD.
   Antes no estaba anotado; ahora sí.
 
-**Regresión:** `tests/test_auditoria_ui3.py`, 11 tests — los tres
-arreglos y el cierre de la auditoría 2.
+**Regresión:** `tests/test_auditoria_ui3.py` — los tres arreglos de esta
+sección y el cierre de la auditoría 2 (canvas theme-aware, censo hex,
+welcome dentro del sistema, export que no sigue el tema de pantalla).
 
 ---
 
-## 2. Backlog para el próximo ciclo
+## 2. El hallazgo del ciclo: el sistema de unidades — CERRADO
 
-### 2.1 El inspector ignora el sistema de unidades — **CERRADO (2026-07-25)**
+> Se conserva el diagnóstico entero, no solo la solución: explica por qué
+> el arreglo tiene la forma que tiene, y por qué terminó tocando el doble
+> de superficies de las que el diagnóstico había listado.
 
-> Resuelto en la misma sesión; se conserva el diagnóstico porque explica
-> la forma del arreglo. **Lo que se hizo** está al final de la sección.
-
-
+### 2.1 Lo que se encontró
 
 `block_inspector.py` **no importa `flowsheet_units` en absoluto** (0
 referencias). Toda la ficha muestra unidades canónicas fijas (°C, bar, kW)
@@ -244,7 +244,11 @@ recorren tres sistemas (Modelo, SI estricto, Imperial) y verifican que
 cambie **el valor y no solo el rótulo** — un round-trip kg/s → tm/año →
 kg/s que tiene que volver al número de partida.
 
-### 2.2 Menores detectados
+## 3. Backlog vivo para el próximo ciclo
+
+Lo único que este ciclo deja abierto.
+
+### 3.1 Menores detectados
 
 - **Chip DOF truncado:** «Sistema determinado» se corta a mitad de palabra
   («Sistema determin») en el pie del sidebar del inspector
@@ -257,7 +261,7 @@ kg/s que tiene que volver al número de partida.
   «Opciones avanzadas…»). Ya no tiene hex, pero la auditoría 2 proponía
   retirarlo o migrarlo al inspector; sigue siendo superficie duplicada.
 
-### 2.3 Superficies que este escaneo NO cubrió
+### 3.2 Superficies que este escaneo NO cubrió
 
 Nacieron después de la auditoría 2 y solo se verificaron por censo
 (0 hex, tipografía del sistema), sin pasada de UX: selector de equipo
@@ -265,5 +269,8 @@ comercial del catálogo, `dialog_kit`, `book_table`, `hx_inspector`.
 
 ---
 
-*Escaneo de verificación: los únicos cambios de código son los tres
-arreglos de §1, cada uno con su test. Generado sobre `55f6c14`.*
+*Arrancó como escaneo de verificación —confirmar que la auditoría 2
+estaba cerrada— y terminó con tres colisiones corregidas (§1) y el
+sistema de unidades cableado en quince campos y superficies (§2). Cada
+cambio con su test: `tests/test_auditoria_ui3.py`, 34 tests. Escaneo
+generado sobre `55f6c14`.*
