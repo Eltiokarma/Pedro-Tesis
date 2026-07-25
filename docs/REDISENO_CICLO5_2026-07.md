@@ -60,8 +60,43 @@ bundle encarnadas:
    heredan del kit existente (FONT_HINT/VALUE/LABEL, tokens green/
    danger/ink_mute) en lugar de valores propios de la ficha.
 
-## Qué sigue (tandas 3-4 del inventario)
+## Tandas 3-4 del inventario — HECHAS (2026-07-25)
 
-Export XLSX (hoja por equipo) y PDF multipágina (QPdfWriter, cuadro de
-revisiones △N).  El agregador ya entrega el dict completo por bloque;
-los exports son consumidores puros.
+`datasheet_export.py`, Qt-free salvo el PDF.  Regresión:
+`tests/test_datasheet_export.py` (15 tests).  Menú *Archivo → Exportar*:
+«Fichas técnicas — PDF (legajo)…» y «Fichas técnicas — Excel…».
+
+- **XLSX** (tanda 3): hoja «Índice» (tag, tipo, categoría, marca/modelo,
+  estado de verificación, CBM) + una hoja por equipo.  Nombres de hoja
+  saneados — Excel rechaza `[]:*?/\` y >31 caracteres, y no admite dos
+  hojas iguales.
+- **PDF** (tanda 4): una ficha por página A4, encabezado
+  proyecto · rev △N · fecha, pie con numeración y la leyenda «diseño
+  conceptual — no apto para construcción».  Una ficha que no entra en una
+  página sigue en la siguiente ROTULADA `(cont.)`, en vez de recortarse en
+  silencio.  Si el flowsheet registró revisiones, cierra con una página de
+  historial △N — el mismo cuadro del Marco PFD, en formato de legajo; sin
+  revisiones no se emite la página (el plano tampoco dibuja un cuadro
+  vacío).
+
+**La decisión que sostiene las dos:** qué se imprime y en qué orden se
+decide UNA vez, en `datasheet_rows()`.  Los renderers solo deciden cómo
+pintar esas filas.  Con un recorrido del spec por formato, divergirían al
+primer campo nuevo y la ficha dejaría de ser el mismo documento en dos
+formatos; `TestParidad` congela esa igualdad.
+
+El rótulo del proyecto sale del **cuadro de título del Marco PFD**, no de
+un nombre nuevo: plano y legajo son dos documentos del mismo trabajo.
+
+### Lo que el export destapó
+
+Escribir la ficha a papel encontró un bug que la UI ya no mostraba:
+`datasheet.verificacion()` seguía devolviendo, para los tipos sin
+catálogo, la frase *«Ingeniería a pedido: ningún fabricante publica
+tamaños de catálogo para este tipo»* — la misma afirmación que la cosecha
+2026-07 había corregido en el callout del inspector **por ser falsa** para
+varios de esos tipos (Solar Turbines publica potencia por modelo, Andritz
+publica área de filtros de banda).  El callout quedó honesto y el veredicto
+no, así que cualquier consumidor nuevo del agregador heredaba la mentira.
+Ahora el mensaje se arma con `motivo_a_pedido()`: título + razón de
+ingeniería verificada, o el genérico débil con su aviso de alcance.

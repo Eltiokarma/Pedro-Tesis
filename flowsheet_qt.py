@@ -7379,6 +7379,15 @@ class FlowsheetMainWindow(QMainWindow):
         m_export.addAction(_ac("PNG (alta resolución)…", self.action_export_png,
                                   None, "file-export"))
         m_export.addSeparator()
+        # Fichas técnicas — el otro documento del proyecto: el plano dice
+        # cómo se conecta la planta, la ficha dice qué es cada equipo.
+        m_export.addAction(_ac("Fichas técnicas — PDF (legajo)…",
+                               self.action_export_fichas_pdf,
+                               None, "file-print"))
+        m_export.addAction(_ac("Fichas técnicas — Excel…",
+                               self.action_export_fichas_xlsx,
+                               None, "file-export"))
+        m_export.addSeparator()
         # Decisión 2b: el export es documento de ingeniería → SIEMPRE
         # papel claro, salvo que el usuario active esto (captura de
         # pantalla / presentación en dark).  Apagado por defecto.
@@ -9031,6 +9040,64 @@ class FlowsheetMainWindow(QMainWindow):
             return
         self.status.showMessage(f"Exportado: {path}", 6000)
         self._show_costing_warnings(caught, "la exportación a Excel")
+
+    # ---------------------------------------------------
+    # EXPORT de FICHAS TÉCNICAS (tandas 3-4 del inventario)
+    # ---------------------------------------------------
+
+    def _nombre_proyecto(self) -> str:
+        """Rótulo del proyecto para el encabezado de las fichas.
+
+        Sale del CUADRO DE TÍTULO del Marco PFD, que es donde el proyecto
+        ya tiene nombre: plano y legajo de fichas son dos documentos del
+        mismo trabajo y deben rotularse igual.  Si el marco no está
+        instanciado, se devuelve vacío — no se inventa un nombre."""
+        pf = getattr(getattr(self, "scene", None), "paper_frame", None)
+        return (getattr(pf, "_project_title", "") or "").strip()
+
+    def _export_fichas(self, escribir, titulo, sugerido, filtro, ext):
+        """Tronco común de los dos exports de fichas: mismas guardas,
+        mismo diálogo, mismo reporte de errores."""
+        if not self.fs.blocks:
+            QMessageBox.information(self, titulo, "El diagrama está vacío.")
+            return
+        path, _ = QFileDialog.getSaveFileName(self, titulo, sugerido, filtro)
+        if not path:
+            return
+        if not path.lower().endswith(ext):
+            path += ext
+        try:
+            import datasheet_export as dxp
+            with warnings.catch_warnings(record=True) as caught:
+                warnings.simplefilter("always")
+                n = escribir(dxp, path)
+        except Exception as e:
+            QMessageBox.critical(self, titulo, f"{type(e).__name__}: {e}")
+            return
+        self.status.showMessage(
+            f"Exportadas {n} ficha{'s' if n != 1 else ''}: {path}", 6000)
+        self._show_costing_warnings(caught, "la exportación de fichas")
+
+    def action_export_fichas_pdf(self):
+        """Legajo de fichas: una por página, con encabezado de proyecto,
+        revisión vigente y el historial △N al final."""
+        proyecto = self._nombre_proyecto()
+        self._export_fichas(
+            lambda dxp, p: dxp.write_datasheets_pdf(p, self.fs,
+                                                    proyecto=proyecto),
+            "Exportar fichas técnicas (PDF)",
+            f"fichas_{proyecto}.pdf" if proyecto else "fichas.pdf",
+            "PDF (*.pdf)", ".pdf")
+
+    def action_export_fichas_xlsx(self):
+        """Libro de fichas: hoja índice + una hoja por equipo."""
+        proyecto = self._nombre_proyecto()
+        self._export_fichas(
+            lambda dxp, p: dxp.write_datasheets_xlsx(p, self.fs,
+                                                     proyecto=proyecto),
+            "Exportar fichas técnicas (Excel)",
+            f"fichas_{proyecto}.xlsx" if proyecto else "fichas.xlsx",
+            "Excel (*.xlsx)", ".xlsx")
 
     # ---------------------------------------------------
     # EXPORT (PDF / SVG / PNG)
