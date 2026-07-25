@@ -2454,6 +2454,74 @@ class OpexExtrasDialog(QDialog):
 
 
 # ======================================================
+# DISPOSAL DIFERIDO DE ITEMS (crash P0 — use-after-free)
+# ======================================================
+# Qt itera SNAPSHOTS de punteros crudos (`QList<QGraphicsItem*>`) mientras
+# despacha eventos: `QGraphicsScene::setSelectionArea` (rubber band) recorre
+# todos los items del área, y `QGraphicsItem::mouseMoveEvent` recorre
+# `selectedItems()` para mover el grupo.  Si en medio de esa iteración un
+# item de la lista se DESTRUYE — p.ej. `StreamItem._rebuild_handles`
+# borrando los handles del stream que acaba de seleccionarse — el resto del
+# bucle desreferencia punteros liberados y el proceso muere con SIGSEGV
+# ("se cierra el programa" al arrastrar una selección por área).
+#
+# Regla: nunca dejar morir el objeto C++ de un item DENTRO del despacho de
+# un evento.  `_dispose_items` lo saca de la escena (Qt ya no lo visita) y
+# retiene la referencia Python en una papelera que se vacía en el próximo
+# ciclo del event loop, cuando ninguna lista de Qt lo apunta.
+
+_ITEM_TRASH: list = []          # items fuera de escena, pendientes de morir
+_TRASH_SCHEDULED = False        # ¿ya hay un purgado en la cola del loop?
+
+# Capas de fondo: la grilla va DEBAJO del papel (que vive en -100).  Antes
+# compartían z=-100 y el desempate era el orden de inserción: al redibujar la
+# grilla (hoja centrada que se extiende a coords negativas) las líneas
+# quedaban encima de la leyenda y del cuadro de título.
+GRID_Z = -101.0
+
+
+def _purge_item_trash():
+    """Suelta las referencias retenidas: acá sí puede morir el C++."""
+    global _TRASH_SCHEDULED
+    _TRASH_SCHEDULED = False
+    _ITEM_TRASH.clear()
+
+
+def _dispose_items(scene, items):
+    """Retira `items` de `scene` y posterga su destrucción al próximo ciclo
+    del event loop.  Seguro de llamar desde itemChange / handlers de mouse.
+
+    Sin esto, el `clear()` de la lista de handles baja el refcount a cero y
+    PySide6 destruye el objeto C++ en el acto — en plena iteración de Qt.
+    """
+    global _TRASH_SCHEDULED
+    kept = []
+    for it in items:
+        if it is None:
+            continue
+        try:
+            sc = it.scene()
+            if sc is not None:
+                sc.removeItem(it)
+        except Exception:
+            pass
+        kept.append(it)
+    if not kept:
+        return
+    _ITEM_TRASH.extend(kept)
+    if not _TRASH_SCHEDULED:
+        _TRASH_SCHEDULED = True
+        try:
+            from PySide6.QtCore import QTimer
+            QTimer.singleShot(0, _purge_item_trash)
+        except Exception:
+            # Sin QTimer disponible: la papelera queda retenida (los items
+            # ya salieron de la escena, así que solo ocupan memoria hasta
+            # el próximo purgado exitoso).  Nunca se destruye en caliente.
+            _TRASH_SCHEDULED = False
+
+
+# ======================================================
 # BLOQUE COMO QGraphicsItem
 # ======================================================
 
@@ -2504,7 +2572,12 @@ class _StreamHandle(QGraphicsEllipseItem):
         self._stream_item = stream_item
         self._wp_idx = waypoint_idx
         self.setFlag(QGraphicsItem.ItemIsMovable, True)
-        self.setFlag(QGraphicsItem.ItemIsSelectable, True)
+        # NO seleccionable: el handle es un agarre, no un elemento del
+        # diagrama.  Siendo seleccionable, el rubber band lo metía en la
+        # selección y el group-drag lo arrastraba junto a los bloques
+        # (waypoints moviéndose solos, endpoints desconectándose) además
+        # de engordar la lista de items que Qt itera al mover el conjunto.
+        self.setFlag(QGraphicsItem.ItemIsSelectable, False)
         self.setFlag(QGraphicsItem.ItemSendsGeometryChanges, True)
         self.setBrush(QBrush(QColor(_tokens.TOK["accent"])))
         self.setPen(QPen(QColor(_tokens.TOK["bg_elev"]), 1.2))
@@ -2568,13 +2641,10 @@ class _StreamHandle(QGraphicsEllipseItem):
             return False
 
     def _self_destruct(self):
-        """Quita el handle de la escena si su stream fue borrado."""
-        try:
-            sc = self.scene()
-            if sc is not None:
-                sc.removeItem(self)
-        except Exception:
-            pass
+        """Quita el handle de la escena si su stream fue borrado.  Sale de
+        la escena ya, pero muere en el próximo ciclo del loop: destruirse
+        dentro del propio itemChange sería tirarle el piso a Qt."""
+        _dispose_items(self.scene(), [self])
 
     def mousePressEvent(self, event):
         # TF §7: snapshot para undo del drag de waypoint (el move real lo
@@ -3207,7 +3277,10 @@ class _EndpointHandle(QGraphicsEllipseItem):
         self._stream_item = stream_item
         self._role = role           # 'start' | 'end'
         self.setFlag(QGraphicsItem.ItemIsMovable, True)
-        self.setFlag(QGraphicsItem.ItemIsSelectable, True)
+        # NO seleccionable (ver _StreamHandle): el rubber band no debe
+        # capturar handles, y el group-drag no debe arrastrarlos — eso
+        # desconectaba endpoints anclados al mover un grupo de equipos.
+        self.setFlag(QGraphicsItem.ItemIsSelectable, False)
         self.setFlag(QGraphicsItem.ItemSendsGeometryChanges, True)
         # estilo: doble anillo (fondo claro, aro naranja token) para
         # distinguir endpoints de waypoints regulares (acento)
@@ -4082,6 +4155,13 @@ class BlockItem(QGraphicsItemGroup):
             self._snap_nearby_floating_endpoints()
         if did_rigid:
             self.editor._refresh_all_stream_paths()
+            # Si el arrastre empujó el equipo sobre la leyenda o fuera del
+            # marco, la hoja se agranda / re-centra (solo al soltar, y solo
+            # si de verdad dejó de caber — el marco no salta por gusto).
+            try:
+                self.scene().ensure_paper_fits()
+            except Exception:
+                pass
         # push undo si hubo un drag
         if (event.button() == Qt.LeftButton and self.editor is not None
             and self.editor._drag_before_snapshot is not None):
@@ -4268,6 +4348,22 @@ class StreamItem(QGraphicsPathItem):
         self.label_flow.setZValue(7)
         self.label_flow.setAcceptedMouseButtons(Qt.NoButton)
 
+        # Banderola de fuera-de-página + rótulo: identifican las corrientes
+        # de límite de batería (alimentaciones y productos que no nacen ni
+        # mueren en un equipo del diagrama).  Siempre visibles cuando
+        # aplican — son parte del lenguaje del plano, no una etiqueta
+        # opcional (ver _draw_offpage_tag).
+        self._offpage = None
+        self.offpage_tag = QGraphicsPolygonItem()
+        self.offpage_tag.setZValue(6)
+        self.offpage_tag.setAcceptedMouseButtons(Qt.NoButton)
+        self.offpage_tag.setVisible(False)
+        self.offpage_label = QGraphicsSimpleTextItem()
+        self.offpage_label.setFont(QFont(mono, 8, QFont.Medium))
+        self.offpage_label.setZValue(7)
+        self.offpage_label.setAcceptedMouseButtons(Qt.NoButton)
+        self.offpage_label.setVisible(False)
+
         self.update_path()
 
     def add_to_scene(self, scene: QGraphicsScene):
@@ -4276,6 +4372,8 @@ class StreamItem(QGraphicsPathItem):
         scene.addItem(self.label_bg)
         scene.addItem(self.label_name)
         scene.addItem(self.label_flow)
+        scene.addItem(self.offpage_tag)
+        scene.addItem(self.offpage_label)
         # Forzar refresh de handles AHORA que el stream está en escena.
         # Sin esto, los endpoint handles (naranja) de streams flotantes
         # no aparecen hasta que el user clickea el stream — y como los
@@ -4291,21 +4389,39 @@ class StreamItem(QGraphicsPathItem):
         # vivos en el momento de entrar a la escena, sin depender del hover.
         self.update_path(rebuild_handles=False)
 
-    def remove_from_scene(self, scene: QGraphicsScene):
-        # remover handles de waypoints si estaban activos
-        for h in self._handles:
-            if h.scene() is scene:
-                scene.removeItem(h)
-        self._handles.clear()
-        # remover chevrons direccionales
+    def set_visible_all(self, show: bool):
+        """Muestra/oculta la corriente COMPLETA: trazo, punta de flecha,
+        chevrons, pill y banderola de fuera-de-página.
+
+        La punta de flecha y los rótulos son items hermanos (no hijos) del
+        path, así que un `setVisible` sobre el StreamItem los dejaba
+        dibujados: al apagar «Mostrar corrientes auxiliares» quedaban las
+        puntas de flecha huérfanas flotando en el plano."""
+        show = bool(show)
+        self.setVisible(show)
+        self.arrow_head.setVisible(show)
+        for it in (self.label_bg, self.label_name, self.label_flow):
+            it.setVisible(show and bool(
+                getattr(self.editor, "_show_stream_labels", False)))
         for arr in self.direction_arrows:
-            if arr.scene() is scene:
-                scene.removeItem(arr)
+            arr.setVisible(show)
+        has_tag = self._offpage is not None
+        self.offpage_tag.setVisible(show and has_tag)
+        self.offpage_label.setVisible(show and has_tag)
+        for h in self._handles:
+            h.setVisible(show)
+
+    def remove_from_scene(self, scene: QGraphicsScene):
+        # Disposal DIFERIDO (ver _dispose_items): borrar un stream mientras
+        # Qt itera la selección — p.ej. «Borrar selección» sobre un grupo —
+        # dejaba punteros colgando en la lista que Qt sigue recorriendo.
+        _dispose_items(scene, list(self._handles))
+        self._handles.clear()
+        _dispose_items(scene, list(self.direction_arrows))
         self.direction_arrows.clear()
-        for item in (self, self.arrow_head, self.label_bg,
-                      self.label_name, self.label_flow):
-            if item.scene() is scene:
-                scene.removeItem(item)
+        _dispose_items(scene, [self, self.arrow_head, self.label_bg,
+                               self.label_name, self.label_flow,
+                               self.offpage_tag, self.offpage_label])
 
     def _utility_loop_info(self):
         """Servicio del LAZO + rango de temperaturas, para colorear.
@@ -4544,9 +4660,10 @@ class StreamItem(QGraphicsPathItem):
             painter.drawLine(QPointF(x1, y1), QPointF(x2, y2))
 
     def hoverEnterEvent(self, event):
-        """Engrosa la línea al hover para feedback visual."""
+        """Engrosa la línea al hover para feedback visual (re-estilo
+        barato: el hover no mueve nada, no hay por qué re-rutear)."""
         self._hovered = True
-        self.update_path(rebuild_handles=False)
+        self._apply_selection_weight()
         super().hoverEnterEvent(event)
 
     def hoverMoveEvent(self, event):
@@ -4570,7 +4687,7 @@ class StreamItem(QGraphicsPathItem):
     def hoverLeaveEvent(self, event):
         self._hovered = False
         self.unsetCursor()
-        self.update_path(rebuild_handles=False)
+        self._apply_selection_weight()
         super().hoverLeaveEvent(event)
 
     # ── Drag de segmento ortogonal (estilo Visio/Word) ──────────
@@ -4709,11 +4826,10 @@ class StreamItem(QGraphicsPathItem):
         Limpia los chevrons previos y crea nuevos según los segmentos.
         """
         import math
-        # Limpiar previos
+        # Limpiar previos (disposal diferido — este método corre dentro de
+        # itemChange/handlers de mouse; ver _dispose_items)
         scene = self.scene()
-        for arr in self.direction_arrows:
-            if scene is not None and arr.scene() is scene:
-                scene.removeItem(arr)
+        _dispose_items(scene, list(self.direction_arrows))
         self.direction_arrows.clear()
         if scene is None or len(pts) < 4:
             return
@@ -4758,6 +4874,7 @@ class StreamItem(QGraphicsPathItem):
                     arr.setZValue(5.3)
                     # decorativo — no participa del hit-testing
                     arr.setAcceptedMouseButtons(Qt.NoButton)
+                    arr.setVisible(self.isVisible())
                     scene.addItem(arr)
                     self.direction_arrows.append(arr)
                     break
@@ -4857,19 +4974,43 @@ class StreamItem(QGraphicsPathItem):
         b_dst = self.fs.blocks.get(s.dst)
         # Endpoint START: si block_src existe, lo tomamos del puerto;
         # si no, lo tomamos de s.start_xy (endpoint flotante).
+        side_src = side_dst = None
+        p_src = p_dst = None
         if b_src is not None:
-            _, x1, y1 = self._resolve_port(b_src, s.src_port, "right")
+            side_src, x1, y1 = self._resolve_port(b_src, s.src_port, "right")
+            p_src = (x1, y1)
         elif s.start_xy and len(s.start_xy) >= 2:
-            x1, y1 = float(s.start_xy[0]), float(s.start_xy[1])
-        else:
-            return   # stream sin punto de inicio definido, no se puede dibujar
+            p_src = (float(s.start_xy[0]), float(s.start_xy[1]))
         # Endpoint END
         if b_dst is not None:
-            _, x2, y2 = self._resolve_port(b_dst, s.dst_port, "left")
+            side_dst, x2, y2 = self._resolve_port(b_dst, s.dst_port, "left")
+            p_dst = (x2, y2)
         elif s.end_xy and len(s.end_xy) >= 2:
-            x2, y2 = float(s.end_xy[0]), float(s.end_xy[1])
-        else:
+            p_dst = (float(s.end_xy[0]), float(s.end_xy[1]))
+        # ── CORRIENTES DE ENTRADA / SALIDA (fuera de página) ──────────────
+        # Un extremo sin bloque y sin coordenada libre es una corriente de
+        # LÍMITE DE BATERÍA: alimentación que entra al proceso (src<=0) o
+        # producto/efluente que sale (dst<=0).  Existen en el modelo y el
+        # solver las usa, pero antes update_path se iba por el `return` y no
+        # se dibujaba NADA: el diagrama parecía no tener alimentaciones ni
+        # productos, y la única forma de mostrarlos era inventar un tanque.
+        # Ahora se dibujan con la convención de plano: muñón ortogonal desde
+        # el puerto hacia afuera + banderola de fuera-de-página con el
+        # nombre de la corriente (ver _offpage_side / _draw_offpage_tag).
+        self._offpage = None
+        if p_src is None and p_dst is not None:
+            side = self._offpage_side(side_dst, b_dst, incoming=True)
+            p_src = self._offpage_point(p_dst, side)
+            self._offpage = ("start", p_src, side)
+        elif p_dst is None and p_src is not None:
+            side = self._offpage_side(side_src, b_src, incoming=False)
+            p_dst = self._offpage_point(p_src, side)
+            self._offpage = ("end", p_dst, side)
+        if p_src is None or p_dst is None:
+            # Sin ningún extremo resoluble no hay nada que dibujar.
+            self._draw_offpage_tag(None)
             return
+        (x1, y1), (x2, y2) = p_src, p_dst
         # Si hay waypoints declarados, usar routing manual.
         # Si no, autoroute con _compute_polyline.
         if s.waypoints:
@@ -5002,6 +5143,9 @@ class StreamItem(QGraphicsPathItem):
         role = self.model.role
         width = {"feed": 2.4, "internal": 2.4, "product": 2.4,
                  "waste": 1.6, "utility": 1.4}.get(role, 2.0)
+        # Peso base del rol, sin selección ni hover: lo consume
+        # _apply_selection_weight para re-estilar sin recomputar el routing.
+        self._role_width = width
         # Selección (artboard 2a familia 4): el hex del rol no cambia —
         # +peso de trazo + halo accent_soft debajo del path.
         sel = self.isSelected()
@@ -5080,6 +5224,9 @@ class StreamItem(QGraphicsPathItem):
         # (ver View → 'Mostrar etiquetas de corrientes' si está disponible).
         show_label = bool(getattr(self.editor, "_show_stream_labels", False)) \
                      if self.editor is not None else False
+        # Una corriente oculta (auxiliares apagadas) no re-enciende sus
+        # rótulos al re-rutearse.
+        show_label = show_label and self.isVisible()
         self.label_bg.setVisible(show_label)
         self.label_name.setVisible(show_label)
         self.label_flow.setVisible(show_label)
@@ -5129,6 +5276,9 @@ class StreamItem(QGraphicsPathItem):
                         continue   # drag activo — Qt lo maneja
                     h._sync_pos_from_model()
 
+        # Banderola de límite de batería (alimentación / producto): se dibuja
+        # con la geometría final, después del gap de la punta de flecha.
+        self._draw_offpage_tag(self._offpage)
         self._update_tooltip()
 
     # ---------------------------------------------------
@@ -5148,21 +5298,28 @@ class StreamItem(QGraphicsPathItem):
              auto-route — click bakea el bend como waypoint editable.
         """
         scene = self.scene()
+        # Disposal DIFERIDO: este método corre desde itemChange (selección)
+        # y desde los handlers de mouse; destruir los handles viejos en el
+        # acto rompía la iteración de Qt sobre punteros crudos → SIGSEGV al
+        # arrastrar una selección hecha con rubber band (ver _dispose_items).
+        doomed = list(self._handles)
         for h in self._handles:
-            if scene is not None and h.scene() is scene:
-                scene.removeItem(h)
-            # también remover snap_marker auxiliar de _EndpointHandle
             sm = getattr(h, "_snap_marker", None)
-            if sm is not None and scene is not None and sm.scene() is scene:
-                scene.removeItem(sm)
+            if sm is not None:
+                doomed.append(sm)
+        _dispose_items(scene, doomed)
         self._handles.clear()
 
         if scene is None:
             return
-        # Stream flotante (src<=0 o dst<=0): mostrar endpoint handles
-        # SIEMPRE, aunque no esté seleccionado, para que el user pueda
-        # arrastrarlos a un puerto sin tener que seleccionar primero.
-        is_floating = (self.model.src <= 0 or self.model.dst <= 0)
+        # Stream FLOTANTE (src o dst == -1): mostrar endpoint handles SIEMPRE,
+        # aunque no esté seleccionado, para que el user pueda arrastrarlos a
+        # un puerto sin tener que seleccionar primero.
+        # OJO: `0` NO es flotante — es una corriente de límite de batería
+        # (alimentación o producto de fuera de página), que ya se dibuja con
+        # su banderola.  Tratarla como flotante ponía un anillo naranja de
+        # agarre sobre el puerto de cada alimentación y cada producto.
+        is_floating = (self.model.src == -1 or self.model.dst == -1)
         if not self.isSelected() and not is_floating:
             return
 
@@ -5206,11 +5363,78 @@ class StreamItem(QGraphicsPathItem):
                 scene.addItem(h)
                 self._handles.append(h)
 
+    # ---------------------------------------------------
+    # RE-ESTILO BARATO (selección / hover) — sin re-routing
+    # ---------------------------------------------------
+    # Seleccionar o pasar el mouse NO cambia la geometría del stream: solo
+    # el peso del trazo y el halo.  Antes ambos casos llamaban update_path,
+    # que recalcula avoidance + lanes + jumpers contra TODOS los bloques y
+    # streams (O(n²)).  Con rubber band eso corría por cada stream que
+    # entraba o salía del área, en cada píxel del arrastre → el "cuelgue".
+
+    def _apply_selection_weight(self):
+        """Re-aplica peso de trazo + halo de selección/hover reusando el
+        path ya calculado.  Cae a update_path solo si nunca se ruteó."""
+        base = getattr(self, "_role_width", None)
+        if base is None:
+            self.update_path(rebuild_handles=False)
+            return
+        sel = self.isSelected()
+        width = base + (1.2 if sel else 0.0)
+        if self._hovered:
+            width *= 1.5
+        pen = QPen(self.pen())
+        pen.setWidthF(width)
+        self.setPen(pen)
+        if sel:
+            if getattr(self, "_sel_glow", None) is None:
+                from PySide6.QtWidgets import QGraphicsPathItem as _GPI
+                self._sel_glow = _GPI(self)
+                self._sel_glow.setZValue(-1)
+                self._sel_glow.setAcceptedMouseButtons(Qt.NoButton)
+            gpen = QPen(QColor(_tokens.TOK["accent_soft"]), width + 4.0)
+            gpen.setCapStyle(Qt.FlatCap)
+            gpen.setJoinStyle(Qt.MiterJoin)
+            self._sel_glow.setPen(gpen)
+            self._sel_glow.setPath(self.path())
+            self._sel_glow.setVisible(True)
+        elif getattr(self, "_sel_glow", None) is not None:
+            self._sel_glow.setVisible(False)
+
+    def _schedule_handles_refresh(self):
+        """Encola UN rebuild de handles para el próximo ciclo del loop.
+
+        Coalescente (varios cambios de selección seguidos = un solo
+        rebuild) y, sobre todo, FUERA del despacho del evento: crear y
+        destruir handles en medio de la iteración de Qt sobre la selección
+        es lo que mataba el proceso (ver _dispose_items)."""
+        if getattr(self, "_handles_refresh_pending", False):
+            return
+        self._handles_refresh_pending = True
+
+        def _run():
+            self._handles_refresh_pending = False
+            if self.scene() is None:
+                return
+            try:
+                if self.model.id not in self.fs.streams:
+                    return          # el stream se borró mientras esperaba
+            except Exception:
+                return
+            self._rebuild_handles()
+
+        try:
+            from PySide6.QtCore import QTimer
+            QTimer.singleShot(0, _run)
+        except Exception:
+            self._handles_refresh_pending = False
+            self._rebuild_handles()
+
     def itemChange(self, change, value):
         if change == QGraphicsItem.ItemSelectedHasChanged:
-            # update_path refresca pen (peso) + halo de selección y
-            # reconstruye handles (rebuild_handles=True por default).
-            self.update_path()
+            # Solo peso + halo acá; los handles se reconstruyen encolados.
+            self._apply_selection_weight()
+            self._schedule_handles_refresh()
         return super().itemChange(change, value)
 
     def contextMenuEvent(self, event):
@@ -5400,6 +5624,7 @@ class StreamItem(QGraphicsPathItem):
         b2  = QPointF(x_end - size*ux - wing*nx, y_end - size*uy - wing*ny)
         self.arrow_head.setPolygon(QPolygonF([tip, b1, b2]))
         self.arrow_head.setBrush(QBrush(self._color()))
+        self.arrow_head.setVisible(self.isVisible())
 
     def shape(self):
         """Hit area más ancha que el stroke visible (2.4 px) → click sobre
@@ -5647,6 +5872,115 @@ class StreamItem(QGraphicsPathItem):
         return {"right": (1, 0), "left": (-1, 0),
                 "top":   (0, -1), "bottom": (0, 1)}.get(side, (1, 0))
 
+    # ---------------------------------------------------
+    # CORRIENTES DE LÍMITE DE BATERÍA (fuera de página)
+    # ---------------------------------------------------
+    # Convención de plano: una alimentación que viene de fuera de la planta
+    # (src<=0) o un producto que se va (dst<=0) NO necesita un tanque
+    # gigante de mentira — se dibuja como un muñón ortogonal que sale del
+    # puerto hacia el borde del diagrama, cerrado con una banderola de
+    # fuera-de-página rotulada con el nombre de la corriente.
+
+    OFFPAGE_STUB = 110.0     # largo del muñón (≈ un cuerpo de equipo)
+    OFFPAGE_TAG_W = 26.0     # banderola: fondo → punta
+    OFFPAGE_TAG_H = 16.0
+    OFFPAGE_TAG_TIP = 9.0    # profundidad de la punta del pentágono
+    OFFPAGE_TAG_GAP = 10.0   # aire entre la corriente y la banderola
+
+    def _offpage_side(self, port_side, block, incoming: bool):
+        """Lado por el que la corriente entra/sale del diagrama.  Es el lado
+        del puerto al que está conectada (así el muñón sale derecho del
+        equipo); sin puerto resuelto, izquierda para entradas y derecha para
+        salidas, que es el sentido de lectura del PFD."""
+        if port_side in ("left", "right", "top", "bottom"):
+            return port_side
+        return "left" if incoming else "right"
+
+    def _offpage_point(self, anchor, side):
+        """Punto fuera de página a OFFPAGE_STUB del puerto, sobre el eje del
+        lado (snap a grilla SOLO en el eje que se mueve, para no romper la
+        ortogonalidad del muñón)."""
+        dx, dy = self._side_dir(side)
+        x = anchor[0] + dx * self.OFFPAGE_STUB
+        y = anchor[1] + dy * self.OFFPAGE_STUB
+        if dx:
+            x = round(x / GRID_STEP) * GRID_STEP
+        else:
+            y = round(y / GRID_STEP) * GRID_STEP
+        return (x, y)
+
+    def _offpage_text(self):
+        """Rótulo de la banderola: nombre + caudal si ya está resuelto."""
+        s = self.model
+        txt = s.name or f"S-{s.id}"
+        try:
+            if getattr(s, "stream_kind", "mass") == "energy":
+                q = float(getattr(s, "energy_kW", 0.0) or 0.0)
+                return f"{txt}  {q:,.0f} kW" if q else txt
+            flow = float(getattr(s, "mass_flow", 0.0) or 0.0)
+            if flow > 0:
+                # Misma unidad de display que la pill de corriente
+                unit = "tm/año"
+                dock = getattr(self.editor, "streams_dock", None) \
+                    if self.editor is not None else None
+                if dock is not None:
+                    unit = dock.current_unit()
+                return f"{txt}  {funits.format_flow(flow, unit)}"
+        except Exception:
+            pass
+        return txt
+
+    def _draw_offpage_tag(self, spec):
+        """Dibuja (o esconde) la banderola de fuera-de-página.
+
+        `spec` es (role, point, side) donde role es 'start' para una
+        alimentación y 'end' para un producto/efluente; None esconde todo.
+        """
+        tag, lbl = self.offpage_tag, self.offpage_label
+        if spec is None:
+            tag.setVisible(False)
+            lbl.setVisible(False)
+            return
+        role, (px, py), side = spec
+        ux, uy = self._side_dir(side)       # versor HACIA AFUERA del diagrama
+        nx, ny = -uy, ux                    # perpendicular
+        g, W = self.OFFPAGE_TAG_GAP, self.OFFPAGE_TAG_W
+        H2, tip = self.OFFPAGE_TAG_H / 2.0, self.OFFPAGE_TAG_TIP
+
+        def P(along, across):
+            return QPointF(px + ux * along + nx * across,
+                           py + uy * along + ny * across)
+
+        # Pentágono con la punta en el sentido del FLUJO: hacia adentro si es
+        # alimentación (entra al proceso), hacia afuera si es producto.
+        if role == "start":
+            poly = [P(g, 0.0), P(g + tip, +H2), P(g + W, +H2),
+                    P(g + W, -H2), P(g + tip, -H2)]
+        else:
+            poly = [P(g + W, 0.0), P(g + W - tip, +H2), P(g, +H2),
+                    P(g, -H2), P(g + W - tip, -H2)]
+        color = self._color()
+        tag.setPolygon(QPolygonF(poly))
+        tag.setBrush(QBrush(QColor(_tokens.TOK["canvas_bg"])))
+        tag.setPen(QPen(color, 1.6))
+        # Sigue la visibilidad de la corriente (auxiliares apagadas).
+        tag.setVisible(self.isVisible())
+
+        lbl.setText(self._offpage_text())
+        lbl.setBrush(QBrush(QColor(_tokens.TOK["label_ink"])))
+        br = lbl.boundingRect()
+        tw, th = br.width(), br.height()
+        anchor = P(g + W + 8.0, 0.0)
+        if ux > 0:                      # sale hacia la derecha
+            lbl.setPos(anchor.x(), anchor.y() - th / 2.0)
+        elif ux < 0:                    # sale hacia la izquierda
+            lbl.setPos(anchor.x() - tw, anchor.y() - th / 2.0)
+        elif uy < 0:                    # sale hacia arriba
+            lbl.setPos(anchor.x() - tw / 2.0, anchor.y() - th)
+        else:                           # sale hacia abajo
+            lbl.setPos(anchor.x() - tw / 2.0, anchor.y())
+        lbl.setVisible(self.isVisible())
+
     def _compute_polyline(self, b_src, b_dst, s):
         """Polyline ortogonal Z-shape o L-shape entre puertos del src y dst."""
         # Guard: auto-edge (mismo bloque a sí mismo).  No debería pasar
@@ -5767,6 +6101,36 @@ class _PaperFrame(QGraphicsItemGroup):
     PAPER_W = 1600
     PAPER_H = 960
 
+    # Geometría del bloque de documento (leyenda + cuadro de título +
+    # cuadro de revisiones) en coordenadas LOCALES de la hoja, medida desde
+    # la esquina inferior derecha — que es el ancla de la escala `_doc_scale`.
+    # La usan `doc_zone` y el layout de la escena para NO dejar que el
+    # diagrama caiga debajo de la leyenda (las corrientes auxiliares, que se
+    # apilan bajo su intercambiador, eran las que terminaban chocando).
+    DOC_W      = 460.0      # ancho leyenda / cuadro de título
+    DOC_W_REVS = 780.0      # + cuadro de revisiones △N a su izquierda
+    DOC_H      = 288.0      # alto leyenda desplegada + cuadro de título
+    DOC_H_COLLAPSED = 152.0  # leyenda plegada (solo la banda + cuadro)
+    DOC_MARGIN = 40.0       # borde de la hoja al bloque de documento
+
+    @classmethod
+    def doc_scale_for(cls, w, h):
+        """Escala del bloque de documento para una hoja de w×h (misma
+        fórmula que usa __init__ — expuesta para que el layout de la escena
+        pueda reservarle sitio antes de construir el marco)."""
+        ratio = max(float(w) / cls.PAPER_W, float(h) / cls.PAPER_H)
+        return min(1.8, max(1.0, ratio ** 0.6))
+
+    @classmethod
+    def doc_zone(cls, w, h, collapsed=False, with_revisions=False):
+        """(zone_w, zone_h): tamaño que ocupa el bloque de documento en la
+        esquina inferior derecha de una hoja de w×h, ya con la escala
+        aplicada.  Territorio prohibido para el diagrama."""
+        s = cls.doc_scale_for(w, h)
+        base_w = cls.DOC_W_REVS if with_revisions else cls.DOC_W
+        base_h = cls.DOC_H_COLLAPSED if collapsed else cls.DOC_H
+        return (base_w * s + cls.DOC_MARGIN, base_h * s + cls.DOC_MARGIN)
+
     def __init__(self, project_title="PFD", area="100",
                  drawing_no="PFD-100-001", rev="A", date=None,
                  legend_collapsed=False, revisions=None,
@@ -5784,8 +6148,8 @@ class _PaperFrame(QGraphicsItemGroup):
         # Escala del bloque leyenda+cuadro de título: crece (sublinealmente)
         # con la hoja para que no se vea diminuto en un proyecto grande.
         # Acotada a [1.0, 1.8]; ancla en la esquina inferior-derecha.
-        ratio = max(self.PAPER_W / W0, self.PAPER_H / H0)
-        self._doc_scale = min(1.8, max(1.0, ratio ** 0.6))
+        self._doc_scale = _PaperFrame.doc_scale_for(self.PAPER_W,
+                                                    self.PAPER_H)
         # `_doc_parent` lo consumen los helpers _add_*/_legend_dot; el marco
         # exterior va a `self`, la leyenda/título a un subgrupo escalable.
         self._doc_parent = self
@@ -5802,7 +6166,10 @@ class _PaperFrame(QGraphicsItemGroup):
         self._rev = (self._revisions[-1].get("rev", rev)
                      if self._revisions else rev)
         self._legend_collapsed = bool(legend_collapsed)
-        self.legend_chevron_rect = None   # QRectF en coords de escena
+        # QRectF en coords LOCALES del marco (la hoja ya no vive siempre en
+        # (0,0): se desplaza para centrar el diagrama, así que el hit-test
+        # mapea el click con `mapFromScene` en vez de comparar en escena).
+        self.legend_chevron_rect = None
         if date is None:
             import datetime
             date = datetime.date.today().isoformat()
@@ -5833,10 +6200,10 @@ class _PaperFrame(QGraphicsItemGroup):
             ox, oy = self.PAPER_W - 40, self.PAPER_H - 40   # esquina inf-der
             self._doc_group.setTransformOriginPoint(ox, oy)
             self._doc_group.setScale(self._doc_scale)
-            # El hit-rect del chevron se testea en coords de escena → mapear
-            # por la misma transformación de escala del subgrupo.
+            # El hit-rect del chevron se testea en coords locales del marco →
+            # mapear por la misma transformación de escala del subgrupo.
             if self.legend_chevron_rect is not None:
-                self.legend_chevron_rect = self._doc_group.mapRectToScene(
+                self.legend_chevron_rect = self._doc_group.mapRectToParent(
                     self.legend_chevron_rect)
 
     # ---------- helpers ----------
@@ -6146,34 +6513,135 @@ class FlowsheetScene(QGraphicsScene):
         self.paper_frame: "_PaperFrame|None" = None
         self._draw_grid()
 
-    def _content_paper_size(self):
-        """Tamaño de hoja que ENVUELVE todo el proyecto: bbox de los bloques
-        + margen, con piso en el nominal 1600×960.  Así el marco crece con
-        el diagrama en vez de quedar chico frente a un proyecto grande."""
-        W0, H0 = _PaperFrame.PAPER_W, _PaperFrame.PAPER_H
+    # Aire mínimo entre el contenido y el borde interior del marco, y entre
+    # el contenido y el bloque de documento (leyenda + cuadro de título).
+    PAPER_PAD = 70.0
+    PAPER_INSET = 20.0        # el rect del marco arranca en 20 (ver _build_frame)
+
+    def _content_bbox(self):
+        """BBox en coords de escena de TODO lo dibujado del diagrama:
+        cuerpos de los bloques (dimensiones visuales reales del item, que
+        son las del glifo ISA), rutas manuales y endpoints flotantes.
+
+        Devuelve (x0, y0, x1, y1) o None si no hay contenido."""
         ed = getattr(self, "editor", None)
         fs = getattr(ed, "fs", None)
         blocks = getattr(fs, "blocks", None)
         if not blocks:
-            return W0, H0
-        try:
-            xs = [b.x for b in blocks.values()]
-            ys = [b.y for b in blocks.values()]
-            max_x = max(xs) + BLOCK_W
-            max_y = max(ys) + BLOCK_H
-            MARGIN = 140          # aire alrededor del contenido
-            W = max(W0, int(max_x + MARGIN))
-            H = max(H0, int(max_y + MARGIN))
-            return W, H
-        except Exception:
-            return W0, H0
+            return None
+        xs0, ys0, xs1, ys1 = [], [], [], []
+        for bid, b in blocks.items():
+            item = self.block_items.get(bid)
+            w = float(getattr(item, "W", 0) or 0) or BLOCK_W
+            h = float(getattr(item, "H", 0) or 0) or BLOCK_H
+            if item is not None and not item.isVisible():
+                continue          # auxiliares ocultas no reservan hoja
+            xs0.append(b.x); ys0.append(b.y)
+            xs1.append(b.x + w); ys1.append(b.y + h)
+        for sid, s in (getattr(fs, "streams", {}) or {}).items():
+            item = self.stream_items.get(sid)
+            if item is not None and not item.isVisible():
+                continue
+            pts = getattr(item, "_last_pts", None) or []
+            for i in range(0, len(pts) - 1, 2):
+                xs0.append(pts[i]);     ys0.append(pts[i + 1])
+                xs1.append(pts[i]);     ys1.append(pts[i + 1])
+            # Banderola + rótulo de límite de batería: sobresalen del muñón,
+            # así que también reservan hoja (si no, el nombre de la
+            # alimentación quedaba cortado por el marco).
+            for deco in (getattr(item, "offpage_tag", None),
+                         getattr(item, "offpage_label", None)):
+                if deco is None or not deco.isVisible():
+                    continue
+                r = deco.sceneBoundingRect()
+                xs0.append(r.left());  ys0.append(r.top())
+                xs1.append(r.right()); ys1.append(r.bottom())
+        if not xs0:
+            return None
+        return (min(xs0), min(ys0), max(xs1), max(ys1))
+
+    def _content_paper_geometry(self):
+        """(ox, oy, W, H) del papel: tamaño que envuelve el proyecto y
+        origen que CENTRA el diagrama en el área útil de la hoja.
+
+        Dos reglas de plano que antes no se cumplían:
+          · el bloque de documento (leyenda + cuadro de título, esquina
+            inferior derecha) es territorio reservado — la hoja crece hasta
+            que el diagrama quepa FUERA de él, así las corrientes
+            auxiliares (que se apilan debajo de su intercambiador) dejan de
+            chocar con la leyenda;
+          · el diagrama va centrado en el área útil, no pegado al vértice
+            superior izquierdo — que es lo que hacía que un ejercicio corto
+            se viera descolgado dentro de un marco enorme.
+        """
+        W0, H0 = _PaperFrame.PAPER_W, _PaperFrame.PAPER_H
+        bbox = self._content_bbox()
+        if bbox is None:
+            return 0.0, 0.0, W0, H0
+        x0, y0, x1, y1 = bbox
+        cw, ch = max(1.0, x1 - x0), max(1.0, y1 - y0)
+        pad, inset = self.PAPER_PAD, self.PAPER_INSET
+        collapsed = bool(getattr(self, "_legend_collapsed", False))
+        ed = getattr(self, "editor", None)
+        revs = bool(getattr(getattr(ed, "fs", None), "revisions", None))
+
+        W = max(W0, cw + 2 * (inset + pad))
+        H = max(H0, ch + 2 * (inset + pad))
+
+        def _usable(w, h):
+            """(uw, uh) del área útil: a la IZQUIERDA del bloque de
+            documento si el diagrama es angosto, ARRIBA si es ancho (el caso
+            de los ejemplos industriales, que ocupan todo el ancho)."""
+            dw, dh = _PaperFrame.doc_zone(w, h, collapsed, revs)
+            free_w = w - dw - inset - 2 * pad
+            if cw <= free_w:
+                return free_w, h - 2 * (inset + pad)
+            return w - 2 * (inset + pad), h - dh - inset - 2 * pad
+
+        # La escala del bloque de documento depende del tamaño de la hoja y
+        # el sitio a reservarle depende de la escala: punto fijo en pocas
+        # pasadas (converge rápido, la escala está acotada a 1.8).
+        for _ in range(6):
+            uw, uh = _usable(W, H)
+            grow_w = max(0.0, cw - uw)
+            grow_h = max(0.0, ch - uh)
+            if grow_w <= 0.5 and grow_h <= 0.5:
+                break
+            W += grow_w
+            H += grow_h
+        uw, uh = _usable(W, H)
+        ux, uy = inset + pad, inset + pad
+
+        def _origin_for(area_w, area_h):
+            """Origen de la hoja que deja el contenido centrado en un área
+            de area_w×area_h anclada en el borde interior sup-izq."""
+            return (x0 - (ux + (area_w - cw) / 2.0),
+                    y0 - (uy + (area_h - ch) / 2.0))
+
+        # Preferencia: centrado en el interior COMPLETO de la hoja — es lo
+        # que se lee como "centrado en el marco".  Un diagrama chico no toca
+        # la leyenda, así que no hay razón para descentrarlo por reservarle
+        # sitio (era el caso de los ejercicios cortos, que además quedaban
+        # pegados al vértice superior izquierdo).
+        full_w, full_h = W - 2 * (inset + pad), H - 2 * (inset + pad)
+        dw, dh = _PaperFrame.doc_zone(W, H, collapsed, revs)
+        GAP = 24.0
+        content = QRectF(x0 - GAP, y0 - GAP, cw + 2 * GAP, ch + 2 * GAP)
+        ox, oy = _origin_for(full_w, full_h)
+        doc = QRectF(ox + W - dw, oy + H - dh, dw, dh)
+        if not doc.intersects(content):
+            return ox, oy, int(round(W)), int(round(H))
+        # Pisa el bloque de documento → centrar en el área útil (la "L" que
+        # queda al descontar la esquina inferior derecha).
+        ox, oy = _origin_for(uw, uh)
+        return ox, oy, int(round(W)), int(round(H))
 
     def set_paper_visible(self, visible: bool,
                            project_title="PFD", area="100",
                            drawing_no="PFD-100-001"):
         """Muestra/oculta el papel de dibujo PFD (marco + leyenda +
-        cuadro de título).  Se posiciona en (0, 0) y se dimensiona para
-        envolver el proyecto completo."""
+        cuadro de título).  Se dimensiona para envolver el proyecto y se
+        posiciona para que el diagrama quede centrado en el área útil."""
         if visible:
             if self.paper_frame is None:
                 # Cuadro de revisiones △N (ciclo 4, 4d): vive en el
@@ -6181,7 +6649,7 @@ class FlowsheetScene(QGraphicsScene):
                 ed = getattr(self, "editor", None)
                 revs = list(getattr(getattr(ed, "fs", None),
                                     "revisions", []) or [])
-                pw, ph = self._content_paper_size()
+                ox, oy, pw, ph = self._content_paper_geometry()
                 self.paper_frame = _PaperFrame(
                     project_title=project_title,
                     area=area, drawing_no=drawing_no,
@@ -6190,51 +6658,133 @@ class FlowsheetScene(QGraphicsScene):
                     revisions=revs,
                     paper_w=pw, paper_h=ph,
                 )
-                self.paper_frame.setPos(0, 0)
+                self.paper_frame.setPos(ox, oy)
                 self.addItem(self.paper_frame)
                 # Ampliar el sceneRect para que la hoja (y el scroll de la
                 # vista) alcancen todo el marco en pantallas chicas.
-                self._grow_scene_rect_for(pw, ph)
+                self._grow_scene_rect_for(ox, oy, ox + pw, oy + ph)
             self.paper_frame.setVisible(True)
         else:
             if self.paper_frame is not None:
                 self.paper_frame.setVisible(False)
 
-    def _grow_scene_rect_for(self, pw, ph):
-        """Asegura que el sceneRect cubra una hoja de pw×ph (más margen),
-        sin encoger el rect actual."""
+    def _doc_zone_rect(self):
+        """QRectF en coords de escena del bloque de documento (leyenda +
+        cuadro de título + revisiones) del marco actual, o None."""
+        pf = self.paper_frame
+        if pf is None:
+            return None
+        dw, dh = _PaperFrame.doc_zone(
+            pf.PAPER_W, pf.PAPER_H,
+            bool(getattr(pf, "_legend_collapsed", False)),
+            bool(getattr(pf, "_revisions", None)))
+        return QRectF(pf.x() + pf.PAPER_W - dw, pf.y() + pf.PAPER_H - dh,
+                      dw, dh)
+
+    def paper_fits_content(self) -> bool:
+        """¿El diagrama entra en el área útil de la hoja actual — dentro del
+        marco y sin pisar la leyenda / cuadro de título?"""
+        pf = self.paper_frame
+        bbox = self._content_bbox()
+        if pf is None or bbox is None:
+            return True
+        inset = self.PAPER_INSET
+        interior = QRectF(pf.x() + inset, pf.y() + inset,
+                          pf.PAPER_W - 2 * inset, pf.PAPER_H - 2 * inset)
+        x0, y0, x1, y1 = bbox
+        # Holgura: el contenido no debe pegarse al marco ni a la leyenda.
+        GAP = 24.0
+        content = QRectF(x0 - GAP, y0 - GAP,
+                         (x1 - x0) + 2 * GAP, (y1 - y0) + 2 * GAP)
+        doc = self._doc_zone_rect()
+        if not interior.contains(content):
+            return False
+        return not (doc is not None and doc.intersects(content))
+
+    def ensure_paper_fits(self):
+        """Recalcula la hoja SOLO si el diagrama dejó de caber en el área
+        útil (creció, se movió sobre la leyenda o se salió del marco).
+
+        Así el marco no salta en cada arrastre: se reacomoda cuando de
+        verdad hace falta."""
+        pf = self.paper_frame
+        if pf is None or not pf.isVisible():
+            return
+        if self.paper_fits_content():
+            return
+        self.refresh_paper()
+
+    def remove_paper(self):
+        """Saca el marco de la escena (disposal diferido) y olvida la
+        referencia.  Antes se hacía `paper_frame = None` sin retirarlo, lo
+        que dejaba un marco huérfano por cada ejemplo cargado."""
+        pf = self.paper_frame
+        self.paper_frame = None
+        if pf is not None:
+            _dispose_items(self, [pf])
+
+    def refresh_paper(self):
+        """Recalcula tamaño y posición del papel para el contenido actual.
+
+        Necesario cada vez que el diagrama cambia de extensión: cargar un
+        ejemplo, mover equipos, agregar bloques o conmutar las corrientes
+        auxiliares (que aparecen DEBAJO de su intercambiador y son las que
+        se metían bajo la leyenda)."""
+        pf = self.paper_frame
+        if pf is None:
+            return
+        visible = pf.isVisible()
+        title, area, dwg = pf._project_title, pf._area, pf._drawing_no
+        self.remove_paper()
+        self.set_paper_visible(visible, project_title=title,
+                               area=area, drawing_no=dwg)
+
+    def _grow_scene_rect_for(self, x0, y0, x1, y1):
+        """Asegura que el sceneRect cubra el rect (x0, y0)-(x1, y1) más
+        margen, sin encoger el rect actual."""
         try:
             cur = self.sceneRect()
-            right  = max(cur.right(),  pw + 200)
-            bottom = max(cur.bottom(), ph + 200)
-            self.setSceneRect(cur.left(), cur.top(),
-                              right - cur.left(), bottom - cur.top())
+            left   = min(cur.left(),   x0 - 200)
+            top    = min(cur.top(),    y0 - 200)
+            right  = max(cur.right(),  x1 + 200)
+            bottom = max(cur.bottom(), y1 + 200)
+            if (left, top, right, bottom) == (cur.left(), cur.top(),
+                                              cur.right(), cur.bottom()):
+                return
+            self.setSceneRect(left, top, right - left, bottom - top)
+            # La grilla se dibuja para el sceneRect vigente: si el rect
+            # creció (hoja centrada que se extiende a coords negativas), hay
+            # que redibujarla o el papel queda con media grilla.
+            self._redraw_grid()
         except Exception:
             pass
+
+    def _redraw_grid(self):
+        """Rehace la grilla para el sceneRect actual."""
+        old = getattr(self, "_grid_lines", None) or []
+        _dispose_items(self, [ln for ln, _major in old])
+        self._grid_lines = []
+        self._draw_grid()
 
     def toggle_legend_collapsed(self):
         """Pliega/despliega la leyenda del Marco PFD (artboard 2c) —
         reconstruye el marco conservando su metadata."""
         self._legend_collapsed = not getattr(self, "_legend_collapsed",
                                              False)
-        pf = self.paper_frame
-        if pf is None:
-            return
-        title, area, dwg = pf._project_title, pf._area, pf._drawing_no
-        visible = pf.isVisible()
-        self.removeItem(pf)
-        self.paper_frame = None
-        if visible:
-            self.set_paper_visible(True, project_title=title,
-                                   area=area, drawing_no=dwg)
+        # Plegar la leyenda libera territorio reservado → la hoja se
+        # recalcula (tamaño + centrado) con la nueva zona de documento.
+        self.refresh_paper()
 
     def mousePressEvent(self, event):
         # Chevron de la leyenda del Marco PFD (el marco es decorativo y
-        # no acepta mouse — el hit-test vive acá).
+        # no acepta mouse — el hit-test vive acá).  El rect del chevron está
+        # en coords locales del marco: la hoja se desplaza para centrar el
+        # diagrama, así que el click se mapea al marco antes de comparar.
         pf = self.paper_frame
         if (pf is not None and pf.isVisible()
                 and pf.legend_chevron_rect is not None
-                and pf.legend_chevron_rect.contains(event.scenePos())):
+                and pf.legend_chevron_rect.contains(
+                    pf.mapFromScene(event.scenePos()))):
             self.toggle_legend_collapsed()
             event.accept()
             return
@@ -6302,7 +6852,7 @@ class FlowsheetScene(QGraphicsScene):
             major = (x % major_span == 0)
             line = QGraphicsLineItem(x, y0, x, y1)
             line.setPen(pen_major if major else pen)
-            line.setZValue(-100)
+            line.setZValue(GRID_Z)
             # decorativa: nunca participa del hit-testing (el press en
             # zona vacía debe iniciar el rubber band, no morir aquí)
             line.setAcceptedMouseButtons(Qt.NoButton)
@@ -6312,7 +6862,7 @@ class FlowsheetScene(QGraphicsScene):
             major = (y % major_span == 0)
             line = QGraphicsLineItem(x0, y, x1, y)
             line.setPen(pen_major if major else pen)
-            line.setZValue(-100)
+            line.setZValue(GRID_Z)
             line.setAcceptedMouseButtons(Qt.NoButton)
             self.addItem(line)
             self._grid_lines.append((line, major))
@@ -6328,15 +6878,7 @@ class FlowsheetScene(QGraphicsScene):
             line.setPen(pen_major if major else pen)
         # El marco PFD hornea la tinta de documento al construirse →
         # reconstruirlo con la misma metadata.
-        if self.paper_frame is not None:
-            pf = self.paper_frame
-            visible = pf.isVisible()
-            title, area, dwg = pf._project_title, pf._area, pf._drawing_no
-            self.removeItem(pf)
-            self.paper_frame = None
-            if visible:
-                self.set_paper_visible(True, project_title=title,
-                                       area=area, drawing_no=dwg)
+        self.refresh_paper()
 
     def clear_flowsheet(self):
         # Borra los items conocidos via mapping
@@ -6348,10 +6890,17 @@ class FlowsheetScene(QGraphicsScene):
         self.stream_items.clear()
         # Defensa: cualquier item no-grid que haya quedado huérfano
         # (renderizado incompleto, fallos previos) se borra ahora.
+        # El marco PFD queda EXENTO: sus hijos (leyenda, cuadro de título)
+        # tienen z propio 0 y la poda los arrancaba dejando un grupo hueco
+        # que había que reconstruir a mano en cada camino.
+        pf = self.paper_frame
+        doomed = []
         for it in list(self.items()):
-            if it.zValue() > -100:    # grid items tienen z=-100
-                # mantenemos los items con tag de grid, removemos el resto
-                self.removeItem(it)
+            if it.zValue() > -100:    # la grilla vive en GRID_Z (-101)
+                if pf is not None and (it is pf or pf.isAncestorOf(it)):
+                    continue
+                doomed.append(it)
+        _dispose_items(self, doomed)
 
 
 # ======================================================
@@ -7124,7 +7673,11 @@ class FlowsheetMainWindow(QMainWindow):
                 item.setVisible(show)
         for sid, item in self.stream_items_iter():
             if getattr(item.model, "auto_aux", False):
-                item.setVisible(show)
+                item.set_visible_all(show)
+        # Los clusters de servicio se apilan DEBAJO de su intercambiador:
+        # al mostrarlos, el contenido crece hacia abajo y hacia la derecha,
+        # justo donde vive la leyenda.  El marco se reajusta si hace falta.
+        self.scene.ensure_paper_fits()
 
     # ---------------------------------------------------
     # EDITOR CHROME WIRING (Parte B — NUEVA_UI)
@@ -7302,9 +7855,9 @@ class FlowsheetMainWindow(QMainWindow):
     def _apply_active_palette(self):
         """Reconstruye la capa canvas con la paleta del tema activo.
 
-        Orden importante: primero los items (clear_flowsheet poda TODO
-        lo que tenga z>-100, incluidos los HIJOS del marco PFD), después
-        retint() que re-tinta papel/grilla y reconstruye el marco."""
+        Orden importante: primero los items, después retint() que re-tinta
+        papel/grilla y reconstruye el marco (clear_flowsheet poda lo que
+        tenga z>-100 pero YA exime al marco PFD y a sus hijos)."""
         _refresh_canvas_palette()
         self._rebuild_scene_keep_status()
         self.scene.retint()
@@ -7649,7 +8202,18 @@ class FlowsheetMainWindow(QMainWindow):
         # factor es adaptativo: garantiza una separación mínima entre equipos
         # conectados para que las corrientes tengan cuerpo visible y no queden
         # reducidas a la cabeza de la flecha.
-        self._expand_block_spacing(factor=1.7)
+        # Ejemplos cortos sin coordenadas (todos los bloques en 0,0): se
+        # arma un layout topológico antes de escalar — si no, el diagrama es
+        # una pila de equipos en un punto y el marco no tiene nada que
+        # centrar.  Corre ANTES de instanciar auxiliares para que cada
+        # cluster de servicio caiga bajo su intercambiador ya ubicado.
+        if self._blocks_overlap_badly():
+            # El layout automático ya usa las dimensiones visuales reales:
+            # no hay que re-escalarlo (el factor adaptativo está pensado para
+            # las coordenadas legacy de silueta 130×60).
+            self._auto_layout_blocks()
+        else:
+            self._expand_block_spacing(factor=1.7)
         # Materializar las corrientes de servicio de los HX que no traen
         # utility, SIN resolver (se dimensionan en el próximo solve).  Así el
         # toggle "Mostrar corrientes auxiliares" es pura visibilidad y nunca
@@ -7663,9 +8227,10 @@ class FlowsheetMainWindow(QMainWindow):
         self._rebuild_scene()
         self._apply_aux_visibility()
 
-        # Auto-mostrar el marco PFD con los datos del ejemplo
-        self.scene.set_paper_visible(False)
-        self.scene.paper_frame = None
+        # Auto-mostrar el marco PFD con los datos del ejemplo (el marco del
+        # diagrama anterior se retira de verdad: antes solo se ocultaba y se
+        # olvidaba la referencia, dejando un marco huérfano en la escena).
+        self.scene.remove_paper()
         self.scene.set_paper_visible(True, project_title=title,
                                        area=area, drawing_no=dwg_no)
         if hasattr(self, "_paper_action"):
@@ -7740,6 +8305,95 @@ class FlowsheetMainWindow(QMainWindow):
             b.x = round(b.x / GRID_STEP) * GRID_STEP
             b.y = round(b.y / GRID_STEP) * GRID_STEP
 
+    # ---------------------------------------------------
+    # AUTO-LAYOUT DE DIAGRAMAS SIN COORDENADAS
+    # ---------------------------------------------------
+
+    def _blocks_overlap_badly(self, min_share=0.34) -> bool:
+        """¿El diagrama viene SIN layout usable?
+
+        Hay ejemplos cortos cuyos bloques están todos en (0, 0) — el JSON
+        nunca les puso coordenadas.  Con eso, ni el escalado adaptativo
+        (multiplica por un factor: 0 sigue siendo 0) ni el centrado del
+        marco pueden hacer nada: los equipos quedan apilados en un punto.
+        Se considera degenerado si al menos `min_share` de los bloques de
+        proceso comparten posición con otro."""
+        blocks = [b for b in self.fs.blocks.values()
+                  if not getattr(b, "auto_aux", False)]
+        if len(blocks) < 2:
+            return False
+        seen, dup = set(), 0
+        for b in blocks:
+            key = (round(b.x / 4.0), round(b.y / 4.0))
+            if key in seen:
+                dup += 1
+            seen.add(key)
+        return dup >= max(1, int(len(blocks) * min_share))
+
+    def _auto_layout_blocks(self):
+        """Coloca los bloques de proceso en capas topológicas izq→der.
+
+        Cada capa es un barrido de Kahn (los equipos que ya tienen resueltas
+        todas sus entradas).  Dentro de la capa se reparten en vertical
+        centrados sobre el eje del diagrama, así un ejercicio corto queda
+        legible y centrable en el marco."""
+        blocks = [b for b in self.fs.blocks.values()
+                  if not getattr(b, "auto_aux", False)]
+        if len(blocks) < 2:
+            return
+        ids = {b.id for b in blocks}
+        succ = {bid: [] for bid in ids}
+        indeg = {bid: 0 for bid in ids}
+        for s in self.fs.streams.values():
+            if getattr(s, "auto_aux", False):
+                continue
+            a, b = getattr(s, "src", -1), getattr(s, "dst", -1)
+            if a in ids and b in ids and a != b:
+                succ[a].append(b)
+                indeg[b] += 1
+        # Capas por barridos de Kahn.  Con reciclos no hay orden topológico
+        # puro: cuando ninguna queda con grado de entrada 0 se corta el ciclo
+        # promoviendo la de menor grado.  Así el nivel máximo está acotado
+        # por la cantidad de equipos (una relajación tipo Bellman-Ford sí se
+        # escapaba: cada pasada por el lazo sumaba una columna y el diagrama
+        # terminaba desparramado en una hoja kilométrica).
+        pend = set(ids)
+        indeg2 = dict(indeg)
+        level, cur = {}, 0
+        while pend:
+            ready = [bid for bid in pend if indeg2[bid] <= 0]
+            if not ready:
+                ready = [min(pend, key=lambda i: (indeg2[i], i))]
+            for bid in ready:
+                level[bid] = cur
+                pend.discard(bid)
+            for bid in ready:
+                for v in succ[bid]:
+                    if v in pend:
+                        indeg2[v] -= 1
+            cur += 1
+        by_level = {}
+        for b in sorted(blocks, key=lambda b: (level.get(b.id, 0), b.id)):
+            by_level.setdefault(level.get(b.id, 0), []).append(b)
+        # Paso de columna/fila desde las dimensiones VISUALES reales (glifo
+        # ISA escalado), más el aire para que la corriente tenga cuerpo.
+        try:
+            from equipment_auxiliaries import _visual_block_dims as _vdims
+            dims = [_vdims(b.eq_type) for b in blocks]
+        except Exception:
+            dims = [(BLOCK_W, BLOCK_H)]
+        max_w = max(d[0] for d in dims)
+        max_h = max(d[1] for d in dims)
+        COL = max_w + 5 * GRID_STEP
+        ROW = max_h + 3 * GRID_STEP
+        n_rows_max = max(len(v) for v in by_level.values())
+        y_mid = (n_rows_max - 1) * ROW / 2.0
+        for lv, items in by_level.items():
+            y0 = y_mid - (len(items) - 1) * ROW / 2.0
+            for i, b in enumerate(items):
+                b.x = round((lv * COL) / GRID_STEP) * GRID_STEP
+                b.y = round((y0 + i * ROW) / GRID_STEP) * GRID_STEP
+
     def _center_view_on_blocks(self):
         """Centra la vista en el centroide del bbox de los bloques.
         No cambia el zoom — solo el centro."""
@@ -7812,15 +8466,9 @@ class FlowsheetMainWindow(QMainWindow):
                      "date": datetime.date.today().strftime("%d-%m"),
                      "by": (by or "—").strip()[:4]})
         self._mark_dirty()
-        # Rebuild del marco si está visible (el cuadro vive ahí)
-        pf = self.scene.paper_frame
-        if pf is not None and pf.isVisible():
-            title, area, dwg = (pf._project_title, pf._area,
-                                pf._drawing_no)
-            self.scene.removeItem(pf)
-            self.scene.paper_frame = None
-            self.scene.set_paper_visible(True, project_title=title,
-                                         area=area, drawing_no=dwg)
+        # Rebuild del marco (el cuadro de revisiones vive ahí y además
+        # ensancha la zona reservada → se recalcula el centrado).
+        self.scene.refresh_paper()
         self.end_action(f"Revisión △{letter}", before)
 
     def action_dof(self):
@@ -8398,11 +9046,22 @@ class FlowsheetMainWindow(QMainWindow):
         bbox = items[0].sceneBoundingRect()
         for it in items[1:]:
             bbox = bbox.united(it.sceneBoundingRect())
-        # incluir pills de streams (label_bg / label_name / label_flow son aparte)
+        # incluir pills de streams (label_bg / label_name / label_flow son
+        # aparte) y las banderolas de las corrientes de límite de batería
         for sid, sit in self.scene.stream_items.items():
-            if sit.label_bg.scene() is self.scene:
-                bbox = bbox.united(sit.label_bg.sceneBoundingRect())
+            for deco in (sit.label_bg, sit.offpage_tag, sit.offpage_label):
+                if deco.isVisible() and deco.scene() is self.scene:
+                    bbox = bbox.united(deco.sceneBoundingRect())
         bbox.adjust(-40, -40, 40, 40)
+        # Con el Marco PFD visible se exporta la HOJA completa: el marco ya no
+        # se ajusta al contenido (reserva la esquina de leyenda + cuadro de
+        # título), así que recortar por el bbox del diagrama dejaba afuera
+        # justo el cuadro de título.
+        pf = self.scene.paper_frame
+        if pf is not None and pf.isVisible():
+            bbox = bbox.united(QRectF(pf.x(), pf.y(),
+                                      pf.PAPER_W, pf.PAPER_H)
+                               .adjusted(-10, -10, 10, 10))
         return bbox
 
     def action_export_pdf(self):
@@ -8957,6 +9616,9 @@ class FlowsheetMainWindow(QMainWindow):
         # ya está asentada (corrige el extremo COLA/src que en el GUI real
         # quedaba stale hasta el hover).
         self._schedule_stream_reanchor()
+        # El marco se redimensiona y re-centra sobre el contenido nuevo
+        # (ejemplo cargado, undo/redo, aux conmutadas).
+        self.scene.refresh_paper()
 
     # ---------------------------------------------------
     # ANOTACIONES (ciclo 3 · 3c) — notas de plano
@@ -9264,6 +9926,9 @@ class FlowsheetMainWindow(QMainWindow):
             logging.getLogger(__name__).debug(f"aux instancing fallo: {_e}")
         self._refresh_port_colors()
         self._update_status()
+        # El equipo nuevo (y sus auxiliares) pueden caer sobre la leyenda:
+        # la hoja se reajusta si dejó de caber.
+        self.scene.ensure_paper_fits()
         # Asegurar que el nuevo bloque sea visible — centrar la vista
         # en él si no estaba visible.
         try:
