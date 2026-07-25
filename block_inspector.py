@@ -1462,25 +1462,36 @@ class BlockInspectorPanel(QWidget):
         ))
 
         # T de operación
+        # CAMPOS EDITABLES: se pintan en la unidad activa y se guardan de
+        # vuelta en la del modelo (`_apply` → funits.a_canonica).  El
+        # modelo guarda T_op en KELVIN, así que el viaje es
+        # K → °C canónico → unidad del usuario, y al revés al guardar.
         T_val = float(getattr(b, "T_op_K", 0.0) or 0.0)
         T_state = "auto" if is_mixer or T_val <= 0 else "spec"
-        sf_T = self._spec_field("T_op_K",
-                                value=f"{T_val:.1f}" if T_val > 0 else "",
-                                unit="K", state=T_state)
+        u_T = funits.active_unit("temp")
+        sf_T = self._spec_field(
+            "T_op_K",
+            value=(f"{funits.conv_temp(funits.de_kelvin(T_val), u_T):.1f}"
+                   if T_val > 0 else ""),
+            unit=u_T, state=T_state)
         l.addWidget(self._row("T de operación", sf_T,
                               info="0/auto → solver usa T promedio del input."))
 
         # P de operación
         P_val = float(getattr(b, "P_op_bar", 1.0) or 1.0)
-        sf_P = self._spec_field("P_op_bar", value=f"{P_val:.2f}",
-                                unit="bar", state="spec")
+        u_P = funits.active_unit("pressure")
+        sf_P = self._spec_field("P_op_bar",
+                                value=f"{funits.conv_pressure(P_val, u_P):.2f}",
+                                unit=u_P, state="spec")
         l.addWidget(self._row("P de operación", sf_P))
 
-        # ΔP
+        # ΔP — es una DIFERENCIA de presión, pero la presión convierte por
+        # factor puro (sin offset), así que la conversión normal sirve.
         dp = float(getattr(b, "delta_p_bar", 0.0) or 0.0)
         sf_dp = self._spec_field("delta_p_bar",
-                                 value=f"{dp:.3f}" if dp != 0 else "",
-                                 unit="bar",
+                                 value=(f"{funits.conv_pressure(dp, u_P):.3f}"
+                                        if dp != 0 else ""),
+                                 unit=u_P,
                                  state="spec" if dp != 0 else "empty")
         l.addWidget(self._row("ΔP a través del bloque", sf_dp,
                               info=">0 suma presión (bomba), <0 la pierde (HX, columna)"))
@@ -1489,9 +1500,12 @@ class BlockInspectorPanel(QWidget):
         if not is_mixer:
             duty_val = float(getattr(b, "duty", 0.0) or 0.0)
             duty_state = "spec" if getattr(b, "duty_locked", False) else "auto"
-            sf_duty = self._spec_field("duty",
-                                       value=f"{duty_val:.1f}" if duty_val != 0 else "",
-                                       unit="kW", state=duty_state)
+            u_E = funits.active_unit("energy")
+            sf_duty = self._spec_field(
+                "duty",
+                value=(f"{funits.conv_energy(duty_val, u_E):.4g}"
+                       if duty_val != 0 else ""),
+                unit=u_E, state=duty_state)
             l.addWidget(self._row("Duty", sf_duty,
                                   info=">0 aporta calor · <0 lo extrae · auto = solver lo calcula"))
 
@@ -1954,14 +1968,21 @@ class BlockInspectorPanel(QWidget):
         self._extras["flash_active"] = act
         l.addWidget(act)
 
+        # Editables: mismo viaje que los de Termo (el modelo guarda K).
         T_K = float(getattr(b, "flash_T_K", 298.15) or 298.15)
-        sf_T = self._spec_field("flash_T_K", value=f"{T_K:.2f}",
-                                unit="K", state="spec")
+        u_T = funits.active_unit("temp")
+        sf_T = self._spec_field(
+            "flash_T_K",
+            value=f"{funits.conv_temp(funits.de_kelvin(T_K), u_T):.2f}",
+            unit=u_T, state="spec")
         l.addWidget(self._row("T_flash", sf_T))
 
         P_bar = float(getattr(b, "flash_P_bar", 1.013) or 1.013)
-        sf_P = self._spec_field("flash_P_bar", value=f"{P_bar:.3f}",
-                                unit="bar", state="spec")
+        u_P = funits.active_unit("pressure")
+        sf_P = self._spec_field(
+            "flash_P_bar",
+            value=f"{funits.conv_pressure(P_bar, u_P):.3f}",
+            unit=u_P, state="spec")
         l.addWidget(self._row("P_flash", sf_P))
 
         # Evidencia gráfica del flash — lazy al abrir esta sección.
@@ -3165,25 +3186,34 @@ class BlockInspectorPanel(QWidget):
             try: b.n = int(float(self._parse_num(f["n"].value())))
             except Exception: pass
         # ─── Termo ───
+        # El usuario escribe en la unidad ACTIVA; el modelo guarda en la
+        # suya (T_op en K, el resto en canónicas).  `a_canonica` es la
+        # inversa exacta de lo que pintó la sección — las dos direcciones
+        # se mueven juntas o el dato se corrompe sin aviso.
         if "T_op_K" in f:
             try:
                 v = self._parse_num(f["T_op_K"].value())
-                b.T_op_K = float(v) if v else 0.0
+                b.T_op_K = (funits.a_kelvin(funits.a_canonica_editada(
+                    v, b.T_op_K, "°C", "{:.1f}", de_kelvin_modelo=True))
+                    if v else 0.0)
             except Exception: pass
         if "P_op_bar" in f:
             try:
                 v = self._parse_num(f["P_op_bar"].value())
-                b.P_op_bar = float(v) if v else 1.0
+                b.P_op_bar = (funits.a_canonica_editada(
+                    v, b.P_op_bar, "bar", "{:.2f}") if v else 1.0)
             except Exception: pass
         if "delta_p_bar" in f:
             try:
                 v = self._parse_num(f["delta_p_bar"].value())
-                b.delta_p_bar = float(v) if v else 0.0
+                b.delta_p_bar = (funits.a_canonica_editada(
+                    v, b.delta_p_bar, "bar", "{:.3f}") if v else 0.0)
             except Exception: pass
         if "duty" in f:
             try:
                 v = self._parse_num(f["duty"].value())
-                b.duty = float(v) if v else 0.0
+                b.duty = (funits.a_canonica_editada(
+                    v, b.duty, "kW", "{:.4g}") if v else 0.0)
                 b.duty_locked = (f["duty"].state() == "spec")
             except Exception: pass
         if "heat_of_reaction" in f:
@@ -3239,11 +3269,21 @@ class BlockInspectorPanel(QWidget):
         # ─── Flash VLE ───
         if "flash_active" in self._extras:
             b.flash_active = bool(self._extras["flash_active"].isChecked())
-        for key in ("flash_T_K", "flash_P_bar"):
+        # Mismo par pintar/guardar que Termo: T_flash vive en K, P en bar.
+        for key, canon in (("flash_T_K", "°C"), ("flash_P_bar", "bar")):
             if key in f:
                 v = self._parse_num(f[key].value())
                 try:
-                    setattr(b, key, float(v) if v else 0.0)
+                    if not v:
+                        setattr(b, key, 0.0)
+                    elif key == "flash_T_K":
+                        setattr(b, key, funits.a_kelvin(
+                            funits.a_canonica_editada(
+                                v, getattr(b, key, 0.0), canon, "{:.2f}",
+                                de_kelvin_modelo=True)))
+                    else:
+                        setattr(b, key, funits.a_canonica_editada(
+                            v, getattr(b, key, 0.0), canon, "{:.3f}"))
                 except Exception:
                     pass
         # ─── Modos especiales ───

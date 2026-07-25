@@ -266,9 +266,98 @@ def partes_canonica(value, unit_canon, fallback="—"):
     return txt, u
 
 
+def a_canonica(value, unit_canon, unit=None):
+    """INVERSA de `fmt_canonica`: lo que el usuario escribió, en la unidad
+    activa, de vuelta a la canónica que guarda el modelo.
+
+    Existe para los campos EDITABLES.  Un campo que se pinta convertido y
+    se guarda sin convertir corrompe el dato en silencio: el usuario ve
+    221.0 rotulado °F, escribe 230 pensando en °F, y el modelo se queda
+    con 230 °C.  Por eso las dos direcciones viven juntas acá y se testean
+    como round-trip — si alguien toca una, la otra tiene que seguirla."""
+    if value is None or value == "":
+        return None
+    v = float(value)
+    mag = _MAGNITUD.get((unit_canon or "").strip())
+    if mag is None:
+        return v                       # magnitud fuera del sistema
+    u = unit or _ACTIVE[mag]
+    if mag == "temp":
+        if u == "K":
+            return v - 273.15
+        if u in ("°F", "F"):
+            return (v - 32.0) * 5.0 / 9.0
+        return v
+    if mag == "pressure":
+        return v / PRESSURE_FACTORS.get(u, 1.0)
+    if mag == "energy":
+        return v / ENERGY_FACTORS.get(u, 1.0)
+    if mag == "flow":
+        return from_display(v, u)
+    return v
+
+
+def a_canonica_editada(texto, actual_canon, unit_canon, fmt="{:.1f}",
+                       de_kelvin_modelo=False):
+    """Lo que el usuario dejó en un campo, de vuelta a canónica —
+    respetando lo que NO tocó.
+
+    El display redondea: 105 °C se pinta como «378.1» K, y volver de
+    378.1 da 104.95 °C.  Abrir el inspector y guardar sin escribir nada
+    desplazaría el valor por el solo hecho de haberlo mirado.  Así que
+    primero se compara el texto del campo con el que se habría pintado
+    desde el valor actual: si son el mismo, el usuario no editó y se
+    devuelve el valor del modelo intacto.
+
+    `de_kelvin_modelo`: el valor guardado está en kelvin (Block.T_op_K)."""
+    if texto is None or texto == "":
+        return None
+    base = de_kelvin(actual_canon) if de_kelvin_modelo else actual_canon
+    if base is not None:
+        mag = _MAGNITUD.get((unit_canon or "").strip())
+        if mag == "temp":
+            pintado = conv_temp(base)
+        elif mag == "pressure":
+            pintado = conv_pressure(base)
+        elif mag == "energy":
+            pintado = conv_energy(base)
+        elif mag == "flow":
+            pintado = conv_flow(base)
+        else:
+            pintado = base
+        try:
+            if fmt.format(pintado).strip() == str(texto).strip():
+                return base            # sin editar: el modelo manda
+        except (ValueError, TypeError):
+            pass
+    try:
+        return a_canonica(texto, unit_canon)
+    except (ValueError, TypeError):
+        # Texto que no es un número: NO se toca el modelo.  Los callers ya
+        # envuelven esto en try/except, pero dejarlo explícito acá es lo
+        # honesto — «no pude leer lo que escribiste» debe conservar el
+        # dato, nunca escribir uno inventado.
+        return base
+
+
 def de_kelvin(T_K):
     """K → °C canónico. Varias superficies guardan T en kelvin."""
     return None if T_K is None else float(T_K) - 273.15
+
+
+def a_kelvin(T_C):
+    """°C canónico → K. Inversa de `de_kelvin`, para los campos que el
+    modelo guarda en kelvin (`Block.T_op_K`, `flash_T_K`)."""
+    return None if T_C is None else float(T_C) + 273.15
+
+
+# CUIDADO al usar esto con DIFERENCIAS de temperatura (ΔT_LMTD, approach,
+# ΔT_min): una diferencia se convierte con el FACTOR pero sin el OFFSET —
+# 10 °C de salto son 18 °F, no 50 °F.  `conv_temp`/`a_canonica` aplican el
+# offset porque están pensadas para temperaturas ABSOLUTAS.  Hoy ninguna
+# diferencia pasa por acá (la memoria de cálculo se queda en las unidades
+# del cálculo, ver auditoría UI 3 §2.1); si algún día hace falta, va una
+# función aparte y no un parámetro más en esta.
 
 
 def de_kg_s(mdot_kg_s):

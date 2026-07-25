@@ -341,6 +341,168 @@ def test_metricas_y_memoria_no_divergen_en_ningun_sistema(
                 f"no aparece en la memoria\n{texto}")
 
 
+# ─────────── 4. Campos EDITABLES: pintar y guardar van juntos ───────────
+
+@pytest.mark.parametrize("sistema", [s[0] for s in _SISTEMAS] +
+                                    ["Magnitudes grandes"])
+def test_round_trip_exacto_de_las_cuatro_magnitudes(sistema_restaurado,
+                                                    sistema):
+    """`a_canonica` tiene que ser la inversa EXACTA de la conversión de
+    ida.  Si no lo es, cada apertura-y-guardado del inspector desplaza el
+    valor un poquito y el error se acumula sin que nadie lo note."""
+    funits = sistema_restaurado
+    funits.set_system(sistema)
+    for T in (25.0, 105.0, -40.0, 380.0, 0.0):
+        assert funits.a_canonica(funits.conv_temp(T), "°C") == \
+            pytest.approx(T, abs=1e-9)
+    for P in (1.013, 10.0, 200.0):
+        assert funits.a_canonica(funits.conv_pressure(P), "bar") == \
+            pytest.approx(P, rel=1e-12)
+    for E in (3.753, -2196.0):
+        assert funits.a_canonica(funits.conv_energy(E), "kW") == \
+            pytest.approx(E, rel=1e-12)
+    for F in (90000.0, 1.0):
+        assert funits.a_canonica(funits.conv_flow(F), "tm/año") == \
+            pytest.approx(F, rel=1e-12)
+
+
+def test_stream_inspector_guarda_en_canonicas(app, sistema_restaurado):
+    """EL DEFECTO QUE ESTO IMPIDE: pintar convertido y guardar crudo. El
+    usuario ve 221.0 rotulado °F, escribe 250 pensando en °F, y el modelo
+    se queda con 250 °C — silencioso y corruptor."""
+    funits = sistema_restaurado
+    from export_examples import _headless_mocks
+    _headless_mocks()
+    import examples_registry as reg
+    import flowsheet_solver as fsv
+    from stream_inspector import StreamInspectorPanel
+
+    fs = reg.load_example("boiler_ft")
+    fsv.solve(fs)
+    s = next(iter(fs.streams.values()))
+    s.temperature, s.pressure_bar = 105.0, 10.0
+
+    funits.set_system("Imperial (US)")
+    panel = StreamInspectorPanel()
+    panel.load_stream(s, fs)
+    panel._build_section_content("termo")
+    # Se pinta convertido...
+    assert float(panel._fields["temperature"].value()) == pytest.approx(221.0,
+                                                                        abs=.1)
+    # ...y lo que el usuario escribe en °F se guarda en °C.
+    panel._fields["temperature"].setValue("250.0")
+    panel._fields["pressure_bar"].setValue("200.0")
+    panel._apply_to_stream()
+    assert s.temperature == pytest.approx((250 - 32) * 5 / 9, abs=1e-6)
+    assert s.pressure_bar == pytest.approx(200 / 14.503773773, rel=1e-9)
+    assert s.temperature != pytest.approx(250.0), \
+        "se guardó el número crudo: el dato quedó corrompido"
+
+
+def test_block_inspector_guarda_en_las_unidades_del_modelo(
+        app, sistema_restaurado):
+    """El inspector de bloques agrega una vuelta más: T_op se guarda en
+    KELVIN, así que el viaje es unidad activa → °C → K."""
+    funits = sistema_restaurado
+    from export_examples import _headless_mocks
+    _headless_mocks()
+    import examples_registry as reg
+    import flowsheet_solver as fsv
+    from block_inspector import BlockInspectorPanel
+
+    fs = reg.load_example("boiler_ft")
+    fsv.solve(fs)
+    b = next(x for x in fs.blocks.values()
+             if not getattr(x, "auto_aux", False))
+    b.T_op_K, b.P_op_bar, b.duty = 378.15, 10.0, 3.753
+
+    funits.set_system("Imperial (US)")
+    panel = BlockInspectorPanel()
+    panel.load_block(b, fs, lambda: None)
+    panel._build_section_content("termo")
+    f = panel._fields
+    assert float(f["T_op_K"].value()) == pytest.approx(221.0, abs=.1)
+    assert float(f["duty"].value()) == pytest.approx(3.753 * 0.00341214,
+                                                     rel=1e-3)
+    f["T_op_K"].setValue("250.0")
+    f["P_op_bar"].setValue("200.0")
+    f["duty"].setValue("0.02")
+    panel._apply_to_block()
+    assert b.T_op_K == pytest.approx((250 - 32) * 5 / 9 + 273.15, abs=1e-6)
+    assert b.P_op_bar == pytest.approx(200 / 14.503773773, rel=1e-9)
+    assert b.duty == pytest.approx(0.02 / 0.00341214, rel=1e-9)
+
+
+def test_editar_sin_tocar_no_mueve_el_valor(app, sistema_restaurado):
+    """Abrir el inspector y guardar sin escribir nada tiene que dejar el
+    modelo EXACTO — en cualquier sistema.
+
+    No es gratis: el display redondea.  105 °C se pinta «378.1» K, y
+    volver de 378.1 da 104.95 °C — mirar el valor lo movería.  Por eso
+    `a_canonica_editada` compara antes el texto del campo con el que se
+    habría pintado desde el valor actual, y si son el mismo devuelve el
+    del modelo sin tocar."""
+    funits = sistema_restaurado
+    from export_examples import _headless_mocks
+    _headless_mocks()
+    import examples_registry as reg
+    import flowsheet_solver as fsv
+    from stream_inspector import StreamInspectorPanel
+
+    fs = reg.load_example("boiler_ft")
+    fsv.solve(fs)
+    s = next(iter(fs.streams.values()))
+    for sistema in ("SI estricto", "Imperial (US)", "Modelo (tm/año)",
+                    "Magnitudes grandes"):
+        s.temperature, s.pressure_bar = 105.0, 10.0
+        funits.set_system(sistema)
+        panel = StreamInspectorPanel()
+        panel.load_stream(s, fs)
+        panel._build_section_content("termo")
+        panel._apply_to_stream()
+        assert s.temperature == 105.0, f"{sistema}: T se movió sola"
+        assert s.pressure_bar == 10.0, f"{sistema}: P se movió sola"
+
+
+def test_abrir_y_guardar_en_bucle_no_deriva(app, sistema_restaurado):
+    """Diez aperturas seguidas no pueden correr el valor ni un dígito: es
+    la forma en que un redondeo asimétrico corrompe datos de verdad — de
+    a poco, cada vez que alguien mira la ficha."""
+    funits = sistema_restaurado
+    from export_examples import _headless_mocks
+    _headless_mocks()
+    import examples_registry as reg
+    import flowsheet_solver as fsv
+    from block_inspector import BlockInspectorPanel
+
+    fs = reg.load_example("boiler_ft")
+    fsv.solve(fs)
+    b = next(x for x in fs.blocks.values()
+             if not getattr(x, "auto_aux", False))
+    b.T_op_K, b.P_op_bar, b.duty = 378.15, 10.0, 3.753
+    funits.set_system("Imperial (US)")
+    for _ in range(10):
+        panel = BlockInspectorPanel()
+        panel.load_block(b, fs, lambda: None)
+        panel._build_section_content("termo")
+        panel._apply_to_block()
+    assert b.T_op_K == 378.15
+    assert b.P_op_bar == 10.0
+    assert b.duty == 3.753
+
+
+def test_texto_invalido_conserva_el_dato(sistema_restaurado):
+    """Escribir cualquier cosa en un campo no puede inventar un valor:
+    «no pude leer lo que escribiste» tiene que conservar el dato."""
+    funits = sistema_restaurado
+    funits.set_system("Imperial (US)")
+    assert funits.a_canonica_editada("abc", 105.0, "°C") == 105.0
+    assert funits.a_canonica_editada("", 105.0, "°C") is None
+    assert funits.a_canonica_editada(None, 105.0, "°C") is None
+    # 0 °C es 32 °F: sin editar, vuelve el cero exacto y no un 32 crudo.
+    assert funits.a_canonica_editada("32.0", 0.0, "°C") == 0.0
+
+
 def test_partes_canonica_no_se_rompe_con_miles(sistema_restaurado):
     """partes_canonica parte valor y unidad; hacerlo por split(' ') se
     rompería con el separador de miles ('1 001 kPa')."""

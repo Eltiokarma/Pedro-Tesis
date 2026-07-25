@@ -190,19 +190,54 @@ Los datos de OPERACIÓN de ese mismo módulo (`T_op`, `P_op`) sí se
 convierten, porque son el mismo dato que muestran la ficha y las burbujas
 — que era la contradicción original.
 
-#### Lo que queda: los campos EDITABLES del `stream_inspector`
+#### Los campos EDITABLES — **cerrado también (2026-07-25)**
 
-`stream_inspector.py` muestra T, T objetivo y P en `SpecField` con `unit`
-fijo (`:851,861,870`) — mismo defecto en apariencia, **problema distinto
-en el fondo**: esos campos se leen de vuelta para guardar
-(`self._fields["temperature"]`). Convertir solo la lectura es peor que no
-convertir nada: el usuario vería `221.0` rotulado °F, escribiría `230`
-pensando en °F, y se guardaría `230 °C`. Silencioso y corruptor.
+Eran el caso peligroso: se leen de vuelta para guardar, así que convertir
+solo la lectura habría sido **peor que no tocar nada** — el usuario ve
+`221.0` rotulado °F, escribe `250` pensando en °F, y el modelo se queda
+con `250 °C`. Silencioso y corruptor.
 
-Necesita el par completo —`fmt` al pintar y `from_display` al guardar—
-más un test de round-trip por sistema (escribir en °F y verificar que el
-modelo guardó °C). Es un frente propio, corto pero que no se puede hacer a
-medias, y por eso no entró acá.
+Por eso el arreglo agrega la dirección que faltaba y la deja pegada a la
+de ida, en el mismo archivo:
+
+- `a_canonica(value, unit)` — inversa exacta de `fmt_canonica`.
+- `a_kelvin` / `de_kelvin` — el par para los campos que el modelo guarda
+  en kelvin (`Block.T_op_K`, `flash_T_K`), que hacen un viaje más largo:
+  K → °C canónico → unidad del usuario, y al revés al guardar.
+
+**Campos cableados** (pintado + guardado, los dos lados):
+`stream_inspector` → temperatura, T objetivo, presión, y el flujo por
+componente de la tabla de composición (que salía en tm/año crudo, sin
+rótulo). `block_inspector` → T de operación, P de operación, ΔP, duty,
+T_flash y P_flash.
+
+**La trampa que quedó anotada en el código:** una DIFERENCIA de
+temperatura no se convierte como una absoluta — 10 °C de salto son 18 °F,
+no 50 °F. `conv_temp`/`a_canonica` aplican el offset porque son para
+temperaturas absolutas. Hoy ninguna diferencia pasa por ahí (ΔT_LMTD,
+approach y ΔT_min viven en la memoria de cálculo, que no se convierte), y
+ΔP sí puede usarlas porque la presión convierte por factor puro. Si algún
+día hace falta un ΔT convertido, va una función aparte y no un parámetro
+más en esta.
+
+**Un segundo defecto, que apareció al escribir el test:** el display
+redondea. `105 °C` se pinta como `378.1` K, y volver de `378.1` da
+`104.95 °C` — es decir, **abrir el inspector y guardar sin escribir nada
+movía el valor**. Mirar un dato lo cambiaba. La primera versión del test
+lo toleraba con `abs=0.06`; tolerarlo estaba mal.
+
+Lo resuelve `a_canonica_editada(texto, actual, unit, fmt)`: antes de
+convertir, compara el texto del campo con el que se habría pintado desde
+el valor actual del modelo. Si son el mismo, el usuario no editó ese
+campo y se devuelve el valor del modelo **intacto**. Solo se convierte lo
+que de verdad cambió.
+
+**Regresión:** 9 tests más, entre ellos los tres que importan de verdad —
+que escribir `250` en °F guarde `121.11 °C` **y no 250**; que abrir y
+guardar sin tocar deje el modelo exacto (sin tolerancia) en los cuatro
+sistemas; y que diez aperturas seguidas no corran el valor ni un dígito,
+que es la forma en que un redondeo asimétrico corrompe datos de verdad:
+de a poco, cada vez que alguien mira la ficha.
 
 **Regresión:** 15 tests nuevos en `tests/test_auditoria_ui3.py`, que
 recorren tres sistemas (Modelo, SI estricto, Imperial) y verifican que
