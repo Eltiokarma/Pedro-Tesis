@@ -55,6 +55,24 @@ def _num(v, nd=3) -> str:
     return str(v)
 
 
+def _u(value, unit_canon: str) -> str:
+    """Valor en la unidad ACTIVA del usuario.
+
+    El spec habla en canónicas (°C/bar/kW/tm por año) porque es un
+    contrato de datos; el papel muestra lo que el usuario eligió.  Si el
+    sistema de unidades no cubre esa magnitud (m², m³/h, m), sale tal
+    cual — ver `flowsheet_units.fmt_canonica`."""
+    try:
+        import flowsheet_units as funits
+        return funits.fmt_canonica(value, unit_canon)
+    except Exception:
+        # El export tiene que salir aunque el módulo de unidades falle:
+        # una ficha en unidades canónicas es peor que una en las del
+        # usuario, pero muchísimo mejor que ninguna.
+        u = f" {unit_canon}" if unit_canon else ""
+        return f"{_num(value)}{u}"
+
+
 def datasheet_rows(spec: dict) -> List[Fila]:
     """Aplana una ficha (`datasheet.datasheet_spec`) a filas imprimibles.
 
@@ -81,16 +99,16 @@ def datasheet_rows(spec: dict) -> List[Fila]:
     cond = spec.get("condiciones", {}) or {}
     if cond.get("T_op_C") is not None:
         add("Condiciones de operación", "T operación",
-            f"{_num(cond['T_op_C'], 2)} °C")
+            _u(cond["T_op_C"], "°C"))
     if cond.get("P_op_bar") is not None:
         add("Condiciones de operación", "P operación",
-            f"{_num(cond['P_op_bar'])} bar")
+            _u(cond["P_op_bar"], "bar"))
     if cond.get("duty_kW"):
-        add("Condiciones de operación", "Duty", f"{_num(cond['duty_kW'])} kW",
+        add("Condiciones de operación", "Duty", _u(cond["duty_kW"], "kW"),
             "positivo aporta calor, negativo lo retira")
     if cond.get("delta_p_bar"):
         add("Condiciones de operación", "ΔP del equipo",
-            f"{_num(cond['delta_p_bar'])} bar")
+            _u(cond["delta_p_bar"], "bar"))
     if cond.get("fases"):
         add("Condiciones de operación", "Fases", " · ".join(cond["fases"]))
 
@@ -98,9 +116,10 @@ def datasheet_rows(spec: dict) -> List[Fila]:
     for sentido, clave in (("Entrada", "in"), ("Salida", "out")):
         for s in corr.get(clave, []) or []:
             etiqueta = f"{sentido} · {s.get('nombre', '')}"
-            valor = (f"{_num(s.get('mass_flow_tm_a'))} t/a · "
-                     f"{_num(s.get('T_C'), 2)} °C · "
-                     f"{_num(s.get('P_bar'))} bar")
+            valor = " · ".join((
+                _u(s.get("mass_flow_tm_a"), "tm/año"),
+                _u(s.get("T_C"), "°C"),
+                _u(s.get("P_bar"), "bar")))
             nota = " · ".join(x for x in (
                 s.get("puerto", ""), s.get("fase", ""),
                 s.get("comp_principal", ""),
@@ -108,9 +127,8 @@ def datasheet_rows(spec: dict) -> List[Fila]:
             add("Corrientes", etiqueta, valor, nota)
 
     for c in spec.get("diseno", []) or []:
-        unidad = f" {c['unit']}" if c.get("unit") else ""
         add("Diseño", c.get("label", c.get("key", "")),
-            f"{_num(c.get('value'))}{unidad}",
+            _u(c.get("value"), c.get("unit", "")),
             _ORIGEN_TXT.get(c.get("origen", ""), c.get("origen", "")))
 
     mat = spec.get("materiales", {}) or {}

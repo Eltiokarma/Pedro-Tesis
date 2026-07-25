@@ -197,3 +197,156 @@ def test_duty_badge_sin_duty_no_deja_pill_huerfano(ventana):
             bg = getattr(it, "duty_badge_bg", None)
             if bg is not None:
                 assert not bg.isVisible(), it.model.name
+
+
+# ──────────── 3. §2.1 · el sistema de unidades manda ────────────
+
+@pytest.fixture
+def sistema_restaurado():
+    import flowsheet_units as funits
+    previo = funits.current_system()
+    yield funits
+    funits.set_system(previo if previo != "Personalizado"
+                      else "Modelo (tm/año)")
+
+
+# (sistema, T, P, flujo) — lo que el usuario debe ver en CADA superficie.
+_SISTEMAS = [
+    ("Modelo (tm/año)", "°C", "bar", "tm/año"),
+    ("SI estricto", "K", "kPa", "kg/s"),
+    ("Imperial (US)", "°F", "psi", "lb/h"),
+]
+
+
+@pytest.mark.parametrize("sistema,u_t,u_p,u_f", _SISTEMAS)
+def test_ficha_exportada_respeta_el_sistema(sistema_restaurado, sistema,
+                                            u_t, u_p, u_f):
+    """La ficha del papel imprimía °C/bar fijos: el spec habla canónico y
+    nadie traducía."""
+    funits = sistema_restaurado
+    import datasheet as ds
+    import datasheet_export as dx
+    from export_examples import _headless_mocks
+    _headless_mocks()
+    import examples_registry as reg
+    import flowsheet_solver as fsv
+
+    fs = reg.load_example("boiler_ft")
+    fsv.solve(fs)
+    b = next(x for x in fs.blocks.values()
+             if not getattr(x, "auto_aux", False))
+    funits.set_system(sistema)
+    filas = dx.datasheet_rows(ds.datasheet_spec(b, fs))
+    cond = {e: v for s, e, v, _ in filas if s.startswith("Condiciones")}
+    if "T operación" in cond:
+        assert cond["T operación"].endswith(u_t), cond["T operación"]
+    if "P operación" in cond:
+        assert cond["P operación"].endswith(u_p), cond["P operación"]
+    corr = [v for s, _e, v, _n in filas if s == "Corrientes"]
+    assert corr, "el ejemplo debería traer corrientes"
+    assert all(u_f in v for v in corr), corr[:2]
+
+
+@pytest.mark.parametrize("sistema,u_t,u_p,u_f", _SISTEMAS)
+def test_burbuja_de_corriente_respeta_el_sistema(app, sistema_restaurado,
+                                                 sistema, u_t, u_p, u_f):
+    """Las burbujas imprimían K/bar/kg·s⁻¹ SIEMPRE — las del solver — y
+    lo que parecía «la burbuja está bien» era coincidencia: con el
+    sistema en °C mostraban K igual."""
+    funits = sistema_restaurado
+    import stream_bubbles as sb
+    b = sb.StreamBubble(1)
+    b._T_K, b._P_bar, b._mdot_kg_s = 378.15, 10.0, 2.85
+    funits.set_system(sistema)
+    filas = {etiqueta: (valor, unidad)
+             for etiqueta, valor, unidad in b._iter_rows()}
+    assert filas["T"][1] == u_t
+    assert filas["P"][1].split()[0] == u_p     # puede traer ' auto'
+    assert filas["ṁ"][1] == u_f
+
+
+def test_burbuja_convierte_el_valor_no_solo_el_rotulo(app,
+                                                      sistema_restaurado):
+    """Cambiar la etiqueta sin convertir el número sería peor que no
+    hacer nada: el round-trip kg/s → tm/año → kg/s tiene que volver."""
+    funits = sistema_restaurado
+    import stream_bubbles as sb
+    b = sb.StreamBubble(1)
+    b._T_K, b._P_bar, b._mdot_kg_s = 378.15, 10.0, 2.85
+
+    funits.set_system("SI estricto")
+    filas = {e: v for e, v, _u in b._iter_rows()}
+    assert filas["T"] == "378.1"
+    assert float(filas["ṁ"]) == pytest.approx(2.85, rel=1e-3)
+
+    funits.set_system("Modelo (tm/año)")
+    filas = {e: v for e, v, _u in b._iter_rows()}
+    assert filas["T"] == "105.0"
+
+
+def test_magnitud_fuera_del_sistema_sale_tal_cual(sistema_restaurado):
+    """El sistema cubre cuatro magnitudes. Un área en m² o un caudal en
+    m³/h no se tocan — fingir una conversión que no existe sería peor
+    que no convertir."""
+    funits = sistema_restaurado
+    funits.set_system("Imperial (US)")
+    assert funits.fmt_canonica(50, "m²") == "50 m²"
+    assert funits.fmt_canonica(11.26, "m³/h") == "11.26 m³/h"
+    assert not funits.es_canonica("m²")
+    assert funits.es_canonica("°C")
+
+
+@pytest.mark.parametrize("sistema,u_t,u_p,u_f", _SISTEMAS)
+def test_header_del_inspector_respeta_el_sistema(app, sistema_restaurado,
+                                                 sistema, u_t, u_p, u_f):
+    """Los chips de corriente del header imprimían K/bar/kg·s⁻¹ fijos: el
+    panel se contradecía consigo mismo — header en K, ficha en °F, tres
+    centímetros de distancia."""
+    funits = sistema_restaurado
+    from block_inspector import StreamPill
+    funits.set_system(sistema)
+    from PySide6.QtWidgets import QLabel
+    pill = StreamPill("S-1", "liq", 378.15, 10.0, 2.85)
+    meta = " ".join(w.text() for w in pill.findChildren(QLabel))
+    for unidad in (u_t, u_p, u_f):
+        assert unidad in meta, f"{sistema}: falta {unidad} en {meta[:200]}"
+
+
+@pytest.mark.parametrize("sistema", [s[0] for s in _SISTEMAS])
+def test_metricas_y_memoria_no_divergen_en_ningun_sistema(
+        sistema_restaurado, sistema):
+    """El inspector tiene dos vistas del mismo cálculo —tarjetas de
+    métricas y memoria textual— y `test_inspector_metrics` exige que cada
+    valor estructurado aparezca literal en el texto.  Esa coherencia solo
+    se verificaba en el sistema por defecto: convertir una vista y no la
+    otra las hace divergir en cuanto el usuario cambia de unidades."""
+    funits = sistema_restaurado
+    from export_examples import _headless_mocks
+    _headless_mocks()
+    import examples_registry as reg
+    import flowsheet_solver as fsv
+    import inspector_evidence as ev
+
+    fs = reg.load_example("ammonia")
+    fsv.solve(fs)
+    funits.set_system(sistema)
+    for b in fs.blocks.values():
+        m = ev.reactor_metrics(b)
+        if m is None:
+            continue
+        texto = ev.reactor_text(b) or ""
+        for metrica in m.get("metrics", []):
+            assert metrica["value"] in texto, (
+                f"{sistema}: '{metrica['key']}'={metrica['value']!r} "
+                f"no aparece en la memoria\n{texto}")
+
+
+def test_partes_canonica_no_se_rompe_con_miles(sistema_restaurado):
+    """partes_canonica parte valor y unidad; hacerlo por split(' ') se
+    rompería con el separador de miles ('1 001 kPa')."""
+    funits = sistema_restaurado
+    funits.set_system("SI estricto")
+    valor, unidad = funits.partes_canonica(10.0, "bar")
+    assert unidad == "kPa"
+    assert valor.replace(" ", "").replace(",", "") == "1000"
+

@@ -103,7 +103,12 @@ arreglos y el cierre de la auditoría 2.
 
 ## 2. Backlog para el próximo ciclo
 
-### 2.1 El inspector ignora el sistema de unidades — ALTA (el hallazgo del ciclo)
+### 2.1 El inspector ignora el sistema de unidades — **CERRADO (2026-07-25)**
+
+> Resuelto en la misma sesión; se conserva el diagnóstico porque explica
+> la forma del arreglo. **Lo que se hizo** está al final de la sección.
+
+
 
 `block_inspector.py` **no importa `flowsheet_units` en absoluto** (0
 referencias). Toda la ficha muestra unidades canónicas fijas (°C, bar, kW)
@@ -129,6 +134,80 @@ agregador — `datasheet_spec` debe seguir devolviendo unidades canónicas
 (es un contrato de datos que el XLSX y los tests consumen). Formatear con
 `funits` en `block_inspector` y en `datasheet_rows`, y agregar un test que
 recorra las superficies y falle si alguna imprime una unidad fija.
+
+#### Lo que se hizo
+
+Al arreglarlo apareció que el problema era **más grande y al revés de lo
+que decía el diagnóstico**: las burbujas de corriente tampoco respetaban
+el sistema. Imprimían K / bar / kg·s⁻¹ **siempre**, porque son las
+unidades del solver. Lo que en la captura parecía «la burbuja está bien»
+era coincidencia: mostraba K porque muestra K pase lo que pase. Las dos
+superficies estaban mal; se veía contradicción solo porque cada una
+estaba mal en una unidad distinta.
+
+**El punto que le faltaba al sistema de unidades** (`flowsheet_units.py`):
+
+- `fmt_canonica(value, unit)` — traduce un valor dado en unidad canónica
+  a la unidad activa. Es el único punto que una superficie nueva necesita
+  llamar. Una magnitud fuera del sistema (m², m³/h, m) sale tal cual: el
+  sistema cubre cuatro magnitudes y fingir lo contrario sería peor que no
+  convertir.
+- `partes_canonica(value, unit)` — igual pero devolviendo (valor, unidad)
+  separados, para las superficies que pintan número y unidad con estilos
+  distintos. Existe porque partir el string formateado por `split(' ')` se
+  rompe con el separador de miles: `'1 001 kPa'`.
+- `de_kelvin` / `de_kg_s` — las superficies que guardan K y kg/s entran al
+  sistema sin repetir la aritmética en cada una.
+
+**Superficies cableadas** (seis, el doble de las que preveía el
+diagnóstico):
+
+1. Sección Ficha del inspector, incluidos los campos de diseño — cada uno
+   trae su unidad y `fmt_canonica` decide si participa del sistema.
+2. Burbujas de corriente, en sus **tres** modos de render: completo,
+   colapsado y degradado por zoom. Los tres imprimían la unidad a mano.
+3. Chips de corriente del header del inspector (`StreamPill`) — los que
+   se contradecían con la ficha tres centímetros más abajo.
+4. Condiciones de operación de la memoria de evidencia.
+5. **Tarjetas de métricas** de `inspector_evidence` — ver abajo.
+6. Las dos rutas del export de fichas (condiciones y corrientes): XLSX y
+   PDF salen en la unidad del usuario porque comparten `datasheet_rows`.
+
+**La 5 la encontró un test, no la lectura.** `test_inspector_metrics`
+exige que cada valor de las tarjetas aparezca literal en la memoria
+textual: son dos vistas del mismo cálculo y no pueden divergir. Al
+convertir la memoria, ese test se puso rojo — porque las tarjetas seguían
+en canónicas. Es el mejor tipo de test: no verificaba unidades, verificaba
+coherencia, y por eso atrapó una superficie que el diagnóstico no había
+listado. Quedó reforzado: ahora la coherencia se comprueba en los tres
+sistemas, no solo en el de por defecto.
+
+**Lo que NO se convierte, a propósito:** la memoria de cálculo de
+`inspector_evidence` (LMTD, approach, perfiles de temperatura, ΔT_min).
+Es la reproducción de cómo se resolvió el equipo, no un dato de lectura:
+está tabulada en las unidades en que corrió el cálculo, como en el libro.
+Los datos de OPERACIÓN de ese mismo módulo (`T_op`, `P_op`) sí se
+convierten, porque son el mismo dato que muestran la ficha y las burbujas
+— que era la contradicción original.
+
+#### Lo que queda: los campos EDITABLES del `stream_inspector`
+
+`stream_inspector.py` muestra T, T objetivo y P en `SpecField` con `unit`
+fijo (`:851,861,870`) — mismo defecto en apariencia, **problema distinto
+en el fondo**: esos campos se leen de vuelta para guardar
+(`self._fields["temperature"]`). Convertir solo la lectura es peor que no
+convertir nada: el usuario vería `221.0` rotulado °F, escribiría `230`
+pensando en °F, y se guardaría `230 °C`. Silencioso y corruptor.
+
+Necesita el par completo —`fmt` al pintar y `from_display` al guardar—
+más un test de round-trip por sistema (escribir en °F y verificar que el
+modelo guardó °C). Es un frente propio, corto pero que no se puede hacer a
+medias, y por eso no entró acá.
+
+**Regresión:** 15 tests nuevos en `tests/test_auditoria_ui3.py`, que
+recorren tres sistemas (Modelo, SI estricto, Imperial) y verifican que
+cambie **el valor y no solo el rótulo** — un round-trip kg/s → tm/año →
+kg/s que tiene que volver al número de partida.
 
 ### 2.2 Menores detectados
 

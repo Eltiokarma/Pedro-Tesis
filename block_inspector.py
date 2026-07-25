@@ -40,6 +40,10 @@ from PySide6.QtWidgets import (
 
 import pfd_fonts
 import equipment_costs as eq
+# El inspector muestra magnitudes del solver, que son canónicas: la
+# unidad que se pinta la decide el sistema de unidades activo, no el
+# formateo de cada f-string (auditoría UI 3 §2.1).
+import flowsheet_units as funits
 
 
 # ════════════════════════════════════════════════════════
@@ -386,20 +390,28 @@ class StreamPill(QFrame):
         meta = QLabel(self)
         meta.setTextFormat(Qt.RichText)
         soft = TOK["ink_soft"]; ink = TOK["ink_mute"]
-        T_s = f"{T:.1f}" if T else "—"
-        P_s = f"{P:.1f}" if P else "—"
-        m_s = f"{mdot:.2f}" if mdot else "—"
+        # El pill recibe T en K, P en bar y ṁ en kg/s —la proyección de
+        # proceso de _stream_dict— y los imprimía así SIEMPRE.  Se vuelve
+        # a canónico y se pinta en la unidad activa: si no, el header del
+        # panel contradice a la ficha que está tres centímetros más abajo
+        # (auditoría UI 3 §2.1).
+        T_s, T_u = (funits.partes_canonica(funits.de_kelvin(T), "°C") if T
+                    else ("—", funits.unidad_activa_de("°C")))
+        P_s, P_u = (funits.partes_canonica(P, "bar") if P
+                    else ("—", funits.unidad_activa_de("bar")))
+        m_s, m_u = (funits.partes_canonica(funits.de_kg_s(mdot), "tm/año")
+                    if mdot else ("—", funits.unidad_activa_de("tm/año")))
         meta.setText(
             # micro-tipografía de chip de datos (px): escala de densidad, no tipografía (excepción 2g)
             f'<span style="color:{soft};font-size:9px;">T</span> '
             f'<b style="color:{ink};font-size:10px;font-family:\'{pfd_fonts.MONO}\';">{T_s}</b>'
-            f'<span style="color:{soft};font-size:9px;"> K · </span>'
+            f'<span style="color:{soft};font-size:9px;"> {T_u} · </span>'
             f'<span style="color:{soft};font-size:9px;">P</span> '
             f'<b style="color:{ink};font-size:10px;font-family:\'{pfd_fonts.MONO}\';">{P_s}</b>'
-            f'<span style="color:{soft};font-size:9px;"> bar · </span>'
+            f'<span style="color:{soft};font-size:9px;"> {P_u} · </span>'
             f'<span style="color:{soft};font-size:9px;">ṁ</span> '
             f'<b style="color:{ink};font-size:10px;font-family:\'{pfd_fonts.MONO}\';">{m_s}</b>'
-            f'<span style="color:{soft};font-size:9px;"> kg/s</span>'
+            f'<span style="color:{soft};font-size:9px;"> {m_u}</span>'
         )
         lay.addWidget(meta, 1, 0, 1, 4)
 
@@ -2466,16 +2478,24 @@ class BlockInspectorPanel(QWidget):
         if ident.get("categoria"):
             self._ficha_row(l, "Categoría", ident["categoria"], mute=True)
 
+        # El spec habla en unidades canónicas (°C/bar/kW); la unidad que
+        # se PINTA es la que el usuario eligió.  Sin esto el mismo panel
+        # mostraba «T 378.1 K» en las burbujas de corriente y «105 °C»
+        # acá abajo — el mismo dato en dos unidades (auditoría UI 3 §2.1).
         cond = spec.get("condiciones", {})
         self._ficha_subheader(l, "Condiciones de operación")
         if cond.get("T_op_C") is not None:
-            self._ficha_row(l, "T operación", f"{cond['T_op_C']:g} °C")
+            self._ficha_row(l, "T operación",
+                            funits.fmt_canonica(cond["T_op_C"], "°C"))
         if cond.get("P_op_bar") is not None:
-            self._ficha_row(l, "P operación", f"{cond['P_op_bar']:g} bar")
+            self._ficha_row(l, "P operación",
+                            funits.fmt_canonica(cond["P_op_bar"], "bar"))
         if cond.get("duty_kW"):
-            self._ficha_row(l, "Duty", f"{cond['duty_kW']:g} kW")
+            self._ficha_row(l, "Duty",
+                            funits.fmt_canonica(cond["duty_kW"], "kW"))
         if cond.get("delta_p_bar"):
-            self._ficha_row(l, "ΔP equipo", f"{cond['delta_p_bar']:g} bar")
+            self._ficha_row(l, "ΔP equipo",
+                            funits.fmt_canonica(cond["delta_p_bar"], "bar"))
         if cond.get("fases"):
             self._ficha_row(l, "Fases", " · ".join(cond["fases"]), mute=True)
 
@@ -2484,10 +2504,12 @@ class BlockInspectorPanel(QWidget):
             self._ficha_subheader(l, "Diseño")
             for c in campos:
                 glifo = self._ORIGEN_GLIFO.get(c.get("origen", ""), "")
-                unidad = f" {c['unit']}" if c.get("unit") else ""
+                # Los campos de diseño traen su unidad: las cuatro del
+                # sistema se convierten, las demás (m², m³/h, m) salen
+                # tal cual — fmt_canonica decide.
                 self._ficha_row(
                     l, f"{glifo} {c['label']}".strip(),
-                    f"{c['value']}{unidad}",
+                    funits.fmt_canonica(c.get("value"), c.get("unit", "")),
                     mute=(c.get("origen") in ("tipico", "estimado")))
 
         mat = spec.get("materiales", {})
