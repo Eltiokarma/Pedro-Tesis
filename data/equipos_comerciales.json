@@ -2256,6 +2256,92 @@
    },
    "fuente": "https://www.centrisys-cnp.com/equipment/cs-series-dewatering-centrifuge",
    "fecha_consulta": "2026-07-25"
+  },
+  {
+   "marca": "Funke",
+   "modelo": "Serie BCP (haz flotante, latón)",
+   "eq_type": "Heat exch. — floating head",
+   "S_no_publicado": "configurable",
+   "granularidad": "modelo",
+   "params": {
+    "P_max_bar": 10,
+    "T_max_C": 150,
+    "notas": "Intercambiador de casco y tubos con PLACA TUBULAR FLOTANTE (sufijo P de la nomenclatura Funke; el folleto lo declara en la tabla de materiales: '1.4571 as a floating tubesheet for the P version', frente al haz fijo de las versiones F). AREA NO PUBLICADA, mismo veredicto que las otras entradas de este tipo: Funke declara mas de 200 tamanos graduados por serie y publica el diagrama de dimensiones, nunca m2 por modelo — el area la fija el diseno termico del servicio. Por eso S_no_publicado = configurable. CRITERIO DE P_max_bar: el folleto publica DOS presiones por serie, 'Max. operating overpressure' de 16 bar en el lado CASCO y 10 bar en el lado TUBOS (prueba 24 y 15 bar respectivamente). Se carga 10 bar, el lado mas debil, porque la verificacion del modo seleccion compara la presion del proceso sin saber por que lado circula: tomar los 16 bar del casco afirmaria de mas en un servicio por tubos. POR QUE granularidad=modelo y no familia: los limites P/T publicados son de la SERIE COMPLETA y son los MISMOS para todos sus tamanos — no son la cota del miembro mas grande, que es el falso positivo contra el que el gate advierte. La envolvente vale exacta para cualquier tamano; lo unico que la serie no fija es el area. Serie BCP: tubos internos de latón CuZn20Al2As / CuNi30Mn1Fe / CuNi10Fe1Mn o 1.4571. T_max_C = 150 (columna BCP de la tabla 'Max. operating temperature'). Es la serie mas caliente de las tres: las de acero se quedan en 110 C. Material NO cargado: el latón no esta en el vocabulario de materiales del repo y mapearlo a Cu seria inventar el factor."
+   },
+   "fuente": "https://www.funke.de/media/b_funke/downloads/broschueren/funke_shell_tube_he_en.pdf",
+   "fecha_consulta": "2026-07-25"
+  },
+  {
+   "marca": "Funke",
+   "modelo": "Serie CCP (haz flotante, acero al carbono)",
+   "eq_type": "Heat exch. — floating head",
+   "S_no_publicado": "configurable",
+   "granularidad": "modelo",
+   "params": {
+    "P_max_bar": 10,
+    "T_max_C": 110,
+    "material": "CS",
+    "notas": "Intercambiador de casco y tubos con PLACA TUBULAR FLOTANTE (sufijo P de la nomenclatura Funke; el folleto lo declara en la tabla de materiales: '1.4571 as a floating tubesheet for the P version', frente al haz fijo de las versiones F). AREA NO PUBLICADA, mismo veredicto que las otras entradas de este tipo: Funke declara mas de 200 tamanos graduados por serie y publica el diagrama de dimensiones, nunca m2 por modelo — el area la fija el diseno termico del servicio. Por eso S_no_publicado = configurable. CRITERIO DE P_max_bar: el folleto publica DOS presiones por serie, 'Max. operating overpressure' de 16 bar en el lado CASCO y 10 bar en el lado TUBOS (prueba 24 y 15 bar respectivamente). Se carga 10 bar, el lado mas debil, porque la verificacion del modo seleccion compara la presion del proceso sin saber por que lado circula: tomar los 16 bar del casco afirmaria de mas en un servicio por tubos. POR QUE granularidad=modelo y no familia: los limites P/T publicados son de la SERIE COMPLETA y son los MISMOS para todos sus tamanos — no son la cota del miembro mas grande, que es el falso positivo contra el que el gate advierte. La envolvente vale exacta para cualquier tamano; lo unico que la serie no fija es el area. Serie CCP: cuerpo de acero al carbono, placa tubular fija P265GH y placa FLOTANTE 1.4571. T_max_C = 110 (columna CCF/P de la tabla de temperatura)."
+   },
+   "fuente": "https://www.funke.de/media/b_funke/downloads/broschueren/funke_shell_tube_he_en.pdf",
+   "fecha_consulta": "2026-07-25"
+  },
+  {
+   "marca": "Funke",
+   "modelo": "Serie SSCP (haz flotante, acero inoxidable)",
+   "eq_type": "Heat exch. — floating head",
+   "S_no_publicado": "configurable",
+   "granularidad": "modelo",
+   "params": {
+    "P_max_bar": 10,
+    "T_max_C": 110,
+    "material": "SS316",
+    "notas": "Intercambiador de casco y tubos con PLACA TUBULAR FLOTANTE (sufijo P de la nomenclatura Funke; el folleto lo declara en la tabla de materiales: '1.4571 as a floating tubesheet for the P version', frente al haz fijo de las versiones F). AREA NO PUBLICADA, mismo veredicto que las otras entradas de este tipo: Funke declara mas de 200 tamanos graduados por serie y publica el diagrama de dimensiones, nunca m2 por modelo — el area la fija el diseno termico del servicio. Por eso S_no_publicado = configurable. CRITERIO DE P_max_bar: el folleto publica DOS presiones por serie, 'Max. operating overpressure' de 16 bar en el lado CASCO y 10 bar en el lado TUBOS (prueba 24 y 15 bar respectivamente). Se carga 10 bar, el lado mas debil, porque la verificacion del modo seleccion compara la presion del proceso sin saber por que lado circula: tomar los 16 bar del casco afirmaria de mas en un servicio por tubos. POR QUE granularidad=modelo y no familia: los limites P/T publicados son de la SERIE COMPLETA y son los MISMOS para todos sus tamanos — no son la cota del miembro mas grande, que es el falso positivo contra el que el gate advierte. La envolvente vale exacta para cualquier tamano; lo unico que la serie no fija es el area. Serie SSCP: acero inoxidable, placas tubulares 1.4571 en la version P. T_max_C = 110 (columna SSCF/P). Material cargado como SS316 con la salvedad de que 1.4571 es en rigor un 316Ti (X6CrNiMoTi17-12-2), el 316 estabilizado con titanio; el repo no tiene clave propia para el 316Ti y SS316 es la equivalencia mas cercana, no una identidad."
+   },
+   "fuente": "https://www.funke.de/media/b_funke/downloads/broschueren/funke_shell_tube_he_en.pdf",
+   "fecha_consulta": "2026-07-25"
+  },
+  {
+   "marca": "Storm Mixer",
+   "modelo": "SMP1F4S (PVC Sch 80, 1 in, bridado, 4 elementos)",
+   "eq_type": "Mixer — static",
+   "S_no_publicado": "otra_magnitud",
+   "granularidad": "modelo",
+   "params": {
+    "P_max_bar": 10,
+    "Q_max_m3_h": 5.0,
+    "notas": "Mezclador estatico en linea de la serie SMP, cuerpo PVC Schedule 80 (hay variante CPVC), elementos excentricos, extremos bridados. VOLUMEN NO PUBLICADO: Storm Mixer publica diametro nominal, numero de elementos, longitud, rango de caudal y presion admisible, nunca un holdup en m3 -> otra_magnitud, el mismo criterio que las entradas Koflo. P_max_bar = 10 de 'PRESSURE RATING: 150 psi (10 bar) at 100 F (38 C)', valida para toda la serie. OJO CON ESA TEMPERATURA: los 38 C son la CONDICION DE REFERENCIA del rating de presion, no un techo termico. El folleto no publica temperatura maxima de servicio y el PVC/CPVC pierde presion admisible al calentarse, asi que T_max_C se OMITE en vez de cargar 38: inventar el techo o la curva de derating seria peor que no declararlo. Q_max_m3_h = extremo superior del 'Flow Range Minimum/Maximum' de la tabla, para el tamano y numero de elementos del modelo. IMPORTANTE, es un caudal RECOMENDADO, no un limite mecanico: el folleto define ese rango como el que 'asegura una caida de presion maxima de 5 psi para quimicos en base agua y buena mezcla'. Conversion US gal -> m3: 1 gpm = 0.2271247 m3/h. El caudal recomendado BAJA al agregar elementos (mas mezcla, mas caida de presion): el mismo 2 in da 90 gpm con 4 elementos y 54 con 8. Por eso el modelo incluye el numero de elementos en el codigo — no es un accesorio, es parte del tamano. Nomenclatura del folleto: SMP + diametro + configuracion de extremos + numero de elementos + tipo de elemento (ejemplo impreso: SMP1F4S). Fila 1 in / 4 elementos: caudal 4.3 a 22 gpm -> Q_max_m3_h = 22 x 0.2271247 = 5.00. Longitud del mezclador 4 in; puerto de inyeccion opcional NPT de 1/2 in."
+   },
+   "fuente": "https://stormmix.com/images/brochures/pvc_static_mixer.pdf",
+   "fecha_consulta": "2026-07-25"
+  },
+  {
+   "marca": "Storm Mixer",
+   "modelo": "SMP2F4S (PVC Sch 80, 2 in, bridado, 4 elementos)",
+   "eq_type": "Mixer — static",
+   "S_no_publicado": "otra_magnitud",
+   "granularidad": "modelo",
+   "params": {
+    "P_max_bar": 10,
+    "Q_max_m3_h": 20.441,
+    "notas": "Mezclador estatico en linea de la serie SMP, cuerpo PVC Schedule 80 (hay variante CPVC), elementos excentricos, extremos bridados. VOLUMEN NO PUBLICADO: Storm Mixer publica diametro nominal, numero de elementos, longitud, rango de caudal y presion admisible, nunca un holdup en m3 -> otra_magnitud, el mismo criterio que las entradas Koflo. P_max_bar = 10 de 'PRESSURE RATING: 150 psi (10 bar) at 100 F (38 C)', valida para toda la serie. OJO CON ESA TEMPERATURA: los 38 C son la CONDICION DE REFERENCIA del rating de presion, no un techo termico. El folleto no publica temperatura maxima de servicio y el PVC/CPVC pierde presion admisible al calentarse, asi que T_max_C se OMITE en vez de cargar 38: inventar el techo o la curva de derating seria peor que no declararlo. Q_max_m3_h = extremo superior del 'Flow Range Minimum/Maximum' de la tabla, para el tamano y numero de elementos del modelo. IMPORTANTE, es un caudal RECOMENDADO, no un limite mecanico: el folleto define ese rango como el que 'asegura una caida de presion maxima de 5 psi para quimicos en base agua y buena mezcla'. Conversion US gal -> m3: 1 gpm = 0.2271247 m3/h. El caudal recomendado BAJA al agregar elementos (mas mezcla, mas caida de presion): el mismo 2 in da 90 gpm con 4 elementos y 54 con 8. Por eso el modelo incluye el numero de elementos en el codigo — no es un accesorio, es parte del tamano. Nomenclatura del folleto: SMP + diametro + configuracion de extremos + numero de elementos + tipo de elemento (ejemplo impreso: SMP1F4S). Fila 2 in / 4 elementos: caudal 18 a 90 gpm -> Q_max_m3_h = 90 x 0.2271247 = 20.441. Longitud del mezclador 7 in; puerto de inyeccion opcional NPT de 1/2 in. El mismo cuerpo de 2 in con 8 elementos baja a 54 gpm recomendados."
+   },
+   "fuente": "https://stormmix.com/images/brochures/pvc_static_mixer.pdf",
+   "fecha_consulta": "2026-07-25"
+  },
+  {
+   "marca": "Storm Mixer",
+   "modelo": "SMP4F4S (PVC Sch 80, 4 in, bridado, 4 elementos)",
+   "eq_type": "Mixer — static",
+   "S_no_publicado": "otra_magnitud",
+   "granularidad": "modelo",
+   "params": {
+    "P_max_bar": 10,
+    "Q_max_m3_h": 79.948,
+    "notas": "Mezclador estatico en linea de la serie SMP, cuerpo PVC Schedule 80 (hay variante CPVC), elementos excentricos, extremos bridados. VOLUMEN NO PUBLICADO: Storm Mixer publica diametro nominal, numero de elementos, longitud, rango de caudal y presion admisible, nunca un holdup en m3 -> otra_magnitud, el mismo criterio que las entradas Koflo. P_max_bar = 10 de 'PRESSURE RATING: 150 psi (10 bar) at 100 F (38 C)', valida para toda la serie. OJO CON ESA TEMPERATURA: los 38 C son la CONDICION DE REFERENCIA del rating de presion, no un techo termico. El folleto no publica temperatura maxima de servicio y el PVC/CPVC pierde presion admisible al calentarse, asi que T_max_C se OMITE en vez de cargar 38: inventar el techo o la curva de derating seria peor que no declararlo. Q_max_m3_h = extremo superior del 'Flow Range Minimum/Maximum' de la tabla, para el tamano y numero de elementos del modelo. IMPORTANTE, es un caudal RECOMENDADO, no un limite mecanico: el folleto define ese rango como el que 'asegura una caida de presion maxima de 5 psi para quimicos en base agua y buena mezcla'. Conversion US gal -> m3: 1 gpm = 0.2271247 m3/h. El caudal recomendado BAJA al agregar elementos (mas mezcla, mas caida de presion): el mismo 2 in da 90 gpm con 4 elementos y 54 con 8. Por eso el modelo incluye el numero de elementos en el codigo — no es un accesorio, es parte del tamano. Nomenclatura del folleto: SMP + diametro + configuracion de extremos + numero de elementos + tipo de elemento (ejemplo impreso: SMP1F4S). Fila 4 in / 4 elementos: caudal 71 a 352 gpm -> Q_max_m3_h = 352 x 0.2271247 = 79.948. Longitud del mezclador 11 in; puerto de inyeccion opcional NPT de 3/4 in."
+   },
+   "fuente": "https://stormmix.com/images/brochures/pvc_static_mixer.pdf",
+   "fecha_consulta": "2026-07-25"
   }
  ]
 }
