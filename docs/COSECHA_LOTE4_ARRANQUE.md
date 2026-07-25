@@ -56,7 +56,18 @@ Prioridad sugerida (mayor impacto pedagógico primero):
 ## Flujo por lote
 
 1. Cosechar N entradas nuevas, appendearlas al array `equipos`.
-2. `python -m unittest tests.test_equipos_comerciales -v` → verde.
+2. `python -m unittest tests.test_equipos_comerciales
+   tests.test_equipos_a_pedido tests.test_datasheet
+   tests.test_ficha_ejemplos_reales -v` → verde.
+   **Los dos últimos NO son opcionales.** El lote 4 los omitió y la
+   cosecha rompió 6 tests sin tocar una línea de motor: retirar
+   `NETZSCH|NEMO L.Cap` y abrir `Reactor — CSTR (agitado)` invalidó
+   fixtures que nombraban esas entradas.  Hoy esos fixtures se resuelven
+   en vivo contra el catálogo (`_tipo_sin_catalogo`, `_entrada_familia`,
+   `_caso_familia`), pero el gate sigue siendo el que avisa.
+   Correrlos **con PySide6 real** (`QT_QPA_PLATFORM=offscreen`): sin Qt,
+   los tests de la sección Ficha y del diálogo se SALTAN y una rotura de
+   UI pasa inadvertida — así se colaron 2 de los 6.
 3. `python tools/preview_catalogo.py` → censo + qué ejemplos ganan
    selector (helper, no toca nada).
 4. `python gate_examples.py` → 64/64 (el catálogo no afecta física, pero

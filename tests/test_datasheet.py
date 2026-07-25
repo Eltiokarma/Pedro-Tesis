@@ -15,6 +15,7 @@ if _PARENT not in sys.path:
     sys.path.insert(0, _PARENT)
 
 import datasheet as ds
+import equipment_costs as ec
 from flowsheet_model import Block, Stream, Flowsheet
 
 # Importar el PySide6 REAL en tiempo de colección: export_examples.
@@ -47,6 +48,38 @@ def _fs_rotary(S=12.0, equipo="", eq_type="Compressor — rotary"):
                 pressure_bar=7.0, phase="gas")
     fs.streams = {10: si, 11: so}
     return fs, b
+
+
+def _tipo_sin_catalogo():
+    """Un eq_type SIN catálogo comercial, resuelto en vivo.
+
+    El fixture hardcodeado se pudre con cada cosecha: estos tests usaban
+    'Reactor — CSTR (agitado)' hasta que la cosecha lo abrió (+6 modelos
+    Pfaudler/De Dietrich) y pasaron a rojo sin que el motor cambiara.  Se
+    prefiere un candidato legible y, si el catálogo también lo abre, se
+    cae a cualquier otro tipo sin entradas."""
+    for t in ("Reactor — PFR (tubular)", "Vessel — vertical",
+              "Storage tank — cone roof"):
+        if not ds.entradas_para(t):
+            return t
+    for t in sorted(ec.EQUIPMENT_DATA):
+        if not ds.entradas_para(t):
+            return t
+    raise unittest.SkipTest("todo eq_type tiene catálogo comercial")
+
+
+def _entrada_familia():
+    """(eq_type, 'marca|modelo') de una entrada granularidad=familia.
+
+    Mismo motivo que arriba: la entrada concreta cambia cuando la cosecha
+    sustituye envolventes de familia por envolventes por tamaño (la deuda
+    que el brief pide cerrar).  None si ya no queda ninguna — el estado
+    'debil_familia' deja de ser testeable y el test se salta."""
+    for t in sorted(ec.EQUIPMENT_DATA):
+        for e in ds.entradas_para(t):
+            if e.get("granularidad") == "familia":
+                return t, ds.clave_de(e)
+    return None
 
 
 class TestFichaTodosLosEjemplos(unittest.TestCase):
@@ -98,7 +131,7 @@ class TestVerificacion(unittest.TestCase):
 
     def test_no_aplica(self):
         fs = Flowsheet()
-        b = Block(id=1, name="R-1", eq_type="Reactor — CSTR (agitado)", S=2.0)
+        b = Block(id=1, name="R-1", eq_type=_tipo_sin_catalogo(), S=2.0)
         fs.blocks = {1: b}; fs.streams = {}
         v = ds.verificacion(b, fs)
         self.assertEqual(v["estado"], "no_aplica")
@@ -170,11 +203,15 @@ class TestVerificacion(unittest.TestCase):
         self.assertFalse(v["apto"])
 
     def test_debil_familia_nunca_afirma(self):
-        """5f.5: NETZSCH — apto SIEMPRE None (nunca tilde verde), checks
-        marcados FAMILIA."""
+        """5f.5: envolvente de FAMILIA — apto SIEMPRE None (nunca tilde
+        verde), checks marcados FAMILIA."""
+        caso = _entrada_familia()
+        if caso is None:                                  # pragma: no cover
+            self.skipTest("el catálogo ya no tiene entradas de familia")
+        eq_type, equipo = caso
         fs = Flowsheet()
-        b = Block(id=1, name="P-1", eq_type="Pump — positive displacement",
-                  S=0.0, equipo_comercial="NETZSCH|NEMO L.Cap")
+        b = Block(id=1, name="P-1", eq_type=eq_type,
+                  S=0.0, equipo_comercial=equipo)
         fs.blocks = {1: b}
         si = Stream(id=10, name="in", src=0, dst=1, mass_flow=30000.0,
                     composition={"water": 1.0}, main_component="water",
@@ -216,15 +253,24 @@ class TestSeccionFichaQt(unittest.TestCase):
         return p
 
     def test_sin_catalogo_afirmacion_tranquila(self):
+        """5f.1 + cosecha 2026-07: sin catálogo NO va selector, y en su
+        lugar va el callout con la RAZÓN de ingeniería (título + qué fija
+        el tamaño), que reemplazó al viejo texto 'Ingeniería a pedido'."""
         from PySide6.QtWidgets import QComboBox, QLabel
+        eq_type = _tipo_sin_catalogo()
         fs = Flowsheet()
-        b = Block(id=1, name="R-1", eq_type="Reactor — CSTR (agitado)", S=2.0)
+        b = Block(id=1, name="R-1", eq_type=eq_type, S=2.0)
         fs.blocks = {1: b}; fs.streams = {}
         sect = self._panel(fs, b)._section_ficha(b, b.eq_type)
         self.assertFalse(sect.findChildren(QComboBox),
                          "5f.1: sin catálogo NO va selector")
         textos = " ".join(l.text() for l in sect.findChildren(QLabel))
-        self.assertIn("Ingeniería a pedido", textos)
+        motivo = ds.motivo_a_pedido(eq_type)
+        self.assertIn(motivo["titulo"], textos)
+        razones = motivo.get("que_fija_el_tamano") or []
+        self.assertTrue(razones, f"{eq_type}: motivo sin razones")
+        for razon in razones:
+            self.assertIn(razon, textos)
 
     def test_ficha_completa_para_todo_tipo(self):
         """La ficha renderiza contenido (condiciones, diseño, materiales,
@@ -233,9 +279,8 @@ class TestSeccionFichaQt(unittest.TestCase):
         todos los ejemplos'."""
         from PySide6.QtWidgets import QLabel
         fs = Flowsheet()
-        b = Block(id=1, name="R-1", eq_type="Reactor — CSTR (agitado)",
-                  S=2.0, duty=150.0, T_op_K=473.15, P_op_bar=5.0,
-                  reactor_mode="cstr")
+        b = Block(id=1, name="R-1", eq_type=_tipo_sin_catalogo(),
+                  S=2.0, duty=150.0, T_op_K=473.15, P_op_bar=5.0)
         fs.blocks = {1: b}
         fs.streams = {
             10: Stream(id=10, name="in", src=0, dst=1, mass_flow=9000.0,
@@ -300,8 +345,7 @@ class TestDialogoEquipoComercialQt(unittest.TestCase):
 
     def test_dialogo_sin_catalogo_oculta_grupo(self):
         import flowsheet_qt as fq
-        b = Block(id=1, name="R-1", eq_type="Reactor — CSTR (agitado)",
-                  S=2.0)
+        b = Block(id=1, name="R-1", eq_type=_tipo_sin_catalogo(), S=2.0)
         dlg = fq.BlockEditDialog(None, b)
         self.assertTrue(dlg.gb_comercial.isHidden(),
                         "ingeniería a pedido: el grupo no aparece")
