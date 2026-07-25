@@ -1,5 +1,27 @@
 # Arranque — cosecha lote 4 (sesión con red abierta)
 
+> **ESTADO 2026-07-25 — META 6× CUMPLIDA.** 173 entradas, **22 de 22 tipos
+> en verde** (≥6 opciones y ≥2 marcas). Lo que sigue vale como registro del
+> método y de las reglas duras, no como lista de pendientes. Lo único que
+> queda abierto es la deuda conocida de `Pump — positive displacement`: dos
+> entradas NETZSCH en `granularidad=familia`, porque el fabricante no
+> publica máximos por tamaño en web (viven en su software de selección).
+>
+> Tres tipos NO se cerraron cosechando más de lo mismo, sino entendiendo
+> por qué el mercado no publica lo que se buscaba — vale la pena leerlo
+> antes de reabrirlos:
+> - **`Mixer — static`**: StaMixCo publica una tabla por modelo, pero la
+>   columna es *burst pressure* (presión de rotura); cargarla como
+>   `P_max_bar` afirmaría que el equipo opera donde revienta. Statiflo y
+>   Kenics dimensionan contra el diámetro de tubería del proyecto. Se cerró
+>   con Storm Mixer, que sí publica presión de trabajo por serie.
+> - **`Heat exch. — floating head`**: ningún fabricante publica m² por
+>   modelo — el área la fija el diseño térmico del servicio. Se cerró con
+>   las series P de Funke por envolvente P/T, no por área.
+> - **`Centrifuge — decanter`**: Alfa Laval publica diámetro y velocidad de
+>   tambor pero NO caudal (Foodec), y Andritz solo el rango de la familia
+>   D2–D12. Se cerró con Centrisys, que publica caudal por modelo.
+
 **Contexto para la sesión nueva:** este documento es el punto de partida
 de la cosecha del catálogo comercial "Plan 6×". La política de red del
 environment ya se abrió, así que ESTA sesión SÍ puede leer los PDFs de
