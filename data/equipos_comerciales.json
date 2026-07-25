@@ -2099,6 +2099,111 @@
    },
    "fuente": "https://www.ddpsinc.com/hubfs/glass-lined-vessels-brochure-2023.pdf",
    "fecha_consulta": "2026-07-24"
+  },
+  {
+   "marca": "Spirax Sarco",
+   "modelo": "SV604 DN25 x DN40 (PN40 x PN16)",
+   "eq_type": "Valve — relief",
+   "S_no_publicado": "otra_magnitud",
+   "granularidad": "modelo",
+   "params": {
+    "P_max_bar": 29,
+    "T_max_C": 400,
+    "material": "CS",
+    "notas": "Valvula de seguridad de carrera completa (full lift) bridada, cuerpo de acero al carbono, entrada PN40 / salida PN16 (modelo SV604 de la gama SV60). CAUDAL NO PUBLICADO en la S_unit del tipo: Spirax Sarco publica presion de tarado, tamano y coeficientes de descarga certificados, nunca un caudal en m3/h -> otra_magnitud (mismo criterio que las entradas LESER). Tabla 'Pressure/temperature limits - SV604', bloque 'Body design conditions PN40' del TI-S13-27 CMGT Issue 18, pag. 2. CRITERIO DE P_max_bar: esa tabla da TRES maximos de tarado por tamano segun el fluido (vapor saturado / aire / agua). Se carga el de VAPOR SATURADO por ser el mas restrictivo: la verificacion del modo seleccion compara presiones sin saber el fluido, y tomar el de aire afirmaria de mas en un servicio de vapor. Comunes a todos los tamanos: tarado minimo 0.2 bar g, T -10 a +400 C, sobrepresion 5% en vapor y 10% en liquidos y gas, contrapresion limite 10% del tarado, prueba hidraulica en frio 60 bar g. Presion y temperatura son ENVOLVENTE, no un punto simultaneo. Fila DN25 x DN40: vapor saturado 29 bar g, aire 40 bar g, agua 40 bar g -> P_max_bar = 29."
+   },
+   "fuente": "https://content.spiraxsarco.com/-/media/spiraxsarco/international/documents/en/ti/sv60-ti-s13-27-en.ashx?rev=1ab3092599234870bf80d9a5f99a9add",
+   "fecha_consulta": "2026-07-25"
+  },
+  {
+   "marca": "Spirax Sarco",
+   "modelo": "SV604 DN50 x DN80 (PN40 x PN16)",
+   "eq_type": "Valve — relief",
+   "S_no_publicado": "otra_magnitud",
+   "granularidad": "modelo",
+   "params": {
+    "P_max_bar": 29,
+    "T_max_C": 400,
+    "material": "CS",
+    "notas": "Valvula de seguridad de carrera completa (full lift) bridada, cuerpo de acero al carbono, entrada PN40 / salida PN16 (modelo SV604 de la gama SV60). CAUDAL NO PUBLICADO en la S_unit del tipo: Spirax Sarco publica presion de tarado, tamano y coeficientes de descarga certificados, nunca un caudal en m3/h -> otra_magnitud (mismo criterio que las entradas LESER). Tabla 'Pressure/temperature limits - SV604', bloque 'Body design conditions PN40' del TI-S13-27 CMGT Issue 18, pag. 2. CRITERIO DE P_max_bar: esa tabla da TRES maximos de tarado por tamano segun el fluido (vapor saturado / aire / agua). Se carga el de VAPOR SATURADO por ser el mas restrictivo: la verificacion del modo seleccion compara presiones sin saber el fluido, y tomar el de aire afirmaria de mas en un servicio de vapor. Comunes a todos los tamanos: tarado minimo 0.2 bar g, T -10 a +400 C, sobrepresion 5% en vapor y 10% en liquidos y gas, contrapresion limite 10% del tarado, prueba hidraulica en frio 60 bar g. Presion y temperatura son ENVOLVENTE, no un punto simultaneo. Fila DN50 x DN80: vapor saturado 29 bar g, aire 40 bar g, agua 40 bar g -> P_max_bar = 29."
+   },
+   "fuente": "https://content.spiraxsarco.com/-/media/spiraxsarco/international/documents/en/ti/sv60-ti-s13-27-en.ashx?rev=1ab3092599234870bf80d9a5f99a9add",
+   "fecha_consulta": "2026-07-25"
+  },
+  {
+   "marca": "Spirax Sarco",
+   "modelo": "SV604 DN100 x DN150 (PN40 x PN16)",
+   "eq_type": "Valve — relief",
+   "S_no_publicado": "otra_magnitud",
+   "granularidad": "modelo",
+   "params": {
+    "P_max_bar": 25,
+    "T_max_C": 400,
+    "material": "CS",
+    "notas": "Valvula de seguridad de carrera completa (full lift) bridada, cuerpo de acero al carbono, entrada PN40 / salida PN16 (modelo SV604 de la gama SV60). CAUDAL NO PUBLICADO en la S_unit del tipo: Spirax Sarco publica presion de tarado, tamano y coeficientes de descarga certificados, nunca un caudal en m3/h -> otra_magnitud (mismo criterio que las entradas LESER). Tabla 'Pressure/temperature limits - SV604', bloque 'Body design conditions PN40' del TI-S13-27 CMGT Issue 18, pag. 2. CRITERIO DE P_max_bar: esa tabla da TRES maximos de tarado por tamano segun el fluido (vapor saturado / aire / agua). Se carga el de VAPOR SATURADO por ser el mas restrictivo: la verificacion del modo seleccion compara presiones sin saber el fluido, y tomar el de aire afirmaria de mas en un servicio de vapor. Comunes a todos los tamanos: tarado minimo 0.2 bar g, T -10 a +400 C, sobrepresion 5% en vapor y 10% en liquidos y gas, contrapresion limite 10% del tarado, prueba hidraulica en frio 60 bar g. Presion y temperatura son ENVOLVENTE, no un punto simultaneo. Fila DN100 x DN150: los tres fluidos coinciden en 25 bar g (vapor, aire y agua), asi que aqui no hay eleccion que hacer -> P_max_bar = 25."
+   },
+   "fuente": "https://content.spiraxsarco.com/-/media/spiraxsarco/international/documents/en/ti/sv60-ti-s13-27-en.ashx?rev=1ab3092599234870bf80d9a5f99a9add",
+   "fecha_consulta": "2026-07-25"
+  },
+  {
+   "marca": "Spirax Sarco",
+   "modelo": "SV604 DN150 x DN250 (PN40 x PN16)",
+   "eq_type": "Valve — relief",
+   "S_no_publicado": "otra_magnitud",
+   "granularidad": "modelo",
+   "params": {
+    "P_max_bar": 16,
+    "T_max_C": 400,
+    "material": "CS",
+    "notas": "Valvula de seguridad de carrera completa (full lift) bridada, cuerpo de acero al carbono, entrada PN40 / salida PN16 (modelo SV604 de la gama SV60). CAUDAL NO PUBLICADO en la S_unit del tipo: Spirax Sarco publica presion de tarado, tamano y coeficientes de descarga certificados, nunca un caudal en m3/h -> otra_magnitud (mismo criterio que las entradas LESER). Tabla 'Pressure/temperature limits - SV604', bloque 'Body design conditions PN40' del TI-S13-27 CMGT Issue 18, pag. 2. CRITERIO DE P_max_bar: esa tabla da TRES maximos de tarado por tamano segun el fluido (vapor saturado / aire / agua). Se carga el de VAPOR SATURADO por ser el mas restrictivo: la verificacion del modo seleccion compara presiones sin saber el fluido, y tomar el de aire afirmaria de mas en un servicio de vapor. Comunes a todos los tamanos: tarado minimo 0.2 bar g, T -10 a +400 C, sobrepresion 5% en vapor y 10% en liquidos y gas, contrapresion limite 10% del tarado, prueba hidraulica en frio 60 bar g. Presion y temperatura son ENVOLVENTE, no un punto simultaneo. Fila DN150 x DN250 (el tamano mayor de la gama): los tres fluidos coinciden en 16 bar g -> P_max_bar = 16. El tarado maximo BAJA con el tamano (29 bar hasta DN80, 25 en DN100, 20 en DN125, 16 en DN150): a mayor area de orificio, menos presion aguanta el mismo resorte."
+   },
+   "fuente": "https://content.spiraxsarco.com/-/media/spiraxsarco/international/documents/en/ti/sv60-ti-s13-27-en.ashx?rev=1ab3092599234870bf80d9a5f99a9add",
+   "fecha_consulta": "2026-07-25"
+  },
+  {
+   "marca": "ARI-Armaturen",
+   "modelo": "ARI-STEVI 450 fig. 35.450 DN25 PN40 (Kvs 10)",
+   "eq_type": "Valve — 3-way",
+   "S_no_publicado": "otra_magnitud",
+   "granularidad": "modelo",
+   "params": {
+    "P_max_bar": 40,
+    "T_max_C": 450,
+    "material": "CS",
+    "notas": "Valvula de control de TRES VIAS (forma mezcladora/distribuidora), ARI-STEVI 450/451, figura 35.450: cuerpo de acero moldeado 1.0619+N, PN40. El fabricante publica Kvs (m3/h a 1 bar de caida), que NO es el caudal en m3/h del S_unit del tipo -> otra_magnitud (mismo criterio que las Samson de 3 vias y las de globo). Datos de la hoja ARI-STEVI 450/451 (DN15-150), edicion 02/25: tabla de Kvs y asientos (pag. 5-6) y tabla 'Pressure-temperature-ratings acc. to manufacturers standard' (pag. 2). P_max_bar = 40 = rating del cuerpo a -10..120 C; el mismo cuerpo baja a 35 bar a 200 C, 28 a 300 C, 23.8 a 400 C y 13.1 a 450 C. T_max_C = 450 es el ultimo escalon impreso para 1.0619+N PN40 (a 13.1 bar). Presion y temperatura son ENVOLVENTE, no un punto simultaneo: la admisible A TEMPERATURA sale de esa tabla. Caracteristica lineal/lineal, fuga clase IV segun DIN EN 60534-4. Ojo, magnitud distinta: la 'max. diff. pressure' de la tabla de Kvs es la caida admisible a traves del asiento con el actuador DP32, no el rating del cuerpo. DN25 en funcion de MEZCLA: Kvs estandar 10 m3/h (reducido 6.3), asientos A/B 27/27 mm, carrera 20 mm, caida admisible 40 bar."
+   },
+   "fuente": "https://www.ari-armaturen.com/_appl/files_tb/files/450001-2.pdf",
+   "fecha_consulta": "2026-07-25"
+  },
+  {
+   "marca": "ARI-Armaturen",
+   "modelo": "ARI-STEVI 450 fig. 35.450 DN50 PN40 (Kvs 40)",
+   "eq_type": "Valve — 3-way",
+   "S_no_publicado": "otra_magnitud",
+   "granularidad": "modelo",
+   "params": {
+    "P_max_bar": 40,
+    "T_max_C": 450,
+    "material": "CS",
+    "notas": "Valvula de control de TRES VIAS (forma mezcladora/distribuidora), ARI-STEVI 450/451, figura 35.450: cuerpo de acero moldeado 1.0619+N, PN40. El fabricante publica Kvs (m3/h a 1 bar de caida), que NO es el caudal en m3/h del S_unit del tipo -> otra_magnitud (mismo criterio que las Samson de 3 vias y las de globo). Datos de la hoja ARI-STEVI 450/451 (DN15-150), edicion 02/25: tabla de Kvs y asientos (pag. 5-6) y tabla 'Pressure-temperature-ratings acc. to manufacturers standard' (pag. 2). P_max_bar = 40 = rating del cuerpo a -10..120 C; el mismo cuerpo baja a 35 bar a 200 C, 28 a 300 C, 23.8 a 400 C y 13.1 a 450 C. T_max_C = 450 es el ultimo escalon impreso para 1.0619+N PN40 (a 13.1 bar). Presion y temperatura son ENVOLVENTE, no un punto simultaneo: la admisible A TEMPERATURA sale de esa tabla. Caracteristica lineal/lineal, fuga clase IV segun DIN EN 60534-4. Ojo, magnitud distinta: la 'max. diff. pressure' de la tabla de Kvs es la caida admisible a traves del asiento con el actuador DP32, no el rating del cuerpo. DN50 en funcion de MEZCLA: Kvs estandar 40 m3/h (reducido 25), asientos A/B 51/50 mm, carrera 20 mm, caida admisible 30 bar."
+   },
+   "fuente": "https://www.ari-armaturen.com/_appl/files_tb/files/450001-2.pdf",
+   "fecha_consulta": "2026-07-25"
+  },
+  {
+   "marca": "ARI-Armaturen",
+   "modelo": "ARI-STEVI 450 fig. 35.450 DN100 PN40 (Kvs 160)",
+   "eq_type": "Valve — 3-way",
+   "S_no_publicado": "otra_magnitud",
+   "granularidad": "modelo",
+   "params": {
+    "P_max_bar": 40,
+    "T_max_C": 450,
+    "material": "CS",
+    "notas": "Valvula de control de TRES VIAS (forma mezcladora/distribuidora), ARI-STEVI 450/451, figura 35.450: cuerpo de acero moldeado 1.0619+N, PN40. El fabricante publica Kvs (m3/h a 1 bar de caida), que NO es el caudal en m3/h del S_unit del tipo -> otra_magnitud (mismo criterio que las Samson de 3 vias y las de globo). Datos de la hoja ARI-STEVI 450/451 (DN15-150), edicion 02/25: tabla de Kvs y asientos (pag. 5-6) y tabla 'Pressure-temperature-ratings acc. to manufacturers standard' (pag. 2). P_max_bar = 40 = rating del cuerpo a -10..120 C; el mismo cuerpo baja a 35 bar a 200 C, 28 a 300 C, 23.8 a 400 C y 13.1 a 450 C. T_max_C = 450 es el ultimo escalon impreso para 1.0619+N PN40 (a 13.1 bar). Presion y temperatura son ENVOLVENTE, no un punto simultaneo: la admisible A TEMPERATURA sale de esa tabla. Caracteristica lineal/lineal, fuga clase IV segun DIN EN 60534-4. Ojo, magnitud distinta: la 'max. diff. pressure' de la tabla de Kvs es la caida admisible a traves del asiento con el actuador DP32, no el rating del cuerpo. DN100 en funcion de MEZCLA: Kvs estandar 160 m3/h (reducido 100), asientos A/B 101/95 mm, carrera 30 mm, caida admisible 25 bar. En funcion DISTRIBUIDORA el mismo DN100 da Kvs 95, mas bajo: el Kvs depende de la funcion, no solo del tamano."
+   },
+   "fuente": "https://www.ari-armaturen.com/_appl/files_tb/files/450001-2.pdf",
+   "fecha_consulta": "2026-07-25"
   }
  ]
 }
