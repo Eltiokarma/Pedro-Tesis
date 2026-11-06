@@ -2449,11 +2449,17 @@ class BlockInspectorPanel(QWidget):
         t.setStyleSheet(f"color:{color};")
         lay.addWidget(t)
 
+        # Requerido/instalado y los checks llegan en unidades canónicas
+        # (kW, bar, °C): se pintan en el sistema activo, igual que la
+        # ficha de abajo y que el mensaje que arma datasheet.py — si no,
+        # la misma caja mezclaba MMBtu/h con kW (auditoría UI 3 §4.1).
+        # Magnitudes fuera del sistema (m², m³/h, m) salen tal cual.
         if estado == "escalar" and v.get("utilizacion") is not None:
             self._ficha_row(lay, "Requerido",
-                            f"{v['S_requerido']:g} {v['S_unit']}")
+                            funits.fmt_canonica(v["S_requerido"],
+                                                v["S_unit"]))
             self._ficha_row(lay, "Instalado",
-                            f"{v['S_modelo']:g} {v['S_unit']}")
+                            funits.fmt_canonica(v["S_modelo"], v["S_unit"]))
             self._ficha_row(lay, "Utilización",
                             f"{v['utilizacion'] * 100:.0f}%")
         for c in v.get("checks", []):
@@ -2463,10 +2469,11 @@ class BlockInspectorPanel(QWidget):
             # pasó («✗ Presión 30 ≤ 16 bar», auditoría UI 3 §4.1).
             op = "≤" if c["ok"] else ">"
             tag = "  · FAMILIA" if c.get("familia") else ""
+            req, _u = funits.partes_canonica(c["requerido"], c["unidad"])
             self._ficha_row(
                 lay, f"{marca} {c['label']}",
-                f"{c['requerido']:g} {op} {c['limite']:g} "
-                f"{c['unidad']}{tag}",
+                f"{req} {op} "
+                f"{funits.fmt_canonica(c['limite'], c['unidad'])}{tag}",
                 mute=c.get("familia", False))
         if v.get("mensaje"):
             m = QLabel(v["mensaje"]); m.setFont(qfont(FONT_HINT))

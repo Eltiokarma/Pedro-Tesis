@@ -293,4 +293,52 @@ def test_check_fallido_no_afirma_la_desigualdad(app, sistema_restaurado):
     txt = _textos_card(card)
     assert "30 > 16 bar" in txt, txt
     assert not any("30 ≤ 16" in t for t in txt)
-    assert "400 ≤ 440 °C" in txt, txt     # el que pasa sigue con ≤
+    assert "400.0 ≤ 440.0 °C" in txt, txt  # el que pasa sigue con ≤
+
+
+# ─────────────────── el veredicto habla el sistema (MEDIA) ───────────────────
+
+def test_veredicto_en_el_sistema_de_unidades(app, sistema_restaurado):
+    """Requerido/instalado y los checks de P y T salían en kW/bar/°C
+    fijos, al lado de una ficha que ya decía MMBtu/h, psi y °F."""
+    from block_inspector import BlockInspectorPanel
+    funits = sistema_restaurado
+    funits.set_system("Imperial (US)")
+    card = BlockInspectorPanel()._ficha_veredicto_card(_v_escalar())
+    txt = _textos_card(card)
+    assert funits.fmt_canonica(686.95, "kW") in txt, txt
+    assert funits.fmt_canonica(4850.0, "kW") in txt, txt
+    assert "435 > 232 psi" in txt, txt           # 30 > 16 bar
+    assert "752.0 ≤ 824.0 °F" in txt, txt        # 400 ≤ 440 °C
+    assert not any(t.endswith((" kW", " bar", " °C")) for t in txt), txt
+
+
+def test_mensaje_del_veredicto_en_el_sistema(app, turbina,
+                                             sistema_restaurado):
+    """«El proceso exige 686.95 kW y el modelo instala 150 kW» venía de
+    datasheet.py en kW fijos: la tarjeta convertida y el mensaje crudo
+    mezclaban unidades en la misma caja.  Los dos van por fmt_canonica."""
+    import datasheet as ds
+    funits = sistema_restaurado
+    fs, b = turbina
+    s_req = float(b.S)
+    chico = _clave(b.eq_type, lambda e: "S" in e and e["S"] < s_req)
+    b.equipo_comercial = chico
+    try:
+        funits.set_system("Imperial (US)")
+        v = ds.verificacion(b, fs)
+        assert v["apto"] is False
+        assert "kW" not in v["mensaje"], v["mensaje"]
+        assert funits.fmt_canonica(v["S_requerido"], "kW") in v["mensaje"]
+        assert funits.fmt_canonica(v["S_modelo"], "kW") in v["mensaje"]
+        # y en el panel, la caja entera habla una sola unidad de energía
+        panel = _panel_ficha(app, fs, b)
+        from PySide6.QtWidgets import QLabel
+        txt = [l.text() for l in _seccion(panel).findChildren(QLabel)]
+        assert not any(" kW" in t for t in txt), \
+            [t for t in txt if " kW" in t]
+        cb = panel._extras["equipo_comercial"]
+        assert " kW" not in cb.currentText(), cb.currentText()
+        panel.close()
+    finally:
+        b.equipo_comercial = ""

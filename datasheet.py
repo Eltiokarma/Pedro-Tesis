@@ -34,6 +34,7 @@ import os
 from typing import List, Optional
 
 import equipment_costs as ec
+import flowsheet_units as funits
 
 _CATALOGO_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)),
                               "data", "equipos_comerciales.json")
@@ -125,7 +126,9 @@ def texto_entrada(entrada: dict, s_unit: str = "") -> str:
     mismo."""
     cabeza = f"{entrada.get('marca', '')} · {entrada.get('modelo', '')}"
     if "S" in entrada:
-        return f"{cabeza} — {float(entrada['S']):g} {s_unit}".rstrip()
+        # El S en el sistema de unidades activo, como el veredicto que
+        # se pinta debajo del selector.
+        return f"{cabeza} — {funits.fmt_canonica(entrada['S'], s_unit)}"
     sufijo = ("envolvente de familia"
               if entrada.get("granularidad", "") == "familia"
               else "envolvente del modelo")
@@ -304,8 +307,14 @@ def verificacion(block, fs) -> dict:
             apto_s = s_req <= s_mod
             base["apto"] = apto_s and all(c["ok"] for c in checks)
             if not apto_s:
-                base["mensaje"] = (f"El proceso exige {s_req:g} {s_unit} y "
-                                   f"el modelo instala {s_mod:g} {s_unit}.")
+                # En el sistema activo, como la tarjeta que lo muestra:
+                # convertir una y no el otro mezcla unidades en la misma
+                # caja (auditoría UI 3 §4.1).
+                base["mensaje"] = (
+                    f"El proceso exige "
+                    f"{funits.fmt_canonica(base['S_requerido'], s_unit)} y "
+                    f"el modelo instala "
+                    f"{funits.fmt_canonica(s_mod, s_unit)}.")
             elif base["utilizacion"] < 0.35:
                 pct = (1.0 - base["utilizacion"]) * 100.0
                 base["mensaje"] = (f"Sobredimensionado: {pct:.0f}% de la "
