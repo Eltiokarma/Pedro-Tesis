@@ -21,7 +21,7 @@ Los recientes se guardan en ~/.pedro_tesis_recent.json.
 import json
 import os
 
-from PySide6.QtCore import Qt
+from PySide6.QtCore import Qt, QSize
 from PySide6.QtGui import QFont
 from PySide6.QtWidgets import (
     QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout,
@@ -41,6 +41,12 @@ RECENT_FILE = os.path.expanduser("~/.pedro_tesis_recent.json")
 MAX_RECENT  = 6          # el panel muestra hasta 6; persisten 8
 MAX_RECENT_SAVE = 8
 FEATURED_EXAMPLES = ("methanol", "hda", "distillation")
+# Tope del bloque de contenido de la columna derecha.  Alto: el útil de la
+# composición de diseño (580 menos márgenes 32+20), así el hueco entre
+# Recientes y Ejemplos nunca supera al de diseño.  Ancho: lo justo para
+# que los tres ejemplos destacados entren en una línea cada uno.
+CONTENT_MAX_W = 880
+CONTENT_MAX_H = 580 - 32 - 20
 
 
 def _load_recent():
@@ -72,6 +78,44 @@ def _here():
 def launch_flowsheet_qt(json_path=None):
     """Compat: avisa al caller que cierre welcome y abra el editor."""
     return ("qt", json_path)
+
+
+class _ExampleCard(QPushButton):
+    """Tarjeta de ejemplo cuyo título hace word-wrap.
+
+    Un QPushButton con texto propio no baja de su ancho de texto: con los
+    tres destacados en fila fijaba el mínimo de la ventana en ~1035 px, y
+    la welcome no entraba en su tamaño de diseño (760×580).  El título va
+    en un QLabel con word-wrap y la tarjeta crece en alto si hace falta.
+    """
+    MIN_H = 56
+
+    def __init__(self, nombre: str):
+        super().__init__()
+        self.label = QLabel(nombre)
+        self.label.setWordWrap(True)
+        self.label.setFont(qfont(FONT_HINT))
+        self.label.setAttribute(Qt.WA_TransparentForMouseEvents)
+        lay = QVBoxLayout(self)
+        lay.setContentsMargins(9, 6, 9, 6)   # = padding 8 + borde 1
+        lay.addWidget(self.label)
+        self.setMinimumHeight(self.MIN_H)
+        sp = QSizePolicy(QSizePolicy.Expanding, QSizePolicy.Preferred)
+        sp.setHeightForWidth(True)
+        self.setSizePolicy(sp)
+
+    def sizeHint(self):
+        return self.layout().totalSizeHint().expandedTo(
+            QSize(0, self.MIN_H))
+
+    def minimumSizeHint(self):
+        return QSize(self.layout().totalMinimumSize().width(), self.MIN_H)
+
+    def hasHeightForWidth(self):
+        return True
+
+    def heightForWidth(self, w):
+        return max(self.MIN_H, self.layout().totalHeightForWidth(w))
 
 
 class WelcomeWindow(QMainWindow):
@@ -165,9 +209,32 @@ class WelcomeWindow(QMainWindow):
 
     # ── columna derecha: recientes + ejemplos ──────────────────
     def _build_right_column(self) -> QWidget:
+        # Auditoría UI 3 §3.1: la composición se diseñó para 760×580.  En
+        # ventana grande el stretch entre Recientes y Ejemplos se comía
+        # todo el alto extra (banda vacía de ~600 px a 1400×900).  Ahora
+        # el contenido vive en un bloque con tope de ancho/alto (el de la
+        # composición de diseño) y el espacio sobrante queda FUERA del
+        # bloque: a la derecha/izquierda y debajo, nunca entre secciones.
         col = QFrame()
-        lay = QVBoxLayout(col)
-        lay.setContentsMargins(28, 32, 28, 20)
+        outer = QVBoxLayout(col)
+        outer.setContentsMargins(28, 32, 28, 20)
+        outer.setSpacing(0)
+        content = QWidget()
+        content.setObjectName("welcomeContent")
+        content.setMaximumSize(CONTENT_MAX_W, CONTENT_MAX_H)
+        # Sin alineación (que lo encogería a su sizeHint): el bloque llena
+        # la celda hasta el tope, así a 760×580 se ve igual que antes; lo
+        # que sobra lo absorben los stretch de factor 0 de los costados y
+        # de abajo, que solo crecen cuando el bloque ya llegó al tope.
+        row = QHBoxLayout()
+        row.setSpacing(0)
+        row.addStretch(0)
+        row.addWidget(content, 1)
+        row.addStretch(0)
+        outer.addLayout(row, 1)
+        outer.addStretch(0)
+        lay = QVBoxLayout(content)
+        lay.setContentsMargins(0, 0, 0, 0)
         lay.setSpacing(8)
 
         lay.addWidget(self._kicker("RECIENTES"))
@@ -304,18 +371,16 @@ class WelcomeWindow(QMainWindow):
         return b
 
     def _example_card(self, clave: str, nombre: str) -> QWidget:
-        b = QPushButton(nombre)
+        b = _ExampleCard(nombre)
         b.setCursor(Qt.PointingHandCursor)
-        b.setMinimumHeight(56)
-        b.setFont(qfont(FONT_HINT))
         b.setToolTip(f"Abrir el ejemplo «{nombre}» en el editor")
         b.setStyleSheet(
             f"QPushButton {{ background:{TOK['bg_elev']}; "
-            f"color:{TOK['ink']}; border:1px solid {TOK['line']}; "
-            f"border-radius:10px; padding:8px; text-align:left; }} "
+            f"border:1px solid {TOK['line']}; border-radius:10px; }} "
             f"QPushButton:hover {{ border-color:{TOK['accent_soft']}; "
             f"background:{TOK['accent_tint']}; }}")
-        b.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
+        b.label.setStyleSheet(
+            f"color:{TOK['ink']}; background:transparent; border:0;")
         b.clicked.connect(lambda _=False, k=clave: self._open_example(k))
         return b
 
