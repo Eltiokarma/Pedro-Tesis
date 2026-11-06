@@ -2390,7 +2390,12 @@ class BlockInspectorPanel(QWidget):
         l1 = QLabel(label); l1.setFont(qfont(FONT_HINT))
         l1.setStyleSheet(f"color:{TOK['ink_mute']};")
         l1.setMinimumWidth(140)
-        l2 = QLabel(value); l2.setFont(qfont(FONT_VALUE))
+        # Identificadores como «Turton_2018_AppA» no tienen espacios donde
+        # cortar: un espacio de ancho cero tras «_» le da al word-wrap un
+        # punto de quiebre y la fila deja de exigir más que el viewport
+        # del inspector (auditoría UI 3 §4.1).
+        l2 = QLabel(str(value).replace("_", "_\u200b"))
+        l2.setFont(qfont(FONT_VALUE))
         l2.setStyleSheet(
             f"color:{TOK['ink_mute'] if mute else TOK['ink']};")
         l2.setWordWrap(True)
@@ -2461,6 +2466,7 @@ class BlockInspectorPanel(QWidget):
                          f"fabricante</a> · consultado "
                          f"{v.get('fecha_consulta', '')}")
             src.setFont(qfont(FONT_HINT))
+            src.setWordWrap(True)
             src.setOpenExternalLinks(True)
             src.setStyleSheet(f"color:{TOK['ink_ghost']};")
             lay.addWidget(src)
@@ -2589,14 +2595,20 @@ class BlockInspectorPanel(QWidget):
                                   self._build_section_content("ficha"))
             cb.currentIndexChanged.connect(_on_equipo)
 
-            fila = QHBoxLayout()
+            # Rótulo ARRIBA del combo, no en la columna de 140 px de las
+            # filas: ahí «Equipo comercial · 12 modelos» se cortaba en
+            # «Equipo comercial · 1» y se leía como un solo modelo
+            # (auditoría UI 3 §4.1).  Con todo el ancho de la sección y
+            # word-wrap como red, el conteo se lee entero.
+            col = QVBoxLayout()
+            col.setContentsMargins(0, 0, 0, 0); col.setSpacing(4)
             lbl = QLabel(f"Equipo comercial · {len(entradas)} "
                          f"modelo{'s' if len(entradas) != 1 else ''}")
             lbl.setFont(qfont(FONT_HINT))
             lbl.setStyleSheet(f"color:{TOK['ink_mute']};")
-            lbl.setMinimumWidth(140)
-            fila.addWidget(lbl); fila.addWidget(cb, 1)
-            wrap = QFrame(); wrap.setLayout(fila)
+            lbl.setWordWrap(True)
+            col.addWidget(lbl); col.addWidget(cb)
+            wrap = QFrame(); wrap.setLayout(col)
             l.addWidget(wrap)
 
         # ── Veredicto ──

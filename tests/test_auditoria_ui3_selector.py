@@ -157,3 +157,40 @@ def test_combo_angosto_no_esconde_el_texto(app, turbina):
     assert cb.toolTip() == cb.itemText(3)
     b.equipo_comercial = ""
     panel.close()
+
+
+# ─────────────────────── rótulo del selector (ALTA) ───────────────────────
+
+def _rotulo_selector(sect):
+    from PySide6.QtWidgets import QLabel
+    return next(l for l in sect.findChildren(QLabel)
+                if l.text().startswith("Equipo comercial"))
+
+
+@pytest.mark.parametrize("declarado", [False, True])
+def test_rotulo_del_selector_se_lee_entero(app, turbina, declarado):
+    """«Equipo comercial · 12 modelos» vivía en una columna de 140 px al
+    lado del combo y se pintaba «Equipo comercial · 1»: se leía como un
+    solo modelo.  El rótulo va arriba del combo, con el ancho de la
+    sección, y la sección entera cabe en el viewport — con o sin
+    veredicto declarado."""
+    import datasheet as ds
+    fs, b = turbina
+    b.equipo_comercial = (ds.clave_de(ds.entradas_para(b.eq_type)[0])
+                          if declarado else "")
+    panel = _panel_ficha(app, fs, b)
+    sect = _seccion(panel)
+    lbl = _rotulo_selector(sect)
+    n = len(ds.entradas_para(b.eq_type))
+    assert lbl.text() == f"Equipo comercial · {n} modelos"
+    assert lbl.fontMetrics().horizontalAdvance(lbl.text()) <= \
+        lbl.contentsRect().width(), \
+        f"rótulo cortado: {lbl.contentsRect().width()} px para " \
+        f"{lbl.fontMetrics().horizontalAdvance(lbl.text())}"
+    util = _VIEWPORT - 40
+    assert sect.minimumSizeHint().width() <= util, \
+        f"la sección exige {sect.minimumSizeHint().width()} px"
+    assert panel._content_scroll.horizontalScrollBar().maximum() == 0, \
+        "el inspector scrollea de costado"
+    b.equipo_comercial = ""
+    panel.close()
