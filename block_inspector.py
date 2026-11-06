@@ -2393,11 +2393,11 @@ class BlockInspectorPanel(QWidget):
     _ORIGEN_GLIFO = {"declarado": "▪", "calculado": "◦",
                      "tipico": "≈", "estimado": "~", "pendiente": "…"}
 
-    def _ficha_row(self, parent_lay, label, value, mute=False):
+    def _ficha_row(self, parent_lay, label, value, mute=False, label_w=140):
         row = QHBoxLayout()
         l1 = QLabel(label); l1.setFont(qfont(FONT_HINT))
         l1.setStyleSheet(f"color:{TOK['ink_mute']};")
-        l1.setMinimumWidth(140)
+        l1.setMinimumWidth(label_w)
         # Identificadores como «Turton_2018_AppA» no tienen espacios donde
         # cortar: un espacio de ancho cero tras «_» le da al word-wrap un
         # punto de quiebre y la fila deja de exigir más que el viewport
@@ -2457,14 +2457,19 @@ class BlockInspectorPanel(QWidget):
         # ficha de abajo y que el mensaje que arma datasheet.py — si no,
         # la misma caja mezclaba MMBtu/h con kW (auditoría UI 3 §4.1).
         # Magnitudes fuera del sistema (m², m³/h, m) salen tal cual.
+        # Columna de rótulos más angosta que la de la ficha (140 px): la
+        # tarjeta tiene ~28 px menos de ancho útil y los valores
+        # convertidos («2.344 MMBtu/h», «752.0 > 732.2 °F») se partían.
+        _w = 104
         if estado == "escalar" and v.get("utilizacion") is not None:
             self._ficha_row(lay, "Requerido",
                             funits.fmt_canonica(v["S_requerido"],
-                                                v["S_unit"]))
+                                                v["S_unit"]), label_w=_w)
             self._ficha_row(lay, "Instalado",
-                            funits.fmt_canonica(v["S_modelo"], v["S_unit"]))
+                            funits.fmt_canonica(v["S_modelo"], v["S_unit"]),
+                            label_w=_w)
             self._ficha_row(lay, "Utilización",
-                            f"{v['utilizacion'] * 100:.0f}%")
+                            f"{v['utilizacion'] * 100:.0f}%", label_w=_w)
         for c in v.get("checks", []):
             marca = "✓" if c["ok"] else "✗"
             # El check es requerido ≤ límite: si falló, lo que vale es
@@ -2477,7 +2482,7 @@ class BlockInspectorPanel(QWidget):
                 lay, f"{marca} {c['label']}",
                 f"{req} {op} "
                 f"{funits.fmt_canonica(c['limite'], c['unidad'])}{tag}",
-                mute=c.get("familia", False))
+                mute=c.get("familia", False), label_w=_w)
         if v.get("mensaje"):
             m = QLabel(v["mensaje"]); m.setFont(qfont(FONT_HINT))
             m.setStyleSheet(f"color:{TOK['ink_mute']};")

@@ -403,3 +403,27 @@ def test_ficha_con_veredicto_no_entra_cabe(app, turbina, sistema_restaurado,
         panel.close()
     finally:
         b.equipo_comercial = ""
+
+
+def test_valores_del_veredicto_no_se_parten(app, turbina, sistema_restaurado):
+    """En imperial «2.344 MMBtu/h» no entraba en la columna de valores
+    de la tarjeta (la de rótulos heredaba los 140 px de las filas de la
+    ficha) y se partía en «2.344 MMBtu/» + «h»."""
+    from PySide6.QtWidgets import QLabel
+    fs, b = turbina
+    chico = _clave(b.eq_type, lambda e: "S" in e and e["S"] < float(b.S))
+    b.equipo_comercial = chico
+    try:
+        sistema_restaurado.set_system("Imperial (US)")
+        panel = _panel_ficha(app, fs, b)
+        sect = _seccion(panel)
+        for unidad in ("MMBtu/h", "psi"):
+            vals = [l for l in sect.findChildren(QLabel)
+                    if l.text().endswith(unidad) and l.isVisible()]
+            assert vals
+            for l in vals:
+                assert l.fontMetrics().horizontalAdvance(l.text()) <= \
+                    l.contentsRect().width(), f"«{l.text()}» se parte"
+        panel.close()
+    finally:
+        b.equipo_comercial = ""
