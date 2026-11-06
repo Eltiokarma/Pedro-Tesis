@@ -118,3 +118,42 @@ def test_texto_de_entrada_vive_en_un_solo_helper(app, turbina):
     assert ds.texto_entrada({"marca": "M", "modelo": "X"}) == \
         "M · X — envolvente del modelo"
     panel.close()
+
+
+# ─────────────────────── ancho del combo (ALTA) ───────────────────────
+
+def test_combo_no_pide_el_ancho_de_su_entrada_mas_larga(app, turbina):
+    """El combo se dimensionaba por su entrada más larga (~420 px): la
+    sección Ficha medía ~620 px dentro de un viewport de 320 y cortaba
+    ayuda, veredicto y filas, con scroll horizontal en el inspector."""
+    fs, b = turbina
+    b.equipo_comercial = ""
+    panel = _panel_ficha(app, fs, b)
+    cb = panel._extras["equipo_comercial"]
+    util = _VIEWPORT - 40          # márgenes 20+20 del contenido
+    assert cb.minimumSizeHint().width() <= util, \
+        f"el combo exige {cb.minimumSizeHint().width()} px"
+    assert cb.width() <= util
+    panel.close()
+
+
+def test_combo_angosto_no_esconde_el_texto(app, turbina):
+    """Con el combo angosto, el texto completo tiene que seguir
+    alcanzable: el popup se abre al ancho de la entrada más larga y el
+    tooltip dice la entrada elegida entera."""
+    import datasheet as ds
+    fs, b = turbina
+    b.equipo_comercial = ds.clave_de(ds.entradas_para(b.eq_type)[0])
+    panel = _panel_ficha(app, fs, b)
+    cb = panel._extras["equipo_comercial"]
+    fm = cb.view().fontMetrics()
+    mas_larga = max(fm.horizontalAdvance(cb.itemText(i))
+                    for i in range(cb.count()))
+    assert cb.view().minimumWidth() >= mas_larga, \
+        "el popup corta las entradas largas"
+    assert cb.toolTip() == cb.currentText()
+    # el tooltip sigue a la selección
+    cb.setCurrentIndex(3)
+    assert cb.toolTip() == cb.itemText(3)
+    b.equipo_comercial = ""
+    panel.close()

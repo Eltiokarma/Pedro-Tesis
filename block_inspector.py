@@ -2560,6 +2560,26 @@ class BlockInspectorPanel(QWidget):
             idx = cb.findData(cur) if cur else 0
             cb.setCurrentIndex(max(0, idx))
             cb.setStyleSheet(self._combo_style())
+            # Sin esto el combo pide el ancho de su entrada más larga
+            # (~420 px: «Siemens Energy · Dresser-Rand AVTTW/GTW — 4500
+            # kW») y la sección entera desborda el viewport del inspector
+            # (auditoría UI 3 §4.1).  El combo se achica al espacio que
+            # le den; el texto completo sigue alcanzable en el popup —
+            # que se abre al ancho de la entrada más larga — y en el
+            # tooltip de la entrada elegida.
+            cb.setSizeAdjustPolicy(
+                QComboBox.AdjustToMinimumContentsLengthWithIcon)
+            cb.setMinimumContentsLength(12)
+            fm = cb.view().fontMetrics()
+            cb.view().setMinimumWidth(
+                max(fm.horizontalAdvance(cb.itemText(i))
+                    for i in range(cb.count())) + 32)
+            cb.view().setTextElideMode(Qt.ElideNone)
+            for i in range(cb.count()):
+                cb.setItemData(i, cb.itemText(i), Qt.ToolTipRole)
+            cb.setToolTip(cb.currentText())
+            cb.currentIndexChanged.connect(
+                lambda _i: cb.setToolTip(cb.currentText()))
             self._extras["equipo_comercial"] = cb
 
             def _on_equipo(_i):
