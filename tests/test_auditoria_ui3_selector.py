@@ -256,3 +256,41 @@ def test_elegir_otra_seccion_y_guardar_persiste(app, turbina):
     assert b.equipo_comercial == otro
     b.equipo_comercial = ""
     panel.close()
+
+
+# ─────────────────── la desigualdad dice lo que pasó (MEDIA) ───────────────────
+
+def _v_escalar(**kw):
+    """Veredicto escalar sintético: P falla, T pasa."""
+    v = {"estado": "escalar", "apto": False,
+         "S_requerido": 686.95, "S_modelo": 4850.0, "S_unit": "kW",
+         "utilizacion": 0.1416,
+         "checks": [
+             {"param": "P_max_bar", "label": "Presión", "unidad": "bar",
+              "requerido": 30.0, "limite": 16.0, "ok": False,
+              "familia": False},
+             {"param": "T_max_C", "label": "Temperatura", "unidad": "°C",
+              "requerido": 400.0, "limite": 440.0, "ok": True,
+              "familia": False},
+         ],
+         "mensaje": "", "fuente": "https://example.com/catalogo.pdf",
+         "fecha_consulta": "2026-07-23"}
+    v.update(kw)
+    return v
+
+
+def _textos_card(card):
+    from PySide6.QtWidgets import QLabel
+    return [l.text() for l in card.findChildren(QLabel)]
+
+
+def test_check_fallido_no_afirma_la_desigualdad(app, sistema_restaurado):
+    """«✗ Presión 30 ≤ 16 bar»: la desigualdad afirmaba lo contrario de
+    lo que falló.  Al fallar, el operador es «>»."""
+    from block_inspector import BlockInspectorPanel
+    sistema_restaurado.set_system("Modelo (tm/año)")
+    card = BlockInspectorPanel()._ficha_veredicto_card(_v_escalar())
+    txt = _textos_card(card)
+    assert "30 > 16 bar" in txt, txt
+    assert not any("30 ≤ 16" in t for t in txt)
+    assert "400 ≤ 440 °C" in txt, txt     # el que pasa sigue con ≤

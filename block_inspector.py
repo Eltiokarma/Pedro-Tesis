@@ -2458,10 +2458,15 @@ class BlockInspectorPanel(QWidget):
                             f"{v['utilizacion'] * 100:.0f}%")
         for c in v.get("checks", []):
             marca = "✓" if c["ok"] else "✗"
+            # El check es requerido ≤ límite: si falló, lo que vale es
+            # «>».  Imprimir «≤» siempre afirmaba lo contrario de lo que
+            # pasó («✗ Presión 30 ≤ 16 bar», auditoría UI 3 §4.1).
+            op = "≤" if c["ok"] else ">"
             tag = "  · FAMILIA" if c.get("familia") else ""
             self._ficha_row(
                 lay, f"{marca} {c['label']}",
-                f"{c['requerido']:g} ≤ {c['limite']:g} {c['unidad']}{tag}",
+                f"{c['requerido']:g} {op} {c['limite']:g} "
+                f"{c['unidad']}{tag}",
                 mute=c.get("familia", False))
         if v.get("mensaje"):
             m = QLabel(v["mensaje"]); m.setFont(qfont(FONT_HINT))
