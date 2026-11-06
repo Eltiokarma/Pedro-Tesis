@@ -2482,7 +2482,12 @@ class BlockInspectorPanel(QWidget):
             lay.addWidget(m)
         # Trazabilidad — no negociable: fuente + fecha siempre visibles.
         if v.get("fuente"):
-            src = QLabel(f"▤ <a href=\"{v['fuente']}\">fuente del "
+            # El link toma el acento del tema: el azul por defecto de Qt
+            # era casi ilegible sobre la tarjeta en oscuro (auditoría UI 3
+            # §4.1).  Inline en el <a> porque el QSS de la etiqueta no
+            # alcanza a los anchors del rich text.
+            src = QLabel(f"▤ <a href=\"{v['fuente']}\" "
+                         f"style=\"color:{TOK['accent']};\">fuente del "
                          f"fabricante</a> · consultado "
                          f"{v.get('fecha_consulta', '')}")
             src.setFont(qfont(FONT_HINT))

@@ -342,3 +342,41 @@ def test_mensaje_del_veredicto_en_el_sistema(app, turbina,
         panel.close()
     finally:
         b.equipo_comercial = ""
+
+
+# ─────────────────── link de la fuente en oscuro (MEDIA) ───────────────────
+
+def _colores_pintados(widget):
+    """Conjunto de colores RGB que el widget pinta (grab real)."""
+    img = widget.grab().toImage()
+    return {img.pixelColor(x, y).getRgb()[:3]
+            for y in range(img.height()) for x in range(img.width())}
+
+
+def _cerca(c, ref, tol=24):
+    return all(abs(a - b) <= tol for a, b in zip(c, ref))
+
+
+@pytest.mark.parametrize("tema", ["dark", "light"])
+def test_link_de_la_fuente_usa_el_acento(app, tema_restaurado, tema):
+    """«fuente del fabricante» salía en el azul por defecto de Qt, casi
+    ilegible sobre el fondo oscuro de la tarjeta.  El link se pinta con
+    el token de acento del tema activo."""
+    from PySide6.QtGui import QColor
+    from PySide6.QtWidgets import QLabel
+    from block_inspector import BlockInspectorPanel
+    tokens.apply_preferences(theme=tema)
+    tokens._PrefsBus.emit()
+    card = BlockInspectorPanel()._ficha_veredicto_card(_v_escalar())
+    src = next(l for l in card.findChildren(QLabel)
+               if "fuente del fabricante" in l.text())
+    src.resize(src.sizeHint())
+    pintados = _colores_pintados(src)
+    acento = QColor(tokens.TOK["accent"]).getRgb()[:3]
+    from PySide6.QtGui import QPalette
+    azul_qt = app.palette().color(QPalette.Link).getRgb()[:3]
+    assert any(_cerca(c, acento) for c in pintados), \
+        f"el link no se pinta con el acento {tokens.TOK['accent']}"
+    if not _cerca(azul_qt, acento):
+        assert not any(_cerca(c, azul_qt, tol=8) for c in pintados), \
+            "el link sigue en el azul por defecto de Qt"
