@@ -588,7 +588,12 @@ class WHBSubcomponent(QFrame):
         def row(label, value, right_w):
             r = QHBoxLayout(); r.setSpacing(8)
             l = QLabel(label); l.setFont(qfont(FONT_HINT))
-            l.setStyleSheet(f"color:{TOK['ink_mute']};"); l.setFixedWidth(92)
+            # Columna de rótulos de ancho fijo (alinea los valores) pero
+            # con word-wrap: a 92 px fijos sin wrap se leía «Tasa de
+            # vapo», «Rango Field e», «Vapor export».  No se ensancha
+            # porque la fila ya va justa en el ancho por defecto del dock.
+            l.setStyleSheet(f"color:{TOK['ink_mute']};"); l.setFixedWidth(104)
+            l.setWordWrap(True)
             r.addWidget(l)
             v = QLabel(value); v.setFont(qfont(FONT_VALUE))
             v.setStyleSheet(f"color:{TOK['ink']};")
@@ -604,7 +609,7 @@ class WHBSubcomponent(QFrame):
                           f"{_grp(whb['range_min'])} – {_grp(whb['range_max'])}", src))
         if whb.get("steam_exported_t_y") is not None:
             lay.addLayout(row("Vapor exportado",
-                              f"{_grp(whb['steam_exported_t_y'])} tm/yr", None))
+                              f"{_grp(whb['steam_exported_t_y'])} tm/año", None))
 
         # range bar
         sep = QFrame(); sep.setFixedHeight(1)

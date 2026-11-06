@@ -152,3 +152,35 @@ def test_approach_desconocido_no_se_anuncia_como_cruce(app):
     # y un cruce de verdad se sigue diciendo
     g2 = hx.make_diagnostic_grid(_vm_hx(approach=-5.0), lambda *_: None)
     assert any("cruce" in t for t in _textos(g2))
+
+
+def test_whb_rotulos_no_se_truncan(app):
+    """Los rótulos de la tarjeta WHB tenían ancho FIJO de 92 px: «Tasa de
+    vapo», «Rango Field e», «Vapor export» (captura del inspector)."""
+    from PySide6.QtWidgets import QLabel
+    import hx_inspector as hx
+    whb = {"steam_kg_per_h": 65959.0, "range_min": 20000.0,
+           "range_max": 800000.0, "variant": "Field erected",
+           "scale_mismatch": False, "fuera_rango": False,
+           "steam_exported_t_y": 527675.0, "revenue_usd_y": None}
+    w = hx.WHBSubcomponent(whb)
+    w.resize(334, w.sizeHint().height())
+    w.show()
+    app.processEvents()
+    rotulos = [l for l in w.findChildren(QLabel)
+               if l.text() in ("Tasa de vapor", "Rango Field erected",
+                               "Vapor exportado")]
+    assert len(rotulos) == 3
+    for l in rotulos:
+        if l.wordWrap():
+            # envuelve: cada palabra cabe y la altura alcanza para todas
+            # las líneas
+            fm = l.fontMetrics()
+            palabra = max(fm.horizontalAdvance(p) for p in l.text().split())
+            assert palabra <= l.contentsRect().width(), l.text()
+            assert l.height() >= l.heightForWidth(l.width()), \
+                f"«{l.text()}» cortado en alto"
+        else:
+            assert l.width() >= l.sizeHint().width(), \
+                f"«{l.text()}» truncado: {l.width()} < {l.sizeHint().width()}"
+    assert not any("tm/yr" in t for t in _textos(w)), "inglés residual"
