@@ -4251,10 +4251,19 @@ def _component_density(name, T_C=25.0):
     return 1000.0
 
 
-def _sep_by_phase(b, feed, target_out, reject_out, target_phase, eff):
+def _sep_by_phase(b, feed, target_out, reject_out, target_phase, eff,
+                  moisture=0.0):
     """Reparte el feed entre target_out (fase objetivo × η) y reject_out
     (resto + fuga).  target_phase ∈ {'solid','liquid','vapor'} ('vapor' se
-    compara contra fase 'gas').  Respeta locks vía _write_output."""
+    compara contra fase 'gas').  Respeta locks vía _write_output.
+
+    moisture: humedad de torta (filtro/centrífuga, solo target 'solid').
+    Fracción másica de líquido arrastrado en la salida target:
+    moisture = m_liq_torta / (m_sól_torta + m_liq_torta).  El líquido sale
+    del no-target en proporción a su composición, acotado a lo disponible
+    (no inventa masa).  Misma fórmula y mismo clamp [0, 0.95] que el legacy
+    solve_separators con cake_moisture → un bloque migrado da los mismos
+    números.  0 = comportamiento previo de mech_sep intacto."""
     if target_out is None or reject_out is None:
         return f"⚠ MechSep {b.name}: faltan 2 salidas conectadas"
     want = "gas" if target_phase in ("vapor", "gas") else target_phase
@@ -4297,6 +4306,22 @@ def _sep_by_phase(b, feed, target_out, reject_out, target_phase, eff):
             rej_masses[c] = m * (1.0 - eff)
         else:
             rej_masses[c] = m
+    moist = max(min(float(moisture or 0.0), 0.95), 0.0)
+    if want == "solid" and moist > 0:
+        # Torta húmeda: arrastra líquido (no-target) hasta que la humedad
+        # de la salida target sea `moist`.  Réplica exacta del legacy.
+        liq = {c: m for c, m in comp_in.items() if not _is_target(c)}
+        m_liq_total = sum(liq.values())
+        m_sol_cake = sum(tgt_masses.values())
+        m_liq_cake = min(max(0.0, m_sol_cake / (1.0 - moist) - m_sol_cake),
+                         m_liq_total)
+        if m_liq_total > 0 and m_liq_cake > 0:
+            for c, m in liq.items():
+                m_ent = m_liq_cake * (m / m_liq_total)
+                tgt_masses[c] = m_ent
+                rej_masses[c] = m - m_ent
+            # Orden de claves = el del feed (como el legacy).
+            tgt_masses = {c: tgt_masses[c] for c in comp_in if c in tgt_masses}
     m_t = sum(tgt_masses.values())
     m_r = sum(rej_masses.values())
     # Etiqueta de fase de la salida objetivo: gas→gas, solid→solid (si el feed
@@ -4709,6 +4734,8 @@ def solve_mechanical_separators(fs):
         et = (b.eq_type or "").lower()
         eff = max(min(getattr(b, "mech_sep_efficiency", 0.95), 1.0), 0.0)
         target_phase = getattr(b, "mech_sep_target_phase", "solid") or "solid"
+        # Humedad de torta: solo filtro/centrífuga (las ramas que la pasan).
+        moist = float(getattr(b, "mech_sep_cake_moisture", 0.0) or 0.0)
         if "decanter" in et:
             msgs.append(_sep_liquid_liquid(fs, b, feed, eff))
         elif "cyclone" in et:
@@ -4720,7 +4747,7 @@ def solve_mechanical_separators(fs):
             t_out, r_out = _pick_outs_by_port(
                 fs, b, ("solido", "producto"), ("liquido", "venteo"))
             msgs.append(_sep_by_phase(b, feed, t_out, r_out,
-                                       target_phase, eff))
+                                       target_phase, eff, moisture=moist))
         elif target_phase in ("liquid", "vapor", "gas"):
             # Knockout / condensador V-L: la fase objetivo se recupera por su
             # puerto (líquido condensado o vapor) y el resto sale por el otro.
@@ -4735,8 +4762,9 @@ def solve_mechanical_separators(fs):
         else:  # filtro y genéricos (sólido/líquido)
             t_out, r_out = _pick_outs_by_port(
                 fs, b, ("producto", "solido"), ("venteo", "liquido"))
-            msgs.append(_sep_by_phase(b, feed, t_out, r_out,
-                                       target_phase, eff))
+            msgs.append(_sep_by_phase(b, feed, t_out, r_out, target_phase,
+                                       eff, moisture=moist if "filter" in et
+                                       else 0.0))
     return msgs
 
 

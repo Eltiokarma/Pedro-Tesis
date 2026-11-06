@@ -245,9 +245,15 @@ class Block:
     # Los flags legacy separator_active/cyclone_active siguen siendo
     # honrados por el mismo solver (se mapean a este modelo), por lo que
     # los flowsheets viejos cargan y corren igual que antes.
+    #   mech_sep_cake_moisture: humedad de torta (filtro/centrífuga, fase
+    #     objetivo sólida): fracción másica de líquido arrastrado en la
+    #     salida target, líquido/(sólido+líquido).  0 = torta seca.  Al
+    #     cargar un bloque legacy separator_active se siembra desde
+    #     cake_moisture (misma semántica).
     mech_sep_active:        bool   = False
     mech_sep_efficiency:    float  = 0.95
     mech_sep_target_phase:  str    = "solid"
+    mech_sep_cake_moisture: float  = 0.0
 
     # ---- CORRIENTES AUXILIARES AUTO-INSTANCIADAS ----
     # auto_aux=True  → el bloque es un source/sink de utility o ambiente
@@ -721,6 +727,14 @@ class Flowsheet:
             # ya curada/fijada por el user → tratar como locked si S > 0.
             if "S_locked" not in bdict:
                 b.S_locked = (b.S > 0)
+            # Humedad de torta en el modelo unificado: un filtro/centrífuga
+            # legacy (separator_active, sin mech_sep) la trae en
+            # cake_moisture → se siembra para que «Modo especial» la
+            # muestre y la conserve al convertirlo.  Los mech_sep ya
+            # guardados sin la clave quedan en 0 (su comportamiento actual).
+            if ("mech_sep_cake_moisture" not in bdict
+                    and b.separator_active and not b.mech_sep_active):
+                b.mech_sep_cake_moisture = float(b.cake_moisture or 0.0)
             fs.blocks[int(bid)] = b
         for sid, sdict in d.get("streams", {}).items():
             s = Stream(**{k: v for k, v in sdict.items()
