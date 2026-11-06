@@ -198,3 +198,83 @@ def test_fl101_convertido_a_mech_sep_da_lo_mismo():
     _, despues = _fl101_outlets(fs2)
     _assert_same_outlets(antes, despues)
     assert any(abs(x[2].get("water", 0) - 0.03) < 1e-12 for x in despues)
+
+
+# ─────────────────────── 3. inspector «Modo especial» ───────────────────────
+
+@pytest.fixture(scope="module")
+def app():
+    pytest.importorskip("PySide6")
+    from PySide6.QtWidgets import QApplication
+    return QApplication.instance() or QApplication([])
+
+
+def _panel_especial(b, fs):
+    from block_inspector import BlockInspectorPanel
+    p = BlockInspectorPanel()
+    p.load_block(b, fs, lambda: None)
+    p._build_section_content("especial")
+    return p
+
+
+def test_fl101_abrir_y_guardar_no_cambia_el_balance(app):
+    """Test crítico (§4.2): sugar.json FL-101 resuelto; se abre en el
+    inspector, «Modo especial» se aplica sin tocar nada (convierte a
+    mech_sep) y se re-resuelve → salidas idénticas."""
+    fs = reg.load_example("sugar")
+    fsv.solve(fs)
+    _, antes = _fl101_outlets(fs)
+
+    fs2 = reg.load_example("sugar")
+    b = next(b for b in fs2.blocks.values() if b.name == "FL-101")
+    p = _panel_especial(b, fs2)
+    assert p._fields["mech_sep_cake_moisture"].value() == "3.00"
+    assert float(p._fields["mech_sep_efficiency"].value()) == \
+        pytest.approx(0.75)
+    p._apply_to_block()
+    assert b.mech_sep_active and not b.separator_active
+    assert b.mech_sep_cake_moisture == 0.03
+    assert b.mech_sep_efficiency == pytest.approx(0.75)
+    fsv.solve(fs2)
+    _, despues = _fl101_outlets(fs2)
+    _assert_same_outlets(antes, despues)
+
+
+def test_inspector_humedad_editable_mueve_liquido(app):
+    fs = reg.load_example("sugar")
+    fsv.solve(fs)
+    b, base = _fl101_outlets(fs)
+    feed_m = sum(s.mass_flow for s in fs.streams.values() if s.dst == b.id)
+    p = _panel_especial(b, fs)
+    p._fields["mech_sep_cake_moisture"].setValue("10")
+    p._apply_to_block()
+    assert b.mech_sep_cake_moisture == pytest.approx(0.10)
+    fsv.solve(fs)
+    _, nuevo = _fl101_outlets(fs)
+    torta0 = next(x for x in base if abs(x[2]["water"] - 0.03) < 1e-9)
+    torta1 = next(x for x in nuevo if x[0] == torta0[0])
+    assert torta1[2]["water"] == pytest.approx(0.10, rel=1e-12)
+    assert torta1[1] > torta0[1]                       # la torta gana líquido
+    assert sum(x[1] for x in nuevo) == pytest.approx(feed_m, rel=1e-9)
+
+
+def test_inspector_humedad_solo_en_filtro_y_centrifuga(app):
+    casos = {"Filter — belt": True, "Centrifuge — disc stack": True,
+             "Cyclone — gas/solid": False, "Decanter — gravity": False,
+             "Centrifuge — decanter": False}
+    for et, esperado in casos.items():
+        fs, b = _filtro(et, mech_sep_active=True)
+        p = _panel_especial(b, fs)
+        assert ("mech_sep_cake_moisture" in p._fields) is esperado, et
+
+
+def test_inspector_humedad_mech_sep_ida_y_vuelta(app):
+    fs, b = _filtro(mech_sep_active=True, mech_sep_cake_moisture=0.123456)
+    p = _panel_especial(b, fs)
+    assert p._fields["mech_sep_cake_moisture"].value() == "12.35"
+    p._apply_to_block()
+    assert b.mech_sep_cake_moisture == 0.123456       # sin editar: exacto
+    p = _panel_especial(b, fs)
+    p._fields["mech_sep_cake_moisture"].setValue("0")
+    p._apply_to_block()
+    assert b.mech_sep_cake_moisture == 0.0

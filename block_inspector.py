@@ -2016,8 +2016,17 @@ class BlockInspectorPanel(QWidget):
             self._add_active_toggle(l, "mech_sep_active",
                                     "Activar separación automática",
                                     init_active)
-            # Eficiencia η — inicial desde mech o, si no, del legacy.
-            eff = float(getattr(b, "mech_sep_efficiency", 0.0) or 0.0)
+            # Eficiencia η — del modelo mech si ya está activo; un bloque
+            # legacy (separator/cyclone_active) trae la suya en
+            # solids_recovery / collection_efficiency: convertirlo no debe
+            # cambiarle la η por el default de mech_sep_efficiency.
+            mech_on = bool(getattr(b, "mech_sep_active", False))
+            if not mech_on and getattr(b, "separator_active", False):
+                eff = float(getattr(b, "solids_recovery", 0.95) or 0.0)
+            elif not mech_on and getattr(b, "cyclone_active", False):
+                eff = float(getattr(b, "collection_efficiency", 0.90) or 0.0)
+            else:
+                eff = float(getattr(b, "mech_sep_efficiency", 0.0) or 0.0)
             if eff <= 0:
                 eff = float((getattr(b, "collection_efficiency", 0.90) if is_cyc
                              else getattr(b, "solids_recovery", 0.95)) or 0.95)
@@ -2050,6 +2059,26 @@ class BlockInspectorPanel(QWidget):
                 l.addWidget(self._row(
                     "Componentes target", sc,
                     info="Override explícito de qué componentes son la fase objetivo"))
+            if _is_mech_separator(eq_type) and not is_dec and not is_cyc:
+                # Humedad de torta (filtro/centrífuga): líquido arrastrado en
+                # la salida target.  Un legacy separator_active la trae en
+                # cake_moisture; se pinta en % y se guarda como fracción.
+                if not mech_on and getattr(b, "separator_active", False):
+                    moist = float(getattr(b, "cake_moisture", 0.0) or 0.0)
+                else:
+                    moist = float(getattr(b, "mech_sep_cake_moisture", 0.0)
+                                  or 0.0)
+                txt = f"{moist * 100.0:.2f}"
+                sf_m = self._spec_field("mech_sep_cake_moisture", value=txt,
+                                        unit="%", state="spec")
+                # lo pintado: abrir y guardar sin tocar conserva el valor
+                # exacto (el % redondea a 2 decimales).
+                sf_m._painted = (txt, moist)
+                l.addWidget(self._row(
+                    "Humedad de torta", sf_m,
+                    info=("Líquido arrastrado en la torta: "
+                          "líquido / (sólido + líquido).  0 = torta seca; "
+                          "solo con fase objetivo solid")))
 
         elif _is_dryer(eq_type):
             l.addLayout(self._section_header(
@@ -3419,6 +3448,21 @@ class BlockInspectorPanel(QWidget):
                     setattr(b, key, float(v) if v else 0.0)
                 except Exception:
                     pass
+        if "mech_sep_cake_moisture" in f:
+            sf_m = f["mech_sep_cake_moisture"]
+            txt = str(sf_m.value() or "").strip()
+            painted = getattr(sf_m, "_painted", None)
+            if painted is not None and txt == painted[0]:
+                b.mech_sep_cake_moisture = painted[1]      # sin editar
+            else:
+                v = self._parse_num(txt)
+                try:
+                    pct = float(v) if v else 0.0
+                except Exception:
+                    pct = None
+                if pct is not None:
+                    # fracción 0 ≤ x < 1 (el solver la acota a 0.95)
+                    b.mech_sep_cake_moisture = min(max(pct / 100.0, 0.0), 0.95)
         for key in ("solute_component", "moisture_component", "volatile_component"):
             if key in self._extras:
                 setattr(b, key, self._extras[key].text().strip())
