@@ -231,7 +231,15 @@ class _BookGrid(QWidget):
         notación del libro, no tipografía (upper convertiría ν→Ν y el
         encabezado leería 'N/|N_A|')."""
         t = str(label)
-        return t.upper() if t.isascii() else t
+        if not t.isascii():
+            return t
+        # Tampoco la notación ASCII: z_i → «Z_I», x_LK → «X_LK» o
+        # [kmol/h] → «[KMOL/H]» cambian de significado (z_i es fracción
+        # molar; KMOL no es una unidad).  Solo las PALABRAS puras van en
+        # caps; subíndices y unidades entre corchetes quedan como vienen.
+        partes = _re.split(r"(\[[^\]]*\]|\s+)", t)
+        return "".join(p.upper() if _re.fullmatch(r"[A-Za-z.]+", p) else p
+                       for p in partes)
 
     def _measure(self) -> int:
         fm_val = QFontMetrics(self._f_val_b)

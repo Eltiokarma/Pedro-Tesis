@@ -336,3 +336,17 @@ def test_balance_de_atomos_strip_y_kicker_envuelven(app, specs_libro):
     for parte, nombre in ((kicker, "kicker"), (strip, "contexto")):
         assert parte.minimumSizeHint().width() <= _ANCHO_TARJETA, \
             f"{nombre}: exige {parte.minimumSizeHint().width()} px"
+
+
+@pytest.mark.parametrize("rotulo,esperado", [
+    ("Especie", "ESPECIE"), ("Comp.", "COMP."), ("Etapa", "ETAPA"),
+    ("z_i", "z_i"), ("x_LK", "x_LK"), ("F_i(X)", "F_i(X)"),
+    ("L [kmol/h]", "L [kmol/h]"), ("T [°C]", "T [°C]"),
+    ("ν/|ν_A|", "ν/|ν_A|"),
+])
+def test_encabezado_en_caps_no_toca_notacion_ni_unidades(rotulo, esperado):
+    """El encabezado ponía en caps todo lo ASCII: «Z_I», «X_LK»,
+    «L [KMOL/H]» (captura de la tabla Wang-Henke y del flash).  z_i es la
+    fracción molar del componente i; KMOL no es una unidad."""
+    from book_table import _BookGrid
+    assert _BookGrid._hdr_text(rotulo) == esperado
