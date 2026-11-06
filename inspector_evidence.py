@@ -435,8 +435,12 @@ def flash_book_spec(block) -> Optional[dict]:
                       "kind": "neutral"})
     return {
         "kicker": "Reparto del flash · estilo ChemSep",
-        "context": [("Flash TP · T", f"{d['T_K'] - 273.15:.1f} °C"),
-                    ("P", f"{d['P_bar']:.3f} bar"),
+        # T y P del flash son las MISMAS condiciones que los campos
+        # T_flash/P_flash del inspector (que ya respetan el sistema de
+        # unidades): dato de operación, no memoria de cálculo.
+        "context": [("Flash TP · T",
+                     funits.fmt_canonica(funits.de_kelvin(d["T_K"]), "°C")),
+                    ("P", funits.fmt_canonica(d["P_bar"], "bar")),
                     ("V/F", f"{d['V_frac']:.4f} molar")],
         "columns": columns,
         "rows": rows,
@@ -523,8 +527,10 @@ def wh_stage_book_spec(block, fs) -> Optional[dict]:
             rows.append({"cells": cells, "ribbon": ribbon})
         ctx = [("LK", LK), ("N", str(N)), ("Feed", f"etapa {n_feed}")]
         def _q(x):
-            return (f"{x / 1000.0:+.2f} MW" if abs(x) >= 1000.0
-                    else f"{x:+.1f} kW")
+            # duties de condensador/rehervidor: el mismo dato que las
+            # tarjetas Q_cond/Q_reb → sistema de unidades, con signo
+            txt = funits.fmt_canonica(x, "kW")
+            return ("+" + txt) if x > 0 else txt
         q_c = wh.get("Q_cond_kW")
         q_r = wh.get("Q_reb_kW")
         if q_c is not None:

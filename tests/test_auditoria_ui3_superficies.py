@@ -350,3 +350,48 @@ def test_encabezado_en_caps_no_toca_notacion_ni_unidades(rotulo, esperado):
     fracción molar del componente i; KMOL no es una unidad."""
     from book_table import _BookGrid
     assert _BookGrid._hdr_text(rotulo) == esperado
+
+
+@pytest.mark.parametrize("sistema,u_t,u_p", [
+    ("Modelo (tm/año)", "°C", "bar"),
+    ("SI estricto", "K", "kPa"),
+    ("Imperial (US)", "°F", "psi"),
+])
+def test_contexto_del_flash_respeta_el_sistema(app, specs_libro,
+                                               sistema_restaurado,
+                                               sistema, u_t, u_p):
+    """El strip del reparto del flash imprimía «76.9 °C · 1.013 bar»
+    fijos, encima de los campos T_flash/P_flash del mismo inspector que
+    sí respetan el sistema: el mismo dato en dos unidades en un panel
+    (exactamente el §2.1 de la auditoría 3, reapareciendo)."""
+    import examples_registry as reg
+    import flowsheet_solver as fsv
+    import inspector_evidence as ev
+    sistema_restaurado.set_system(sistema)
+    fs = reg.load_example("nested_recycle")
+    fsv.solve(fs)
+    v = next(b for b in fs.blocks.values() if b.name == "V-101")
+    ctx = dict(ev.flash_book_spec(v)["context"])
+    assert ctx["Flash TP · T"].endswith(u_t), ctx
+    assert ctx["P"].endswith(u_p), ctx
+
+
+def test_duties_de_columna_respetan_el_sistema(app, sistema_restaurado):
+    """Q_cond/Q_reb del strip de etapas Wang-Henke salían en kW/MW fijos."""
+    import types
+    import distillation_wanghenke as wh
+    import inspector_evidence as ev
+    r = wh.wang_henke(["benzene", "toluene"], [0.5, 0.5], F=10.0 / 3600.0,
+                      T_feed_K=380.0, P_bar=1.013, N=8, feed_stage=4,
+                      D_over_F=0.5, R=1.8, max_iter=80)
+    r.update(feed_stage=4, _comps=["benzene", "toluene"],
+             Q_cond_kW=-120.0, Q_reb_kW=135.0)
+    b = types.SimpleNamespace(_wh_result=r, column_LK="benzene",
+                              column_HK="toluene", column_active=True)
+    sistema_restaurado.set_system("Imperial (US)")
+    ctx = dict(ev.wh_stage_book_spec(b, None)["context"])
+    assert ctx["Q_cond"].endswith("MMBtu/h") and ctx["Q_cond"].startswith("-")
+    assert ctx["Q_reb"].endswith("MMBtu/h") and ctx["Q_reb"].startswith("+")
+    sistema_restaurado.set_system("Modelo (tm/año)")
+    ctx = dict(ev.wh_stage_book_spec(b, None)["context"])
+    assert ctx["Q_reb"] == "+135 kW", ctx
