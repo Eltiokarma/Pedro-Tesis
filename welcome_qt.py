@@ -219,7 +219,10 @@ class WelcomeWindow(QMainWindow):
         outer = QVBoxLayout(col)
         outer.setContentsMargins(28, 32, 28, 20)
         outer.setSpacing(0)
-        content = QWidget()
+        # Con padre explícito: entra a `row` antes de que `row` cuelgue de
+        # `col`, y sin padre PySide lo trata como top-level propio; al
+        # cerrar la app lo destruía por segunda vez (segfault al salir).
+        content = QWidget(col)
         content.setObjectName("welcomeContent")
         content.setMaximumSize(CONTENT_MAX_W, CONTENT_MAX_H)
         # Sin alineación (que lo encogería a su sizeHint): el bloque llena

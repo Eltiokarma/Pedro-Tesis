@@ -122,3 +122,28 @@ def test_tamano_de_diseno_entra_sin_desbordes(app, monkeypatch, recientes):
         assert lb.heightForWidth(lb.width()) <= lb.height(), (
             f"título recortado en la tarjeta «{lb.text()}»")
     win.close()
+
+
+def test_cerrar_la_app_no_revienta(tmp_path):
+    """Regresión: el bloque de contenido nacía sin padre y PySide lo
+    destruía dos veces al finalizar la app → segfault (exit 139) DESPUÉS
+    de que todos los tests pasaban.  Se corre en un subproceso porque el
+    crash ocurre en el apagado del intérprete, no dentro de un test."""
+    import subprocess
+    script = tmp_path / "welcome_dos_veces.py"
+    script.write_text(
+        "import os, sys\n"
+        "os.environ['QT_QPA_PLATFORM'] = 'offscreen'\n"
+        f"sys.path.insert(0, {_PARENT!r})\n"
+        "from PySide6.QtWidgets import QApplication\n"
+        "app = QApplication([])\n"
+        "import welcome_qt as wq\n"
+        "def abrir(w, h):\n"
+        "    win = wq.WelcomeWindow(); win.resize(w, h); win.show()\n"
+        "    app.processEvents(); win.close()\n"
+        "abrir(720, 560); abrir(1400, 900)\n",
+        encoding="utf-8")
+    r = subprocess.run([sys.executable, str(script)],
+                       capture_output=True, timeout=120)
+    assert r.returncode == 0, (
+        f"la app murió al cerrarse (exit {r.returncode})")
