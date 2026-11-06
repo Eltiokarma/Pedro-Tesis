@@ -836,6 +836,12 @@ class _InspectorSidebar(QFrame):
         self._dof_dot = QLabel(self._dof); self._dof_dot.setFixedSize(8, 8)
         self._dof_text = QLabel("Sistema determinado", self._dof)
         self._dof_text.setFont(qfont(FONT_HINT))
+        # El sidebar es de ancho fijo (186 px) y deja ~140 px al texto:
+        # «Sistema determinado» y «N sobre-especificado» piden ~155 px en
+        # una línea y Qt los cortaba a mitad de palabra («Sistema
+        # determin»).  Con word-wrap el chip crece en alto y parte en un
+        # límite de palabra; nunca recorta.
+        self._dof_text.setWordWrap(True)
         df_lay.addWidget(self._dof_dot)
         df_lay.addWidget(self._dof_text, 1)
         self._lay.addWidget(self._dof)
