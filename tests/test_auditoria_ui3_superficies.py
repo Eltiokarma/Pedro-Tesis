@@ -138,3 +138,17 @@ def test_diseno_riguroso_T_de_corrientes_en_el_sistema(
     txt = _textos(rb)
     assert esperado in txt, f"{sistema}: {txt}"
     assert "260 / 200 K" not in txt
+
+
+def test_approach_desconocido_no_se_anuncia_como_cruce(app):
+    """Sin T de corrientes (fallback) el approach es None: no se sabe.
+    La card decía «cruce térmico imposible ✗» — afirmaba un fallo físico
+    que nadie calculó, a un estudiante que todavía no resolvió."""
+    import hx_inspector as hx
+    vm = _vm_hx(approach=None, dTlm=40.0, data_source="hardcoded_fallback",
+                T_h_in=None, T_h_out=None, T_c_in=None, T_c_out=None)
+    g = hx.make_diagnostic_grid(vm, on_open=lambda *_: None)
+    assert not any("cruce" in t for t in _textos(g)), _textos(g)
+    # y un cruce de verdad se sigue diciendo
+    g2 = hx.make_diagnostic_grid(_vm_hx(approach=-5.0), lambda *_: None)
+    assert any("cruce" in t for t in _textos(g2))

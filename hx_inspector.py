@@ -354,7 +354,8 @@ def make_diagnostic_grid(vm: dict, on_open: Callable) -> QWidget:
     U, ap, dtmin = vm["U_eff"], vm["approach"], vm["dT_min"]
     crossing = dTlm is None or (ap is not None and ap < 0)
     fState = "error" if F < 0.75 else "warn" if F < 0.85 else "ok"
-    aState = "error" if (ap is None or ap < 0) else "warn" if ap < dtmin else "ok"
+    aState = ("fallback" if ap is None else "error" if ap < 0
+              else "warn" if ap < dtmin else "ok")
 
     c1 = DiagnosticCard("ΔT_lm", _fmt(dTlm, 1), "K",
                         state=cs("error" if crossing else "ok"),
@@ -367,12 +368,16 @@ def make_diagnostic_grid(vm: dict, on_open: Callable) -> QWidget:
     c3 = DiagnosticCard("U efectivo", _fmt(U, 0), "W/m²K",
                         state=cs("ok"), source=vm["data_source"],
                         topic="fouling", on_open=on_open)
-    asub = (f"≥ ΔT_min {dtmin:.0f} K  ✓" if aState == "ok" else
+    # approach None = sin las 4 T de corriente: NO SE SABE.  Decir «cruce
+    # térmico imposible» afirmaba un fallo físico que nadie calculó.
+    asub = ("sin T de corrientes" if ap is None else
+            f"≥ ΔT_min {dtmin:.0f} K  ✓" if aState == "ok" else
             f"< ΔT_min {dtmin:.0f} K  ⚠" if aState == "warn" else
             "cruce térmico imposible  ✗")
     c4 = DiagnosticCard("Approach", _fmt(ap, 1), "K",
                         state=cs(aState), source=vm["data_source"], subtext=asub,
-                        corner_icon=("warn-approach" if aState != "ok" else None),
+                        corner_icon=("warn-approach" if aState in ("warn", "error")
+                                     else None),
                         topic="approach", on_open=on_open)
     for i, c in enumerate((c1, c2, c3, c4)):
         g.addWidget(c, i // 2, i % 2)
