@@ -7537,10 +7537,17 @@ class FlowsheetMainWindow(QMainWindow):
         for r in results:
             mark = ("✓", "ok") if r["within_tol"] else ("✗", "bad")
             if r["kind"] == "T":
+                # Objetivo y actual son T absolutas: van por el sistema de
+                # unidades.  La desviación es una DIFERENCIA — se resta en
+                # la unidad activa (el offset de °F/K se cancela), nunca
+                # se convierte como absoluta (auditoría UI 3 §2).
+                u_t = funits.active_unit("temp")
+                dev = (funits.conv_temp(r["actual"])
+                       - funits.conv_temp(r["target"]))
                 rows.append([r["stream_name"], ("T", "mute"),
-                             f"{r['target']:g} °C",
-                             f"{r['actual']:.1f} °C",
-                             (f"{r['deviation']:+.1f} °C",
+                             funits.fmt_canonica(r["target"], "°C"),
+                             funits.fmt_canonica(r["actual"], "°C"),
+                             (f"{dev:+.1f} {u_t}",
                               "" if r["within_tol"] else "bad"), mark])
             else:
                 rows.append([r["stream_name"],
@@ -7572,10 +7579,12 @@ class FlowsheetMainWindow(QMainWindow):
             rrows = []
             for r in gs_results:
                 mark = ("✓", "ok") if r["success"] else ("✗", "bad")
-                duty_s = (f"{r['duty_found']:+.1f} kW"
-                          if r["duty_found"] is not None else "—")
+                d_f = r["duty_found"]
+                duty_s = ("—" if d_f is None else
+                          ("+" if d_f > 0 else "")
+                          + funits.fmt_canonica(d_f, "kW"))
                 rrows.append([r["stream_name"], (r["block_name"], "mute"),
-                              duty_s, f"{r['t_final']:.1f} °C",
+                              duty_s, funits.fmt_canonica(r["t_final"], "°C"),
                               (r["message"], "mute"), mark])
             res.body.addWidget(kit_table(
                 ["Corriente", "Bloque", "Duty", "T final", "Estado", ""],
@@ -7733,8 +7742,8 @@ class FlowsheetMainWindow(QMainWindow):
                 ["Σ Cp°", f"$ {res['sum_Cp']:,.0f}"],
                 ["FCI", f"{res['FCI_MMUSD']:.2f} MM USD"],
                 ["ISBL", f"{isbl_mm:.2f} MM USD"],
-                ["Producción", f"{product_total:g} tm/año"],
-                ["Alimentación", f"{feed_total:g} tm/año"],
+                ["Producción", funits.fmt_canonica(product_total, "tm/año")],
+                ["Alimentación", funits.fmt_canonica(feed_total, "tm/año")],
                 ["Ingresos", f"$ {revenue:,.0f}/año"],
                 ["Materia prima", f"$ {raw_mp:,.0f}/año"],
             ]

@@ -395,3 +395,58 @@ def test_duties_de_columna_respetan_el_sistema(app, sistema_restaurado):
     sistema_restaurado.set_system("Modelo (tm/año)")
     ctx = dict(ev.wh_stage_book_spec(b, None)["context"])
     assert ctx["Q_reb"] == "+135 kW", ctx
+
+
+# ─────────────── diálogos del kit en uso (flowsheet_qt) ───────────────
+
+@pytest.fixture
+def dialogos_capturados(monkeypatch):
+    """Intercepta KitDialog.exec: el diálogo se construye entero pero no
+    bloquea; el test lee lo que se iba a mostrar."""
+    import dialog_kit
+    vistos = []
+    monkeypatch.setattr(dialog_kit.KitDialog, "exec",
+                        lambda self: vistos.append(self) or 0)
+    return vistos
+
+
+@pytest.fixture(scope="module")
+def ventana(app):
+    import flowsheet_qt as fq
+    w = fq.FlowsheetMainWindow()
+    w.action_load_example("boiler_ft")
+    return w
+
+
+def test_setpoints_en_el_sistema_de_unidades(app, ventana, sistema_restaurado,
+                                             dialogos_capturados):
+    """El diálogo Setpoints imprimía «°C» fijo para objetivo, actual y Δ,
+    aunque el usuario declara la T objetivo en el inspector de corrientes
+    en SU unidad.  La Δ es una diferencia: se resta en la unidad activa
+    (10 °C de salto son 18 °F, no 50 °F)."""
+    from PySide6.QtWidgets import QLabel
+    s = next(x for x in ventana.fs.streams.values()
+             if x.temperature is not None)
+    previo = s.target_temperature
+    try:
+        s.target_temperature = float(s.temperature) + 10.0
+        sistema_restaurado.set_system("Imperial (US)")
+        ventana.action_setpoints()
+        dlg = dialogos_capturados[-1]
+        textos = [l.text() for l in dlg.findChildren(QLabel)]
+        assert not any(t.endswith("°C") for t in textos), textos
+        assert "-18.0 °F" in textos, textos
+    finally:
+        s.target_temperature = previo
+
+
+def test_lang_flujos_en_el_sistema_de_unidades(app, ventana,
+                                               sistema_restaurado,
+                                               dialogos_capturados):
+    from PySide6.QtWidgets import QLabel
+    sistema_restaurado.set_system("Métrico (ingeniería)")
+    ventana.action_compute()
+    dlg = dialogos_capturados[-1]
+    textos = [l.text() for l in dlg.findChildren(QLabel)]
+    assert not any("tm/año" in t for t in textos), textos
+    assert any(t.endswith("kg/h") for t in textos), textos
