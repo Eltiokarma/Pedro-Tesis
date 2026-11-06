@@ -188,6 +188,13 @@ def hx_block_status(vm: dict) -> str:
 # ════════════════════════════════════════════════════════════════════
 #  helpers de estilo
 # ════════════════════════════════════════════════════════════════════
+# El cuerpo del inspector fija `background:bg_elev` SIN selector (cascadea
+# a todo descendiente): dentro de una tarjeta con fondo propio —aviso
+# ámbar, WHB lila— cada QLabel quedaba como un parche rectangular del
+# fondo del panel.  Las tarjetas lo neutralizan en su propio QSS.
+_QSS_LABELS_TRANSPARENTES = " QLabel { background: transparent; }"
+
+
 def _subsect_header(title: str, sub: str = "") -> QWidget:
     w = QWidget()
     lay = QHBoxLayout(w); lay.setContentsMargins(0, 0, 0, 0); lay.setSpacing(8)
@@ -321,14 +328,14 @@ class DiagnosticCard(QFrame):
         border = TOK["line"]
         self.setStyleSheet(
             f"#hxDiag {{ background:{bg}; border:1px solid {border}; "
-            f"border-radius:9px; }}")
+            f"border-radius:9px; }}" + _QSS_LABELS_TRANSPARENTES)
 
     def enterEvent(self, e):
         if self._topic:
             bg = {"warn": TOK["amber_bg"], "error": TOK["danger_bg"]}.get(self._state, TOK["bg_elev"])
             self.setStyleSheet(
                 f"#hxDiag {{ background:{bg}; border:1px solid {TOK['accent']}; "
-                f"border-radius:9px; }}")
+                f"border-radius:9px; }}" + _QSS_LABELS_TRANSPARENTES)
         super().enterEvent(e)
 
     def leaveEvent(self, e):
@@ -454,9 +461,12 @@ class WarningRow(QFrame):
         bg = {"warn": TOK["amber_bg"], "error": TOK["danger_bg"]}.get(severity, TOK["bg_elev"])
         gc = {"warn": TOK["amber"], "error": TOK["danger"]}.get(severity, TOK["ink_soft"])
         tc = TOK["danger"] if severity == "error" else TOK["ink"]
+        # `#hxWarn`, no `QFrame`: QLabel ES un QFrame y cada rótulo
+        # heredaba fondo y BORDE propios (cajas dentro del aviso).
+        self.setObjectName("hxWarn")
         self.setStyleSheet(
-            f"QFrame {{ background:{bg}; border:1px solid {TOK['line']}; "
-            f"border-radius:7px; }}")
+            f"#hxWarn {{ background:{bg}; border:1px solid {TOK['line']}; "
+            f"border-radius:7px; }}" + _QSS_LABELS_TRANSPARENTES)
         lay = QHBoxLayout(self); lay.setContentsMargins(11, 8, 10, 8); lay.setSpacing(10)
         lay.addWidget(hi.GlyphLabel(glyph, 16, gc, 1.6), 0, Qt.AlignTop)
         col = QVBoxLayout(); col.setContentsMargins(0, 0, 0, 0); col.setSpacing(2)
@@ -560,7 +570,8 @@ class WHBSubcomponent(QFrame):
         state = "error" if whb["fuera_rango"] else "warn" if whb["scale_mismatch"] else "ok"
         self.setStyleSheet(
             f"QFrame#whb {{ background:{TOK['sinnott_bg']}; "
-            f"border:1px solid {TOK['sinnott']}; border-radius:9px; }}")
+            f"border:1px solid {TOK['sinnott']}; border-radius:9px; }}"
+            + _QSS_LABELS_TRANSPARENTES)
         self.setObjectName("whb")
         lay = QVBoxLayout(self); lay.setContentsMargins(12, 11, 12, 11); lay.setSpacing(8)
 
@@ -721,7 +732,7 @@ class RigorousBlock(QFrame):
         self.setObjectName("rig")
         self.setStyleSheet(
             f"#rig {{ background:{TOK['bg_elev']}; border:1px solid {TOK['line']}; "
-            f"border-radius:9px; }}")
+            f"border-radius:9px; }}" + _QSS_LABELS_TRANSPARENTES)
         root = QVBoxLayout(self); root.setContentsMargins(0, 0, 0, 0); root.setSpacing(0)
 
         self._hd = QFrame(); self._hd.setCursor(Qt.PointingHandCursor)
@@ -738,7 +749,11 @@ class RigorousBlock(QFrame):
         root.addWidget(self._hd)
 
         self._body = QFrame()
-        self._body.setStyleSheet(f"border-top:1px solid {TOK['line_soft']};")
+        # Con selector: sin él, el border-top cascadeaba a cada QLabel
+        # de la tabla clave-valor y dibujaba una raya por rótulo.
+        self._body.setObjectName("rigBody")
+        self._body.setStyleSheet(
+            f"#rigBody {{ border-top:1px solid {TOK['line_soft']}; }}")
         bl = QVBoxLayout(self._body); bl.setContentsMargins(12, 8, 12, 12); bl.setSpacing(6)
 
         def kv(label, value):

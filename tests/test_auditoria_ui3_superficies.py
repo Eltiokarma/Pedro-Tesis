@@ -184,3 +184,90 @@ def test_whb_rotulos_no_se_truncan(app):
             assert l.width() >= l.sizeHint().width(), \
                 f"«{l.text()}» truncado: {l.width()} < {l.sizeHint().width()}"
     assert not any("tm/yr" in t for t in _textos(w)), "inglés residual"
+
+
+def _cuenta_color(img, rect, color, margen=4):
+    from PySide6.QtGui import QColor
+    c = QColor(color).rgb()
+    n = 0
+    for x in range(rect.left() + margen, rect.right() - margen):
+        for y in range(rect.top() + margen, rect.bottom() - margen):
+            if img.pixel(x, y) == c:
+                n += 1
+    return n
+
+
+def _render_en_inspector(app, w, ancho=334):
+    """Monta `w` bajo un host con el mismo QSS que el cuerpo del
+    inspector (`background: bg_elev` SIN selector, que cascadea a todo
+    descendiente) y lo renderiza."""
+    from PySide6.QtGui import QImage
+    from PySide6.QtWidgets import QWidget, QVBoxLayout
+    host = QWidget()
+    host.setStyleSheet(f"background:{tokens.TOK['bg_elev']};")
+    lay = QVBoxLayout(host)
+    lay.setContentsMargins(0, 0, 0, 0)
+    lay.addWidget(w)
+    host.resize(ancho, w.sizeHint().height())
+    host.show()
+    app.processEvents()
+    img = QImage(host.size(), QImage.Format_RGB32)
+    host.render(img)
+    return host, img
+
+
+def test_tarjetas_hx_no_heredan_parches_del_inspector(app, tema_restaurado):
+    """El cuerpo del inspector fija `background:bg_elev` sin selector y
+    eso cascadea a cada QLabel: dentro de un aviso ámbar o de la tarjeta
+    WHB cada rótulo quedaba como un parche rectangular del fondo del
+    panel (muy visible en oscuro).  Y el aviso usaba `QFrame {…}` —QLabel
+    ES un QFrame— así que cada rótulo llevaba además su propio borde."""
+    tokens.apply_preferences(theme="dark")
+    from PySide6.QtCore import QRect
+    from PySide6.QtWidgets import QLabel
+    import hx_inspector as hx
+
+    def _rotulos(w, host):
+        """Rects (en coords del host) de los QLabel de texto que NO
+        declaran fondo propio (el pill de estado sí lo declara)."""
+        for l in w.findChildren(QLabel):
+            if not l.text() or "background" in l.styleSheet():
+                continue
+            yield l, QRect(l.mapTo(host, l.rect().topLeft()), l.size())
+
+    fila = hx.WarningRow("sinnott_out", "WHB sub-escala: steam_rate=467 "
+                         "kg/h < S_min=5000 kg/h. Considerá un kettle.")
+    host, img = _render_en_inspector(app, fila)
+    for l, r in _rotulos(fila, host):
+        assert _cuenta_color(img, r, tokens.TOK["bg_elev"], 0) == 0, \
+            f"«{l.text()[:20]}»: parche del fondo del panel en el aviso"
+        assert _cuenta_color(img, r, tokens.TOK["line"], 0) == 0, \
+            f"«{l.text()[:20]}»: borde propio heredado de `QFrame {{}}`"
+    whb = hx.WHBSubcomponent({
+        "steam_kg_per_h": 65959.0, "range_min": 20000.0,
+        "range_max": 800000.0, "variant": "Packaged",
+        "scale_mismatch": False, "fuera_rango": False,
+        "steam_exported_t_y": None, "revenue_usd_y": None})
+    host2, img2 = _render_en_inspector(app, whb)
+    for l, r in _rotulos(whb, host2):
+        assert _cuenta_color(img2, r, tokens.TOK["bg_elev"], 0) == 0, \
+            f"«{l.text()[:20]}»: parche del fondo del panel en la WHB"
+
+
+def test_riguroso_sin_rayas_bajo_cada_rotulo(app, tema_restaurado):
+    """`border-top` del cuerpo del riguroso iba sin selector: cada QLabel
+    de la tabla clave-valor dibujaba su propia raya superior."""
+    tokens.apply_preferences(theme="light")
+    from PySide6.QtGui import QColor
+    import hx_inspector as hx
+    rb = hx.RigorousBlock(_vm_hx(), default_open=True)
+    host, img = _render_en_inspector(app, rb)
+    body = rb._body.geometry().translated(rb.geometry().topLeft())
+    linea = QColor(tokens.TOK["line_soft"]).rgb()
+    filas_con_raya = 0
+    for y in range(body.top() + 3, body.bottom() - 3):
+        n = sum(1 for x in range(body.left() + 4, body.right() - 4)
+                if img.pixel(x, y) == linea)
+        if n >= 20:
+            filas_con_raya += 1
+    assert filas_con_raya == 0, f"{filas_con_raya} rayas dentro del cuerpo"
