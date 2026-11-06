@@ -71,3 +71,32 @@ def test_kit_table_nota_larga_no_desborda_el_dialogo(app):
     assert tabla.minimumSizeHint().width() <= 760 - 48, \
         "la nota larga ensancha la tabla más que el diálogo"
     dlg.close()
+
+
+def test_enter_dispara_el_primario_y_no_el_cerrar(app):
+    """El ✕ del header es un QPushButton con autoDefault y es el primer
+    widget enfocable: Enter cerraba el diálogo en vez de aplicar.  El
+    botón primario tiene que ser el default; el ✕ no toma foco."""
+    from PySide6.QtCore import Qt
+    from PySide6.QtTest import QTest
+    from dialog_kit import KitDialog
+    dlg = KitDialog("Setpoints", "objetivos")
+    disparos = []
+    dlg.add_button("Cancelar")
+    dlg.add_button("Aplicar", role="primary",
+                   slot=lambda: disparos.append("aplicar"))
+    dlg.show()
+    app.processEvents()
+    QTest.keyClick(dlg, Qt.Key_Return)
+    app.processEvents()
+    assert disparos == ["aplicar"], "Enter no ejecutó la acción primaria"
+    assert dlg.isVisible(), "Enter cerró el diálogo por el ✕"
+    dlg.close()
+
+
+def test_cerrar_del_header_tiene_tooltip(app):
+    from PySide6.QtWidgets import QPushButton
+    from dialog_kit import KitDialog
+    dlg = KitDialog("x")
+    cerrar = [b for b in dlg.findChildren(QPushButton) if b.text() == "✕"]
+    assert cerrar and cerrar[0].toolTip(), "el ✕ es un glifo mudo"

@@ -197,6 +197,11 @@ class KitDialog(QDialog):
         x = QPushButton("✕")   # glifo-ícono (excepción 2g)
         x.setFixedSize(28, 28)
         x.setCursor(Qt.PointingHandCursor)
+        x.setToolTip("Cerrar (Esc)")
+        # Es el primer widget enfocable del diálogo: con autoDefault, Enter
+        # lo «pulsaba» y cerraba en vez de ejecutar la acción primaria.
+        x.setFocusPolicy(Qt.NoFocus)
+        x.setAutoDefault(False)
         x.setStyleSheet(
             f"QPushButton {{ color:{TOK['ink_mute']}; border:0; "
             f"background:transparent; border-radius:6px; }} "
@@ -235,6 +240,11 @@ class KitDialog(QDialog):
                    slot=None) -> QPushButton:
         b = kit_button(text, role)
         b.clicked.connect(slot if slot is not None else self.reject)
+        # Enter = acción primaria (convención de diálogo); los demás no
+        # se vuelven default por tener foco.
+        b.setAutoDefault(role == "primary")
+        if role == "primary":
+            b.setDefault(True)
         self._foot_lay.addWidget(b)
         return b
 
