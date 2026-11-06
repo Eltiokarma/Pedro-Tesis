@@ -2555,14 +2555,7 @@ class BlockInspectorPanel(QWidget):
             # agrupados por fabricante (orden del catálogo); en QComboBox
             # plano el grupo se lee como prefijo "Marca · Modelo"
             for e in entradas:
-                if "S" in e:
-                    texto = f"{e['marca']} · {e['modelo']} — {e['S']:g} {s_unit}"
-                else:
-                    gran = e.get("granularidad", "")
-                    sufijo = ("envolvente de familia" if gran == "familia"
-                              else "envolvente del modelo")
-                    texto = f"{e['marca']} · {e['modelo']} — {sufijo}"
-                cb.addItem(texto, ds.clave_de(e))
+                cb.addItem(ds.texto_entrada(e, s_unit), ds.clave_de(e))
             cur = getattr(b, "equipo_comercial", "") or ""
             idx = cb.findData(cur) if cur else 0
             cb.setCurrentIndex(max(0, idx))

@@ -115,6 +115,23 @@ def clave_de(entrada: dict) -> str:
     return f"{entrada.get('marca', '')}|{entrada.get('modelo', '')}"
 
 
+def texto_entrada(entrada: dict, s_unit: str = "") -> str:
+    """Texto de una entrada del catálogo tal como se lista en el selector
+    de equipo comercial: «Marca · Modelo — S unidad» si el modelo publica
+    un S escalar, o la granularidad de su envolvente si no.
+
+    Vive acá (Qt-free) y no en el inspector para que el selector, su
+    tooltip y cualquier otra superficie que liste el catálogo digan lo
+    mismo."""
+    cabeza = f"{entrada.get('marca', '')} · {entrada.get('modelo', '')}"
+    if "S" in entrada:
+        return f"{cabeza} — {float(entrada['S']):g} {s_unit}".rstrip()
+    sufijo = ("envolvente de familia"
+              if entrada.get("granularidad", "") == "familia"
+              else "envolvente del modelo")
+    return f"{cabeza} — {sufijo}"
+
+
 def entrada_de(block) -> Optional[dict]:
     """Resuelve Block.equipo_comercial ('marca|modelo') contra el
     catálogo, exigiendo además que el eq_type coincida."""
