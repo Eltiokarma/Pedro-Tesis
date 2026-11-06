@@ -2447,6 +2447,9 @@ class BlockInspectorPanel(QWidget):
         lay.setContentsMargins(12, 10, 12, 10); lay.setSpacing(6)
         t = QLabel(titulo); t.setFont(qfont(FONT_LABEL))
         t.setStyleSheet(f"color:{color};")
+        # «NO ENTRA — el proceso excede el modelo» mide ~266 px: sin
+        # word-wrap la tarjeta exigía más que el viewport del inspector.
+        t.setWordWrap(True)
         lay.addWidget(t)
 
         # Requerido/instalado y los checks llegan en unidades canónicas

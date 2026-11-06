@@ -380,3 +380,26 @@ def test_link_de_la_fuente_usa_el_acento(app, tema_restaurado, tema):
     if not _cerca(azul_qt, acento):
         assert not any(_cerca(c, azul_qt, tol=8) for c in pintados), \
             "el link sigue en el azul por defecto de Qt"
+
+
+# ─────────────────── el veredicto NO ENTRA también cabe ───────────────────
+
+@pytest.mark.parametrize("sistema", ["Modelo (tm/año)", "Imperial (US)"])
+def test_ficha_con_veredicto_no_entra_cabe(app, turbina, sistema_restaurado,
+                                           sistema):
+    """«NO ENTRA — el proceso excede el modelo» es el título más largo
+    del veredicto y no envolvía: con un modelo chico la tarjeta volvía a
+    exigir más que el viewport."""
+    fs, b = turbina
+    chico = _clave(b.eq_type, lambda e: "S" in e and e["S"] < float(b.S))
+    b.equipo_comercial = chico
+    try:
+        sistema_restaurado.set_system(sistema)
+        panel = _panel_ficha(app, fs, b)
+        sect = _seccion(panel)
+        assert sect.minimumSizeHint().width() <= _VIEWPORT - 40, \
+            f"la sección exige {sect.minimumSizeHint().width()} px"
+        assert panel._content_scroll.horizontalScrollBar().maximum() == 0
+        panel.close()
+    finally:
+        b.equipo_comercial = ""
