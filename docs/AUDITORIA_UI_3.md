@@ -296,38 +296,54 @@ Diez defectos corregidos, un commit cada uno. Test:
 
 ## 4. Backlog vivo para el próximo ciclo
 
-### 4.1 Selector de equipo comercial (`block_inspector.py`, sección Ficha técnica)
+### 4.1 Selector de equipo comercial — CERRADO (2026-11-06)
 
-No se tocó en la pasada porque `block_inspector.py` estaba ocupado por el
-retiro del diálogo; ya está libre.
+Los seis ítems, más tres que aparecieron midiendo. Test:
+`tests/test_auditoria_ui3_selector.py` (TB-101, 12 modelos, viewport de
+320 px). La sección pasó de 612 px a 280.
 
-- **ALTA** — El combo de modelos se dimensiona por su entrada más larga
-  (~420 px): la sección Ficha queda en 624 px dentro de un viewport de 320
-  y corta ayuda, veredicto y filas. *Fix:* `AdjustToMinimumContentsLengthWithIcon`,
-  popup más ancho, tooltip con el texto completo.
-- **ALTA** — «Equipo comercial · 12 modelos» se corta en
-  «Equipo comercial · 1»: se lee como un solo modelo. *Fix:* rótulo arriba
-  del combo.
-- **MEDIA** — Elegir un modelo escribe `b.equipo_comercial` directo al
-  modelo: «Cancelar» no lo deshace. *Fix:* guardarlo solo en `_apply_to_block`.
-- **MEDIA** — Un chequeo fallido imprime «✗ Presión 30 ≤ 16 bar»: la
-  desigualdad afirma lo contrario de lo que falló. *Fix:* «>» al fallar.
-- **MEDIA** — El veredicto (S, P, T y el mensaje «El proceso exige X kW…»
-  de `datasheet.py`) ignora el sistema de unidades. *Fix:* `fmt_canonica`
-  en tarjeta y mensaje a la vez, para no mezclar unidades.
-- **MEDIA (dark)** — El link «fuente del fabricante» usa el azul por
-  defecto de Qt, casi ilegible en oscuro. *Fix:* color del token de acento.
+- **ALTA — combo desbordado:** `AdjustToMinimumContentsLengthWithIcon`
+  (176 px en vez de 448); el popup abre al ancho de la entrada más larga y
+  cada entrada lleva su texto completo de tooltip.
+- **ALTA — «· 1 modelo»:** el rótulo va arriba del combo, a todo el
+  ancho. De paso: `Turton_2018_AppA` y el link de fuente también envuelven.
+- **MEDIA — «Cancelar» no deshacía:** la elección queda pendiente y solo
+  `_apply_to_block` la escribe; el veredicto se calcula sobre una copia.
+- **MEDIA — «30 ≤ 16 bar»:** un chequeo fallido muestra «>».
+- **MEDIA — unidades:** veredicto, chequeos, entradas del combo y el
+  mensaje de `datasheet.py` pasan por `fmt_canonica`. Efecto: el export
+  de la ficha también respeta el sistema activo, y se redondea igual que
+  el resto de la ficha («687 kW», no «686.95 kW»).
+- **MEDIA (dark) — link azul:** color del token de acento.
+- **Extras:** el título «NO ENTRA…» envuelve; los valores en MMBtu/h ya no
+  se parten; el texto de cada entrada sale de un solo helper,
+  `datasheet.texto_entrada`.
 
-### 4.2 Decisión pendiente: `cake_moisture`
+### 4.2 `cake_moisture` — CERRADO (2026-11-06)
 
-La humedad de torta de filtros y centrífugas no se puede editar desde
-ninguna superficie (no es regresión: el diálogo que la tenía ya era
-inalcanzable). El modelo unificado `mech_sep` no tiene ese término, pero el
-solver la sigue respetando al cargar; la usa `sugar.json` FL-101 (3 %).
-*Plan si se decide:* `mech_sep_cake_moisture` en `_sep_by_phase` (rama
-filtro/centrífuga) como líquido arrastrado en la salida objetivo, sembrado
-desde `cake_moisture` al cargar, campo en «Modo especial» y test de que el
-balance de FL-101 no cambia tras abrir y guardar.
+La humedad de torta vuelve al modelo unificado como
+`mech_sep_cake_moisture`, con la misma semántica que el camino legacy
+(torta = sólidos recuperados / (1 − humedad), líquido arrastrado en
+proporción a su composición, tope en el líquido disponible). Solo la
+aplican filtros y centrífugas; ciclón y decantador la ignoran. Se siembra
+desde `cake_moisture` al cargar solo en bloques legacy: `salt_crystal`
+FL-101 ya es `mech_sep` con un `cake_moisture` inerte y sembrarlo le
+habría cambiado los números. Campo «Humedad de torta» en «Modo especial».
+
+El test de abrir y guardar destapó un bug peor: el campo η mostraba el
+default 0.95 de `mech_sep` en vez del valor legacy, así que **abrir y
+guardar FL-101 de `sugar.json` le subía la recuperación de 0.75 a 0.95**
+sin avisar. Corregido: hoy FL-101 sale idéntico (rel 1e-12) tras abrir,
+guardar y re-resolver. Test: `tests/test_cake_moisture.py`; gate de
+ejemplos 64/64 sin cambios.
+
+### 4.2b Un segfault que los tests verdes tapaban — CERRADO
+
+Al integrar el ciclo, la suite completa daba «N passed» y el proceso
+moría con exit 139 en el apagado. Origen: el bloque de contenido de la
+welcome (§3.1) nacía sin padre y PySide lo destruía dos veces. Arreglado
+y con test de regresión en subproceso. Lección: correr la suite mirando
+el código de salida, no solo el resumen.
 
 ### 4.3 Menores
 
@@ -346,9 +362,9 @@ balance de FL-101 no cambia tras abrir y guardar.
   «IBM Plex Mono» en vez de pasar por los tokens de fuente.
 - **BAJA (dark)** — El chip «auto» de los campos del inspector es gris
   sobre gris.
-- **BAJA** — El texto de las entradas del combo comercial se armaba en dos
-  lugares; con `BlockEditDialog` retirado queda uno solo, pero conviene
-  moverlo a un helper de `datasheet.py` y agrupar por marca.
+- **BAJA** — El badge de tipo de TB-101 (turbina de vapor) dice «PUMP»
+  en el header del inspector.
+- **BAJA** — Las entradas del combo comercial no se agrupan por marca.
 
 ---
 
@@ -357,4 +373,4 @@ estaba cerrada— y terminó con tres colisiones corregidas (§1), el
 sistema de unidades cableado en quince campos y superficies (§2), y el
 backlog del ciclo cerrado (§3: tres menores y diez defectos de las
 superficies nuevas). Cada cambio con su test. Escaneo generado sobre
-`55f6c14`; §3 ejecutada el 2026-11-06.*
+`55f6c14`; §3 y §4.1-4.2 ejecutadas el 2026-11-06.*
