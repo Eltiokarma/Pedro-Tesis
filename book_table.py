@@ -50,8 +50,10 @@ from PySide6.QtCore import Qt, QRectF, QRect, QSize, QPoint
 from PySide6.QtGui import QColor, QFont, QBrush, QPainter, QPen, QFontMetrics
 from PySide6.QtWidgets import (
     QWidget, QFrame, QLabel, QVBoxLayout, QHBoxLayout, QGridLayout,
-    QLayout, QSizePolicy,
+    QLayout, QSizePolicy, QScrollArea,
 )
+import html as _html
+import re as _re
 
 import block_inspector as _bi     # TOK en caliente (muta con el tema)
 from tokens import qfont, FONT_VALUE, FONT_HINT, FONT_LABEL
@@ -78,6 +80,102 @@ _KIND_TOKENS = {
 
 def _kind(k: str):
     return _KIND_TOKENS.get(k or "neutral", _KIND_TOKENS["neutral"])
+
+
+# ─────────────────────────────────────────────────────────────────────
+#  Piezas que deben CABER en el inspector (auditoría UI 3 §3.2)
+# ─────────────────────────────────────────────────────────────────────
+# El contenido del inspector mide ~320 px a su ancho por defecto
+# (PANEL_W).  Cada pieza de la tarjeta que exigía su ancho natural en una
+# sola línea —strip de contexto, fila de chips, kicker, grilla— empujaba
+# el panel ENTERO a scroll horizontal: del reparto del flash solo se veía
+# la columna de especies.  Ahora el texto envuelve y la grilla, que no
+# puede envolver (es una tabla), scrollea sola.
+
+def _cortable(texto: str) -> str:
+    """Permite cortar tokens larguísimos sin espacios (rutas tipo
+    `modulo.funcion_larga`) después de «.», «_» o «/»: un QLabel con
+    word-wrap no puede ser más angosto que su palabra más larga."""
+    return _re.sub(r"\S{24,}",
+                   lambda m: _re.sub(r"([._/])", "\\1\u200b", m.group(0)),
+                   texto)
+
+
+def _context_strip(ctx) -> QFrame:
+    """Banda de contexto (pares RÓTULO valor) que ENVUELVE.
+
+    Un solo QLabel rich-text con word-wrap: el rótulo y su valor van
+    unidos por &nbsp; (no se separan), los pares se separan por espacios
+    normales (ahí corta la línea).  Antes eran QHBoxLayout sin wrap: la
+    reacción «R006 — Oxidación de SO2 a SO3 (proceso de contacto)»
+    exigía 910 px."""
+    f_lab, f_val = qfont(FONT_LABEL), qfont(FONT_VALUE)
+
+    def _sin_cortes(t: str) -> str:
+        # El motor de rich text corta después de «/» y «-» («V/ F»,
+        # «kmol/ h»): word-joiner los pega.  `white-space:nowrap` no lo
+        # respeta QLabel.
+        return t.replace("/", "/\u2060").replace("-", "-\u2060")
+
+    partes = []
+    for lab, val in ctx:
+        rot = _html.escape(_sin_cortes(str(lab).upper())).replace(" ", "&nbsp;")
+        # número y unidad no se separan («76.9 °C»); el resto del valor
+        # sí puede envolver en sus espacios (nombres de reacción largos)
+        v = _re.sub(r"(\d) ", "\\1\u00a0", _sin_cortes(str(val)))
+        partes.append(
+            f'<span style="font-family:\'{f_lab.family()}\'; '
+            f'font-size:{FONT_LABEL[1]}pt; font-weight:600; '
+            f'color:{_tok("ink_soft")};">{rot}</span>&nbsp;'
+            f'<span style="font-family:\'{f_val.family()}\'; '
+            f'font-size:{FONT_VALUE[1]}pt; color:{_tok("ink")};">'
+            f'{_html.escape(v)}</span>')
+    strip = QFrame()
+    strip.setStyleSheet(f"background:{_tok('bg_sunk')}; border:0;")
+    sl = QVBoxLayout(strip)
+    sl.setContentsMargins(14, 8, 14, 8)
+    lbl = QLabel("&nbsp;&nbsp;&nbsp;&nbsp; ".join(partes))
+    lbl.setTextFormat(Qt.RichText)
+    lbl.setWordWrap(True)
+    lbl.setStyleSheet("border:0; background:transparent;")
+    sl.addWidget(lbl)
+    return strip
+
+
+class _GridScroll(QScrollArea):
+    """La grilla con scroll horizontal PROPIO cuando no entra.
+
+    Una tabla no envuelve: si su ancho natural no cabe, la alternativa a
+    recortar columnas en silencio o a desbordar el panel entero es que
+    scrollee ella sola.  La altura acompaña: suma la barra solo cuando
+    hace falta."""
+
+    def __init__(self, grid: QWidget, parent=None):
+        super().__init__(parent)
+        self._grid = grid
+        self.setWidget(grid)
+        self.setWidgetResizable(True)
+        self.setFrameShape(QFrame.NoFrame)
+        self.setVerticalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+        self.setHorizontalScrollBarPolicy(Qt.ScrollBarAsNeeded)
+        self.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
+        self.setStyleSheet("QScrollArea { background:transparent; border:0; }")
+        self.viewport().setStyleSheet("background:transparent;")
+        self.setFixedHeight(grid.height())
+
+    def minimumSizeHint(self) -> QSize:
+        return QSize(min(120, self._grid._natural), self.height())
+
+    def sizeHint(self) -> QSize:
+        return QSize(self._grid._natural, self.height())
+
+    def resizeEvent(self, ev):
+        super().resizeEvent(ev)
+        falta = self.width() < self._grid._natural
+        h = self._grid.height() + (
+            self.horizontalScrollBar().sizeHint().height() if falta else 0)
+        if self.height() != h:
+            self.setFixedHeight(h)
 
 
 # ─────────────────────────────────────────────────────────────────────
@@ -302,37 +400,15 @@ class BookTable(QFrame):
         f_k = qfont(FONT_LABEL)
         f_k.setLetterSpacing(QFont.AbsoluteSpacing, 1.2)
         kt.setFont(f_k)
+        kt.setWordWrap(True)
         kt.setStyleSheet(f"color:{_tok('ink_soft')}; border:0;")
-        kl.addWidget(kt)
-        kl.addStretch(1)
+        kl.addWidget(kt, 1)
         lay.addWidget(kick)
 
         # ── strip de contexto ──
         ctx = spec.get("context") or []
         if ctx:
-            strip = QFrame()
-            strip.setStyleSheet(
-                f"background:{_tok('bg_sunk')}; border:0;")
-            sl = QHBoxLayout(strip)
-            sl.setContentsMargins(14, 8, 14, 8)
-            sl.setSpacing(18)
-            for lab, val in ctx:
-                cell = QHBoxLayout()
-                cell.setSpacing(5)
-                ll = QLabel(str(lab).upper())
-                ll.setFont(qfont(FONT_LABEL))
-                ll.setStyleSheet(f"color:{_tok('ink_soft')}; border:0;")
-                cell.addWidget(ll)
-                vl = QLabel(str(val))
-                vl.setFont(qfont(FONT_VALUE))
-                vl.setStyleSheet(f"color:{_tok('ink')}; border:0;")
-                cell.addWidget(vl)
-                wrap = QFrame()
-                wrap.setStyleSheet("border:0; background:transparent;")
-                wrap.setLayout(cell)
-                sl.addWidget(wrap)
-            sl.addStretch(1)
-            lay.addWidget(strip)
+            lay.addWidget(_context_strip(ctx))
 
         # ── grilla ──
         grid_wrap = QFrame()
@@ -341,7 +417,7 @@ class BookTable(QFrame):
         gl.setContentsMargins(14, 4, 14, 2)
         self.grid = _BookGrid(spec.get("columns") or [],
                               spec.get("rows") or [])
-        gl.addWidget(self.grid)
+        gl.addWidget(_GridScroll(self.grid))
         lay.addWidget(grid_wrap)
 
         # ── chips derivados ──
@@ -349,9 +425,12 @@ class BookTable(QFrame):
         if chips:
             ch_wrap = QFrame()
             ch_wrap.setStyleSheet("border:0; background:transparent;")
-            cl = QHBoxLayout(ch_wrap)
-            cl.setContentsMargins(14, 8, 14, 2)
-            cl.setSpacing(8)
+            ch_out = QVBoxLayout(ch_wrap)
+            ch_out.setContentsMargins(14, 8, 14, 2)
+            ch_host = QFrame()
+            ch_host.setStyleSheet("border:0; background:transparent;")
+            cl = _FlowLayout(ch_host, hspace=8, vspace=6)
+            ch_out.addWidget(ch_host)
             for ch in chips:
                 ink_t, bg_t = _kind(ch.get("kind"))
                 pill = QLabel(
@@ -363,7 +442,6 @@ class BookTable(QFrame):
                     f"background:{_tok(bg_t)}; color:{_tok(ink_t)}; "
                     f"border:0; border-radius:7px; padding:3px 11px;")
                 cl.addWidget(pill)
-            cl.addStretch(1)
             lay.addWidget(ch_wrap)
 
         # ── procedencia de X (vocabulario sudoku) ──
@@ -371,9 +449,12 @@ class BookTable(QFrame):
         if prov:
             pv_wrap = QFrame()
             pv_wrap.setStyleSheet("border:0; background:transparent;")
-            pl = QHBoxLayout(pv_wrap)
-            pl.setContentsMargins(14, 5, 14, 2)
-            pl.setSpacing(8)
+            pv_out = QVBoxLayout(pv_wrap)
+            pv_out.setContentsMargins(14, 5, 14, 2)
+            pv_host = QFrame()
+            pv_host.setStyleSheet("border:0; background:transparent;")
+            pv_out.addWidget(pv_host)
+            pl = _FlowLayout(pv_host, hspace=8, vspace=4)
             pre = QLabel(str(prov.get("pre", "")))
             pre.setFont(qfont(FONT_HINT))
             pre.setStyleSheet(f"color:{_tok('ink_mute')}; border:0;")
@@ -387,7 +468,6 @@ class BookTable(QFrame):
                 f"background:{_tok(bg_t)}; color:{_tok(ink_t)}; "
                 f"border:0; border-radius:6px; padding:1px 9px;")
             pl.addWidget(pill)
-            pl.addStretch(1)
             lay.addWidget(pv_wrap)
 
         # ── nota (identidad / fórmula) ──
@@ -426,7 +506,7 @@ class BookTable(QFrame):
         glyph.setStyleSheet(
             f"color:{_tok('ink_soft')}; border:0; font-size:11px;")
         srl.addWidget(glyph)
-        st = QLabel(f"Fuente: {spec.get('source', '')}")
+        st = QLabel(_cortable(f"Fuente: {spec.get('source', '')}"))
         st.setFont(qfont(FONT_HINT))
         st.setWordWrap(True)
         st.setStyleSheet(f"color:{_tok('ink_soft')}; border:0;")
@@ -569,9 +649,9 @@ class AtomBalanceCard(QFrame):
         f_k = qfont(FONT_LABEL)
         f_k.setLetterSpacing(QFont.AbsoluteSpacing, 1.2)
         kt.setFont(f_k)
+        kt.setWordWrap(True)
         kt.setStyleSheet(f"color:{_tok('ink_soft')}; border:0;")
-        kl.addWidget(kt)
-        kl.addStretch(1)
+        kl.addWidget(kt, 1)
         # chip resumen: ✓ átomos (green) / ⚠ átomos (danger)
         ink_t, bg_t = ("green", "green_bg") if ok else ("danger", "danger_bg")
         chip = QLabel(("✓ átomos" if ok else "⚠ átomos"))
@@ -585,28 +665,7 @@ class AtomBalanceCard(QFrame):
         return kick
 
     def _context_strip(self, ctx) -> QFrame:
-        strip = QFrame()
-        strip.setStyleSheet(f"background:{_tok('bg_sunk')}; border:0;")
-        sl = QHBoxLayout(strip)
-        sl.setContentsMargins(14, 8, 14, 8)
-        sl.setSpacing(18)
-        for lab, val in ctx:
-            cell = QHBoxLayout()
-            cell.setSpacing(5)
-            ll = QLabel(str(lab).upper())
-            ll.setFont(qfont(FONT_LABEL))
-            ll.setStyleSheet(f"color:{_tok('ink_soft')}; border:0;")
-            cell.addWidget(ll)
-            vl = QLabel(str(val))
-            vl.setFont(qfont(FONT_VALUE))
-            vl.setStyleSheet(f"color:{_tok('ink')}; border:0;")
-            cell.addWidget(vl)
-            wrap = QFrame()
-            wrap.setStyleSheet("border:0; background:transparent;")
-            wrap.setLayout(cell)
-            sl.addWidget(wrap)
-        sl.addStretch(1)
-        return strip
+        return _context_strip(ctx)
 
     def _apply_col_stretch(self, g: QGridLayout):
         for i, s in enumerate(self._STRETCH):
@@ -774,7 +833,7 @@ class AtomBalanceCard(QFrame):
         glyph.setStyleSheet(
             f"color:{_tok('ink_soft')}; border:0; font-size:11px;")
         srl.addWidget(glyph)
-        st = QLabel(f"Fuente: {source}")
+        st = QLabel(_cortable(f"Fuente: {source}"))
         st.setFont(qfont(FONT_HINT))
         st.setWordWrap(True)
         st.setStyleSheet(f"color:{_tok('ink_soft')}; border:0;")

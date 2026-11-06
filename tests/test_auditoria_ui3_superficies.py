@@ -271,3 +271,68 @@ def test_riguroso_sin_rayas_bajo_cada_rotulo(app, tema_restaurado):
         if n >= 20:
             filas_con_raya += 1
     assert filas_con_raya == 0, f"{filas_con_raya} rayas dentro del cuerpo"
+
+
+# ─────────────────────────── book_table ───────────────────────────
+
+# Ancho que recibe una tarjeta de la sección Diagnóstico con el inspector
+# a su ancho POR DEFECTO (tokens.PANEL_W = 520): sidebar 186, scrollbar
+# vertical y márgenes de contenido 20+20 dejan 280 px (medido: viewport
+# 320 − 40).
+_ANCHO_TARJETA = 280
+
+
+@pytest.fixture(scope="module")
+def specs_libro(app):
+    import examples_registry as reg
+    import flowsheet_solver as fsv
+    import inspector_evidence as ev
+    fs = reg.load_example("sulfuric")
+    fsv.solve(fs)
+    r = next(b for b in fs.blocks.values() if b.name == "R-101")
+    fs2 = reg.load_example("nested_recycle")
+    fsv.solve(fs2)
+    v = next(b for b in fs2.blocks.values() if b.name == "V-101")
+    return {"stoich": ev.stoich_book_spec(r, fs),
+            "flash": ev.flash_book_spec(v),
+            "atomos": ev.atom_balance_book_spec(r, fs)}
+
+
+@pytest.mark.parametrize("clave", ["stoich", "flash"])
+def test_tabla_de_libro_cabe_en_el_inspector(app, specs_libro, clave):
+    """La tabla de libro empujaba el inspector ENTERO a scroll horizontal:
+    a su ancho por defecto solo se veía la primera columna del reparto del
+    flash — K_i, el dato de la tabla, quedaba fuera de pantalla.  Los
+    culpables: el strip de contexto («R006 — Oxidación de SO2 a SO3
+    (proceso de contacto)» en una sola línea: 910 px), las filas de chips
+    y de procedencia sin wrap, y la grilla, que fijaba su mínimo en el
+    ancho natural de la tabla."""
+    from book_table import BookTable
+    spec = specs_libro[clave]
+    assert spec is not None
+    w = BookTable(spec)
+    assert w.minimumSizeHint().width() <= _ANCHO_TARJETA, \
+        f"{clave}: exige {w.minimumSizeHint().width()} px"
+    # y a ese ancho la grilla sigue teniendo TODAS sus columnas —con
+    # scroll propio—, no recortadas en silencio
+    w.resize(_ANCHO_TARJETA, w.sizeHint().height())
+    w.show()
+    app.processEvents()
+    assert w.grid.width() >= w.grid._natural
+
+
+def test_balance_de_atomos_strip_y_kicker_envuelven(app, specs_libro):
+    """Misma causa en la tarjeta de átomos: kicker y strip de contexto
+    exigían 524 y 832 px.  (El resto de la tarjeta —fila de elemento y
+    las dos cajas de procedencia lado a lado— queda abierto: ver el
+    reporte de la auditoría.)"""
+    from PySide6.QtWidgets import QFrame
+    from book_table import AtomBalanceCard
+    w = AtomBalanceCard(specs_libro["atomos"])
+    lay = w.layout()
+    kicker = lay.itemAt(0).widget()
+    strip = lay.itemAt(1).widget()
+    assert isinstance(strip, QFrame)
+    for parte, nombre in ((kicker, "kicker"), (strip, "contexto")):
+        assert parte.minimumSizeHint().width() <= _ANCHO_TARJETA, \
+            f"{nombre}: exige {parte.minimumSizeHint().width()} px"
