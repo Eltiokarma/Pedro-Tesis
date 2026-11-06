@@ -982,6 +982,10 @@ class BlockInspectorPanel(QWidget):
         self._reaction_rows: List[Tuple[str, ReactionRow]] = []
         # (rxn_id, QCheckBox) de la sección Predictor rxn
         self._predictor_rows: List[Tuple[str, QCheckBox]] = []
+        # Equipo comercial elegido en la Ficha y todavía NO guardado
+        # (None = sin tocar).  Vive en el panel, no en el Block, para que
+        # «Cancelar» lo descarte (auditoría UI 3 §4.1).
+        self._equipo_pendiente: Optional[str] = None
         # Suscribirse al bus de prefs para re-construir el panel al
         # cambiar tema/densidad/acento (Vista > Preferencias…).
         try:
@@ -1115,7 +1119,10 @@ class BlockInspectorPanel(QWidget):
         if self.block is None or self.fs is None:
             return
         active = self._sidebar.active() or "identidad"
+        pendiente = self._equipo_pendiente
         self.load_block(self.block, self.fs, on_save=self._on_save)
+        # cambiar de tema no es cancelar: la elección sin guardar sigue
+        self._equipo_pendiente = pendiente
         # restaurar sección activa
         try:
             self._switch_section(active)
@@ -1133,6 +1140,7 @@ class BlockInspectorPanel(QWidget):
         self._extras.clear()
         self._reaction_rows.clear()
         self._predictor_rows.clear()
+        self._equipo_pendiente = None
 
         eq_type = block.eq_type
         type_short = _type_short(eq_type)
@@ -2562,7 +2570,9 @@ class BlockInspectorPanel(QWidget):
             # plano el grupo se lee como prefijo "Marca · Modelo"
             for e in entradas:
                 cb.addItem(ds.texto_entrada(e, s_unit), ds.clave_de(e))
-            cur = getattr(b, "equipo_comercial", "") or ""
+            cur = (self._equipo_pendiente
+                   if self._equipo_pendiente is not None
+                   else getattr(b, "equipo_comercial", "") or "")
             idx = cb.findData(cur) if cur else 0
             cb.setCurrentIndex(max(0, idx))
             cb.setStyleSheet(self._combo_style())
@@ -2589,7 +2599,10 @@ class BlockInspectorPanel(QWidget):
             self._extras["equipo_comercial"] = cb
 
             def _on_equipo(_i):
-                b.equipo_comercial = cb.currentData() or ""
+                # NO se escribe en el Block: la elección queda pendiente
+                # hasta «Guardar cambios» (_apply_to_block).  La sección
+                # se reconstruye para que el veredicto ya la muestre.
+                self._equipo_pendiente = cb.currentData() or ""
                 from PySide6.QtCore import QTimer
                 QTimer.singleShot(0, lambda:
                                   self._build_section_content("ficha"))
@@ -2612,8 +2625,17 @@ class BlockInspectorPanel(QWidget):
             l.addWidget(wrap)
 
         # ── Veredicto ──
+        # Con una elección pendiente, el veredicto y la ficha se calculan
+        # sobre una COPIA del bloque con ese equipo: el Block real no se
+        # toca hasta guardar.
+        vista = b
+        if (self._equipo_pendiente is not None and self._equipo_pendiente
+                != (getattr(b, "equipo_comercial", "") or "")):
+            import copy
+            vista = copy.copy(b)
+            vista.equipo_comercial = self._equipo_pendiente
         try:
-            v = ds.verificacion(b, self.fs)
+            v = ds.verificacion(vista, self.fs)
         except Exception as exc:
             v = {"estado": "no_aplica", "mensaje": f"verificación no "
                  f"disponible: {exc}"}
@@ -2633,7 +2655,7 @@ class BlockInspectorPanel(QWidget):
         #    catálogo comercial: el fallback genérico del agregador
         #    garantiza contenido en los 60 tipos ──
         try:
-            spec = ds.datasheet_spec(b, self.fs)
+            spec = ds.datasheet_spec(vista, self.fs)
         except Exception as exc:
             err = QLabel(f"ficha no disponible: {exc}")
             err.setFont(qfont(FONT_HINT)); err.setWordWrap(True)
@@ -3524,12 +3546,16 @@ class BlockInspectorPanel(QWidget):
             data = cb.currentData()
             b.heat_source = data if data else ""
         # ─── Ficha técnica: equipo comercial declarado ───
-        # (el combo también escribe en vivo al cambiar; esto lo hace
-        # idempotente en el pase de apply)
+        # Único punto donde la elección del combo llega al Block: elegir
+        # un modelo solo la deja pendiente en el panel, y «Cancelar» la
+        # descarta.  Si la Ficha no está renderizada (el usuario eligió y
+        # cambió de sección) vale la pendiente.
         if "equipo_comercial" in self._extras:
             cb = self._extras["equipo_comercial"]
             data = cb.currentData()
             b.equipo_comercial = data if data else ""
+        elif self._equipo_pendiente is not None:
+            b.equipo_comercial = self._equipo_pendiente
 
     @staticmethod
     def _parse_num(s: str) -> str:

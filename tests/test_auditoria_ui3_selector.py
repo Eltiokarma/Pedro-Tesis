@@ -194,3 +194,65 @@ def test_rotulo_del_selector_se_lee_entero(app, turbina, declarado):
         "el inspector scrollea de costado"
     b.equipo_comercial = ""
     panel.close()
+
+
+# ─────────────────── Cancelar deshace la elección (MEDIA) ───────────────────
+
+def test_elegir_modelo_y_cancelar_no_toca_el_bloque(app, turbina):
+    """Elegir un modelo escribía `b.equipo_comercial` directo al modelo:
+    «Cancelar» cerraba el panel con el cambio ya hecho.  La elección
+    queda pendiente en el panel hasta «Guardar cambios»; mientras tanto
+    el veredicto ya la muestra."""
+    import datasheet as ds
+    from PySide6.QtWidgets import QLabel
+    fs, b = turbina
+    original = ds.clave_de(ds.entradas_para(b.eq_type)[0])
+    otro = ds.clave_de(ds.entradas_para(b.eq_type)[1])
+    b.equipo_comercial = original
+    cerrado = []
+    panel = _panel_ficha(app, fs, b)
+    panel.closeRequested.connect(lambda: cerrado.append(True))
+    cb = panel._extras["equipo_comercial"]
+    cb.setCurrentIndex(cb.findData(otro))
+    app.processEvents(); app.processEvents()   # rebuild diferido
+    assert b.equipo_comercial == original, \
+        "elegir en el combo ya escribió en el modelo"
+    # la sección reconstruida muestra la elección pendiente
+    cb = panel._extras["equipo_comercial"]
+    assert cb.currentData() == otro
+    modelo = next(e for e in ds.entradas_para(b.eq_type)
+                  if ds.clave_de(e) == otro)
+    textos = [l.text() for l in _seccion(panel).findChildren(QLabel)]
+    import flowsheet_units as funits
+    assert any(funits.fmt_canonica(modelo["S"], "kW") in t
+               or f"{modelo['S']:g} kW" in t for t in textos), \
+        "el veredicto no refleja el modelo elegido"
+    # Cancelar
+    panel._cancel_btn.click()
+    assert cerrado
+    assert b.equipo_comercial == original, "Cancelar no deshizo la elección"
+    # reabrir el bloque: el combo vuelve al declarado
+    panel.load_block(b, fs, lambda: None)
+    panel._switch_section("ficha")
+    assert panel._extras["equipo_comercial"].currentData() == original
+    panel.close()
+
+
+def test_elegir_otra_seccion_y_guardar_persiste(app, turbina):
+    """La elección pendiente sobrevive a cambiar de sección antes de
+    guardar: «Guardar cambios» la persiste aunque el combo ya no esté
+    renderizado."""
+    import datasheet as ds
+    fs, b = turbina
+    b.equipo_comercial = ""
+    otro = ds.clave_de(ds.entradas_para(b.eq_type)[2])
+    panel = _panel_ficha(app, fs, b)
+    cb = panel._extras["equipo_comercial"]
+    cb.setCurrentIndex(cb.findData(otro))
+    app.processEvents(); app.processEvents()
+    panel._switch_section("identidad")
+    assert b.equipo_comercial == ""
+    panel._save_btn.click()
+    assert b.equipo_comercial == otro
+    b.equipo_comercial = ""
+    panel.close()
