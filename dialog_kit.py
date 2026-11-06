@@ -130,6 +130,7 @@ def kit_table(headers, rows, aligns=None) -> QFrame:
         hl = kicker(h)
         hl.setStyleSheet(f"color:{TOK['ink_soft']}; border:0;")
         g.addWidget(hl, 0, c, qal.get(aligns[c], Qt.AlignLeft))
+    ultima = len(headers) - 1
     for r, row in enumerate(rows, start=1):
         for c, cell in enumerate(row):
             tone = ""
@@ -139,8 +140,18 @@ def kit_table(headers, rows, aligns=None) -> QFrame:
             lbl.setFont(qfont(FONT_VALUE))
             lbl.setStyleSheet(
                 f"color:{tones.get(tone, TOK['ink'])}; border:0;")
-            g.addWidget(lbl, r, c, qal.get(aligns[c], Qt.AlignLeft))
-    g.setColumnStretch(len(headers) - 1, 1)
+            if c == ultima:
+                # La última columna es la que estira y la que trae texto
+                # libre (Notas, Estado): envuelve en vez de exigir el
+                # ancho de la frase más larga — sin esto el cuerpo del
+                # diálogo scrolleaba en horizontal (auditoría UI 3 §3.2).
+                lbl.setWordWrap(True)
+                lbl.setAlignment(qal.get(aligns[c], Qt.AlignLeft)
+                                 | Qt.AlignVCenter)
+                g.addWidget(lbl, r, c)
+            else:
+                g.addWidget(lbl, r, c, qal.get(aligns[c], Qt.AlignLeft))
+    g.setColumnStretch(ultima, 1)
     return box
 
 
