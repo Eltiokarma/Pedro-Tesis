@@ -319,9 +319,11 @@ class TestSeccionFichaQt(unittest.TestCase):
 
 
 class TestDialogoEquipoComercialQt(unittest.TestCase):
-    """Auditoría 2026-07: el selector también vive en el diálogo de
-    crear/editar bloque (BlockEditDialog) — el usuario esperaba la opción
-    al crear el equipo, no solo en la sección Ficha del inspector."""
+    """Auditoría 2026-07: el usuario esperaba declarar el equipo comercial
+    al editar el bloque.  El selector vivía duplicado en el viejo
+    BlockEditDialog; la auditoría UI 3 §3.1 retiró ese diálogo y el
+    selector queda solo en la sección Ficha del inspector — estos tests
+    fijan que ahí se declara, se oculta y se preserva igual que antes."""
 
     @classmethod
     def setUpClass(cls):
@@ -330,36 +332,45 @@ class TestDialogoEquipoComercialQt(unittest.TestCase):
         from PySide6.QtWidgets import QApplication
         cls.app = QApplication.instance() or QApplication([])
 
+    def _panel_ficha(self, b):
+        import block_inspector as bi
+        fs = Flowsheet()
+        fs.blocks = {b.id: b}; fs.streams = {}
+        p = bi.BlockInspectorPanel()
+        p.load_block(b, fs, lambda: None)
+        p._build_section_content("ficha")
+        return p
+
     def test_dialogo_con_catalogo_ofrece_selector(self):
-        import flowsheet_qt as fq
         b = Block(id=1, name="K-1", eq_type="Compressor — rotary", S=12.0)
-        dlg = fq.BlockEditDialog(None, b)
-        self.assertFalse(dlg.gb_comercial.isHidden(),
-                         "tipo con catálogo debe mostrar el grupo")
-        self.assertEqual(dlg.comercial_combo.count(), 15)  # placeholder+14
-        idx = dlg.comercial_combo.findData("Atlas Copco|GA 90")
+        p = self._panel_ficha(b)
+        cb = p._extras.get("equipo_comercial")
+        self.assertIsNotNone(cb, "tipo con catálogo debe mostrar el selector")
+        self.assertEqual(cb.count(), 15)  # placeholder+14
+        idx = cb.findData("Atlas Copco|GA 90")
         self.assertGreater(idx, 0)
-        dlg.comercial_combo.setCurrentIndex(idx)
-        dlg.apply_to_model()
+        cb.blockSignals(True); cb.setCurrentIndex(idx); cb.blockSignals(False)
+        p._apply_to_block()
         self.assertEqual(b.equipo_comercial, "Atlas Copco|GA 90")
+        self.assertEqual(b.S, 12.0)   # el S del catálogo NUNCA pisa el S
 
     def test_dialogo_sin_catalogo_oculta_grupo(self):
-        import flowsheet_qt as fq
+        # El CSTR ya tiene catálogo (reactores vidriados): el tipo sin
+        # catálogo se resuelve en vivo, no se hardcodea.
         b = Block(id=1, name="R-1", eq_type=_tipo_sin_catalogo(), S=2.0)
-        dlg = fq.BlockEditDialog(None, b)
-        self.assertTrue(dlg.gb_comercial.isHidden(),
-                        "ingeniería a pedido: el grupo no aparece")
-        dlg.apply_to_model()
+        p = self._panel_ficha(b)
+        self.assertNotIn("equipo_comercial", p._extras,
+                         "ingeniería a pedido: el selector no aparece")
+        p._apply_to_block()
         self.assertEqual(b.equipo_comercial, "")
 
     def test_dialogo_preserva_declarado(self):
-        import flowsheet_qt as fq
         b = Block(id=1, name="TB-1", eq_type="Turbine — steam", S=700.0,
                   equipo_comercial="Siemens Energy|Dresser-Rand RLA/RLVA")
-        dlg = fq.BlockEditDialog(None, b)
-        self.assertEqual(dlg.comercial_combo.currentData(),
+        p = self._panel_ficha(b)
+        self.assertEqual(p._extras["equipo_comercial"].currentData(),
                          "Siemens Energy|Dresser-Rand RLA/RLVA")
-        dlg.apply_to_model()
+        p._apply_to_block()
         self.assertEqual(b.equipo_comercial,
                          "Siemens Energy|Dresser-Rand RLA/RLVA")
 

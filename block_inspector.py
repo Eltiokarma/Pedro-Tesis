@@ -167,6 +167,9 @@ def _sections_for(eq_type: str) -> List[str]:
         secs.append("flash")
     if _has_special_mode(eq_type):
         secs.append("especial")
+    # Predictor de reacciones (Fase 8): aplica a TODO bloque (opt-in vía
+    # allow_reactions), no solo a reactores.  Migrado del BlockEditDialog.
+    secs.append("predictor")
     secs.append("sizing")
     secs.append("ficha")
     secs.append("utility")
@@ -796,6 +799,7 @@ class _InspectorSidebar(QFrame):
         "columna":     "Etapas y reflujo",
         "flash":       "Flash VLE",
         "especial":    "Modo especial",
+        "predictor":   "Predictor rxn",
         "sizing":      "Sizing",
         "ficha":       "Ficha técnica",
         "utility":     "Utility",
@@ -809,6 +813,7 @@ class _InspectorSidebar(QFrame):
         "columna":     "≡",
         "flash":       "V",
         "especial":    "★",
+        "predictor":   "P",
         "sizing":      "□",
         "ficha":       "▤",
         "utility":     "♨",
@@ -975,7 +980,8 @@ class BlockInspectorPanel(QWidget):
         self._fields: Dict[str, SpecField] = {}
         self._extras: Dict[str, object] = {}   # widgets no-SpecField
         self._reaction_rows: List[Tuple[str, ReactionRow]] = []
-        self._open_advanced_cb: Optional[Callable] = None
+        # (rxn_id, QCheckBox) de la sección Predictor rxn
+        self._predictor_rows: List[Tuple[str, QCheckBox]] = []
         # Suscribirse al bus de prefs para re-construir el panel al
         # cambiar tema/densidad/acento (Vista > Preferencias…).
         try:
@@ -1109,9 +1115,7 @@ class BlockInspectorPanel(QWidget):
         if self.block is None or self.fs is None:
             return
         active = self._sidebar.active() or "identidad"
-        self.load_block(self.block, self.fs,
-                        on_save=self._on_save,
-                        open_advanced=self._open_advanced_cb)
+        self.load_block(self.block, self.fs, on_save=self._on_save)
         # restaurar sección activa
         try:
             self._switch_section(active)
@@ -1119,17 +1123,16 @@ class BlockInspectorPanel(QWidget):
             pass
 
     # ─── API pública ─────────────────────────────────────
-    def load_block(self, block, flowsheet, on_save: Optional[Callable] = None,
-                   open_advanced: Optional[Callable] = None):
+    def load_block(self, block, flowsheet, on_save: Optional[Callable] = None):
         """Carga un Block en el panel. on_save() se invoca tras un Guardar OK."""
         self.block = block
         self.fs = flowsheet
         self._on_save = on_save
-        self._open_advanced_cb = open_advanced
         self._hx_vm_cache = None
         self._fields.clear()
         self._extras.clear()
         self._reaction_rows.clear()
+        self._predictor_rows.clear()
 
         eq_type = block.eq_type
         type_short = _type_short(eq_type)
@@ -1280,6 +1283,7 @@ class BlockInspectorPanel(QWidget):
         self._fields.clear()
         self._extras.clear()
         self._reaction_rows.clear()
+        self._predictor_rows.clear()
         # custom reactions: drop el snapshot local — se re-crea desde el
         # block.custom_reactions cuando se vuelve a entrar a Reactividad
         if hasattr(self, "_custom_rxns_data"):
@@ -1296,6 +1300,7 @@ class BlockInspectorPanel(QWidget):
             "columna":     self._section_columna,
             "flash":       self._section_flash,
             "especial":    self._section_especial,
+            "predictor":   self._section_predictor,
             "sizing":      self._section_sizing,
             "ficha":       self._section_ficha,
             "utility":     self._section_utility,
@@ -1307,33 +1312,15 @@ class BlockInspectorPanel(QWidget):
             sect = fn(b, eq_type)
             self._content_lay.insertWidget(self._content_lay.count() - 1, sect)
 
-        # Nota: el link 'Opciones avanzadas…' fue retirado en V2 — todas
-        # las opciones de nicho (custom rxns, FUG columna, flash VLE,
-        # separadores mecánicos, dryer, crystallizer, evaporator, cyclone)
-        # están migradas a secciones nativas del inspector.
+        # El link 'Opciones avanzadas…' y el BlockEditDialog que abría ya
+        # no existen (auditoría UI 3 §3.1): todo campo editable del bloque
+        # vive en una sección nativa del inspector.  Ver
+        # tests/test_auditoria_ui3_blockedit.py.
 
         # asegurar que el scroll empieza arriba al cambiar de sección
         # (defer un tick para que el layout calcule range primero)
         from PySide6.QtCore import QTimer
         QTimer.singleShot(0, lambda: self._content_scroll.verticalScrollBar().setValue(0))
-
-    def _build_advanced_link(self) -> QFrame:
-        f = QFrame(); f.setObjectName("advLink")
-        lay = QHBoxLayout(f); lay.setContentsMargins(0, 8, 0, 4)
-        btn = QPushButton("Opciones avanzadas…")
-        btn.setCursor(Qt.PointingHandCursor)
-        btn.setStyleSheet(
-            f"QPushButton {{ background: transparent; color: {TOK['accent']}; "
-            f"border: 0; padding: 4px 0; text-align: left; }} "
-            f"QPushButton:hover {{ color: {TOK['accent_deep']}; text-decoration: underline; }}"
-        )
-        btn.clicked.connect(self._do_open_advanced)
-        lay.addWidget(btn); lay.addStretch(1)
-        return f
-
-    def _do_open_advanced(self):
-        if self._open_advanced_cb:
-            self._open_advanced_cb(self.block)
 
     # ─── HX riguroso (extensión Sinnott/WHB) ─────────────
     def _hx_viewmodel(self):
@@ -2178,6 +2165,80 @@ class BlockInspectorPanel(QWidget):
             f"QLineEdit::placeholder {{ color: {TOK['ink_ghost']}; }}"
         )
 
+    def _section_predictor(self, b, eq_type) -> QFrame:
+        """Predictor de reacciones (Fase 8 / Capa 4b): toggle
+        allow_reactions + selección de active_reactions entre las
+        reacciones curadas/predichas que dejó el último Solve en
+        block.feed_analysis_cache.  Migrado del BlockEditDialog."""
+        sect = QFrame()
+        l = QVBoxLayout(sect); l.setContentsMargins(0, 0, 0, 0); l.setSpacing(8)
+        fa = getattr(b, "feed_analysis_cache", None) or {}
+        if fa:
+            sub = (f"{fa.get('n_curated', 0)} curadas · "
+                   f"{fa.get('n_predicted', 0)} predichas · "
+                   f"{fa.get('n_warnings', 0)} warnings")
+        else:
+            sub = "sin análisis"
+        l.addLayout(self._section_header(
+            "Predictor de reacciones", sub=sub,
+            help_text="Si está permitido, las reacciones marcadas abajo se "
+                      "incluyen en el balance al correr Solve; si no, se "
+                      "ignoran todas.  El asistente de reactividad puede "
+                      "sugerir activarlo."
+        ))
+
+        try:
+            from chemfx.defaults import default_allow_reactions
+            default_allow = default_allow_reactions(eq_type or "")
+        except Exception:
+            default_allow = False
+        allow = QCheckBox("Permitir reacciones en este bloque  "
+                          f"(default por tipo: {'ON' if default_allow else 'OFF'})")
+        allow.setChecked(bool(getattr(b, "allow_reactions", default_allow)))
+        allow.setFont(qfont(FONT_HINT))
+        allow.setStyleSheet(self._checkbox_style())
+        self._extras["allow_reactions"] = allow
+        l.addWidget(allow)
+
+        rows: list = []
+        for rid, name in zip(fa.get("curated_ids", []) or [],
+                             fa.get("curated_names", []) or []):
+            rows.append((rid, name or rid, "ALTA"))
+        for r in fa.get("predicted_summary", []) or []:
+            rid = r.get("id", "")
+            if not rid:
+                continue
+            rows.append((rid, r.get("display_label", "") or rid,
+                         (r.get("confidence_mechanism", "alta")
+                          or "alta").upper()))
+
+        if not rows:
+            msg = ("El predictor todavía no corrió sobre este bloque: "
+                   "apretá Solve balances para activar el análisis."
+                   if not fa else
+                   "El análisis no detectó reacciones para este bloque.")
+            ph = QLabel(msg); ph.setWordWrap(True)
+            ph.setFont(qfont(FONT_HINT))
+            ph.setStyleSheet(f"color:{TOK['ink_soft']}; font-style:italic;")
+            l.addWidget(ph)
+            return sect
+
+        lbl = QLabel("Reacciones detectadas")
+        lbl.setFont(qfont(FONT_LABEL))
+        lbl.setStyleSheet(f"color:{TOK['ink_soft']}; padding-top:8px; "
+                          f"letter-spacing:1px;")
+        l.addWidget(lbl)
+        active = set(getattr(b, "active_reactions", []) or [])
+        for rid, label, conf in rows:
+            cb = QCheckBox(f"{label[:80]}  · {conf}")
+            cb.setToolTip(rid)
+            cb.setChecked(rid in active)
+            cb.setFont(qfont(FONT_HINT))
+            cb.setStyleSheet(self._checkbox_style())
+            self._predictor_rows.append((rid, cb))
+            l.addWidget(cb)
+        return sect
+
     def _section_sizing(self, b, eq_type) -> QFrame:
         sect = QFrame()
         l = QVBoxLayout(sect); l.setContentsMargins(0, 0, 0, 0); l.setSpacing(8)
@@ -2233,6 +2294,35 @@ class BlockInspectorPanel(QWidget):
                                     unit="m",
                                     state="spec" if head > 0 else "empty")
             l.addWidget(self._row("Head height", sf_h, info="Default canónico: 3 m"))
+            # Tipo de interno + eficiencia de plato / HETP (migrados del
+            # antiguo BlockEditDialog).  Metros y adimensional: fuera del
+            # sistema de unidades, se pintan y guardan tal cual.
+            pk = QComboBox()
+            pk.addItem("Platos (default)", "")
+            pk.addItem("Empaque random", "random")
+            pk.addItem("Empaque estructurado", "structured")
+            i = pk.findData(getattr(b, "packing_type", "") or "")
+            pk.setCurrentIndex(max(0, i))
+            pk.setStyleSheet(self._combo_style())
+            self._extras["packing_type"] = pk
+            l.addWidget(self._row("Tipo interno", pk,
+                                  info="Platos: N_real = N/η_plato · spacing. "
+                                       "Empaque: H = N·HETP"))
+            te = float(getattr(b, "tray_efficiency", None) or 0.0)
+            sf_te = self._spec_field("tray_efficiency",
+                                     value=f"{te:.3f}" if te > 0 else "",
+                                     unit="·",
+                                     state="spec" if te > 0 else "empty")
+            l.addWidget(self._row("Tray efficiency", sf_te,
+                                  info="Solo platos. Default canónico: 1.0"))
+            hetp = float(getattr(b, "HETP_m", None) or 0.0)
+            sf_hetp = self._spec_field("HETP_m",
+                                       value=f"{hetp:.3f}" if hetp > 0 else "",
+                                       unit="m",
+                                       state="spec" if hetp > 0 else "empty")
+            l.addWidget(self._row("HETP (empaque)", sf_hetp,
+                                  info="Solo empaque. Default canónico: 0.5 m "
+                                       "(estructurado ~0.3 m)"))
 
         # Pump/Compressor — efficiency
         if _is_pump_compressor(eq_type):
@@ -3246,6 +3336,19 @@ class BlockInspectorPanel(QWidget):
         # custom reactions (lista in-memory de dicts)
         if hasattr(self, "_custom_rxns_data"):
             b.custom_reactions = list(self._custom_rxns_data)
+        # ─── Predictor rxn (Fase 8) ───
+        if "allow_reactions" in self._extras:
+            b.allow_reactions = bool(self._extras["allow_reactions"].isChecked())
+        if self._predictor_rows:
+            # Solo se decide sobre las reacciones mostradas; un id activo
+            # que el último análisis ya no lista se conserva (no se pierde
+            # en silencio al guardar).
+            shown = {rid for rid, _ in self._predictor_rows}
+            kept = [rid for rid in (getattr(b, "active_reactions", []) or [])
+                    if rid not in shown]
+            b.active_reactions = list(dict.fromkeys(
+                kept + [rid for rid, cb in self._predictor_rows
+                        if cb.isChecked()]))
         # ─── Columna ───
         for key, attr in (
             ("column_N_stages", "column_N_stages"),
@@ -3336,8 +3439,10 @@ class BlockInspectorPanel(QWidget):
                 b.dtlm_override = float(v) if v else None
             except Exception:
                 b.dtlm_override = None
+        if "packing_type" in self._extras:
+            b.packing_type = self._extras["packing_type"].currentData() or ""
         for key in ("tray_spacing_m", "K_souders_brown", "column_head_height_m",
-                    "efficiency"):
+                    "tray_efficiency", "HETP_m", "efficiency"):
             if key in f:
                 v = self._parse_num(f[key].value())
                 try:
@@ -3403,10 +3508,8 @@ class BlockInspectorDock(QDockWidget):
         self.setWidget(self.panel)
         self.hide()
 
-    def show_for(self, block, flowsheet, on_save=None, open_advanced=None):
-        self.panel.load_block(block, flowsheet,
-                              on_save=on_save,
-                              open_advanced=open_advanced)
+    def show_for(self, block, flowsheet, on_save=None):
+        self.panel.load_block(block, flowsheet, on_save=on_save)
         self.show()
         self.raise_()
         # Ancho por defecto = PANEL_W en pantallas grandes, acotado en chicas.
