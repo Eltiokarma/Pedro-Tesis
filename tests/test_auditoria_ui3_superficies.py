@@ -100,3 +100,41 @@ def test_cerrar_del_header_tiene_tooltip(app):
     dlg = KitDialog("x")
     cerrar = [b for b in dlg.findChildren(QPushButton) if b.text() == "✕"]
     assert cerrar and cerrar[0].toolTip(), "el ✕ es un glifo mudo"
+
+
+# ─────────────────────────── hx_inspector ───────────────────────────
+
+def _vm_hx(**kw):
+    vm = {"dTlm": 38.5, "F": 1.0, "U_eff": 900.0, "approach": 16.0,
+          "dT_min": 10.0, "data_source": "partial_from_utility_range",
+          "n_shell": 1, "n_tube": 2, "service": "condensación de vapor",
+          "T_h_in": 260.0, "T_h_out": 200.0, "T_c_in": 184.0,
+          "T_c_out": 184.0, "duty": -305.5, "warnings": [], "whb": None,
+          "is_cross": False}
+    vm.update(kw)
+    return vm
+
+
+def _textos(w):
+    from PySide6.QtWidgets import QLabel
+    return [l.text() for l in w.findChildren(QLabel)]
+
+
+@pytest.mark.parametrize("sistema,esperado", [
+    ("Modelo (tm/año)", "260.0 / 200.0 °C"),
+    ("SI estricto", "533.1 / 473.1 K"),
+    ("Imperial (US)", "500.0 / 392.0 °F"),
+])
+def test_diseno_riguroso_T_de_corrientes_en_el_sistema(
+        app, sistema_restaurado, sistema, esperado):
+    """«T caliente in/out 260 / 200 K»: los T_h/T_c del diagnóstico son
+    temperaturas de CORRIENTE en °C (equipment_sizing las toma de
+    Stream.temperature) y el riguroso las rotulaba en kelvin — 533 K de
+    error de lectura, al lado del diagrama T-Q que dice 260 °C.  Son dato
+    de operación (el mismo de las burbujas): van por el sistema."""
+    import hx_inspector as hx
+    sistema_restaurado.set_system(sistema)
+    rb = hx.RigorousBlock(_vm_hx(), default_open=True)
+    txt = _textos(rb)
+    assert esperado in txt, f"{sistema}: {txt}"
+    assert "260 / 200 K" not in txt

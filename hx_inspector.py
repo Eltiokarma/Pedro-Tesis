@@ -213,6 +213,20 @@ def _fmt(v, nd: int) -> str:
         return str(v)
 
 
+def _par_T(t_in, t_out) -> str:
+    """«in / out unidad» para dos temperaturas de CORRIENTE.
+
+    Los T_h_in/T_c_out del diagnóstico salen de Stream.temperature, o sea
+    °C canónicos — no kelvin (el riguroso los rotulaba «K»).  Son dato de
+    operación, el mismo que muestran las burbujas: van por el sistema de
+    unidades.  (ΔT_lm y approach, en cambio, son diferencias y memoria de
+    cálculo: siguen en K, que como salto vale lo mismo que °C.)"""
+    import flowsheet_units as funits
+    a, u = funits.partes_canonica(t_in, "°C")
+    b, _ = funits.partes_canonica(t_out, "°C")
+    return f"{a} / {b} {u}"
+
+
 def _grp(n: float) -> str:
     return f"{int(round(n)):,}".replace(",", " ")
 
@@ -731,9 +745,9 @@ class RigorousBlock(QFrame):
         bl.addLayout(kv("U efectivo", _fmt(vm["U_eff"], 0) + " W/m²K"))
         if vm.get("T_h_in") is not None:
             bl.addLayout(kv("T caliente in/out",
-                            f"{_fmt(vm['T_h_in'],0)} / {_fmt(vm['T_h_out'],0)} K"))
+                            _par_T(vm["T_h_in"], vm["T_h_out"])))
             bl.addLayout(kv("T fría in/out",
-                            f"{_fmt(vm['T_c_in'],0)} / {_fmt(vm['T_c_out'],0)} K"))
+                            _par_T(vm["T_c_in"], vm["T_c_out"])))
         note = QLabel("El fouling está plegado en el U de servicio (tablas "
                       "Perry/Sinnott por par de fluidos), no se modela R_f por separado.")
         note.setWordWrap(True); note.setFont(qfont(FONT_HINT))
