@@ -244,33 +244,117 @@ recorren tres sistemas (Modelo, SI estricto, Imperial) y verifican que
 cambie **el valor y no solo el rótulo** — un round-trip kg/s → tm/año →
 kg/s que tiene que volver al número de partida.
 
-## 3. Backlog vivo para el próximo ciclo
+## 3. El backlog del ciclo — CERRADO (2026-11-06)
 
-Lo único que este ciclo deja abierto.
+Los tres menores de §3.1 y la pasada UX de §3.2 se ejecutaron. Cada
+arreglo con su test, que falla sin el arreglo y pasa con él; suite
+completa en verde (968 passed, 3 skipped).
 
-### 3.1 Menores detectados
+### 3.1 Los tres menores
 
-- **Chip DOF truncado:** «Sistema determinado» se corta a mitad de palabra
-  («Sistema determin») en el pie del sidebar del inspector
-  (`block_inspector.py:825`) — falta elidir o dar ancho.
-- **Welcome en ventana grande:** la composición se diseñó para 720×560; al
-  maximizar deja una banda vacía enorme entre «Recientes» y «Ejemplos»
-  (`audit3_welcome_dark.png`, capturada a 1400×900). Menor: nadie maximiza
-  la pantalla de inicio, pero el layout no está preparado.
-- **`BlockEditDialog`** sigue vivo (`flowsheet_qt.py:369`, invocado desde
-  «Opciones avanzadas…»). Ya no tiene hex, pero la auditoría 2 proponía
-  retirarlo o migrarlo al inspector; sigue siendo superficie duplicada.
+- **Chip DOF truncado — CERRADO.** El sidebar mide 186 px fijos y al
+  texto le quedaban 140; «Sistema determinado» pide ~154 y
+  «N sobre-especificado» ~152. El label ahora parte por palabra y el chip
+  crece. No se ensanchó el sidebar: habría movido todo el inspector.
+  Test: `tests/test_auditoria_ui3_dof_chip.py`.
+- **Welcome en ventana grande — CERRADO.** Todo el sobrante se iba entre
+  «Recientes» y «Ejemplos» (580 px a 1400×900). El contenido es ahora un
+  bloque con tope, centrado y anclado arriba. Midiendo apareció un
+  defecto peor: la ventana **nunca medía 720×560**, porque los títulos de
+  las tarjetas de ejemplo forzaban un mínimo de 1035 px. Ahora envuelven
+  (mínimo 665 px). Queda el hueco propio del diseño (~260 px sin
+  recientes), que no crece con la ventana. Test:
+  `tests/test_auditoria_ui3_welcome.py`.
+- **`BlockEditDialog` — RETIRADO.** El diagnóstico de la auditoría estaba
+  corrido: «Opciones avanzadas…» ya no se dibujaba (`_build_advanced_link`
+  no tenía llamadores), así que el diálogo era código muerto y cinco campos
+  que solo él editaba **ya estaban perdidos para el usuario**. Se migraron
+  al inspector (`packing_type`, `tray_efficiency`, `HETP_m` en Sizing de
+  torre; `allow_reactions` y `active_reactions` en la sección nueva
+  «Predictor rxn») y se borró la clase (~1150 líneas). Test:
+  `tests/test_auditoria_ui3_blockedit.py` (tabla campo por campo).
 
-### 3.2 Superficies que este escaneo NO cubrió
+### 3.2 La pasada UX de las cuatro superficies
 
-Nacieron después de la auditoría 2 y solo se verificaron por censo
-(0 hex, tipografía del sistema), sin pasada de UX: selector de equipo
-comercial del catálogo, `dialog_kit`, `book_table`, `hx_inspector`.
+Diez defectos corregidos, un commit cada uno. Test:
+`tests/test_auditoria_ui3_superficies.py`.
+
+| Superficie | Defecto | Sev. |
+|---|---|---|
+| `hx_inspector` | «Diseño riguroso» rotulaba en K temperaturas que estaban en °C | ALTA |
+| `book_table` | Las tablas de libro empujaban el inspector a scroll horizontal (estequiometría pedía 912 px contra ~280); ahora la grilla scrollea sola | ALTA |
+| `dialog_kit` | La columna de notas no envolvía: 1221 px en un diálogo de 760 | MEDIA |
+| `dialog_kit` | Enter cerraba con el ✕ en vez de aplicar | MEDIA |
+| `dialog_kit` (en uso) | Setpoints, goal-seek y Lang ignoraban el sistema de unidades; el Δ ahora se resta en la unidad activa (10 °C → 18 °F, no 50 °F) | MEDIA |
+| `hx_inspector` | Approach desconocido anunciado como «cruce térmico imposible» | MEDIA |
+| `hx_inspector` | Rótulos WHB cortados a mitad de palabra; «tm/yr» → «tm/año» | MEDIA |
+| `hx_inspector` | El QSS cascadeaba parches y bordes a cada rótulo de las tarjetas | MEDIA |
+| `book_table` | Contexto del flash y duties de Wang-Henke en unidades fijas | MEDIA |
+| `book_table` | El encabezado en caps reescribía la notación («Z_I», «X_LK») | BAJA |
+
+---
+
+## 4. Backlog vivo para el próximo ciclo
+
+### 4.1 Selector de equipo comercial (`block_inspector.py`, sección Ficha técnica)
+
+No se tocó en la pasada porque `block_inspector.py` estaba ocupado por el
+retiro del diálogo; ya está libre.
+
+- **ALTA** — El combo de modelos se dimensiona por su entrada más larga
+  (~420 px): la sección Ficha queda en 624 px dentro de un viewport de 320
+  y corta ayuda, veredicto y filas. *Fix:* `AdjustToMinimumContentsLengthWithIcon`,
+  popup más ancho, tooltip con el texto completo.
+- **ALTA** — «Equipo comercial · 12 modelos» se corta en
+  «Equipo comercial · 1»: se lee como un solo modelo. *Fix:* rótulo arriba
+  del combo.
+- **MEDIA** — Elegir un modelo escribe `b.equipo_comercial` directo al
+  modelo: «Cancelar» no lo deshace. *Fix:* guardarlo solo en `_apply_to_block`.
+- **MEDIA** — Un chequeo fallido imprime «✗ Presión 30 ≤ 16 bar»: la
+  desigualdad afirma lo contrario de lo que falló. *Fix:* «>» al fallar.
+- **MEDIA** — El veredicto (S, P, T y el mensaje «El proceso exige X kW…»
+  de `datasheet.py`) ignora el sistema de unidades. *Fix:* `fmt_canonica`
+  en tarjeta y mensaje a la vez, para no mezclar unidades.
+- **MEDIA (dark)** — El link «fuente del fabricante» usa el azul por
+  defecto de Qt, casi ilegible en oscuro. *Fix:* color del token de acento.
+
+### 4.2 Decisión pendiente: `cake_moisture`
+
+La humedad de torta de filtros y centrífugas no se puede editar desde
+ninguna superficie (no es regresión: el diálogo que la tenía ya era
+inalcanzable). El modelo unificado `mech_sep` no tiene ese término, pero el
+solver la sigue respetando al cargar; la usa `sugar.json` FL-101 (3 %).
+*Plan si se decide:* `mech_sep_cake_moisture` en `_sep_by_phase` (rama
+filtro/centrífuga) como líquido arrastrado en la salida objetivo, sembrado
+desde `cake_moisture` al cargar, campo en «Modo especial» y test de que el
+balance de FL-101 no cambia tras abrir y guardar.
+
+### 4.3 Menores
+
+- **MEDIA** — `AtomBalanceCard._element_block` (`book_table.py`): las
+  cajas IN/OUT lado a lado piden 300-337 px contra 280; con la grilla de
+  métricas (~304 px) el Diagnóstico aún scrollea de costado. *Fix:* apilar
+  bajo ~360 px.
+- **BAJA** — La nota de Wang-Henke muestra el nombre interno `_wh_result`
+  (`inspector_evidence.py`).
+- **BAJA** — `hx_inspector`: el badge dice «Sinnott 2024» y la tarjeta WHB
+  «Sinnott '19»; el rango WHB «20 000 – 800 000» no tiene unidad; el vapor
+  exportado usa 8000 h/año y el sistema de unidades 8760 h.
+- **BAJA** — El header colapsable de `RigorousBlock` no es alcanzable por
+  teclado ni tiene tooltip.
+- **BAJA** — Las fichas de moléculas IN/OUT de `book_table.py` hardcodean
+  «IBM Plex Mono» en vez de pasar por los tokens de fuente.
+- **BAJA (dark)** — El chip «auto» de los campos del inspector es gris
+  sobre gris.
+- **BAJA** — El texto de las entradas del combo comercial se armaba en dos
+  lugares; con `BlockEditDialog` retirado queda uno solo, pero conviene
+  moverlo a un helper de `datasheet.py` y agrupar por marca.
 
 ---
 
 *Arrancó como escaneo de verificación —confirmar que la auditoría 2
-estaba cerrada— y terminó con tres colisiones corregidas (§1) y el
-sistema de unidades cableado en quince campos y superficies (§2). Cada
-cambio con su test: `tests/test_auditoria_ui3.py`, 34 tests. Escaneo
-generado sobre `55f6c14`.*
+estaba cerrada— y terminó con tres colisiones corregidas (§1), el
+sistema de unidades cableado en quince campos y superficies (§2), y el
+backlog del ciclo cerrado (§3: tres menores y diez defectos de las
+superficies nuevas). Cada cambio con su test. Escaneo generado sobre
+`55f6c14`; §3 ejecutada el 2026-11-06.*
