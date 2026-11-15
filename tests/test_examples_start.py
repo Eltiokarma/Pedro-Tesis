@@ -74,6 +74,100 @@ def _load(key):
         return json.load(f)
 
 
+def _reaches_liquid_pump(feed, blocks, streams, max_hops=5):
+    """Permit a suction mixing vessel before the pump, never a pressure
+    increase or a processing unit before the first mover. Bound traversal
+    so a disconnected recycle cannot satisfy the structural contract."""
+    pressure = float(feed.get('pressure_bar') or 1.013)
+
+    def walk(stream, seen, depth):
+        b = blocks.get(stream.get('dst'))
+        if b is None or depth > max_hops or b['id'] in seen:
+            return False
+        if (stream.get('pressure_locked') and
+                float(stream.get('pressure_bar') or pressure) > pressure + 1e-6):
+            return False
+        if b['eq_type'].startswith('Pump'):
+            return True
+        if not b['eq_type'].startswith(('Mixer', 'Vessel', 'Storage tank', 'Valve')):
+            return False
+        if float(b.get('delta_p_bar') or 0) > 1e-6:
+            return False
+        outlets = [s for s in streams if s.get('src') == b['id']
+                   and s.get('stream_kind', 'mass') == 'mass']
+        return bool(outlets) and all(walk(s, seen | {b['id']}, depth + 1)
+                                    for s in outlets)
+
+    return walk(feed, set(), 0)
+
+
+def test_suction_mixer_path_does_not_allow_pressure_creation():
+    blocks = {1: {'id': 1, 'eq_type': 'Mixer — static', 'delta_p_bar': 0},
+              2: {'id': 2, 'eq_type': 'Pump — centrifugal'}}
+    feed = {'dst': 1, 'pressure_bar': 1.013, 'pressure_locked': True}
+    suction = {'src': 1, 'dst': 2, 'pressure_bar': 1.013, 'pressure_locked': True}
+    assert _reaches_liquid_pump(feed, blocks, [suction])
+    suction['pressure_bar'] = 8
+    assert not _reaches_liquid_pump(feed, blocks, [suction])
+    suction.update(pressure_bar=1.013, dst=1)
+    assert not _reaches_liquid_pump(feed, blocks, [suction])
+
+
+def _is_atmospheric_natural_draft_air(feed, block, streams):
+    """Natural convection supplies air without a mechanical compressor.
+
+    This exception needs an active natural-draft tower, an air inlet and
+    an atmospheric outlet without pressure gain; it is not a gas-feed
+    exemption based on the example name.
+    """
+    if (block.get('eq_type') != 'Cooling tower — natural draft'
+            or not block.get('cooling_tower_active')
+            or feed.get('dst_port') != 'aire'
+            or feed.get('phase') != 'gas'
+            or not feed.get('pressure_locked')):
+        return False
+    pressure = float(feed.get('pressure_bar') or 0)
+    comp = feed.get('composition') or {}
+    if (not 0.95 <= pressure <= 1.05
+            or float(block.get('delta_p_bar') or 0) > 0
+            or float(block.get('P_op_bar') or pressure) > pressure + 1e-6
+            or set(comp) - {'nitrogen', 'oxygen', 'water'}
+            or not 0.70 <= comp.get('nitrogen', 0) <= 0.82
+            or not 0.18 <= comp.get('oxygen', 0) <= 0.25
+            or not 0 <= comp.get('water', 0) <= 0.05
+            or abs(sum(comp.values()) - 1) > 1e-6):
+        return False
+    gas_out = [s for s in streams if s.get('src') == block['id']
+               and s.get('phase') in ('gas', 'vapor')]
+    return bool(gas_out) and all(
+        s.get('pressure_locked')
+        and 0.95 <= float(s.get('pressure_bar') or 0) <= pressure + 1e-6
+        for s in gas_out)
+
+
+def test_natural_draft_air_exception_is_bounded_by_physics():
+    block = {'id': 1, 'eq_type': 'Cooling tower — natural draft',
+             'cooling_tower_active': True, 'delta_p_bar': 0, 'P_op_bar': 1.0}
+    feed = {'dst': 1, 'dst_port': 'aire', 'phase': 'gas',
+            'pressure_bar': 1.013, 'pressure_locked': True,
+            'composition': {'nitrogen': 0.76, 'oxygen': 0.23, 'water': 0.01}}
+    out = {'src': 1, 'phase': 'gas', 'pressure_bar': 1.013,
+           'pressure_locked': True}
+    assert _is_atmospheric_natural_draft_air(feed, block, [out])
+    assert not _is_atmospheric_natural_draft_air(
+        dict(feed, pressure_bar=2.0), block, [out])
+    assert not _is_atmospheric_natural_draft_air(
+        feed, block, [dict(out, pressure_bar=2.0)])
+    assert not _is_atmospheric_natural_draft_air(
+        dict(feed, composition={'methane': 1.0}), block, [out])
+    assert not _is_atmospheric_natural_draft_air(
+        dict(feed, dst_port='agua'), block, [out])
+    assert not _is_atmospheric_natural_draft_air(
+        feed, dict(block, cooling_tower_active=False), [out])
+    assert not _is_atmospheric_natural_draft_air(
+        feed, dict(block, eq_type='Cooling tower — forced draft'), [out])
+
+
 class TestIniciosDeEjemplos(unittest.TestCase):
     """Cada ejemplo del catálogo inicia con corriente de alimentación."""
 
@@ -133,15 +227,16 @@ class TestIniciosDeEjemplos(unittest.TestCase):
                 self.assertIsNotNone(
                     dst, f"{key}: feed '{s.get('name')}' sin bloque destino")
                 self.assertTrue(
-                    dst["eq_type"].startswith("Pump"),
+                    _reaches_liquid_pump(s, blocks, list(d.get('streams', {}).values())),
                     f"{key}: feed líquido '{s.get('name')}' entra a "
                     f"'{dst['eq_type']}' ({dst['name']}) sin bomba de "
                     f"alimentación")
 
     def test_feeds_gaseosos_pasan_por_compresor(self):
         """Todo feed gaseoso entra al proceso a través de un compresor: la
-        presión de llegada no es un dato, es trabajo calculado.  Fase "vapor"
-        (headers de vapor de caldera) y _EXCEPCIONES_GAS quedan exentos."""
+        presión de llegada no es un dato, es trabajo calculado. Fase "vapor"
+        (headers de caldera), fronteras declaradas y aire atmosférico de
+        una torre activa de tiro natural tienen sus excepciones físicas."""
         for key in _example_keys():
             d = _load(key)
             blocks = {int(k): v for k, v in d.get("blocks", {}).items()}
@@ -153,6 +248,9 @@ class TestIniciosDeEjemplos(unittest.TestCase):
                 dst = blocks.get(s.get("dst"))
                 self.assertIsNotNone(
                     dst, f"{key}: feed '{s.get('name')}' sin bloque destino")
+                if _is_atmospheric_natural_draft_air(
+                        s, dst, list(d.get('streams', {}).values())):
+                    continue
                 self.assertTrue(
                     dst["eq_type"].startswith(_MOVEDORES_GAS),
                     f"{key}: feed gaseoso '{s.get('name')}' entra a "

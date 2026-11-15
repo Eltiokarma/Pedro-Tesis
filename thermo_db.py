@@ -61,6 +61,11 @@ class ComponentThermo:
     # Cp DIPPR-100: J/(kmol·K), T en K
     cp_gas_coefs:   Optional[Tuple[float, float, float, float, float]] = None
     cp_gas_range_K: Tuple[float, float] = (0, 0)
+    # NIST Shomate segments: (Tmin, Tmax, A, B, C, D, E), Cp in J/mol/K,
+    # t=T/1000.  Explicit data file retains the source and validity range.
+    cp_gas_shomate: List[Tuple[float, ...]] = field(default_factory=list)
+    cp_condensed_powers: List[Tuple[float, float]] = field(default_factory=list)
+    cp_condensed_range_K: Tuple[float, float] = (0, 0)
     cp_liq_coefs:   Optional[Tuple[float, float, float, float, float]] = None
     cp_liq_range_K: Tuple[float, float] = (0, 0)
     # ΔH_f° (kJ/mol)
@@ -121,7 +126,19 @@ class ComponentThermo:
     def cp_J_mol_K(self, T_K: float, phase: str = "liquid") -> Optional[float]:
         """Cp en J/(mol·K) a T en K para la fase indicada.
         Devuelve None si no hay coeficientes para esa fase."""
+        if self.cp_condensed_powers:
+            # A nonvolatile solid carried by a gas stream remains a solid;
+            # use its particulate Cp, never an invented atomic-gas Cp.
+            if not self.cp_condensed_range_K[0] <= T_K <= self.cp_condensed_range_K[1]:
+                return None
+            return self.mw * sum(a * T_K**p for p, a in self.cp_condensed_powers)
         if phase in ("vapor", "gas"):
+            if self.cp_gas_shomate:
+                for lo, hi, a, b, c, d, e in self.cp_gas_shomate:
+                    if lo <= T_K <= hi:
+                        t = T_K / 1000.0
+                        return a + b*t + c*t*t + d*t*t*t + e/(t*t)
+                return None
             coefs = self.cp_gas_coefs
         else:
             coefs = self.cp_liq_coefs
@@ -517,6 +534,17 @@ def _ensure_loaded() -> Dict[str, ComponentThermo]:
     global _DB
     if _DB is None:
         _DB = _parse_db()
+        shomate_path = Path(__file__).parent / "data" / "caloric_shomate.json"
+        if shomate_path.exists():
+            for name, record in json.loads(shomate_path.read_text(encoding="utf-8")).items():
+                if name in _DB:
+                    _DB[name].cp_gas_shomate = [tuple(row) for row in record["segments"]]
+        condensed_path = Path(__file__).parent / "data" / "caloric_condensed.json"
+        if condensed_path.exists():
+            for name, record in json.loads(condensed_path.read_text(encoding="utf-8")).items():
+                if name in _DB:
+                    _DB[name].cp_condensed_powers = [tuple(row) for row in record["powers"]]
+                    _DB[name].cp_condensed_range_K = tuple(record["range_K"])
         _apply_pseudo_provenance(_DB)
     return _DB
 
@@ -532,6 +560,12 @@ def _ensure_loaded() -> Dict[str, ComponentThermo]:
 _ALIASES = {
     "vegetable_oil": "triolein",
     "biodiesel":     "methyl_oleate",
+    # Same CAS 124-38-9.  The later spelling only contains liquid Cp and
+    # previously hid the gas Cp/Antoine in the complete CO2 entry.
+    "carbon_dioxide": "co2",
+    "carbon_monoxide": "co",
+    "hydrogen_sulfide": "h2s",
+    "sulfur_dioxide": "so2",
 }
 
 
@@ -539,6 +573,9 @@ def get(name: str) -> Optional[ComponentThermo]:
     """Devuelve el ComponentThermo por nombre (case-insensitive,
     underscore-tolerant).  None si no existe."""
     db = _ensure_loaded()
+    norm = name.lower().replace("-", "_").replace(" ", "_")
+    if norm in ("carbon_dioxide", "carbon_monoxide", "hydrogen_sulfide", "sulfur_dioxide"):
+        return db.get(_ALIASES[norm]) or db.get(norm)
     if name in db:
         return db[name]
     # fallback: lowercase + underscores

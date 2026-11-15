@@ -7,8 +7,8 @@ auto-satisfacía → converged FALSO a 0.  S2-B marca los tears activos
 
 Verifica:
   - aislado: un stream marcado como tear activo NO se deduce por balance;
-  - RC2 cerrado: hda_full vivo ya NO declara convergencia falsa (antes:
-    conv=True iters=1 con interior colapsado; ahora: conv=False honesto);
+  - RC2 cerrado: hda_full vivo converge con caudales positivos y balances
+    verificados; no acepta conv=True con el interior colapsado;
   - el ancla sintética SIGUE convergiendo (S2-B no rompe la convergencia real);
   - haber_rec byte-idéntico.
 """
@@ -75,10 +75,9 @@ def test_active_tear_not_deduced_by_balance():
 
 
 def test_rc2_cerrado_hda_full_no_converge_falso():
-    """hda_full vivo: antes de S2-B el motor declaraba conv=True en 1 iter con
-    el interior colapsado (S-5=0).  Con S2-B debe ser conv=False HONESTO (no
-    hay productor del split sin S2-C → el residuo no cierra)."""
-    d = json.load(open("data/examples/hda_full.json"))
+    """The corrected HDA units produce live splits: convergence must mean
+    positive internal flows and actual unit balances, never a collapsed loop."""
+    d = json.load(open("data/examples/hda_full.json", encoding="utf-8"))
     for s in d["streams"].values():
         if s["name"] in ("S-2", "S-4", "S-gas-recic", "S-11", "S-tol-recic"):
             s["mass_flow_locked"] = False
@@ -87,9 +86,16 @@ def test_rc2_cerrado_hda_full_no_converge_falso():
     multi = [rs for rs in res.recycle_solutions if "+" in rs.tear_stream]
     assert multi, "hda_full vivo debe ir al solver multi-tear"
     rs = multi[0]
-    # NO debe declarar convergencia (sería falsa: interior colapsa sin S2-C)
-    assert not rs.converged, (
-        "RC2: no debe declarar conv=True con el interior colapsado")
+    assert rs.converged and res.success, res.summary()
+    assert not res.mass_balance_errors and not res.consistency_errors
+    for block in fs.blocks.values():
+        ins = [s for s in fs.streams.values() if s.dst == block.id]
+        outs = [s for s in fs.streams.values() if s.src == block.id]
+        if ins and outs:
+            incoming = sum(s.mass_flow for s in ins)
+            outgoing = sum(s.mass_flow for s in outs)
+            assert incoming > 0 and outgoing > 0, block.name
+            assert abs(incoming - outgoing) <= 1e-4 * incoming, block.name
     # y el vector EVOLUCIONA (no congelado en el guess de un solo paso)
     assert len(rs.history) > 1
 

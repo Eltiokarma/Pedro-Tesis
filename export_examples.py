@@ -212,9 +212,10 @@ def export_all(write=True):
               f"b{g['n_blocks']} s{g['n_streams']} duty={g['sum_duty']:.1f}")
 
     if write:
-        with open(GOLDEN_PATH, "w", encoding="utf-8") as f:
+        with open(GOLDEN_PATH, "w", encoding="utf-8", newline="\n") as f:
             json.dump(golden_all, f, ensure_ascii=False, indent=1,
                       sort_keys=True)
+            f.write("\n")
         print(f"\nRegenerado _golden.json ({n} ejemplos) en {DATA_DIR}")
     else:
         print(f"\n[--check] {n} ejemplos procesados (sin escribir)")

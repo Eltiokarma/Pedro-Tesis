@@ -65,6 +65,14 @@ class Component:
 
 COMPONENTS: Dict[str, Component] = {
 
+    # Defined soap surrogate for triolein saponification. Cp is the existing
+    # condensed-soap screening correlation; MW is sodium OLEATE, not stearate.
+    "sodium_oleate": Component(
+        name="sodium_oleate", label="Oleato de sodio (C18H33NaO2)",
+        mw=304.44, tb_c=99999.0, cp_l_a=2.0, cp_l_b=0.002,
+        cp_v_a=2.0, cp_v_b=0.002, dh_vap=0.0,
+    ),
+
     # ---- Aromáticos ----
     "toluene":   Component(
         name="toluene", label="Tolueno (C₇H₈)", mw=92.14, tb_c=110.6,

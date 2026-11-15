@@ -82,11 +82,12 @@ def build_dual_recycle_fs():
         fs.streams[sid] = s
         return s
 
-    S("Feed", -1, M1, 100.0, lock=True, role="feed")
+    # 0 is the battery boundary; -1 means a disconnected draft endpoint.
+    S("Feed", 0, M1, 100.0, lock=True, role="feed")
     S("S-a", M1, X1)                          # tramo compartido
     S("S-fwd", X1, X2)                         # X1 out0 (forward)
     S("R1", X1, M1, role="recycle")           # X1 out1 (reciclo 1)
-    S("Prod", X2, -1, role="product")         # X2 out0 (producto)
+    S("Prod", X2, 0, role="product")          # X2 out0 (producto)
     S("R2", X2, M1, role="recycle")           # X2 out1 (reciclo 2)
     return fs
 

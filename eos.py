@@ -134,9 +134,14 @@ def fugacity_coeff_pure(T_K: float, P_Pa: float, Tc_K: float, Pc_Pa: float,
     """Coeficiente de fugacidad φ del componente puro a (T, P).
 
     phase ∈ {'liquid', 'vapor'}.  Elige la raíz Z correspondiente (líquido =
-    menor, vapor = mayor).  Devuelve None si no hay raíz física para esa fase
-    a esa (T, P) — p.ej. pedir líquido cuando solo existe la raíz vapor.
+    menor, vapor = mayor).  Si sólo hay una raíz, se devuelve su fugacidad
+    para ambas fases de prueba: el valor Z por sí solo no prueba estabilidad.
+    Devuelve None si no hay raíz física.
     """
+    if (phase not in ("liquid", "vapor")
+            or any(not math.isfinite(v) or v <= 0 for v in (T_K, P_Pa, Tc_K, Pc_Pa))
+            or not math.isfinite(omega)):
+        return None
     a, b = pr_a_b(Tc_K, Pc_Pa, omega, T_K)
     A, B = _AB(a, b, T_K, P_Pa)
     roots = z_roots(A, B)
@@ -144,13 +149,7 @@ def fugacity_coeff_pure(T_K: float, P_Pa: float, Tc_K: float, Pc_Pa: float,
         return None
 
     if len(roots) == 1:
-        # Monofásico: clasificar la única raíz por su Z (Z_c PR ≈ 0.307).
         z = roots[0]
-        is_vapor = z > 0.307
-        if phase == "vapor" and not is_vapor:
-            return None
-        if phase == "liquid" and is_vapor:
-            return None
         return math.exp(_ln_phi_from_Z(z, A, B))
 
     z = roots[0] if phase == "liquid" else roots[-1]
@@ -285,6 +284,14 @@ def fugacity_coeff_mix(comps_props: Sequence[Tuple[float, float, float]],
     para la fase pedida.
     """
     n = len(comps_props)
+    if (n < 1 or n != len(x) or phase not in ("liquid", "vapor")
+            or not math.isfinite(T_K) or T_K <= 0
+            or not math.isfinite(P_Pa) or P_Pa <= 0
+            or any(not math.isfinite(xi) or xi < 0 for xi in x)
+            or sum(x) <= 0):
+        return None
+    total = sum(x)
+    x = [xi / total for xi in x]
     a_list: List[float] = []
     b_list: List[float] = []
     for (Tc_K, Pc_Pa, omega) in comps_props:
@@ -301,11 +308,9 @@ def fugacity_coeff_mix(comps_props: Sequence[Tuple[float, float, float]],
         return None
     if len(roots) == 1:
         Z = roots[0]
-        is_vapor = Z > 0.307
-        if phase == "vapor" and not is_vapor:
-            return None
-        if phase == "liquid" and is_vapor:
-            return None
+        # A single root is a valid trial phase.  Zc=0.307 is NOT a phase
+        # stability criterion (a compressed gas can have Z<Zc).  During
+        # flash iterations the incipient phase must be allowed to evolve.
     else:
         Z = roots[0] if phase == "liquid" else roots[-1]
 
@@ -343,6 +348,9 @@ def _eos_consts(name: str) -> Optional[Tuple[float, float, float]]:
         return None
     if c.tc_c is None or c.pc_bar is None or c.omega is None:
         return None
+    if (c.tc_c <= -273.15 or c.pc_bar <= 0
+            or not all(math.isfinite(v) for v in (c.tc_c, c.pc_bar, c.omega))):
+        return None
     return (c.tc_c + 273.15, c.pc_bar * 1e5, c.omega)
 
 
@@ -376,7 +384,7 @@ def _rachford_rice(z: Sequence[float], K: Sequence[float],
     n = len(z)
 
     def g(V: float) -> float:
-        return sum(z[i] * (K[i] - 1.0) / (1.0 + V * (K[i] - 1.0))
+        return sum(z[i] * (K[i] - 1.0) / ((1.0 - V) + V * K[i])
                    for i in range(n))
 
     if g(0.0) < 0.0:
@@ -409,7 +417,11 @@ def flash_TP_eos(names: Sequence[str], z_mol: Sequence[float],
       · no converge / no hay solución bifásica física.
     """
     n = len(names)
-    if n < 1 or n != len(z_mol):
+    if (n < 1 or n != len(z_mol) or max_iter < 1
+            or not math.isfinite(T_K) or T_K <= 0
+            or not math.isfinite(P_bar) or P_bar <= 0
+            or any(not math.isfinite(zi) or zi < 0 for zi in z_mol)
+            or sum(z_mol) <= 0):
         return None
     consts = [_eos_consts(nm) for nm in names]
     if any(c is None for c in consts):
@@ -421,8 +433,10 @@ def flash_TP_eos(names: Sequence[str], z_mol: Sequence[float],
     z = [zi / s for zi in z_mol]
 
     # (1) Guess inicial de Wilson.
-    K = [(Pc / P_Pa) * math.exp(5.373 * (1.0 + w) * (1.0 - Tc / T_K))
+    K = [math.exp(max(-60.0, min(60.0, math.log(Pc / P_Pa)
+                               + 5.373 * (1.0 + w) * (1.0 - Tc / T_K))))
          for (Tc, Pc, w) in comps_props]
+    initial_V = _rachford_rice(z, K)
 
     def _edge(V: float, it: int) -> dict:
         """Devuelve el borde single-phase (V=0 ó 1) con x=z ó y=z."""
@@ -441,11 +455,11 @@ def flash_TP_eos(names: Sequence[str], z_mol: Sequence[float],
     for it in range(1, max_iter + 1):
         # (2) Rachford-Rice por V.
         V = _rachford_rice(z, K)
-        # (6) Bordes single-phase: no forzar bifásico.
-        if V <= 1e-6 or V >= 1.0 - 1e-6:
-            return _edge(V, it)
+        # Wilson only initializes K; a single-phase Wilson guess is not
+        # proof of a stable phase.  Refine its normalized incipient phase
+        # with fugacities as well as interior two-phase guesses.
         # (3) Composiciones de fase.
-        x = [z[i] / (1.0 + V * (K[i] - 1.0)) for i in range(n)]
+        x = [z[i] / ((1.0 - V) + V * K[i]) for i in range(n)]
         y = [K[i] * x[i] for i in range(n)]
         sx, sy = sum(x), sum(y)
         if sx <= 0 or sy <= 0:
@@ -458,17 +472,31 @@ def flash_TP_eos(names: Sequence[str], z_mol: Sequence[float],
         if phiL is None or phiV is None:
             return None
         K_new = [phiL[i] / phiV[i] for i in range(n)]
+        if any(not math.isfinite(k) or k <= 0 for k in K_new):
+            return None
         max_dk = max(abs(K_new[i] - K[i]) / max(K[i], 1e-12)
                      for i in range(n))
         K = K_new
         # (5) Convergencia.
         if max_dk < tol:
             break
+    else:
+        return None
+
+    # Identical phase compositions are the trivial single-phase fixed
+    # point, not a 50/50 equilibrium split (RR is then identically zero).
+    if max(abs(math.log(k)) for k in K) < tol:
+        # For a pure subcritical fluid use PR saturation, not Wilson.
+        if n == 1 and T_K < comps_props[0][0]:
+            psat = psat_pr(*comps_props[0], T_K)
+            if psat is not None:
+                return _edge(0.0 if P_Pa > psat else 1.0, it)
+        return _edge(0.0 if initial_V < 0.5 else 1.0, it)
 
     V = _rachford_rice(z, K)
     if V <= 1e-6 or V >= 1.0 - 1e-6:
         return _edge(V, it)
-    x = [z[i] / (1.0 + V * (K[i] - 1.0)) for i in range(n)]
+    x = [z[i] / ((1.0 - V) + V * K[i]) for i in range(n)]
     y = [K[i] * x[i] for i in range(n)]
     sx, sy = sum(x), sum(y)
     if sx <= 0 or sy <= 0:

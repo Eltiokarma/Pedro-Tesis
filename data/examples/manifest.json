@@ -1,6 +1,6 @@
 {
  "version": 1,
- "_comment": "Generado por gen_manifest.py desde EXAMPLE_CATEGORIES + builder_map de flowsheet_qt.py. Orden = orden del menú. NO editar a mano: regenerar.",
+ "_comment": "Catalogo autoritativo de ejemplos; los JSON contienen el modelo y este archivo define sus etiquetas, metadata y orden del menu.",
  "examples": [
   {
    "clave": "hda",
@@ -254,9 +254,9 @@
   },
   {
    "clave": "penicillin",
-   "label": "Penicilina por fermentación",
+   "label": "Penicilina — recuperación desde caldo fermentado",
    "categoria": "Alimentaria y bioproceso",
-   "nombre": "Penicilina por fermentación (batch→continuo)",
+   "nombre": "Penicilina — recuperación downstream con desempeños especificados",
    "capa": "100 — Farmacéutica",
    "codigo_pfd": "PFD-PEN-001",
    "builder": "_example_penicillin",
@@ -344,9 +344,9 @@
   },
   {
    "clave": "cement",
-   "label": "Cemento Portland (horno rotatorio)",
+   "label": "Calcinación de caliza (cal viva)",
    "categoria": "Materiales y energía",
-   "nombre": "Cemento Portland (horno rotatorio)",
+   "nombre": "Calcinación de caliza (cal viva)",
    "capa": "100 — Materiales",
    "codigo_pfd": "PFD-CEM-001",
    "builder": "_example_cement",
@@ -374,9 +374,9 @@
   },
   {
    "clave": "water_treat",
-   "label": "Tratamiento de agua potable",
+   "label": "Clarificación y filtración de agua (sin desinfección)",
    "categoria": "Materiales y energía",
-   "nombre": "Tratamiento de agua potable",
+   "nombre": "Clarificación y filtración de agua — balance de sólidos",
    "capa": "200 — Servicios / ambiental",
    "codigo_pfd": "PFD-WATER-001",
    "builder": "_example_water_treatment",

@@ -179,6 +179,12 @@ class Block:
     # reacción.  Solo aplica si reactor_mode == 'stoich'.
     reactor_conversion: float = 0.95
 
+    # Optional electrolysis work for a single stoichiometric reaction.
+    # W = extent[mol/s] * electrons/extent * F * voltage / efficiency.
+    electrolysis_voltage_V: float = 0.0
+    electrolysis_current_efficiency: float = 1.0
+    electrolysis_electrons_per_extent: float = 0.0
+
     # ---- COLUMNA DE DESTILACIÓN (FUG / McCabe-Thiele, Capa 6) ----
     # Si column_active es True y el bloque es tipo Tower/column, el
     # solver computa AUTOMÁTICAMENTE las composiciones de los outputs
@@ -216,6 +222,26 @@ class Block:
     # Aplica a bloques tipo Mixer, splitter genérico, manifold.
     splitter_active:    bool       = False
     splitter_fractions: List[float] = field(default_factory=list)
+
+    # Fixed-performance component separator (not an equilibrium/VLE model).
+    # {outlet src_port: {component: fraction of that inlet component}}.
+    # The default port receives all unallocated component mass, including
+    # species not listed in the specification. Fractions must sum <= 1.
+    component_recovery_active: bool = False
+    component_recoveries: Dict[str, Dict[str, float]] = field(default_factory=dict)
+    component_recovery_default_port: str = ""
+
+    # Specified-temperature moist-air tower, with evaporation from energy.
+    # None: cold-water circulation is fixed and blowdown closes water balance.
+    # Numeric: blowdown / total liquid inlet; circulation is calculated.
+    cooling_tower_active: bool = False
+    cooling_tower_blowdown_fraction: Optional[float] = None
+
+    # Explicit mass-yield models for characterized industrial pseudocomponents.
+    # Each input's yields sum to 1; this is not molecular reaction chemistry.
+    lumped_yield_active: bool = False
+    lumped_yields: Dict[str, Dict[str, float]] = field(default_factory=dict)
+    lumped_yield_basis: str = ""
 
     # ---- SEPARADOR MECÁNICO sólido/líquido (filtro, centrífuga) ----
     # Si separator_active=True y eq_type es Filter — belt o Centrifuge,
@@ -278,6 +304,11 @@ class Block:
     crystallizer_active: bool   = False
     solute_component:    str    = ""
     crystal_yield:       float  = 0.80
+    # Optional solubility at T_op_K, in kg solute / kg solvent. When set,
+    # crystal_yield applies to available supersaturation, not total solute.
+    # None retains the explicitly declared-yield model (no SLE prediction).
+    crystallizer_solubility_kg_per_kg_solvent: Optional[float] = None
+    crystallizer_solvent_component: str = "water"
 
     # ---- EVAPORADOR (Evaporator — vertical) ----
     # Si evaporator_active=True y eq_type es Evaporator — vertical, el
@@ -483,6 +514,11 @@ class Stream:
     phase: str = ""
     # vapor_fraction: solo aplica si phase == "two_phase".  0..1.
     vapor_fraction: float = 0.0
+    # Explicit species phase allocation for heterogeneous screening streams.
+    # {component: mass vapor fraction}; complete positive-composition coverage
+    # is required. Overrides bulk quality, which is derived by mass weighting.
+    # This is a declared allocation, not a VLE prediction.
+    component_vapor_fractions: Dict[str, float] = field(default_factory=dict)
     # composition: Dict[component_name, mass_fraction].  Si vacío y
     # main_component != "", se asume 100% main_component.  Si ambos
     # vacíos, el solver usa el Cp manual (campo cp arriba).

@@ -1,5 +1,5 @@
 {
- "_next_id": 18,
+ "_next_id": 19,
  "blocks": {
   "2": {
    "HETP_m": null,
@@ -114,7 +114,7 @@
    "duty": 0.0,
    "duty_locked": false,
    "efficiency": 0.75,
-   "eq_type": "Reactor — jacketed agitated",
+   "eq_type": "Mixer — impeller",
    "evaporator_active": false,
    "final_moisture": 0.02,
    "flash_P_bar": 1.013,
@@ -129,12 +129,10 @@
    "mech_sep_target_phase": "solid",
    "moisture_component": "water",
    "n": 1,
-   "name": "R-101",
+   "name": "M-AG floculación física",
    "packing_type": "",
    "reaction_warnings": [],
-   "reactions": [
-    "R_FLOCULACION"
-   ],
+   "reactions": [],
    "reactor_conversion": 0.95,
    "reactor_mode": "equilibrium",
    "reactor_volume_L": 0.0,
@@ -223,7 +221,15 @@
    "tray_spacing_m": null,
    "volatile_component": "water",
    "x": 600,
-   "y": 240
+   "y": 240,
+   "component_recoveries": {
+    "liquido": {
+     "raw_water_solids": 0.99,
+     "water": 0.002
+    }
+   },
+   "component_recovery_active": true,
+   "component_recovery_default_port": "vapor"
   },
   "5": {
    "HETP_m": null,
@@ -297,7 +303,15 @@
    "tray_spacing_m": null,
    "volatile_component": "water",
    "x": 780,
-   "y": 240
+   "y": 240,
+   "component_recoveries": {
+    "venteo": {
+     "raw_water_solids": 0.999,
+     "water": 0.0002
+    }
+   },
+   "component_recovery_active": true,
+   "component_recovery_default_port": "producto"
   },
   "6": {
    "HETP_m": null,
@@ -338,7 +352,7 @@
    "duty": 0.0,
    "duty_locked": false,
    "efficiency": 0.75,
-   "eq_type": "Mixer — static",
+   "eq_type": "Vessel — vertical",
    "evaporator_active": false,
    "final_moisture": 0.02,
    "flash_P_bar": 1.013,
@@ -353,7 +367,7 @@
    "mech_sep_target_phase": "solid",
    "moisture_component": "water",
    "n": 1,
-   "name": "M-102",
+   "name": "TK-agua-filtrada",
    "packing_type": "",
    "reaction_warnings": [],
    "reactions": [],
@@ -589,11 +603,8 @@
    "bubble_show_composition": false,
    "bubble_show_enthalpy": false,
    "bubble_visible": false,
-   "composition": {
-    "raw_water_solids": 0.002,
-    "water": 0.998
-   },
-   "composition_locked": true,
+   "composition": {},
+   "composition_locked": false,
    "cp": 0.0,
    "delta_h_vap_override": 0.0,
    "display_number": 0,
@@ -641,11 +652,8 @@
    "bubble_show_composition": false,
    "bubble_show_enthalpy": false,
    "bubble_visible": false,
-   "composition": {
-    "raw_water_solids": 0.5,
-    "water": 0.5
-   },
-   "composition_locked": true,
+   "composition": {},
+   "composition_locked": false,
    "cp": 0.0,
    "delta_h_vap_override": 0.0,
    "display_number": 0,
@@ -656,10 +664,10 @@
    "id": 12,
    "is_pipe": false,
    "main_component": "raw_water_solids",
-   "mass_flow": 4,
-   "mass_flow_locked": true,
+   "mass_flow": 0.0,
+   "mass_flow_locked": false,
    "name": "S-lodos",
-   "phase": "liquid",
+   "phase": "solid",
    "phase_locked": true,
    "pipe_K_local": 0.0,
    "pipe_diameter_m": 0.0,
@@ -693,10 +701,8 @@
    "bubble_show_composition": false,
    "bubble_show_enthalpy": false,
    "bubble_visible": false,
-   "composition": {
-    "water": 1.0
-   },
-   "composition_locked": true,
+   "composition": {},
+   "composition_locked": false,
    "cp": 0.0,
    "delta_h_vap_override": 0.0,
    "display_number": 0,
@@ -744,10 +750,8 @@
    "bubble_show_composition": false,
    "bubble_show_enthalpy": false,
    "bubble_visible": false,
-   "composition": {
-    "water": 1.0
-   },
-   "composition_locked": true,
+   "composition": {},
+   "composition_locked": false,
    "cp": 0.0,
    "delta_h_vap_override": 0.0,
    "display_number": 0,
@@ -795,10 +799,8 @@
    "bubble_show_composition": false,
    "bubble_show_enthalpy": false,
    "bubble_visible": false,
-   "composition": {
-    "water": 1.0
-   },
-   "composition_locked": true,
+   "composition": {},
+   "composition_locked": false,
    "cp": 0.0,
    "delta_h_vap_override": 0.0,
    "display_number": 0,
@@ -811,7 +813,7 @@
    "main_component": "water",
    "mass_flow": 0.0,
    "mass_flow_locked": false,
-   "name": "S-potable",
+   "name": "S-agua-filtrada",
    "phase": "liquid",
    "phase_locked": true,
    "pipe_K_local": 0.0,
@@ -846,11 +848,8 @@
    "bubble_show_composition": false,
    "bubble_show_enthalpy": false,
    "bubble_visible": false,
-   "composition": {
-    "raw_water_solids": 0.002,
-    "water": 0.998
-   },
-   "composition_locked": true,
+   "composition": {},
+   "composition_locked": false,
    "cp": 0.0,
    "delta_h_vap_override": 0.0,
    "display_number": 0,
@@ -878,6 +877,56 @@
    "role": "internal",
    "src": 16,
    "src_port": "descarga",
+   "start_xy": [],
+   "stream_kind": "mass",
+   "target_purity_component": "",
+   "target_purity_fraction": 0.0,
+   "target_temperature": -999.0,
+   "temperature": 15,
+   "temperature_locked": true,
+   "vapor_fraction": 0.0,
+   "waypoints": []
+  },
+  "18": {
+   "active_reactions": [],
+   "allow_reactions": false,
+   "auto_aux": false,
+   "batch_window": null,
+   "bubble_collapsed": false,
+   "bubble_position": [],
+   "bubble_show_composition": false,
+   "bubble_show_enthalpy": false,
+   "bubble_visible": false,
+   "composition": {},
+   "composition_locked": false,
+   "cp": 0.0,
+   "delta_h_vap_override": 0.0,
+   "display_number": 0,
+   "dst": 0,
+   "dst_port": "",
+   "end_xy": [],
+   "energy_kW": 0.0,
+   "id": 18,
+   "is_pipe": false,
+   "main_component": "raw_water_solids",
+   "mass_flow": 0.0,
+   "mass_flow_locked": false,
+   "name": "S-retrolavado",
+   "phase": "liquid",
+   "phase_locked": true,
+   "pipe_K_local": 0.0,
+   "pipe_diameter_m": 0.0,
+   "pipe_length_m": 0.0,
+   "pipe_roughness_m": 4.5e-05,
+   "pressure_bar": 1.013,
+   "pressure_lock_origin": "",
+   "pressure_locked": false,
+   "price_usd_per_tm": 0.0,
+   "reaction_warnings": [],
+   "residence_time_s": null,
+   "role": "waste",
+   "src": 5,
+   "src_port": "venteo",
    "start_xy": [],
    "stream_kind": "mass",
    "target_purity_component": "",

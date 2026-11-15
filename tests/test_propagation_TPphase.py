@@ -57,10 +57,14 @@ def test_column_propagates_T():
         f"T distillate fuera de rango: {dist.temperature}°C"
     assert 95 < bot.temperature < 105, \
         f"T bottom fuera de rango: {bot.temperature}°C"
-    # P propagada: bottom = P_col + 0.1 bar (gradiente de la columna).
-    assert dist.pressure_bar > 0, "P distillate no propagada"
-    assert abs(bot.pressure_bar - 1.113) < 0.01, \
-        f"P bottom {bot.pressure_bar} ≠ P_col+0.1"
+    # Both saturation states use the actual column feed pressure. A pressure
+    # gradient must be modeled explicitly, not fabricated as a 0.1 bar offset.
+    column = fs.blocks[bot.src]
+    feed = next(s for s in fs.streams.values() if s.dst == column.id)
+    expected_pressure = feed.pressure_bar + column.delta_p_bar
+    assert abs(dist.pressure_bar - expected_pressure) < 0.01
+    assert abs(bot.pressure_bar - expected_pressure) < 0.01, \
+        f"P bottom {bot.pressure_bar} ≠ P column {expected_pressure}"
     # Phase inferida: el bottom siempre sale líquido saturado.
     assert bot.phase == "liquid", f"bottom phase {bot.phase} != liquid"
     print(f"  ✓ Column: T_top={dist.temperature:.1f}°C, "

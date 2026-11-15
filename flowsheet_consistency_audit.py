@@ -14,6 +14,7 @@ _check_component_balance del solver (Detector 2 lo integra).
 from __future__ import annotations
 
 import json
+import math
 import os
 from dataclasses import dataclass, field
 from typing import Dict, List
@@ -105,7 +106,7 @@ class AuditReport:
         lines = [f"Auditoría de consistencia ({self.n_errors} errores, "
                  f"{self.n_warnings} warnings, {self.n_infos} infos):"]
         for cat in ('phase', 'component_balance', 'component_balance_strict',
-                    'pressure_source', 'pseudo', 'redundant_lock'):
+                    'pressure_source', 'pseudo', 'redundant_lock', 'model_scope'):
             cat_f = self.by_category(cat)
             if not cat_f:
                 continue
@@ -201,6 +202,47 @@ def check_stream_phase(s):
     _audit_phase) o None si es consistente / no auditable.  Reutilizable por
     la UI (tooltip/burbuja) para marcar la fase con el hallazgo del verificador
     sin re-correr toda la auditoría."""
+    if s.mass_flow <= 0:
+        return None
+    allocation = getattr(s, "component_vapor_fractions", {})
+    if allocation or not isinstance(allocation, dict):
+        # An explicit heterogeneous allocation is a process specification,
+        # not the result of an equilibrium flash. Validate its own complete
+        # mass/phase definition before applying any equilibrium inference.
+        from stream_enthalpy import resolved_vapor_fraction
+        try:
+            quality = resolved_vapor_fraction(s)
+            stored_quality = float(s.vapor_fraction)
+        except (TypeError, ValueError):
+            quality, stored_quality = None, None
+        data = {"reason": "specified_component_phase_allocation",
+                "derived_vapor_fraction": quality,
+                "stored_vapor_fraction": stored_quality,
+                "declared_phase": s.phase}
+        problem = None
+        if quality is None:
+            problem = "asignacion incompleta o invalida de fases por componente"
+        else:
+            expected = ("liquid" if quality <= 1e-12 else
+                        "vapor" if quality >= 1-1e-12 else "two_phase")
+            declared = (s.phase or "").lower()
+            declared = "vapor" if declared == "gas" else declared
+            data["expected_phase"] = expected
+            if declared != expected:
+                problem = f"fase declarada '{s.phase}' incompatible con calidad masica {quality:.8g}"
+            elif (stored_quality is None or not math.isfinite(stored_quality)
+                  or abs(stored_quality - quality) > 1e-9):
+                problem = "vapor_fraction no coincide con la asignacion masica por componente"
+        if problem:
+            return AuditFinding(category="phase", severity="error",
+                                target_kind="stream", target_name=s.name,
+                                message=f"{s.name}: {problem}.", data=data)
+        return AuditFinding(
+            category="model_scope", severity="info", target_kind="stream",
+            target_name=s.name,
+            message=(f"{s.name}: asignacion de fases por componente especificada "
+                     f"(calidad masica={quality:.8g}); no es una prediccion de equilibrio."),
+            data=data)
     try:
         from flowsheet_solver import _infer_phase_from_TP
     except Exception:
@@ -312,7 +354,9 @@ def _block_transforms_composition(b) -> bool:
       · separador que reparte componentes entre salidas (flash, mech_sep,
         splitter) o cambia de fase (crystallizer, dryer, evaporator)
     """
-    if getattr(b, "reactions", None):
+    if getattr(b, "reactions", None) or getattr(b, "custom_reactions", None):
+        return True
+    if getattr(b, "lumped_yield_active", False):
         return True
     if getattr(b, "column_active", False):
         return True
@@ -345,21 +389,8 @@ def _block_transforms_composition(b) -> bool:
 def _audit_component_balance(fs, findings, tol_rel=0.02):
     rxn_blocks = {b.id for b in fs.blocks.values()
                   if _block_transforms_composition(b)}
-    # Bloques downstream transitivo de un reactor: heredan composición.
-    downstream_of_rxn: set = set()
-    frontier = set(rxn_blocks)
-    while frontier:
-        nxt = set()
-        for s in fs.streams.values():
-            if (s.src in frontier and s.dst in fs.blocks
-                    and s.dst not in downstream_of_rxn
-                    and s.dst not in rxn_blocks):
-                nxt.add(s.dst)
-        downstream_of_rxn |= nxt
-        frontier = nxt
-
     for b in fs.blocks.values():
-        if b.id in rxn_blocks or b.id in downstream_of_rxn:
+        if b.id in rxn_blocks:
             continue
         if getattr(b, "splitter_active", False):
             continue
@@ -377,11 +408,15 @@ def _audit_component_balance(fs, findings, tol_rel=0.02):
             comp = s.composition or ({s.main_component: 1.0}
                                      if s.main_component else {})
             for c, w in comp.items():
+                item = _thermo(c)
+                c = item.name if item is not None else c
                 comp_in[c] = comp_in.get(c, 0.0) + w * s.mass_flow
         for s in outs:
             comp = s.composition or ({s.main_component: 1.0}
                                      if s.main_component else {})
             for c, w in comp.items():
+                item = _thermo(c)
+                c = item.name if item is not None else c
                 comp_out[c] = comp_out.get(c, 0.0) + w * s.mass_flow
         # ¿el bloque cruza el Tb del agua? (in/out straddle 100°C)
         T_in = [s.temperature for s in ins]
@@ -397,9 +432,6 @@ def _audit_component_balance(fs, findings, tol_rel=0.02):
             if r < tol_rel:
                 continue
             sev = 'error' if r > 0.10 else 'warning'
-            # Cambio de fase legítimo del agua no modelado → baja severity.
-            if c.lower() in _WATER_NAMES and crosses_water_tb:
-                sev = 'warning' if sev == 'error' else 'info'
             findings.append(AuditFinding(
                 category='component_balance', severity=sev,
                 target_kind='block', target_name=b.name,
@@ -431,8 +463,16 @@ def _audit_component_balance_strict(fs, findings):
         return
     for f in rep.get("findings", []):
         findings.append(AuditFinding(
-            category='component_balance_strict', severity='warning',
+            category='component_balance_strict',
+            severity='error' if f.get('severity') == 'CRITICO' else 'warning',
             target_kind='block', target_name=f.get("block", "?"),
+            message=f.get("message", ""),
+            data={k: v for k, v in f.items() if k != "message"}))
+
+    for f in rep.get("element_findings", []):
+        findings.append(AuditFinding(
+            category="element_balance", severity="error" if f.get("severity") == "CRITICO" else "warning",
+            target_kind="block", target_name=f.get("block", "?"),
             message=f.get("message", ""),
             data={k: v for k, v in f.items() if k != "message"}))
 
@@ -575,6 +615,17 @@ def _audit_pseudo(fs, findings):
                              f"pseudo aproximado."),
                     data={'component': c}))
             elif _thermo(c) is None:
+                # The caloric catalog also contains characterized solids and
+                # petroleum cuts without a full molecular VLE record.
+                import components
+                legacy = components.get(c)
+                if legacy is not None and getattr(legacy, "valid", False):
+                    findings.append(AuditFinding(
+                        category="property_model", severity="warning",
+                        target_kind="stream", target_name=s.name,
+                        message=f"{s.name}: '{c}' usa propiedades caloricas aproximadas de components; sin modelo VLE completo.",
+                        data={"component": c}))
+                    continue
                 findings.append(AuditFinding(
                     category='pseudo', severity='error',
                     target_kind='stream', target_name=s.name,
@@ -713,15 +764,63 @@ def _audit_redundant_locks(fs, findings):
 # ENTRY POINT
 # ======================================================================
 
+def _audit_thermal_availability(fs, findings):
+    """Missing enthalpy is a model limitation, never zero heat consumption."""
+    from stream_enthalpy import stream_enthalpy_kW
+    missing = set()
+    for stream in fs.streams.values():
+        if getattr(stream, "stream_kind", "mass") != "mass" or stream.mass_flow <= 0:
+            continue
+        try:
+            value = stream_enthalpy_kW(stream)
+        except (ValueError, TypeError, ArithmeticError):
+            value = None
+        if value is None:
+            missing.add(stream.id)
+            findings.append(AuditFinding(
+                category="thermo_missing", severity="warning", target_kind="stream",
+                target_name=stream.name,
+                message=f"{stream.name}: entalpia no disponible; el balance de energia no puede verificarse.",
+                data={"mass_flow": stream.mass_flow}))
+    if not missing:
+        return
+    for block in fs.blocks.values():
+        eq = (block.eq_type or "").lower()
+        thermal = (any(word in eq for word in ("exchanger", "heater", "cooler", "evaporator", "boiler", "reactor"))
+                   or any(getattr(block, flag, False) for flag in
+                          ("flash_active", "column_active", "evaporator_active")))
+        if not thermal:
+            continue
+        ins = [st for st in fs.streams.values() if st.dst == block.id
+               and getattr(st, "stream_kind", "mass") == "mass" and st.mass_flow > 0]
+        outs = [st for st in fs.streams.values() if st.src == block.id
+                and getattr(st, "stream_kind", "mass") == "mass" and st.mass_flow > 0]
+        affected = [st.name for st in ins + outs if st.id in missing]
+        if ins and outs and affected:
+            findings.append(AuditFinding(
+                category="thermo_missing", severity="error", target_kind="block",
+                target_name=block.name,
+                message=f"{block.name}: calculo termico incompleto; faltan entalpias de {', '.join(affected)}.",
+                data={"streams": affected}))
+
+
 def audit_flowsheet(fs) -> AuditReport:
     """Pasada única que detecta los 4 tipos de inconsistencia."""
     findings: List[AuditFinding] = []
     _audit_phase(fs, findings)
+    _audit_thermal_availability(fs, findings)
     _audit_component_balance(fs, findings)
     _audit_component_balance_strict(fs, findings)
     _audit_pressure_source(fs, findings)
     _audit_pseudo(fs, findings)
     _audit_redundant_locks(fs, findings)
+    for block in fs.blocks.values():
+        if getattr(block, "lumped_yield_active", False):
+            findings.append(AuditFinding(
+                category="model_scope", severity="warning", target_kind="block",
+                target_name=block.name,
+                message=f"{block.name}: rendimientos masicos especificados; no predicen cinetica, equilibrio ni calor de cracking.",
+                data={"basis": getattr(block, "lumped_yield_basis", "")}))
     report = AuditReport(findings=findings)
     report.n_errors = sum(1 for f in findings if f.severity == 'error')
     report.n_warnings = sum(1 for f in findings if f.severity == 'warning')

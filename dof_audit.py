@@ -37,11 +37,13 @@ class BlockStatus:
     mass_dof:   int = 0
     energy_dof: int = 0
     comp_dof:   int = 0
-    overall:    str = "ok"   # ok | under | over
+    overall:    str = "ok"   # ok | under | over | mixed
     notes:      List[str] = field(default_factory=list)
 
     @property
     def total_dof(self) -> int:
+        # Legacy signed sum, not a validity verdict: independent constraints
+        # can be missing and contradictory in the same block.
         return self.mass_dof + self.energy_dof + self.comp_dof
 
 
@@ -54,6 +56,8 @@ class DOFReport:
     n_ok:         int = 0
     n_under:      int = 0
     n_over:       int = 0
+    # Under/over counts both include mixed blocks; this is their intersection.
+    n_mixed:      int = 0
     blocks:       List[BlockStatus]  = field(default_factory=list)
     streams:      List[StreamStatus] = field(default_factory=list)
     n_indeterminable_mass: int = 0
@@ -152,19 +156,30 @@ def _determinable_masses(fs: Flowsheet,
                                 det.add(s.id); changed = True
                         continue
 
+            # A moist-air tower needs either fixed cold-water circulation
+            # or a blowdown fraction in addition to its inlet flows.
+            tower_specified = (
+                getattr(b, "cooling_tower_active", False)
+                and (getattr(b, "cooling_tower_blowdown_fraction", None) is not None
+                     or any(s.src_port == "agua_fria" and s.mass_flow_locked
+                            for s in outs)))
+
             # ── Caso flash_active / column_active / separadores
             # mecánicos: solver dedicado propaga conservando masa.
             # Si los inputs son determinables, los outputs los pone
             # el solver salvo que estén lockeados.
             if (getattr(b, "flash_active", False)
                     or getattr(b, "column_active", False)
+                    or getattr(b, "component_recovery_active", False)
+                    or getattr(b, "lumped_yield_active", False)
+                    or tower_specified
                     or getattr(b, "separator_active", False)
                     or getattr(b, "mech_sep_active", False)
                     or getattr(b, "dryer_active", False)
                     or getattr(b, "crystallizer_active", False)
                     or getattr(b, "evaporator_active", False)
                     or getattr(b, "cyclone_active", False)):
-                if all(s.id in det for s in ins):
+                if ins and all(s.id in det for s in ins):
                     for s in outs:
                         if s.id not in det:
                             det.add(s.id); changed = True
@@ -210,6 +225,9 @@ def _determinable_compositions(fs: Flowsheet) -> Set[int]:
                           or getattr(b, "splitter_active", False)
                           or getattr(b, "flash_active", False)
                           or getattr(b, "column_active", False)
+                          or getattr(b, "component_recovery_active", False)
+                          or getattr(b, "cooling_tower_active", False)
+                          or getattr(b, "lumped_yield_active", False)
                           or getattr(b, "separator_active", False)
                           or getattr(b, "mech_sep_active", False)
                           or getattr(b, "dryer_active", False)
@@ -341,11 +359,19 @@ def analyze_flowsheet(fs: Flowsheet) -> DOFReport:
                     f"{len(outs_indet)} output(s) sin composition "
                     f"determinable ({names})")
 
-        # Status
-        if bs.total_dof > 0:
-            bs.overall = "under"; report.n_under += 1
-        elif bs.total_dof < 0:
-            bs.overall = "over";  report.n_over += 1
+        # Independent mass, energy and composition constraints cannot cancel.
+        dimensions = (bs.mass_dof, bs.energy_dof, bs.comp_dof)
+        has_under = any(d > 0 for d in dimensions)
+        has_over = any(d < 0 for d in dimensions)
+        report.n_under += int(has_under)
+        report.n_over += int(has_over)
+        if has_under and has_over:
+            bs.overall = "mixed"
+            report.n_mixed += 1
+        elif has_under:
+            bs.overall = "under"
+        elif has_over:
+            bs.overall = "over"
         else:
             bs.overall = "ok";    report.n_ok += 1
         report.blocks.append(bs)
@@ -365,6 +391,8 @@ def analyze_flowsheet(fs: Flowsheet) -> DOFReport:
         report.summary = (
             f"✗ MIXTO — {report.n_under} bloque(s) UNDER y "
             f"{report.n_over} con conflicto entre locks (OVER)")
+        if report.n_mixed:
+            report.summary += f"; {report.n_mixed} con ambos problemas"
         report.suggestions.append(
             "Resolver primero los conflictos entre locks (✗); después "
             "agregar los locks que faltan (⚠).")
@@ -402,6 +430,8 @@ def format_report(report: DOFReport, max_blocks: int = 50) -> str:
                 f"Componentes: {report.n_components}")
     out.append(f"  Status:  ✓ {report.n_ok}    "
                 f"⚠ {report.n_under}    ✗ {report.n_over}")
+    if report.n_mixed:
+        out.append(f"  Incluidos en UNDER y OVER: {report.n_mixed} bloque(s)")
     if report.n_indeterminable_mass > 0:
         out.append(f"  Streams sin mass determinable: "
                     f"{report.n_indeterminable_mass}")
@@ -413,12 +443,15 @@ def format_report(report: DOFReport, max_blocks: int = 50) -> str:
 
     problems = [b for b in report.blocks if b.overall != "ok"]
     if problems:
-        out.append("BLOQUES CON SPECS FALTANTES:")
+        out.append("BLOQUES CON ESPECIFICACIONES FALTANTES O EN CONFLICTO:")
         out.append("-" * 76)
         for b in problems[:max_blocks]:
             icon = "⚠" if b.overall == "under" else "✗"
             out.append(f"  {icon} {b.name:14}  {b.eq_type:32}  "
                         f"DOF={b.total_dof:+d}")
+            if b.overall == "mixed":
+                out.append(f"        MIXTO: masa={b.mass_dof:+d}, "
+                           f"energia={b.energy_dof:+d}, composicion={b.comp_dof:+d}")
             for note in b.notes:
                 out.append(f"        · {note}")
         out.append("")

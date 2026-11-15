@@ -1,0 +1,68 @@
+{
+  "nitric_oxide": {
+    "columns": [
+      "Tmin_K",
+      "Tmax_K",
+      "A",
+      "B",
+      "C",
+      "D",
+      "E"
+    ],
+    "equation": "Cp [J/mol/K] = A+B*t+C*t^2+D*t^3+E/t^2; t=T[K]/1000",
+    "segments": [
+      [
+        298,
+        1200,
+        23.83491,
+        12.58878,
+        -1.139011,
+        -1.497459,
+        0.214194
+      ],
+      [
+        1200,
+        6000,
+        35.99169,
+        0.95717,
+        -0.148032,
+        0.009974,
+        -3.004088
+      ]
+    ],
+    "source": "NIST Chemistry WebBook SRD69, Chase 1998, https://webbook.nist.gov/cgi/cbook.cgi?ID=C10102439&Mask=1"
+  },
+  "nitrogen_dioxide": {
+    "columns": [
+      "Tmin_K",
+      "Tmax_K",
+      "A",
+      "B",
+      "C",
+      "D",
+      "E"
+    ],
+    "equation": "Cp [J/mol/K] = A+B*t+C*t^2+D*t^3+E/t^2; t=T[K]/1000; monomer NO2, dimerization requires a separate reaction",
+    "segments": [
+      [
+        298,
+        1200,
+        16.10857,
+        75.89525,
+        -54.3874,
+        14.30777,
+        0.239423
+      ],
+      [
+        1200,
+        6000,
+        56.82541,
+        0.738053,
+        -0.144721,
+        0.009777,
+        -5.459911
+      ]
+    ],
+    "source": "NIST Chemistry WebBook SRD69, Chase 1998, https://webbook.nist.gov/cgi/cbook.cgi?ID=C10102440&Mask=1"
+  }
+}

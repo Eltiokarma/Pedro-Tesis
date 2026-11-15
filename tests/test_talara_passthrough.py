@@ -21,7 +21,7 @@ os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from examples_registry import load_example
-from flowsheet_model import Block, Stream
+from flowsheet_model import Block, Stream, Flowsheet
 import flowsheet_solver as fsv
 
 
@@ -37,6 +37,22 @@ FCC_DESIGN = {          # data/examples/talara.json — R-FCC, 6 cortes
 
 def _fcc(fs):
     return next(b for b in fs.blocks.values() if b.name == "R-FCC")
+
+
+def _splitter_fixture():
+    """Isolate keyed-split behavior from Talara's chemical yield/recovery model."""
+    fs = Flowsheet()
+    block = Block(fs.new_id(), "R-FCC", "Splitter — flow divider", 1,
+                  splitter_active=True, splitter_fractions=list(FCC_DESIGN.values()))
+    fs.blocks[block.id] = block
+    feed = Stream(fs.new_id(), "feed", 0, block.id, mass_flow=10000,
+                  mass_flow_locked=True, composition={"water": 1.0}, phase="liquid")
+    fs.streams[feed.id] = feed
+    for name, fraction in FCC_DESIGN.items():
+        out = Stream(fs.new_id(), name, block.id, 0, split_fraction=fraction,
+                     role="product", phase="liquid")
+        fs.streams[out.id] = out
+    return fs
 
 
 def _insert_passthrough_on(fs, stream_name):
@@ -82,7 +98,7 @@ def test_insertar_passthrough_no_redistribuye_los_otros_cortes():
     """El escenario del pendiente: pass-through en C10-LCO. Los OTROS
     cinco cortes deben conservar su fracción de diseño exacta, y el
     stream nuevo hereda el remanente (la fracción del LCO)."""
-    fs = load_example("talara")
+    fs = _splitter_fixture()
     new_sid = _insert_passthrough_on(fs, "C10-LCO")
     fsv.solve(fs)
     fcc = _fcc(fs)
@@ -104,7 +120,7 @@ def test_insertar_passthrough_no_redistribuye_los_otros_cortes():
 def test_fuente_unica_pairs_parcial_keyed():
     """effective_split_fractions con keyed parcial: keyed conservan su
     valor, las nuevas reparten el remanente en partes iguales."""
-    fs = load_example("talara")
+    fs = _splitter_fixture()
     fcc = _fcc(fs)
     # Quitar el split_fraction a DOS cortes (0.14 + 0.03 = 0.17)
     for s in fs.streams.values():

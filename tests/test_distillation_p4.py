@@ -34,9 +34,12 @@ import examples_registry as reg
 class TestJ_PanelColumna(unittest.TestCase):
     def _panel_text(self, method):
         import inspector_evidence as ev
-        # industrial_complete: columna T-201 multicomponente (separación
-        # factible con las keys auto-detectadas → FUG produce N).
-        fs = reg.load_example('industrial')
+        # This is a report/UI contract test, so use the standalone active
+        # benzene/toluene column. A full reactive recycle plant with a
+        # repeatedly solved MESH column makes a format assertion depend
+        # on unrelated plant convergence. Industrial integration is tested
+        # separately by the example and balance gates.
+        fs = reg.load_example('distillation')
         col = next(b for b in fs.blocks.values()
                    if getattr(b, "column_active", False))
         col.column_method = method

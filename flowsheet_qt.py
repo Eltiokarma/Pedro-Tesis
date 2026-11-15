@@ -3838,7 +3838,7 @@ class BlockItem(QGraphicsItemGroup):
 
     def _render_ports(self):
         r = self.PORT_RADIUS
-        coords = pfd.port_coords(self.model.eq_type, self.W, self.H)
+        coords = pfd.port_coords(self.model.eq_type, self.W, self.H, block=self.model)
         # Stubs: pequeñas líneas desde el puerto hacia el cuerpo del símbolo,
         # para que visualmente el puerto se conecte al SVG (los SVGs tienen
         # margen interno y los puertos quedan al borde del bounding box).
@@ -3857,7 +3857,7 @@ class BlockItem(QGraphicsItemGroup):
                 stub.setPen(QPen(QColor(_tokens.TOK["stream_internal"]), 1.6))
                 stub.setZValue(0.5)   # encima del rect, debajo del puerto
                 self.decoration_items.append(stub)
-            kind = ep.get_port_kind(self.model.eq_type, pname)
+            kind = ep.get_block_port_kind(self.model, pname)
             base_color = PORT_KIND_COLORS.get(kind, PORT_KIND_COLORS["aux"])
             ell = QGraphicsEllipseItem(cx - r, cy - r, 2*r, 2*r, parent=self)
             ell.setBrush(QBrush(_port_tint(base_color)))
@@ -3946,7 +3946,7 @@ class BlockItem(QGraphicsItemGroup):
         """Tooltip al hover con info del bloque (HTML)."""
         b = self.model
         spec = eq.EQUIPMENT_DATA.get(b.eq_type, {})
-        ports = ep.get_ports(b.eq_type)
+        ports = ep.get_block_ports(b)
         port_list = ", ".join(ports.keys()) if ports else "(sin puertos)"
         lines = [
             f"<b>{b.name}</b>",
@@ -5829,7 +5829,7 @@ class StreamItem(QGraphicsPathItem):
     # ---- helpers de routing (cálculo de paths entre puertos de bloques) ----
 
     def _resolve_port(self, b, port_name, default_side):
-        ports = ep.get_ports(b.eq_type)
+        ports = ep.get_block_ports(b)
         if port_name and port_name in ports:
             pname = port_name
             side, frac = ports[port_name]
@@ -10072,4 +10072,3 @@ class FlowsheetMainWindow(QMainWindow):
         self._update_status()
         self.end_action(f"Agregar {name} (flotante {kind})", before)
         return sid
-

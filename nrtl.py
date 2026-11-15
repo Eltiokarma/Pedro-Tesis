@@ -144,6 +144,13 @@ def gamma(names: List[str], x_vec: List[float], T_K: float) -> List[float]:
     n = len(names)
     if n != len(x_vec) or n < 1:
         return None
+    # Exact ideal limit.  Reactor/recycle phase checks often contain only
+    # gases with no binary NRTL parameters; allocating and summing dense
+    # zero matrices thousands of times adds no thermodynamic information.
+    params = _ensure_loaded()
+    if not any((names[i], names[j]) in params or (names[j], names[i]) in params
+               for i in range(n) for j in range(i + 1, n)):
+        return [1.0] * n
     # Construir matrices τ y G (n×n).  Para pares sin NRTL, asumimos
     # γ ≈ 1 (Raoult ideal): τ=0, G=1.  Esto degrada graciosamente
     # cuando algún componente no tiene par binario en el catálogo
@@ -211,23 +218,42 @@ def _Psat_bar(comp_name: str, T_K: float) -> Optional[float]:
     """Presión de saturación en bar para componente a T_K, usando
     Antoine de thermo_db.
 
-    Para componentes SIN Antoine (glucose, polímeros, sales, etc),
-    retorna 1e-10 — es decir, asume no-volátil.  En flash_TP esto
-    los manda 100% al líquido (V/F=0 contribution).  Mucho más útil
-    que retornar None y abortar el flash entero.
+    Without Antoine, known EOS volatiles use Peng-Robinson below Tc.
+    Above Tc, failed EOS roots and unknown identities return None: absent
+    saturation data must not turn a volatile such as chlorine into a salt.
+    Known nonvolatile/pseudo records without EOS retain the legacy 1e-10
+    screening approximation for their negligible vapor contribution.
     """
     try:
         import thermo_db as _td
     except ImportError:
         return None
+    if not math.isfinite(T_K) or T_K <= 0:
+        return None
     c = _td.get(comp_name)
     if c is None:
-        # Componente no en thermo_db: tratar como no-volátil
-        return 1e-10
+        # Some explicitly nonvolatile process pseudocomponents live only in
+        # the legacy registry (e.g. NaOH / milk solids). Unknown identities
+        # still fail; do not silently manufacture a nonvolatile component.
+        from components import get as legacy_get
+        legacy = legacy_get(comp_name)
+        if legacy is not None and legacy.dh_vap == 0 and legacy.tb_c > 1000:
+            return 1e-10
+        return None
     T_C = T_K - 273.15
     p_kpa = c.vapor_pressure_kPa(T_C)
     if p_kpa is None or p_kpa <= 0:
-        # Sin Antoine válido: no-volátil
+        eos_known = (c.tc_c is not None and c.pc_bar is not None and c.omega is not None
+                     and math.isfinite(c.tc_c) and c.tc_c > -273.15
+                     and math.isfinite(c.pc_bar) and c.pc_bar > 0
+                     and math.isfinite(c.omega))
+        if eos_known:
+            if T_C >= c.tc_c:
+                return None
+            from eos import psat_bar
+            value = psat_bar(comp_name, T_C)
+            return value if value is not None and math.isfinite(value) and value > 0 else None
+        # Explicit known pseudo/nonvolatile record without EOS parameters.
         return 1e-10
     return p_kpa / 100.0   # kPa → bar
 
@@ -397,7 +423,10 @@ def flash_TP(names: List[str], z_vec: List[float], T_K: float, P_bar: float,
     Returns: dict {'V_frac', 'x', 'y', 'K', 'iterations'} o None.
     """
     n = len(names)
-    if n != len(z_vec):
+    if (n < 1 or n != len(z_vec) or not math.isfinite(T_K) or T_K <= 0
+            or not math.isfinite(P_bar) or P_bar <= 0 or max_iter < 1
+            or any(not math.isfinite(zi) or zi < 0 for zi in z_vec)
+            or sum(z_vec) <= 0):
         return None
     z = [zi / sum(z_vec) for zi in z_vec]   # renormalizar
 
@@ -415,7 +444,7 @@ def flash_TP(names: List[str], z_vec: List[float], T_K: float, P_bar: float,
             return None
         V = V_new
         # Calcular x e y
-        x = [z[i] / (1 + V * (K[i] - 1)) for i in range(n)]
+        x = [z[i] / ((1 - V) + V * K[i]) for i in range(n)]
         y = [K[i] * x[i] for i in range(n)]
         # Normalizar
         sx = sum(x); sy = sum(y)
@@ -434,6 +463,22 @@ def flash_TP(names: List[str], z_vec: List[float], T_K: float, P_bar: float,
         K = K_new
         if max_dk < tol:
             break
+    else:
+        # A material balance alone is not a flash solution: the phases
+        # must also satisfy equality of fugacities (the K fixed point).
+        return None
+    # Use the CONVERGED K for all returned quantities, not the previous
+    # iterate.  This also preserves z = (1-V)x + Vy at a phase boundary.
+    V = _solve_rr(z, K)
+    if V is None:
+        return None
+    x = [z[i] / ((1.0 - V) + V * K[i]) for i in range(n)]
+    y = [K[i] * x[i] for i in range(n)]
+    sx, sy = sum(x), sum(y)
+    if sx <= 0 or sy <= 0:
+        return None
+    x = [xi / sx for xi in x]
+    y = [yi / sy for yi in y]
     # Si V < 0: todo líquido; V > 1: todo vapor
     if V < 0:
         return dict(V_frac=0.0, x=z, y=[0.0]*n, K=K, iterations=it+1)
@@ -449,7 +494,7 @@ def _solve_rr(z: List[float], K: List[float]) -> Optional[float]:
     n = len(z)
     def F(V):
         try:
-            return sum(z[i] * (K[i] - 1) / (1 + V * (K[i] - 1))
+            return sum(z[i] * (K[i] - 1) / ((1 - V) + V * K[i])
                        for i in range(n))
         except ZeroDivisionError:
             return float('nan')
@@ -510,7 +555,9 @@ def flash_LLE(names: List[str], z_vec: List[float], T_K: float,
       None si falta data o no converge.
     """
     n = len(names)
-    if n < 2 or n != len(z_vec):
+    if (n < 2 or n != len(z_vec) or max_iter < 1
+            or not math.isfinite(T_K) or T_K <= 0
+            or any(not math.isfinite(zi) or zi < 0 for zi in z_vec)):
         return None
     s = sum(z_vec)
     if s <= 0:
@@ -547,10 +594,13 @@ def flash_LLE(names: List[str], z_vec: List[float], T_K: float,
         K_LL = [g_alpha[i] / g_beta[i] for i in range(n)]
         # Rachford-Rice para LLE:
         #   z_i = L_α · x_iα + (1-L_α) · x_iβ
-        #   x_iα = z_i / (L_α + (1-L_α)/K_LL_i)
-        #   x_iβ = z_i / (L_α · K_LL_i + (1-L_α))
-        # F(L_α) = Σ x_iα - Σ x_iβ = Σ z_i · (K_LL_i - 1)/(L_α·(K_LL_i-1) + 1) = 0
-        L_new = _solve_rr_LLE(z, K_LL)
+        #   x_iα = z_i / (L_α + (1-L_α) K_LL_i)
+        #   x_iβ = K_LL_i x_iα
+        # The ordinary RR variable is the fraction of the SECOND phase,
+        # beta=1-L_alpha.  Inverting K here swapped the phases on every
+        # iteration and returned an unconverged 100-iteration oscillation.
+        beta_new = _solve_rr_LLE(z, K_LL)
+        L_new = None if beta_new is None else 1.0 - beta_new
         if L_new is None:
             return None
         # Convergencia trivial: L→0 o L→1 indica single-phase
@@ -563,8 +613,8 @@ def flash_LLE(names: List[str], z_vec: List[float], T_K: float,
                          x_alpha=list(z), x_beta=list(z),
                          iterations=it+1)
         # Calcular xα, xβ desde z y K_LL
-        x_alpha_new = [z[i] / (L_new + (1 - L_new) / K_LL[i]) for i in range(n)]
-        x_beta_new  = [z[i] / (L_new * K_LL[i] + (1 - L_new)) for i in range(n)]
+        x_alpha_new = [z[i] / (L_new + (1 - L_new) * K_LL[i]) for i in range(n)]
+        x_beta_new  = [K_LL[i] * x_alpha_new[i] for i in range(n)]
         # Renormalizar (Rachford-Rice no garantiza Σ=1 exacto)
         s_a = sum(x_alpha_new)
         s_b = sum(x_beta_new)
@@ -581,7 +631,17 @@ def flash_LLE(names: List[str], z_vec: List[float], T_K: float,
         x_beta  = x_beta_new
         L_alpha = L_new
         if max_dx < tol:
-            break
+            ga = gamma(names, x_alpha, T_K)
+            gb = gamma(names, x_beta, T_K)
+            if ga is None or gb is None:
+                return None
+            residual = max((abs(math.log(x_alpha[i] * ga[i] /
+                                         (x_beta[i] * gb[i])))
+                            for i in range(n) if z[i] > 0), default=0.0)
+            if residual < tol:
+                break
+    else:
+        return None
     return dict(
         two_phase=True,
         L_alpha=L_alpha,
@@ -592,13 +652,14 @@ def flash_LLE(names: List[str], z_vec: List[float], T_K: float,
 
 
 def _solve_rr_LLE(z: List[float], K_LL: List[float]) -> Optional[float]:
-    """Rachford-Rice para LLE: encontrar L_α tal que
-        Σᵢ zᵢ (K_LL_i − 1) / (L_α·(K_LL_i − 1) + 1) = 0
-    en L_α ∈ [0, 1].  Bisección."""
+    """Rachford-Rice for the SECOND liquid fraction (1-L_alpha).
+
+    K_LL = x_beta/x_alpha, hence denominator = (1-beta)+beta*K_LL.
+    """
     n = len(z)
     def F(L):
         try:
-            return sum(z[i] * (K_LL[i] - 1) / (L * (K_LL[i] - 1) + 1)
+            return sum(z[i] * (K_LL[i] - 1) / ((1 - L) + L * K_LL[i])
                        for i in range(n))
         except ZeroDivisionError:
             return float('nan')

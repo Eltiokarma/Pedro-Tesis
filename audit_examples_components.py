@@ -66,7 +66,15 @@ def _stream_component_mass(s) -> Dict[str, float]:
     """{componente: masa (tm/año)} de un stream, desde composition o
     main_component (100% puro)."""
     comp = s.composition or ({s.main_component: 1.0} if s.main_component else {})
-    return {c: w * s.mass_flow for c, w in comp.items() if w}
+    import thermo_db
+    masses = {}
+    for name, fraction in comp.items():
+        if not fraction:
+            continue
+        item = thermo_db.get(name)
+        canonical = item.name if item is not None else name
+        masses[canonical] = masses.get(canonical, 0.0) + fraction * s.mass_flow
+    return masses
 
 
 def _has_declared_reaction(b) -> bool:
@@ -236,7 +244,12 @@ def _check_pseudo_cut(b, comp_in, comp_out, block_flow) -> List[dict]:
     debe igualar la suma de la masa de los comps de salida del grupo.  Los
     componentes fuera de cualquier grupo se chequean por conservación normal."""
     findings = []
-    pc = getattr(b, "pseudo_cut", {}) or {}
+    import thermo_db
+    def canonical(name):
+        component = thermo_db.get(name)
+        return component.name if component is not None else name
+    pc = {canonical(name): [canonical(product) for product in products]
+          for name, products in (getattr(b, "pseudo_cut", {}) or {}).items()}
     grouped_in = set(pc.keys())
     grouped_out = set()
     for outs in pc.values():

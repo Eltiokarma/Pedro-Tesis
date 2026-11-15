@@ -1,81 +1,37 @@
-"""
-FLOWSHEET SOLVER — propagación iterativa de balances de masa y
-energía sobre el grafo del diagrama de proceso.
+"""Sequential-modular material and energy solver for process flowsheets.
 
-ESTRATEGIA
+Material balances use explicit user specifications, dedicated reactor and
+separator models, and flow closure. Recycles use Wegstein/Broyden followed
+by complete mass/composition convergence, never a count of populated values.
+A zero-flow phase is a valid solution when its producing balance is known.
+Heat exchanger circuits conserve mass and composition on their own ports.
 
-  Sequential modular con propagación por cierre:
+Thermal propagation inverts stream_enthalpy.stream_enthalpy_kW, the same
+reference-consistent enthalpy used to infer duties. Mixers solve sum(m*h),
+three-temperature cross exchangers solve their remaining outlet temperature,
+and explicit utility circuits derive flow from the process heat demand.
+Demand, mass and temperature are iterated together. Reaction heats use the
+same physical reference; isothermal reactor duties follow final feed states.
 
-    En cada iteración, para cada bloque del flowsheet:
-      1. Listar streams in/out con mass_flow conocido (!=0) y desconocido.
-      2. Si exactamente UN stream del bloque queda sin valor, deducirlo
-         por closure del balance de masa.
-      3. Repetir hasta que no haya cambios o se llegue al max de
-         iteraciones.
-
-  Topología lineal (1-in-1-out, HX, pumps, tanks):
-      out = in            ← caso trivial
-  Mixers (N-in-1-out):
-      out = Σ ins
-  Splitters parciales (1-in-N-out, columna con dos productos):
-      el output que falta = in − Σ otros outputs conocidos
-
-  Reciclos (SCCs con > 1 bloque):
-      El algoritmo de closure NO resuelve reciclos por sí mismo.  Si
-      después de max_iter quedan streams sin propagar dentro de un
-      reciclo, se reportan como 'unresolved' — el usuario debe
-      declarar manualmente al menos uno (tear stream).
-      Futura mejora: tear + Wegstein automático.
-
-ENERGÍA
-
-  Misma estructura.  Con duty del bloque + Cp/T de streams ya
-  conocidos:
-    Passthrough (1-in-1-out):
-        T_out = T_in + duty_kW / (m_kg_s × Cp_kJ_per_kg_K)
-    Mixer:
-        T_out = (Σ m·Cp·T) / (Σ m·Cp)  (despreciando duty pequeño)
-    Splitter:
-        T_out_j = T_in (igualdad térmica)
-
-  Cp del output se asume igual al del input dominante (no manejamos
-  cambio de fase ni Cp(T)).
-
-  COMPRESORES / TURBINAS / FANS (gas compresible):
-    Estos NO usan el balance sensible de arriba — propagan T_out vía
-    relación isentrópica de gas ideal (Cengel cap 7-9), en
-    _propagate_T_compressor_isentropic:
-        T_out_isen = T_in · (P_out/P_in)^((k−1)/k)
-        T_out_real = T_in + (T_out_isen − T_in) / η   (compresor)
-        T_out_real = T_in − η·(T_in − T_out_isen)     (turbina)
-    con k=Cp/Cv y MW de la composición (_compressible_props, usa Cp(T)
-    real de thermo_db — más preciso que el cold-air-standard de k=1.4
-    constante).  Convención: P_out>P_in → compresor (duty>0); P_out<P_in
-    → turbina/expansor (duty<0).  El compresor delega a
-    equipment_design.compressor_sizing (single source of truth con el
-    sizing).  Habilita ciclos Brayton, recompresión de gas caliente y
-    expansores.  Bombas siguen con T_out ≈ T_in (líquido incompresible).
-    Requiere que la presión esté resuelta ANTES (solve_pressure_hydraulic
-    corre antes que _solve_energy_iteration en solve()).
-
-USO
-
-    from flowsheet_solver import solve
-
-    result = solve(flowsheet)
-    print(result.summary())
-
-    if not result.success:
-        # mostrar result.unresolved_streams al user para que declare
-        ...
-
-DEPENDENCIAS
-    Sólo stdlib (no networkx).  La detección de ciclos se hace
-    en una pasada de Tarjan ligera embebida.
+Mass flow is tonnes/year; temperature is Celsius; pressure is absolute bar;
+heat/work is kW. Failures, nonfinite inputs, failed recycles and critical
+component/element/thermal audits affect success and the visible status.
+Approximate property and equipment models are still identified by warnings.
 """
 
 from dataclasses import dataclass, field
+import math
 from typing import Any, Dict, List, Optional, Tuple
+from component_recovery import solve_component_recoveries as _recover_components
+from pseudocomponent_yields import solve_lumped_yields
+from cooling_tower import solve_cooling_towers
+
+
+def solve_component_recoveries(fs):
+    # A tower may be temporarily infeasible before its hot feed is solved.
+    # Its final thermal-pass errors are collected after temperature convergence.
+    towers = [msg for msg in solve_cooling_towers(fs) if msg.startswith("V") or msg.startswith("✓")]
+    return solve_lumped_yields(fs) + _recover_components(fs) + towers
 
 
 # ======================================================
@@ -97,7 +53,7 @@ MAX_ITER      = 30
 # Si el solver calcula una T fuera de este rango, NO la propaga
 # (es señal de que el modelo Cp simple no captura ΔH_vap o ΔH_rxn
 # y el duty declarado da una T absurda).
-T_MIN_REASONABLE = -100.0    # °C  (refrigeración severa)
+T_MIN_REASONABLE = -273.14   # °C (incluye separación criogénica de aire)
 T_MAX_REASONABLE = 1500.0    # °C  (hornos de craqueo)
 
 
@@ -135,7 +91,7 @@ class SolverResult:
     # Warnings sobre balance POR COMPONENTE en blocks no-reactor.
     # Indica que las composiciones declaradas en los example builders
     # son inconsistentes con un balance riguroso por componente.
-    # No degrada overall_status — el balance total sigue siendo OK.
+    # Los hallazgos críticos sí degradan success y overall_status.
     component_warnings:  List[str]          = field(default_factory=list)
     # Auditoría de consistencia unificada (Frente A): phase, balance por
     # componente, pseudo-componentes y locks redundantes.  audit_report
@@ -290,6 +246,8 @@ def _build_adjacency(fs):
     """Dict: block_id → set de block_ids alcanzables por un stream."""
     adj = {bid: set() for bid in fs.blocks}
     for s in fs.streams.values():
+        if getattr(s, "stream_kind", "mass") != "mass":
+            continue
         if s.src in adj and s.dst in adj:
             adj[s.src].add(s.dst)
     return adj
@@ -366,7 +324,7 @@ def _is_mass_locked(s):
     Las fuentes legítimas de specs (example builders, from_dict, UI dialog)
     setean explícitamente el lock al crear/cargar.  Para JSONs viejos, la
     migración en Flowsheet.from_dict los infiere por heurística una vez."""
-    return getattr(s, "mass_flow_locked", False)
+    return getattr(s, "mass_flow_locked", False) or getattr(s, "_flow_specified_by_energy", False)
 
 
 def _is_temp_locked(s):
@@ -450,19 +408,40 @@ def _drop_noncondensables(mol_frac: Dict[str, float]) -> Dict[str, float]:
 
 
 def _boiling_point_K(comp: str, P_bar: float):
-    """Tb de un componente puro a P_bar por bisección sobre Antoine
-    (nrtl._Psat_bar es monótona creciente en T).  None si falta Antoine."""
+    """Pure-component saturation T inside a bracketed Antoine validity range.
+
+    NRTL's missing-Antoine sentinel is not a measured vapor pressure and
+    must never be inverted into a fictitious boiling point at a search bound.
+    """
+    if not math.isfinite(P_bar) or P_bar <= 0:
+        return None
     try:
-        import nrtl as _nrtl
+        import thermo_db as _td
     except ImportError:
         return None
-    lo, hi = 150.0, 800.0
-    if _nrtl._Psat_bar(comp, lo) is None or _nrtl._Psat_bar(comp, hi) is None:
+    record = _td.get(comp)
+    if record is None or record.antoine_A is None:
+        return None
+    lo_C, hi_C = record.antoine_range_C
+    if record.tc_c is not None:
+        hi_C = min(hi_C, record.tc_c - 1e-6)
+    lo, hi = lo_C + 273.15, hi_C + 273.15
+    if not 0 < lo < hi:
+        return None
+
+    def psat(T_K):
+        value = record.vapor_pressure_kPa(T_K - 273.15)
+        return value / 100.0 if value is not None else None
+
+    p_lo, p_hi = psat(lo), psat(hi)
+    if (p_lo is None or p_hi is None
+            or not math.isfinite(p_lo) or not math.isfinite(p_hi)
+            or not 0 < p_lo < p_hi or not p_lo <= P_bar <= p_hi):
         return None
     for _ in range(80):
         mid = 0.5 * (lo + hi)
-        pm = _nrtl._Psat_bar(comp, mid)
-        if pm is None:
+        pm = psat(mid)
+        if pm is None or not math.isfinite(pm) or pm <= 0:
             return None
         if pm < P_bar:
             lo = mid
@@ -483,7 +462,8 @@ def _infer_phase_from_TP(composition_mass: Dict[str, float],
     (falta Antoine/NRTL) devuelve ('', 0.0) — el caller deja lo que había.
     NO toca el stream.
     """
-    if not composition_mass or T_K <= 0 or P_bar <= 0:
+    if (not composition_mass or not math.isfinite(T_K) or T_K <= 0
+            or not math.isfinite(P_bar) or P_bar <= 0):
         return ('', 0.0)
     x_mol = _mass_to_mol(composition_mass)
     if not x_mol:
@@ -502,7 +482,21 @@ def _infer_phase_from_TP(composition_mass: Dict[str, float],
         comp = dominant[0] if dominant else names[0]
         Tb = _boiling_point_K(comp, P_bar)
         if Tb is None:
-            return ('', 0.0)
+            # A known volatile can lack Antoine (e.g. chlorine). Use the
+            # EOS phase calculation, not NRTL's nonvolatile sentinel. Unknown
+            # or unsupported properties remain unresolved rather than liquid.
+            from eos import flash_TP_eos
+            pure_flash = flash_TP_eos([comp], [1.0], T_K, P_bar)
+            if pure_flash is None:
+                return ('', 0.0)
+            quality = pure_flash.get("V_frac")
+            if quality is None or not math.isfinite(quality) or not 0 <= quality <= 1:
+                return ('', 0.0)
+            if quality <= 1e-8:
+                return ('liquid', 0.0)
+            if quality >= 1 - 1e-8:
+                return ('vapor', 1.0)
+            return ('two_phase', quality)
         if T_K < Tb - 0.5:
             return ('liquid', 0.0)
         if T_K > Tb + 0.5:
@@ -577,6 +571,7 @@ def _reset_propagated_values(fs):
                 s._comp_declared = dict(s.composition) if s.composition else {}
             except Exception:
                 s._comp_declared = {}
+        s._flow_specified_by_energy = False
         if not _is_mass_locked(s):
             s.mass_flow = 0.0
         if not _is_temp_locked(s):
@@ -589,7 +584,7 @@ def _reset_propagated_values(fs):
         # En reactores de equilibrio (Capa 4) heat_of_reaction lo
         # computa el solver desde 0 — limpiamos antes para que el
         # nuevo cálculo no se mezcle con el viejo.
-        if getattr(b, "reactions", None):
+        if getattr(b, "reactions", None) or getattr(b, "custom_reactions", None):
             b.heat_of_reaction = 0.0
         # Perfiles runtime de PFR/batch — siempre limpiar antes del
         # solve para que un reactor que ya no es PFR (o un solve viejo)
@@ -617,6 +612,16 @@ _ACTIVE_TEAR_IDS: set = set()
 _ACTIVE_SCC_BLOCK_IDS: set = set()
 
 
+def _has_material_producer(fs, stream):
+    """A unit-operation result cannot be redefined by downstream closure."""
+    source = fs.blocks.get(stream.src)
+    return bool(source and (getattr(source, "reactions", None) or getattr(source, "custom_reactions", None) or any(
+        getattr(source, flag, False) for flag in
+        ("cooling_tower_active", "lumped_yield_active", "component_recovery_active", "flash_active", "column_active",
+         "splitter_active", "mech_sep_active", "separator_active",
+         "evaporator_active", "crystallizer_active", "dryer_active"))))
+
+
 def _solve_mass_iteration(fs):
     """Una pasada sobre todos los bloques.  Devuelve lista de tuplas
     (stream_name, new_mass_flow) con lo que se propagó esta pasada.
@@ -641,8 +646,11 @@ def _solve_mass_iteration(fs):
     # DETECCIÓN DE CICLOS) pero en el forward pass.  Se computa una vez.
     hx4 = _four_port_hx_ids(fs)
     for b in fs.blocks.values():
-        ins  = [s for s in fs.streams.values() if s.dst == b.id]
-        outs = [s for s in fs.streams.values() if s.src == b.id]
+        if any(getattr(b, flag, False) for flag in
+               ("component_recovery_active", "lumped_yield_active", "cooling_tower_active")):
+            continue
+        ins  = [s for s in fs.streams.values() if s.dst == b.id and getattr(s, "stream_kind", "mass") == "mass"]
+        outs = [s for s in fs.streams.values() if s.src == b.id and getattr(s, "stream_kind", "mass") == "mass"]
         if not ins or not outs:
             continue
 
@@ -678,6 +686,7 @@ def _solve_mass_iteration(fs):
         # están vivos (loop): con 2 salidas desconocidas la regla de bloque no
         # dispara y colapsan a 0.
         if b.id in hx4:
+            paired_any = False
             side_ins, side_outs = {}, {}
             for s in proc_ins:
                 side_ins.setdefault(_stream_side(s.dst_port), []).append(s)
@@ -690,19 +699,23 @@ def _solve_mass_iteration(fs):
                 so = side_outs.get(side, [])
                 if len(si) != 1 or len(so) != 1:
                     continue          # lado no es 1-in/1-out → regla de bloque
+                paired_any = True
                 a, c = si[0], so[0]
-                # Sólo el caso VIVO: ambos lados sin lock (sin ancla closure) y
-                # ninguno es tear activo.  Con un lado locked → regla de bloque.
-                if _is_mass_locked(a) or _is_mass_locked(c):
-                    continue
-                if a.id in _ACTIVE_TEAR_IDS or c.id in _ACTIVE_TEAR_IDS:
-                    continue
-                if c.mass_flow == 0 and a.mass_flow > 0:
-                    c.mass_flow = a.mass_flow
-                    propagated.append((c.name, a.mass_flow))
-                elif a.mass_flow == 0 and c.mass_flow > 0:
+                # Each circuit conserves its own mass even when one side
+                # has a user anchor. Never close a deficit using the other
+                # circuit: that would transport material through the wall.
+                if (not _is_mass_locked(c) and c.id not in _ACTIVE_TEAR_IDS
+                        and (a.mass_flow > 0 or _is_mass_locked(a))):
+                    if abs(c.mass_flow - a.mass_flow) > 1e-9:
+                        c.mass_flow = a.mass_flow
+                        propagated.append((c.name, c.mass_flow))
+                elif (not _is_mass_locked(a) and a.id not in _ACTIVE_TEAR_IDS
+                      and b.id not in _ACTIVE_SCC_BLOCK_IDS
+                      and a.mass_flow == 0 and c.mass_flow > 0):
                     a.mass_flow = c.mass_flow
-                    propagated.append((a.name, c.mass_flow))
+                    propagated.append((a.name, a.mass_flow))
+            if paired_any:
+                continue
 
         # ── Splitter: aplicar las fracciones DURANTE el tearing (TF §3) ──
         # Con ≥2 salidas desconocidas la regla de bloque (1 incógnita) no
@@ -742,9 +755,11 @@ def _solve_mass_iteration(fs):
         # como un compresor de reciclo, que ningún unit-op solver escribe).
         unknown_ins   = [s for s in proc_ins
                           if not _is_mass_locked(s) and s.mass_flow == 0
+                          and not _zero_flow_is_resolved(fs, s)
                           and s.id not in _ACTIVE_TEAR_IDS]
         unknown_outs  = [s for s in proc_outs
-                          if not _is_mass_locked(s) and s.mass_flow == 0]
+                          if not _is_mass_locked(s) and s.mass_flow == 0
+                          and not _zero_flow_is_resolved(fs, s)]
 
         if not unknown_ins and len(unknown_outs) == 1:
             sum_in        = sum(s.mass_flow for s in proc_ins)
@@ -756,6 +771,7 @@ def _solve_mass_iteration(fs):
                 propagated.append((unknown_outs[0].name, deduced))
 
         elif not unknown_outs and len(unknown_ins) == 1 \
+                and not _has_material_producer(fs, unknown_ins[0]) \
                 and b.id not in _ACTIVE_SCC_BLOCK_IDS:
             # S2-D: dentro del SCC activo NO se deduce backward (eco del tear).
             sum_out       = sum(s.mass_flow for s in proc_outs)
@@ -793,20 +809,11 @@ def _solve_mass_iteration(fs):
             if abs(imbal) > 1e-6:
                 free_outs = [s for s in proc_outs
                              if not _is_mass_locked(s)]
-                free_ins  = [s for s in proc_ins
-                             if not _is_mass_locked(s)
-                             and s.id not in _ACTIVE_TEAR_IDS]
                 if len(free_outs) == 1:
                     new = free_outs[0].mass_flow + imbal
                     if new >= 0 and abs(new - free_outs[0].mass_flow) > 1e-9:
                         free_outs[0].mass_flow = new
                         propagated.append((free_outs[0].name, new))
-                elif (len(free_ins) == 1
-                      and b.id not in _ACTIVE_SCC_BLOCK_IDS):
-                    new = free_ins[0].mass_flow - imbal
-                    if new >= 0 and abs(new - free_ins[0].mass_flow) > 1e-9:
-                        free_ins[0].mass_flow = new
-                        propagated.append((free_ins[0].name, new))
     return propagated
 
 
@@ -896,25 +903,114 @@ def _check_stream_roles(fs):
 
 
 def _check_mass_balance(fs, tol_rel=MASS_TOL_REL):
-    """Devuelve lista de mensajes para bloques cuyo balance TOTAL falla.
-    El balance por componente se chequea aparte (auditor de consistencia,
-    flowsheet_consistency_audit._audit_component_balance)."""
+    """Check every material outlet, including legitimately empty phases.
+
+    A zero branch never exempts the other branches from conservation. Heat
+    exchanger tube and shell circuits must also conserve mass individually.
+    """
     errors = []
+    hx4 = _four_port_hx_ids(fs)
     for b in fs.blocks.values():
-        ins  = [s for s in fs.streams.values() if s.dst == b.id]
-        outs = [s for s in fs.streams.values() if s.src == b.id]
+        ins = [s for s in fs.streams.values() if s.dst == b.id
+               and getattr(s, "stream_kind", "mass") == "mass"]
+        outs = [s for s in fs.streams.values() if s.src == b.id
+                and getattr(s, "stream_kind", "mass") == "mass"]
         if not ins or not outs:
             continue
-        if any(s.mass_flow <= 0 for s in ins + outs):
+        groups = [("", ins, outs)]
+        if b.id in hx4:
+            groups += [(f" ({side})", [s for s in ins if _stream_side(s.dst_port) == side],
+                        [s for s in outs if _stream_side(s.src_port) == side])
+                       for side in {_stream_side(s.dst_port) for s in ins}
+                       if side is not None]
+        for label, gi, go in groups:
+            if not gi or not go:
+                continue
+            values = [s.mass_flow for s in gi + go]
+            if any(not math.isfinite(v) or v < 0 for v in values):
+                errors.append(f"{b.name}{label}: caudal no finito o negativo")
+                continue
+            in_t = sum(s.mass_flow for s in gi)
+            out_t = sum(s.mass_flow for s in go)
+            diff = abs(in_t - out_t)
+            rel = diff / max(in_t, out_t, 1e-9)
+            if diff > 1e-9 and rel >= tol_rel:
+                errors.append(f"{b.name}{label}: ent={in_t:g} sal={out_t:g} "
+                              f"delta={diff:g} ({rel*100:.1f}%)")
+    return errors
+
+
+def _zero_flow_is_resolved(fs, stream, seen=None):
+    """Distinguish an empty phase/closed branch from an unknown zero seed."""
+    if stream.mass_flow != 0:
+        return stream.mass_flow > 0 and math.isfinite(stream.mass_flow)
+    if _is_mass_locked(stream):
+        return True
+    seen = set() if seen is None else set(seen)
+    if stream.id in seen:
+        return False
+    seen.add(stream.id)
+    ins = [s for s in fs.streams.values() if s.dst == stream.src
+           and getattr(s, "stream_kind", "mass") == "mass"]
+    outs = [s for s in fs.streams.values() if s.src == stream.src
+            and getattr(s, "stream_kind", "mass") == "mass"]
+    if not ins or not outs:
+        return False
+    if not all(_zero_flow_is_resolved(fs, s, seen) for s in ins):
+        return False
+    if any(not math.isfinite(s.mass_flow) or s.mass_flow < 0 for s in outs):
+        return False
+    # Other unknown zero outputs do not make the material balance determined.
+    other = [s for s in outs if s.id != stream.id]
+    source = fs.blocks.get(stream.src)
+    active = source is not None and any(getattr(source, flag, False) for flag in
+        ("cooling_tower_active", "flash_active", "splitter_active", "component_recovery_active",
+         "mech_sep_active", "separator_active", "dryer_active",
+         "evaporator_active", "crystallizer_active", "column_active"))
+    if not active and any(s.mass_flow == 0 and not _is_mass_locked(s) for s in other):
+        return False
+    mi, mo = sum(s.mass_flow for s in ins), sum(s.mass_flow for s in outs)
+    return abs(mi - mo) <= 1e-9 * max(mi, mo, 1.0)
+
+
+def _invalid_numeric_state(fs):
+    """Fail closed for invalid specifications before any iterative arithmetic."""
+    errors = []
+    for s in fs.streams.values():
+        if s.src not in fs.blocks or s.dst not in fs.blocks:
             continue
-        in_t  = sum(s.mass_flow for s in ins)
-        out_t = sum(s.mass_flow for s in outs)
-        diff  = abs(in_t - out_t)
-        rel   = diff / max(in_t, out_t, 1e-9)
-        if rel >= tol_rel:
-            errors.append(
-                f"{b.name}: ent={in_t:g} sal={out_t:g} Δ={diff:g} ({rel*100:.1f}%)"
-            )
+        if getattr(s, "stream_kind", "mass") != "mass":
+            if not math.isfinite(float(getattr(s, "energy_kW", 0.0))):
+                errors.append(f"{s.name}: potencia no finita")
+            continue
+        fields = (("caudal", s.mass_flow, 0.0, False),
+                  ("temperatura", s.temperature, -273.15, True),
+                  ("presion absoluta", s.pressure_bar, 0.0, True))
+        for label, value, lower, strict in fields:
+            try:
+                number = float(value)
+                invalid = not math.isfinite(number) or (number <= lower if strict else number < lower)
+            except (TypeError, ValueError):
+                invalid = True
+            if invalid:
+                errors.append(f"{s.name}: {label} invalido ({value!r})")
+        comp = s.composition or {}
+        try:
+            values = [float(v) for v in comp.values()]
+            if any(not math.isfinite(v) or v < 0 for v in values):
+                errors.append(f"{s.name}: fracciones de composicion invalidas")
+            elif values and abs(sum(values) - 1.0) > 1e-3:
+                errors.append(f"{s.name}: composicion no suma 1 ({sum(values):g})")
+        except (TypeError, ValueError):
+            errors.append(f"{s.name}: composicion no numerica")
+    for b in fs.blocks.values():
+        for field in ("duty", "heat_of_reaction"):
+            try:
+                valid = math.isfinite(float(getattr(b, field, 0.0)))
+            except (TypeError, ValueError):
+                valid = False
+            if not valid:
+                errors.append(f"{b.name}: {field} no finito")
     return errors
 
 
@@ -1302,158 +1398,87 @@ from stream_enthalpy import (                                  # noqa: E402
     _resolve_cp,
     _resolve_dh_vap,
     stream_enthalpy_kW as _stream_enthalpy_kW,
+    temperature_for_enthalpy,
 )
 
 
 def _compressible_props(comp: dict, T_K: float):
-    """Devuelve (mw_avg [g/mol], k=Cp/Cv) para una composición de gas.
-
-    MW: Kay's rule (regla aditiva por w_i).
-    k: Cp/(Cp − R/MW) usando thermo_db.cp_mix_kJ_kg_K(phase='gas').
-    R = 8.314 J/(mol·K).
-
-    Fallback si thermo_db no resuelve Cp: k típicos por familia
-    (CO2 1.28, vapor de agua 1.33, hidrocarburos livianos 1.30,
-    diatómicos/aire 1.40)."""
-    try:
-        import thermo_db as _td
-    except ImportError:
+    """Mass-mixture molecular weight and ideal-gas Cp/Cv at inlet T."""
+    from compressor_thermo import mixture_molecular_weight
+    import thermo_db
+    mw = mixture_molecular_weight(comp)
+    if mw is None:
         return (28.96, 1.40)
-    mw_avg = 0.0
-    total_w = 0.0
-    for c, w in comp.items():
-        co = _td.get(c)
-        if co is None or co.mw <= 0:
-            continue
-        mw_avg += w * co.mw
-        total_w += w
-    if total_w <= 0:
-        return (28.96, 1.40)   # fallback aire
-    mw_avg /= total_w
-
-    T_C = T_K - 273.15
-    try:
-        cp_kJ_kg_K = _td.cp_mix_kJ_kg_K(comp, T_C, "gas")
-    except Exception:
-        cp_kJ_kg_K = None
-    if cp_kJ_kg_K is None or cp_kJ_kg_K <= 0:
-        # Fallback heurístico por composición dominante
-        if comp.get("co2", 0) > 0.5 or comp.get("carbon dioxide", 0) > 0.5:
-            k = 1.28
-        elif comp.get("water", 0) > 0.5:
-            k = 1.33
-        elif (comp.get("methane", 0) + comp.get("ethane", 0)
-              + comp.get("propane", 0)) > 0.5:
-            k = 1.30
-        else:
-            k = 1.40   # aire / N2 / O2 / H2
-        return (mw_avg, k)
-
-    R_specific_kJ_kg_K = 8.314 / (mw_avg * 1e-3) / 1000.0
-    cv = cp_kJ_kg_K - R_specific_kJ_kg_K
-    if cv <= 0:
-        return (mw_avg, 1.40)
-    return (mw_avg, cp_kJ_kg_K / cv)
+    cp = thermo_db.cp_mix_kJ_kg_K(comp, T_K - 273.15, "gas")
+    cv = cp - 8.314 / mw
+    return (mw, cp / cv if cv > 0 else 1.40)
 
 
 def _propagate_T_compressor_isentropic(b, fs, propagated=None, skipped=None,
                                         tol_T=0.5):
-    """Propaga T_out de un compresor/fan/turbina vía relación isentrópica
-    de gas ideal (Cengel cap 7-9).  Reemplaza el skip silencioso del
-    solver de energía para equipos eléctricos compresibles.
+    """Solve a gas machine using entropy and the shared stream enthalpy.
 
-    Convención del proyecto (no hay tipo 'Turbine' separado):
-      · P_out > P_in → COMPRESOR (consume W, sube T, duty > 0)
-      · P_out < P_in → TURBINA/EXPANSOR (genera W, baja T, duty < 0)
-
-    Compresor: delega a equipment_design.compressor_sizing (single source
-    of truth, mismo cálculo que el sizing/duty P12; η_isen clampeado a
-    ≤0.95 ahí).  Turbina: expansión isentrópica manual (η sin clamp).
-
-    NO aplica a bombas (líquido incompresible — T_out ≈ T_in).
-    Respeta temperature_locked / pressure_locked / duty_locked y el rango
-    físico [T_MIN, T_MAX]_REASONABLE.  Devuelve True si propagó algo."""
-    if propagated is None: propagated = []
-    if skipped is None: skipped = []
-    ins  = [s for s in fs.streams.values() if s.dst == b.id]
-    outs = [s for s in fs.streams.values() if s.src == b.id]
-    if len(ins) != 1 or len(outs) != 1:
+    Duty is electrical work. Internal coolers and mechanical losses are
+    explicit rejected heat, so W = delta H + Q_intercool + Q_mechanical.
+    """
+    from compressor_thermo import gas_machine_for_stream
+    if propagated is None:
+        propagated = []
+    if skipped is None:
+        skipped = []
+    ins = [s for s in fs.streams.values() if s.dst == b.id
+           and getattr(s, "stream_kind", "mass") == "mass"]
+    outs = [s for s in fs.streams.values() if s.src == b.id
+            and getattr(s, "stream_kind", "mass") == "mass"]
+    if len(ins) != 1 or len(outs) != 1 or ins[0].mass_flow <= 0:
         return False
     feed, out = ins[0], outs[0]
-    if feed.mass_flow <= 0 or feed.pressure_bar <= 0:
-        return False
-    comp = feed.composition or (
-        {feed.main_component: 1.0} if feed.main_component else {})
-    if not comp:
-        return False
-
-    P_in = feed.pressure_bar
-    if getattr(out, "pressure_locked", False) and out.pressure_bar > 0:
-        P_out = out.pressure_bar
-    elif b.delta_p_bar != 0:
-        P_out = P_in + b.delta_p_bar      # delta_p_bar negativo si turbina
+    if not feed.phase:
+        feed.phase = "gas"
+    if getattr(out, "pressure_locked", False):
+        pout = out.pressure_bar
+    elif b.delta_p_bar:
+        pout = feed.pressure_bar + b.delta_p_bar
     else:
-        return False                       # falta info de P
-    if P_out <= 0 or abs(P_out - P_in) < 1e-6:
+        pout = out.pressure_bar
+    if feed.pressure_bar <= 0 or pout <= 0 or abs(pout-feed.pressure_bar) < 1e-6:
         return False
-
-    T_in_K = feed.temperature + 273.15
-    from flowsheet_model import SEC_PER_YEAR, TM_TO_KG
-    m_kg_s = feed.mass_flow * TM_TO_KG / SEC_PER_YEAR
-    mw_avg, k = _compressible_props(comp, T_in_K)
-
-    if P_out > P_in:
-        # COMPRESOR — equipment_design (consistente con sizing/duty)
-        try:
-            from equipment_design import compressor_sizing
-            res = compressor_sizing(
-                m_kg_s=m_kg_s, P_in_bar=P_in, P_out_bar=P_out,
-                T_in_K=T_in_K, mw_avg=mw_avg, k=k,
-                eta_isen=b.efficiency or 0.75)
-        except Exception:
-            res = None
-        if res is None:
-            return False
-        T_out_K = res["T_out_K"]
-        W_elec_kW = res["W_act_kW"]        # POSITIVO (consume)
-        # multi-etapa: el cierre de energía y los mensajes usan estos datos
-        b._n_stages = int(res.get("n_stages", 1) or 1)
-        b._q_intercool_kW = float(res.get("Q_intercool_kW", 0.0) or 0.0)
+    res = gas_machine_for_stream(feed, pout, b.efficiency or 0.75)
+    if res is None:
+        skipped.append(f"❌ {b.name}: no se resuelve el estado calorico del gas comprimido/expandido")
+        return False
+    t_new = res["T_out_C"]
+    if not T_MIN_REASONABLE <= t_new <= T_MAX_REASONABLE:
+        skipped.append(f"❌ {b.name}: temperatura de descarga fuera de rango fisico: {t_new:g} C")
+        return False
+    if not _is_temp_locked(out) and abs(t_new-out.temperature) > tol_T:
+        out.temperature = t_new
+        propagated.append((out.name, t_new))
+    predicted_phase = res.get("phase", "gas")
+    phase_equivalent = (out.phase == predicted_phase or
+                        out.phase in {"gas", "vapor"} and predicted_phase in {"gas", "vapor"})
+    if _is_phase_locked(out) and not phase_equivalent:
+        skipped.append(f"❌ {b.name}: fase declarada {out.phase!r} incompatible con descarga {predicted_phase!r}")
     else:
-        # TURBINA / EXPANSOR — expansión isentrópica
-        exponent = (k - 1.0) / k
-        ratio = P_out / P_in
-        T_out_isen = T_in_K * (ratio ** exponent)
-        eta = b.efficiency or 0.85         # turbinas tienden a η más alta
-        T_out_K = T_in_K - eta * (T_in_K - T_out_isen)
-        T_avg_C = ((T_in_K + T_out_K) / 2.0) - 273.15
-        try:
-            import thermo_db as _td
-            cp = _td.cp_mix_kJ_kg_K(comp, T_avg_C, "gas")
-        except Exception:
-            cp = None
-        if cp is None or cp <= 0:
-            R = 8.314
-            cp = (R / (mw_avg * 1e-3)) * (k / (k - 1.0)) / 1000.0
-        W_isen_kW = m_kg_s * cp * (T_in_K - T_out_isen)
-        W_elec_kW = -(eta * W_isen_kW)     # NEGATIVO (genera)
-
-    # ── Aplicar resultados (respetando locks + rango) ──
-    t_new_C = T_out_K - 273.15
-    if not (T_MIN_REASONABLE <= t_new_C <= T_MAX_REASONABLE):
-        skipped.append(
-            f"{b.name} → {out.name}: T isentrópica = {t_new_C:.0f} °C fuera "
-            f"de rango físico [-100, 1500].  T mantenida en {out.temperature:g} °C."
-        )
-    elif not _is_temp_locked(out) and abs(t_new_C - out.temperature) > tol_T:
-        out.temperature = t_new_C
-        propagated.append((out.name, t_new_C))
-    # P_out (si no locked)
-    if not getattr(out, "pressure_locked", False) and abs(out.pressure_bar - P_out) > 1e-4:
-        out.pressure_bar = max(P_out, 0.01)
-    # duty (si no locked) — el solver puede re-iterarlo si P cambia upstream
-    if not getattr(b, "duty_locked", False):
-        b.duty = W_elec_kW
+        quality = float(res.get("vapor_fraction", 1.0))
+        if not phase_equivalent or abs(out.vapor_fraction-quality) > 1e-8:
+            if not _is_phase_locked(out):
+                out.phase = predicted_phase
+            out.vapor_fraction = quality
+            propagated.append((out.name, out.temperature))
+    if not getattr(out, "pressure_locked", False):
+        out.pressure_bar = pout
+    b._n_stages = res["n_stages"]
+    b._q_intercool_kW = res["Q_intercool_kW"]
+    b._q_mechanical_loss_kW = res["Q_mechanical_loss_kW"]
+    b._gas_work_kW = res["W_gas_kW"]
+    if not _is_duty_locked(b):
+        b.duty = res["W_act_kW"]
+    hin, hout = _stream_enthalpy_kW(feed), _stream_enthalpy_kW(out)
+    if hin is not None and hout is not None:
+        residual = hout-hin-b.duty+b._q_intercool_kW+b._q_mechanical_loss_kW
+        if abs(residual) > max(0.01, 1e-5*max(abs(b.duty), 1.0)):
+            skipped.append(f"❌ {b.name}: energia de maquina no cierra ({residual:+.6g} kW); verificar temperatura/duty declarados")
     return True
 
 
@@ -1522,9 +1547,15 @@ def _solve_energy_iteration(fs, tol_T=0.5, skipped=None):
     # importar lazy para evitar circular
     import equipment_ports as _ep_mod
 
+    hx4 = _four_port_hx_ids(fs)
     for b in fs.blocks.values():
-        ins  = [s for s in fs.streams.values() if s.dst == b.id]
-        outs = [s for s in fs.streams.values() if s.src == b.id]
+        if getattr(b, "cooling_tower_active", False):
+            continue  # Moist-air/evaporation energy balance owns these outlets.
+
+        ins  = [s for s in fs.streams.values() if s.dst == b.id and getattr(s, "stream_kind", "mass") == "mass"
+                and not getattr(s, "auto_aux", False)]
+        outs = [s for s in fs.streams.values() if s.src == b.id and getattr(s, "stream_kind", "mass") == "mass"
+                and not getattr(s, "auto_aux", False)]
         if not ins or not outs:
             continue
         # Que cada stream tenga Cp resoluble (manual, composition o
@@ -1532,6 +1563,17 @@ def _solve_energy_iteration(fs, tol_T=0.5, skipped=None):
         def _stream_ok(s):
             return s.mass_flow > 0 and _resolve_cp(s) is not None
         if not all(_stream_ok(s) for s in ins + outs):
+            continue
+        if b.id in hx4 and len(ins) >= 2 and len(outs) >= 2:
+            free = [outlet for outlet in outs if not _is_temp_locked(outlet)]
+            if len(free) == 1:
+                inlet_h = [_stream_enthalpy_kW(inlet) for inlet in ins]
+                other_h = [_stream_enthalpy_kW(outlet) for outlet in outs if outlet is not free[0]]
+                if all(h is not None for h in inlet_h + other_h):
+                    external = b.duty if _is_duty_locked(b) else 0.0
+                    t_new = temperature_for_enthalpy(free[0], sum(inlet_h) + external - sum(other_h))
+                    if t_new is not None:
+                        _try_set(free[0], t_new, b.name)
             continue
         # Equipos eléctricos (bombas, compresores, fans, turbinas).
         # Antes se skipeaban sin propagar T.  Ahora:
@@ -1544,7 +1586,7 @@ def _solve_energy_iteration(fs, tol_T=0.5, skipped=None):
         if _ep_mod.is_electrical_equipment(b.eq_type):
             eq_lower = b.eq_type.lower()
             if ("compressor" in eq_lower or "fan" in eq_lower
-                    or "turbin" in eq_lower):
+                    or "turbin" in eq_lower or "expander" in eq_lower or "blower" in eq_lower):
                 _propagate_T_compressor_isentropic(
                     b, fs, propagated, skipped, tol_T)
             elif "pump" in eq_lower:
@@ -1560,7 +1602,7 @@ def _solve_energy_iteration(fs, tol_T=0.5, skipped=None):
         # solver de energía debería skipearlo.  Heat_of_reaction
         # ya se setea via solve_equilibrium_reactors() y el balance
         # del flowsheet downstream lo recoge.
-        if getattr(b, "reactions", None):
+        if getattr(b, "reactions", None) or getattr(b, "custom_reactions", None):
             continue
 
         duty = b.duty
@@ -1575,57 +1617,24 @@ def _solve_energy_iteration(fs, tol_T=0.5, skipped=None):
             # libera calor → es como un duty positivo.
             duty += q_rxn
 
-        # Passthrough simple: 1 in - 1 out
-        if len(ins) == 1 and len(outs) == 1:
-            s_in, s_out = ins[0], outs[0]
-            h_in = _stream_enthalpy_kW(s_in) or 0.0
-            # Cp del output a T promedio (mejor estimación)
-            T_guess_avg = (T_REF_C + s_out.temperature) / 2.0
-            cp_out = _resolve_cp(s_out, T_eval=T_guess_avg)
-            if cp_out is None or cp_out <= 0:
+        # Invert the SAME enthalpy function used by the balance. A Cp(T)
+        # average minus latent(T) is not its inverse and can create energy.
+        if len(outs) == 1 or getattr(b, "splitter_active", False):
+            inlet_h = [_stream_enthalpy_kW(s) for s in ins]
+            if any(h is None or not math.isfinite(h) for h in inlet_h):
                 continue
-            m_out_kg_s = (s_out.mass_flow * TM_TO_KG) / SEC_PER_YEAR
-            denom = m_out_kg_s * cp_out
-            # restar contribución latente del output si está en vapor
-            dh_lat_out = 0.0
-            if s_out.phase in ("vapor", "gas"):
-                dh_v = _resolve_dh_vap(s_out)
-                if dh_v is not None:
-                    dh_lat_out = m_out_kg_s * dh_v
-            elif s_out.phase == "two_phase":
-                dh_v = _resolve_dh_vap(s_out)
-                if dh_v is not None:
-                    dh_lat_out = m_out_kg_s * s_out.vapor_fraction * dh_v
-            if denom > 0:
-                # H_out = H_in + duty
-                # H_out_sensible + H_out_lat = H_in + duty
-                # T_out = T_REF + (H_in + duty - H_out_lat) / (m·Cp)
-                t_new = T_REF_C + (h_in + duty - dh_lat_out) / denom
-                _try_set(s_out, t_new, b.name)
-            continue
-
-        # Mixer: N in - 1 out
-        if len(outs) == 1:
-            s_out = outs[0]
-            # entalpía total de los inputs
-            h_in_total = sum(_stream_enthalpy_kW(s) or 0.0 for s in ins)
-            T_guess_avg = (T_REF_C + s_out.temperature) / 2.0
-            cp_out = _resolve_cp(s_out, T_eval=T_guess_avg)
-            if cp_out is None or cp_out <= 0:
+            total_out = sum(s.mass_flow for s in outs)
+            if total_out <= 0:
                 continue
-            m_out_kg_s = (s_out.mass_flow * TM_TO_KG) / SEC_PER_YEAR
-            denom_out  = m_out_kg_s * cp_out
-            dh_lat_out = 0.0
-            if s_out.phase in ("vapor", "gas"):
-                dh_v = _resolve_dh_vap(s_out)
-                if dh_v is not None:
-                    dh_lat_out = m_out_kg_s * dh_v
-            elif s_out.phase == "two_phase":
-                dh_v = _resolve_dh_vap(s_out)
-                if dh_v is not None:
-                    dh_lat_out = m_out_kg_s * s_out.vapor_fraction * dh_v
-            if denom_out > 0:
-                t_new = T_REF_C + (h_in_total + duty - dh_lat_out) / denom_out
+            target_h = sum(inlet_h) + duty
+            for s_out in outs:
+                target = target_h * s_out.mass_flow / total_out
+                t_new = temperature_for_enthalpy(s_out, target)
+                if t_new is None:
+                    skipped.append(
+                        f"❌ {b.name}: no se pudo resolver T desde la entalpia "
+                        f"de {s_out.name}; revisar fase, duty y propiedades.")
+                    continue
                 _try_set(s_out, t_new, b.name)
             continue
 
@@ -1685,20 +1694,115 @@ def _hx_energy_closes(fs, b, ins, outs, tol=0.05):
 
 
 def _pair_hx_streams(ins, outs):
-    """Empareja entradas con salidas por mass_flow más cercano."""
+    """Pair physical tube/shell circuits; mass proximity is a legacy fallback."""
     pairs, used = [], set()
-    for i in ins:
-        best, bd = None, float("inf")
-        for j, o in enumerate(outs):
-            if j in used:
-                continue
-            d = abs((i.mass_flow or 0) - (o.mass_flow or 0))
-            if d < bd:
-                bd, best = d, j
-        if best is not None:
-            used.add(best)
-            pairs.append((i, outs[best]))
+    for inlet in ins:
+        side = _stream_side(inlet.dst_port)
+        matching = [(j, outlet) for j, outlet in enumerate(outs)
+                    if j not in used and side is not None
+                    and _stream_side(outlet.src_port) == side]
+        if side is None:
+            matching = [(j, outlet) for j, outlet in enumerate(outs)
+                        if j not in used and _stream_side(outlet.src_port) is None]
+        candidates = matching or [(j, outlet) for j, outlet in enumerate(outs) if j not in used]
+        if candidates:
+            j, outlet = min(candidates, key=lambda item: abs(inlet.mass_flow - item[1].mass_flow))
+            used.add(j)
+            pairs.append((inlet, outlet))
     return pairs
+
+
+def _is_declared_hx_utility_pair(inlet, outlet):
+    return (inlet.role == outlet.role == "utility"
+            and not getattr(inlet, "auto_aux", False)
+            and not getattr(outlet, "auto_aux", False)
+            and not inlet.mass_flow_locked and not outlet.mass_flow_locked
+            and _is_temp_locked(inlet) and _is_temp_locked(outlet))
+
+
+def _recycle_material_view(fs):
+    """Share process states while removing analytically sized utility edges.
+
+    HX circuits do not mix. Automatic services and a specified-temperature
+    utility pair get their circulation from heat demand, not a mass tear.
+    The complete flowsheet remains intact for sizing and final auditing.
+    """
+    from copy import copy
+    excluded = {s.id for s in fs.streams.values()
+                if getattr(s, "auto_aux", False) and s.role in {"utility", "ambient"}}
+    for bid in _four_port_hx_ids(fs):
+        ins = [s for s in fs.streams.values() if s.dst == bid and s.stream_kind == "mass"]
+        outs = [s for s in fs.streams.values() if s.src == bid and s.stream_kind == "mass"]
+        for inlet, outlet in _pair_hx_streams(ins, outs):
+            if _is_declared_hx_utility_pair(inlet, outlet):
+                excluded.update((inlet.id, outlet.id))
+    if not excluded:
+        return fs
+    view = copy(fs)
+    view.streams = {sid: stream for sid, stream in fs.streams.items() if sid not in excluded}
+    return view
+
+
+def size_declared_hx_utilities(fs):
+    """Solve an unlocked utility circuit from process heat and actual h(T,phase).
+
+    Both utility endpoint temperatures/compositions are specified; their
+    common flow is the one unknown. Process circuits and explicit user flow
+    specifications are retained. No fixed steam rate or latent heat is used.
+    """
+    from copy import copy
+    messages = []
+    for bid in _four_port_hx_ids(fs):
+        b = fs.blocks[bid]
+        ins = [s for s in fs.streams.values() if s.dst == bid
+               and getattr(s, "stream_kind", "mass") == "mass"]
+        outs = [s for s in fs.streams.values() if s.src == bid
+                and getattr(s, "stream_kind", "mass") == "mass"]
+        for ui, uo in _pair_hx_streams(ins, outs):
+            if not _is_declared_hx_utility_pair(ui, uo):
+                continue
+            other_in = [s for s in ins if s.id != ui.id]
+            other_out = [s for s in outs if s.id != uo.id]
+            if any(s.mass_flow <= 0 for s in other_in + other_out):
+                continue
+            h_in = [_stream_enthalpy_kW(s) for s in other_in]
+            h_out = [_stream_enthalpy_kW(s) for s in other_out]
+            a, c = copy(ui), copy(uo)
+            a.mass_flow = c.mass_flow = 1.0
+            ha, hc = _stream_enthalpy_kW(a), _stream_enthalpy_kW(c)
+            if any(h is None for h in h_in + h_out + [ha, hc]):
+                continue
+            dh = hc - ha
+            if abs(dh) < 1e-12:
+                continue
+            external = float(b.duty) if _is_duty_locked(b) else 0.0
+            flow = (external + sum(h_in) - sum(h_out)) / dh
+            if not math.isfinite(flow) or flow < 0:
+                messages.append(f"❌ {b.name}: estados del servicio incompatibles con el calor requerido")
+                continue
+            ui.mass_flow = uo.mass_flow = flow
+            ui._flow_specified_by_energy = uo._flow_specified_by_energy = True
+            messages.append(f"✓ {b.name}: servicio calculado por entalpia = {flow:g} tm/a")
+    for _ in range(len(fs.blocks)):
+        changed = False
+        for b in fs.blocks.values():
+            ins_b = [st for st in fs.streams.values() if st.dst == b.id
+                     and getattr(st, "stream_kind", "mass") == "mass"]
+            outs_b = [st for st in fs.streams.values() if st.src == b.id
+                      and getattr(st, "stream_kind", "mass") == "mass"]
+            if len(ins_b) != 1 or len(outs_b) != 1:
+                continue
+            inlet, outlet = ins_b[0], outs_b[0]
+            if (getattr(outlet, "_flow_specified_by_energy", False)
+                    and not inlet.mass_flow_locked and not _has_material_producer(fs, inlet)):
+                if (not getattr(inlet, "_flow_specified_by_energy", False)
+                        or abs(inlet.mass_flow - outlet.mass_flow) > 1e-9):
+                    inlet.mass_flow = outlet.mass_flow
+                    inlet._flow_specified_by_energy = True
+                    changed = True
+        if not changed:
+            break
+    return messages
 
 
 def is_cross_exchange(fs, b):
@@ -1772,9 +1876,11 @@ def infer_block_duty(fs, b):
     # si están sin dimensionar (ṁ=0 / Cp irresoluble), fuerzan duty=0.
     # Se excluyen: el duty se infiere del lado de proceso.
     ins  = [s for s in fs.streams.values()
-            if s.dst == b.id and not getattr(s, "auto_aux", False)]
+            if s.dst == b.id and not getattr(s, "auto_aux", False)
+            and getattr(s, "stream_kind", "mass") == "mass"]
     outs = [s for s in fs.streams.values()
-            if s.src == b.id and not getattr(s, "auto_aux", False)]
+            if s.src == b.id and not getattr(s, "auto_aux", False)
+            and getattr(s, "stream_kind", "mass") == "mass"]
     if not ins or not outs:
         return None
 
@@ -1798,7 +1904,7 @@ def infer_block_duty(fs, b):
         # exo (h_of_r < 0) → q_rxn > 0 (el medio recibe calor)
         q_rxn = -m_in_total * b.heat_of_reaction
 
-    return h_out_total - h_in_total - q_rxn
+    return h_out_total - h_in_total - q_rxn - float(getattr(b, "_electrical_work_kW", 0.0) or 0.0)
 
 
 def auto_set_duties_from_thermo(fs, only_zero=False, respect_locks=True):
@@ -1817,12 +1923,20 @@ def auto_set_duties_from_thermo(fs, only_zero=False, respect_locks=True):
     for b in fs.blocks.values():
         if respect_locks and _is_duty_locked(b):
             continue
-        if only_zero and b.duty != 0:
+        if getattr(b, "column_active", False):
+            continue  # column solver owns reboiler/condenser duties
+        outs = [s for s in fs.streams.values() if s.src == b.id
+                and getattr(s, "stream_kind", "mass") == "mass"
+                and not getattr(s, "auto_aux", False)]
+        reactive = bool(getattr(b, "reactions", None) or getattr(b, "custom_reactions", None))
+        isothermal_reactive = reactive and bool(b.T_op_K and b.T_op_K >= 100)
+        state_specified = isothermal_reactive or (bool(outs) and all(_is_temp_locked(s) for s in outs))
+        if only_zero and not (state_specified or getattr(b, "flash_active", False)):
             continue
         # Skipear reactores: su duty ya lo seteó solve_equilibrium_reactors
         # (sea Q externo de horno isothermal, o 0 de adiabático).
         # Sobreescribirlo aquí lleva a duties absurdos.
-        if getattr(b, "reactions", None):
+        if reactive and not isothermal_reactive:
             continue
         d = infer_block_duty(fs, b)
         if d is None:
@@ -2110,7 +2224,7 @@ def find_conflicts(fs, tol_mass_rel=0.01, tol_energy_rel=0.05):
                 h_out = sum(_stream_enthalpy_kW(s) or 0.0 for s in outs)
                 m_in = sum(s.mass_flow * TM_TO_KG / SEC_PER_YEAR for s in ins)
                 q_rxn = -m_in * b.heat_of_reaction
-                residual = h_out - h_in - b.duty - q_rxn
+                residual = h_out - h_in - b.duty - q_rxn - float(getattr(b, "_electrical_work_kW", 0.0) or 0.0)
                 if abs(b.duty) > 1 and abs(residual) / abs(b.duty) > tol_energy_rel:
                     conflicts.append(
                         f"{b.name}: energía locked overspec — "
@@ -2123,418 +2237,9 @@ def find_conflicts(fs, tol_mass_rel=0.01, tol_energy_rel=0.05):
 
 
 def solve_equilibrium_reactors(fs):
-    """Para cada bloque con `reactions` declaradas (reactor de equilibrio,
-    Capa 4):
-      1. Agrega los inlets en una composición + mass_flow promedio.
-      2. Llama solve_equilibrium_reactor_from_composition (Newton-Raphson
-         multi-reacción en fase gas ideal).
-      3. Setea composición de los outlets a la composición de equilibrio.
-      4. Setea block.heat_of_reaction = ΔH/m_in [kJ/kg input] para que
-         el balance de energía existente lo recoja sin tocar el solver.
-
-    Skip si:
-      - block.reactions == [] (no es reactor de equilibrio)
-      - los inlets no tienen composición ni mass_flow (todavía no
-        resueltos por el balance de masa upstream)
-      - el solver multi-reacción no converge (e.g. Keq inválido o
-        reacciones linealmente dependientes) → reporta y deja
-        heat_of_reaction = 0.
-
-    Devuelve lista de mensajes informativos (success/warning) por
-    reactor procesado.
-    """
-    try:
-        import reactions_db as _rdb
-    except ImportError:
-        return []
-    msgs = []
-    for b in fs.blocks.values():
-        # Hallazgo 1: aceptar b.reactions (IDs del catálogo) Y/O
-        # b.custom_reactions (definidas por el user, in-memory).
-        if not (getattr(b, "reactions", None)
-                or getattr(b, "custom_reactions", None)):
-            continue
-        # Reactor estructural / placeholder: si NINGUNA de las reacciones
-        # declaradas existe en el DB de Capa 4, asumimos que el user usó
-        # IDs simbólicos para marcar el bloque como reactor (chemistry
-        # via outputs locked) — saltamos la chemistry sin error.  El
-        # block sigue siendo "reactor" para el component balance skip.
-        known = [rid for rid in b.reactions if _rdb.get(rid) is not None]
-        # Hallazgo 1: fusionar custom_reactions del bloque.  Las
-        # registramos temporalmente en el cache de reactions_db con
-        # IDs únicos para que solve_*_from_composition (que toma IDs)
-        # las pueda resolver vía _rdb.get().  Después del solve las
-        # desregistramos para no polucionar la DB global.
-        custom_rxn_ids: List[str] = []
-        try:
-            _cache = _rdb._ensure_loaded()    # dict module-level
-            for i, d in enumerate(getattr(b, "custom_reactions", []) or []):
-                try:
-                    rxn_obj = _rdb.reaction_from_dict(d)
-                except (ValueError, KeyError) as _e:
-                    msgs.append(f"⚠ Reactor {b.name}: custom_reactions[{i}] "
-                                 f"inválida ({_e}), saltada.")
-                    continue
-                # ID único in-memory para evitar colisión con catálogo
-                rid_uniq = f"_BLOCK{b.id}_CUSTOM{i}"
-                rxn_obj.id = rid_uniq
-                _cache[rid_uniq] = rxn_obj
-                custom_rxn_ids.append(rid_uniq)
-        except Exception as _e:
-            msgs.append(f"⚠ Reactor {b.name}: error fusionando custom_reactions: {_e}")
-        all_rxn_ids = known + custom_rxn_ids
-        if not all_rxn_ids:
-            continue
-        # NOTA: usamos all_rxn_ids (fusión catalog + custom) en las
-        # llamadas downstream a solve_*_from_composition.  NO mutamos
-        # b.reactions para no contaminar el modelo persistido.
-        ins  = [s for s in fs.streams.values() if s.dst == b.id]
-        outs = [s for s in fs.streams.values() if s.src == b.id]
-        if not ins or not outs:
-            continue
-        m_in_total = sum(s.mass_flow for s in ins if s.mass_flow > 0)
-        if m_in_total <= 0:
-            msgs.append(f"⚠ Reactor {b.name}: inlets sin mass_flow, skip.")
-            continue
-        # Composición agregada (mass-weighted) de los inputs
-        agg: Dict[str, float] = {}
-        for s in ins:
-            if s.mass_flow <= 0:
-                continue
-            comp = s.composition or ({s.main_component: 1.0}
-                                       if s.main_component else {})
-            if not comp:
-                continue
-            w = s.mass_flow / m_in_total
-            for c, f in comp.items():
-                agg[c] = agg.get(c, 0.0) + w * f
-        if not agg:
-            msgs.append(f"⚠ Reactor {b.name}: inlets sin composition.")
-            continue
-        # Renormalizar (mass fractions deben sumar 1)
-        total = sum(agg.values())
-        if total > 0:
-            agg = {k: v/total for k, v in agg.items()}
-        # T de operación: explicit o promedio ponderado del inlet
-        T_in_avg_K = (sum(s.temperature * s.mass_flow
-                            for s in ins if s.mass_flow > 0)
-                       / m_in_total + 273.15)
-        T_K = b.T_op_K if b.T_op_K > 0 else T_in_avg_K
-        # mass_flow del flowsheet está en tm/año → kg/s
-        from flowsheet_model import SEC_PER_YEAR, TM_TO_KG
-        m_in_kg_s = m_in_total * TM_TO_KG / SEC_PER_YEAR
-
-        # CAPA 7 — REACTOR ADIABÁTICO:
-        # Si T_op_K = 0 (no isothermal) y el bloque tiene reactions,
-        # el solver itera T y composición acopladas:
-        #   T_out = T_in + (-Q_rxn) / (m·Cp_mix(T_avg))
-        # con Q_rxn > 0 endo → enfría; Q_rxn < 0 exo → calienta.
-        # En ese caso usamos T_in como T_op inicial y refinamos.
-        is_adiabatic = (not b.T_op_K or b.T_op_K < 100)
-        if is_adiabatic:
-            # T inicial = T promedio del input
-            T_K = T_in_avg_K
-            # Iterar T ↔ composición hasta convergencia
-            for adiab_it in range(8):
-                # Llamar al solver con T actual
-                mode = getattr(b, "reactor_mode", "equilibrium") or "equilibrium"
-                try:
-                    if mode == "equilibrium":
-                        res_iter = _rdb.solve_equilibrium_reactor_from_composition(
-                            rxn_ids=all_rxn_ids, inlet_composition=agg,
-                            inlet_mass_kg_s=m_in_kg_s,
-                            T_K=T_K, P_bar=b.P_op_bar)
-                    elif mode in ("pfr", "cstr"):
-                        V_L = getattr(b, "reactor_volume_L", 0.0) or 0.0
-                        if V_L <= 0:
-                            break
-                        res_iter = _rdb.solve_kinetic_reactor_from_composition(
-                            mode=mode, rxn_ids=all_rxn_ids,
-                            inlet_composition=agg, inlet_mass_kg_s=m_in_kg_s,
-                            T_K=T_K, P_bar=b.P_op_bar, V_reactor_L=V_L)
-                    elif mode == "stoich":
-                        res_iter = _rdb.solve_stoichiometric_reactor(
-                            rxn_ids=all_rxn_ids, inlet_composition=agg,
-                            inlet_mass_kg_s=m_in_kg_s, T_K=T_K,
-                            P_bar=b.P_op_bar,
-                            conversion=getattr(b, "reactor_conversion", 0.95))
-                    else:
-                        break
-                except Exception:
-                    res_iter = None
-                if res_iter is None:
-                    break
-                # Cp promedio del input (kJ/kg·K).
-                # Para reactores adiabáticos, el feed casi siempre es
-                # gas (T > 100°C, presiones moderadas).  Forzamos
-                # phase='gas' al consultar Cp para evitar valores
-                # absurdos del Cp líquido extrapolado fuera de su rango.
-                cp_avg = 0.0; mw = 0.0
-                try:
-                    import thermo_db as _td_cp
-                    for s_in_ in ins:
-                        if s_in_.mass_flow <= 0: continue
-                        comp_in = s_in_.composition or (
-                            {s_in_.main_component: 1.0}
-                            if s_in_.main_component else {})
-                        # Phase: 'gas' si T > 80°C o phase declarado
-                        # contiene 'gas'/'vapor', sino respetar.
-                        ph = (s_in_.phase or "").lower()
-                        if "gas" in ph or "vap" in ph:
-                            use_phase = "gas"
-                        elif (s_in_.temperature + 273.15) > 353:
-                            use_phase = "gas"   # > 80°C → asumir vapor
-                        else:
-                            use_phase = "liquid"
-                        cp_i = _td_cp.cp_mix_kJ_kg_K(comp_in,
-                                                        T_K - 273.15,
-                                                        use_phase)
-                        if cp_i is None or cp_i <= 0 or cp_i > 50:
-                            # Fallback agua vapor / aire
-                            cp_i = 2.0 if use_phase == "gas" else 4.18
-                        cp_avg += cp_i * s_in_.mass_flow
-                        mw += s_in_.mass_flow
-                except ImportError:
-                    pass
-                if mw > 0:
-                    cp_avg /= mw
-                else:
-                    cp_avg = 2.0    # fallback ~ vapor genérico
-                # Q_rxn [kW] = res_iter['duty_kW'] (positivo endo)
-                Q_rxn_kW = res_iter.get('duty_kW', 0.0) or 0.0
-                # Adiabatic: T_out = T_in + (-Q_rxn)/(m·Cp)
-                # Q_rxn > 0 (endo): T baja → -Q_rxn negativo → ΔT<0
-                # Q_rxn < 0 (exo): T sube → -Q_rxn positivo → ΔT>0
-                delta_T = -Q_rxn_kW / (m_in_kg_s * cp_avg)
-                T_new = T_in_avg_K + delta_T
-                # Cap T en rango físico
-                T_new = max(min(T_new, 2500.0), 100.0)
-                if abs(T_new - T_K) < 2.0:
-                    T_K = T_new
-                    break
-                # Damping para estabilidad (50% del paso)
-                T_K = 0.5 * (T_K + T_new)
-            # Usar el res_iter de la última iter como res
-            res = res_iter if 'res_iter' in dir() else None
-            if res is None:
-                msgs.append(f"✗ Reactor adiabático {b.name}: no convergió T")
-                continue
-            # Marcar que el reactor es adiabático: duty externo = 0
-            b._adiabatic_T_final_K = T_K
-        else:
-            # Comportamiento isothermal (T_op_K declarado): igual que antes
-            T_K = b.T_op_K
-
-        # Despacho según reactor_mode (Capas 4 vs 5):
-        mode = getattr(b, "reactor_mode", "equilibrium") or "equilibrium"
-        # Hallazgo 1 (nota de scope): si el user eligió pfr/cstr pero
-        # alguna reacción NO tiene cinética Arrhenius (custom o R022-R025
-        # NO derivadas), degradar a 'equilibrium' con aviso.  Evita
-        # crash y refleja la limitación real (no hay k0/Ea para esa rxn).
-        if mode in ("pfr", "cstr") and custom_rxn_ids:
-            # Las custom nunca traen cinética → si hay alguna, degradar.
-            msgs.append(f"⚠ Reactor {b.name}: modo '{mode}' incompatible "
-                         f"con reacciones custom (sin cinética Arrhenius). "
-                         f"Degradando a 'equilibrium'.")
-            mode = "equilibrium"
-        if mode == "equilibrium":
-            res = _rdb.solve_equilibrium_reactor_from_composition(
-                rxn_ids=all_rxn_ids,
-                inlet_composition=agg,
-                inlet_mass_kg_s=m_in_kg_s,
-                T_K=T_K, P_bar=b.P_op_bar)
-        elif mode == "stoich":
-            res = _rdb.solve_stoichiometric_reactor(
-                rxn_ids=all_rxn_ids,
-                inlet_composition=agg,
-                inlet_mass_kg_s=m_in_kg_s,
-                T_K=T_K, P_bar=b.P_op_bar,
-                conversion=getattr(b, "reactor_conversion", 0.95))
-        elif mode in ("pfr", "cstr"):
-            V_L = getattr(b, "reactor_volume_L", 0.0) or 0.0
-            if V_L <= 0:
-                msgs.append(f"✗ Reactor {b.name} ({mode}): falta declarar "
-                             f"reactor_volume_L > 0.")
-                continue
-            res = _rdb.solve_kinetic_reactor_from_composition(
-                mode=mode,
-                rxn_ids=all_rxn_ids,
-                inlet_composition=agg,
-                inlet_mass_kg_s=m_in_kg_s,
-                T_K=T_K, P_bar=b.P_op_bar,
-                V_reactor_L=V_L)
-        elif mode == "batch":
-            V_L = getattr(b, "reactor_volume_L", 0.0) or 0.0
-            t_b = getattr(b, "batch_time_s", 3600.0) or 0.0
-            if V_L <= 0:
-                msgs.append(f"✗ Reactor {b.name} (batch): falta declarar "
-                             f"reactor_volume_L > 0.")
-                continue
-            if t_b <= 0:
-                msgs.append(f"✗ Reactor {b.name} (batch): falta declarar "
-                             f"batch_time_s > 0.")
-                continue
-            res = _rdb.solve_batch_from_composition(
-                rxn_ids=all_rxn_ids,
-                inlet_composition=agg,
-                inlet_mass_kg_s=m_in_kg_s,
-                T_K=T_K, P_bar=b.P_op_bar,
-                V_reactor_L=V_L,
-                t_batch_s=t_b)
-        else:
-            msgs.append(f"✗ Reactor {b.name}: modo desconocido '{mode}'.")
-            continue
-        if res is None:
-            msgs.append(f"✗ Reactor {b.name} ({mode}): no convergió "
-                         f"(rxns={b.reactions}, T={T_K:.0f}K, "
-                         f"P={b.P_op_bar}bar).")
-            continue
-
-        # Aplicar resultados a los outlets.  En reactores de equilibrio
-        # Capa 4 la composición de salida ESTÁ DETERMINADA por la termo
-        # — sobreescribimos siempre, ignorando composition_locked.
-        # (composition_locked en outputs de reactor pierde sentido: si
-        # el user quiere otra composición, debe vaciar block.reactions
-        # y declarar todo manual.)
-        # Excepción: outlets con role=='product' que ya tengan composition
-        # explícita la respetamos como hint estequiométrico DOWNSTREAM
-        # (e.g. para un KO drum cuya separación es declarada por el user).
-        out_comp = res['outlet_composition']
-        for s_out in outs:
-            if s_out.role == "product" and s_out.composition:
-                continue   # respetamos override en outputs declarados
-            s_out.composition = dict(out_comp)
-            if out_comp:
-                s_out.main_component = max(out_comp, key=out_comp.get)
-
-        # heat_of_reaction se computa SIEMPRE desde el solver de
-        # equilibrio (no hay flag de lock para este campo todavía;
-        # el user que quiera override puede vaciar block.reactions
-        # y declarar heat_of_reaction manual).  _reset_propagated_values
-        # ya lo dejó en 0 al inicio del solve.
-        b.heat_of_reaction = res['heat_of_reaction_kJ_per_kg']
-
-        # Guardar el perfil espacial del PFR / temporal del batch en el
-        # bloque para que el panel de propiedades los pueda graficar.
-        # CSTR → ambos None (no tiene perfil). Runtime con guion bajo:
-        # NO se serializan.
-        b._pfr_profile = res.get("pfr_profile")
-        b._batch_profile = res.get("batch_profile")
-
-        # ---- AUTO-DUTY: calor que el horno/jacket externo provee ----
-        # Para mantener el reactor isothermal a T_op_K, el horno debe
-        # aportar (o extraer):
-        #   Q_externo = Q_sensible_in→T_op + Q_rxn
-        # donde:
-        #   Q_sensible = m·Cp̄·(T_op − T_in_avg)   [kW]
-        #   Q_rxn      = res['duty_kW']            [kW, positivo = endo]
-        #
-        # Q > 0 → horno aporta calor (SMR endotérmico, cracking)
-        # Q < 0 → jacket extrae calor (Haber exotérmico)
-        #
-        # Esto reemplaza el duty actual del bloque (si no está locked
-        # por el user) para que aparezca en el cálculo de utilities.
-        # T_out de los outlets se propaga a T_op_C — sin esto, el
-        # solver de energía downstream calcula T's absurdas porque
-        # no captura el T_op isothermal del reactor.
-        from flowsheet_model import T_REF_C
-        Q_rxn_kW = res['duty_kW']
-        # T_in_avg_K ya calculado arriba (en el setup del bloque)
-        # Cp ponderado del input (kJ/kg·K)
-        cp_in_avg = 0.0
-        m_with_cp = 0.0
-        for s in ins:
-            if s.mass_flow <= 0:
-                continue
-            cp = _resolve_cp(s)
-            if cp is None:
-                continue
-            cp_in_avg += cp * s.mass_flow
-            m_with_cp += s.mass_flow
-        if m_with_cp > 0:
-            cp_in_avg /= m_with_cp
-        Q_sensible_kW = m_in_kg_s * cp_in_avg * (T_K - T_in_avg_K)
-
-        # Capa 7 — reactor ADIABÁTICO: no hay duty externo (Q_total=0).
-        # T_out se ajustó iterando hasta que Q_sensible compensa Q_rxn.
-        # Para isothermal (T_op_K declarado): Q_total = Q_sens + Q_rxn,
-        # el horno/jacket provee/extrae ese calor.
-        if is_adiabatic:
-            Q_total_kW = 0.0
-            adiab_tag = " [ADIABÁTICO]"
-        else:
-            Q_total_kW = Q_sensible_kW + Q_rxn_kW
-            adiab_tag = ""
-
-        if not _is_duty_locked(b):
-            b.duty = Q_total_kW
-
-        T_op_C = T_K - 273.15
-        for s_out in outs:
-            if not _is_temp_locked(s_out):
-                s_out.temperature = T_op_C
-
-        # ── Propagar P de operación + inferir phase de los outlets ──
-        # (Frente B).  Sólo corrientes de proceso (no utility/ambient).
-        proc_outs = [s for s in outs
-                     if (s.role or "") not in ("utility", "ambient")]
-        # Sólo estampar P_op_bar si el reactor DECLARÓ una presión real de
-        # operación (> 1 atm).  El default de P_op_bar es 1.0, y un guard
-        # `> 0` lo trataba como declarado → pisaba las salidas a 1.0 bar,
-        # descartando la presión de entrada (bug: entra 30 bar, sale 1 bar).
-        # Umbral coherente con _seed_reactor_pressures (> ATM+1e-6): un
-        # reactor sin P_op declarado deja que la propagación de presión
-        # (solve_pressure_propagation) resuelva la salida = entrada + ΔP.
-        _ATM = 1.01325
-        if b.P_op_bar > _ATM + 1e-6:
-            for s_out in proc_outs:
-                if not _is_pressure_locked(s_out):
-                    s_out.pressure_bar = b.P_op_bar
-        # La composición del outlet a (T_op, P_op) puede caer en cualquier
-        # región; el reactor no decide la fase — la infiere la termo.
-        if out_comp:
-            phase_inf, vfrac = _infer_phase_from_TP(out_comp, T_K, b.P_op_bar)
-            if phase_inf:
-                for s_out in proc_outs:
-                    if not _is_phase_locked(s_out):
-                        s_out.phase = phase_inf
-                        s_out.vapor_fraction = vfrac
-
-        # ── ENERGÍA DE REACTOR por PRIMERA LEY (programa análogo al de
-        # columnas).  Q_sensible con cp̄ de ENTRADA aproximaba mal el duty:
-        # ignora el cambio de composición (Cp/latente de los productos) y
-        # cualquier T de salida DECLARADA ≠ T_op (ammonia 450→500 °C con
-        # T_op=450 dejaba 85 kW sin dueño → [W-ENERGY-BLOCK] espurio).
-        # Con Ts, composición y fase de los outlets ya resueltas, el duty
-        # externo real es duty = H_out − H_in + Q_rxn(endo+), con el MISMO
-        # modelo entálpico de corrientes que usa el chequeo de cierre.
-        # Fallback al Q_sensible previo si alguna entalpía no es resoluble
-        # (masa/Cp pendientes en iteraciones tempranas del solve).
-        if not _is_duty_locked(b) and not is_adiabatic:
-            h_in_fl = h_out_fl = 0.0
-            fl_ok = True
-            for s in ins:
-                h = _stream_enthalpy_kW(s)
-                if h is None:
-                    fl_ok = False
-                    break
-                h_in_fl += h
-            if fl_ok:
-                for s_out in outs:
-                    h = _stream_enthalpy_kW(s_out)
-                    if h is None:
-                        fl_ok = False
-                        break
-                    h_out_fl += h
-            if fl_ok:
-                Q_total_kW = h_out_fl - h_in_fl + Q_rxn_kW
-                b.duty = Q_total_kW
-
-        msgs.append(f"✓ Reactor {b.name}{adiab_tag}: ΔH_rxn={Q_rxn_kW:+.2f} kW, "
-                     f"Q_sens={Q_sensible_kW:+.2f} kW, "
-                     f"Q_total={Q_total_kW:+.2f} kW, T_out={T_op_C:.0f}°C, "
-                     f"ξ={res['xi']}")
-    return msgs
+    """Solve chemistry and reference-consistent energy; report failed reactors."""
+    from reactor_calorics import solve_reactors
+    return solve_reactors(fs)
 
 
 def _column_feed_q(feed, T_feed_K, P_bar):
@@ -2605,7 +2310,18 @@ def solve_columns(fs):
     except ImportError:
         return []
     msgs = []
+    scope = set(_ACTIVE_SCC_BLOCK_IDS)
+    if scope:
+        while True:
+            expanded = scope | {st.src for st in fs.streams.values()
+                                if st.dst in scope and getattr(st, "stream_kind", "mass") == "mass"}
+            if expanded == scope:
+                break
+            scope = expanded
     for b in fs.blocks.values():
+        if scope and b.id not in scope:
+            continue
+
         if not getattr(b, "column_active", False):
             continue
         LK = getattr(b, "column_LK", "")
@@ -2664,15 +2380,16 @@ def solve_columns(fs):
 
         # Llamar al diseño FUG completo (siempre, como reference)
         T_feed_K = feed.temperature + 273.15
+        P_col_bar = feed.pressure_bar if feed.pressure_bar > 0 else 1.013
         T_top_K  = dist_stream.temperature + 273.15 if dist_stream.temperature else T_feed_K - 10
         T_bot_K  = bot_stream.temperature + 273.15 if bot_stream.temperature else T_feed_K + 20
         # q dinámico del feed (P1.2): detecta fase real / flash si bifásico
-        q_feed = _column_feed_q(feed, T_feed_K, 1.013)
+        q_feed = _column_feed_q(feed, T_feed_K, P_col_bar)
         try:
             res = _fug.design_column(
                 feed_composition=feed.composition,
                 F=feed.mass_flow,
-                T_K=T_feed_K, P_bar=1.013,
+                T_K=T_feed_K, P_bar=P_col_bar,
                 light_key=LK, heavy_key=HK,
                 x_D_LK=b.column_x_D_LK,
                 x_B_LK=b.column_x_B_LK,
@@ -2721,7 +2438,7 @@ def solve_columns(fs):
                 # max_iter más alto: cerca de azeótropos WH converge lento
                 wh_res = _wh.wang_henke(
                     comps=comps, feed_z=z_mol, F=F_mol,
-                    T_feed_K=T_feed_K, P_bar=1.013,
+                    T_feed_K=T_feed_K, P_bar=P_col_bar,
                     N=N_wh, feed_stage=fs_wh,
                     D_over_F=res["D"] / res["F"],
                     R=res["R"], max_iter=80)
@@ -2779,7 +2496,7 @@ def solve_columns(fs):
                     alphas[comp] = 1.0
                 else:
                     a = _fug.relative_volatility(comp, HK, full_comp,
-                                                   T_feed_K, 1.013)
+                                                   T_feed_K, P_col_bar)
                     if a is not None:
                         alphas[comp] = a
                     else:
@@ -2823,13 +2540,16 @@ def solve_columns(fs):
             bot_stream.mass_flow = feed.mass_flow * B_F
 
         # ── Propagación T/P/phase de los outputs (Frente B) ──
-        # T_top = bubble point del distillate a P_col (condensador total);
-        # T_bot = bubble point del bottom a P_col + 0.1 bar (gradiente).
+        # Product saturation temperatures use their actual declared/hydraulic
+        # pressure. No undeclared pressure gradient is added to the bottom.
         # Los gases no-condensables (CO₂, H₂, N₂, CH₄…) que el FUG manda al
         # tope NO condensan en un condensador total: se excluyen del cálculo
         # de T para no hundir el bubble point a valores absurdos (-60°C).
         import nrtl as _nrtl_col
         P_col_bar = feed.pressure_bar if feed.pressure_bar > 0 else 1.013
+        outlet_pressure = max(0.01, P_col_bar + (getattr(b, "delta_p_bar", 0.0) or 0.0))
+        p_top = dist_stream.pressure_bar if _is_pressure_locked(dist_stream) else outlet_pressure
+        p_bot = bot_stream.pressure_bar if _is_pressure_locked(bot_stream) else outlet_pressure
         x_D_mol = _drop_noncondensables(_mass_to_mol(x_D_full))
         x_B_mol = _drop_noncondensables(_mass_to_mol(x_B_full))
         # ¿el destilado sale como VAPOR (tope) o como LÍQUIDO (condensador)?
@@ -2839,14 +2559,14 @@ def solve_columns(fs):
         # punto de BURBUJA.  El fondo siempre sale como líquido saturado.
         if dist_is_vapor:
             bp_top = (_nrtl_col.dew_point(list(x_D_mol.keys()),
-                                          list(x_D_mol.values()), P_col_bar)
+                                          list(x_D_mol.values()), p_top)
                       if x_D_mol else None)
         else:
             bp_top = (_nrtl_col.bubble_point(list(x_D_mol.keys()),
-                                             list(x_D_mol.values()), P_col_bar)
+                                             list(x_D_mol.values()), p_top)
                       if x_D_mol else None)
         bp_bot = (_nrtl_col.bubble_point(list(x_B_mol.keys()),
-                                         list(x_B_mol.values()), P_col_bar + 0.1)
+                                         list(x_B_mol.values()), p_bot)
                   if x_B_mol else None)
         T_top_old = dist_stream.temperature
         T_bot_old = bot_stream.temperature
@@ -2873,9 +2593,9 @@ def solve_columns(fs):
                         f"convergió. T_bot no propagada.")
         # P de outputs
         if not _is_pressure_locked(dist_stream):
-            dist_stream.pressure_bar = P_col_bar
+            dist_stream.pressure_bar = p_top
         if not _is_pressure_locked(bot_stream):
-            bot_stream.pressure_bar = P_col_bar + 0.1
+            bot_stream.pressure_bar = p_bot
         # Phase del distillate por puerto (vapor_tope → vapor;
         # condensador líquido → liquid).  Bottom siempre líquido saturado.
         if not _is_phase_locked(dist_stream):
@@ -3386,6 +3106,11 @@ def _seed_reactor_pressures(fs):
     # pierde su sección.
     for is_input in (False, True):
         for b in hi:
+            eq = (b.eq_type or "").lower()
+            pressure_changer = any(word in eq for word in
+                ("pump", "compressor", "fan", "blower", "turbin", "expander", "valve"))
+            if is_input and pressure_changer:
+                continue  # P_op is discharge, never the machine suction.
             pop = float(b.P_op_bar)
             for s in fs.streams.values():
                 attached = (s.dst == b.id) if is_input else (s.src == b.id)
@@ -3569,39 +3294,10 @@ def solve_pressure_hydraulic(fs, max_iter=8):
 
 
 def _auto_hydraulic_compressor_duty(b, fs):
-    """FASE 2.4 — duty politrópico de un compresor/fan auto-dimensionado.
-
-    Usa el MISMO modelo isentrópico que el paso de energía
-    (compressor_sizing + _compressible_props), tomando la M de la mezcla
-    desde la composición MÁSICA del feed.  Devuelve W_elec_kW (>0) o None.
-    Se computa con el ΔP recién auto-dimensionado; el paso de energía lo
-    refina luego con la T propagada (valor final idéntico al previo →
-    golden-safe), pero deja la marca duty_origin='auto-hidraulico'."""
-    try:
-        from equipment_design import compressor_sizing
-        from flowsheet_model import SEC_PER_YEAR, TM_TO_KG
-    except Exception:
-        return None
-    ins = [s for s in fs.streams.values() if s.dst == b.id and s.mass_flow > 0]
-    if not ins:
-        return None
-    feed = ins[0]
-    comp = feed.composition or ({feed.main_component: 1.0}
-                                if feed.main_component else {})
-    if not comp:
-        return None
-    P_in = feed.pressure_bar if feed.pressure_bar > 0 else 1.013
-    P_out = P_in + float(getattr(b, "delta_p_bar", 0.0) or 0.0)
-    if P_out <= P_in:
-        return None
-    m_kg_s = feed.mass_flow * TM_TO_KG / SEC_PER_YEAR
-    mw_avg, k = _compressible_props(comp, feed.temperature + 273.15)
-    res = compressor_sizing(m_kg_s=m_kg_s, P_in_bar=P_in, P_out_bar=P_out,
-                            T_in_K=feed.temperature + 273.15, mw_avg=mw_avg,
-                            k=k, eta_isen=(b.efficiency or 0.75))
-    if not res or res.get("W_act_kW", 0) <= 0:
-        return None
-    return res["W_act_kW"]
+    """Use the same caloric model as machine sizing and temperature solve."""
+    from equipment_design import design_compressor_for_block
+    result = design_compressor_for_block(b, fs)
+    return result["W_act_kW"] if result else None
 
 
 def _find_downstream_target(fs, start_block_id, _pd):
@@ -4059,8 +3755,8 @@ def solve_splitters(fs):
     for b in fs.blocks.values():
         if not getattr(b, "splitter_active", False):
             continue
-        ins  = [s for s in fs.streams.values() if s.dst == b.id]
-        outs = [s for s in fs.streams.values() if s.src == b.id]
+        ins  = [s for s in fs.streams.values() if s.dst == b.id and getattr(s, "stream_kind", "mass") == "mass"]
+        outs = [s for s in fs.streams.values() if s.src == b.id and getattr(s, "stream_kind", "mass") == "mass"]
         if not ins or len(outs) < 2:
             continue
         feed = next((s for s in ins if s.mass_flow > 0), None)
@@ -4079,14 +3775,20 @@ def solve_splitters(fs):
         pairs = effective_split_fractions(fs, b)
         if not pairs:
             continue
+        mixed_comp = {}
+        for inlet in ins:
+            comp = inlet.composition or ({inlet.main_component: 1.0}
+                                         if inlet.main_component else {})
+            for species, fraction in comp.items():
+                mixed_comp[species] = mixed_comp.get(species, 0.0) + inlet.mass_flow * fraction / sum_in
         # Distribuir mass_flow y propagar composición
         for s_out, frac in pairs:
             if not _is_mass_locked(s_out):
                 s_out.mass_flow = sum_in * frac
             if not _is_comp_locked(s_out):
-                s_out.composition = dict(feed.composition or {})
-                if feed.main_component:
-                    s_out.main_component = feed.main_component
+                s_out.composition = dict(mixed_comp)
+                if mixed_comp:
+                    s_out.main_component = max(mixed_comp, key=mixed_comp.get)
         msgs.append(f"✓ Splitter {b.name}: fracs={[round(f, 4) for _, f in pairs]}")
     return msgs
 
@@ -4140,7 +3842,14 @@ def _write_output(s_out, total_mass, comp_masses, phase=None):
     """Setea composition + main_component + mass_flow del stream
     respetando _is_mass_locked y _is_comp_locked.  comp_masses son
     masas absolutas; se normalizan a fracciones internamente."""
-    if total_mass <= 0:
+    if total_mass < 0 or not math.isfinite(total_mass):
+        raise ValueError("separator outlet mass must be finite and nonnegative")
+    if total_mass == 0:
+        if not _is_mass_locked(s_out):
+            s_out.mass_flow = 0.0
+        if not _is_comp_locked(s_out):
+            s_out.composition = {}
+            s_out.main_component = ""
         return
     if not _is_comp_locked(s_out):
         comp_frac = {c: m / total_mass for c, m in comp_masses.items()
@@ -4515,57 +4224,89 @@ def solve_dryers(fs):
 
 
 def solve_crystallizers(fs):
-    """Cristalizadores con crystallizer_active=True.
+    """Crystallization and ideal solid/liquid separation with optional SLE cap.
 
-    Modelo:  solute_component cristaliza con crystal_yield; el resto
-    + solvente + impurezas van al licor madre.
-
-    Puertos: alimentacion → producto (cristales) + venteo (madre).
+    A specified solubility is kg dissolved solute / kg solvent at T_op_K.
+    Yield then applies only to supersaturation available at that temperature.
+    Without solubility this is an explicit empirical total-solute yield model.
     """
+    from component_recovery import _canonical
     msgs = []
     for b in fs.blocks.values():
         if not getattr(b, "crystallizer_active", False):
             continue
-        feed = _pick_feed(fs, b)
-        if feed is None:
-            continue
-        xtal_out, mother_out = _pick_outs_by_port(
-            fs, b, ("producto",), ("venteo", "liquido"))
-        if xtal_out is None or mother_out is None:
-            msgs.append(f"⚠ Crystallizer {b.name}: faltan 2 salidas conectadas")
-            continue
-
-        solute = b.solute_component or feed.main_component
-        if not solute:
-            # Sin solute_component declarado → pass-through (no se
-            # puede cristalizar lo desconocido).  Preserva balance.
-            _passthrough_to(feed, mother_out, xtal_out, phase="liquid")
-            msgs.append(f"⚠ Crystallizer {b.name}: solute_component vacío "
-                         f"→ pass-through al licor madre")
-            continue
-        yield_ = max(min(b.crystal_yield, 1.0), 0.0)
-        comp_in = _comp_masses(feed)
-        m_solute_in = comp_in.get(solute, 0.0)
-        if m_solute_in <= 0:
-            # Solute no presente en feed → mismo manejo.
-            _passthrough_to(feed, mother_out, xtal_out, phase="liquid")
-            msgs.append(f"⚠ Crystallizer {b.name}: feed sin '{solute}' "
-                         f"→ pass-through al licor madre")
-            continue
-        m_xtal = m_solute_in * yield_
-        m_solute_mother = m_solute_in - m_xtal
-        # Cristales = puro solute (modelo simple); madre = resto del feed
-        xtal_masses = {solute: m_xtal}
-        mother_masses = {c: m for c, m in comp_in.items() if c != solute}
-        if m_solute_mother > 0:
-            mother_masses[solute] = m_solute_mother
-        m_mother = sum(mother_masses.values())
-        _write_output(xtal_out, m_xtal, xtal_masses, phase="liquid")
-        _write_output(mother_out, m_mother, mother_masses, phase="liquid")
-        msgs.append(
-            f"✓ Crystallizer {b.name}: xtals={m_xtal:.0f} "
-            f"({solute}, yield={yield_:.2f}), mother={m_mother:.0f}"
-        )
+        try:
+            feeds = [s for s in fs.streams.values() if s.dst == b.id
+                     and getattr(s, "stream_kind", "mass") == "mass"]
+            outputs = [s for s in fs.streams.values() if s.src == b.id
+                       and getattr(s, "stream_kind", "mass") == "mass"]
+            xtal_out, mother_out = _pick_outs_by_port(
+                fs, b, ("producto",), ("venteo", "liquido"))
+            if len(feeds) != 1 or len(outputs) != 2 or xtal_out is None or mother_out is None:
+                raise ValueError("requires one feed and two connected outlets: producto / liquido or venteo")
+            feed = feeds[0]
+            solute = _canonical(b.solute_component or feed.main_component, require_known=True)
+            yield_ = float(b.crystal_yield)
+            if not math.isfinite(yield_) or not 0 <= yield_ <= 1:
+                raise ValueError("crystal_yield must be finite and in [0, 1]")
+            mass = float(feed.mass_flow)
+            composition = feed.composition or ({feed.main_component: 1.0} if feed.main_component else {})
+            if not math.isfinite(mass) or mass < 0:
+                raise ValueError("feed mass must be finite and nonnegative")
+            if mass and (not composition or any(not math.isfinite(v) or v < 0 for v in composition.values())
+                         or abs(sum(composition.values()) - 1) > 1e-6):
+                raise ValueError("positive feed needs a normalized, finite nonnegative composition")
+            comp_in = {}
+            for name, fraction in composition.items():
+                name = _canonical(name)
+                comp_in[name] = comp_in.get(name, 0.0) + mass * fraction
+            m_solute = comp_in.get(solute, 0.0)
+            solubility = getattr(b, "crystallizer_solubility_kg_per_kg_solvent", None)
+            temperature = None
+            if solubility is None:
+                available = m_solute
+                basis = "declared total-solute yield; no solubility prediction"
+            else:
+                solubility = float(solubility)
+                if not math.isfinite(solubility) or solubility < 0:
+                    raise ValueError("solubility must be finite and nonnegative (kg solute/kg solvent)")
+                solvent = _canonical(b.crystallizer_solvent_component, require_known=True)
+                if solvent == solute or (mass > 0 and comp_in.get(solvent, 0.0) <= 0):
+                    raise ValueError("solubility model requires a distinct solvent present in the feed")
+                if not math.isfinite(b.T_op_K) or b.T_op_K <= 0:
+                    raise ValueError("specified solubility requires its temperature T_op_K")
+                temperature = b.T_op_K - 273.15
+                for stream in outputs:
+                    if stream.temperature_locked and abs(stream.temperature - temperature) > 1e-6:
+                        raise ValueError("locked outlet temperature differs from solubility temperature T_op_K")
+                available = max(0.0, m_solute - solubility * comp_in.get(solvent, 0.0))
+                basis = f"yield of available supersaturation; solubility={solubility:g} kg/kg at {temperature:g} C"
+            m_xtal = available * yield_
+            mother = dict(comp_in)
+            mother[solute] = m_solute - m_xtal
+            mother = {name: amount for name, amount in mother.items() if amount > 0}
+            m_mother = sum(mother.values())
+            expected = [(xtal_out, m_xtal, {solute: m_xtal}, "solid"),
+                        (mother_out, m_mother, mother, "liquid")]
+            # Contradictory outlet locks are errors, not silent overrides of SLE.
+            for stream, total, species, phase in expected:
+                if _is_mass_locked(stream) and abs(stream.mass_flow - total) > max(1e-6, mass * 1e-8):
+                    raise ValueError(f"locked outlet mass of {stream.name} contradicts crystallization")
+                if _is_comp_locked(stream) and total > 0:
+                    actual = {_canonical(k): v for k, v in stream.composition.items()}
+                    keys = set(actual) | set(species)
+                    if any(abs(actual.get(k, 0) - species.get(k, 0) / total) > 1e-8 for k in keys):
+                        raise ValueError(f"locked outlet composition of {stream.name} contradicts crystallization")
+                if stream.phase_locked and stream.phase != phase:
+                    raise ValueError(f"locked outlet phase of {stream.name} must be {phase}")
+            for stream, total, species, phase in expected:
+                _write_output(stream, total, species, phase=phase)
+                stream.phase = phase
+                if temperature is not None:
+                    stream.temperature = temperature
+            msgs.append(f"✓ Crystallizer {b.name}: crystals={m_xtal:.6g}, mother={m_mother:.6g}; {basis}")
+        except (TypeError, ValueError, AttributeError) as exc:
+            msgs.append(f"❌ Crystallizer {b.name}: {exc}")
     return msgs
 
 
@@ -4761,9 +4502,9 @@ def _is_passthrough_block(b):
     et = (b.eq_type or "").lower()
     if not any(k in et for k in _PASSTHROUGH_EQ_KW):
         return False
-    if getattr(b, "reactions", None):
+    if getattr(b, "reactions", None) or getattr(b, "custom_reactions", None):
         return False
-    for fl in ("splitter_active", "flash_active", "column_active",
+    for fl in ("cooling_tower_active", "lumped_yield_active", "component_recovery_active", "splitter_active", "flash_active", "column_active",
                "separator_active", "mech_sep_active", "dryer_active",
                "crystallizer_active", "evaporator_active", "cyclone_active"):
         if getattr(b, fl, False):
@@ -4784,9 +4525,11 @@ def _passthrough_io(b, fs):
     if not _is_passthrough_block(b):
         return None
     ins = [s for s in fs.streams.values()
-           if s.dst == b.id and not getattr(s, "auto_aux", False)]
+           if s.dst == b.id and not getattr(s, "auto_aux", False)
+            and getattr(s, "stream_kind", "mass") == "mass"]
     outs = [s for s in fs.streams.values()
-            if s.src == b.id and not getattr(s, "auto_aux", False)]
+            if s.src == b.id and not getattr(s, "auto_aux", False)
+            and getattr(s, "stream_kind", "mass") == "mass"]
     if len(ins) != 1 or len(outs) != 1:
         return None
     sin, sout = ins[0], outs[0]
@@ -4847,10 +4590,11 @@ def auto_propagate_compositions(fs):
     Sólo se propaga main_component cuando estaba vacío.
     """
     changed = 0
+    hx4 = _four_port_hx_ids(fs)
     for b in fs.blocks.values():
         if b.heat_of_reaction != 0:
             continue
-        if getattr(b, "reactions", None):
+        if getattr(b, "reactions", None) or getattr(b, "custom_reactions", None):
             continue
         # Skip columnas y flashes activos — sus outputs los escriben
         # solve_columns / solve_flashes con composiciones específicas
@@ -4859,7 +4603,9 @@ def auto_propagate_compositions(fs):
             continue
         if getattr(b, "flash_active", False):
             continue
-        if getattr(b, "splitter_active", False):
+        if any(getattr(b, flag, False) for flag in
+               ("lumped_yield_active", "cooling_tower_active",
+                "component_recovery_active", "splitter_active")):
             continue
         # Separadores mecánicos (filtro/centrífuga/secador/cristalizador/
         # evaporador/ciclón) — sus outputs los escriben los solvers
@@ -4876,26 +4622,23 @@ def auto_propagate_compositions(fs):
             continue
         if getattr(b, "mech_sep_active", False):
             continue
-        ins  = [s for s in fs.streams.values() if s.dst == b.id]
-        outs = [s for s in fs.streams.values() if s.src == b.id]
+        ins  = [s for s in fs.streams.values() if s.dst == b.id and getattr(s, "stream_kind", "mass") == "mass"]
+        outs = [s for s in fs.streams.values() if s.src == b.id and getattr(s, "stream_kind", "mass") == "mass"]
         if not ins:
             continue
-        # SEPARAR inputs proceso de inputs utility.  En un HX 4-port
-        # (cool_in/cool_out separados de proceso_in/proceso_out), o
-        # un reboiler con steam shell-side, los streams utility NO
-        # deben mezclarse con los del proceso al calcular composición
-        # del output proceso — sino contamina (ej. CW agua mezclada
-        # con syngas reactor genera comp con 80 % water absurdo).
-        ins_proc = [s for s in ins if s.role != "utility"]
-        ins_util = [s for s in ins if s.role == "utility"]
-        # outputs análogos (por nombre de puerto típico)
-        utility_port_kw = ("cool_out", "steam_out", "cool_in",
-                            "steam_in", "shell_in", "shell_out")
-        outs_util = [s for s in outs
-                       if any(k in (s.src_port or "").lower()
-                                for k in utility_port_kw)
-                       or s.role == "utility"]
-        outs_proc = [s for s in outs if s not in outs_util]
+        if b.id in hx4:
+            for inlet, outlet in _pair_hx_streams(ins, outs):
+                if _is_comp_locked(outlet):
+                    continue
+                comp = inlet.composition or ({inlet.main_component: 1.0}
+                                              if inlet.main_component else {})
+                if comp:
+                    outlet.composition = dict(comp)
+                    outlet.main_component = max(comp, key=comp.get)
+                    changed += 1
+            continue
+        ins_proc, outs_proc = ins, outs
+        ins_util, outs_util = [], []
 
         def _agg_comp(streams):
             total_m = sum(s.mass_flow for s in streams if s.mass_flow > 0)
@@ -5073,7 +4816,8 @@ def _streams_in_scc(scc_block_ids, fs):
     """Streams cuyos src y dst están ambos en el SCC."""
     bids = set(scc_block_ids)
     return [s for s in fs.streams.values()
-            if s.src in bids and s.dst in bids]
+            if s.src in bids and s.dst in bids
+            and getattr(s, "stream_kind", "mass") == "mass"]
 
 
 # Prefijo de puerto → lado canónico de un HX de 4 puertos.  Los dos lados de un
@@ -5145,10 +4889,11 @@ def _decompose_scc_cycles(scc_block_ids, fs):
 
     Implementa la base de ciclos fundamentales aprobada en
     `docs/multitear_design.md` §2.1: un spanning tree (DFS dirigido desde la
-    entrada del SCC) deja exactamente `E_int − V + 1` aristas NO-árbol
+    entrada del SCC) deja exactamente `E_int - V + C` aristas NO-árbol
     (back-edges); cada back-edge + el camino (no dirigido) del árbol entre sus
     extremos forma un ciclo fundamental.  El nº de back-edges = circuit rank =
-    nº de reciclos independientes (Motard / Upadhye-Grens).
+    nº de reciclos independientes (Motard / Upadhye-Grens). C cuenta las
+    componentes conexas después de separar los lados de los HX.
 
     El DFS arranca en la ENTRADA del SCC (bloque con feed externo) y sigue el
     flujo de proceso, de modo que las aristas de árbol son la cadena forward y
@@ -5209,29 +4954,37 @@ def _decompose_scc_cycles(scc_block_ids, fs):
     if root is None:
         return []
 
-    # DFS dirigido → árbol de expansión.  tree_parent[nodo] = (padre, stream).
-    tree_parent = {root: None}
+    # Splitting HX sides can disconnect a block-level SCC into independent
+    # process/utility graphs. Build one spanning tree per weak component;
+    # unvisited utility edges are not individual cycles.
+    tree_parent = {}
     tree_stream_ids = set()
-    visited = {root}
-    stack = [root]
-    while stack:
-        u = stack.pop()
-        for s in out_edges[u]:
-            v = node_dst(s)
-            if v not in visited:
-                visited.add(v)
-                tree_parent[v] = (u, s)
-                tree_stream_ids.add(s.id)
-                stack.append(v)
-
-    # Si el DFS dirigido desde la raíz no alcanza todo el SCC (raro: puede pasar
-    # si la entrada no domina), completar el árbol de forma no dirigida.
-    if len(visited) < len(nodes):
-        undirected = {n: [] for n in nodes}
-        for s in internal:
-            undirected[node_src(s)].append((node_dst(s), s))
-            undirected[node_dst(s)].append((node_src(s), s))
-        stack = [root]
+    visited = set()
+    undirected = {n: [] for n in nodes}
+    for s in internal:
+        undirected[node_src(s)].append((node_dst(s), s))
+        undirected[node_dst(s)].append((node_src(s), s))
+    for tree_root in [root] + sorted(nodes - {root}, key=repr):
+        if tree_root in visited:
+            continue
+        tree_parent[tree_root] = None
+        visited.add(tree_root)
+        component_nodes = {tree_root}
+        stack = [tree_root]
+        # Preserve forward DFS and its physical recycle back-edge preference.
+        while stack:
+            u = stack.pop()
+            for s in out_edges[u]:
+                v = node_dst(s)
+                if v not in visited:
+                    visited.add(v)
+                    component_nodes.add(v)
+                    tree_parent[v] = (u, s)
+                    tree_stream_ids.add(s.id)
+                    stack.append(v)
+        # A directed root need not reach every node in a weak component.
+        # Start from ALL reached nodes, including branches behind the root.
+        stack = sorted(component_nodes, key=repr, reverse=True)
         while stack:
             u = stack.pop()
             for v, s in sorted(undirected[u], key=lambda t: t[1].id):
@@ -5289,7 +5042,7 @@ def _decompose_scc_cycles(scc_block_ids, fs):
 
 
 def _scc_circuit_rank(scc_block_ids, fs):
-    """Nº de reciclos independientes del SCC = E_int − V + 1 (circuit rank).
+    """Independent cycles = E_int - V + C in the port-aware graph.
 
     PORT-AWARE y consistente con `_decompose_scc_cycles`: V cuenta los nodos
     desdoblando los HX de 4 puertos en (block, lado).  Así el ciclo FALSO que
@@ -5297,12 +5050,21 @@ def _scc_circuit_rank(scc_block_ids, fs):
     hda_full/gas_sweet: 3 → 2, que es el nº real de reciclos: gas + tolueno)."""
     internal = _streams_in_scc(scc_block_ids, fs)
     node_src, node_dst = _portaware_nodes(scc_block_ids, fs)
-    nodes = set()
+    adjacency = {}
     for s in internal:
-        nodes.add(node_src(s))
-        nodes.add(node_dst(s))
-    e_int = len(internal)
-    return e_int - len(nodes) + 1
+        u, v = node_src(s), node_dst(s)
+        adjacency.setdefault(u, set()).add(v)
+        adjacency.setdefault(v, set()).add(u)
+    remaining = set(adjacency)
+    components = 0
+    while remaining:
+        components += 1
+        stack = [remaining.pop()]
+        while stack:
+            new_nodes = adjacency[stack.pop()] & remaining
+            remaining.difference_update(new_nodes)
+            stack.extend(new_nodes)
+    return len(internal) - len(adjacency) + components
 
 
 def _choose_tear(scc_streams, fs=None, scc_block_ids=None):
@@ -5494,6 +5256,7 @@ def _propagate_loop_with_chemistry(fs, max_inner=15):
         changed = bool(_solve_mass_iteration(fs))
         auto_propagate_compositions(fs)
         solve_equilibrium_reactors(fs)
+        solve_component_recoveries(fs)
         auto_propagate_compositions(fs)
         if not changed:
             break
@@ -5564,38 +5327,14 @@ def _solve_recycle_wegstein(fs, scc_block_ids,
     _ACTIVE_SCC_BLOCK_IDS = set(scc_block_ids)
     try:
         for it in range(max_iter):
-            # (a) limpiar los streams internos NO lockeados del SCC para que se
-            #     recomputen desde el tear inyectado (si no, _solve_mass_iteration
-            #     los ve "ya resueltos" y no los actualiza entre iteraciones).
-            for s in scc_streams:
-                if s.id != tear.id and not getattr(s, "mass_flow_locked", False):
-                    s.mass_flow = 0.0
-
-            # (b) inyectar el guess y CONGELAR el tear (lock temporal) para que
-            #     la propagación forward no lo pise antes de leer S-gases.
+            # Use the same ordered unit-operation pass as multi-tear solving.
+            # Flash products must be current before a splitter returns the tear;
+            # the old scalar path split stale flash output once per iteration.
             x_mass = max(x_mass, 1e-6)
-            tear.mass_flow = x_mass
             if x_comp:
                 tear.composition = dict(x_comp)
             tear.temperature = x_T
-            _was_locked = getattr(tear, "mass_flow_locked", False)
-            tear.mass_flow_locked = True
-
-            # (c) propagar el loop con química (mixer + reactor)
-            _propagate_loop_with_chemistry(fs)
-
-            # (d) recalcular el tear: desbloquear y dejar que su bloque fuente
-            #     (splitter/separador) lo produzca desde el estado POST-reacción.
-            tear.mass_flow_locked = _was_locked
-            tear.mass_flow = 0.0
-            solve_splitters(fs)
-            solve_flashes(fs)
-            solve_mechanical_separators(fs)
-            solve_columns(fs)
-            for _ in range(3):
-                if not _solve_mass_iteration(fs):
-                    break
-            auto_propagate_compositions(fs)
+            _tears_forward_pass(fs, scc_streams, [tear], [x_mass])
 
             f_mass = tear.mass_flow
             f_comp = dict(tear.composition or {})
@@ -5700,6 +5439,8 @@ def _activate_s2c(fs, scc_block_ids):
             continue
         # (b) pasivo
         if (getattr(b, "flash_active", False)
+                or getattr(b, "component_recovery_active", False)
+                or (getattr(b, "lumped_yield_active", False) or getattr(b, "cooling_tower_active", False))
                 or getattr(b, "splitter_active", False)
                 or getattr(b, "separator_active", False)):
             continue
@@ -5788,6 +5529,7 @@ def _tears_forward_pass(fs, scc_streams, tears, x_vec):
             solve_flashes(fs)
             solve_mechanical_separators(fs)
             solve_columns(fs)
+            solve_component_recoveries(fs)
             solve_splitters(fs)
             if not _solve_mass_iteration(fs):
                 break
@@ -5986,13 +5728,31 @@ def apply_energy_streams(fs) -> List[str]:
             b_src._energy_streams_delta = (
                 getattr(b_src, "_energy_streams_delta", 0.0) - Q)
         # dst recibe Q kW (más positivo)
-        if not _is_duty_locked(b_dst):
+        if not _is_duty_locked(b_dst) and not hasattr(b_dst, "_electrical_work_kW"):
             b_dst.duty += Q
             b_dst._energy_streams_delta = (
                 getattr(b_dst, "_energy_streams_delta", 0.0) + Q)
         msgs.append(f"✓ Energy stream {s.name}: {b_src.name} → "
                      f"{b_dst.name}, Q={Q:.1f} kW (duties acoplados)")
     return msgs
+
+
+def _material_state(fs):
+    return {sid: (s.mass_flow, dict(s.composition or {}))
+            for sid, s in fs.streams.items()
+            if getattr(s, "stream_kind", "mass") == "mass"}
+
+
+def _material_residual(previous, fs):
+    residual = 0.0
+    for sid, (mass, comp) in previous.items():
+        current = fs.streams[sid]
+        residual = max(residual, abs(current.mass_flow - mass) /
+                       max(abs(current.mass_flow), abs(mass), 1.0))
+        now = current.composition or {}
+        residual = max(residual, max((abs(now.get(k, 0.0) - comp.get(k, 0.0))
+                                      for k in set(comp) | set(now)), default=0.0))
+    return residual
 
 
 def solve(fs, max_iter=MAX_ITER):
@@ -6007,6 +5767,11 @@ def solve(fs, max_iter=MAX_ITER):
     """
     result = SolverResult()
     fs._solver_warnings = []      # reset de warnings acumulados por corrida
+    invalid = _invalid_numeric_state(fs)
+    if invalid or max_iter < 1:
+        result.mass_balance_errors = invalid or ["Solver: max_iter debe ser positivo"]
+        _compute_status_per_item(fs, result)
+        return result
 
     # 0. Reset de valores propagados en corridas anteriores.  Sin esto,
     #    al editar un valor lockeado y volver a llamar solve(), los
@@ -6016,9 +5781,20 @@ def solve(fs, max_iter=MAX_ITER):
     #    locks del user.
     _reset_propagated_values(fs)
 
-    # 1. Detectar SCCs y reciclos
-    sccs = _strongly_connected_components(fs)
-    recycle_sccs = [scc for scc in sccs if _is_recycle_scc(scc, fs)]
+    # Separate material recycles from utility circulation determined by duty.
+    # The views share stream objects; they never delete user equipment/streams.
+    recycle_fs = _recycle_material_view(fs)
+    sccs = _strongly_connected_components(recycle_fs)
+    recycle_sccs = [scc for scc in sccs if _is_recycle_scc(scc, recycle_fs)]
+    service_loop_sccs = []
+    if recycle_fs is not fs:
+        for scc in _strongly_connected_components(fs):
+            if not _is_recycle_scc(scc, fs):
+                continue
+            for cycle in _decompose_scc_cycles(scc, fs):
+                streams = cycle["streams"]
+                if streams and all(getattr(st, "auto_aux", False) for st in streams):
+                    service_loop_sccs.append(sorted({st.src for st in streams} | {st.dst for st in streams}))
     result.cycles_detected = [
         [fs.blocks[b].name for b in scc] for scc in recycle_sccs
     ]
@@ -6038,15 +5814,14 @@ def solve(fs, max_iter=MAX_ITER):
     #    caudal lo fija analíticamente size_utility_streams desde el
     #    duty del HX — el tearing ahí solo producía un "NO convergió"
     #    espurio (sin feed externo, _balance_at_block da 0).
-    service_loop_sccs = []
     for scc in recycle_sccs:
-        scc_streams = _streams_in_scc(scc, fs)
+        scc_streams = _streams_in_scc(scc, recycle_fs)
         if all(s.mass_flow > 0 for s in scc_streams):
             continue  # ya está resuelto por closure
         if _is_pure_service_scc(scc, fs):
             service_loop_sccs.append(scc)
             continue
-        rs = _solve_recycle_multitear(fs, scc)
+        rs = _solve_recycle_multitear(recycle_fs, scc)
         result.recycle_solutions.append(rs)
 
     # 4. Re-propagar después de los tears resueltos (cierra todo lo
@@ -6076,10 +5851,11 @@ def solve(fs, max_iter=MAX_ITER):
     #     más allá de tol.  Para flowsheets sin reciclo o sin reactor
     #     en SCC, converge en 1 iteración.
     reactor_in_scc = any(
-        getattr(fs.blocks[bid], "reactions", None)
+        (getattr(fs.blocks[bid], "reactions", None)
+         or getattr(fs.blocks[bid], "custom_reactions", None))
         for scc in recycle_sccs for bid in scc
     )
-    n_outer_iter = 30 if reactor_in_scc else 1
+    n_outer_iter = max(200 if reactor_in_scc else 30, max_iter)
 
     # Mensajes de los unit ops (4cb).  Declarados ACÁ porque
     # _run_unit_ops_loop (definida más abajo) los escribe vía nonlocal y
@@ -6106,7 +5882,9 @@ def solve(fs, max_iter=MAX_ITER):
         (1er solve ≠ 2do)."""
         nonlocal split_msgs, flash_msgs, sep_msgs, cyc_msgs
         nonlocal dry_msgs, cry_msgs, evp_msgs, col_msgs
-        for _outer in range(5):
+        for _outer in range(max(5, max_iter)):
+            previous = _material_state(fs)
+            size_declared_hx_utilities(fs)
             prev_count = sum(1 for s in fs.streams.values() if s.composition)
             # También rastrear masa resuelta: en un segundo solve (p.ej. tras
             # instanciar auxiliares) las composiciones PERSISTEN de la corrida
@@ -6116,7 +5894,7 @@ def solve(fs, max_iter=MAX_ITER):
             # iterando mientras se resuelva masa nueva evita ese corte temprano.
             prev_mass = sum(1 for s in fs.streams.values() if s.mass_flow > 0)
             # Splitters: distribuyen mass, propagan composición igual
-            split_msgs = solve_splitters(fs)
+            split_msgs = solve_component_recoveries(fs) + solve_splitters(fs)
             for _ in range(3):
                 if not _solve_mass_iteration(fs):
                     break
@@ -6155,14 +5933,13 @@ def solve(fs, max_iter=MAX_ITER):
             auto_propagate_compositions(fs)
             new_count = sum(1 for s in fs.streams.values() if s.composition)
             new_mass = sum(1 for s in fs.streams.values() if s.mass_flow > 0)
-            if new_count == prev_count and new_mass == prev_mass:
+            if _material_residual(previous, fs) < 1e-8:
                 break
 
     rxn_msgs = []
     for outer in range(n_outer_iter):
         # Snapshot de composiciones actuales
-        prev_comps = {sid: dict(s.composition or {})
-                       for sid, s in fs.streams.items()}
+        previous = _material_state(fs)
         rxn_msgs = solve_equilibrium_reactors(fs)
         # Propagar composición a los downstream del reactor (split
         # gases → recycle, etc.)
@@ -6182,29 +5959,17 @@ def solve(fs, max_iter=MAX_ITER):
                 scc_streams = _streams_in_scc(scc, fs)
                 if not all(s.mass_flow > 0 for s in scc_streams):
                     _solve_recycle_multitear(fs, scc, max_iter=10)
-            # Correr los separadores/columnas AHORA para propagar la
-            # composición del recycle de vuelta al inlet del reactor antes
-            # de la próxima iteración.  Sin esto, si el tear del recycle
-            # pasa por un flash/columna (industrial_complete: el metanol
-            # vuelve por V-201/V-203), el reactor veía un inlet sin recycle
-            # y el solve no era idempotente.  _run_unit_ops_loop se define
-            # más abajo pero ya está ligada en este scope al ejecutarse.
-            _run_unit_ops_loop()
-            auto_propagate_compositions(fs)
-        # Check convergencia: compare composiciones
-        if outer > 0:
-            max_diff = 0.0
-            for sid, prev in prev_comps.items():
-                curr = fs.streams[sid].composition or {}
-                all_keys = set(prev) | set(curr)
-                for k in all_keys:
-                    diff = abs(curr.get(k, 0.0) - prev.get(k, 0.0))
-                    if diff > max_diff:
-                        max_diff = diff
-            if max_diff < 1e-4:
-                break
+        # Multiple reactors/units may be connected through newly computed
+        # streams even without a recycle. Resolve their material state to a
+        # fixed point instead of accepting a populated-but-stale composition.
+        _run_unit_ops_loop()
+        auto_propagate_compositions(fs)
+        if outer > 0 and _material_residual(previous, fs) < 1e-7:
+            break
+    else:
+        result.energy_balance_errors.append("Solver: composicion/caudales no convergieron")
     for m in rxn_msgs:
-        if m.startswith("✗") or m.startswith("⚠"):
+        if m.startswith(("✗", "❌")) or m.startswith("⚠"):
             result.energy_balance_errors.append(m)
 
     # 4cb. Unit ops automáticos (splitters, flashes, columnas).  La función
@@ -6215,10 +5980,17 @@ def solve(fs, max_iter=MAX_ITER):
 
     for m in (split_msgs + flash_msgs + col_msgs
               + cyc_msgs + sep_msgs + dry_msgs + cry_msgs + evp_msgs):
-        if m.startswith("✗"):
+        if m.startswith(("✗", "❌")):
             result.energy_balance_errors.append(m)
         elif m.startswith("⚠"):
             result.energy_warnings.append(m)
+
+    for message in size_declared_hx_utilities(fs):
+        if message.startswith("❌"):
+            result.energy_balance_errors.append(message)
+    for _ in range(max_iter):
+        if not _solve_mass_iteration(fs):
+            break
 
     # 4d. Auto-inferir duties de HX/equipos sin duty declarado, ahora
     #     que el reactor escribió T_out y composition.  only_zero=True
@@ -6233,7 +6005,7 @@ def solve(fs, max_iter=MAX_ITER):
     # src/dst válidos; los flotantes (src<=0 o dst<=0) se ignoran.
     e_msgs = apply_energy_streams(fs)
     for m in e_msgs:
-        if m.startswith("✗"):
+        if m.startswith(("✗", "❌")):
             result.energy_balance_errors.append(m)
         elif m.startswith("⚠"):
             result.energy_warnings.append(m)
@@ -6255,19 +6027,48 @@ def solve(fs, max_iter=MAX_ITER):
     except Exception:
         pass
     for m in p_msgs:
-        if m.startswith("✗"):
+        if m.startswith(("✗", "❌")):
             result.energy_balance_errors.append(m)
         elif m.startswith("⚠"):
             result.energy_warnings.append(m)
 
-    # 5. Solver de energía
+    # Couple thermal propagation and demand-driven utility mass. A steam
+    # demand evaluated before the feed temperature settles is only a guess.
+    from reactor_calorics import refresh_adiabatic_reactors
     total_propagated_temp = []
     skipped_temp = []
+    final_adiabatic_messages = []
+    final_demand_messages = []
+    final_tower_messages = []
     for it_e in range(max_iter):
-        prop_e = _solve_energy_iteration(fs, skipped=skipped_temp)
+        previous = _material_state(fs)
+        final_demand_messages = size_declared_hx_utilities(fs)
+        for _ in range(max_iter):
+            if not _solve_mass_iteration(fs):
+                break
+        auto_propagate_compositions(fs)
+        final_adiabatic_messages = refresh_adiabatic_reactors(fs)
+        if final_adiabatic_messages:
+            _run_unit_ops_loop()
+            auto_propagate_compositions(fs)
+        auto_set_duties_from_thermo(fs, only_zero=True, respect_locks=True)
+        prop_e = _solve_energy_iteration(fs, tol_T=1e-5, skipped=skipped_temp)
         total_propagated_temp.extend(prop_e)
-        if not prop_e:
+        final_tower_messages = solve_cooling_towers(fs)
+        if (not prop_e and not final_adiabatic_messages
+                and _material_residual(previous, fs) < 1e-8):
             break
+    else:
+        result.energy_balance_errors.append("Solver: temperatura/demanda termica no convergieron")
+    for message in final_tower_messages:
+        if message.startswith(("✗", "❌")):
+            result.energy_balance_errors.append(message)
+    for message in final_adiabatic_messages + final_demand_messages:
+        if message.startswith(("✗", "❌")):
+            result.energy_balance_errors.append(message)
+    auto_set_duties_from_thermo(fs, only_zero=True, respect_locks=True)
+    skipped_temp = []
+    _solve_energy_iteration(fs, tol_T=1e-5, skipped=skipped_temp)
     result.propagated_temp = total_propagated_temp
     # auto-propagar composiciones para bloques no-reactivos
     auto_propagate_compositions(fs)
@@ -6311,7 +6112,9 @@ def solve(fs, max_iter=MAX_ITER):
             #   está downstream de un reactor con reactions != [], en
             #   cuyo caso el Cp simple no puede capturar T_op del reactor
             #   y el "fuera de rango" es consecuencia esperada.
-            if "fuera de rango físico" in msg:
+            if msg.startswith(("✗", "❌")):
+                result.energy_balance_errors.append(msg)
+            elif "fuera de rango físico" in msg:
                 if block_name in downstream_of_rxn:
                     result.energy_warnings.append(msg)
                 else:
@@ -6370,6 +6173,17 @@ def solve(fs, max_iter=MAX_ITER):
     except Exception:
         pass
 
+    # Explicit species phase allocations carry their actual mass quality to UI.
+    from stream_enthalpy import resolved_vapor_fraction
+    for stream in fs.streams.values():
+        if getattr(stream, "component_vapor_fractions", None):
+            quality = resolved_vapor_fraction(stream)
+            if quality is not None:
+                stream.vapor_fraction = quality
+            elif stream.mass_flow > 0:
+                result.energy_balance_errors.append(
+                    f"❌ {stream.name}: asignacion de fase por componente incompleta o invalida")
+
     # 4. Validación + listado de unresolved
     #    Streams con endpoint flotante (src=-1 o dst=-1) se skipean —
     #    son borradores no conectados, no entran en ningún balance ni
@@ -6377,9 +6191,11 @@ def solve(fs, max_iter=MAX_ITER):
     for s in fs.streams.values():
         if s.src not in fs.blocks or s.dst not in fs.blocks:
             continue
-        if s.mass_flow <= 0:
+        if getattr(s, "stream_kind", "mass") != "mass":
+            continue
+        if not _zero_flow_is_resolved(fs, s):
             result.unresolved_streams.append(s.name)
-    result.mass_balance_errors    = _check_mass_balance(fs)
+    result.mass_balance_errors = _check_mass_balance(fs) + _invalid_numeric_state(fs)
     # Auditoría de consistencia unificada (Frente A).  Reemplaza al viejo
     # _check_component_balance: el Detector 2 del auditor integra esa
     # lógica.  No rompe solve() si el auditor falla.
@@ -6422,12 +6238,13 @@ def solve(fs, max_iter=MAX_ITER):
         result.awareness_warnings = [
             f"[W-AWARE-ERR] auditoría de conciencia falló: "
             f"{type(e).__name__}: {e}"]
-    # energy balance errors quedan deshabilitados (no comparables al Cp
-    # simple — comentado en _check_energy_balance del editor)
 
     result.success = (
-        not result.unresolved_streams and
-        not result.mass_balance_errors
+        bool(fs.blocks) and not result.unresolved_streams and
+        not result.mass_balance_errors and
+        not result.energy_balance_errors and
+        not result.consistency_errors and
+        all(rs.converged for rs in result.recycle_solutions)
     )
 
     # 5. Calcular estados visuales (color UI: verde/azul/amarillo/rojo)
@@ -6648,7 +6465,8 @@ def _compute_awareness_warnings(fs):
                 # el condensador (Q_cond < 0) NO es un bloque separado en
                 # estos ejemplos → el balance neto es Q_reb + Q_cond.
                 q_cond = float(getattr(b, "_Q_cond_kW", 0.0) or 0.0)
-                resid = h_out - h_in - duty - q_rxn + q_ic - q_cond
+                q_mechanical = float(getattr(b, "_q_mechanical_loss_kW", 0.0) or 0.0)
+                resid = h_out - h_in - duty - q_rxn + q_ic + q_mechanical - q_cond - float(getattr(b, "_electrical_work_kW", 0.0) or 0.0)
                 scale = max(abs(h_in), abs(h_out), abs(duty), 10.0)
                 if abs(resid) > 10.0 and abs(resid) / scale > 0.10:
                     is_column = "tower" in eqt.lower() or "column" in eqt.lower()
@@ -6906,6 +6724,16 @@ def _compute_status_per_item(fs, result):
         name = msg.split("→")[0].strip() if "→" in msg else msg.split(":")[0].strip()
         err_block_names.add(name)
 
+    err_stream_names = set()
+    warn_stream_names = set()
+    for finding in (result.audit_report.findings if result.audit_report else []):
+        if finding.severity == "error":
+            (err_block_names if finding.target_kind == "block" else err_stream_names).add(finding.target_name)
+        elif finding.severity == "warning" and finding.target_kind == "stream":
+            warn_stream_names.add(finding.target_name)
+    for rs in result.recycle_solutions:
+        if not rs.converged:
+            err_block_names.update(rs.cycle_blocks)
     warn_block_names: set = set()
     for msg in result.energy_warnings:
         name = msg.split("→")[0].strip() if "→" in msg else msg.split(":")[0].strip()
@@ -6919,7 +6747,13 @@ def _compute_status_per_item(fs, result):
 
     # Streams primero
     for s in fs.streams.values():
-        if s.name in unresolved_set or s.mass_flow <= 0:
+        if getattr(s, "stream_kind", "mass") != "mass":
+            result.stream_status[s.id] = "ok"
+            continue
+        if s.name in err_stream_names:
+            result.stream_status[s.id] = "error"
+            continue
+        if s.name in unresolved_set or (s.mass_flow <= 0 and not _zero_flow_is_resolved(fs, s)):
             # ¿Realmente unresolved (orfanato) o solo no procesado?
             has_src = s.src in fs.blocks
             has_dst = s.dst in fs.blocks
@@ -6937,7 +6771,7 @@ def _compute_status_per_item(fs, result):
             if dst_block.name in warn_block_names:
                 result.stream_status[s.id] = "warning"
                 continue
-        result.stream_status[s.id] = "ok"
+        result.stream_status[s.id] = "warning" if s.name in warn_stream_names else "ok"
 
     # Bloques
     for b in fs.blocks.values():
@@ -6963,10 +6797,10 @@ def _compute_status_per_item(fs, result):
     if not fs.blocks:
         result.overall_status = "empty"
     elif result.mass_balance_errors or result.unresolved_streams \
-            or result.energy_balance_errors:
+            or result.energy_balance_errors or result.consistency_errors \
+            or any(not rs.converged for rs in result.recycle_solutions):
         result.overall_status = "error"
-    elif result.energy_warnings or any(not rs.converged
-                                        for rs in result.recycle_solutions):
+    elif result.energy_warnings or result.consistency_warnings or result.hx_warnings:
         result.overall_status = "warning"
     else:
         result.overall_status = "ok"

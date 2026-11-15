@@ -77,8 +77,11 @@ FORMULA_TO_THERMO = {
     'C8H10':           'ethylbenzene',
     'C2H5_C6H5':       'ethylbenzene',  # alias usado en R016 styrene
     'Triolein':        'triolein',      # R021 biodiesel (C57H104O6)
+    'C57H104O6':       'triolein',
+    'C18H33NaO2':      'sodium_oleate',
     'MeOleate':        'methyl_oleate', # R021 biodiesel (FAME, C19H36O2)
     'Glycerol':        'glycerin',      # nombre alternativo (R021 biodiesel)
+    'C3H8O3':          'glycerin',
     # Bioquímica
     'Glucose':         'glucose',
     'Sucrose':         'sucrose',
@@ -95,6 +98,7 @@ FORMULA_TO_THERMO = {
     'CaO':             'quicklime',
     'SiO2':            'silica',
     'Na2CO3':          'soda_ash',
+    'C':              'carbon',
     # Pseudo-componentes (química asociada NO derivable de Capa 3)
     'polyethylene':    'polyethylene',
     'urea':            'urea',
@@ -104,7 +108,7 @@ FORMULA_TO_THERMO = {
     # No mapeables (no están en thermo_db actual)
     'FAME':            None,
     'Starch_unit':     None,
-    'C(s)':            None,
+    'C(s)':            'carbon',
 }
 
 
@@ -133,7 +137,51 @@ def formula_for(thermo_name_str: str) -> Optional[str]:
     """Inverso de thermo_name(): devuelve la fórmula química para
     un nombre canónico de thermo_db.  Retorna None si no hay match
     (componente no participa en ninguna reacción del catálogo)."""
-    return THERMO_TO_FORMULA.get(thermo_name_str)
+    key = (thermo_name_str or "").strip().lower().replace(" ", "_")
+    return THERMO_TO_FORMULA.get(key)
+
+
+def component_for_mass(name):
+    """Reaction molar basis, with legacy properties for solids and salts.
+
+    R027 is written per mole of C2H4 repeat units, not per mole of polymer
+    chains. Its -93 kJ/mol heat and unit stoichiometric coefficient require
+    the repeat-unit mass; the property catalogue retains chain-average MW.
+    """
+    import thermo_db
+    import components
+    if not name:
+        return None
+    component = thermo_db.get(name) or components.get(name)
+    if name == "polyethylene" and component is not None:
+        from dataclasses import replace
+        monomer = thermo_db.get("ethylene") or components.get("ethylene")
+        return replace(component, mw=monomer.mw)
+    return component
+
+
+def reaction_extents_from_species(rxn_ids, initial, final):
+    """Recover simultaneous extents from the complete stoichiometric system.
+
+    The change in a shared reactant cannot be assigned independently to
+    each reaction. Solve nu*xi = delta-n with all species instead.
+    Returns None for dependent reactions or a nonstoichiometric result.
+    """
+    import numpy as np
+    reactions = [get(rid) for rid in rxn_ids]
+    if any(r is None for r in reactions):
+        return None
+    species = sorted(set(initial) | set(final) |
+                     {sp.formula for r in reactions for sp in r.stoich})
+    matrix = np.array([[sum(sp.nu for sp in r.stoich if sp.formula == name)
+                        for r in reactions] for name in species], dtype=float)
+    delta = np.array([final.get(name, 0.0) - initial.get(name, 0.0)
+                      for name in species], dtype=float)
+    extents, _, rank, _ = np.linalg.lstsq(matrix, delta, rcond=None)
+    scale = max(1.0, float(np.max(np.abs(delta))))
+    if rank != len(rxn_ids) or np.max(np.abs(matrix @ extents - delta)) > scale * 1e-7:
+        return None
+    return dict(zip(rxn_ids, map(float, extents)))
 
 
 # ============================================================
@@ -785,6 +833,11 @@ def reaction_from_dict(d: dict) -> Reaction:
     # parseables → debe cuadrar; si alguna no, advertimos en el msg
     # del bloque global de validación (no crasheamos).
     _check_element_balance(stoich)
+    # Validate literal chemical formulas first, then use the same aliases as
+    # the feed mapping (e.g. C57H104O6 and Triolein denote the same species).
+    for entry in stoich:
+        canonical_name = thermo_name(entry.formula)
+        entry.formula = THERMO_TO_FORMULA.get(canonical_name, entry.formula)
 
     # ΔH obligatorio
     try:
@@ -1396,7 +1449,7 @@ def solve_equilibrium_reactor_from_composition(
     for thermo_n, frac in norm_comp.items():
         m_kg_per_s = frac * inlet_mass_kg_s
         formula = formula_for(thermo_n)
-        comp_obj = _td.get(thermo_n)
+        comp_obj = component_for_mass(thermo_n)
         if comp_obj is None or comp_obj.mw <= 0 or formula is None:
             # No puedo convertirlo a moles o no tiene fórmula → inerte
             inert_mass_per_s[thermo_n] = m_kg_per_s
@@ -1422,7 +1475,7 @@ def solve_equilibrium_reactor_from_composition(
         thermo_n = thermo_name(formula)
         if thermo_n is None:
             continue
-        comp_obj = _td.get(thermo_n)
+        comp_obj = component_for_mass(thermo_n)
         if comp_obj is None or comp_obj.mw <= 0:
             continue
         # mol/s × MW (g/mol) ÷ 1000 = kg/s
@@ -1491,7 +1544,7 @@ def solve_stoichiometric_reactor(
     for thermo_n, frac in norm_comp.items():
         m_kg_per_s = frac * inlet_mass_kg_s
         formula = formula_for(thermo_n)
-        comp_obj = _td.get(thermo_n)
+        comp_obj = component_for_mass(thermo_n)
         if comp_obj is None or comp_obj.mw <= 0 or formula is None:
             inert_mass_per_s[thermo_n] = (inert_mass_per_s.get(thermo_n, 0.0)
                                           + m_kg_per_s)
@@ -1528,7 +1581,7 @@ def solve_stoichiometric_reactor(
         thermo_n = thermo_name(formula)
         if thermo_n is None:
             continue
-        comp_obj = _td.get(thermo_n)
+        comp_obj = component_for_mass(thermo_n)
         if comp_obj is None or comp_obj.mw <= 0:
             continue
         outlet_mass_per_s[thermo_n] = (outlet_mass_per_s.get(thermo_n, 0.0)
@@ -2168,7 +2221,7 @@ def solve_kinetic_reactor_from_composition(
     for thermo_n, frac in norm_comp.items():
         m_kg_per_s = frac * inlet_mass_kg_s
         formula = formula_for(thermo_n)
-        comp_obj = _td.get(thermo_n)
+        comp_obj = component_for_mass(thermo_n)
         if comp_obj is None or comp_obj.mw <= 0 or formula is None:
             inert_mass_per_s[thermo_n] = m_kg_per_s
             if formula is None:
@@ -2197,7 +2250,7 @@ def solve_kinetic_reactor_from_composition(
         thermo_n = thermo_name(formula)
         if thermo_n is None:
             continue
-        comp_obj = _td.get(thermo_n)
+        comp_obj = component_for_mass(thermo_n)
         if comp_obj is None or comp_obj.mw <= 0:
             continue
         outlet_mass_per_s[thermo_n] = mol_per_s * comp_obj.mw / 1000.0
@@ -2209,29 +2262,18 @@ def solve_kinetic_reactor_from_composition(
     outlet_composition = ({k: v/total_out for k, v in outlet_mass_per_s.items()}
                            if total_out > 0 else {})
 
-    # Calcular dh_total: para cada reacción, ΔH(T) · ξ (en mol/s = kJ/s = kW)
+    # Reconstruct coupled extents from all species, including shared reactants.
+    xi_dict = (reaction_extents_from_species(rxn_ids, F_in, res['F_out'])
+               if mode == "pfr" else res['xi'])
+    if xi_dict is None:
+        return None
     dh_total_kW = 0.0
-    if mode == "pfr":
-        # ξⱼ = ∫₀ᵛ rⱼ dV ≈ generación neta de productos clave
-        # Simplificación: ΔF_i / νᵢ del primer producto puro
-        for j, rid in enumerate(rxn_ids):
-            rxn = get(rid)
-            # ξ inferido: tomar la especie con mayor |ΔF|/|ν|
-            xi_inferred = 0.0
-            for sp in rxn.stoich:
-                dF = res['F_out'].get(sp.formula, 0.0) - F_in.get(sp.formula, 0.0)
-                if abs(sp.nu) > 0:
-                    xi_inferred = dF / sp.nu
-                    break
-            dh = rxn.dh_rxn_kJ_mol(T_K) or rxn.dh_rxn_298_kJ_mol or 0.0
-            dh_total_kW += xi_inferred * dh
-        xi_dict = {}
-    else:    # cstr: ξⱼ directo
-        xi_dict = res['xi']
-        for rid, xi in xi_dict.items():
-            rxn = get(rid)
-            dh = rxn.dh_rxn_kJ_mol(T_K) or rxn.dh_rxn_298_kJ_mol or 0.0
-            dh_total_kW += xi * dh
+    for rid, xi in xi_dict.items():
+        rxn = get(rid)
+        dh = rxn.dh_rxn_kJ_mol(T_K)
+        if dh is None:
+            return None
+        dh_total_kW += xi * dh
 
     heat_of_reaction_kJ_per_kg = (dh_total_kW / inlet_mass_kg_s
                                    if inlet_mass_kg_s > 0 else 0.0)
@@ -2323,14 +2365,14 @@ def solve_batch_from_composition(
     mass_charge_kg = inlet_mass_kg_s * t_batch_s
 
     N_in: Dict[str, float] = {}
-    inert_moles: Dict[str, float] = {}
+    inert_mass_kg: Dict[str, float] = {}
     unmapped: List[str] = []
     for thermo_n, frac in norm.items():
         m_kg = frac * mass_charge_kg
         formula = formula_for(thermo_n)
-        comp_obj = _td.get(thermo_n)
+        comp_obj = component_for_mass(thermo_n)
         if comp_obj is None or comp_obj.mw <= 0 or formula is None:
-            inert_moles[thermo_n] = inert_moles.get(thermo_n, 0.0)
+            inert_mass_kg[thermo_n] = inert_mass_kg.get(thermo_n, 0.0) + m_kg
             if formula is None:
                 unmapped.append(thermo_n)
             continue
@@ -2353,27 +2395,27 @@ def solve_batch_from_composition(
         tn = thermo_name(formula)
         if tn is None:
             continue
-        co = _td.get(tn)
+        co = component_for_mass(tn)
         if co is None or co.mw <= 0:
             continue
         kg_total = moles * co.mw / 1000.0
         outlet_mass_per_s[tn] = kg_total / t_batch_s     # caudal medio
+    for name, kg_total in inert_mass_kg.items():
+        outlet_mass_per_s[name] = outlet_mass_per_s.get(name, 0.0) + kg_total / t_batch_s
     total_out = sum(outlet_mass_per_s.values())
     outlet_composition = ({k: v/total_out for k, v in outlet_mass_per_s.items()}
                           if total_out > 0 else {})
 
-    # Calor de reacción: Σ ξ·ΔH, ξ inferido de ΔN del primer reactante
+    xi_batch = reaction_extents_from_species(rxn_ids, N_in, res['N_out'])
+    if xi_batch is None:
+        return None
+    xi_rate = {rid: amount / t_batch_s for rid, amount in xi_batch.items()}
     dh_total_kW = 0.0
-    for rid in rxn_ids:
-        rxn = get(rid)
-        xi_mol = 0.0
-        for sp in rxn.stoich:
-            dN = res['N_out'].get(sp.formula, 0.0) - N_in.get(sp.formula, 0.0)
-            if abs(sp.nu) > 0:
-                xi_mol = dN / sp.nu
-                break
-        dh = rxn.dh_rxn_kJ_mol(T_K) or rxn.dh_rxn_298_kJ_mol or 0.0
-        dh_total_kW += (xi_mol * dh) / t_batch_s     # kJ tanda / s = kW medio
+    for rid, extent in xi_rate.items():
+        dh = get(rid).dh_rxn_kJ_mol(T_K)
+        if dh is None:
+            return None
+        dh_total_kW += extent * dh
     heat_kJ_per_kg = (dh_total_kW / inlet_mass_kg_s
                       if inlet_mass_kg_s > 0 else 0.0)
 
@@ -2402,7 +2444,7 @@ def solve_batch_from_composition(
         outlet_mass_kg_s=total_out,
         heat_of_reaction_kJ_per_kg=heat_kJ_per_kg,
         duty_kW=dh_total_kW,
-        xi={},
+        xi=xi_rate,
         unmapped=unmapped,
         tau_s=t_batch_s,                 # para batch, "τ" = tiempo tanda
         conversion=res.get('conversion', {}),

@@ -17,10 +17,10 @@ pasa por el HX dos veces), así que el bloque DEBE seguir en el SCC.  Lo que se
 elimina es el ciclo FALSO que cruza sus lados → el circuit rank baja al nº real
 de reciclos (hda_full/gas_sweet: 3 → 2) y desaparece el tear espurio.
 
-Los 3 HX de 4 puertos en los 41 (los tres en SCC de reciclo):
+HX de 4 puertos en los ejemplos industriales auditados:
   · hda_full/E-101  (tube/shell, feed-efluente)
   · gas_sweet/E-101 (tube/shell, feed-efluente)
-  · industrial/E-202 (liq/steam-cond, proceso/servicio)
+  · industrial/E-102 y E-103 (recuperación de calor, lados separados)
 
 USO:  python -m unittest tests.test_ciclo_hx_4puertos -v
 """
@@ -71,15 +71,15 @@ class TestDeteccionHX4Puertos(unittest.TestCase):
         self.assertEqual(fsv._stream_side("liq_in"), "proc")
         self.assertIsNone(fsv._stream_side(""))
 
-    def test_los_3_hx_4puertos(self):
+    def test_hx_4puertos_industriales(self):
         import flowsheet_solver as fsv
-        casos = {"hda_full": "E-101", "gas_sweet": "E-101",
-                 "industrial": "E-202"}
-        for key, hxname in casos.items():
+        casos = {"hda_full": {"E-101"}, "gas_sweet": {"E-101"},
+                 "industrial": {"E-102", "E-103"}}
+        for key, expected in casos.items():
             fs = _load(key)
             ids = fsv._four_port_hx_ids(fs)
             names = {fs.blocks[i].name for i in ids}
-            self.assertIn(hxname, names, f"{key}: {hxname} debe ser HX 4-puertos")
+            self.assertEqual(names, expected, f"{key}: lados de HX independientes")
 
     def test_hda_simple_sin_hx_4puertos(self):
         # hda (lazo simple) no tiene HX de 4 puertos → no se afecta.
@@ -110,7 +110,10 @@ class TestCicloFalsoEliminado(unittest.TestCase):
         self.assertNotIn("S-4", be)
         tears = {t.name for t in fsv._choose_tears(scc, fs)}
         self.assertNotIn("S-3", tears, f"S-3 no debe ser tear; {tears}")
-        self.assertIn("S-tol-recic", tears)
+        # El reciclo líquido ahora tiene una válvula de 1.3 a 1.013 bar
+        # antes del mezclador de aspiración. El tear sigue en ese reciclo,
+        # a la salida de la válvula, sin atravesar los lados del HX.
+        self.assertIn("S-tol-recic-out", tears)
 
     def test_gas_sweet_rank_2(self):
         import flowsheet_solver as fsv

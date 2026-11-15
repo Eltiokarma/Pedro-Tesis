@@ -54,16 +54,18 @@ def test_energy_block_compressor_detector_sigue_vivo():
 
 
 def test_energy_block_barrido_amplio():
-    """El barrido de cierre de energía sigue disparando en varios ejemplos
-    (compresores con aftercooler implícito, reactores con Q_rxn, hornos).
-    Tras cerrar las columnas por primera ley (Q_reb+Q_cond=ΔH), el conteo
-    bajó a ~9 — el detector sigue vivo y con cobertura amplia."""
-    n = 0
-    for e in reg.list_examples():
-        _, res = _solve(e["clave"])
-        if _lines(res, "W-ENERGY-BLOCK"):
-            n += 1
-    assert n >= 7, f"esperado barrido amplio, sólo {n} ejemplos"
+    """The detector covers several equipment types without requiring bad examples."""
+    import flowsheet_model as fm
+    for eq_type in ('Heat exch. - floating head', 'Mixer - static', 'Storage tank - cone roof'):
+        fs = fm.Flowsheet()
+        fs.blocks[1] = b = fm.Block(id=1, name='BAD-ENERGY', eq_type=eq_type, S=1)
+        fs.streams[2] = fm.Stream(id=2, name='in', src=0, dst=1, mass_flow=100000,
+                                  temperature=25, composition={'water':1}, phase='liquid')
+        fs.streams[3] = fm.Stream(id=3, name='out', src=1, dst=0, mass_flow=100000,
+                                  temperature=100, composition={'water':1}, phase='liquid')
+        assert any(w.startswith('[W-ENERGY-BLOCK]') for w in fsv._compute_awareness_warnings(fs))
+        b.duty = fsv.infer_block_duty(fs, b)
+        assert not any(w.startswith('[W-ENERGY-BLOCK]') for w in fsv._compute_awareness_warnings(fs))
 
 
 def test_energia_reactor_primera_ley():
@@ -89,19 +91,16 @@ def test_energia_reactor_primera_ley():
 
 
 def test_energia_reactor_detector_sigue_vivo():
-    """Detector vivo: re-introducir el defecto histórico EN MEMORIA (duty
-    isotermo = −Q_rxn completo, ignorando que la salida declarada sale más
-    caliente que la entrada) vuelve a disparar W-ENERGY-BLOCK en ammonia."""
-    fs = reg.load_example("ammonia")
-    b = next(x for x in fs.blocks.values() if x.name == "R-101")
-    b.duty = -146.6           # el valor isotermo previo al programa
-    b.duty_locked = True
-    res = fsv.solve(fs)
-    hits = [w for w in _lines(res, "W-ENERGY-BLOCK") if "R-101" in w]
-    assert hits, "duty isotermo con salida más caliente debe disparar"
+    """Changing a solved reactor duty must expose the first-law error."""
+    fs, result = _solve('ammonia')
+    b = next(x for x in fs.blocks.values() if x.name == 'R-101')
+    assert not any('R-101' in w for w in _lines(result, 'W-ENERGY-BLOCK'))
+    b.duty -= 5000
+    hits = [w for w in fsv._compute_awareness_warnings(fs)
+            if w.startswith('[W-ENERGY-BLOCK]') and 'R-101' in w]
+    assert hits
 
 
-# ── 1.2 [W-COMP-T] ──────────────────────────────────────────────────────
 def test_comp_t_ldpe_extremo():
     """ldpe K-101/S-HP: con el modelo multi-etapa la descarga baja de
     ~1322 °C (1 etapa) a ~134 °C → ya NO dispara.  Detector vivo: si la
@@ -169,87 +168,70 @@ def test_tank_duty_industrial():
 
 
 # ── 1.5 [W-PLACEHOLDER] + bonus ─────────────────────────────────────────
-def test_placeholder_quince_ejemplos():
-    """Los reactores estructurales (química via outputs locked) deben ser
-    visibles en ~11 ejemplos (eran ~15; la sesión 3 conectó la química real
-    de acetic/beer/bread/sulfuric → ya no son placeholder)."""
-    n = 0
-    for e in reg.list_examples():
-        _, res = _solve(e["clave"])
-        if _lines(res, "W-PLACEHOLDER"):
-            n += 1
-    assert n >= 10, f"esperado ~11 ejemplos con placeholder, hay {n}"
+def test_catalogue_has_no_fake_reaction_identifiers():
+    """Every declared reaction is real or an explicitly defined custom model."""
+    import reactions_db
+    for item in reg.list_examples():
+        fs = reg.load_example(item['clave'])
+        for block in fs.blocks.values():
+            for reaction_id in block.reactions:
+                assert reactions_db.get(reaction_id) is not None, (item['clave'], block.name, reaction_id)
 
 
 def test_placeholder_bonus_ldpe_r027():
-    """ldpe usa R027_PLACEHOLDER y R027 existe curada → bonus de sugerencia."""
-    _, res = _solve("ldpe")
-    lines = _lines(res, "W-PLACEHOLDER")
-    assert any("R027 existe curada" in w for w in lines)
+    """The warning still identifies an intentionally reintroduced fake ID."""
+    fs = reg.load_example('ldpe')
+    block = next(b for b in fs.blocks.values() if b.name == 'R-101')
+    assert block.reactions == ['R027']
+    block.reactions = ['R027_PLACEHOLDER']
+    lines = fsv._compute_awareness_warnings(fs)
+    assert any('[W-PLACEHOLDER]' in w and 'R027 existe curada' in w for w in lines)
 
 
-# ── 1.6 [W-SPLIT-LOCK] ──────────────────────────────────────────────────
-def test_split_lock_talara_v101_corregido():
-    """talara V-101 (desalador): el cruce fracción↔stream fue corregido.
-
-    El cruce era: splitter_fractions=[0.952, 0.048] asignaba 0.952 a la
-    salmuera (S-brine, 25000 t/a) y 0.048 al crudo desalado (C1-desalado,
-    500000 t/a) — invertido.  Corregido a [0.048, 0.952] para alinear con
-    el orden de outputs [S-brine, C1-desalado].  V-101 ya NO debe disparar
-    [W-SPLIT-LOCK] y su split debe cerrar el balance."""
-    fs, res = _solve("talara")
-    lines = _lines(res, "W-SPLIT-LOCK")
-    assert not any("V-101" in w for w in lines), \
-        f"V-101 no debe disparar W-SPLIT-LOCK tras el fix: {lines}"
-
-    b = next(b for b in fs.blocks.values() if b.name == "V-101")
+def test_talara_desalter_uses_conservative_component_recovery():
+    """Desalting separates water/contaminants, not a bulk fixed-ratio split."""
+    fs, result = _solve('talara')
+    b = next(b for b in fs.blocks.values() if b.name == 'V-101')
+    assert b.component_recovery_active and not b.splitter_active
+    assert not any('V-101' in w for w in _lines(result, 'W-SPLIT-LOCK'))
     ins = [s for s in fs.streams.values() if s.dst == b.id]
     outs = [s for s in fs.streams.values() if s.src == b.id]
-    feed = sum(s.mass_flow for s in ins)
-    assert abs(sum(s.mass_flow for s in outs) - feed) < 1e-6  # Σout = feed
-    # cada fracción cuadra con el flujo lockeado de su output (tol 2%)
-    for k, s in enumerate(outs):
-        expected = feed * b.splitter_fractions[k]
-        assert abs(s.mass_flow - expected) / max(abs(expected), 1.0) < 0.02
+    from component_recovery import _canonical
+    for species in {_canonical(c) for s in ins+outs for c in s.composition}:
+        m_in = sum(s.mass_flow*x for s in ins for c,x in s.composition.items()
+                   if _canonical(c) == species)
+        m_out = sum(s.mass_flow*x for s in outs for c,x in s.composition.items()
+                    if _canonical(c) == species)
+        assert abs(m_in-m_out) < max(1e-6, m_in*1e-8)
 
 
 def test_split_lock_detector_sigue_vivo():
-    """El detector [W-SPLIT-LOCK] sigue funcionando: si se RE-introduce el
-    cruce en V-101 (invertir las fracciones), el warning vuelve a dispararse.
-    Garantiza que el fix de arriba es lo que limpió el warning, no que el
-    detector quedó muerto."""
-    fs = reg.load_example("talara")
-    b = next(b for b in fs.blocks.values() if b.name == "V-101")
-    # V-101 ya usa fracciones ancladas por salida (split_fraction).  Para
-    # re-introducir el cruce hay que invertir el campo AUTORITATIVO (el keyed),
-    # no la lista posicional legacy (que el solver ignora si hay keyed).
-    outs = [s for s in fs.streams.values() if s.src == b.id]
-    fr = [s.split_fraction for s in outs]
-    for s, f in zip(outs, reversed(fr)):
-        s.split_fraction = f
-    b.splitter_fractions = list(reversed(b.splitter_fractions))  # coherencia
-    res = fsv.solve(fs)
-    lines = _lines(res, "W-SPLIT-LOCK")
-    assert any("V-101" in w for w in lines), \
-        "el detector W-SPLIT-LOCK debe disparar con el cruce re-introducido"
+    """Wrong keyed outlet fractions conflict with locked flows and are detected."""
+    import flowsheet_model as fm
+    fs = fm.Flowsheet()
+    fs.blocks[1] = fm.Block(id=1, name='SPLIT', eq_type='Splitter', S=1, splitter_active=True)
+    fs.streams[2] = fm.Stream(id=2, name='feed', src=0, dst=1, mass_flow=1000,
+                              composition={'water':1})
+    fs.streams[3] = fm.Stream(id=3, name='small', src=1, dst=0, mass_flow=200,
+                              mass_flow_locked=True, split_fraction=.8, composition={'water':1})
+    fs.streams[4] = fm.Stream(id=4, name='large', src=1, dst=0, mass_flow=800,
+                              mass_flow_locked=True, split_fraction=.2, composition={'water':1})
+    assert any(w.startswith('[W-SPLIT-LOCK]') for w in fsv._compute_awareness_warnings(fs))
+    fs.streams[3].split_fraction, fs.streams[4].split_fraction = .2, .8
+    assert not any(w.startswith('[W-SPLIT-LOCK]') for w in fsv._compute_awareness_warnings(fs))
 
 
-# ── 1.7 [W-DUTY-S] ──────────────────────────────────────────────────────
 def test_duty_s_talara_fhtn():
-    """talara F-HTN fue redimensionado (S=2000 ≥ duty 1948) → ya no
-    dispara.  Detector vivo: S subdeclarado dispara."""
-    _, res = _solve("talara")
-    assert not any("F-HTN" in w for w in _lines(res, "W-DUTY-S"))
-    fs = reg.load_example("talara")
-    b = next(x for x in fs.blocks.values() if x.name == "F-HTN")
-    b.S = 1200.0                     # el defecto histórico
-    res2 = fsv.solve(fs)
-    lines = [w for w in res2.awareness_warnings
-             if w.startswith("[W-DUTY-S]") and "F-HTN" in w]
-    assert lines, "S=1200 < duty≈1948 debe disparar W-DUTY-S"
+    """Undersizing the actual solved heater must produce a cost-capacity warning."""
+    fs, result = _solve('talara')
+    assert not any('F-HTN' in w for w in _lines(result, 'W-DUTY-S'))
+    b = next(x for x in fs.blocks.values() if x.name == 'F-HTN')
+    assert b.duty > 0
+    b.S = abs(b.duty)*.5
+    assert any(w.startswith('[W-DUTY-S]') and 'F-HTN' in w
+               for w in fsv._compute_awareness_warnings(fs))
 
 
-# ── 1.8 [W-SIGN] ────────────────────────────────────────────────────────
 def test_sign_rxn_flash_col_aircooler():
     """rxn_flash_col E-101 calentaba (25→87 °C) y estaba mal tipado como
     air cooler; re-tipado a floating head → ya no dispara.  Detector vivo:
@@ -266,29 +248,27 @@ def test_sign_rxn_flash_col_aircooler():
 
 
 # ── INVARIANTE: los warnings NO alteran overall_status ──────────────────
-def test_awareness_no_altera_overall_status():
-    """Un ejemplo 'ok' del golden con warnings de conciencia debe seguir
-    siendo 'ok' (un warning advisory no cambia el estado)."""
-    import json
-    golden_path = os.path.join(os.path.dirname(__file__), "..", "data",
-                               "examples", "_golden.json")
-    with open(golden_path, encoding="utf-8") as f:
-        golden = json.load(f)
-    for clave, g in golden.items():
-        _, res = _solve(clave)
-        assert res.overall_status == g["overall_status"], (
-            f"{clave}: overall_status cambió "
-            f"{g['overall_status']} → {res.overall_status}")
+def test_awareness_no_altera_overall_status(monkeypatch):
+    """Advisory diagnostics do not change solver acceptance of a valid process."""
+    _, baseline = _solve('ldpe')
+    original = fsv._compute_awareness_warnings
+    monkeypatch.setattr(fsv, '_compute_awareness_warnings',
+                        lambda fs: original(fs) + ['[W-DUTY-S] injected advisory'])
+    _, with_advisory = _solve('ldpe')
+    assert with_advisory.overall_status == baseline.overall_status == 'ok'
+    assert '[W-DUTY-S] injected advisory' in with_advisory.awareness_warnings
 
 
 def test_ok_example_con_warnings_sigue_ok():
-    """talara es golden 'ok' pero dispara múltiples warnings de conciencia."""
-    _, res = _solve("talara")
-    assert res.overall_status == "ok"
-    assert len(res.awareness_warnings) >= 5
+    """A real cost-capacity advisory does not invalidate material/energy closure."""
+    fs = reg.load_example('ldpe')
+    b = next(b for b in fs.blocks.values() if b.name == 'K-101')
+    b.S, b.S_locked = 1, True
+    result = fsv.solve(fs)
+    assert result.overall_status == 'ok'
+    assert any('K-101' in w for w in _lines(result, 'W-DUTY-S'))
 
 
-# ── 1.6b [W-PHYS-NONVOL] no-volátil en fase vapor ───────────────────────
 def test_phys_nonvol_detecta_solido_en_vapor():
     """Un componente no-volátil (sal) ruteado a una salida de fase vapor —
     el síntoma del separador mal configurado (BUG 2) — debe disparar

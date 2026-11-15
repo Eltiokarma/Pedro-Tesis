@@ -318,51 +318,21 @@ def design_pump_for_block(block, fs) -> Optional[Dict]:
 
 
 def design_compressor_for_block(block, fs) -> Optional[Dict]:
-    """Dimensiona un compresor a partir del bloque del flowsheet."""
-    try:
-        import thermo_db as _td
-    except ImportError:
+    """Size from the same Cp(T), enthalpy and efficiencies as propagation."""
+    from compressor_thermo import gas_machine_for_stream
+    ins = [s for s in fs.streams.values() if s.dst == block.id
+           and getattr(s, "stream_kind", "mass") == "mass"]
+    outs = [s for s in fs.streams.values() if s.src == block.id
+            and getattr(s, "stream_kind", "mass") == "mass"]
+    if len(ins) != 1 or len(outs) != 1:
         return None
-    ins  = [s for s in fs.streams.values() if s.dst == block.id]
-    outs = [s for s in fs.streams.values() if s.src == block.id]
-    if not ins or not outs:
-        return None
-    feed = ins[0]
-    out  = outs[0]
-    if feed.mass_flow <= 0:
-        return None
-    comp = feed.composition or {feed.main_component: 1.0}
-    if not comp:
-        return None
-    # MW promedio
-    mw_avg = 0.0
-    total = 0.0
-    for c, w in comp.items():
-        co = _td.get(c)
-        if co is None or co.mw <= 0:
-            continue
-        mw_avg += w * co.mw
-        total += w
-    if total <= 0:
-        return None
-    mw_avg /= total
-    # P in/out
-    P_in = feed.pressure_bar if feed.pressure_bar > 0 else 1.013
-    if block.delta_p_bar > 0:
-        P_out = P_in + block.delta_p_bar
-    elif out.pressure_bar > P_in:
-        P_out = out.pressure_bar
+    feed, out = ins[0], outs[0]
+    if getattr(out, "pressure_locked", False):
+        pout = out.pressure_bar
+    elif block.delta_p_bar:
+        pout = feed.pressure_bar + block.delta_p_bar
     else:
+        pout = out.pressure_bar
+    if pout <= feed.pressure_bar:
         return None
-    # k típico: para mezcla heterogénea, usar 1.3-1.4
-    # Aprox: si dominan diatomicos N2/O2/H2 → 1.4
-    #        si CO2/SO2/poliatómicos → 1.28
-    k = 1.4
-    if comp.get("co2", 0) > 0.5 or comp.get("water", 0) > 0.3:
-        k = 1.30
-    from flowsheet_model import SEC_PER_YEAR, TM_TO_KG  # única fuente §6.3
-    m_kg_s = feed.mass_flow * TM_TO_KG / SEC_PER_YEAR
-    return compressor_sizing(
-        m_kg_s=m_kg_s, P_in_bar=P_in, P_out_bar=P_out,
-        T_in_K=feed.temperature + 273.15, mw_avg=mw_avg, k=k,
-        eta_isen=block.efficiency)
+    return gas_machine_for_stream(feed, pout, block.efficiency or 0.75)

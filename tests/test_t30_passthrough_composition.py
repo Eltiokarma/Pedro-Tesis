@@ -4,9 +4,11 @@ Un pass-through 1-in-1-out (HX, bomba, compresor, fired heater, válvula,
 turbina) no transforma composición: su salida = su entrada.  El motor ahora
 la propaga en vez de exigir que esté escrita a mano en el JSON.  Si el JSON
 declara una composición que DIFIERE del inlet (override manual, química
-hardcodeada), se conserva y se emite [W-COMP-OVERRIDE] (advisory)."""
+hardcodeada), se conserva y se emite [W-COMP-OVERRIDE] (advisory). El
+balance estricto de especies sigue rechazando la creación de materia."""
 import examples_registry as reg
 import flowsheet_solver as fsv
+from flowsheet_model import Block, Stream, Flowsheet
 
 
 def _stream(fs, name):
@@ -90,27 +92,53 @@ def test_override_conservado_y_warning():
 
 
 def test_v201_oxidacion_y_absorcion_consistentes():
-    """La química que antes vivía hardcodeada en E-203 ahora está DECLARADA
-    en V-201 (cooler-condenser Ostwald): R033 (2NO+O₂→2NO₂) + R034
-    (3NO₂+H₂O→2HNO₃+NO) explican el cambio de composición por mínimos
-    cuadrados (auditor de balance por componente → 0 hallazgos)."""
+    """La oxidación y absorción se calculan, no se explican retrospectivamente
+    mediante IDs inline sobre composiciones y caudales escritos a mano."""
     import audit_examples_components as aec
-    v201 = _block(reg.load_example("hno3"), "V-201")
-    assert sorted(v201.inline_reaction) == ["R033", "R034"]
+    fs = reg.load_example("hno3")
+    v201 = _block(fs, "V-201")
+    assert not v201.inline_reaction
+    assert v201.component_recovery_active
+    oxidation = _block(fs, "R-301")
+    absorption = _block(fs, "R-401")
+    assert oxidation.reactions == ["R033"]
+    assert oxidation.reactor_mode == absorption.reactor_mode == "stoich"
+    assert absorption.custom_reactions
+    fsv.solve(fs)
+    oxidized = _stream(fs, "A11-NOx-ox")
+    acid = _stream(fs, "A13b-HNO3-producto")
+    assert oxidized.composition.get("nitrogen_dioxide", 0) > .1
+    assert acid.composition.get("nitric_acid", 0) > .5
     rep = aec.audit_example("hno3")
     assert rep["n_critico"] == 0 and rep["n_mayor"] == 0, rep["findings"]
 
 
-def test_warning_es_advisory_no_altera_status():
-    fs = _hno3_con_override_en_memoria()
+def test_override_advisory_no_oculta_error_de_conservacion():
+    """The advisory preserves a manual spec, but cannot waive species balance.
+
+    A controlled nonreactive fixture isolates that gate from the downstream
+    chemistry/enthalpy errors caused by corrupting a complete acid plant.
+    """
+    fs = Flowsheet()
+    fs.blocks[1] = Block(1, "E-test", "Heat exch. — fixed tube", 1)
+    fs.streams[2] = Stream(2, "feed", 0, 1, mass_flow=1000,
+        mass_flow_locked=True, composition={"nitrogen": .8, "oxygen": .2},
+        composition_locked=True, temperature=80, temperature_locked=True,
+        phase="gas", phase_locked=True)
+    fs.streams[3] = Stream(3, "product", 1, 0, role="product",
+        composition={"nitrogen": .7, "oxygen": .3}, composition_locked=True,
+        temperature=40, temperature_locked=True, phase="gas", phase_locked=True)
     res = fsv.solve(fs)
     assert any("W-COMP-OVERRIDE" in w for w in res.awareness_warnings)
-    assert res.overall_status in ("ok", "warning")       # NO 'error'
+    assert fs.streams[3].composition == {"nitrogen": .7, "oxygen": .3}
+    assert not res.energy_balance_errors
+    assert any("component_balance" in e for e in res.consistency_errors)
+    assert res.overall_status == "error" and not res.success
 
 
 def test_catalogo_sin_overrides():
     """Ningún ejemplo del catálogo dispara W-COMP-OVERRIDE: el único caso
-    (hno3/E-203) fue retirado — su química es ahora declarada en V-201."""
+    (hno3/E-203) fue retirado y la química vive en reactores explícitos."""
     for meta in reg.list_examples():
         res = fsv.solve(reg.load_example(meta["clave"]))
         hits = [w for w in res.awareness_warnings if "W-COMP-OVERRIDE" in w]

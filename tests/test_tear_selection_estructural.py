@@ -118,8 +118,8 @@ class TestC3_HdaFullParcial(unittest.TestCase):
         # Con los reciclos des-lockeados (estado futuro), multi agarra el
         # reciclo de tolueno real S-tol-recic por estructura (sin tag role).
         names = self._multi(lambda d: _unlock_recycles(
-            d, ("S-gas-recic", "S-tol-recic")))
-        self.assertIn("S-tol-recic", names,
+            d, ("S-gas-recic", "S-tol-recic", "S-tol-recic-out")))
+        self.assertIn("S-tol-recic-out", names,
                       f"esperaba el reciclo de tolueno; got {names}")
 
     def test_residuo_S3_RESUELTO_por_portaware(self):

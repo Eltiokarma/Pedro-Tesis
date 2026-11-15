@@ -37,7 +37,7 @@
    "delta_p_bar": 0.0,
    "dryer_active": false,
    "dtlm_override": null,
-   "duty": 0.0,
+   "duty": 0,
    "duty_locked": false,
    "efficiency": 0.75,
    "eq_type": "Mixer — static",
@@ -73,7 +73,20 @@
    "tray_spacing_m": null,
    "volatile_component": "water",
    "x": 260,
-   "y": 300
+   "y": 300,
+   "component_recoveries": {},
+   "component_recovery_active": false,
+   "component_recovery_default_port": "",
+   "duty_origin": "",
+   "electrolysis_current_efficiency": 1.0,
+   "electrolysis_electrons_per_extent": 0.0,
+   "electrolysis_voltage_V": 0.0,
+   "equipo_comercial": "",
+   "inline_reaction": [],
+   "lumped_yield_active": false,
+   "lumped_yield_basis": "",
+   "lumped_yields": {},
+   "pseudo_cut": {}
   },
   "4": {
    "HETP_m": null,
@@ -106,12 +119,42 @@
    "concentration_factor": 2.0,
    "crystal_yield": 0.8,
    "crystallizer_active": false,
-   "custom_reactions": [],
+   "custom_reactions": [
+    {
+     "comments": "Defined triolein/sodium-oleate screening surrogate; heat from R030 estimate, not product-specific calorimetry.",
+     "dh_rxn_298_kJ_mol": -60.0,
+     "id": "SOAP-TRIOLEIN",
+     "irreversible": true,
+     "name": "Triolein saponification to sodium oleate",
+     "stoich": [
+      {
+       "formula": "C57H104O6",
+       "nu": -1,
+       "phase": "l"
+      },
+      {
+       "formula": "NaOH",
+       "nu": -3,
+       "phase": "aq"
+      },
+      {
+       "formula": "C18H33NaO2",
+       "nu": 3,
+       "phase": "s"
+      },
+      {
+       "formula": "C3H8O3",
+       "nu": 1,
+       "phase": "l"
+      }
+     ]
+    }
+   ],
    "cyclone_active": false,
    "delta_p_bar": 0.0,
    "dryer_active": false,
    "dtlm_override": null,
-   "duty": 0.0,
+   "duty": 0,
    "duty_locked": false,
    "efficiency": 0.75,
    "eq_type": "Reactor — jacketed agitated",
@@ -132,11 +175,9 @@
    "name": "R-101",
    "packing_type": "",
    "reaction_warnings": [],
-   "reactions": [
-    "R030_PLACEHOLDER"
-   ],
-   "reactor_conversion": 0.95,
-   "reactor_mode": "equilibrium",
+   "reactions": [],
+   "reactor_conversion": 1.0,
+   "reactor_mode": "stoich",
    "reactor_volume_L": 0.0,
    "separator_active": false,
    "solid_components": [],
@@ -149,7 +190,20 @@
    "tray_spacing_m": null,
    "volatile_component": "water",
    "x": 480,
-   "y": 300
+   "y": 300,
+   "component_recoveries": {},
+   "component_recovery_active": false,
+   "component_recovery_default_port": "",
+   "duty_origin": "",
+   "electrolysis_current_efficiency": 1.0,
+   "electrolysis_electrons_per_extent": 0.0,
+   "electrolysis_voltage_V": 0.0,
+   "equipo_comercial": "",
+   "inline_reaction": [],
+   "lumped_yield_active": false,
+   "lumped_yield_basis": "",
+   "lumped_yields": {},
+   "pseudo_cut": {}
   },
   "5": {
    "HETP_m": null,
@@ -187,7 +241,7 @@
    "delta_p_bar": 0.0,
    "dryer_active": false,
    "dtlm_override": null,
-   "duty": 0.0,
+   "duty": 0,
    "duty_locked": false,
    "efficiency": 0.75,
    "eq_type": "Vessel — vertical",
@@ -196,7 +250,7 @@
    "flash_P_bar": 1.013,
    "flash_T_K": 298.15,
    "flash_active": false,
-   "heat_of_reaction": 0.0,
+   "heat_of_reaction": 0,
    "heat_source": "",
    "heat_source_locked": false,
    "id": 5,
@@ -223,7 +277,25 @@
    "tray_spacing_m": null,
    "volatile_component": "water",
    "x": 680,
-   "y": 300
+   "y": 300,
+   "component_recoveries": {
+    "vapor": {
+     "sodium_oleate": 1.0,
+     "triolein": 1.0
+    }
+   },
+   "component_recovery_active": true,
+   "component_recovery_default_port": "liquido",
+   "duty_origin": "",
+   "electrolysis_current_efficiency": 1.0,
+   "electrolysis_electrons_per_extent": 0.0,
+   "electrolysis_voltage_V": 0.0,
+   "equipo_comercial": "",
+   "inline_reaction": [],
+   "lumped_yield_active": false,
+   "lumped_yield_basis": "",
+   "lumped_yields": {},
+   "pseudo_cut": {}
   },
   "14": {
    "HETP_m": null,
@@ -261,7 +333,7 @@
    "delta_p_bar": 0.0,
    "dryer_active": false,
    "dtlm_override": null,
-   "duty": 0.0,
+   "duty": 0,
    "duty_locked": false,
    "efficiency": 0.75,
    "eq_type": "Pump — centrifugal",
@@ -297,7 +369,20 @@
    "tray_spacing_m": null,
    "volatile_component": "water",
    "x": 160,
-   "y": 265
+   "y": 265,
+   "component_recoveries": {},
+   "component_recovery_active": false,
+   "component_recovery_default_port": "",
+   "duty_origin": "",
+   "electrolysis_current_efficiency": 1.0,
+   "electrolysis_electrons_per_extent": 0.0,
+   "electrolysis_voltage_V": 0.0,
+   "equipo_comercial": "",
+   "inline_reaction": [],
+   "lumped_yield_active": false,
+   "lumped_yield_basis": "",
+   "lumped_yields": {},
+   "pseudo_cut": {}
   },
   "16": {
    "HETP_m": null,
@@ -335,7 +420,7 @@
    "delta_p_bar": 0.0,
    "dryer_active": false,
    "dtlm_override": null,
-   "duty": 0.0,
+   "duty": 0,
    "duty_locked": false,
    "efficiency": 0.75,
    "eq_type": "Pump — centrifugal",
@@ -371,7 +456,20 @@
    "tray_spacing_m": null,
    "volatile_component": "water",
    "x": 160,
-   "y": 365
+   "y": 365,
+   "component_recoveries": {},
+   "component_recovery_active": false,
+   "component_recovery_default_port": "",
+   "duty_origin": "",
+   "electrolysis_current_efficiency": 1.0,
+   "electrolysis_electrons_per_extent": 0.0,
+   "electrolysis_voltage_V": 0.0,
+   "equipo_comercial": "",
+   "inline_reaction": [],
+   "lumped_yield_active": false,
+   "lumped_yield_basis": "",
+   "lumped_yields": {},
+   "pseudo_cut": {}
   }
  },
  "fixed_overrides": {
@@ -399,7 +497,7 @@
    "bubble_show_enthalpy": false,
    "bubble_visible": false,
    "composition": {
-    "vegetable_oil": 1.0
+    "triolein": 1.0
    },
    "composition_locked": true,
    "cp": 0.0,
@@ -411,7 +509,7 @@
    "energy_kW": 0.0,
    "id": 8,
    "is_pipe": false,
-   "main_component": "vegetable_oil",
+   "main_component": "triolein",
    "mass_flow": 1000,
    "mass_flow_locked": true,
    "name": "S-oil",
@@ -437,7 +535,9 @@
    "temperature": 25,
    "temperature_locked": false,
    "vapor_fraction": 0.0,
-   "waypoints": []
+   "waypoints": [],
+   "pressure_lock_origin": "",
+   "split_fraction": null
   },
   "9": {
    "active_reactions": [],
@@ -450,7 +550,8 @@
    "bubble_show_enthalpy": false,
    "bubble_visible": false,
    "composition": {
-    "sodium_hydroxide": 1.0
+    "sodium_hydroxide": 0.5,
+    "water": 0.5
    },
    "composition_locked": true,
    "cp": 0.0,
@@ -463,7 +564,7 @@
    "id": 9,
    "is_pipe": false,
    "main_component": "sodium_hydroxide",
-   "mass_flow": 135.6,
+   "mass_flow": 271.2,
    "mass_flow_locked": true,
    "name": "S-NaOH",
    "phase": "liquid",
@@ -474,7 +575,7 @@
    "pipe_roughness_m": 4.5e-05,
    "pressure_bar": 1.013,
    "pressure_locked": false,
-   "price_usd_per_tm": 400.0,
+   "price_usd_per_tm": 200.0,
    "reaction_warnings": [],
    "residence_time_s": null,
    "role": "feed",
@@ -488,7 +589,9 @@
    "temperature": 25,
    "temperature_locked": false,
    "vapor_fraction": 0.0,
-   "waypoints": []
+   "waypoints": [],
+   "pressure_lock_origin": "",
+   "split_fraction": null
   },
   "10": {
    "active_reactions": [],
@@ -502,9 +605,9 @@
    "bubble_visible": false,
    "composition": {
     "sodium_hydroxide": 0.119,
-    "vegetable_oil": 0.881
+    "triolein": 0.881
    },
-   "composition_locked": true,
+   "composition_locked": false,
    "cp": 0.0,
    "delta_h_vap_override": 0.0,
    "display_number": 0,
@@ -514,7 +617,7 @@
    "energy_kW": 0.0,
    "id": 10,
    "is_pipe": false,
-   "main_component": "vegetable_oil",
+   "main_component": "triolein",
    "mass_flow": 0.0,
    "mass_flow_locked": false,
    "name": "S-mix",
@@ -540,7 +643,9 @@
    "temperature": 70,
    "temperature_locked": true,
    "vapor_fraction": 0.0,
-   "waypoints": []
+   "waypoints": [],
+   "pressure_lock_origin": "",
+   "split_fraction": null
   },
   "11": {
    "active_reactions": [],
@@ -552,11 +657,8 @@
    "bubble_show_composition": false,
    "bubble_show_enthalpy": false,
    "bubble_visible": false,
-   "composition": {
-    "glycerin": 0.092,
-    "soap": 0.908
-   },
-   "composition_locked": true,
+   "composition": {},
+   "composition_locked": false,
    "cp": 0.0,
    "delta_h_vap_override": 0.0,
    "display_number": 0,
@@ -566,8 +668,8 @@
    "energy_kW": 0.0,
    "id": 11,
    "is_pipe": false,
-   "main_component": "soap",
-   "mass_flow": 0.0,
+   "main_component": "",
+   "mass_flow": 0,
    "mass_flow_locked": false,
    "name": "S-rxn",
    "phase": "liquid",
@@ -592,7 +694,9 @@
    "temperature": 80,
    "temperature_locked": true,
    "vapor_fraction": 0.0,
-   "waypoints": []
+   "waypoints": [],
+   "pressure_lock_origin": "",
+   "split_fraction": null
   },
   "12": {
    "active_reactions": [],
@@ -604,10 +708,8 @@
    "bubble_show_composition": false,
    "bubble_show_enthalpy": false,
    "bubble_visible": false,
-   "composition": {
-    "soap": 1.0
-   },
-   "composition_locked": true,
+   "composition": {},
+   "composition_locked": false,
    "cp": 0.0,
    "delta_h_vap_override": 0.0,
    "display_number": 0,
@@ -617,8 +719,8 @@
    "energy_kW": 0.0,
    "id": 12,
    "is_pipe": false,
-   "main_component": "soap",
-   "mass_flow": 0.0,
+   "main_component": "",
+   "mass_flow": 0,
    "mass_flow_locked": false,
    "name": "S-soap",
    "phase": "liquid",
@@ -643,7 +745,9 @@
    "temperature": 80,
    "temperature_locked": true,
    "vapor_fraction": 0.0,
-   "waypoints": []
+   "waypoints": [],
+   "pressure_lock_origin": "",
+   "split_fraction": null
   },
   "13": {
    "active_reactions": [],
@@ -655,10 +759,8 @@
    "bubble_show_composition": false,
    "bubble_show_enthalpy": false,
    "bubble_visible": false,
-   "composition": {
-    "glycerin": 1.0
-   },
-   "composition_locked": true,
+   "composition": {},
+   "composition_locked": false,
    "cp": 0.0,
    "delta_h_vap_override": 0.0,
    "display_number": 0,
@@ -668,9 +770,9 @@
    "energy_kW": 0.0,
    "id": 13,
    "is_pipe": false,
-   "main_component": "glycerin",
-   "mass_flow": 104.0,
-   "mass_flow_locked": true,
+   "main_component": "",
+   "mass_flow": 0,
+   "mass_flow_locked": false,
    "name": "S-glycerin",
    "phase": "liquid",
    "phase_locked": true,
@@ -694,7 +796,9 @@
    "temperature": 80,
    "temperature_locked": true,
    "vapor_fraction": 0.0,
-   "waypoints": []
+   "waypoints": [],
+   "pressure_lock_origin": "",
+   "split_fraction": null
   },
   "15": {
    "active_reactions": [],
@@ -707,9 +811,9 @@
    "bubble_show_enthalpy": false,
    "bubble_visible": false,
    "composition": {
-    "vegetable_oil": 1.0
+    "triolein": 1.0
    },
-   "composition_locked": true,
+   "composition_locked": false,
    "cp": 0.0,
    "delta_h_vap_override": 0.0,
    "display_number": 0,
@@ -719,7 +823,7 @@
    "energy_kW": 0.0,
    "id": 15,
    "is_pipe": false,
-   "main_component": "vegetable_oil",
+   "main_component": "triolein",
    "mass_flow": 0.0,
    "mass_flow_locked": false,
    "name": "S-oil-b",
@@ -745,7 +849,9 @@
    "temperature": 25,
    "temperature_locked": true,
    "vapor_fraction": 0.0,
-   "waypoints": []
+   "waypoints": [],
+   "pressure_lock_origin": "",
+   "split_fraction": null
   },
   "17": {
    "active_reactions": [],
@@ -758,9 +864,10 @@
    "bubble_show_enthalpy": false,
    "bubble_visible": false,
    "composition": {
-    "sodium_hydroxide": 1.0
+    "sodium_hydroxide": 0.5,
+    "water": 0.5
    },
-   "composition_locked": true,
+   "composition_locked": false,
    "cp": 0.0,
    "delta_h_vap_override": 0.0,
    "display_number": 0,
@@ -771,7 +878,7 @@
    "id": 17,
    "is_pipe": false,
    "main_component": "sodium_hydroxide",
-   "mass_flow": 0.0,
+   "mass_flow": 271.2,
    "mass_flow_locked": false,
    "name": "S-NaOH-b",
    "phase": "liquid",
@@ -796,10 +903,15 @@
    "temperature": 25,
    "temperature_locked": true,
    "vapor_fraction": 0.0,
-   "waypoints": []
+   "waypoints": [],
+   "pressure_lock_origin": "",
+   "split_fraction": null
   }
  },
  "econ_overrides": {
   "com_gamma": 1.1
- }
+ },
+ "_model_notes": "Soap is a defined triolein/sodium-oleate surrogate, not generic oil converted to sodium stearate. Heat is the existing estimated R030 value; specified separation omits brine and salting-out thermodynamics. Caustic feed is 50 wt% aqueous NaOH; the glycerol coproduct contains water and residual alkali.",
+ "annotations": [],
+ "revisions": []
 }

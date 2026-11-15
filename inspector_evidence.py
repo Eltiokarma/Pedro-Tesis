@@ -104,7 +104,6 @@ def stoich_table(block, fs) -> Optional[dict]:
     """
     try:
         import reactions_db as _rdb
-        import thermo_db as _td
 
         es_reactor = "reactor" in (getattr(block, "eq_type", "") or "").lower()
         if not es_reactor:
@@ -153,7 +152,10 @@ def stoich_table(block, fs) -> Optional[dict]:
         F0 = {}                       # thermo_name -> kmol/h
         sin_mw = []
         for name, w in inlet_w.items():
-            c = _td.get(name)
+            # Match the reactor's stoichiometric basis. In R027 polyethylene
+            # is counted as C2H4 repeat units, while its property record keeps
+            # the chain-average molecular weight used outside reactions.
+            c = _rdb.component_for_mass(name)
             if c is None or c.mw <= 0:
                 sin_mw.append(name)
                 continue
@@ -166,6 +168,13 @@ def stoich_table(block, fs) -> Optional[dict]:
         for f, nu in stoich:
             tn = _rdb.thermo_name(f) or f.lower()
             rxn_names[tn] = rxn_names.get(tn, 0) + nu
+        molar_basis_note = None
+        if "polyethylene" in rxn_names:
+            unit_mw = _rdb.component_for_mass("polyethylene").mw
+            molar_basis_note = (
+                "Polietileno: kmol de unidades repetitivas C2H4 "
+                f"(M = {unit_mw:g} kg/kmol). Los factores d/e no predicen "
+                "el volumen del sistema gas-polímero.")
         cands = [(F0[n] / abs(nu), n) for n, nu in rxn_names.items()
                  if nu < 0 and F0.get(n, 0.0) > 0]
         if not cands:
@@ -221,6 +230,7 @@ def stoich_table(block, fs) -> Optional[dict]:
                 "F_A0_kmol_h": F_A0, "y_A0": y_A0,
                 "delta": delta, "epsilon": epsilon,
                 "X": X, "X_origin": X_origin,
+                "molar_basis_note": molar_basis_note,
                 "sin_mw": sin_mw, "rows": rows}
     except Exception:
         return None
@@ -238,6 +248,8 @@ def stoich_table_text(block, fs) -> Optional[str]:
                  f"tabla es por reacción)")
     L.append(f"Base        1 mol de {d['limitante_formula']} (limitante)"
              f"  ·  F_A0 = {d['F_A0_kmol_h']:.3g} kmol/h")
+    if d.get("molar_basis_note"):
+        L.append(d["molar_basis_note"])
     L.append("")
     con_x = d["X"] is not None
     hdr = f"{'Especie':<12}{'ν/|νA|':>8}{'F_i0':>10}{'θ_i':>8}"
@@ -341,6 +353,8 @@ def stoich_book_spec(block, fs) -> Optional[dict]:
     if d["n_rxns"] > 1:
         note = ((note + "   ·   ") if note else "") + \
             f"primera de {d['n_rxns']} reacciones activas (tabla por reacción)"
+    if d.get("molar_basis_note"):
+        note = ((note + "   ·   ") if note else "") + d["molar_basis_note"]
     return {
         "kicker": "Tabla estequiométrica · Fogler §3.4",
         "context": ctx,
@@ -746,6 +760,85 @@ def _special_outs(block, fs):
     return prod, vent
 
 
+def component_recovery_metrics(block, fs) -> Optional[dict]:
+    """Specified component recoveries and actual outlet flow evidence."""
+    if not (getattr(block, "component_recovery_active", False)
+            or getattr(block, "lumped_yield_active", False)):
+        return None
+    ins, outs = _io_streams(block, fs)
+    metrics = [{"key": "feed", "label": "Alimentación",
+                "value": f"{sum(s.mass_flow for s in ins):,.3f}",
+                "unit": "tm/a", "state": "auto"}]
+    for s in outs:
+        metrics.append({"key": f"out_{s.id}", "label": s.src_port or s.name,
+                        "value": f"{s.mass_flow:,.3f}", "unit": "tm/a",
+                        "state": "auto"})
+    return {"status": [{"text": "Recuperaciones especificadas", "kind": "spec"}],
+            "metrics": metrics, "figure": None,
+            "warnings": ["La recuperación es una especificación; no predice equilibrio de fases."]}
+
+
+def component_recovery_text(block, fs) -> Optional[str]:
+    data = component_recovery_metrics(block, fs)
+    if data is None:
+        return None
+    lines = ["Recuperaciones especificadas por componente (base másica)."]
+    if getattr(block, "lumped_yield_active", False):
+        lines.append(getattr(block, "lumped_yield_basis", ""))
+    for port, composition in (getattr(block, "component_recoveries", {}) or {}).items():
+        amounts = ", ".join(f"{name}: {float(fraction) * 100:g} %"
+                            for name, fraction in composition.items())
+        lines.append(f"{port}: {amounts or 'sin recuperaciones explícitas'}")
+    lines.append("Remanente → " + getattr(block, "component_recovery_default_port", ""))
+    lines += [f"{m['label']}: {m['value']} {m['unit']}" for m in data["metrics"]]
+    lines += data["warnings"]
+    return "\n".join(lines)
+
+
+def cooling_tower_metrics(block, fs) -> Optional[dict]:
+    """Measured operating point: air/water balances, not a Merkel prediction."""
+    if not getattr(block, "cooling_tower_active", False):
+        return None
+    ins, outs = _io_streams(block, fs)
+    cold = next((s for s in outs if s.src_port == "agua_fria"), None)
+    gas = next((s for s in outs if s.src_port == "vapor_loss"), None)
+    purge = next((s for s in outs if s.src_port == "blowdown"), None)
+    air = [s for s in ins if s.phase in ("gas", "vapor")]
+    if cold is None or gas is None or purge is None or not air or gas.mass_flow <= 0:
+        return None
+    from cooling_tower import water_relative_humidity
+    from stream_enthalpy import block_delta_h_kW
+    water_in_air = sum(s.mass_flow * (s.composition or {}).get("water", 0) for s in air)
+    dry_air = sum(s.mass_flow for s in air) - water_in_air
+    evaporated = gas.mass_flow * (gas.composition or {}).get("water", 0) - water_in_air
+    rh = water_relative_humidity(gas.composition, gas.temperature, gas.pressure_bar)
+    delta_h = block_delta_h_kW(ins, outs)
+    metrics = [
+        {"key": "cold", "label": "Agua fría", "value": f"{cold.mass_flow:,.3f}", "unit": "tm/a", "state": "auto"},
+        {"key": "air", "label": "Aire seco", "value": f"{dry_air:,.3f}", "unit": "tm/a", "state": "spec"},
+        {"key": "evap", "label": "Agua evaporada", "value": f"{evaporated:,.3f}", "unit": "tm/a", "state": "auto"},
+        {"key": "purge", "label": "Purga", "value": f"{purge.mass_flow:,.3f}", "unit": "tm/a", "state": "auto"},
+        {"key": "rh", "label": "Humedad relativa de salida", "value": f"{rh * 100:.2f}", "unit": "%", "state": "auto"},
+        {"key": "tcold", "label": "T agua fría", "value": f"{cold.temperature:.2f}", "unit": "°C", "state": "spec"},
+        {"key": "tair", "label": "T aire de salida", "value": f"{gas.temperature:.2f}", "unit": "°C", "state": "spec"},
+    ]
+    if delta_h is not None:
+        metrics.append({"key": "closure", "label": "H salida − H entrada",
+                        "value": f"{delta_h:.5g}", "unit": "kW", "state": "auto"})
+    return {"status": [{"text": "Balance de agua y aire húmedo", "kind": "neutral"}],
+            "metrics": metrics, "figure": None,
+            "warnings": ["Temperaturas de salida y aire especificados; no calcula capacidad por Merkel."]}
+
+
+def cooling_tower_text(block, fs) -> Optional[str]:
+    data = cooling_tower_metrics(block, fs)
+    if data is None:
+        return None
+    return "\n".join(["Torre de enfriamiento: balance de agua y aire húmedo."]
+                     + [f"{m['label']}: {m['value']} {m['unit']}" for m in data["metrics"]]
+                     + data["warnings"])
+
+
 def dryer_text(block, fs) -> Optional[str]:
     """Secador: humedad in→out, agua evaporada (evidencia post-solve —
     antes el tipo solo tenía editor de specs y ninguna evidencia)."""
@@ -784,8 +877,8 @@ def dryer_text(block, fs) -> Optional[str]:
 def crystallizer_text(block, fs) -> Optional[str]:
     """Cristalizador: soluto, yield, cristales vs licor madre.
 
-    Con el modo automático INACTIVO (patrón sancionado: corrientes
-    lockeadas, caso sugar/R-102) la evidencia sale de las corrientes y
+    Con el modo automático INACTIVO y corrientes especificadas,
+    la evidencia sale de las corrientes y
     lo dice — no muestra specs que el solver no aplicó."""
     try:
         eq = (block.eq_type or "").lower()
@@ -810,6 +903,12 @@ def crystallizer_text(block, fs) -> Optional[str]:
                 f"modelo simple)",
                 f"Licor madre:   {vent.mass_flow:,.0f} tm/a",
             ]
+            solubility = getattr(block, "crystallizer_solubility_kg_per_kg_solvent", None)
+            if solubility is not None:
+                solvent = getattr(block, "crystallizer_solvent_component", "water")
+                lines += [f"Solubilidad:   {solubility:g} kg de soluto/kg de {solvent}",
+                          "Base del yield: exceso de soluto sobre la capacidad de disolución.",
+                          f"T de la especificación: {block.T_op_K - 273.15:g} °C"]
         else:
             if prod.mass_flow <= 0 and vent.mass_flow <= 0:
                 return None
@@ -830,8 +929,8 @@ def crystallizer_text(block, fs) -> Optional[str]:
 def evaporator_text(block, fs) -> Optional[str]:
     """Evaporador: factor de concentración, vapor retirado, sólidos.
 
-    Con el modo automático INACTIVO (corrientes lockeadas, caso sugar
-    EV-101..104) el CF se calcula EFECTIVO desde las corrientes y la
+    Con el modo automático INACTIVO y corrientes especificadas,
+    el CF se calcula EFECTIVO desde las corrientes y la
     procedencia queda dicha."""
     try:
         eq = (block.eq_type or "").lower()
@@ -2620,6 +2719,13 @@ def crystallizer_metrics(block, fs) -> Optional[dict]:
                  "state": "info"},
             ]
             status = []
+            solubility = getattr(block, "crystallizer_solubility_kg_per_kg_solvent", None)
+            if solubility is not None:
+                solvent = getattr(block, "crystallizer_solvent_component", "water")
+                metrics.append({"key": "solubility", "label": "Solubilidad",
+                                "value": f"{solubility:g}", "unit": f"kg/kg {solvent}",
+                                "state": "spec"})
+                status.append({"text": "Yield sobre exceso de soluto disponible", "kind": "spec"})
         else:
             if prod.mass_flow <= 0 and vent.mass_flow <= 0:
                 return None

@@ -140,9 +140,9 @@ class TestCustomReactionSolverEndToEnd(unittest.TestCase):
         # b.reactions NO contaminado
         self.assertEqual(b.reactions, [])
 
-    def test_pfr_con_custom_degrada_a_equilibrium(self):
-        # Mode pfr + custom_reactions (sin Arrhenius) → degrada a
-        # equilibrium con warning explícito (no crashea).
+    def test_pfr_con_custom_sin_cinetica_falla_explicito(self):
+        # Equilibrium is not a substitute for a residence-time-dependent
+        # PFR. Missing kinetics must be reported, without inventing a model.
         fs = fm.Flowsheet()
         b = fm.Block(id=1, name="R", eq_type="Reactor — jacketed non-agit.",
                       S=10.0, T_op_K=800.0, P_op_bar=1.0)
@@ -167,11 +167,12 @@ class TestCustomReactionSolverEndToEnd(unittest.TestCase):
         fs.streams[3] = fm.Stream(id=3, name="O", src=1, dst=0)
 
         res = fsv.solve(fs)
-        # No crash, mensaje de degradación presente
+        # No crash, failed calculation explicitly identifies the missing data.
         all_msgs = res.energy_warnings + res.energy_balance_errors
-        self.assertTrue(any("Degradando a 'equilibrium'" in m
-                              for m in all_msgs),
-                          f"no warning de degradación en: {all_msgs[:5]}")
+        self.assertTrue(any("sin cinética" in m for m in all_msgs), all_msgs)
+        self.assertFalse(res.success)
+        self.assertEqual(res.overall_status, "error")
+        self.assertEqual(b.reactor_mode, "pfr")
 
 
 # ─────────────────────────────────────────────────────────────

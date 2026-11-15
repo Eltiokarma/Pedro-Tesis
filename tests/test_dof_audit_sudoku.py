@@ -21,7 +21,8 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 import pytest
 
 from examples_registry import list_examples, load_example
-from dof_audit import analyze_flowsheet
+from dof_audit import analyze_flowsheet, format_report
+from flowsheet_model import Block, Flowsheet, Stream
 
 
 EJEMPLOS_CON_RECICLO = ["hda", "haber_rec", "industrial", "feed_effluent",
@@ -100,19 +101,16 @@ def test_quitar_todos_los_locks_es_under_masivo():
 def test_lock_conflictivo_detecta_over():
     """Un bloque con TODOS sus streams lockeados cuyo balance no cierra
     es un conflicto entre locks: el solver no puede corregir ninguno."""
-    fs = load_example("sugar")   # R-102 tiene todos sus streams lockeados
-    target = None
-    for b in fs.blocks.values():
-        ins = [s for s in fs.streams.values() if s.dst == b.id]
-        outs = [s for s in fs.streams.values() if s.src == b.id]
-        if (ins and outs
-                and all(getattr(s, "mass_flow_locked", False)
-                        for s in ins + outs)):
-            target = (b, outs[0])
-            break
-    assert target, "sugar sin bloque completamente lockeado"
-    _, out_stream = target
-    out_stream.mass_flow *= 2.0    # sigue lockeado, ahora en conflicto
+    # Test contradictory boundary conditions independently of plant fixtures,
+    # whose product flows are now calculated from component recoveries.
+    fs = Flowsheet()
+    fs.blocks[1] = Block(1, "Heater", "Heat exchanger", 1, duty_locked=True)
+    fs.streams[2] = Stream(2, "feed", 0, 1, mass_flow=100,
+                           mass_flow_locked=True, main_component="water")
+    fs.streams[3] = Stream(3, "product", 1, 0, mass_flow=100,
+                           mass_flow_locked=True, main_component="water")
+    assert analyze_flowsheet(fs).n_over == 0
+    fs.streams[3].mass_flow = 200
     r = analyze_flowsheet(fs)
     assert r.n_over >= 1, "conflicto entre locks no detectado"
     assert r.total_dof < 0
@@ -125,3 +123,66 @@ def test_ejemplos_sanos_no_flagean_over():
     for k in _keys():
         r = analyze_flowsheet(load_example(k))
         assert r.n_over == 0, f"{k}: falso positivo over"
+
+
+def test_component_recoveries_determine_outlets_but_not_feed():
+    fs = Flowsheet()
+    block = Block(1, "Separator", "Tower", 1,
+                  component_recoveries={"gas": {"methane": .99}},
+                  component_recovery_default_port="liquid")
+    fs.blocks[1] = block
+    fs.streams = {
+        2: Stream(2, "feed", 0, 1, mass_flow=100, mass_flow_locked=True,
+                  composition={"methane": .5, "water": .5}),
+        3: Stream(3, "gas", 1, 0, src_port="gas"),
+        4: Stream(4, "liquid", 1, 0, src_port="liquid"),
+    }
+    assert analyze_flowsheet(fs).n_indeterminable_mass == 2
+    block.component_recovery_active = True
+    assert analyze_flowsheet(fs).n_indeterminable_mass == 0
+    fs.streams[2].mass_flow_locked = False
+    assert analyze_flowsheet(fs).n_indeterminable_mass == 3
+
+
+def test_mass_conflict_and_missing_energy_spec_do_not_cancel():
+    fs = Flowsheet()
+    fs.blocks[1] = Block(1, "Heater", "Heat exchanger", 1)
+    fs.streams = {
+        2: Stream(2, "feed", 0, 1, mass_flow=100,
+                  mass_flow_locked=True, main_component="water"),
+        3: Stream(3, "product", 1, 0, mass_flow=200,
+                  mass_flow_locked=True, main_component="water"),
+    }
+    report = analyze_flowsheet(fs)
+    block = report.blocks[0]
+    assert (block.mass_dof, block.energy_dof, block.comp_dof) == (-1, 1, 0)
+    assert block.overall == "mixed"
+    assert report.n_under == report.n_over == report.n_mixed == 1
+    assert report.n_ok == 0
+    assert report.n_ok + report.n_under + report.n_over - report.n_mixed == report.n_blocks
+    assert "MIXTO" in report.summary
+    assert "BIEN ESPECIFICADO" not in report.summary
+    assert "masa=-1, energia=+1" in format_report(report)
+
+
+@pytest.mark.parametrize("fixed_circulation", [False, True])
+def test_cooling_tower_requires_circulation_or_blowdown_spec(fixed_circulation):
+    fs = Flowsheet()
+    block = Block(1, "Tower", "Cooling tower", 1,
+                  cooling_tower_active=True)
+    fs.blocks[1] = block
+    fs.streams = {
+        2: Stream(2, "hot water", 0, 1, mass_flow=1000,
+                  mass_flow_locked=True, main_component="water"),
+        3: Stream(3, "air", 0, 1, mass_flow=5000,
+                  mass_flow_locked=True, main_component="nitrogen"),
+        4: Stream(4, "cold water", 1, 0, src_port="agua_fria", mass_flow=900),
+        5: Stream(5, "blowdown", 1, 0, src_port="blowdown"),
+        6: Stream(6, "exhaust", 1, 0, src_port="vapor_loss"),
+    }
+    assert analyze_flowsheet(fs).n_indeterminable_mass == 3
+    if fixed_circulation:
+        fs.streams[4].mass_flow_locked = True
+    else:
+        block.cooling_tower_blowdown_fraction = .01
+    assert analyze_flowsheet(fs).n_indeterminable_mass == 0
