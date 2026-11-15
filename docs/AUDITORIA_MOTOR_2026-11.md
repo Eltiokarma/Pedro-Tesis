@@ -219,3 +219,35 @@ etiquetas muestran los coeficientes efectivos. Sin modificar tolerancias ni
 referencias del gate, **64/64** ejemplos coinciden en NPV e IRR entre API y
 ruta GUI/Save. Las pruebas financieras enfocadas aprobaron **14/14**,
 incluida la coherencia del flujo de caja del libro exportado.
+
+## Validación final de la entrega
+
+La suite completa sobre el commit de código `0622bc892a4e2c36c7b8b3ffdaaf65d813dda0fe` terminó con
+**1066 pruebas aprobadas, 6 omitidas y cero fallos**, en 837.88 s.
+Se ejecutó en Windows con Python 3.11.18, pytest
+9.2.0 y cuatro procesos de pytest-xdist:
+
+```powershell
+$env:PYTHONUTF8 = '1'
+$env:QT_QPA_PLATFORM = 'offscreen'
+python -X utf8 -m pytest -n 4 --dist=worksteal -v --disable-warnings --durations=10
+```
+
+Se omitieron tres pruebas del predictor por sus dependencias opcionales,
+dos comparaciones con el módulo Monte Carlo antiguo no importable y una
+comprobación del inspector de utilidades sin un ejemplo aplicable en el
+catálogo. No se contabilizan como pruebas aprobadas. Las advertencias
+de ejecución y las limitaciones físicas documentadas tampoco desaparecen
+por aprobar la suite.
+
+Sobre esa misma versión se ejecutaron el barrido físico de 64 ejemplos,
+la regeneración de referencias de exportación y `gate_simulate.py`: pasan
+la importación sin interfaz gráfica, **64/64** comparaciones del motor con
+sus referencias y **64/64** comparaciones económicas entre API y GUI/Save.
+Estos dos últimos controles comprueban consistencia entre rutas, no son
+una validación experimental independiente.
+
+El registro de versiones, comandos y resultados está en
+[validation_summary.json](../outputs/validation_summary.json). El commit
+posterior únicamente incorpora este registro documental; el código de
+simulación validado queda identificado por el hash anterior.
