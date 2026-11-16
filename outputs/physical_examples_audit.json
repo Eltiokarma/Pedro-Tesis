@@ -1,0 +1,3415 @@
+{
+  "passed": 64,
+  "total": 64,
+  "examples": [
+    {
+      "key": "hda",
+      "passed": true,
+      "status": "ok",
+      "blocks": 12,
+      "streams": 14,
+      "errors": [],
+      "maximum_unit_mass_relative_error": 0.0,
+      "findings": [
+        {
+          "category": "phase",
+          "severity": "info",
+          "target": "S-2",
+          "message": "S-2: phase='vapor' a T=200.0°C, P=25.00bar; verificación de fase no confiable (T fuera del rango Antoine del componente principal 'toluene')."
+        },
+        {
+          "category": "phase",
+          "severity": "info",
+          "target": "S-8",
+          "message": "S-8: phase='vapor' a T=85.0°C, P=25.00bar; verificación de fase no confiable (T fuera del rango Antoine del componente principal 'benzene')."
+        }
+      ]
+    },
+    {
+      "key": "methanol",
+      "passed": true,
+      "status": "ok",
+      "blocks": 7,
+      "streams": 9,
+      "errors": [],
+      "maximum_unit_mass_relative_error": 0.0,
+      "findings": []
+    },
+    {
+      "key": "distillation",
+      "passed": true,
+      "status": "ok",
+      "blocks": 5,
+      "streams": 7,
+      "errors": [],
+      "maximum_unit_mass_relative_error": 0.0,
+      "findings": []
+    },
+    {
+      "key": "ammonia",
+      "passed": true,
+      "status": "ok",
+      "blocks": 5,
+      "streams": 7,
+      "errors": [],
+      "maximum_unit_mass_relative_error": 0.0,
+      "findings": []
+    },
+    {
+      "key": "ethanol",
+      "passed": true,
+      "status": "warning",
+      "blocks": 9,
+      "streams": 11,
+      "errors": [],
+      "maximum_unit_mass_relative_error": 2.0842807473197926e-14,
+      "findings": [
+        {
+          "category": "pseudo",
+          "severity": "info",
+          "target": "S-mosto",
+          "message": "S-mosto: usa pseudo-componente alimentario/biológico 'glucose' — comportamiento aproximado, mantener como tal."
+        },
+        {
+          "category": "pseudo",
+          "severity": "info",
+          "target": "S-1",
+          "message": "S-1: usa pseudo-componente alimentario/biológico 'glucose' — comportamiento aproximado, mantener como tal."
+        },
+        {
+          "category": "pseudo",
+          "severity": "info",
+          "target": "S-2",
+          "message": "S-2: usa pseudo-componente alimentario/biológico 'glucose' — comportamiento aproximado, mantener como tal."
+        },
+        {
+          "category": "pseudo",
+          "severity": "info",
+          "target": "S-3",
+          "message": "S-3: usa pseudo-componente alimentario/biológico 'glucose' — comportamiento aproximado, mantener como tal."
+        },
+        {
+          "category": "pseudo",
+          "severity": "info",
+          "target": "S-4",
+          "message": "S-4: usa pseudo-componente alimentario/biológico 'glucose' — comportamiento aproximado, mantener como tal."
+        },
+        {
+          "category": "pseudo",
+          "severity": "info",
+          "target": "S-vap",
+          "message": "S-vap: usa pseudo-componente alimentario/biológico 'glucose' — comportamiento aproximado, mantener como tal."
+        },
+        {
+          "category": "pseudo",
+          "severity": "info",
+          "target": "S-EtOH",
+          "message": "S-EtOH: usa pseudo-componente alimentario/biológico 'glucose' — comportamiento aproximado, mantener como tal."
+        },
+        {
+          "category": "pseudo",
+          "severity": "info",
+          "target": "S-fondo",
+          "message": "S-fondo: usa pseudo-componente alimentario/biológico 'glucose' — comportamiento aproximado, mantener como tal."
+        },
+        {
+          "category": "pseudo",
+          "severity": "info",
+          "target": "S-vinaza",
+          "message": "S-vinaza: usa pseudo-componente alimentario/biológico 'glucose' — comportamiento aproximado, mantener como tal."
+        },
+        {
+          "category": "pseudo",
+          "severity": "info",
+          "target": "S-mosto-b",
+          "message": "S-mosto-b: usa pseudo-componente alimentario/biológico 'glucose' — comportamiento aproximado, mantener como tal."
+        }
+      ]
+    },
+    {
+      "key": "biodiesel",
+      "passed": true,
+      "status": "ok",
+      "blocks": 5,
+      "streams": 8,
+      "errors": [],
+      "maximum_unit_mass_relative_error": 2.0121564198516106e-16,
+      "findings": []
+    },
+    {
+      "key": "cdu",
+      "passed": true,
+      "status": "ok",
+      "blocks": 10,
+      "streams": 14,
+      "errors": [],
+      "maximum_unit_mass_relative_error": 0.0,
+      "findings": [
+        {
+          "category": "pseudo",
+          "severity": "info",
+          "target": "S-crudo",
+          "message": "S-crudo: corte de petróleo 'crude_oil' — pseudo-componente legítimo caracterizado por rango de ebullición (TBP), como en todo simulador de proceso. No se reemplaza por una molécula; VLE aproximado por caracterización."
+        },
+        {
+          "category": "pseudo",
+          "severity": "info",
+          "target": "S-1",
+          "message": "S-1: corte de petróleo 'crude_oil' — pseudo-componente legítimo caracterizado por rango de ebullición (TBP), como en todo simulador de proceso. No se reemplaza por una molécula; VLE aproximado por caracterización."
+        },
+        {
+          "category": "pseudo",
+          "severity": "info",
+          "target": "S-2",
+          "message": "S-2: corte de petróleo 'crude_oil' — pseudo-componente legítimo caracterizado por rango de ebullición (TBP), como en todo simulador de proceso. No se reemplaza por una molécula; VLE aproximado por caracterización."
+        },
+        {
+          "category": "pseudo",
+          "severity": "info",
+          "target": "S-3",
+          "message": "S-3: corte de petróleo 'crude_oil' — pseudo-componente legítimo caracterizado por rango de ebullición (TBP), como en todo simulador de proceso. No se reemplaza por una molécula; VLE aproximado por caracterización."
+        },
+        {
+          "category": "pseudo",
+          "severity": "info",
+          "target": "S-nafta-v",
+          "message": "S-nafta-v: corte de petróleo 'kerosene' — pseudo-componente legítimo caracterizado por rango de ebullición (TBP), como en todo simulador de proceso. No se reemplaza por una molécula; VLE aproximado por caracterización."
+        },
+        {
+          "category": "pseudo",
+          "severity": "info",
+          "target": "S-nafta-v",
+          "message": "S-nafta-v: corte de petróleo 'naphtha' — pseudo-componente legítimo caracterizado por rango de ebullición (TBP), como en todo simulador de proceso. No se reemplaza por una molécula; VLE aproximado por caracterización."
+        },
+        {
+          "category": "pseudo",
+          "severity": "info",
+          "target": "S-nafta",
+          "message": "S-nafta: corte de petróleo 'kerosene' — pseudo-componente legítimo caracterizado por rango de ebullición (TBP), como en todo simulador de proceso. No se reemplaza por una molécula; VLE aproximado por caracterización."
+        },
+        {
+          "category": "pseudo",
+          "severity": "info",
+          "target": "S-nafta",
+          "message": "S-nafta: corte de petróleo 'naphtha' — pseudo-componente legítimo caracterizado por rango de ebullición (TBP), como en todo simulador de proceso. No se reemplaza por una molécula; VLE aproximado por caracterización."
+        },
+        {
+          "category": "pseudo",
+          "severity": "info",
+          "target": "S-kero-h",
+          "message": "S-kero-h: corte de petróleo 'diesel' — pseudo-componente legítimo caracterizado por rango de ebullición (TBP), como en todo simulador de proceso. No se reemplaza por una molécula; VLE aproximado por caracterización."
+        },
+        {
+          "category": "pseudo",
+          "severity": "info",
+          "target": "S-kero-h",
+          "message": "S-kero-h: corte de petróleo 'kerosene' — pseudo-componente legítimo caracterizado por rango de ebullición (TBP), como en todo simulador de proceso. No se reemplaza por una molécula; VLE aproximado por caracterización."
+        },
+        {
+          "category": "pseudo",
+          "severity": "info",
+          "target": "S-kero-h",
+          "message": "S-kero-h: corte de petróleo 'naphtha' — pseudo-componente legítimo caracterizado por rango de ebullición (TBP), como en todo simulador de proceso. No se reemplaza por una molécula; VLE aproximado por caracterización."
+        },
+        {
+          "category": "pseudo",
+          "severity": "info",
+          "target": "S-kero",
+          "message": "S-kero: corte de petróleo 'diesel' — pseudo-componente legítimo caracterizado por rango de ebullición (TBP), como en todo simulador de proceso. No se reemplaza por una molécula; VLE aproximado por caracterización."
+        },
+        {
+          "category": "pseudo",
+          "severity": "info",
+          "target": "S-kero",
+          "message": "S-kero: corte de petróleo 'kerosene' — pseudo-componente legítimo caracterizado por rango de ebullición (TBP), como en todo simulador de proceso. No se reemplaza por una molécula; VLE aproximado por caracterización."
+        },
+        {
+          "category": "pseudo",
+          "severity": "info",
+          "target": "S-kero",
+          "message": "S-kero: corte de petróleo 'naphtha' — pseudo-componente legítimo caracterizado por rango de ebullición (TBP), como en todo simulador de proceso. No se reemplaza por una molécula; VLE aproximado por caracterización."
+        },
+        {
+          "category": "pseudo",
+          "severity": "info",
+          "target": "S-diesel-h",
+          "message": "S-diesel-h: corte de petróleo 'atmospheric_residue' — pseudo-componente legítimo caracterizado por rango de ebullición (TBP), como en todo simulador de proceso. No se reemplaza por una molécula; VLE aproximado por caracterización."
+        },
+        {
+          "category": "pseudo",
+          "severity": "info",
+          "target": "S-diesel-h",
+          "message": "S-diesel-h: corte de petróleo 'diesel' — pseudo-componente legítimo caracterizado por rango de ebullición (TBP), como en todo simulador de proceso. No se reemplaza por una molécula; VLE aproximado por caracterización."
+        },
+        {
+          "category": "pseudo",
+          "severity": "info",
+          "target": "S-diesel-h",
+          "message": "S-diesel-h: corte de petróleo 'kerosene' — pseudo-componente legítimo caracterizado por rango de ebullición (TBP), como en todo simulador de proceso. No se reemplaza por una molécula; VLE aproximado por caracterización."
+        },
+        {
+          "category": "pseudo",
+          "severity": "info",
+          "target": "S-diesel",
+          "message": "S-diesel: corte de petróleo 'atmospheric_residue' — pseudo-componente legítimo caracterizado por rango de ebullición (TBP), como en todo simulador de proceso. No se reemplaza por una molécula; VLE aproximado por caracterización."
+        },
+        {
+          "category": "pseudo",
+          "severity": "info",
+          "target": "S-diesel",
+          "message": "S-diesel: corte de petróleo 'diesel' — pseudo-componente legítimo caracterizado por rango de ebullición (TBP), como en todo simulador de proceso. No se reemplaza por una molécula; VLE aproximado por caracterización."
+        },
+        {
+          "category": "pseudo",
+          "severity": "info",
+          "target": "S-diesel",
+          "message": "S-diesel: corte de petróleo 'kerosene' — pseudo-componente legítimo caracterizado por rango de ebullición (TBP), como en todo simulador de proceso. No se reemplaza por una molécula; VLE aproximado por caracterización."
+        },
+        {
+          "category": "pseudo",
+          "severity": "info",
+          "target": "S-res-h",
+          "message": "S-res-h: corte de petróleo 'atmospheric_residue' — pseudo-componente legítimo caracterizado por rango de ebullición (TBP), como en todo simulador de proceso. No se reemplaza por una molécula; VLE aproximado por caracterización."
+        },
+        {
+          "category": "pseudo",
+          "severity": "info",
+          "target": "S-res-h",
+          "message": "S-res-h: corte de petróleo 'diesel' — pseudo-componente legítimo caracterizado por rango de ebullición (TBP), como en todo simulador de proceso. No se reemplaza por una molécula; VLE aproximado por caracterización."
+        },
+        {
+          "category": "pseudo",
+          "severity": "info",
+          "target": "S-residuo",
+          "message": "S-residuo: corte de petróleo 'atmospheric_residue' — pseudo-componente legítimo caracterizado por rango de ebullición (TBP), como en todo simulador de proceso. No se reemplaza por una molécula; VLE aproximado por caracterización."
+        },
+        {
+          "category": "pseudo",
+          "severity": "info",
+          "target": "S-residuo",
+          "message": "S-residuo: corte de petróleo 'diesel' — pseudo-componente legítimo caracterizado por rango de ebullición (TBP), como en todo simulador de proceso. No se reemplaza por una molécula; VLE aproximado por caracterización."
+        },
+        {
+          "category": "pseudo",
+          "severity": "info",
+          "target": "S-diesel-hot",
+          "message": "S-diesel-hot: corte de petróleo 'atmospheric_residue' — pseudo-componente legítimo caracterizado por rango de ebullición (TBP), como en todo simulador de proceso. No se reemplaza por una molécula; VLE aproximado por caracterización."
+        },
+        {
+          "category": "pseudo",
+          "severity": "info",
+          "target": "S-diesel-hot",
+          "message": "S-diesel-hot: corte de petróleo 'diesel' — pseudo-componente legítimo caracterizado por rango de ebullición (TBP), como en todo simulador de proceso. No se reemplaza por una molécula; VLE aproximado por caracterización."
+        },
+        {
+          "category": "pseudo",
+          "severity": "info",
+          "target": "S-diesel-hot",
+          "message": "S-diesel-hot: corte de petróleo 'kerosene' — pseudo-componente legítimo caracterizado por rango de ebullición (TBP), como en todo simulador de proceso. No se reemplaza por una molécula; VLE aproximado por caracterización."
+        },
+        {
+          "category": "pseudo",
+          "severity": "info",
+          "target": "S-residuo-hot",
+          "message": "S-residuo-hot: corte de petróleo 'atmospheric_residue' — pseudo-componente legítimo caracterizado por rango de ebullición (TBP), como en todo simulador de proceso. No se reemplaza por una molécula; VLE aproximado por caracterización."
+        },
+        {
+          "category": "pseudo",
+          "severity": "info",
+          "target": "S-residuo-hot",
+          "message": "S-residuo-hot: corte de petróleo 'diesel' — pseudo-componente legítimo caracterizado por rango de ebullición (TBP), como en todo simulador de proceso. No se reemplaza por una molécula; VLE aproximado por caracterización."
+        }
+      ]
+    },
+    {
+      "key": "smr_eq",
+      "passed": true,
+      "status": "ok",
+      "blocks": 8,
+      "streams": 10,
+      "errors": [],
+      "maximum_unit_mass_relative_error": 0.0,
+      "findings": [
+        {
+          "category": "phase",
+          "severity": "info",
+          "target": "S-mix",
+          "message": "S-mix: phase='vapor' a T=171.9°C, P=25.00bar; verificación de fase no confiable (T fuera del rango Antoine del componente principal 'water')."
+        }
+      ]
+    },
+    {
+      "key": "ethane_pfr",
+      "passed": true,
+      "status": "ok",
+      "blocks": 7,
+      "streams": 7,
+      "errors": [],
+      "maximum_unit_mass_relative_error": 0.0,
+      "findings": []
+    },
+    {
+      "key": "haber_rec",
+      "passed": true,
+      "status": "ok",
+      "blocks": 9,
+      "streams": 11,
+      "errors": [],
+      "maximum_unit_mass_relative_error": 1.818989403545531e-15,
+      "findings": []
+    },
+    {
+      "key": "dist_eth_az",
+      "passed": true,
+      "status": "ok",
+      "blocks": 5,
+      "streams": 7,
+      "errors": [],
+      "maximum_unit_mass_relative_error": 0.0,
+      "findings": [
+        {
+          "category": "phase",
+          "severity": "info",
+          "target": "S-vap-tope",
+          "message": "S-vap-tope: phase='vapor' a T=78.0°C, P=1.01bar; verificación de fase no confiable (T fuera del rango Antoine del componente principal '')."
+        }
+      ]
+    },
+    {
+      "key": "rxn_flash_col",
+      "passed": true,
+      "status": "warning",
+      "blocks": 7,
+      "streams": 8,
+      "errors": [],
+      "maximum_unit_mass_relative_error": 2.0629045453754401e-16,
+      "findings": [
+        {
+          "category": "pseudo",
+          "severity": "info",
+          "target": "S-mosto",
+          "message": "S-mosto: usa pseudo-componente alimentario/biológico 'glucose' — comportamiento aproximado, mantener como tal."
+        },
+        {
+          "category": "pseudo",
+          "severity": "info",
+          "target": "S-fermentado",
+          "message": "S-fermentado: usa pseudo-componente alimentario/biológico 'glucose' — comportamiento aproximado, mantener como tal."
+        },
+        {
+          "category": "pseudo",
+          "severity": "info",
+          "target": "S-cooled",
+          "message": "S-cooled: usa pseudo-componente alimentario/biológico 'glucose' — comportamiento aproximado, mantener como tal."
+        },
+        {
+          "category": "pseudo",
+          "severity": "info",
+          "target": "S-cleaned",
+          "message": "S-cleaned: usa pseudo-componente alimentario/biológico 'glucose' — comportamiento aproximado, mantener como tal."
+        },
+        {
+          "category": "pseudo",
+          "severity": "info",
+          "target": "S-etanol",
+          "message": "S-etanol: usa pseudo-componente alimentario/biológico 'glucose' — comportamiento aproximado, mantener como tal."
+        },
+        {
+          "category": "pseudo",
+          "severity": "info",
+          "target": "S-agua",
+          "message": "S-agua: usa pseudo-componente alimentario/biológico 'glucose' — comportamiento aproximado, mantener como tal."
+        },
+        {
+          "category": "pseudo",
+          "severity": "info",
+          "target": "S-mosto-b",
+          "message": "S-mosto-b: usa pseudo-componente alimentario/biológico 'glucose' — comportamiento aproximado, mantener como tal."
+        }
+      ]
+    },
+    {
+      "key": "hydraulic",
+      "passed": true,
+      "status": "ok",
+      "blocks": 3,
+      "streams": 4,
+      "errors": [],
+      "maximum_unit_mass_relative_error": 0.0,
+      "findings": []
+    },
+    {
+      "key": "hda_full",
+      "passed": true,
+      "status": "ok",
+      "blocks": 26,
+      "streams": 31,
+      "errors": [],
+      "maximum_unit_mass_relative_error": 1.3754176276910184e-09,
+      "findings": [
+        {
+          "category": "phase",
+          "severity": "info",
+          "target": "S-9",
+          "message": "S-9: phase='liquid' a T=115.0°C, P=1.30bar; verificación de fase no confiable (T fuera del rango Antoine del componente principal 'benzene')."
+        },
+        {
+          "category": "phase",
+          "severity": "info",
+          "target": "S-10",
+          "message": "S-10: phase='vapor' a T=82.0°C, P=1.30bar; verificación de fase no confiable (T fuera del rango Antoine del componente principal 'benzene')."
+        }
+      ]
+    },
+    {
+      "key": "gas_sweet",
+      "passed": true,
+      "status": "ok",
+      "blocks": 13,
+      "streams": 20,
+      "errors": [],
+      "maximum_unit_mass_relative_error": 1.375613990781274e-11,
+      "findings": [
+        {
+          "category": "phase",
+          "severity": "info",
+          "target": "S-lean-bot",
+          "message": "S-lean-bot: phase='liquid' a T=125.0°C, P=2.00bar; verificación de fase no confiable (T fuera del rango Antoine del componente principal 'water')."
+        },
+        {
+          "category": "phase",
+          "severity": "info",
+          "target": "S-lean-hot",
+          "message": "S-lean-hot: phase='liquid' a T=125.0°C, P=2.00bar; verificación de fase no confiable (T fuera del rango Antoine del componente principal 'mdea')."
+        },
+        {
+          "category": "redundant_lock",
+          "severity": "info",
+          "target": "S-lean-hot",
+          "message": "S-lean-hot: composition_locked=True pero E-103 es un equipo no-reactivo. El solver pudo haber propagado composición desde los inputs. Considerar quitar el lock para que la UI muestre el cálculo automático."
+        }
+      ]
+    },
+    {
+      "key": "sugar",
+      "passed": true,
+      "status": "ok",
+      "blocks": 10,
+      "streams": 19,
+      "errors": [],
+      "maximum_unit_mass_relative_error": 0.0,
+      "findings": [
+        {
+          "category": "phase",
+          "severity": "info",
+          "target": "S-vap1-a-condensacion",
+          "message": "S-vap1-a-condensacion: phase='vapor' a T=110.0°C, P=1.43bar; verificación de fase no confiable (T fuera del rango Antoine del componente principal 'water')."
+        },
+        {
+          "category": "pseudo",
+          "severity": "info",
+          "target": "S-jugo",
+          "message": "S-jugo: usa pseudo-componente alimentario/biológico 'glucose' — comportamiento aproximado, mantener como tal."
+        },
+        {
+          "category": "pseudo",
+          "severity": "info",
+          "target": "S-jugo",
+          "message": "S-jugo: usa pseudo-componente alimentario/biológico 'sucrose' — comportamiento aproximado, mantener como tal."
+        },
+        {
+          "category": "pseudo",
+          "severity": "info",
+          "target": "S-jugo",
+          "message": "S-jugo: especie inorgánica/material 'limestone' (sal, óxido, mineral, polímero o mezcla) sin modelo VLE — balances por componente y VLE no son físicamente significativos; tratar como pseudo aproximado."
+        },
+        {
+          "category": "pseudo",
+          "severity": "info",
+          "target": "S-1",
+          "message": "S-1: usa pseudo-componente alimentario/biológico 'glucose' — comportamiento aproximado, mantener como tal."
+        },
+        {
+          "category": "pseudo",
+          "severity": "info",
+          "target": "S-1",
+          "message": "S-1: usa pseudo-componente alimentario/biológico 'sucrose' — comportamiento aproximado, mantener como tal."
+        },
+        {
+          "category": "pseudo",
+          "severity": "info",
+          "target": "S-1",
+          "message": "S-1: especie inorgánica/material 'limestone' (sal, óxido, mineral, polímero o mezcla) sin modelo VLE — balances por componente y VLE no son físicamente significativos; tratar como pseudo aproximado."
+        },
+        {
+          "category": "pseudo",
+          "severity": "info",
+          "target": "S-2",
+          "message": "S-2: usa pseudo-componente alimentario/biológico 'glucose' — comportamiento aproximado, mantener como tal."
+        },
+        {
+          "category": "pseudo",
+          "severity": "info",
+          "target": "S-2",
+          "message": "S-2: usa pseudo-componente alimentario/biológico 'sucrose' — comportamiento aproximado, mantener como tal."
+        },
+        {
+          "category": "pseudo",
+          "severity": "info",
+          "target": "S-cachaza",
+          "message": "S-cachaza: usa pseudo-componente alimentario/biológico 'glucose' — comportamiento aproximado, mantener como tal."
+        },
+        {
+          "category": "pseudo",
+          "severity": "info",
+          "target": "S-cachaza",
+          "message": "S-cachaza: usa pseudo-componente alimentario/biológico 'sucrose' — comportamiento aproximado, mantener como tal."
+        },
+        {
+          "category": "pseudo",
+          "severity": "info",
+          "target": "S-cachaza",
+          "message": "S-cachaza: especie inorgánica/material 'limestone' (sal, óxido, mineral, polímero o mezcla) sin modelo VLE — balances por componente y VLE no son físicamente significativos; tratar como pseudo aproximado."
+        },
+        {
+          "category": "pseudo",
+          "severity": "info",
+          "target": "S-ev1",
+          "message": "S-ev1: usa pseudo-componente alimentario/biológico 'glucose' — comportamiento aproximado, mantener como tal."
+        },
+        {
+          "category": "pseudo",
+          "severity": "info",
+          "target": "S-ev1",
+          "message": "S-ev1: usa pseudo-componente alimentario/biológico 'sucrose' — comportamiento aproximado, mantener como tal."
+        },
+        {
+          "category": "pseudo",
+          "severity": "info",
+          "target": "S-ev2",
+          "message": "S-ev2: usa pseudo-componente alimentario/biológico 'glucose' — comportamiento aproximado, mantener como tal."
+        },
+        {
+          "category": "pseudo",
+          "severity": "info",
+          "target": "S-ev2",
+          "message": "S-ev2: usa pseudo-componente alimentario/biológico 'sucrose' — comportamiento aproximado, mantener como tal."
+        },
+        {
+          "category": "pseudo",
+          "severity": "info",
+          "target": "S-ev3",
+          "message": "S-ev3: usa pseudo-componente alimentario/biológico 'glucose' — comportamiento aproximado, mantener como tal."
+        },
+        {
+          "category": "pseudo",
+          "severity": "info",
+          "target": "S-ev3",
+          "message": "S-ev3: usa pseudo-componente alimentario/biológico 'sucrose' — comportamiento aproximado, mantener como tal."
+        },
+        {
+          "category": "pseudo",
+          "severity": "info",
+          "target": "S-miel-madre",
+          "message": "S-miel-madre: usa pseudo-componente alimentario/biológico 'glucose' — comportamiento aproximado, mantener como tal."
+        },
+        {
+          "category": "pseudo",
+          "severity": "info",
+          "target": "S-miel-madre",
+          "message": "S-miel-madre: usa pseudo-componente alimentario/biológico 'sucrose' — comportamiento aproximado, mantener como tal."
+        },
+        {
+          "category": "pseudo",
+          "severity": "info",
+          "target": "S-masa",
+          "message": "S-masa: usa pseudo-componente alimentario/biológico 'glucose' — comportamiento aproximado, mantener como tal."
+        },
+        {
+          "category": "pseudo",
+          "severity": "info",
+          "target": "S-masa",
+          "message": "S-masa: usa pseudo-componente alimentario/biológico 'sucrose' — comportamiento aproximado, mantener como tal."
+        },
+        {
+          "category": "pseudo",
+          "severity": "info",
+          "target": "S-az-humedo",
+          "message": "S-az-humedo: usa pseudo-componente alimentario/biológico 'glucose' — comportamiento aproximado, mantener como tal."
+        },
+        {
+          "category": "pseudo",
+          "severity": "info",
+          "target": "S-az-humedo",
+          "message": "S-az-humedo: usa pseudo-componente alimentario/biológico 'sucrose' — comportamiento aproximado, mantener como tal."
+        },
+        {
+          "category": "pseudo",
+          "severity": "info",
+          "target": "S-melaza",
+          "message": "S-melaza: usa pseudo-componente alimentario/biológico 'glucose' — comportamiento aproximado, mantener como tal."
+        },
+        {
+          "category": "pseudo",
+          "severity": "info",
+          "target": "S-melaza",
+          "message": "S-melaza: usa pseudo-componente alimentario/biológico 'sucrose' — comportamiento aproximado, mantener como tal."
+        },
+        {
+          "category": "pseudo",
+          "severity": "info",
+          "target": "S-azucar",
+          "message": "S-azucar: usa pseudo-componente alimentario/biológico 'glucose' — comportamiento aproximado, mantener como tal."
+        },
+        {
+          "category": "pseudo",
+          "severity": "info",
+          "target": "S-azucar",
+          "message": "S-azucar: usa pseudo-componente alimentario/biológico 'sucrose' — comportamiento aproximado, mantener como tal."
+        },
+        {
+          "category": "pseudo",
+          "severity": "info",
+          "target": "S-jugo-b",
+          "message": "S-jugo-b: usa pseudo-componente alimentario/biológico 'glucose' — comportamiento aproximado, mantener como tal."
+        },
+        {
+          "category": "pseudo",
+          "severity": "info",
+          "target": "S-jugo-b",
+          "message": "S-jugo-b: usa pseudo-componente alimentario/biológico 'sucrose' — comportamiento aproximado, mantener como tal."
+        },
+        {
+          "category": "pseudo",
+          "severity": "info",
+          "target": "S-jugo-b",
+          "message": "S-jugo-b: especie inorgánica/material 'limestone' (sal, óxido, mineral, polímero o mezcla) sin modelo VLE — balances por componente y VLE no son físicamente significativos; tratar como pseudo aproximado."
+        }
+      ]
+    },
+    {
+      "key": "industrial",
+      "passed": true,
+      "status": "ok",
+      "blocks": 30,
+      "streams": 35,
+      "errors": [],
+      "maximum_unit_mass_relative_error": 2.669689379855502e-07,
+      "findings": [
+        {
+          "category": "phase",
+          "severity": "info",
+          "target": "S-blowdown",
+          "message": "S-blowdown: phase='liquid' a T=233.8°C, P=30.00bar; verificación de fase no confiable (T fuera del rango Antoine del componente principal '')."
+        },
+        {
+          "category": "phase",
+          "severity": "info",
+          "target": "S-cond",
+          "message": "S-cond: phase='liquid' a T=233.8°C, P=30.00bar; verificación de fase no confiable (T fuera del rango Antoine del componente principal '')."
+        },
+        {
+          "category": "redundant_lock",
+          "severity": "info",
+          "target": "S-MP-supply",
+          "message": "S-MP-supply: composition_locked=True pero TK-305 es un equipo no-reactivo. El solver pudo haber propagado composición desde los inputs. Considerar quitar el lock para que la UI muestre el cálculo automático."
+        }
+      ]
+    },
+    {
+      "key": "quimpac",
+      "passed": true,
+      "status": "ok",
+      "blocks": 21,
+      "streams": 29,
+      "errors": [],
+      "maximum_unit_mass_relative_error": 2.222586319916428e-08,
+      "findings": [
+        {
+          "category": "pseudo",
+          "severity": "info",
+          "target": "S-sal",
+          "message": "S-sal: especie inorgánica/material 'sodium_chloride' (sal, óxido, mineral, polímero o mezcla) sin modelo VLE — balances por componente y VLE no son físicamente significativos; tratar como pseudo aproximado."
+        },
+        {
+          "category": "pseudo",
+          "severity": "info",
+          "target": "S-cruda",
+          "message": "S-cruda: especie inorgánica/material 'sodium_chloride' (sal, óxido, mineral, polímero o mezcla) sin modelo VLE — balances por componente y VLE no son físicamente significativos; tratar como pseudo aproximado."
+        },
+        {
+          "category": "pseudo",
+          "severity": "info",
+          "target": "S-purif",
+          "message": "S-purif: especie inorgánica/material 'sodium_chloride' (sal, óxido, mineral, polímero o mezcla) sin modelo VLE — balances por componente y VLE no son físicamente significativos; tratar como pseudo aproximado."
+        },
+        {
+          "category": "pseudo",
+          "severity": "info",
+          "target": "S-clear",
+          "message": "S-clear: especie inorgánica/material 'sodium_chloride' (sal, óxido, mineral, polímero o mezcla) sin modelo VLE — balances por componente y VLE no son físicamente significativos; tratar como pseudo aproximado."
+        },
+        {
+          "category": "pseudo",
+          "severity": "info",
+          "target": "S-ultrapur",
+          "message": "S-ultrapur: especie inorgánica/material 'sodium_chloride' (sal, óxido, mineral, polímero o mezcla) sin modelo VLE — balances por componente y VLE no son físicamente significativos; tratar como pseudo aproximado."
+        },
+        {
+          "category": "pseudo",
+          "severity": "info",
+          "target": "S-cell-feed",
+          "message": "S-cell-feed: especie inorgánica/material 'sodium_chloride' (sal, óxido, mineral, polímero o mezcla) sin modelo VLE — balances por componente y VLE no son físicamente significativos; tratar como pseudo aproximado."
+        },
+        {
+          "category": "pseudo",
+          "severity": "info",
+          "target": "S-anolito",
+          "message": "S-anolito: especie inorgánica/material 'sodium_chloride' (sal, óxido, mineral, polímero o mezcla) sin modelo VLE — balances por componente y VLE no son físicamente significativos; tratar como pseudo aproximado."
+        },
+        {
+          "category": "pseudo",
+          "severity": "info",
+          "target": "S-catolito-caustico",
+          "message": "S-catolito-caustico: especie inorgánica/material 'sodium_hydroxide' (sal, óxido, mineral, polímero o mezcla) sin modelo VLE — balances por componente y VLE no son físicamente significativos; tratar como pseudo aproximado."
+        },
+        {
+          "category": "pseudo",
+          "severity": "info",
+          "target": "S-h2so4",
+          "message": "S-h2so4: especie inorgánica/material 'sulfuric_acid' (sal, óxido, mineral, polímero o mezcla) sin modelo VLE — balances por componente y VLE no son físicamente significativos; tratar como pseudo aproximado."
+        },
+        {
+          "category": "pseudo",
+          "severity": "info",
+          "target": "S-acid-spent",
+          "message": "S-acid-spent: especie inorgánica/material 'sulfuric_acid' (sal, óxido, mineral, polímero o mezcla) sin modelo VLE — balances por componente y VLE no son físicamente significativos; tratar como pseudo aproximado."
+        },
+        {
+          "category": "pseudo",
+          "severity": "info",
+          "target": "S-naoh-concentrada",
+          "message": "S-naoh-concentrada: especie inorgánica/material 'sodium_hydroxide' (sal, óxido, mineral, polímero o mezcla) sin modelo VLE — balances por componente y VLE no son físicamente significativos; tratar como pseudo aproximado."
+        },
+        {
+          "category": "pseudo",
+          "severity": "info",
+          "target": "S-cell-pumped",
+          "message": "S-cell-pumped: especie inorgánica/material 'sodium_chloride' (sal, óxido, mineral, polímero o mezcla) sin modelo VLE — balances por componente y VLE no son físicamente significativos; tratar como pseudo aproximado."
+        },
+        {
+          "category": "pseudo",
+          "severity": "info",
+          "target": "S-h2so4-b",
+          "message": "S-h2so4-b: especie inorgánica/material 'sulfuric_acid' (sal, óxido, mineral, polímero o mezcla) sin modelo VLE — balances por componente y VLE no son físicamente significativos; tratar como pseudo aproximado."
+        },
+        {
+          "category": "pseudo",
+          "severity": "info",
+          "target": "S-cell-products",
+          "message": "S-cell-products: especie inorgánica/material 'sodium_chloride' (sal, óxido, mineral, polímero o mezcla) sin modelo VLE — balances por componente y VLE no son físicamente significativos; tratar como pseudo aproximado."
+        },
+        {
+          "category": "pseudo",
+          "severity": "info",
+          "target": "S-cell-products",
+          "message": "S-cell-products: especie inorgánica/material 'sodium_hydroxide' (sal, óxido, mineral, polímero o mezcla) sin modelo VLE — balances por componente y VLE no son físicamente significativos; tratar como pseudo aproximado."
+        },
+        {
+          "category": "pseudo",
+          "severity": "info",
+          "target": "S-anolito-retorno",
+          "message": "S-anolito-retorno: especie inorgánica/material 'sodium_chloride' (sal, óxido, mineral, polímero o mezcla) sin modelo VLE — balances por componente y VLE no son físicamente significativos; tratar como pseudo aproximado."
+        },
+        {
+          "category": "pseudo",
+          "severity": "info",
+          "target": "S-catolito-atm",
+          "message": "S-catolito-atm: especie inorgánica/material 'sodium_hydroxide' (sal, óxido, mineral, polímero o mezcla) sin modelo VLE — balances por componente y VLE no son físicamente significativos; tratar como pseudo aproximado."
+        },
+        {
+          "category": "pseudo",
+          "severity": "info",
+          "target": "S-naoh-50-producto",
+          "message": "S-naoh-50-producto: especie inorgánica/material 'sodium_hydroxide' (sal, óxido, mineral, polímero o mezcla) sin modelo VLE — balances por componente y VLE no son físicamente significativos; tratar como pseudo aproximado."
+        }
+      ]
+    },
+    {
+      "key": "hno3",
+      "passed": true,
+      "status": "ok",
+      "blocks": 23,
+      "streams": 28,
+      "errors": [],
+      "maximum_unit_mass_relative_error": 1.8418653714593815e-16,
+      "findings": [
+        {
+          "category": "model_scope",
+          "severity": "info",
+          "target": "A8-gas-cool",
+          "message": "A8-gas-cool: asignacion de fases por componente especificada (calidad masica=0.89421545); no es una prediccion de equilibrio."
+        },
+        {
+          "category": "model_scope",
+          "severity": "info",
+          "target": "A13-HNO3-crudo",
+          "message": "A13-HNO3-crudo: asignacion de fases por componente especificada (calidad masica=4.2167059e-06); no es una prediccion de equilibrio."
+        },
+        {
+          "category": "model_scope",
+          "severity": "info",
+          "target": "A12c-absorcion-reaccion",
+          "message": "A12c-absorcion-reaccion: asignacion de fases por componente especificada (calidad masica=0.6888477); no es una prediccion de equilibrio."
+        },
+        {
+          "category": "model_scope",
+          "severity": "info",
+          "target": "A13-acido-letdown",
+          "message": "A13-acido-letdown: asignacion de fases por componente especificada (calidad masica=4.2167059e-06); no es una prediccion de equilibrio."
+        }
+      ]
+    },
+    {
+      "key": "talara",
+      "passed": true,
+      "status": "warning",
+      "blocks": 72,
+      "streams": 87,
+      "errors": [],
+      "maximum_unit_mass_relative_error": 1.1282636431128927e-16,
+      "findings": [
+        {
+          "category": "phase",
+          "severity": "info",
+          "target": "C2-hot",
+          "message": "C2-hot: phase='liquid' a T=340.0°C, P=50.00bar; verificación de fase no confiable (T fuera del rango Antoine del componente principal 'naphtha')."
+        },
+        {
+          "category": "phase",
+          "severity": "info",
+          "target": "C12-nafta-clean-acondicionado",
+          "message": "C12-nafta-clean-acondicionado: phase='liquid' a T=340.0°C, P=10.00bar; verificación de fase no confiable (T fuera del rango Antoine del componente principal 'naphtha')."
+        },
+        {
+          "category": "phase",
+          "severity": "info",
+          "target": "C5-gasoleo-enfriado",
+          "message": "C5-gasoleo-enfriado: phase='liquid' a T=180.0°C, P=1.50bar; verificación de fase no confiable (T fuera del rango Antoine del componente principal 'diesel')."
+        },
+        {
+          "category": "pseudo",
+          "severity": "info",
+          "target": "C13-reformado-agregado-hot",
+          "message": "C13-reformado-agregado-hot: corte de petróleo 'naphtha' — pseudo-componente legítimo caracterizado por rango de ebullición (TBP), como en todo simulador de proceso. No se reemplaza por una molécula; VLE aproximado por caracterización."
+        },
+        {
+          "category": "pseudo",
+          "severity": "info",
+          "target": "C0-crudo",
+          "message": "C0-crudo: corte de petróleo 'crude_oil' — pseudo-componente legítimo caracterizado por rango de ebullición (TBP), como en todo simulador de proceso. No se reemplaza por una molécula; VLE aproximado por caracterización."
+        },
+        {
+          "category": "pseudo",
+          "severity": "info",
+          "target": "C0-crudo",
+          "message": "C0-crudo: corte de petróleo 'atmospheric_residue' — pseudo-componente legítimo caracterizado por rango de ebullición (TBP), como en todo simulador de proceso. No se reemplaza por una molécula; VLE aproximado por caracterización."
+        },
+        {
+          "category": "pseudo",
+          "severity": "info",
+          "target": "C0-crudo",
+          "message": "C0-crudo: corte de petróleo 'diesel' — pseudo-componente legítimo caracterizado por rango de ebullición (TBP), como en todo simulador de proceso. No se reemplaza por una molécula; VLE aproximado por caracterización."
+        },
+        {
+          "category": "pseudo",
+          "severity": "info",
+          "target": "C0-crudo",
+          "message": "C0-crudo: corte de petróleo 'kerosene' — pseudo-componente legítimo caracterizado por rango de ebullición (TBP), como en todo simulador de proceso. No se reemplaza por una molécula; VLE aproximado por caracterización."
+        },
+        {
+          "category": "pseudo",
+          "severity": "info",
+          "target": "C0-crudo",
+          "message": "C0-crudo: corte de petróleo 'naphtha' — pseudo-componente legítimo caracterizado por rango de ebullición (TBP), como en todo simulador de proceso. No se reemplaza por una molécula; VLE aproximado por caracterización."
+        },
+        {
+          "category": "pseudo",
+          "severity": "info",
+          "target": "C0-crudo",
+          "message": "C0-crudo: especie inorgánica/material 'sodium_chloride' (sal, óxido, mineral, polímero o mezcla) sin modelo VLE — balances por componente y VLE no son físicamente significativos; tratar como pseudo aproximado."
+        },
+        {
+          "category": "pseudo",
+          "severity": "info",
+          "target": "S-mix-desal",
+          "message": "S-mix-desal: corte de petróleo 'crude_oil' — pseudo-componente legítimo caracterizado por rango de ebullición (TBP), como en todo simulador de proceso. No se reemplaza por una molécula; VLE aproximado por caracterización."
+        },
+        {
+          "category": "pseudo",
+          "severity": "info",
+          "target": "S-mix-desal",
+          "message": "S-mix-desal: corte de petróleo 'atmospheric_residue' — pseudo-componente legítimo caracterizado por rango de ebullición (TBP), como en todo simulador de proceso. No se reemplaza por una molécula; VLE aproximado por caracterización."
+        },
+        {
+          "category": "pseudo",
+          "severity": "info",
+          "target": "S-mix-desal",
+          "message": "S-mix-desal: corte de petróleo 'diesel' — pseudo-componente legítimo caracterizado por rango de ebullición (TBP), como en todo simulador de proceso. No se reemplaza por una molécula; VLE aproximado por caracterización."
+        },
+        {
+          "category": "pseudo",
+          "severity": "info",
+          "target": "S-mix-desal",
+          "message": "S-mix-desal: corte de petróleo 'kerosene' — pseudo-componente legítimo caracterizado por rango de ebullición (TBP), como en todo simulador de proceso. No se reemplaza por una molécula; VLE aproximado por caracterización."
+        },
+        {
+          "category": "pseudo",
+          "severity": "info",
+          "target": "S-mix-desal",
+          "message": "S-mix-desal: corte de petróleo 'naphtha' — pseudo-componente legítimo caracterizado por rango de ebullición (TBP), como en todo simulador de proceso. No se reemplaza por una molécula; VLE aproximado por caracterización."
+        },
+        {
+          "category": "pseudo",
+          "severity": "info",
+          "target": "S-mix-desal",
+          "message": "S-mix-desal: especie inorgánica/material 'sodium_chloride' (sal, óxido, mineral, polímero o mezcla) sin modelo VLE — balances por componente y VLE no son físicamente significativos; tratar como pseudo aproximado."
+        },
+        {
+          "category": "pseudo",
+          "severity": "info",
+          "target": "S-brine",
+          "message": "S-brine: especie inorgánica/material 'sodium_chloride' (sal, óxido, mineral, polímero o mezcla) sin modelo VLE — balances por componente y VLE no son físicamente significativos; tratar como pseudo aproximado."
+        },
+        {
+          "category": "pseudo",
+          "severity": "info",
+          "target": "C1-desalado",
+          "message": "C1-desalado: corte de petróleo 'crude_oil' — pseudo-componente legítimo caracterizado por rango de ebullición (TBP), como en todo simulador de proceso. No se reemplaza por una molécula; VLE aproximado por caracterización."
+        },
+        {
+          "category": "pseudo",
+          "severity": "info",
+          "target": "C1-desalado",
+          "message": "C1-desalado: corte de petróleo 'atmospheric_residue' — pseudo-componente legítimo caracterizado por rango de ebullición (TBP), como en todo simulador de proceso. No se reemplaza por una molécula; VLE aproximado por caracterización."
+        },
+        {
+          "category": "pseudo",
+          "severity": "info",
+          "target": "C1-desalado",
+          "message": "C1-desalado: corte de petróleo 'diesel' — pseudo-componente legítimo caracterizado por rango de ebullición (TBP), como en todo simulador de proceso. No se reemplaza por una molécula; VLE aproximado por caracterización."
+        },
+        {
+          "category": "pseudo",
+          "severity": "info",
+          "target": "C1-desalado",
+          "message": "C1-desalado: corte de petróleo 'kerosene' — pseudo-componente legítimo caracterizado por rango de ebullición (TBP), como en todo simulador de proceso. No se reemplaza por una molécula; VLE aproximado por caracterización."
+        },
+        {
+          "category": "pseudo",
+          "severity": "info",
+          "target": "C1-desalado",
+          "message": "C1-desalado: corte de petróleo 'naphtha' — pseudo-componente legítimo caracterizado por rango de ebullición (TBP), como en todo simulador de proceso. No se reemplaza por una molécula; VLE aproximado por caracterización."
+        },
+        {
+          "category": "pseudo",
+          "severity": "info",
+          "target": "C1b-feed-DP1",
+          "message": "C1b-feed-DP1: corte de petróleo 'crude_oil' — pseudo-componente legítimo caracterizado por rango de ebullición (TBP), como en todo simulador de proceso. No se reemplaza por una molécula; VLE aproximado por caracterización."
+        },
+        {
+          "category": "pseudo",
+          "severity": "info",
+          "target": "C1b-feed-DP1",
+          "message": "C1b-feed-DP1: corte de petróleo 'atmospheric_residue' — pseudo-componente legítimo caracterizado por rango de ebullición (TBP), como en todo simulador de proceso. No se reemplaza por una molécula; VLE aproximado por caracterización."
+        },
+        {
+          "category": "pseudo",
+          "severity": "info",
+          "target": "C1b-feed-DP1",
+          "message": "C1b-feed-DP1: corte de petróleo 'diesel' — pseudo-componente legítimo caracterizado por rango de ebullición (TBP), como en todo simulador de proceso. No se reemplaza por una molécula; VLE aproximado por caracterización."
+        },
+        {
+          "category": "pseudo",
+          "severity": "info",
+          "target": "C1b-feed-DP1",
+          "message": "C1b-feed-DP1: corte de petróleo 'kerosene' — pseudo-componente legítimo caracterizado por rango de ebullición (TBP), como en todo simulador de proceso. No se reemplaza por una molécula; VLE aproximado por caracterización."
+        },
+        {
+          "category": "pseudo",
+          "severity": "info",
+          "target": "C1b-feed-DP1",
+          "message": "C1b-feed-DP1: corte de petróleo 'naphtha' — pseudo-componente legítimo caracterizado por rango de ebullición (TBP), como en todo simulador de proceso. No se reemplaza por una molécula; VLE aproximado por caracterización."
+        },
+        {
+          "category": "pseudo",
+          "severity": "info",
+          "target": "C2-nafta",
+          "message": "C2-nafta: corte de petróleo 'naphtha' — pseudo-componente legítimo caracterizado por rango de ebullición (TBP), como en todo simulador de proceso. No se reemplaza por una molécula; VLE aproximado por caracterización."
+        },
+        {
+          "category": "pseudo",
+          "severity": "info",
+          "target": "C2-hot",
+          "message": "C2-hot: corte de petróleo 'naphtha' — pseudo-componente legítimo caracterizado por rango de ebullición (TBP), como en todo simulador de proceso. No se reemplaza por una molécula; VLE aproximado por caracterización."
+        },
+        {
+          "category": "pseudo",
+          "severity": "info",
+          "target": "C3-turbo",
+          "message": "C3-turbo: corte de petróleo 'kerosene' — pseudo-componente legítimo caracterizado por rango de ebullición (TBP), como en todo simulador de proceso. No se reemplaza por una molécula; VLE aproximado por caracterización."
+        },
+        {
+          "category": "pseudo",
+          "severity": "info",
+          "target": "C4-diesel",
+          "message": "C4-diesel: corte de petróleo 'diesel' — pseudo-componente legítimo caracterizado por rango de ebullición (TBP), como en todo simulador de proceso. No se reemplaza por una molécula; VLE aproximado por caracterización."
+        },
+        {
+          "category": "pseudo",
+          "severity": "info",
+          "target": "C4-hot",
+          "message": "C4-hot: corte de petróleo 'diesel' — pseudo-componente legítimo caracterizado por rango de ebullición (TBP), como en todo simulador de proceso. No se reemplaza por una molécula; VLE aproximado por caracterización."
+        },
+        {
+          "category": "pseudo",
+          "severity": "info",
+          "target": "C5-gasoleo-atm",
+          "message": "C5-gasoleo-atm: corte de petróleo 'diesel' — pseudo-componente legítimo caracterizado por rango de ebullición (TBP), como en todo simulador de proceso. No se reemplaza por una molécula; VLE aproximado por caracterización."
+        },
+        {
+          "category": "pseudo",
+          "severity": "info",
+          "target": "C6-residuo-atm",
+          "message": "C6-residuo-atm: corte de petróleo 'crude_oil' — pseudo-componente legítimo caracterizado por rango de ebullición (TBP), como en todo simulador de proceso. No se reemplaza por una molécula; VLE aproximado por caracterización."
+        },
+        {
+          "category": "pseudo",
+          "severity": "info",
+          "target": "C6-residuo-atm",
+          "message": "C6-residuo-atm: corte de petróleo 'atmospheric_residue' — pseudo-componente legítimo caracterizado por rango de ebullición (TBP), como en todo simulador de proceso. No se reemplaza por una molécula; VLE aproximado por caracterización."
+        },
+        {
+          "category": "pseudo",
+          "severity": "info",
+          "target": "C7-VGO",
+          "message": "C7-VGO: corte de petróleo 'crude_oil' — pseudo-componente legítimo caracterizado por rango de ebullición (TBP), como en todo simulador de proceso. No se reemplaza por una molécula; VLE aproximado por caracterización."
+        },
+        {
+          "category": "pseudo",
+          "severity": "info",
+          "target": "C8-resid-vac",
+          "message": "C8-resid-vac: corte de petróleo 'atmospheric_residue' — pseudo-componente legítimo caracterizado por rango de ebullición (TBP), como en todo simulador de proceso. No se reemplaza por una molécula; VLE aproximado por caracterización."
+        },
+        {
+          "category": "pseudo",
+          "severity": "info",
+          "target": "C9-nafta-FCC",
+          "message": "C9-nafta-FCC: corte de petróleo 'naphtha' — pseudo-componente legítimo caracterizado por rango de ebullición (TBP), como en todo simulador de proceso. No se reemplaza por una molécula; VLE aproximado por caracterización."
+        },
+        {
+          "category": "pseudo",
+          "severity": "info",
+          "target": "C10-LCO",
+          "message": "C10-LCO: corte de petróleo 'diesel' — pseudo-componente legítimo caracterizado por rango de ebullición (TBP), como en todo simulador de proceso. No se reemplaza por una molécula; VLE aproximado por caracterización."
+        },
+        {
+          "category": "pseudo",
+          "severity": "info",
+          "target": "C11c-slurry",
+          "message": "C11c-slurry: corte de petróleo 'atmospheric_residue' — pseudo-componente legítimo caracterizado por rango de ebullición (TBP), como en todo simulador de proceso. No se reemplaza por una molécula; VLE aproximado por caracterización."
+        },
+        {
+          "category": "pseudo",
+          "severity": "info",
+          "target": "C11d-coque-FCC",
+          "message": "C11d-coque-FCC: especie inorgánica/material 'carbon' (sal, óxido, mineral, polímero o mezcla) sin modelo VLE — balances por componente y VLE no son físicamente significativos; tratar como pseudo aproximado."
+        },
+        {
+          "category": "pseudo",
+          "severity": "info",
+          "target": "C9b-naft-FCC-feed",
+          "message": "C9b-naft-FCC-feed: corte de petróleo 'naphtha' — pseudo-componente legítimo caracterizado por rango de ebullición (TBP), como en todo simulador de proceso. No se reemplaza por una molécula; VLE aproximado por caracterización."
+        },
+        {
+          "category": "pseudo",
+          "severity": "info",
+          "target": "C9b-hot",
+          "message": "C9b-hot: corte de petróleo 'naphtha' — pseudo-componente legítimo caracterizado por rango de ebullición (TBP), como en todo simulador de proceso. No se reemplaza por una molécula; VLE aproximado por caracterización."
+        },
+        {
+          "category": "pseudo",
+          "severity": "info",
+          "target": "C9c-clean",
+          "message": "C9c-clean: corte de petróleo 'naphtha' — pseudo-componente legítimo caracterizado por rango de ebullición (TBP), como en todo simulador de proceso. No se reemplaza por una molécula; VLE aproximado por caracterización."
+        },
+        {
+          "category": "pseudo",
+          "severity": "info",
+          "target": "C17-coque-a-gasificador",
+          "message": "C17-coque-a-gasificador: especie inorgánica/material 'carbon' (sal, óxido, mineral, polímero o mezcla) sin modelo VLE — balances por componente y VLE no son físicamente significativos; tratar como pseudo aproximado."
+        },
+        {
+          "category": "pseudo",
+          "severity": "info",
+          "target": "C17b-nafta-FCK",
+          "message": "C17b-nafta-FCK: corte de petróleo 'naphtha' — pseudo-componente legítimo caracterizado por rango de ebullición (TBP), como en todo simulador de proceso. No se reemplaza por una molécula; VLE aproximado por caracterización."
+        },
+        {
+          "category": "pseudo",
+          "severity": "info",
+          "target": "C17c-gasoleo-FCK",
+          "message": "C17c-gasoleo-FCK: corte de petróleo 'diesel' — pseudo-componente legítimo caracterizado por rango de ebullición (TBP), como en todo simulador de proceso. No se reemplaza por una molécula; VLE aproximado por caracterización."
+        },
+        {
+          "category": "pseudo",
+          "severity": "info",
+          "target": "C17d-coque-FCK",
+          "message": "C17d-coque-FCK: especie inorgánica/material 'carbon' (sal, óxido, mineral, polímero o mezcla) sin modelo VLE — balances por componente y VLE no son físicamente significativos; tratar como pseudo aproximado."
+        },
+        {
+          "category": "pseudo",
+          "severity": "info",
+          "target": "C12-nafta-clean",
+          "message": "C12-nafta-clean: corte de petróleo 'naphtha' — pseudo-componente legítimo caracterizado por rango de ebullición (TBP), como en todo simulador de proceso. No se reemplaza por una molécula; VLE aproximado por caracterización."
+        },
+        {
+          "category": "pseudo",
+          "severity": "info",
+          "target": "C12-hot",
+          "message": "C12-hot: corte de petróleo 'naphtha' — pseudo-componente legítimo caracterizado por rango de ebullición (TBP), como en todo simulador de proceso. No se reemplaza por una molécula; VLE aproximado por caracterización."
+        },
+        {
+          "category": "pseudo",
+          "severity": "info",
+          "target": "C13-hot",
+          "message": "C13-hot: corte de petróleo 'naphtha' — pseudo-componente legítimo caracterizado por rango de ebullición (TBP), como en todo simulador de proceso. No se reemplaza por una molécula; VLE aproximado por caracterización."
+        },
+        {
+          "category": "pseudo",
+          "severity": "info",
+          "target": "C13-reformado-agregado",
+          "message": "C13-reformado-agregado: corte de petróleo 'naphtha' — pseudo-componente legítimo caracterizado por rango de ebullición (TBP), como en todo simulador de proceso. No se reemplaza por una molécula; VLE aproximado por caracterización."
+        },
+        {
+          "category": "pseudo",
+          "severity": "info",
+          "target": "C14-hot",
+          "message": "C14-hot: corte de petróleo 'diesel' — pseudo-componente legítimo caracterizado por rango de ebullición (TBP), como en todo simulador de proceso. No se reemplaza por una molécula; VLE aproximado por caracterización."
+        },
+        {
+          "category": "pseudo",
+          "severity": "info",
+          "target": "C14-diesel-tratado-no-certificado",
+          "message": "C14-diesel-tratado-no-certificado: corte de petróleo 'diesel' — pseudo-componente legítimo caracterizado por rango de ebullición (TBP), como en todo simulador de proceso. No se reemplaza por una molécula; VLE aproximado por caracterización."
+        },
+        {
+          "category": "pseudo",
+          "severity": "info",
+          "target": "C9c-naft-FCC-clean",
+          "message": "C9c-naft-FCC-clean: corte de petróleo 'naphtha' — pseudo-componente legítimo caracterizado por rango de ebullición (TBP), como en todo simulador de proceso. No se reemplaza por una molécula; VLE aproximado por caracterización."
+        },
+        {
+          "category": "pseudo",
+          "severity": "info",
+          "target": "C2-pumped",
+          "message": "C2-pumped: corte de petróleo 'naphtha' — pseudo-componente legítimo caracterizado por rango de ebullición (TBP), como en todo simulador de proceso. No se reemplaza por una molécula; VLE aproximado por caracterización."
+        },
+        {
+          "category": "pseudo",
+          "severity": "info",
+          "target": "C4-pumped",
+          "message": "C4-pumped: corte de petróleo 'diesel' — pseudo-componente legítimo caracterizado por rango de ebullición (TBP), como en todo simulador de proceso. No se reemplaza por una molécula; VLE aproximado por caracterización."
+        },
+        {
+          "category": "pseudo",
+          "severity": "info",
+          "target": "C9b-pumped",
+          "message": "C9b-pumped: corte de petróleo 'naphtha' — pseudo-componente legítimo caracterizado por rango de ebullición (TBP), como en todo simulador de proceso. No se reemplaza por una molécula; VLE aproximado por caracterización."
+        },
+        {
+          "category": "pseudo",
+          "severity": "info",
+          "target": "C0-crudo-b",
+          "message": "C0-crudo-b: corte de petróleo 'crude_oil' — pseudo-componente legítimo caracterizado por rango de ebullición (TBP), como en todo simulador de proceso. No se reemplaza por una molécula; VLE aproximado por caracterización."
+        },
+        {
+          "category": "pseudo",
+          "severity": "info",
+          "target": "C0-crudo-b",
+          "message": "C0-crudo-b: corte de petróleo 'atmospheric_residue' — pseudo-componente legítimo caracterizado por rango de ebullición (TBP), como en todo simulador de proceso. No se reemplaza por una molécula; VLE aproximado por caracterización."
+        },
+        {
+          "category": "pseudo",
+          "severity": "info",
+          "target": "C0-crudo-b",
+          "message": "C0-crudo-b: corte de petróleo 'diesel' — pseudo-componente legítimo caracterizado por rango de ebullición (TBP), como en todo simulador de proceso. No se reemplaza por una molécula; VLE aproximado por caracterización."
+        },
+        {
+          "category": "pseudo",
+          "severity": "info",
+          "target": "C0-crudo-b",
+          "message": "C0-crudo-b: corte de petróleo 'kerosene' — pseudo-componente legítimo caracterizado por rango de ebullición (TBP), como en todo simulador de proceso. No se reemplaza por una molécula; VLE aproximado por caracterización."
+        },
+        {
+          "category": "pseudo",
+          "severity": "info",
+          "target": "C0-crudo-b",
+          "message": "C0-crudo-b: corte de petróleo 'naphtha' — pseudo-componente legítimo caracterizado por rango de ebullición (TBP), como en todo simulador de proceso. No se reemplaza por una molécula; VLE aproximado por caracterización."
+        },
+        {
+          "category": "pseudo",
+          "severity": "info",
+          "target": "C0-crudo-b",
+          "message": "C0-crudo-b: especie inorgánica/material 'sodium_chloride' (sal, óxido, mineral, polímero o mezcla) sin modelo VLE — balances por componente y VLE no son físicamente significativos; tratar como pseudo aproximado."
+        },
+        {
+          "category": "pseudo",
+          "severity": "info",
+          "target": "C14-ULSD-hot",
+          "message": "C14-ULSD-hot: corte de petróleo 'diesel' — pseudo-componente legítimo caracterizado por rango de ebullición (TBP), como en todo simulador de proceso. No se reemplaza por una molécula; VLE aproximado por caracterización."
+        },
+        {
+          "category": "pseudo",
+          "severity": "info",
+          "target": "C9c-clean-hot",
+          "message": "C9c-clean-hot: corte de petróleo 'naphtha' — pseudo-componente legítimo caracterizado por rango de ebullición (TBP), como en todo simulador de proceso. No se reemplaza por una molécula; VLE aproximado por caracterización."
+        },
+        {
+          "category": "pseudo",
+          "severity": "info",
+          "target": "S-mix-desal-caliente",
+          "message": "S-mix-desal-caliente: corte de petróleo 'crude_oil' — pseudo-componente legítimo caracterizado por rango de ebullición (TBP), como en todo simulador de proceso. No se reemplaza por una molécula; VLE aproximado por caracterización."
+        },
+        {
+          "category": "pseudo",
+          "severity": "info",
+          "target": "S-mix-desal-caliente",
+          "message": "S-mix-desal-caliente: corte de petróleo 'atmospheric_residue' — pseudo-componente legítimo caracterizado por rango de ebullición (TBP), como en todo simulador de proceso. No se reemplaza por una molécula; VLE aproximado por caracterización."
+        },
+        {
+          "category": "pseudo",
+          "severity": "info",
+          "target": "S-mix-desal-caliente",
+          "message": "S-mix-desal-caliente: corte de petróleo 'diesel' — pseudo-componente legítimo caracterizado por rango de ebullición (TBP), como en todo simulador de proceso. No se reemplaza por una molécula; VLE aproximado por caracterización."
+        },
+        {
+          "category": "pseudo",
+          "severity": "info",
+          "target": "S-mix-desal-caliente",
+          "message": "S-mix-desal-caliente: corte de petróleo 'kerosene' — pseudo-componente legítimo caracterizado por rango de ebullición (TBP), como en todo simulador de proceso. No se reemplaza por una molécula; VLE aproximado por caracterización."
+        },
+        {
+          "category": "pseudo",
+          "severity": "info",
+          "target": "S-mix-desal-caliente",
+          "message": "S-mix-desal-caliente: corte de petróleo 'naphtha' — pseudo-componente legítimo caracterizado por rango de ebullición (TBP), como en todo simulador de proceso. No se reemplaza por una molécula; VLE aproximado por caracterización."
+        },
+        {
+          "category": "pseudo",
+          "severity": "info",
+          "target": "S-mix-desal-caliente",
+          "message": "S-mix-desal-caliente: especie inorgánica/material 'sodium_chloride' (sal, óxido, mineral, polímero o mezcla) sin modelo VLE — balances por componente y VLE no son físicamente significativos; tratar como pseudo aproximado."
+        },
+        {
+          "category": "pseudo",
+          "severity": "info",
+          "target": "C1c-feed-DP1",
+          "message": "C1c-feed-DP1: corte de petróleo 'crude_oil' — pseudo-componente legítimo caracterizado por rango de ebullición (TBP), como en todo simulador de proceso. No se reemplaza por una molécula; VLE aproximado por caracterización."
+        },
+        {
+          "category": "pseudo",
+          "severity": "info",
+          "target": "C1c-feed-DP1",
+          "message": "C1c-feed-DP1: corte de petróleo 'atmospheric_residue' — pseudo-componente legítimo caracterizado por rango de ebullición (TBP), como en todo simulador de proceso. No se reemplaza por una molécula; VLE aproximado por caracterización."
+        },
+        {
+          "category": "pseudo",
+          "severity": "info",
+          "target": "C1c-feed-DP1",
+          "message": "C1c-feed-DP1: corte de petróleo 'diesel' — pseudo-componente legítimo caracterizado por rango de ebullición (TBP), como en todo simulador de proceso. No se reemplaza por una molécula; VLE aproximado por caracterización."
+        },
+        {
+          "category": "pseudo",
+          "severity": "info",
+          "target": "C1c-feed-DP1",
+          "message": "C1c-feed-DP1: corte de petróleo 'kerosene' — pseudo-componente legítimo caracterizado por rango de ebullición (TBP), como en todo simulador de proceso. No se reemplaza por una molécula; VLE aproximado por caracterización."
+        },
+        {
+          "category": "pseudo",
+          "severity": "info",
+          "target": "C1c-feed-DP1",
+          "message": "C1c-feed-DP1: corte de petróleo 'naphtha' — pseudo-componente legítimo caracterizado por rango de ebullición (TBP), como en todo simulador de proceso. No se reemplaza por una molécula; VLE aproximado por caracterización."
+        },
+        {
+          "category": "pseudo",
+          "severity": "info",
+          "target": "C7-VGO-impulsado",
+          "message": "C7-VGO-impulsado: corte de petróleo 'crude_oil' — pseudo-componente legítimo caracterizado por rango de ebullición (TBP), como en todo simulador de proceso. No se reemplaza por una molécula; VLE aproximado por caracterización."
+        },
+        {
+          "category": "pseudo",
+          "severity": "info",
+          "target": "C8-resid-vac-impulsado",
+          "message": "C8-resid-vac-impulsado: corte de petróleo 'atmospheric_residue' — pseudo-componente legítimo caracterizado por rango de ebullición (TBP), como en todo simulador de proceso. No se reemplaza por una molécula; VLE aproximado por caracterización."
+        },
+        {
+          "category": "pseudo",
+          "severity": "info",
+          "target": "C5-gasoleo-presurizado",
+          "message": "C5-gasoleo-presurizado: corte de petróleo 'diesel' — pseudo-componente legítimo caracterizado por rango de ebullición (TBP), como en todo simulador de proceso. No se reemplaza por una molécula; VLE aproximado por caracterización."
+        },
+        {
+          "category": "pseudo",
+          "severity": "info",
+          "target": "C-gasolina-mezclada-sin-octano-certificado",
+          "message": "C-gasolina-mezclada-sin-octano-certificado: corte de petróleo 'naphtha' — pseudo-componente legítimo caracterizado por rango de ebullición (TBP), como en todo simulador de proceso. No se reemplaza por una molécula; VLE aproximado por caracterización."
+        },
+        {
+          "category": "pseudo",
+          "severity": "info",
+          "target": "C6-residuo-atm-acondicionado",
+          "message": "C6-residuo-atm-acondicionado: corte de petróleo 'crude_oil' — pseudo-componente legítimo caracterizado por rango de ebullición (TBP), como en todo simulador de proceso. No se reemplaza por una molécula; VLE aproximado por caracterización."
+        },
+        {
+          "category": "pseudo",
+          "severity": "info",
+          "target": "C6-residuo-atm-acondicionado",
+          "message": "C6-residuo-atm-acondicionado: corte de petróleo 'atmospheric_residue' — pseudo-componente legítimo caracterizado por rango de ebullición (TBP), como en todo simulador de proceso. No se reemplaza por una molécula; VLE aproximado por caracterización."
+        },
+        {
+          "category": "pseudo",
+          "severity": "info",
+          "target": "C12-nafta-clean-acondicionado",
+          "message": "C12-nafta-clean-acondicionado: corte de petróleo 'naphtha' — pseudo-componente legítimo caracterizado por rango de ebullición (TBP), como en todo simulador de proceso. No se reemplaza por una molécula; VLE aproximado por caracterización."
+        },
+        {
+          "category": "pseudo",
+          "severity": "info",
+          "target": "C9c-clean-acondicionado",
+          "message": "C9c-clean-acondicionado: corte de petróleo 'naphtha' — pseudo-componente legítimo caracterizado por rango de ebullición (TBP), como en todo simulador de proceso. No se reemplaza por una molécula; VLE aproximado por caracterización."
+        },
+        {
+          "category": "pseudo",
+          "severity": "info",
+          "target": "C13-reformado-agregado-acondicionado",
+          "message": "C13-reformado-agregado-acondicionado: corte de petróleo 'naphtha' — pseudo-componente legítimo caracterizado por rango de ebullición (TBP), como en todo simulador de proceso. No se reemplaza por una molécula; VLE aproximado por caracterización."
+        },
+        {
+          "category": "pseudo",
+          "severity": "info",
+          "target": "C5-gasoleo-enfriado",
+          "message": "C5-gasoleo-enfriado: corte de petróleo 'diesel' — pseudo-componente legítimo caracterizado por rango de ebullición (TBP), como en todo simulador de proceso. No se reemplaza por una molécula; VLE aproximado por caracterización."
+        },
+        {
+          "category": "model_scope",
+          "severity": "warning",
+          "target": "R-FCC",
+          "message": "R-FCC: rendimientos masicos especificados; no predicen cinetica, equilibrio ni calor de cracking."
+        },
+        {
+          "category": "model_scope",
+          "severity": "warning",
+          "target": "R-FCK",
+          "message": "R-FCK: rendimientos masicos especificados; no predicen cinetica, equilibrio ni calor de cracking."
+        }
+      ]
+    },
+    {
+      "key": "pasteurizer",
+      "passed": true,
+      "status": "ok",
+      "blocks": 4,
+      "streams": 5,
+      "errors": [],
+      "maximum_unit_mass_relative_error": 0.0,
+      "findings": [
+        {
+          "category": "pseudo",
+          "severity": "info",
+          "target": "S-jugo-crudo",
+          "message": "S-jugo-crudo: usa pseudo-componente alimentario/biológico 'sucrose' — comportamiento aproximado, mantener como tal."
+        },
+        {
+          "category": "pseudo",
+          "severity": "info",
+          "target": "S-1",
+          "message": "S-1: usa pseudo-componente alimentario/biológico 'sucrose' — comportamiento aproximado, mantener como tal."
+        },
+        {
+          "category": "pseudo",
+          "severity": "info",
+          "target": "S-2",
+          "message": "S-2: usa pseudo-componente alimentario/biológico 'sucrose' — comportamiento aproximado, mantener como tal."
+        },
+        {
+          "category": "pseudo",
+          "severity": "info",
+          "target": "S-pasteurizado",
+          "message": "S-pasteurizado: usa pseudo-componente alimentario/biológico 'sucrose' — comportamiento aproximado, mantener como tal."
+        },
+        {
+          "category": "pseudo",
+          "severity": "info",
+          "target": "S-jugo-crudo-b",
+          "message": "S-jugo-crudo-b: usa pseudo-componente alimentario/biológico 'sucrose' — comportamiento aproximado, mantener como tal."
+        }
+      ]
+    },
+    {
+      "key": "pineapple",
+      "passed": true,
+      "status": "ok",
+      "blocks": 6,
+      "streams": 7,
+      "errors": [],
+      "maximum_unit_mass_relative_error": 0.0,
+      "findings": [
+        {
+          "category": "pseudo",
+          "severity": "info",
+          "target": "S-jugo-diluido",
+          "message": "S-jugo-diluido: usa pseudo-componente alimentario/biológico 'pineapple_solids' — comportamiento aproximado, mantener como tal."
+        },
+        {
+          "category": "pseudo",
+          "severity": "info",
+          "target": "S-1",
+          "message": "S-1: usa pseudo-componente alimentario/biológico 'pineapple_solids' — comportamiento aproximado, mantener como tal."
+        },
+        {
+          "category": "pseudo",
+          "severity": "info",
+          "target": "S-2",
+          "message": "S-2: usa pseudo-componente alimentario/biológico 'pineapple_solids' — comportamiento aproximado, mantener como tal."
+        },
+        {
+          "category": "pseudo",
+          "severity": "info",
+          "target": "S-concentrado",
+          "message": "S-concentrado: usa pseudo-componente alimentario/biológico 'pineapple_solids' — comportamiento aproximado, mantener como tal."
+        },
+        {
+          "category": "pseudo",
+          "severity": "info",
+          "target": "S-jugo-diluido-b",
+          "message": "S-jugo-diluido-b: usa pseudo-componente alimentario/biológico 'pineapple_solids' — comportamiento aproximado, mantener como tal."
+        }
+      ]
+    },
+    {
+      "key": "potato_chips",
+      "passed": true,
+      "status": "ok",
+      "blocks": 3,
+      "streams": 5,
+      "errors": [],
+      "maximum_unit_mass_relative_error": 0.0,
+      "findings": [
+        {
+          "category": "pseudo",
+          "severity": "info",
+          "target": "S-papa-cruda",
+          "message": "S-papa-cruda: usa pseudo-componente alimentario/biológico 'potato_solids' — comportamiento aproximado, mantener como tal."
+        },
+        {
+          "category": "pseudo",
+          "severity": "info",
+          "target": "S-aceite",
+          "message": "S-aceite: usa pseudo-componente alimentario/biológico 'vegetable_oil' — comportamiento aproximado, mantener como tal."
+        },
+        {
+          "category": "pseudo",
+          "severity": "info",
+          "target": "S-chips",
+          "message": "S-chips: usa pseudo-componente alimentario/biológico 'potato_solids' — comportamiento aproximado, mantener como tal."
+        },
+        {
+          "category": "pseudo",
+          "severity": "info",
+          "target": "S-chips",
+          "message": "S-chips: usa pseudo-componente alimentario/biológico 'vegetable_oil' — comportamiento aproximado, mantener como tal."
+        },
+        {
+          "category": "pseudo",
+          "severity": "info",
+          "target": "S-aceite-b",
+          "message": "S-aceite-b: usa pseudo-componente alimentario/biológico 'vegetable_oil' — comportamiento aproximado, mantener como tal."
+        }
+      ]
+    },
+    {
+      "key": "bread",
+      "passed": true,
+      "status": "ok",
+      "blocks": 5,
+      "streams": 6,
+      "errors": [],
+      "maximum_unit_mass_relative_error": 0.0,
+      "findings": [
+        {
+          "category": "pseudo",
+          "severity": "info",
+          "target": "S-masa-cruda",
+          "message": "S-masa-cruda: usa pseudo-componente alimentario/biológico 'glucose' — comportamiento aproximado, mantener como tal."
+        },
+        {
+          "category": "pseudo",
+          "severity": "info",
+          "target": "S-masa-cruda",
+          "message": "S-masa-cruda: usa pseudo-componente alimentario/biológico 'starch' — comportamiento aproximado, mantener como tal."
+        },
+        {
+          "category": "pseudo",
+          "severity": "info",
+          "target": "S-amasada",
+          "message": "S-amasada: usa pseudo-componente alimentario/biológico 'glucose' — comportamiento aproximado, mantener como tal."
+        },
+        {
+          "category": "pseudo",
+          "severity": "info",
+          "target": "S-amasada",
+          "message": "S-amasada: usa pseudo-componente alimentario/biológico 'starch' — comportamiento aproximado, mantener como tal."
+        },
+        {
+          "category": "pseudo",
+          "severity": "info",
+          "target": "S-leudada",
+          "message": "S-leudada: usa pseudo-componente alimentario/biológico 'glucose' — comportamiento aproximado, mantener como tal."
+        },
+        {
+          "category": "pseudo",
+          "severity": "info",
+          "target": "S-leudada",
+          "message": "S-leudada: usa pseudo-componente alimentario/biológico 'starch' — comportamiento aproximado, mantener como tal."
+        },
+        {
+          "category": "pseudo",
+          "severity": "info",
+          "target": "S-pan-cal",
+          "message": "S-pan-cal: usa pseudo-componente alimentario/biológico 'glucose' — comportamiento aproximado, mantener como tal."
+        },
+        {
+          "category": "pseudo",
+          "severity": "info",
+          "target": "S-pan-cal",
+          "message": "S-pan-cal: usa pseudo-componente alimentario/biológico 'starch' — comportamiento aproximado, mantener como tal."
+        },
+        {
+          "category": "pseudo",
+          "severity": "info",
+          "target": "S-pan",
+          "message": "S-pan: usa pseudo-componente alimentario/biológico 'glucose' — comportamiento aproximado, mantener como tal."
+        },
+        {
+          "category": "pseudo",
+          "severity": "info",
+          "target": "S-pan",
+          "message": "S-pan: usa pseudo-componente alimentario/biológico 'starch' — comportamiento aproximado, mantener como tal."
+        }
+      ]
+    },
+    {
+      "key": "beer",
+      "passed": true,
+      "status": "ok",
+      "blocks": 5,
+      "streams": 6,
+      "errors": [],
+      "maximum_unit_mass_relative_error": 0.0,
+      "findings": [
+        {
+          "category": "pseudo",
+          "severity": "info",
+          "target": "S-mosto",
+          "message": "S-mosto: usa pseudo-componente alimentario/biológico 'glucose' — comportamiento aproximado, mantener como tal."
+        },
+        {
+          "category": "pseudo",
+          "severity": "info",
+          "target": "S-fermented",
+          "message": "S-fermented: usa pseudo-componente alimentario/biológico 'glucose' — comportamiento aproximado, mantener como tal."
+        },
+        {
+          "category": "pseudo",
+          "severity": "info",
+          "target": "S-vino",
+          "message": "S-vino: usa pseudo-componente alimentario/biológico 'glucose' — comportamiento aproximado, mantener como tal."
+        },
+        {
+          "category": "pseudo",
+          "severity": "info",
+          "target": "S-cerveza",
+          "message": "S-cerveza: usa pseudo-componente alimentario/biológico 'glucose' — comportamiento aproximado, mantener como tal."
+        },
+        {
+          "category": "pseudo",
+          "severity": "info",
+          "target": "S-mosto-b",
+          "message": "S-mosto-b: usa pseudo-componente alimentario/biológico 'glucose' — comportamiento aproximado, mantener como tal."
+        }
+      ]
+    },
+    {
+      "key": "penicillin",
+      "passed": true,
+      "status": "ok",
+      "blocks": 5,
+      "streams": 8,
+      "errors": [],
+      "maximum_unit_mass_relative_error": 1.1368683772161603e-16,
+      "findings": [
+        {
+          "category": "pseudo",
+          "severity": "info",
+          "target": "S-caldo-fermentado",
+          "message": "S-caldo-fermentado: usa pseudo-componente alimentario/biológico 'glucose' — comportamiento aproximado, mantener como tal."
+        },
+        {
+          "category": "pseudo",
+          "severity": "info",
+          "target": "S-caldo-fermentado",
+          "message": "S-caldo-fermentado: usa pseudo-componente alimentario/biológico 'biomass' — comportamiento aproximado, mantener como tal."
+        },
+        {
+          "category": "pseudo",
+          "severity": "info",
+          "target": "S-caldo-fermentado",
+          "message": "S-caldo-fermentado: usa pseudo-componente alimentario/biológico 'penicillin' — comportamiento aproximado, mantener como tal."
+        },
+        {
+          "category": "pseudo",
+          "severity": "info",
+          "target": "S-est",
+          "message": "S-est: usa pseudo-componente alimentario/biológico 'glucose' — comportamiento aproximado, mantener como tal."
+        },
+        {
+          "category": "pseudo",
+          "severity": "info",
+          "target": "S-est",
+          "message": "S-est: usa pseudo-componente alimentario/biológico 'biomass' — comportamiento aproximado, mantener como tal."
+        },
+        {
+          "category": "pseudo",
+          "severity": "info",
+          "target": "S-est",
+          "message": "S-est: usa pseudo-componente alimentario/biológico 'penicillin' — comportamiento aproximado, mantener como tal."
+        },
+        {
+          "category": "pseudo",
+          "severity": "info",
+          "target": "S-caldo",
+          "message": "S-caldo: usa pseudo-componente alimentario/biológico 'glucose' — comportamiento aproximado, mantener como tal."
+        },
+        {
+          "category": "pseudo",
+          "severity": "info",
+          "target": "S-caldo",
+          "message": "S-caldo: usa pseudo-componente alimentario/biológico 'biomass' — comportamiento aproximado, mantener como tal."
+        },
+        {
+          "category": "pseudo",
+          "severity": "info",
+          "target": "S-caldo",
+          "message": "S-caldo: usa pseudo-componente alimentario/biológico 'penicillin' — comportamiento aproximado, mantener como tal."
+        },
+        {
+          "category": "pseudo",
+          "severity": "info",
+          "target": "S-biomass",
+          "message": "S-biomass: usa pseudo-componente alimentario/biológico 'glucose' — comportamiento aproximado, mantener como tal."
+        },
+        {
+          "category": "pseudo",
+          "severity": "info",
+          "target": "S-biomass",
+          "message": "S-biomass: usa pseudo-componente alimentario/biológico 'biomass' — comportamiento aproximado, mantener como tal."
+        },
+        {
+          "category": "pseudo",
+          "severity": "info",
+          "target": "S-biomass",
+          "message": "S-biomass: usa pseudo-componente alimentario/biológico 'penicillin' — comportamiento aproximado, mantener como tal."
+        },
+        {
+          "category": "pseudo",
+          "severity": "info",
+          "target": "S-liq",
+          "message": "S-liq: usa pseudo-componente alimentario/biológico 'glucose' — comportamiento aproximado, mantener como tal."
+        },
+        {
+          "category": "pseudo",
+          "severity": "info",
+          "target": "S-liq",
+          "message": "S-liq: usa pseudo-componente alimentario/biológico 'biomass' — comportamiento aproximado, mantener como tal."
+        },
+        {
+          "category": "pseudo",
+          "severity": "info",
+          "target": "S-liq",
+          "message": "S-liq: usa pseudo-componente alimentario/biológico 'penicillin' — comportamiento aproximado, mantener como tal."
+        },
+        {
+          "category": "pseudo",
+          "severity": "info",
+          "target": "S-pen",
+          "message": "S-pen: usa pseudo-componente alimentario/biológico 'glucose' — comportamiento aproximado, mantener como tal."
+        },
+        {
+          "category": "pseudo",
+          "severity": "info",
+          "target": "S-pen",
+          "message": "S-pen: usa pseudo-componente alimentario/biológico 'penicillin' — comportamiento aproximado, mantener como tal."
+        },
+        {
+          "category": "pseudo",
+          "severity": "info",
+          "target": "S-residual",
+          "message": "S-residual: usa pseudo-componente alimentario/biológico 'glucose' — comportamiento aproximado, mantener como tal."
+        },
+        {
+          "category": "pseudo",
+          "severity": "info",
+          "target": "S-residual",
+          "message": "S-residual: usa pseudo-componente alimentario/biológico 'biomass' — comportamiento aproximado, mantener como tal."
+        },
+        {
+          "category": "pseudo",
+          "severity": "info",
+          "target": "S-residual",
+          "message": "S-residual: usa pseudo-componente alimentario/biológico 'penicillin' — comportamiento aproximado, mantener como tal."
+        },
+        {
+          "category": "pseudo",
+          "severity": "info",
+          "target": "S-medio-b",
+          "message": "S-medio-b: usa pseudo-componente alimentario/biológico 'glucose' — comportamiento aproximado, mantener como tal."
+        },
+        {
+          "category": "pseudo",
+          "severity": "info",
+          "target": "S-medio-b",
+          "message": "S-medio-b: usa pseudo-componente alimentario/biológico 'biomass' — comportamiento aproximado, mantener como tal."
+        },
+        {
+          "category": "pseudo",
+          "severity": "info",
+          "target": "S-medio-b",
+          "message": "S-medio-b: usa pseudo-componente alimentario/biológico 'penicillin' — comportamiento aproximado, mantener como tal."
+        }
+      ]
+    },
+    {
+      "key": "leche_gloria",
+      "passed": true,
+      "status": "ok",
+      "blocks": 19,
+      "streams": 27,
+      "errors": [],
+      "maximum_unit_mass_relative_error": 1.8226346728916398e-16,
+      "findings": [
+        {
+          "category": "pseudo",
+          "severity": "info",
+          "target": "S-cruda",
+          "message": "S-cruda: usa pseudo-componente alimentario/biológico 'lactose' — comportamiento aproximado, mantener como tal."
+        },
+        {
+          "category": "pseudo",
+          "severity": "info",
+          "target": "S-cruda",
+          "message": "S-cruda: usa pseudo-componente alimentario/biológico 'milk_ash' — comportamiento aproximado, mantener como tal."
+        },
+        {
+          "category": "pseudo",
+          "severity": "info",
+          "target": "S-cruda",
+          "message": "S-cruda: usa pseudo-componente alimentario/biológico 'milk_fat' — comportamiento aproximado, mantener como tal."
+        },
+        {
+          "category": "pseudo",
+          "severity": "info",
+          "target": "S-cruda",
+          "message": "S-cruda: usa pseudo-componente alimentario/biológico 'milk_protein' — comportamiento aproximado, mantener como tal."
+        },
+        {
+          "category": "pseudo",
+          "severity": "info",
+          "target": "S-clarif-waste",
+          "message": "S-clarif-waste: usa pseudo-componente alimentario/biológico 'lactose' — comportamiento aproximado, mantener como tal."
+        },
+        {
+          "category": "pseudo",
+          "severity": "info",
+          "target": "S-clarif-waste",
+          "message": "S-clarif-waste: usa pseudo-componente alimentario/biológico 'milk_ash' — comportamiento aproximado, mantener como tal."
+        },
+        {
+          "category": "pseudo",
+          "severity": "info",
+          "target": "S-clarif-waste",
+          "message": "S-clarif-waste: usa pseudo-componente alimentario/biológico 'milk_fat' — comportamiento aproximado, mantener como tal."
+        },
+        {
+          "category": "pseudo",
+          "severity": "info",
+          "target": "S-clarif-waste",
+          "message": "S-clarif-waste: usa pseudo-componente alimentario/biológico 'milk_protein' — comportamiento aproximado, mantener como tal."
+        },
+        {
+          "category": "pseudo",
+          "severity": "info",
+          "target": "S-clar",
+          "message": "S-clar: usa pseudo-componente alimentario/biológico 'lactose' — comportamiento aproximado, mantener como tal."
+        },
+        {
+          "category": "pseudo",
+          "severity": "info",
+          "target": "S-clar",
+          "message": "S-clar: usa pseudo-componente alimentario/biológico 'milk_ash' — comportamiento aproximado, mantener como tal."
+        },
+        {
+          "category": "pseudo",
+          "severity": "info",
+          "target": "S-clar",
+          "message": "S-clar: usa pseudo-componente alimentario/biológico 'milk_fat' — comportamiento aproximado, mantener como tal."
+        },
+        {
+          "category": "pseudo",
+          "severity": "info",
+          "target": "S-clar",
+          "message": "S-clar: usa pseudo-componente alimentario/biológico 'milk_protein' — comportamiento aproximado, mantener como tal."
+        },
+        {
+          "category": "pseudo",
+          "severity": "info",
+          "target": "S-precal",
+          "message": "S-precal: usa pseudo-componente alimentario/biológico 'lactose' — comportamiento aproximado, mantener como tal."
+        },
+        {
+          "category": "pseudo",
+          "severity": "info",
+          "target": "S-precal",
+          "message": "S-precal: usa pseudo-componente alimentario/biológico 'milk_ash' — comportamiento aproximado, mantener como tal."
+        },
+        {
+          "category": "pseudo",
+          "severity": "info",
+          "target": "S-precal",
+          "message": "S-precal: usa pseudo-componente alimentario/biológico 'milk_fat' — comportamiento aproximado, mantener como tal."
+        },
+        {
+          "category": "pseudo",
+          "severity": "info",
+          "target": "S-precal",
+          "message": "S-precal: usa pseudo-componente alimentario/biológico 'milk_protein' — comportamiento aproximado, mantener como tal."
+        },
+        {
+          "category": "pseudo",
+          "severity": "info",
+          "target": "S-crema-fluida",
+          "message": "S-crema-fluida: usa pseudo-componente alimentario/biológico 'lactose' — comportamiento aproximado, mantener como tal."
+        },
+        {
+          "category": "pseudo",
+          "severity": "info",
+          "target": "S-crema-fluida",
+          "message": "S-crema-fluida: usa pseudo-componente alimentario/biológico 'milk_ash' — comportamiento aproximado, mantener como tal."
+        },
+        {
+          "category": "pseudo",
+          "severity": "info",
+          "target": "S-crema-fluida",
+          "message": "S-crema-fluida: usa pseudo-componente alimentario/biológico 'milk_fat' — comportamiento aproximado, mantener como tal."
+        },
+        {
+          "category": "pseudo",
+          "severity": "info",
+          "target": "S-crema-fluida",
+          "message": "S-crema-fluida: usa pseudo-componente alimentario/biológico 'milk_protein' — comportamiento aproximado, mantener como tal."
+        },
+        {
+          "category": "pseudo",
+          "severity": "info",
+          "target": "S-crema-manteq",
+          "message": "S-crema-manteq: usa pseudo-componente alimentario/biológico 'lactose' — comportamiento aproximado, mantener como tal."
+        },
+        {
+          "category": "pseudo",
+          "severity": "info",
+          "target": "S-crema-manteq",
+          "message": "S-crema-manteq: usa pseudo-componente alimentario/biológico 'milk_ash' — comportamiento aproximado, mantener como tal."
+        },
+        {
+          "category": "pseudo",
+          "severity": "info",
+          "target": "S-crema-manteq",
+          "message": "S-crema-manteq: usa pseudo-componente alimentario/biológico 'milk_fat' — comportamiento aproximado, mantener como tal."
+        },
+        {
+          "category": "pseudo",
+          "severity": "info",
+          "target": "S-crema-manteq",
+          "message": "S-crema-manteq: usa pseudo-componente alimentario/biológico 'milk_protein' — comportamiento aproximado, mantener como tal."
+        },
+        {
+          "category": "pseudo",
+          "severity": "info",
+          "target": "S-desc-fluida",
+          "message": "S-desc-fluida: usa pseudo-componente alimentario/biológico 'lactose' — comportamiento aproximado, mantener como tal."
+        },
+        {
+          "category": "pseudo",
+          "severity": "info",
+          "target": "S-desc-fluida",
+          "message": "S-desc-fluida: usa pseudo-componente alimentario/biológico 'milk_ash' — comportamiento aproximado, mantener como tal."
+        },
+        {
+          "category": "pseudo",
+          "severity": "info",
+          "target": "S-desc-fluida",
+          "message": "S-desc-fluida: usa pseudo-componente alimentario/biológico 'milk_fat' — comportamiento aproximado, mantener como tal."
+        },
+        {
+          "category": "pseudo",
+          "severity": "info",
+          "target": "S-desc-fluida",
+          "message": "S-desc-fluida: usa pseudo-componente alimentario/biológico 'milk_protein' — comportamiento aproximado, mantener como tal."
+        },
+        {
+          "category": "pseudo",
+          "severity": "info",
+          "target": "S-desc-evap",
+          "message": "S-desc-evap: usa pseudo-componente alimentario/biológico 'lactose' — comportamiento aproximado, mantener como tal."
+        },
+        {
+          "category": "pseudo",
+          "severity": "info",
+          "target": "S-desc-evap",
+          "message": "S-desc-evap: usa pseudo-componente alimentario/biológico 'milk_ash' — comportamiento aproximado, mantener como tal."
+        },
+        {
+          "category": "pseudo",
+          "severity": "info",
+          "target": "S-desc-evap",
+          "message": "S-desc-evap: usa pseudo-componente alimentario/biológico 'milk_fat' — comportamiento aproximado, mantener como tal."
+        },
+        {
+          "category": "pseudo",
+          "severity": "info",
+          "target": "S-desc-evap",
+          "message": "S-desc-evap: usa pseudo-componente alimentario/biológico 'milk_protein' — comportamiento aproximado, mantener como tal."
+        },
+        {
+          "category": "pseudo",
+          "severity": "info",
+          "target": "S-std",
+          "message": "S-std: usa pseudo-componente alimentario/biológico 'lactose' — comportamiento aproximado, mantener como tal."
+        },
+        {
+          "category": "pseudo",
+          "severity": "info",
+          "target": "S-std",
+          "message": "S-std: usa pseudo-componente alimentario/biológico 'milk_ash' — comportamiento aproximado, mantener como tal."
+        },
+        {
+          "category": "pseudo",
+          "severity": "info",
+          "target": "S-std",
+          "message": "S-std: usa pseudo-componente alimentario/biológico 'milk_fat' — comportamiento aproximado, mantener como tal."
+        },
+        {
+          "category": "pseudo",
+          "severity": "info",
+          "target": "S-std",
+          "message": "S-std: usa pseudo-componente alimentario/biológico 'milk_protein' — comportamiento aproximado, mantener como tal."
+        },
+        {
+          "category": "pseudo",
+          "severity": "info",
+          "target": "S-past",
+          "message": "S-past: usa pseudo-componente alimentario/biológico 'lactose' — comportamiento aproximado, mantener como tal."
+        },
+        {
+          "category": "pseudo",
+          "severity": "info",
+          "target": "S-past",
+          "message": "S-past: usa pseudo-componente alimentario/biológico 'milk_ash' — comportamiento aproximado, mantener como tal."
+        },
+        {
+          "category": "pseudo",
+          "severity": "info",
+          "target": "S-past",
+          "message": "S-past: usa pseudo-componente alimentario/biológico 'milk_fat' — comportamiento aproximado, mantener como tal."
+        },
+        {
+          "category": "pseudo",
+          "severity": "info",
+          "target": "S-past",
+          "message": "S-past: usa pseudo-componente alimentario/biológico 'milk_protein' — comportamiento aproximado, mantener como tal."
+        },
+        {
+          "category": "pseudo",
+          "severity": "info",
+          "target": "S-homog",
+          "message": "S-homog: usa pseudo-componente alimentario/biológico 'lactose' — comportamiento aproximado, mantener como tal."
+        },
+        {
+          "category": "pseudo",
+          "severity": "info",
+          "target": "S-homog",
+          "message": "S-homog: usa pseudo-componente alimentario/biológico 'milk_ash' — comportamiento aproximado, mantener como tal."
+        },
+        {
+          "category": "pseudo",
+          "severity": "info",
+          "target": "S-homog",
+          "message": "S-homog: usa pseudo-componente alimentario/biológico 'milk_fat' — comportamiento aproximado, mantener como tal."
+        },
+        {
+          "category": "pseudo",
+          "severity": "info",
+          "target": "S-homog",
+          "message": "S-homog: usa pseudo-componente alimentario/biológico 'milk_protein' — comportamiento aproximado, mantener como tal."
+        },
+        {
+          "category": "pseudo",
+          "severity": "info",
+          "target": "S-fluida",
+          "message": "S-fluida: usa pseudo-componente alimentario/biológico 'lactose' — comportamiento aproximado, mantener como tal."
+        },
+        {
+          "category": "pseudo",
+          "severity": "info",
+          "target": "S-fluida",
+          "message": "S-fluida: usa pseudo-componente alimentario/biológico 'milk_ash' — comportamiento aproximado, mantener como tal."
+        },
+        {
+          "category": "pseudo",
+          "severity": "info",
+          "target": "S-fluida",
+          "message": "S-fluida: usa pseudo-componente alimentario/biológico 'milk_fat' — comportamiento aproximado, mantener como tal."
+        },
+        {
+          "category": "pseudo",
+          "severity": "info",
+          "target": "S-fluida",
+          "message": "S-fluida: usa pseudo-componente alimentario/biológico 'milk_protein' — comportamiento aproximado, mantener como tal."
+        },
+        {
+          "category": "pseudo",
+          "severity": "info",
+          "target": "S-crema-past",
+          "message": "S-crema-past: usa pseudo-componente alimentario/biológico 'lactose' — comportamiento aproximado, mantener como tal."
+        },
+        {
+          "category": "pseudo",
+          "severity": "info",
+          "target": "S-crema-past",
+          "message": "S-crema-past: usa pseudo-componente alimentario/biológico 'milk_ash' — comportamiento aproximado, mantener como tal."
+        },
+        {
+          "category": "pseudo",
+          "severity": "info",
+          "target": "S-crema-past",
+          "message": "S-crema-past: usa pseudo-componente alimentario/biológico 'milk_fat' — comportamiento aproximado, mantener como tal."
+        },
+        {
+          "category": "pseudo",
+          "severity": "info",
+          "target": "S-crema-past",
+          "message": "S-crema-past: usa pseudo-componente alimentario/biológico 'milk_protein' — comportamiento aproximado, mantener como tal."
+        },
+        {
+          "category": "pseudo",
+          "severity": "info",
+          "target": "S-crema-mad",
+          "message": "S-crema-mad: usa pseudo-componente alimentario/biológico 'lactose' — comportamiento aproximado, mantener como tal."
+        },
+        {
+          "category": "pseudo",
+          "severity": "info",
+          "target": "S-crema-mad",
+          "message": "S-crema-mad: usa pseudo-componente alimentario/biológico 'milk_ash' — comportamiento aproximado, mantener como tal."
+        },
+        {
+          "category": "pseudo",
+          "severity": "info",
+          "target": "S-crema-mad",
+          "message": "S-crema-mad: usa pseudo-componente alimentario/biológico 'milk_fat' — comportamiento aproximado, mantener como tal."
+        },
+        {
+          "category": "pseudo",
+          "severity": "info",
+          "target": "S-crema-mad",
+          "message": "S-crema-mad: usa pseudo-componente alimentario/biológico 'milk_protein' — comportamiento aproximado, mantener como tal."
+        },
+        {
+          "category": "pseudo",
+          "severity": "info",
+          "target": "S-manteq",
+          "message": "S-manteq: usa pseudo-componente alimentario/biológico 'lactose' — comportamiento aproximado, mantener como tal."
+        },
+        {
+          "category": "pseudo",
+          "severity": "info",
+          "target": "S-manteq",
+          "message": "S-manteq: usa pseudo-componente alimentario/biológico 'milk_ash' — comportamiento aproximado, mantener como tal."
+        },
+        {
+          "category": "pseudo",
+          "severity": "info",
+          "target": "S-manteq",
+          "message": "S-manteq: usa pseudo-componente alimentario/biológico 'milk_fat' — comportamiento aproximado, mantener como tal."
+        },
+        {
+          "category": "pseudo",
+          "severity": "info",
+          "target": "S-manteq",
+          "message": "S-manteq: usa pseudo-componente alimentario/biológico 'milk_protein' — comportamiento aproximado, mantener como tal."
+        },
+        {
+          "category": "pseudo",
+          "severity": "info",
+          "target": "S-buttermilk",
+          "message": "S-buttermilk: usa pseudo-componente alimentario/biológico 'lactose' — comportamiento aproximado, mantener como tal."
+        },
+        {
+          "category": "pseudo",
+          "severity": "info",
+          "target": "S-buttermilk",
+          "message": "S-buttermilk: usa pseudo-componente alimentario/biológico 'milk_ash' — comportamiento aproximado, mantener como tal."
+        },
+        {
+          "category": "pseudo",
+          "severity": "info",
+          "target": "S-buttermilk",
+          "message": "S-buttermilk: usa pseudo-componente alimentario/biológico 'milk_fat' — comportamiento aproximado, mantener como tal."
+        },
+        {
+          "category": "pseudo",
+          "severity": "info",
+          "target": "S-buttermilk",
+          "message": "S-buttermilk: usa pseudo-componente alimentario/biológico 'milk_protein' — comportamiento aproximado, mantener como tal."
+        },
+        {
+          "category": "pseudo",
+          "severity": "info",
+          "target": "S-mid",
+          "message": "S-mid: usa pseudo-componente alimentario/biológico 'lactose' — comportamiento aproximado, mantener como tal."
+        },
+        {
+          "category": "pseudo",
+          "severity": "info",
+          "target": "S-mid",
+          "message": "S-mid: usa pseudo-componente alimentario/biológico 'milk_ash' — comportamiento aproximado, mantener como tal."
+        },
+        {
+          "category": "pseudo",
+          "severity": "info",
+          "target": "S-mid",
+          "message": "S-mid: usa pseudo-componente alimentario/biológico 'milk_fat' — comportamiento aproximado, mantener como tal."
+        },
+        {
+          "category": "pseudo",
+          "severity": "info",
+          "target": "S-mid",
+          "message": "S-mid: usa pseudo-componente alimentario/biológico 'milk_protein' — comportamiento aproximado, mantener como tal."
+        },
+        {
+          "category": "pseudo",
+          "severity": "info",
+          "target": "S-conc",
+          "message": "S-conc: usa pseudo-componente alimentario/biológico 'lactose' — comportamiento aproximado, mantener como tal."
+        },
+        {
+          "category": "pseudo",
+          "severity": "info",
+          "target": "S-conc",
+          "message": "S-conc: usa pseudo-componente alimentario/biológico 'milk_ash' — comportamiento aproximado, mantener como tal."
+        },
+        {
+          "category": "pseudo",
+          "severity": "info",
+          "target": "S-conc",
+          "message": "S-conc: usa pseudo-componente alimentario/biológico 'milk_fat' — comportamiento aproximado, mantener como tal."
+        },
+        {
+          "category": "pseudo",
+          "severity": "info",
+          "target": "S-conc",
+          "message": "S-conc: usa pseudo-componente alimentario/biológico 'milk_protein' — comportamiento aproximado, mantener como tal."
+        },
+        {
+          "category": "pseudo",
+          "severity": "info",
+          "target": "S-evap",
+          "message": "S-evap: usa pseudo-componente alimentario/biológico 'lactose' — comportamiento aproximado, mantener como tal."
+        },
+        {
+          "category": "pseudo",
+          "severity": "info",
+          "target": "S-evap",
+          "message": "S-evap: usa pseudo-componente alimentario/biológico 'milk_ash' — comportamiento aproximado, mantener como tal."
+        },
+        {
+          "category": "pseudo",
+          "severity": "info",
+          "target": "S-evap",
+          "message": "S-evap: usa pseudo-componente alimentario/biológico 'milk_fat' — comportamiento aproximado, mantener como tal."
+        },
+        {
+          "category": "pseudo",
+          "severity": "info",
+          "target": "S-evap",
+          "message": "S-evap: usa pseudo-componente alimentario/biológico 'milk_protein' — comportamiento aproximado, mantener como tal."
+        },
+        {
+          "category": "pseudo",
+          "severity": "info",
+          "target": "S-cruda-b",
+          "message": "S-cruda-b: usa pseudo-componente alimentario/biológico 'lactose' — comportamiento aproximado, mantener como tal."
+        },
+        {
+          "category": "pseudo",
+          "severity": "info",
+          "target": "S-cruda-b",
+          "message": "S-cruda-b: usa pseudo-componente alimentario/biológico 'milk_ash' — comportamiento aproximado, mantener como tal."
+        },
+        {
+          "category": "pseudo",
+          "severity": "info",
+          "target": "S-cruda-b",
+          "message": "S-cruda-b: usa pseudo-componente alimentario/biológico 'milk_fat' — comportamiento aproximado, mantener como tal."
+        },
+        {
+          "category": "pseudo",
+          "severity": "info",
+          "target": "S-cruda-b",
+          "message": "S-cruda-b: usa pseudo-componente alimentario/biológico 'milk_protein' — comportamiento aproximado, mantener como tal."
+        },
+        {
+          "category": "pseudo",
+          "severity": "info",
+          "target": "S-crema-total",
+          "message": "S-crema-total: usa pseudo-componente alimentario/biológico 'lactose' — comportamiento aproximado, mantener como tal."
+        },
+        {
+          "category": "pseudo",
+          "severity": "info",
+          "target": "S-crema-total",
+          "message": "S-crema-total: usa pseudo-componente alimentario/biológico 'milk_ash' — comportamiento aproximado, mantener como tal."
+        },
+        {
+          "category": "pseudo",
+          "severity": "info",
+          "target": "S-crema-total",
+          "message": "S-crema-total: usa pseudo-componente alimentario/biológico 'milk_fat' — comportamiento aproximado, mantener como tal."
+        },
+        {
+          "category": "pseudo",
+          "severity": "info",
+          "target": "S-crema-total",
+          "message": "S-crema-total: usa pseudo-componente alimentario/biológico 'milk_protein' — comportamiento aproximado, mantener como tal."
+        },
+        {
+          "category": "pseudo",
+          "severity": "info",
+          "target": "S-descremada-total",
+          "message": "S-descremada-total: usa pseudo-componente alimentario/biológico 'lactose' — comportamiento aproximado, mantener como tal."
+        },
+        {
+          "category": "pseudo",
+          "severity": "info",
+          "target": "S-descremada-total",
+          "message": "S-descremada-total: usa pseudo-componente alimentario/biológico 'milk_ash' — comportamiento aproximado, mantener como tal."
+        },
+        {
+          "category": "pseudo",
+          "severity": "info",
+          "target": "S-descremada-total",
+          "message": "S-descremada-total: usa pseudo-componente alimentario/biológico 'milk_fat' — comportamiento aproximado, mantener como tal."
+        },
+        {
+          "category": "pseudo",
+          "severity": "info",
+          "target": "S-descremada-total",
+          "message": "S-descremada-total: usa pseudo-componente alimentario/biológico 'milk_protein' — comportamiento aproximado, mantener como tal."
+        },
+        {
+          "category": "pseudo",
+          "severity": "info",
+          "target": "S-homog-out",
+          "message": "S-homog-out: usa pseudo-componente alimentario/biológico 'lactose' — comportamiento aproximado, mantener como tal."
+        },
+        {
+          "category": "pseudo",
+          "severity": "info",
+          "target": "S-homog-out",
+          "message": "S-homog-out: usa pseudo-componente alimentario/biológico 'milk_ash' — comportamiento aproximado, mantener como tal."
+        },
+        {
+          "category": "pseudo",
+          "severity": "info",
+          "target": "S-homog-out",
+          "message": "S-homog-out: usa pseudo-componente alimentario/biológico 'milk_fat' — comportamiento aproximado, mantener como tal."
+        },
+        {
+          "category": "pseudo",
+          "severity": "info",
+          "target": "S-homog-out",
+          "message": "S-homog-out: usa pseudo-componente alimentario/biológico 'milk_protein' — comportamiento aproximado, mantener como tal."
+        },
+        {
+          "category": "pseudo",
+          "severity": "info",
+          "target": "S-conc-out",
+          "message": "S-conc-out: usa pseudo-componente alimentario/biológico 'lactose' — comportamiento aproximado, mantener como tal."
+        },
+        {
+          "category": "pseudo",
+          "severity": "info",
+          "target": "S-conc-out",
+          "message": "S-conc-out: usa pseudo-componente alimentario/biológico 'milk_ash' — comportamiento aproximado, mantener como tal."
+        },
+        {
+          "category": "pseudo",
+          "severity": "info",
+          "target": "S-conc-out",
+          "message": "S-conc-out: usa pseudo-componente alimentario/biológico 'milk_fat' — comportamiento aproximado, mantener como tal."
+        },
+        {
+          "category": "pseudo",
+          "severity": "info",
+          "target": "S-conc-out",
+          "message": "S-conc-out: usa pseudo-componente alimentario/biológico 'milk_protein' — comportamiento aproximado, mantener como tal."
+        },
+        {
+          "category": "pseudo",
+          "severity": "info",
+          "target": "S-conc-esterilizada",
+          "message": "S-conc-esterilizada: usa pseudo-componente alimentario/biológico 'lactose' — comportamiento aproximado, mantener como tal."
+        },
+        {
+          "category": "pseudo",
+          "severity": "info",
+          "target": "S-conc-esterilizada",
+          "message": "S-conc-esterilizada: usa pseudo-componente alimentario/biológico 'milk_ash' — comportamiento aproximado, mantener como tal."
+        },
+        {
+          "category": "pseudo",
+          "severity": "info",
+          "target": "S-conc-esterilizada",
+          "message": "S-conc-esterilizada: usa pseudo-componente alimentario/biológico 'milk_fat' — comportamiento aproximado, mantener como tal."
+        },
+        {
+          "category": "pseudo",
+          "severity": "info",
+          "target": "S-conc-esterilizada",
+          "message": "S-conc-esterilizada: usa pseudo-componente alimentario/biológico 'milk_protein' — comportamiento aproximado, mantener como tal."
+        }
+      ]
+    },
+    {
+      "key": "sulfuric",
+      "passed": true,
+      "status": "ok",
+      "blocks": 10,
+      "streams": 13,
+      "errors": [],
+      "maximum_unit_mass_relative_error": 0.0,
+      "findings": [
+        {
+          "category": "pseudo",
+          "severity": "info",
+          "target": "S-H2SO4",
+          "message": "S-H2SO4: especie inorgánica/material 'sulfuric_acid' (sal, óxido, mineral, polímero o mezcla) sin modelo VLE — balances por componente y VLE no son físicamente significativos; tratar como pseudo aproximado."
+        },
+        {
+          "category": "pseudo",
+          "severity": "info",
+          "target": "S-absorbed-mix",
+          "message": "S-absorbed-mix: especie inorgánica/material 'sulfuric_acid' (sal, óxido, mineral, polímero o mezcla) sin modelo VLE — balances por componente y VLE no son físicamente significativos; tratar como pseudo aproximado."
+        }
+      ]
+    },
+    {
+      "key": "acetic",
+      "passed": true,
+      "status": "ok",
+      "blocks": 10,
+      "streams": 13,
+      "errors": [],
+      "maximum_unit_mass_relative_error": 0.0,
+      "findings": [
+        {
+          "category": "phase",
+          "severity": "info",
+          "target": "S-2",
+          "message": "S-2: phase='liquid' a T=180.0°C, P=35.00bar; verificación de fase no confiable (T fuera del rango Antoine del componente principal 'methanol')."
+        },
+        {
+          "category": "phase",
+          "severity": "info",
+          "target": "S-3",
+          "message": "S-3: phase='liquid' a T=185.0°C, P=35.00bar; verificación de fase no confiable (T fuera del rango Antoine del componente principal 'acetic_acid')."
+        }
+      ]
+    },
+    {
+      "key": "ldpe",
+      "passed": true,
+      "status": "ok",
+      "blocks": 12,
+      "streams": 13,
+      "errors": [],
+      "maximum_unit_mass_relative_error": 1.13686837721616e-16,
+      "findings": [
+        {
+          "category": "pseudo",
+          "severity": "info",
+          "target": "S-mix",
+          "message": "S-mix: especie inorgánica/material 'polyethylene' (sal, óxido, mineral, polímero o mezcla) sin modelo VLE — balances por componente y VLE no son físicamente significativos; tratar como pseudo aproximado."
+        },
+        {
+          "category": "pseudo",
+          "severity": "info",
+          "target": "S-polymer-melt",
+          "message": "S-polymer-melt: especie inorgánica/material 'polyethylene' (sal, óxido, mineral, polímero o mezcla) sin modelo VLE — balances por componente y VLE no son físicamente significativos; tratar como pseudo aproximado."
+        },
+        {
+          "category": "pseudo",
+          "severity": "info",
+          "target": "S-polymer-letdown",
+          "message": "S-polymer-letdown: especie inorgánica/material 'polyethylene' (sal, óxido, mineral, polímero o mezcla) sin modelo VLE — balances por componente y VLE no son físicamente significativos; tratar como pseudo aproximado."
+        },
+        {
+          "category": "pseudo",
+          "severity": "info",
+          "target": "S-polymer-low-pressure",
+          "message": "S-polymer-low-pressure: especie inorgánica/material 'polyethylene' (sal, óxido, mineral, polímero o mezcla) sin modelo VLE — balances por componente y VLE no son físicamente significativos; tratar como pseudo aproximado."
+        },
+        {
+          "category": "pseudo",
+          "severity": "info",
+          "target": "S-PE",
+          "message": "S-PE: especie inorgánica/material 'polyethylene' (sal, óxido, mineral, polímero o mezcla) sin modelo VLE — balances por componente y VLE no son físicamente significativos; tratar como pseudo aproximado."
+        }
+      ]
+    },
+    {
+      "key": "chloralkali_hcl",
+      "passed": true,
+      "status": "ok",
+      "blocks": 14,
+      "streams": 22,
+      "errors": [],
+      "maximum_unit_mass_relative_error": 2.690770562765152e-08,
+      "findings": [
+        {
+          "category": "pseudo",
+          "severity": "info",
+          "target": "S-NaCl",
+          "message": "S-NaCl: especie inorgánica/material 'sodium_chloride' (sal, óxido, mineral, polímero o mezcla) sin modelo VLE — balances por componente y VLE no son físicamente significativos; tratar como pseudo aproximado."
+        },
+        {
+          "category": "pseudo",
+          "severity": "info",
+          "target": "S-NaOH-32",
+          "message": "S-NaOH-32: especie inorgánica/material 'sodium_hydroxide' (sal, óxido, mineral, polímero o mezcla) sin modelo VLE — balances por componente y VLE no son físicamente significativos; tratar como pseudo aproximado."
+        },
+        {
+          "category": "pseudo",
+          "severity": "info",
+          "target": "S-NaCl-b",
+          "message": "S-NaCl-b: especie inorgánica/material 'sodium_chloride' (sal, óxido, mineral, polímero o mezcla) sin modelo VLE — balances por componente y VLE no son físicamente significativos; tratar como pseudo aproximado."
+        },
+        {
+          "category": "pseudo",
+          "severity": "info",
+          "target": "S-salmuera-mix",
+          "message": "S-salmuera-mix: especie inorgánica/material 'sodium_chloride' (sal, óxido, mineral, polímero o mezcla) sin modelo VLE — balances por componente y VLE no son físicamente significativos; tratar como pseudo aproximado."
+        },
+        {
+          "category": "pseudo",
+          "severity": "info",
+          "target": "S-cell-products",
+          "message": "S-cell-products: especie inorgánica/material 'sodium_chloride' (sal, óxido, mineral, polímero o mezcla) sin modelo VLE — balances por componente y VLE no son físicamente significativos; tratar como pseudo aproximado."
+        },
+        {
+          "category": "pseudo",
+          "severity": "info",
+          "target": "S-cell-products",
+          "message": "S-cell-products: especie inorgánica/material 'sodium_hydroxide' (sal, óxido, mineral, polímero o mezcla) sin modelo VLE — balances por componente y VLE no son físicamente significativos; tratar como pseudo aproximado."
+        },
+        {
+          "category": "pseudo",
+          "severity": "info",
+          "target": "S-anolito",
+          "message": "S-anolito: especie inorgánica/material 'sodium_chloride' (sal, óxido, mineral, polímero o mezcla) sin modelo VLE — balances por componente y VLE no son físicamente significativos; tratar como pseudo aproximado."
+        },
+        {
+          "category": "pseudo",
+          "severity": "info",
+          "target": "S-anolito-retorno",
+          "message": "S-anolito-retorno: especie inorgánica/material 'sodium_chloride' (sal, óxido, mineral, polímero o mezcla) sin modelo VLE — balances por componente y VLE no son físicamente significativos; tratar como pseudo aproximado."
+        }
+      ]
+    },
+    {
+      "key": "urea",
+      "passed": true,
+      "status": "ok",
+      "blocks": 18,
+      "streams": 20,
+      "errors": [],
+      "maximum_unit_mass_relative_error": 0.0,
+      "findings": [
+        {
+          "category": "pseudo",
+          "severity": "info",
+          "target": "S-rxn",
+          "message": "S-rxn: especie inorgánica/material 'urea' (sal, óxido, mineral, polímero o mezcla) sin modelo VLE — balances por componente y VLE no son físicamente significativos; tratar como pseudo aproximado."
+        },
+        {
+          "category": "pseudo",
+          "severity": "info",
+          "target": "S-liq",
+          "message": "S-liq: especie inorgánica/material 'urea' (sal, óxido, mineral, polímero o mezcla) sin modelo VLE — balances por componente y VLE no son físicamente significativos; tratar como pseudo aproximado."
+        },
+        {
+          "category": "pseudo",
+          "severity": "info",
+          "target": "S-urea",
+          "message": "S-urea: especie inorgánica/material 'urea' (sal, óxido, mineral, polímero o mezcla) sin modelo VLE — balances por componente y VLE no son físicamente significativos; tratar como pseudo aproximado."
+        },
+        {
+          "category": "pseudo",
+          "severity": "info",
+          "target": "S-urea-cooled",
+          "message": "S-urea-cooled: especie inorgánica/material 'urea' (sal, óxido, mineral, polímero o mezcla) sin modelo VLE — balances por componente y VLE no son físicamente significativos; tratar como pseudo aproximado."
+        },
+        {
+          "category": "pseudo",
+          "severity": "info",
+          "target": "S-urea-letdown",
+          "message": "S-urea-letdown: especie inorgánica/material 'urea' (sal, óxido, mineral, polímero o mezcla) sin modelo VLE — balances por componente y VLE no son físicamente significativos; tratar como pseudo aproximado."
+        },
+        {
+          "category": "pseudo",
+          "severity": "info",
+          "target": "S-urea-to-evap",
+          "message": "S-urea-to-evap: especie inorgánica/material 'urea' (sal, óxido, mineral, polímero o mezcla) sin modelo VLE — balances por componente y VLE no son físicamente significativos; tratar como pseudo aproximado."
+        }
+      ]
+    },
+    {
+      "key": "soap",
+      "passed": true,
+      "status": "warning",
+      "blocks": 5,
+      "streams": 8,
+      "errors": [],
+      "maximum_unit_mass_relative_error": 0.0,
+      "findings": [
+        {
+          "category": "pseudo",
+          "severity": "info",
+          "target": "S-NaOH",
+          "message": "S-NaOH: especie inorgánica/material 'sodium_hydroxide' (sal, óxido, mineral, polímero o mezcla) sin modelo VLE — balances por componente y VLE no son físicamente significativos; tratar como pseudo aproximado."
+        },
+        {
+          "category": "pseudo",
+          "severity": "info",
+          "target": "S-mix",
+          "message": "S-mix: especie inorgánica/material 'sodium_hydroxide' (sal, óxido, mineral, polímero o mezcla) sin modelo VLE — balances por componente y VLE no son físicamente significativos; tratar como pseudo aproximado."
+        },
+        {
+          "category": "pseudo",
+          "severity": "info",
+          "target": "S-rxn",
+          "message": "S-rxn: especie inorgánica/material 'sodium_hydroxide' (sal, óxido, mineral, polímero o mezcla) sin modelo VLE — balances por componente y VLE no son físicamente significativos; tratar como pseudo aproximado."
+        },
+        {
+          "category": "property_model",
+          "severity": "warning",
+          "target": "S-rxn",
+          "message": "S-rxn: 'sodium_oleate' usa propiedades caloricas aproximadas de components; sin modelo VLE completo."
+        },
+        {
+          "category": "property_model",
+          "severity": "warning",
+          "target": "S-soap",
+          "message": "S-soap: 'sodium_oleate' usa propiedades caloricas aproximadas de components; sin modelo VLE completo."
+        },
+        {
+          "category": "pseudo",
+          "severity": "info",
+          "target": "S-glycerin",
+          "message": "S-glycerin: especie inorgánica/material 'sodium_hydroxide' (sal, óxido, mineral, polímero o mezcla) sin modelo VLE — balances por componente y VLE no son físicamente significativos; tratar como pseudo aproximado."
+        },
+        {
+          "category": "pseudo",
+          "severity": "info",
+          "target": "S-NaOH-b",
+          "message": "S-NaOH-b: especie inorgánica/material 'sodium_hydroxide' (sal, óxido, mineral, polímero o mezcla) sin modelo VLE — balances por componente y VLE no son físicamente significativos; tratar como pseudo aproximado."
+        }
+      ]
+    },
+    {
+      "key": "ethylene_crk",
+      "passed": true,
+      "status": "ok",
+      "blocks": 10,
+      "streams": 11,
+      "errors": [],
+      "maximum_unit_mass_relative_error": 0.0,
+      "findings": []
+    },
+    {
+      "key": "cement",
+      "passed": true,
+      "status": "warning",
+      "blocks": 6,
+      "streams": 7,
+      "errors": [],
+      "maximum_unit_mass_relative_error": 1.1368683772161603e-16,
+      "findings": [
+        {
+          "category": "phase",
+          "severity": "info",
+          "target": "S-1",
+          "message": "S-1: phase='liquid' a T=900°C — FUNDIDO (componente proxy fuera del modelo VLE: mineral/óxido/vidrio fundido). La verificación Antoine no aplica."
+        },
+        {
+          "category": "phase",
+          "severity": "info",
+          "target": "S-lime-hot",
+          "message": "S-lime-hot: phase='liquid' a T=900°C — FUNDIDO (componente proxy fuera del modelo VLE: mineral/óxido/vidrio fundido). La verificación Antoine no aplica."
+        },
+        {
+          "category": "pseudo",
+          "severity": "info",
+          "target": "S-caliza",
+          "message": "S-caliza: especie inorgánica/material 'limestone' (sal, óxido, mineral, polímero o mezcla) sin modelo VLE — balances por componente y VLE no son físicamente significativos; tratar como pseudo aproximado."
+        },
+        {
+          "category": "pseudo",
+          "severity": "info",
+          "target": "S-1",
+          "message": "S-1: especie inorgánica/material 'limestone' (sal, óxido, mineral, polímero o mezcla) sin modelo VLE — balances por componente y VLE no son físicamente significativos; tratar como pseudo aproximado."
+        },
+        {
+          "category": "pseudo",
+          "severity": "info",
+          "target": "S-lime-hot",
+          "message": "S-lime-hot: especie inorgánica/material 'limestone' (sal, óxido, mineral, polímero o mezcla) sin modelo VLE — balances por componente y VLE no son físicamente significativos; tratar como pseudo aproximado."
+        },
+        {
+          "category": "property_model",
+          "severity": "warning",
+          "target": "S-lime-hot",
+          "message": "S-lime-hot: 'quicklime' usa propiedades caloricas aproximadas de components; sin modelo VLE completo."
+        },
+        {
+          "category": "pseudo",
+          "severity": "info",
+          "target": "S-quicklime",
+          "message": "S-quicklime: especie inorgánica/material 'limestone' (sal, óxido, mineral, polímero o mezcla) sin modelo VLE — balances por componente y VLE no son físicamente significativos; tratar como pseudo aproximado."
+        },
+        {
+          "category": "property_model",
+          "severity": "warning",
+          "target": "S-quicklime",
+          "message": "S-quicklime: 'quicklime' usa propiedades caloricas aproximadas de components; sin modelo VLE completo."
+        },
+        {
+          "category": "pseudo",
+          "severity": "info",
+          "target": "S-lime-cooling",
+          "message": "S-lime-cooling: especie inorgánica/material 'limestone' (sal, óxido, mineral, polímero o mezcla) sin modelo VLE — balances por componente y VLE no son físicamente significativos; tratar como pseudo aproximado."
+        },
+        {
+          "category": "property_model",
+          "severity": "warning",
+          "target": "S-lime-cooling",
+          "message": "S-lime-cooling: 'quicklime' usa propiedades caloricas aproximadas de components; sin modelo VLE completo."
+        },
+        {
+          "category": "pseudo",
+          "severity": "info",
+          "target": "S-calciner-out",
+          "message": "S-calciner-out: especie inorgánica/material 'limestone' (sal, óxido, mineral, polímero o mezcla) sin modelo VLE — balances por componente y VLE no son físicamente significativos; tratar como pseudo aproximado."
+        },
+        {
+          "category": "property_model",
+          "severity": "warning",
+          "target": "S-calciner-out",
+          "message": "S-calciner-out: 'quicklime' usa propiedades caloricas aproximadas de components; sin modelo VLE completo."
+        }
+      ]
+    },
+    {
+      "key": "glass",
+      "passed": true,
+      "status": "warning",
+      "blocks": 4,
+      "streams": 7,
+      "errors": [],
+      "maximum_unit_mass_relative_error": 1.13686837721616e-16,
+      "findings": [
+        {
+          "category": "phase",
+          "severity": "info",
+          "target": "S-melt",
+          "message": "S-melt: phase='liquid' a T=1500°C — FUNDIDO (componente proxy fuera del modelo VLE: mineral/óxido/vidrio fundido). La verificación Antoine no aplica."
+        },
+        {
+          "category": "pseudo",
+          "severity": "info",
+          "target": "S-silica",
+          "message": "S-silica: especie inorgánica/material 'silica' (sal, óxido, mineral, polímero o mezcla) sin modelo VLE — balances por componente y VLE no son físicamente significativos; tratar como pseudo aproximado."
+        },
+        {
+          "category": "pseudo",
+          "severity": "info",
+          "target": "S-soda",
+          "message": "S-soda: especie inorgánica/material 'soda_ash' (sal, óxido, mineral, polímero o mezcla) sin modelo VLE — balances por componente y VLE no son físicamente significativos; tratar como pseudo aproximado."
+        },
+        {
+          "category": "pseudo",
+          "severity": "info",
+          "target": "S-lime",
+          "message": "S-lime: especie inorgánica/material 'limestone' (sal, óxido, mineral, polímero o mezcla) sin modelo VLE — balances por componente y VLE no son físicamente significativos; tratar como pseudo aproximado."
+        },
+        {
+          "category": "pseudo",
+          "severity": "info",
+          "target": "S-batch",
+          "message": "S-batch: especie inorgánica/material 'silica' (sal, óxido, mineral, polímero o mezcla) sin modelo VLE — balances por componente y VLE no son físicamente significativos; tratar como pseudo aproximado."
+        },
+        {
+          "category": "pseudo",
+          "severity": "info",
+          "target": "S-batch",
+          "message": "S-batch: especie inorgánica/material 'soda_ash' (sal, óxido, mineral, polímero o mezcla) sin modelo VLE — balances por componente y VLE no son físicamente significativos; tratar como pseudo aproximado."
+        },
+        {
+          "category": "pseudo",
+          "severity": "info",
+          "target": "S-batch",
+          "message": "S-batch: especie inorgánica/material 'limestone' (sal, óxido, mineral, polímero o mezcla) sin modelo VLE — balances por componente y VLE no son físicamente significativos; tratar como pseudo aproximado."
+        },
+        {
+          "category": "pseudo",
+          "severity": "info",
+          "target": "S-melt",
+          "message": "S-melt: especie inorgánica/material 'glass' (sal, óxido, mineral, polímero o mezcla) sin modelo VLE — balances por componente y VLE no son físicamente significativos; tratar como pseudo aproximado."
+        },
+        {
+          "category": "pseudo",
+          "severity": "info",
+          "target": "S-glass",
+          "message": "S-glass: especie inorgánica/material 'glass' (sal, óxido, mineral, polímero o mezcla) sin modelo VLE — balances por componente y VLE no son físicamente significativos; tratar como pseudo aproximado."
+        },
+        {
+          "category": "model_scope",
+          "severity": "warning",
+          "target": "F-GLASS horno de fusión",
+          "message": "F-GLASS horno de fusión: rendimientos masicos especificados; no predicen cinetica, equilibrio ni calor de cracking."
+        }
+      ]
+    },
+    {
+      "key": "air_sep",
+      "passed": true,
+      "status": "ok",
+      "blocks": 5,
+      "streams": 8,
+      "errors": [],
+      "maximum_unit_mass_relative_error": 0.0,
+      "findings": []
+    },
+    {
+      "key": "water_treat",
+      "passed": true,
+      "status": "ok",
+      "blocks": 6,
+      "streams": 9,
+      "errors": [],
+      "maximum_unit_mass_relative_error": 0.0,
+      "findings": [
+        {
+          "category": "pseudo",
+          "severity": "info",
+          "target": "S-cruda",
+          "message": "S-cruda: especie inorgánica/material 'raw_water_solids' (sal, óxido, mineral, polímero o mezcla) sin modelo VLE — balances por componente y VLE no son físicamente significativos; tratar como pseudo aproximado."
+        },
+        {
+          "category": "pseudo",
+          "severity": "info",
+          "target": "S-coag",
+          "message": "S-coag: especie inorgánica/material 'raw_water_solids' (sal, óxido, mineral, polímero o mezcla) sin modelo VLE — balances por componente y VLE no son físicamente significativos; tratar como pseudo aproximado."
+        },
+        {
+          "category": "pseudo",
+          "severity": "info",
+          "target": "S-floc",
+          "message": "S-floc: especie inorgánica/material 'raw_water_solids' (sal, óxido, mineral, polímero o mezcla) sin modelo VLE — balances por componente y VLE no son físicamente significativos; tratar como pseudo aproximado."
+        },
+        {
+          "category": "pseudo",
+          "severity": "info",
+          "target": "S-lodos",
+          "message": "S-lodos: especie inorgánica/material 'raw_water_solids' (sal, óxido, mineral, polímero o mezcla) sin modelo VLE — balances por componente y VLE no son físicamente significativos; tratar como pseudo aproximado."
+        },
+        {
+          "category": "pseudo",
+          "severity": "info",
+          "target": "S-clar",
+          "message": "S-clar: especie inorgánica/material 'raw_water_solids' (sal, óxido, mineral, polímero o mezcla) sin modelo VLE — balances por componente y VLE no son físicamente significativos; tratar como pseudo aproximado."
+        },
+        {
+          "category": "pseudo",
+          "severity": "info",
+          "target": "S-fil",
+          "message": "S-fil: especie inorgánica/material 'raw_water_solids' (sal, óxido, mineral, polímero o mezcla) sin modelo VLE — balances por componente y VLE no son físicamente significativos; tratar como pseudo aproximado."
+        },
+        {
+          "category": "pseudo",
+          "severity": "info",
+          "target": "S-agua-filtrada",
+          "message": "S-agua-filtrada: especie inorgánica/material 'raw_water_solids' (sal, óxido, mineral, polímero o mezcla) sin modelo VLE — balances por componente y VLE no son físicamente significativos; tratar como pseudo aproximado."
+        },
+        {
+          "category": "pseudo",
+          "severity": "info",
+          "target": "S-cruda-b",
+          "message": "S-cruda-b: especie inorgánica/material 'raw_water_solids' (sal, óxido, mineral, polímero o mezcla) sin modelo VLE — balances por componente y VLE no son físicamente significativos; tratar como pseudo aproximado."
+        },
+        {
+          "category": "pseudo",
+          "severity": "info",
+          "target": "S-retrolavado",
+          "message": "S-retrolavado: especie inorgánica/material 'raw_water_solids' (sal, óxido, mineral, polímero o mezcla) sin modelo VLE — balances por componente y VLE no son físicamente significativos; tratar como pseudo aproximado."
+        }
+      ]
+    },
+    {
+      "key": "rankine",
+      "passed": true,
+      "status": "ok",
+      "blocks": 4,
+      "streams": 5,
+      "errors": [],
+      "maximum_unit_mass_relative_error": 0.0,
+      "findings": []
+    },
+    {
+      "key": "nuclear",
+      "passed": true,
+      "status": "ok",
+      "blocks": 4,
+      "streams": 5,
+      "errors": [],
+      "maximum_unit_mass_relative_error": 0.0,
+      "findings": []
+    },
+    {
+      "key": "desal",
+      "passed": true,
+      "status": "ok",
+      "blocks": 6,
+      "streams": 9,
+      "errors": [],
+      "maximum_unit_mass_relative_error": 0.0,
+      "findings": [
+        {
+          "category": "pseudo",
+          "severity": "info",
+          "target": "S-seawater",
+          "message": "S-seawater: especie inorgánica/material 'sodium_chloride' (sal, óxido, mineral, polímero o mezcla) sin modelo VLE — balances por componente y VLE no son físicamente significativos; tratar como pseudo aproximado."
+        },
+        {
+          "category": "pseudo",
+          "severity": "info",
+          "target": "S-precal",
+          "message": "S-precal: especie inorgánica/material 'sodium_chloride' (sal, óxido, mineral, polímero o mezcla) sin modelo VLE — balances por componente y VLE no son físicamente significativos; tratar como pseudo aproximado."
+        },
+        {
+          "category": "pseudo",
+          "severity": "info",
+          "target": "S-mid1",
+          "message": "S-mid1: especie inorgánica/material 'sodium_chloride' (sal, óxido, mineral, polímero o mezcla) sin modelo VLE — balances por componente y VLE no son físicamente significativos; tratar como pseudo aproximado."
+        },
+        {
+          "category": "pseudo",
+          "severity": "info",
+          "target": "S-mid2",
+          "message": "S-mid2: especie inorgánica/material 'sodium_chloride' (sal, óxido, mineral, polímero o mezcla) sin modelo VLE — balances por componente y VLE no son físicamente significativos; tratar como pseudo aproximado."
+        },
+        {
+          "category": "pseudo",
+          "severity": "info",
+          "target": "S-brine",
+          "message": "S-brine: especie inorgánica/material 'sodium_chloride' (sal, óxido, mineral, polímero o mezcla) sin modelo VLE — balances por componente y VLE no son físicamente significativos; tratar como pseudo aproximado."
+        },
+        {
+          "category": "pseudo",
+          "severity": "info",
+          "target": "S-seawater-b",
+          "message": "S-seawater-b: especie inorgánica/material 'sodium_chloride' (sal, óxido, mineral, polímero o mezcla) sin modelo VLE — balances por componente y VLE no son físicamente significativos; tratar como pseudo aproximado."
+        }
+      ]
+    },
+    {
+      "key": "salt_crystal",
+      "passed": true,
+      "status": "ok",
+      "blocks": 4,
+      "streams": 7,
+      "errors": [],
+      "maximum_unit_mass_relative_error": 1.9589116653570765e-16,
+      "findings": [
+        {
+          "category": "pseudo",
+          "severity": "info",
+          "target": "S-brine",
+          "message": "S-brine: especie inorgánica/material 'sodium_chloride' (sal, óxido, mineral, polímero o mezcla) sin modelo VLE — balances por componente y VLE no son físicamente significativos; tratar como pseudo aproximado."
+        },
+        {
+          "category": "pseudo",
+          "severity": "info",
+          "target": "S-brine2",
+          "message": "S-brine2: especie inorgánica/material 'sodium_chloride' (sal, óxido, mineral, polímero o mezcla) sin modelo VLE — balances por componente y VLE no son físicamente significativos; tratar como pseudo aproximado."
+        },
+        {
+          "category": "pseudo",
+          "severity": "info",
+          "target": "S-salt",
+          "message": "S-salt: especie inorgánica/material 'sodium_chloride' (sal, óxido, mineral, polímero o mezcla) sin modelo VLE — balances por componente y VLE no son físicamente significativos; tratar como pseudo aproximado."
+        },
+        {
+          "category": "pseudo",
+          "severity": "info",
+          "target": "S-mother",
+          "message": "S-mother: especie inorgánica/material 'sodium_chloride' (sal, óxido, mineral, polímero o mezcla) sin modelo VLE — balances por componente y VLE no son físicamente significativos; tratar como pseudo aproximado."
+        },
+        {
+          "category": "pseudo",
+          "severity": "info",
+          "target": "S-brine-p",
+          "message": "S-brine-p: especie inorgánica/material 'sodium_chloride' (sal, óxido, mineral, polímero o mezcla) sin modelo VLE — balances por componente y VLE no son físicamente significativos; tratar como pseudo aproximado."
+        },
+        {
+          "category": "pseudo",
+          "severity": "info",
+          "target": "S-concentrate",
+          "message": "S-concentrate: especie inorgánica/material 'sodium_chloride' (sal, óxido, mineral, polímero o mezcla) sin modelo VLE — balances por componente y VLE no son físicamente significativos; tratar como pseudo aproximado."
+        }
+      ]
+    },
+    {
+      "key": "cyclone",
+      "passed": true,
+      "status": "ok",
+      "blocks": 2,
+      "streams": 4,
+      "errors": [],
+      "maximum_unit_mass_relative_error": 0.0,
+      "findings": [
+        {
+          "category": "pseudo",
+          "severity": "info",
+          "target": "S-fluegas",
+          "message": "S-fluegas: especie inorgánica/material 'silica' (sal, óxido, mineral, polímero o mezcla) sin modelo VLE — balances por componente y VLE no son físicamente significativos; tratar como pseudo aproximado."
+        },
+        {
+          "category": "pseudo",
+          "severity": "info",
+          "target": "S-fg-c",
+          "message": "S-fg-c: especie inorgánica/material 'silica' (sal, óxido, mineral, polímero o mezcla) sin modelo VLE — balances por componente y VLE no son físicamente significativos; tratar como pseudo aproximado."
+        },
+        {
+          "category": "pseudo",
+          "severity": "info",
+          "target": "S-cleangas",
+          "message": "S-cleangas: especie inorgánica/material 'silica' (sal, óxido, mineral, polímero o mezcla) sin modelo VLE — balances por componente y VLE no son físicamente significativos; tratar como pseudo aproximado."
+        },
+        {
+          "category": "pseudo",
+          "severity": "info",
+          "target": "S-dust",
+          "message": "S-dust: especie inorgánica/material 'silica' (sal, óxido, mineral, polímero o mezcla) sin modelo VLE — balances por componente y VLE no son físicamente significativos; tratar como pseudo aproximado."
+        }
+      ]
+    },
+    {
+      "key": "decanter",
+      "passed": true,
+      "status": "ok",
+      "blocks": 2,
+      "streams": 4,
+      "errors": [],
+      "maximum_unit_mass_relative_error": 0.0,
+      "findings": []
+    },
+    {
+      "key": "bypass",
+      "passed": true,
+      "status": "ok",
+      "blocks": 4,
+      "streams": 6,
+      "errors": [],
+      "maximum_unit_mass_relative_error": 0.0,
+      "findings": []
+    },
+    {
+      "key": "parallel",
+      "passed": true,
+      "status": "ok",
+      "blocks": 5,
+      "streams": 7,
+      "errors": [],
+      "maximum_unit_mass_relative_error": 0.0,
+      "findings": []
+    },
+    {
+      "key": "centrifuge",
+      "passed": true,
+      "status": "warning",
+      "blocks": 2,
+      "streams": 4,
+      "errors": [],
+      "maximum_unit_mass_relative_error": 0.0,
+      "findings": [
+        {
+          "category": "thermo_missing",
+          "severity": "warning",
+          "target": "S-slurry",
+          "message": "S-slurry: entalpia no disponible; el balance de energia no puede verificarse."
+        },
+        {
+          "category": "thermo_missing",
+          "severity": "warning",
+          "target": "S-slurry-p",
+          "message": "S-slurry-p: entalpia no disponible; el balance de energia no puede verificarse."
+        },
+        {
+          "category": "thermo_missing",
+          "severity": "warning",
+          "target": "S-cake",
+          "message": "S-cake: entalpia no disponible; el balance de energia no puede verificarse."
+        },
+        {
+          "category": "thermo_missing",
+          "severity": "warning",
+          "target": "S-centrate",
+          "message": "S-centrate: entalpia no disponible; el balance de energia no puede verificarse."
+        },
+        {
+          "category": "pseudo",
+          "severity": "info",
+          "target": "S-slurry",
+          "message": "S-slurry: especie inorgánica/material 'calcium carbonate' (sal, óxido, mineral, polímero o mezcla) sin modelo VLE — balances por componente y VLE no son físicamente significativos; tratar como pseudo aproximado."
+        },
+        {
+          "category": "pseudo",
+          "severity": "info",
+          "target": "S-slurry-p",
+          "message": "S-slurry-p: especie inorgánica/material 'calcium carbonate' (sal, óxido, mineral, polímero o mezcla) sin modelo VLE — balances por componente y VLE no son físicamente significativos; tratar como pseudo aproximado."
+        },
+        {
+          "category": "pseudo",
+          "severity": "info",
+          "target": "S-cake",
+          "message": "S-cake: especie inorgánica/material 'calcium carbonate' (sal, óxido, mineral, polímero o mezcla) sin modelo VLE — balances por componente y VLE no son físicamente significativos; tratar como pseudo aproximado."
+        },
+        {
+          "category": "pseudo",
+          "severity": "info",
+          "target": "S-centrate",
+          "message": "S-centrate: especie inorgánica/material 'calcium carbonate' (sal, óxido, mineral, polímero o mezcla) sin modelo VLE — balances por componente y VLE no son físicamente significativos; tratar como pseudo aproximado."
+        }
+      ]
+    },
+    {
+      "key": "cooling",
+      "passed": true,
+      "status": "ok",
+      "blocks": 2,
+      "streams": 3,
+      "errors": [],
+      "maximum_unit_mass_relative_error": 0.0,
+      "findings": []
+    },
+    {
+      "key": "pfr",
+      "passed": true,
+      "status": "ok",
+      "blocks": 2,
+      "streams": 3,
+      "errors": [],
+      "maximum_unit_mass_relative_error": 0.0,
+      "findings": []
+    },
+    {
+      "key": "boiler_ft",
+      "passed": true,
+      "status": "warning",
+      "blocks": 2,
+      "streams": 3,
+      "errors": [],
+      "maximum_unit_mass_relative_error": 0.0,
+      "findings": []
+    },
+    {
+      "key": "letdown",
+      "passed": true,
+      "status": "ok",
+      "blocks": 2,
+      "streams": 3,
+      "errors": [],
+      "maximum_unit_mass_relative_error": 0.0,
+      "findings": []
+    },
+    {
+      "key": "blower",
+      "passed": true,
+      "status": "ok",
+      "blocks": 1,
+      "streams": 2,
+      "errors": [],
+      "maximum_unit_mass_relative_error": 0.0,
+      "findings": []
+    },
+    {
+      "key": "steam_turbine",
+      "passed": true,
+      "status": "ok",
+      "blocks": 1,
+      "streams": 2,
+      "errors": [],
+      "maximum_unit_mass_relative_error": 0.0,
+      "findings": []
+    },
+    {
+      "key": "gas_expander",
+      "passed": true,
+      "status": "ok",
+      "blocks": 3,
+      "streams": 4,
+      "errors": [],
+      "maximum_unit_mass_relative_error": 0.0,
+      "findings": []
+    },
+    {
+      "key": "agitated_blend",
+      "passed": true,
+      "status": "ok",
+      "blocks": 3,
+      "streams": 5,
+      "errors": [],
+      "maximum_unit_mass_relative_error": 0.0,
+      "findings": [
+        {
+          "category": "pseudo",
+          "severity": "info",
+          "target": "S-jarabe",
+          "message": "S-jarabe: usa pseudo-componente alimentario/biológico 'sucrose' — comportamiento aproximado, mantener como tal."
+        },
+        {
+          "category": "pseudo",
+          "severity": "info",
+          "target": "S-jarabe-p",
+          "message": "S-jarabe-p: usa pseudo-componente alimentario/biológico 'sucrose' — comportamiento aproximado, mantener como tal."
+        },
+        {
+          "category": "pseudo",
+          "severity": "info",
+          "target": "S-mezcla",
+          "message": "S-mezcla: usa pseudo-componente alimentario/biológico 'sucrose' — comportamiento aproximado, mantener como tal."
+        }
+      ]
+    },
+    {
+      "key": "feed_effluent",
+      "passed": true,
+      "status": "warning",
+      "blocks": 4,
+      "streams": 6,
+      "errors": [],
+      "maximum_unit_mass_relative_error": 0.0,
+      "findings": []
+    },
+    {
+      "key": "double_effect",
+      "passed": true,
+      "status": "ok",
+      "blocks": 3,
+      "streams": 6,
+      "errors": [],
+      "maximum_unit_mass_relative_error": 0.0,
+      "findings": [
+        {
+          "category": "pseudo",
+          "severity": "info",
+          "target": "S-juice",
+          "message": "S-juice: usa pseudo-componente alimentario/biológico 'sucrose' — comportamiento aproximado, mantener como tal."
+        },
+        {
+          "category": "pseudo",
+          "severity": "info",
+          "target": "S-juice-p",
+          "message": "S-juice-p: usa pseudo-componente alimentario/biológico 'sucrose' — comportamiento aproximado, mantener como tal."
+        },
+        {
+          "category": "pseudo",
+          "severity": "info",
+          "target": "S-conc1",
+          "message": "S-conc1: usa pseudo-componente alimentario/biológico 'sucrose' — comportamiento aproximado, mantener como tal."
+        },
+        {
+          "category": "pseudo",
+          "severity": "info",
+          "target": "S-conc2",
+          "message": "S-conc2: usa pseudo-componente alimentario/biológico 'sucrose' — comportamiento aproximado, mantener como tal."
+        }
+      ]
+    },
+    {
+      "key": "nested_recycle",
+      "passed": true,
+      "status": "ok",
+      "blocks": 7,
+      "streams": 11,
+      "errors": [],
+      "maximum_unit_mass_relative_error": 8.638507528431464e-09,
+      "findings": []
+    },
+    {
+      "key": "hen",
+      "passed": true,
+      "status": "warning",
+      "blocks": 5,
+      "streams": 8,
+      "errors": [],
+      "maximum_unit_mass_relative_error": 0.0,
+      "findings": []
+    },
+    {
+      "key": "sidedraw",
+      "passed": true,
+      "status": "ok",
+      "blocks": 2,
+      "streams": 5,
+      "errors": [],
+      "maximum_unit_mass_relative_error": 0.0,
+      "findings": [
+        {
+          "category": "redundant_lock",
+          "severity": "info",
+          "target": "S-top",
+          "message": "S-top: composition_locked=True pero el bloque upstream T-101 es un unit op automática (column/flash/splitter). El lock se ignoró: la composición fue recalculada por la termodinámica."
+        },
+        {
+          "category": "redundant_lock",
+          "severity": "info",
+          "target": "S-side",
+          "message": "S-side: composition_locked=True pero el bloque upstream T-101 es un unit op automática (column/flash/splitter). El lock se ignoró: la composición fue recalculada por la termodinámica."
+        },
+        {
+          "category": "redundant_lock",
+          "severity": "info",
+          "target": "S-bot",
+          "message": "S-bot: composition_locked=True pero el bloque upstream T-101 es un unit op automática (column/flash/splitter). El lock se ignoró: la composición fue recalculada por la termodinámica."
+        }
+      ]
+    },
+    {
+      "key": "cw_loop",
+      "passed": true,
+      "status": "ok",
+      "blocks": 6,
+      "streams": 12,
+      "errors": [],
+      "maximum_unit_mass_relative_error": 0.0,
+      "findings": [
+        {
+          "category": "pseudo",
+          "severity": "info",
+          "target": "S-oilhot",
+          "message": "S-oilhot: corte de petróleo 'diesel' — pseudo-componente legítimo caracterizado por rango de ebullición (TBP), como en todo simulador de proceso. No se reemplaza por una molécula; VLE aproximado por caracterización."
+        },
+        {
+          "category": "pseudo",
+          "severity": "info",
+          "target": "S-oil-p",
+          "message": "S-oil-p: corte de petróleo 'diesel' — pseudo-componente legítimo caracterizado por rango de ebullición (TBP), como en todo simulador de proceso. No se reemplaza por una molécula; VLE aproximado por caracterización."
+        },
+        {
+          "category": "pseudo",
+          "severity": "info",
+          "target": "S-oilcool",
+          "message": "S-oilcool: corte de petróleo 'diesel' — pseudo-componente legítimo caracterizado por rango de ebullición (TBP), como en todo simulador de proceso. No se reemplaza por una molécula; VLE aproximado por caracterización."
+        }
+      ]
+    },
+    {
+      "key": "solvent_rec",
+      "passed": true,
+      "status": "ok",
+      "blocks": 5,
+      "streams": 7,
+      "errors": [],
+      "maximum_unit_mass_relative_error": 0.0,
+      "findings": []
+    },
+    {
+      "key": "reformer_whb",
+      "passed": true,
+      "status": "ok",
+      "blocks": 3,
+      "streams": 4,
+      "errors": [],
+      "maximum_unit_mass_relative_error": 0.0,
+      "findings": [
+        {
+          "category": "phase",
+          "severity": "info",
+          "target": "S-frio",
+          "message": "S-frio: phase='vapor' a T=160.0°C, P=25.00bar; verificación de fase no confiable (T fuera del rango Antoine del componente principal 'water')."
+        }
+      ]
+    },
+    {
+      "key": "cw_natural",
+      "passed": true,
+      "status": "ok",
+      "blocks": 13,
+      "streams": 23,
+      "errors": [],
+      "maximum_unit_mass_relative_error": 0.0,
+      "findings": [
+        {
+          "category": "pseudo",
+          "severity": "info",
+          "target": "S-kero",
+          "message": "S-kero: corte de petróleo 'kerosene' — pseudo-componente legítimo caracterizado por rango de ebullición (TBP), como en todo simulador de proceso. No se reemplaza por una molécula; VLE aproximado por caracterización."
+        },
+        {
+          "category": "pseudo",
+          "severity": "info",
+          "target": "S-kero-p",
+          "message": "S-kero-p: corte de petróleo 'kerosene' — pseudo-componente legítimo caracterizado por rango de ebullición (TBP), como en todo simulador de proceso. No se reemplaza por una molécula; VLE aproximado por caracterización."
+        },
+        {
+          "category": "pseudo",
+          "severity": "info",
+          "target": "S-kero-f",
+          "message": "S-kero-f: corte de petróleo 'kerosene' — pseudo-componente legítimo caracterizado por rango de ebullición (TBP), como en todo simulador de proceso. No se reemplaza por una molécula; VLE aproximado por caracterización."
+        }
+      ]
+    }
+  ]
+}

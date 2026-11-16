@@ -161,7 +161,7 @@ class TestSeparatorPassthrough(unittest.TestCase):
         fs = fm.Flowsheet()
         b = _make_block("Crystallizer",
                          crystallizer_active=True,
-                         solute_component="salt",     # no en feed
+                         solute_component="sodium_chloride",  # known, absent from feed
                          crystal_yield=0.80)
         fs.blocks[1] = b
         _add_feed(fs, 1, 1000.0,
@@ -341,7 +341,7 @@ class TestSugarMillEndToEnd(unittest.TestCase):
         s_azucar    = next(s for s in fs.streams.values()
                               if s.name == "S-azucar")
         s_vap_dry   = next(s for s in fs.streams.values()
-                              if s.name == "S-vap-dry")
+                              if s.name == "S-vap-dry-a-condensacion")
         s_masa      = next(s for s in fs.streams.values()
                               if s.name == "S-masa")
 
@@ -353,8 +353,10 @@ class TestSugarMillEndToEnd(unittest.TestCase):
         self.assertAlmostEqual(s_azucar.mass_flow + s_vap_dry.mass_flow,
                                   s_az_humedo.mass_flow, delta=1.0)
 
-        # Composiciones: torta a 3 % moisture, azúcar refino 0.5 %
-        self.assertAlmostEqual(s_az_humedo.composition["water"], 0.03,
+        # cake_moisture es fracción de fase no sólida retenida: incluye
+        # glucosa disuelta además de agua. El secador sí especifica agua.
+        self.assertAlmostEqual(sum(w for c, w in s_az_humedo.composition.items()
+                                   if c != "sucrose"), 0.03,
                                   delta=0.001)
         self.assertAlmostEqual(s_azucar.composition["water"], 0.005,
                                   delta=0.001)

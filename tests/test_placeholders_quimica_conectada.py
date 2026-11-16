@@ -1,22 +1,4 @@
-"""Batch — química real conectada a placeholders con base curada.
-
-Historia en dos tandas:
-
-  · T29a/b: chloralkali_hcl/R-201 → R028 (H2 + Cl2 → 2 HCl), conv 0.999.
-  · Sesión 3 (2026-07): el triage de conectabilidad (todas las especies con
-    MW en reactions_db) marcó 4 reactores más como tratables y se conectaron
-    con su cadena downstream re-propagada por-diferencia:
-      · acetic/R-101  → R026 (metanol + CO → ácido acético)
-      · beer/R-101    → R007 (glucosa → 2 etanol + 2 CO2)
-      · bread/R-101   → R007 (fermentación de la masa)
-      · sulfuric/R-101 → R006 (2 SO2 + O2 → 2 SO3)
-
-Los otros 4 con base curada se DIFIEREN (siguen placeholder honesto, ver
-docs/inventario_hardcode.md §6.7 y docs/AUDITORIA_HARDCODEO_2026.md):
-  · cement (R029): mismatch de especie (R029 produce quicklime, no clinker).
-  · ldpe (R027), soap (R030), urea (R031): pseudo-componentes sin MW → la
-    reacción no dispara en modo stoich.
-"""
+"""Active chemical reactions replace former catalogue placeholders."""
 import examples_registry as reg
 import flowsheet_solver as fsv
 
@@ -94,10 +76,14 @@ def test_conectados_calor_de_reaccion_calculado():
 
 
 # ── diferidos: siguen siendo placeholder honesto ────────────────────────
-def test_diferidos_siguen_placeholder():
+def test_diferidos_ahora_tienen_quimica_activa():
     for clave, blk in [("cement", "R-101"), ("ldpe", "R-101"),
                        ("soap", "R-101"), ("urea", "R-101")]:
-        res = fsv.solve(reg.load_example(clave))
-        assert any("PLACEHOLDER" in w and blk in w
-                   for w in res.awareness_warnings), \
-            f"{clave}/{blk} debe seguir disparando W-PLACEHOLDER (diferido)"
+        fs = reg.load_example(clave)
+        reactor = next(b for b in fs.blocks.values() if b.name == blk)
+        assert reactor.reactor_mode == "stoich"
+        assert reactor.reactions or reactor.custom_reactions
+        assert not any("PLACEHOLDER" in rid for rid in reactor.reactions)
+        res = fsv.solve(fs)
+        assert res.success, (clave, res.mass_balance_errors, res.energy_balance_errors)
+        assert _no_placeholder(res, blk)

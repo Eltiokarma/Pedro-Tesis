@@ -1215,9 +1215,9 @@
    "bubble_show_enthalpy": false,
    "bubble_visible": false,
    "composition": {
-    "toluene": 0.222685,
-    "hydrogen": 0.000256,
-    "benzene": 0.777058
+    "toluene": 0.22268522268522267,
+    "hydrogen": 0.000256000256000256,
+    "benzene": 0.777058777058777
    },
    "composition_locked": true,
    "cp": 0.0,
@@ -1603,7 +1603,7 @@
    "target_purity_fraction": 0.0,
    "target_temperature": -999.0,
    "temperature": 168.2,
-   "temperature_locked": true,
+   "temperature_locked": false,
    "vapor_fraction": 0.0,
    "waypoints": []
   }

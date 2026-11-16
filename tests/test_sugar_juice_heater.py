@@ -4,8 +4,8 @@ Entra S-jugo (30°C) y sale S-1 (70°C) con composición IDÉNTICA: no hay
 reacción, es el calentamiento del jugo de caña con vapor antes de la
 evaporación.  Estaba mal tipado como "Reactor — jacketed agitated" (y con
 S=50 m³ fuera del rango de costeo del reactor).  Re-tipado a intercambiador
-de calor líquido (fixed tube).  El duty (+3058 kW) es el mismo salto
-entálpico físico de 40°C — solo cambió el TIPO y, con él, el costo."""
+de calor líquido (fixed tube). El duty responde al caudal y a las
+propiedades del jugo; el salto sensible de 40°C no transforma especies."""
 import examples_registry as reg
 import flowsheet_solver as fsv
 
@@ -46,11 +46,20 @@ def test_s1_se_propaga_desde_sjugo_por_t30():
     assert io is not None and (io[0].name, io[1].name) == ("S-jugo-b", "S-1")
 
 
-def test_duty_calentamiento_se_mantiene_sin_warnings():
+def test_duty_calentamiento_corresponde_al_jugo_actual_sin_warnings():
     fs = reg.load_example("sugar")
     res = fsv.solve(fs)
     b = _block(fs, "R-101")
-    assert 3000 < b.duty < 3120                        # ~3058 kW, exotérmico+
+    sj, s1 = _stream(fs, "S-jugo-b"), _stream(fs, "S-1")
+    # La mezcla es mayoritariamente agua con azúcar y sólidos suspendidos.
+    # Una banda de Cp razonable verifica el orden físico del deber, sin
+    # congelar el valor de una tabla de propiedades anterior.
+    kg_s = sj.mass_flow * 1000.0 / (8760.0 * 3600.0)
+    cp_effective = b.duty / (kg_s * (s1.temperature - sj.temperature))
+    assert 3.0 < cp_effective < 4.2
+    from stream_enthalpy import block_delta_h_kW
+    import pytest
+    assert b.duty == pytest.approx(block_delta_h_kW([sj], [s1]), rel=1e-9)
     assert res.overall_status == "ok"
     assert not any("PLACEHOLDER" in w and "R-101" in w
                    for w in res.awareness_warnings)

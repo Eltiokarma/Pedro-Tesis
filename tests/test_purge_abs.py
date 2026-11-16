@@ -1,27 +1,9 @@
-"""PR-A2 / PR-A2.2 — [W-PURGE-ABS]: purga absoluta dentro de un loop.
-
-PR-A2 detectó el patrón topológico (salida terminal lockeada + hermana
-recirculante en un loop de reciclo no determinado).  PR-A2.2 añadió el
-discriminador FÍSICO por COMPOSICIÓN: una PURGA es un split físico (la
-salida que purga y la que recircula llevan la MISMA composición — mismo gas
-dividido); un SEPARADOR reparte composiciones distintas a cada salida (cada
-una es una fase/producto/corte).  Solo el split físico subdetermina el
-caudal del reciclo.  (El rol NO discrimina: la purga canónica de haber_rec
-es role=waste — por eso A2.1, que filtraba por rol, estaba mal.)
-
-Disparos finales sobre los 41: hda_full K-101 (purga de gas absoluta genuina
-→ input para PR-G2 / Fase 2 de T29c).  NO disparan los separadores (comp
-distinta) ni los loops ya determinados por splitter.
-
-T29c (loop de gas vivo + makeup de H2): tras re-sintonizar la separación de
-hda_full a un estado estacionario coherente, T-103 dejó de ser una purga
-absoluta (S-14/S-pesados ahora es tolueno puro, mientras S-13 recircula
-tolueno+benceno) y pasó a clasificar como SEPARADOR real (comp distinta) →
-ya no dispara.  Queda K-101 como única purga absoluta (el reparto del gas de
-reciclo sigue lockeado; su conversión a fracción es la Fase 2 diferida).
+"""Absolute-purge diagnostics: retain detection on invalid loops while
+the industrial catalogue uses determined split fractions or true separations.
 """
 import os
 import re
+from functools import lru_cache
 
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
@@ -32,6 +14,7 @@ from flowsheet_model import Flowsheet, Block, Stream
 _TAG = "[W-PURGE-ABS]"
 
 
+@lru_cache(maxsize=None)
 def _purge_blocks(clave):
     fs = reg.load_example(clave)
     res = fsv.solve(fs)
@@ -45,20 +28,17 @@ def _purge_blocks(clave):
 
 
 # ── DISPARA en las purgas genuinas (split físico, comp idéntica) ────────
-def test_dispara_en_purgas_genuinas():
-    # hda_full K-101 (gas de reciclo): S-purga ≡ S-gas-pre (mismo gas dividido).
-    # NOTA: industrial V-301 (S-blowdown) ERA un disparo, pero PR-G2a lo
-    # convirtió a splitter (purga = fracción) → ya no dispara.
-    # NOTA: hda_full T-103 ERA un disparo, pero T29c re-sintonizó la
-    # separación → ahora separa de verdad (comp distinta) → no dispara
-    # (ver test_no_dispara_en_separadores).
-    casos = [("hda_full", "K-101")]    # S-purga ≡ S-gas-pre (benzene/H2/CH4)
-    for clave, blk in casos:
-        _, _, blocks = _purge_blocks(clave)
-        assert blk in blocks, f"{clave}/{blk}: purga genuina debería disparar, got {blocks}"
+def test_hda_purga_de_gas_definida_por_fraccion():
+    fs, result, blocks = _purge_blocks("hda_full")
+    purge = next(s for s in fs.streams.values() if s.name == "S-purga")
+    splitter = fs.blocks[purge.src]
+    assert splitter.splitter_active
+    assert not purge.mass_flow_locked
+    assert purge.mass_flow > 0
+    assert splitter.name not in blocks
+    assert result.success
 
 
-# ── NO dispara en SEPARADORES (comp distinta a cada salida) ─────────────
 def test_no_dispara_en_separadores():
     casos = [("hda", "V-101"),         # H2/CH4 vs benzene/toluene
              ("hda_full", "T-101"),    # corte: benzene .1 vs .86
@@ -71,29 +51,24 @@ def test_no_dispara_en_separadores():
             f"{clave}/{blk}: separador (comp distinta), no debería disparar"
 
 
-def test_disparos_exactos_en_los_41():
-    # PR-G2a convirtió industrial V-301 a splitter; T29c re-sintonizó la
-    # separación de hda_full (T-103 ahora separa de verdad) → queda 1 disparo:
-    # K-101, la única purga de gas todavía lockeada en absoluto (Fase 2).
-    got = set()
-    for e in reg.list_examples():
-        _, _, blocks = _purge_blocks(e["clave"])
-        for b in blocks:
-            got.add((e["clave"], b))
-    assert got == {("hda_full", "K-101")}, \
-        f"set de disparos inesperado: {got}"
+def test_catalogo_sin_purgas_absolutas_indeterminadas():
+    got = {(e["clave"], b) for e in reg.list_examples()
+           for b in _purge_blocks(e["clave"])[2]}
+    assert got == set(), f"Purgas absolutas no resueltas: {got}"
 
 
-def test_industrial_v301_convertido_no_dispara():
-    """PR-G2a: V-301 pasó a splitter (purga de vapor = fracción) → el
-    [W-PURGE-ABS] que disparaba en A2.2 ya no aparece."""
-    fs, _, blocks = _purge_blocks("industrial")
-    assert "V-301" not in blocks
-    v301 = next(b for b in fs.blocks.values() if b.name == "V-301")
-    assert v301.splitter_active
+def test_caldera_integrada_tiene_purga_y_vapor_conservativos():
+    fs, result, blocks = _purge_blocks("industrial")
+    boiler = next(b for b in fs.blocks.values() if b.name == "F-301")
+    outs = [s for s in fs.streams.values() if s.src == boiler.id]
+    ins = [s for s in fs.streams.values() if s.dst == boiler.id]
+    assert boiler.name not in blocks
+    assert {s.phase for s in outs} == {"liquid", "vapor"}
+    assert all(s.mass_flow > 0 for s in outs)
+    assert abs(sum(s.mass_flow for s in ins) - sum(s.mass_flow for s in outs)) < 1e-6
+    assert result.success
 
 
-# ── loops determinados por splitter NO disparan ─────────────────────────
 def test_no_dispara_loops_determinados():
     for clave, blk in [("haber_rec", "V-102"), ("haber_rec", "V-101"),
                        ("industrial", "V-203"), ("industrial", "V-201")]:
@@ -132,22 +107,22 @@ def _mk_loop_fs(distinct):
         fs.streams[i] = s
         return s
 
-    f = S(name="S-feed", src=-1, dst=mix, mass_flow=1000.0, role="feed",
-          composition={"a": 0.5, "b": 0.5}, main_component="a")
+    f = S(name="S-feed", src=0, dst=mix, mass_flow=1000.0, role="feed",
+          composition={"nitrogen": 0.5, "oxygen": 0.5}, main_component="nitrogen")
     f.mass_flow_locked = True
     f.composition_locked = True
     f.start_xy = [-100.0, 0.0]
     S(name="S-a", src=mix, dst=sep, mass_flow=0.0)
     if distinct:
-        cp_p, cp_r = {"a": 0.9, "b": 0.1}, {"a": 0.1, "b": 0.9}
+        cp_p, cp_r = {"nitrogen": 0.9, "oxygen": 0.1}, {"nitrogen": 0.1, "oxygen": 0.9}
     else:
-        cp_p, cp_r = {"a": 0.5, "b": 0.5}, {"a": 0.5, "b": 0.5}
+        cp_p, cp_r = {"nitrogen": 0.5, "oxygen": 0.5}, {"nitrogen": 0.5, "oxygen": 0.5}
     p = S(name="S-purge", src=sep, dst=sink, mass_flow=200.0,
-          composition=cp_p, main_component="a")
+          composition=cp_p, main_component="nitrogen")
     p.mass_flow_locked = True
     p.composition_locked = True
     r = S(name="S-rec", src=sep, dst=mix, mass_flow=0.0,
-          composition=cp_r, main_component="a")
+          composition=cp_r, main_component="nitrogen")
     r.composition_locked = True
     return fs
 
@@ -167,14 +142,13 @@ def test_negativo_sintetico_separador_comp_distinta_no_dispara():
 
 
 # ── advisory: no altera overall_status ──────────────────────────────────
-def test_advisory_no_altera_overall_status():
-    import json
-    golden_path = os.path.join(os.path.dirname(__file__), "..", "data",
-                               "examples", "_golden.json")
-    with open(golden_path, encoding="utf-8") as f:
-        golden = json.load(f)
-    for clave, g in golden.items():
-        fs = reg.load_example(clave)
-        res = fsv.solve(fs)
-        assert res.overall_status == g["overall_status"], \
-            f"{clave}: overall_status cambió"
+def test_advisory_no_altera_overall_status(monkeypatch):
+    with_warnings = fsv.solve(_mk_loop_fs(distinct=False))
+    assert any(w.startswith(_TAG) for w in with_warnings.awareness_warnings)
+    monkeypatch.setattr(fsv, "_compute_awareness_warnings", lambda fs: [])
+    without_warnings = fsv.solve(_mk_loop_fs(distinct=False))
+    assert without_warnings.awareness_warnings == []
+    assert with_warnings.overall_status == without_warnings.overall_status
+    assert with_warnings.success == without_warnings.success
+    # The advisory must not conceal the actual underdetermined-loop error.
+    assert not with_warnings.success

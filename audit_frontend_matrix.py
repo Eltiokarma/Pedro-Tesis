@@ -54,6 +54,8 @@ SPECIFIC_EVIDENCE = [
     ("boiler_text",       lambda ie, b, fs: ie.boiler_text(b, fs)),
     ("valve_text",        lambda ie, b, fs: ie.valve_text(b, fs)),
     ("mixer_text",        lambda ie, b, fs: ie.mixer_text(b, fs)),
+    ("component_recovery_text", lambda ie, b, fs: ie.component_recovery_text(b, fs)),
+    ("cooling_tower_text", lambda ie, b, fs: ie.cooling_tower_text(b, fs)),
 ]
 
 

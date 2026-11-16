@@ -11,6 +11,10 @@ from flowsheet_solver import effective_pressure, effective_temperature
 
 def _rows(clave="talara"):
     fs = reg.load_example(clave)
+    # Templates now leave propagated temperatures/compositions unset.
+    # Cost the operating case, not their unsolved placeholder values.
+    from flowsheet_solver import solve
+    solve(fs)
     return fs, fx.collect_equipment_rows(fs, 2024)
 
 
@@ -56,10 +60,16 @@ def test_t_op_unidades_kelvin_vs_celsius():
     """Regresión del bug de unidades: stream.temperature está en °C pero
     block.T_op_K en K.  Un fired heater HT debe dar cientos de °C, no
     decenas (que sería tratar °C como K)."""
-    fs, rows = _rows()
-    fhtd = next(r for r in rows if r["Tag"] == "F-HTD")
-    # C4-hot=370°C, C4-pumped=250°C → promedio 310°C
-    assert math.isclose(fhtd["T_op [°C]"], 310.0, abs_tol=1.0)
+    # Isolate unit conversion from pump heating and plant feed changes.
+    from flowsheet_model import Block, Stream, Flowsheet
+    fs = Flowsheet()
+    b = Block(id=1, name="F-test", eq_type="Fired heater — non-reformer", S=5000)
+    fs.blocks = {1: b}
+    fs.streams = {1: Stream(id=1, name="in", src=0, dst=1, temperature=250.),
+                  2: Stream(id=2, name="out", src=1, dst=0, temperature=370.)}
+    assert fx.collect_equipment_rows(fs, 2024)[0]["T_op [°C]"] == pytest.approx(310.)
+    b.T_op_K = 573.15
+    assert fx.collect_equipment_rows(fs, 2024)[0]["T_op [°C]"] == pytest.approx(300.)
 
 
 def test_columna_material_origen_presente_y_al_final():
@@ -70,9 +80,11 @@ def test_columna_material_origen_presente_y_al_final():
     # PR-B2: los hornos se costean como CS aunque su servicio sea corrosivo.
     assert by["F-HTD"]["Material (origen)"] == "default (CS)"
     assert "default" in by["F-101"]["Material (origen)"].lower()
-    # …pero la heurística SÍ sigue aplicando a recipientes (la pared corroe):
-    # R-HTD, mismo servicio H2S que F-HTD, conserva SS316.
-    assert "hydrogen sulfide" in by["R-HTD"]["Material (origen)"]
+    # The revised feed has trace H2S below the screening threshold; the
+    # reactor still reports its high-pressure hydrogen rule.  Corrosive
+    # species above threshold are tested independently below.
+    assert by["R-HTD"]["Material"] == "SS304"
+    assert "H2 a alta P" in by["R-HTD"]["Material (origen)"]
 
 
 def test_fired_heaters_siempre_cs():
@@ -86,8 +98,29 @@ def test_fired_heaters_siempre_cs():
     # FBM de los HT cae a CS+FP (≈4-6 por la presión), no 13-15 de aleación
     for tag in ("F-HTD", "F-HTF", "F-HTN"):
         assert by[tag]["FBM"] < 7.0, f"{tag} FBM={by[tag]['FBM']} (aún aleado?)"
-    # F-HTD (alta P + más grande) sigue costando más que F-101 (atm)
-    assert by["F-HTD"]["CBM USD (2024)"] > by["F-101"]["CBM USD (2024)"]
+    assert all(by[tag]["CBM USD (2024)"] > 0
+               for tag in ("F-HTD", "F-HTF", "F-HTN", "F-101", "F-RCA"))
+    # Compare equal-size heaters: a different plant's revised duties are
+    # not a valid control for pressure-factor behavior.
+    from flowsheet_model import Block, Flowsheet
+    pair = Flowsheet()
+    pair.blocks = {
+        1: Block(id=1, name="F-low", eq_type="Fired heater — non-reformer", S=5000, P_op_bar=2.),
+        2: Block(id=2, name="F-high", eq_type="Fired heater — non-reformer", S=5000, P_op_bar=80.)}
+    compared = {r["Tag"]: r for r in fx.collect_equipment_rows(pair, 2024)}
+    assert compared["F-high"]["CBM USD (2024)"] > compared["F-low"]["CBM USD (2024)"]
+
+
+@pytest.mark.parametrize("species", ["hydrogen sulfide", "hydrogen_sulfide", "hydrogen-sulfide"])
+def test_corrosion_rule_accepts_canonical_species_and_reports_origin(species):
+    from flowsheet_model import Block, Stream, Flowsheet
+    fs = Flowsheet()
+    fs.blocks = {1: Block(id=1, name="R-test", eq_type="Reactor — autoclave", S=5)}
+    fs.streams = {1: Stream(id=1, name="sour", src=0, dst=1,
+                           composition={species: .1, "water": .9})}
+    row = fx.collect_equipment_rows(fs, 2024)[0]
+    assert row["Material"] == "SS316"
+    assert "hydrogen sulfide" in row["Material (origen)"]
 
 
 # ── ciclón gas/sólido: fases correctas + costeado (no zero-cost) ────────

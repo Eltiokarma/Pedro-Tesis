@@ -114,7 +114,7 @@ def _material_origin(fs, block_id, material):
             for sp, frac in s.composition.items():
                 if frac < 0.01:
                     continue
-                spl = sp.lower()
+                spl = sp.lower().replace("_", " ").replace("-", " ")
                 for kw, mat in eq.CORROSIVE_SPECIES.items():
                     if kw in spl and mat == material:
                         return f"heurística: {kw} → {mat}"
@@ -342,11 +342,16 @@ def compute_turton_costing(fs, df_variable, df_fixed, fci_musd,
 
     # COM Turton Eq 8.2 con desglose explícito (incluye Dep_SL y M+T+I
     # separados — bug-fix consistencia COM/Dep).
+    # Match the headless API: an embedded process-specific variable-cost
+    # factor takes precedence over the active economic profile.
+    com_gamma = (getattr(fs, "econ_overrides", None) or {}).get("com_gamma")
+    com_gamma = float(com_gamma) if com_gamma is not None else None
     com = eq.cost_of_manufacture_components(
         FCI_usd=fci_usd, COL_usd=col,
         CUT_usd=cut, CRM_usd=crm, CWT_usd=cwt,
         depreciable_base_usd=depreciable_base,
         useful_life_yr=_years,
+        gamma=com_gamma,
     )
 
     # Rentabilidad usando depreciable_base + WC explícitos.
@@ -375,6 +380,8 @@ def compute_turton_costing(fs, df_variable, df_fixed, fci_musd,
             FCI_usd=fci_s, COL_usd=col,
             CUT_usd=cut * op_f, CRM_usd=crm * op_f,
             CWT_usd=cwt * op_f,
+            alpha_d=com["alpha_d"], alpha=com["alpha"],
+            beta=com["beta"], gamma=com["gamma"],
         ))["COM_d"]
         rev_s = revenue * op_f
         prof_s = eq.profitability_indicators(
@@ -421,11 +428,11 @@ def compute_turton_costing(fs, df_variable, df_fixed, fci_musd,
     rows.append(("  COL (Operating Labor)", "", f"{col:>14,.0f} USD/yr"))
     rows.append(("", "", ""))
     rows.append(("COST OF MANUFACTURE (Turton Eq 8.2)", "", ""))
-    rows.append(("  0.180·FCI",          "",
+    rows.append((f"  {com['alpha_d']:.3f}·FCI",          "",
                   f"{com['0.180·FCI']:>14,.0f}"))
-    rows.append(("  2.73·COL",            "",
+    rows.append((f"  {com['beta']:.2f}·COL",            "",
                   f"{com['2.73·COL']:>14,.0f}"))
-    rows.append(("  1.23·(CUT+CRM+CWT)",  "",
+    rows.append((f"  {com['gamma']:.2f}·(CUT+CRM+CWT)",  "",
                   f"{com['1.23·(CUT+CRM+CWT)']:>14,.0f}"))
     rows.append(("  COM_d (con depreciación implícita)","",
                   f"{com['COM_d']:>14,.0f} USD/yr"))
@@ -1389,6 +1396,10 @@ def write_project_xlsx(path, fs, isbl, feeds, products, base_xlsx=None):
         years_op=_prof["years_op"],
         tax_rate=_prof["tax_rate"],
         maintenance_tax_insurance_usd_yr=costing_data["mti_usd_yr"],
+        alpha_d=costing_data["com"]["alpha_d"],
+        alpha=costing_data["com"]["alpha"],
+        beta=costing_data["com"]["beta"],
+        gamma=costing_data["com"]["gamma"],
     )
     # Assert de coherencia (fail-fast si las dos hojas divergen).
     try:

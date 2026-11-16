@@ -111,10 +111,10 @@
    "delta_p_bar": 0.0,
    "dryer_active": false,
    "dtlm_override": null,
-   "duty": 250.0,
-   "duty_locked": true,
+   "duty": 0.0,
+   "duty_locked": false,
    "efficiency": 0.75,
-   "eq_type": "Reactor — jacketed non-agit.",
+   "eq_type": "Fired heater — non-reformer",
    "evaporator_active": false,
    "final_moisture": 0.02,
    "flash_P_bar": 1.013,
@@ -129,12 +129,10 @@
    "mech_sep_target_phase": "solid",
    "moisture_component": "water",
    "n": 1,
-   "name": "R-101",
+   "name": "F-GLASS horno de fusión",
    "packing_type": "",
    "reaction_warnings": [],
-   "reactions": [
-    "R_FUSION_GLASS"
-   ],
+   "reactions": [],
    "reactor_conversion": 0.95,
    "reactor_mode": "equilibrium",
    "reactor_volume_L": 0.0,
@@ -149,7 +147,29 @@
    "tray_spacing_m": null,
    "volatile_component": "water",
    "x": 500,
-   "y": 360
+   "y": 360,
+   "component_recoveries": {
+    "util_out": {
+     "co2": 1.0
+    }
+   },
+   "component_recovery_active": false,
+   "component_recovery_default_port": "producto",
+   "lumped_yield_active": true,
+   "lumped_yield_basis": "Balance de carga seca: SiO2 retenido; CaCO3 y Na2CO3 liberan 1 mol CO2/mol carbonato y retienen masa de oxido en vidrio pseudocomponente. Conversion completa especificada; no equilibrio/estructura de red. Demanda adicional de fusion/reaccion 2200 kJ/kg es un parametro empirico no validado, ademas de entalpia sensible.",
+   "lumped_yields": {
+    "limestone": {
+     "co2": 0.43969927065640924,
+     "glass": 0.5603007293435908
+    },
+    "silica": {
+     "glass": 1.0
+    },
+    "soda_ash": {
+     "co2": 0.41522313425794893,
+     "glass": 0.5847768657420511
+    }
+   }
   },
   "6": {
    "HETP_m": null,
@@ -341,7 +361,7 @@
    "mass_flow": 720,
    "mass_flow_locked": true,
    "name": "S-silica",
-   "phase": "liquid",
+   "phase": "solid",
    "phase_locked": true,
    "pipe_K_local": 0.0,
    "pipe_diameter_m": 0.0,
@@ -392,7 +412,7 @@
    "mass_flow": 140,
    "mass_flow_locked": true,
    "name": "S-soda",
-   "phase": "liquid",
+   "phase": "solid",
    "phase_locked": true,
    "pipe_K_local": 0.0,
    "pipe_diameter_m": 0.0,
@@ -443,7 +463,7 @@
    "mass_flow": 140,
    "mass_flow_locked": true,
    "name": "S-lime",
-   "phase": "liquid",
+   "phase": "solid",
    "phase_locked": true,
    "pipe_K_local": 0.0,
    "pipe_diameter_m": 0.0,
@@ -477,12 +497,8 @@
    "bubble_show_composition": false,
    "bubble_show_enthalpy": false,
    "bubble_visible": false,
-   "composition": {
-    "limestone": 0.14,
-    "silica": 0.72,
-    "soda_ash": 0.14
-   },
-   "composition_locked": true,
+   "composition": {},
+   "composition_locked": false,
    "cp": 0.0,
    "delta_h_vap_override": 0.0,
    "display_number": 0,
@@ -530,10 +546,8 @@
    "bubble_show_composition": false,
    "bubble_show_enthalpy": false,
    "bubble_visible": false,
-   "composition": {
-    "glass": 1.0
-   },
-   "composition_locked": true,
+   "composition": {},
+   "composition_locked": false,
    "cp": 0.0,
    "delta_h_vap_override": 0.0,
    "display_number": 0,
@@ -581,10 +595,8 @@
    "bubble_show_composition": false,
    "bubble_show_enthalpy": false,
    "bubble_visible": false,
-   "composition": {
-    "co2": 1.0
-   },
-   "composition_locked": true,
+   "composition": {},
+   "composition_locked": false,
    "cp": 0.0,
    "delta_h_vap_override": 0.0,
    "display_number": 0,
@@ -595,8 +607,8 @@
    "id": 14,
    "is_pipe": false,
    "main_component": "co2",
-   "mass_flow": 120,
-   "mass_flow_locked": true,
+   "mass_flow": 0.0,
+   "mass_flow_locked": false,
    "name": "S-CO2",
    "phase": "gas",
    "phase_locked": true,
@@ -632,10 +644,8 @@
    "bubble_show_composition": false,
    "bubble_show_enthalpy": false,
    "bubble_visible": false,
-   "composition": {
-    "glass": 1.0
-   },
-   "composition_locked": true,
+   "composition": {},
+   "composition_locked": false,
    "cp": 0.0,
    "delta_h_vap_override": 0.0,
    "display_number": 0,

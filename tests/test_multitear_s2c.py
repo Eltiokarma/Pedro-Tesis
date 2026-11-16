@@ -61,14 +61,14 @@ def build_s2c_degenerate_fs():
         fs.streams[i] = s
         return s
 
-    S("Feed", -1, M, 100.0, {"hydrogen": 0.2, "benzene": 0.8},
+    S("Feed", 0, M, 100.0, {"hydrogen": 0.2, "benzene": 0.8},
       lock=True, role="feed")
     S("S-m", M, SEP)
     S("S-vap", SEP, Xv, comp={"hydrogen": 1.0}, phase="gas")    # comp DISTINTA
     S("S-liq", SEP, Xl, comp={"benzene": 1.0}, phase="liquid")
-    S("Purge", Xv, -1, role="product", phase="gas")
+    S("Purge", Xv, 0, role="product", phase="gas")
     S("Rvap", Xv, M, role="recycle", phase="gas")
-    S("Prod", Xl, -1, role="product")
+    S("Prod", Xl, 0, role="product")
     S("Rliq", Xl, M, role="recycle")
     return fs
 
@@ -98,16 +98,25 @@ def test_s2c_activa_y_converge_con_balance_cerrado():
 
 def test_is_vl_separator_acotado():
     """(a-fix): identifica separadores v/l reales; excluye same-comp y splitters."""
-    # hda_full/V-101: comp declarada distinta → True
-    fs = Flowsheet.from_dict(json.load(open("data/examples/hda_full.json")))
+    # Explicit synthetic passive v/l separator: distinct outlet compositions.
+    # Industrial examples now declare their actual separation model up front.
+    fs = build_s2c_degenerate_fs()
     F._reset_propagated_values(fs)
-    v = next(b for b in fs.blocks.values() if b.name == "V-101")
+    v = next(b for b in fs.blocks.values() if b.name == "SEP")
     assert F._is_vl_separator(fs, v)
-    # industrial/V-201: salidas misma comp (declarada) → False
-    fs2 = Flowsheet.from_dict(json.load(open("data/examples/industrial.json")))
-    F._reset_propagated_values(fs2)
-    v201 = next(b for b in fs2.blocks.values() if b.name == "V-201")
-    assert not F._is_vl_separator(fs2, v201)
+    # Start from a fresh declaration, before the solver captures composition.
+    fs = build_s2c_degenerate_fs()
+    v = next(b for b in fs.blocks.values() if b.name == "SEP")
+    for s in fs.streams.values():
+        if s.src == v.id:
+            s.composition = {"benzene": 1.0}
+            s.main_component = "benzene"
+    assert not F._is_vl_separator(fs, v)
+    fs = build_s2c_degenerate_fs()
+    v = next(b for b in fs.blocks.values() if b.name == "SEP")
+    v.eq_type = "Splitter - flow divider"
+    v.splitter_active = True
+    assert not F._is_vl_separator(fs, v)
 
 
 def test_haber_rec_no_activa_s2c_byte_identico():
@@ -122,8 +131,8 @@ def test_haber_rec_no_activa_s2c_byte_identico():
 
 
 def test_gate_examples_no_activan_s2c():
-    """Ningún ejemplo de los 41 enciende S2-C (todos frozen/pinned/mono) →
-    el golden no se mueve en esta capa.  Prueba dura de acotamiento."""
+    """Los ejemplos declaran sus modelos de separación; S2-C no debe
+    reinterpretarlos automáticamente como otros flashes."""
     for ex in ("hda_full", "gas_sweet", "industrial", "haber_rec", "hda"):
         fs = reg.load_example(ex)
         res = F.solve(fs)

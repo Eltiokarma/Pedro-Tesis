@@ -576,7 +576,7 @@ def suggested_material(composition_dicts, p_op_bar=1.0, eq_type=None):
         for sp, frac in comp.items():
             if frac < 0.01:
                 continue
-            spl = sp.lower()
+            spl = sp.lower().replace("_", " ").replace("-", " ")
             for kw, mat in CORROSIVE_SPECIES.items():
                 if kw in spl:
                     fm = MATERIAL_FACTORS.get(mat, 1.0)

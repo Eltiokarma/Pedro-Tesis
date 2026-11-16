@@ -270,6 +270,7 @@ COOLING_TOWER_PORTS = {
     "agua_caliente": ("top",   0.30),   # warm return from process
     "agua_fria":     ("bottom",0.5),    # cold supply to process
     "makeup":        ("left",  0.5),    # agua de reposición
+    "aire":          ("left",  0.80),   # air enters the direct-contact tower
     "blowdown":      ("bottom",0.80),   # purga concentración
     "vapor_loss":    ("top",   0.70),   # pérdida por evaporación
 }
@@ -333,6 +334,7 @@ PORT_KIND_BY_NAME = {
     "liq_in":          "process_in",
     "agua_in":         "process_in",
     "agua_caliente":   "process_in",      # cooling tower warm return
+    "aire":            "process_in",      # cooling tower air supply
     "stripping_steam": "process_in",
     "makeup":          "process_in",
     "in":              "process_in",
@@ -579,6 +581,43 @@ def get_ports(eq_type):
     """Dict {port_name: (side, frac)} para el eq_type.
     Si no está catalogado, devuelve DEFAULT_PORTS."""
     return EQUIPMENT_PORTS.get(eq_type, DEFAULT_PORTS)
+
+
+def _recovery_outlet_names(block):
+    """Ordered outlet names declared by this block, not the type catalog."""
+    if not (getattr(block, "component_recovery_active", False)
+            or getattr(block, "lumped_yield_active", False)):
+        return ()
+    recoveries = getattr(block, "component_recoveries", {})
+    names = list(recoveries) if isinstance(recoveries, dict) else []
+    names.append(getattr(block, "component_recovery_default_port", ""))
+    return tuple(dict.fromkeys(name for name in names
+                               if isinstance(name, str) and name))
+
+
+def get_block_ports(block):
+    """Copy of catalog ports plus this block's specified recovery outlets.
+
+    Recovery outlets are process outlets on the right. Redistribute the whole
+    right side so custom names never coincide with each other or a catalog dot.
+    Static callers of get_ports() and other blocks keep their original geometry.
+    """
+    ports = dict(get_ports(block.eq_type))
+    names = _recovery_outlet_names(block)
+    if names:
+        for name in names:
+            ports[name] = ("right", 0.5)
+        right = [name for name, (side, _) in ports.items() if side == "right"]
+        for index, name in enumerate(right, 1):
+            ports[name] = ("right", index / (len(right) + 1))
+    return ports
+
+
+def get_block_port_kind(block, port_name):
+    """Classify declared recovery outlets as process, including custom names."""
+    if port_name in _recovery_outlet_names(block):
+        return "process_out"
+    return get_port_kind(block.eq_type, port_name)
 
 
 def get_isa_prefix(eq_type):
@@ -1076,4 +1115,3 @@ def utility_consumption(util_key, duty_kw_abs):
     elif util["type"] == "generation":
         mass_kg *= eff       # sólo η del calor cedido → vapor exportable
     return mass_kg / 1000.0  # tm/año
-

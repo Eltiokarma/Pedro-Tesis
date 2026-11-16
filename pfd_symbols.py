@@ -1277,7 +1277,8 @@ def block_dims(eq_type: str) -> Tuple[float, float]:
 
 def port_coords(eq_type: str,
                  w: Optional[float] = None,
-                 h: Optional[float] = None
+                 h: Optional[float] = None,
+                 block=None
                  ) -> Dict[str, Tuple[float, float]]:
     """Devuelve {port_name: (x, y)} en coordenadas absolutas del bloque,
     combinando los lados+fracciones de equipment_ports.py con el (w, h)
@@ -1297,7 +1298,8 @@ def port_coords(eq_type: str,
         return {}
 
     out: Dict[str, Tuple[float, float]] = {}
-    for name, (side, frac) in ep.get_ports(eq_type).items():
+    ports = ep.get_block_ports(block) if block is not None else ep.get_ports(eq_type)
+    for name, (side, frac) in ports.items():
         if side == "left":
             out[name] = (0.0, h * frac)
         elif side == "right":

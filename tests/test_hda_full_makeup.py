@@ -1,35 +1,4 @@
-"""T29c — hda_full: makeup de H2 + balance elemental coherente.
-
-Antes de T29c hda_full tenía DOS ficciones estructurales:
-
-  1. El único feed externo era tolueno puro (S-feed-tol).  No había makeup
-     de H2 → el H2 que circulaba "salía de la nada": balance elemental de
-     hidrógeno global feeds≈5210 atH vs products≈6542 atH (déficit −1332,
-     ≈666 kmol de H2 apareciendo de la nada por el lazo de gas congelado).
-
-  2. El reciclo de tolueno (S-tol-recic = 214.9 kmol) era MAYOR que el
-     tolueno no-reaccionado que el reactor dejaba (130.2 kmol): un reciclo
-     no puede exceder su fuente — ficción hardcodeada.
-
-T29c re-sintonizó el flowsheet a UN estado estacionario coherente, calculado
-por balance (no a ojo):
-
-  - Feed fresco de tolueno = tolueno neto consumido (738 kmol convertidos por
-    R035) + pérdida de tolueno en pesados.  Sale ≈746.3 kmol = 68763 kg.
-  - Reciclo de tolueno = no-reaccionado recuperado en la separación
-    (≤130.2 kmol disponibles).  Sale ≈121.9 kmol.
-  - Makeup de H2 (S-H2-makeup) = H2 consumido (738) + H2 purgado + H2 perdido
-    al fuel − H2 que ya recircula.  Sale ≈1267 kmol = 2555 kg, calculado por
-    el punto fijo del lazo de gas (no aproximado).
-
-El reactor R-101 (R035, conv 0.85, 738 kmol convertidos 1:1:1:1) NO se tocó:
-sólo cambió la carga de inerte (metano) del reciclo, que es una cantidad del
-lazo, no de la reacción.
-
-El lazo de gas sigue CONGELADO (tear lockeado); su activación viva (purga →
-fracción + Wegstein) es la Fase 2, diferida a T29c-2.  El balance elemental
-cerrado es la prioridad y ya está.
-"""
+"""HDA live recycle: makeup feeds, elemental balances and reaction extent."""
 import math
 
 import examples_registry as reg
@@ -131,10 +100,14 @@ def test_reactor_r035_preservado():
     d_h2 = _kmol(S3, "hydrogen") - _kmol(S4, "hydrogen")
     d_benz = _kmol(S4, "benzene") - _kmol(S3, "benzene")
     d_met = _kmol(S4, "methane") - _kmol(S3, "methane")
-    assert math.isclose(d_tol, 738.0, abs_tol=2.0)
+    reactor = next(b for b in fs.blocks.values() if b.name == "R-101")
+    expected = min(_kmol(S3, "toluene"), _kmol(S3, "hydrogen")) * reactor.reactor_conversion
+    assert expected > 0
+    assert math.isclose(d_tol, expected, rel_tol=2e-3)
     for x in (d_h2, d_benz, d_met):
         assert math.isclose(x, d_tol, rel_tol=2e-3)          # 1:1:1:1
-    assert math.isclose(d_tol / _kmol(S3, "toluene"), 0.85, abs_tol=0.005)
+    assert math.isclose(d_tol / min(_kmol(S3, "toluene"), _kmol(S3, "hydrogen")),
+                        reactor.reactor_conversion, abs_tol=0.005)
 
 
 # ── 6. Lazo de tolueno coherente: reciclo ≤ no-reaccionado ───────────────
@@ -150,4 +123,6 @@ def test_toluene_loop_coherente():
     feed_tol = _kmol(
         next(s for s in fs.streams.values() if s.name == "S-feed-tol"),
         "toluene")
-    assert feed_tol >= 738.0, "el feed fresco debe cubrir el tolueno convertido"
+    S3 = next(s for s in fs.streams.values() if s.name == "S-3")
+    consumed = _kmol(S3, "toluene") - _kmol(S4, "toluene")
+    assert feed_tol >= consumed * (1 - 1e-3), "fresh toluene must cover net consumption"

@@ -34,6 +34,7 @@ def test_scc_mixto_hda_full_aux_converge():
     fs = reg.load_example("hda_full")
     fsv.solve(fs)
     n = 0
+    utility_hx_ids = []
     for b in list(fs.blocks.values()):
         if ec.EQUIPMENT_DATA.get(b.eq_type, {}).get("categoria") \
                 != "Heat exchangers":
@@ -44,11 +45,29 @@ def test_scc_mixto_hda_full_aux_converge():
             continue
         if eaux.instantiate_auxiliaries(fs, b):
             n += 1
+            utility_hx_ids.append(b.id)
     assert n >= 1, "hda_full no instanció auxiliares"
     res = fsv.solve(fs)
     no_conv = [rs for rs in res.recycle_solutions if not rs.converged]
     assert no_conv == [], f"SCC mixto no convergió: {no_conv}"
     assert res.overall_status in ("ok", "warning")
+    tear_names = {name for rs in res.recycle_solutions
+                  for name in rs.tear_stream.split("+")}
+    auxiliary_names = {s.name for s in fs.streams.values() if s.auto_aux}
+    assert not tear_names & auxiliary_names, "circulación analítica no es una variable de tear"
+    checked = 0
+    for bid in utility_hx_ids:
+        if abs(fs.blocks[bid].duty) <= 1e-6:
+            continue
+        utilities = [s for s in fs.streams.values()
+                     if s.auto_aux and s.role == "utility"
+                     and s.stream_kind == "mass" and (s.src == bid or s.dst == bid)]
+        if not utilities:
+            # Air coolers have open ambient intake/exhaust, no utility loop.
+            continue
+        assert all(s.mass_flow > 0 for s in utilities), fs.blocks[bid].name
+        checked += 1
+    assert checked > 0, "debe verificar al menos un lazo de servicio con duty activo"
 
 
 # ── §4: HX aislado infiere duty y dimensiona su lazo ────────────────────
@@ -57,14 +76,14 @@ def test_hx_standalone_infiere_duty_y_dimensiona_lazo():
     b = fs.new_id()
     fs.blocks[b] = Block(id=b, name="E-1", eq_type="Heat exch. — fixed tube",
                          S=10.0, x=0, y=0)
-    s1 = Stream(id=fs.new_id(), name="S-in", src=-1, dst=b, mass_flow=1000.0,
+    s1 = Stream(id=fs.new_id(), name="S-in", src=0, dst=b, mass_flow=1000.0,
                 composition={"water": 1.0}, temperature=80.0)
     s1.mass_flow_locked = True
     s1.composition_locked = True
     s1.temperature_locked = True
     s1.start_xy = [-100, 0]
     fs.streams[s1.id] = s1
-    s2 = Stream(id=fs.new_id(), name="S-out", src=b, dst=-1, mass_flow=1000.0,
+    s2 = Stream(id=fs.new_id(), name="S-out", src=b, dst=0, mass_flow=1000.0,
                 composition={"water": 1.0}, temperature=40.0)
     s2.mass_flow_locked = True
     s2.composition_locked = True

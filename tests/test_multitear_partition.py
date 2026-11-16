@@ -11,7 +11,7 @@ Anclas:
     descomposición port-aware ese artefacto desaparece y el rank baja a 2, que
     es el nº físico de reciclos.
   - haber_rec / mono-reciclo: 1 ciclo (no se sobre-particiona lo simple).
-  - industrial: cada uno de sus 3 SCC → 1 ciclo.
+  - industrial: shared HX combine one block SCC, with 3 independent mass loops.
   - ancla sintética (#88): 2 ciclos independientes.
 Invariante transversal: nº de ciclos == circuit rank (ambos port-aware), y el
 set de back-edges rompe TODOS los ciclos (subgrafo port-aware restante acíclico).
@@ -71,12 +71,13 @@ def _assert_basis_valid(scc, fs):
     assert len(set(be_ids)) == len(be_ids), "back-edges deben ser distintos"
     assert _remaining_is_acyclic(scc, fs, set(be_ids)), \
         "el set de back-edges debe romper TODOS los ciclos"
-    # cada ciclo es un loop cerrado: todo bloque del ciclo tiene grado par
+    # Each physical HX side must close independently, not just its block id.
+    node_src, node_dst = F._portaware_nodes(scc, fs)
     for c in cycles:
         deg = collections.Counter()
         for s in c["streams"]:
-            deg[s.src] += 1
-            deg[s.dst] += 1
+            deg[node_src(s)] += 1
+            deg[node_dst(s)] += 1
         assert all(d % 2 == 0 for d in deg.values()), \
             f"ciclo no cerrado: grados {dict(deg)}"
     return cycles
@@ -122,13 +123,16 @@ def test_haber_rec_mono_un_solo_ciclo():
     assert len(cycles) == 1, "mono-reciclo no debe sobre-particionarse"
 
 
-def test_industrial_tres_sccs_un_ciclo_cada_uno():
+def test_industrial_hx_compartidos_conservan_tres_ciclos_fisicos():
     fs = reg.load_example("industrial")
     sccs = _recycle_sccs(fs)
-    assert len(sccs) == 3, f"industrial son 3 SCC paralelos, dio {len(sccs)}"
-    for scc in sccs:
-        cycles = _assert_basis_valid(scc, fs)
-        assert len(cycles) == 1, "cada SCC paralelo es mono-reciclo"
+    assert len(sccs) == 1, "los HX compartidos conectan el grafo de bloques"
+    cycles = _assert_basis_valid(sccs[0], fs)
+    assert len(cycles) == 3, "proceso, vapor y CW conservan tres lazos materiales"
+    # No service edge may masquerade as a one-edge open 'cycle'.
+    assert all(len(c["streams"]) > 1 for c in cycles)
+    ids = [{s.id for s in c["streams"]} for c in cycles]
+    assert all(not ids[i] & ids[j] for i in range(3) for j in range(i))
 
 
 def test_anchor_sintetico_dos_ciclos():

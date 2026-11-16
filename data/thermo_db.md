@@ -1027,10 +1027,15 @@ dH_f_liq_298K = N/A
 ### Capa 1 — Antoine [NIST]
 Equation: log10(P_sat / kPa) = A - B / (T_°C + C)
 Range: -56 to 31 °C
-A = 8.65721
+A = 6.65721
 B = 835.060
 C = 268.220
 Source: Yaws liq-vap (>TP)
+Audit 2026-11-15: corrected decimal pressure scale (A was two units too
+large). The previous curve gave ~7350 bar at Tc=31 C instead of Pc=73.8
+bar. This is an approximate liquid-vapor fit, NOT the NIST sublimation
+Antoine fit (154.26-195.89 K); do not use it below the triple point.
+Phase anchors: https://webbook.nist.gov/cgi/cbook.cgi?ID=C124389&Mask=4
 
 ### Capa 2a — Cp gas (DIPPR-100) [SVN fit]
 Equation: Cp_gas(T) = C1 + C2·T + C3·T² + C4·T³ + C5·T⁴   [J/(kmol·K)]
@@ -10703,3 +10708,21 @@ Para QuinoaBrew específicamente, las **3 capas + Watson + Rackett que tenés ah
 - Dimensionamiento de intercambiadores
 - Cálculo de carga de refrigeración
 - Análisis económico (consumo de utilidades)
+
+---
+
+## Carbon (C)
+
+### IDs
+- CAS: 7782-42-5
+- Formula: C
+- MW: 12.011 g/mol
+
+### Capa 3 - Formación
+dH_f_liq_298K = 0.0 kJ/mol
+The condensed-field value denotes the graphite SOLID standard state,
+not liquid carbon. No liquid/gas phase transition is modeled. Variable
+solid Cp (250-3000 K) is declared in data/caloric_condensed.json from
+Butland and Maddison (1973), compiled by NIST Chemistry WebBook SRD69.
+Source: https://webbook.nist.gov/cgi/cbook.cgi?ID=C7782425&Mask=2
+Coke is represented by graphite only as a declared caloric approximation.

@@ -31,7 +31,7 @@ def _recycle_scc(fs):
 def _live(example):
     """Carga el ejemplo y deslockea TODOS sus streams internos de SCC
     (escenario vivo) para que los back-edges sean tearables. Solo selección."""
-    d = json.load(open(f"data/examples/{example}.json"))
+    d = json.load(open(f"data/examples/{example}.json", encoding="utf-8"))
     fs0 = Flowsheet.from_dict(d)
     scc = _recycle_scc(fs0)
     internal_names = {s.name for s in F._streams_in_scc(scc, fs0)}
@@ -95,7 +95,7 @@ def test_hda_full_tear_por_ciclo_no_S2():
                     if _cycle_index_of(cycles, t.name)
                     & _cycle_index_of(cycles, "S-gas-recic"))
     assert gas_tear.name in ("S-gas-pre", "S-gas-recic"), gas_tear.name
-    assert "S-tol-recic" in names, f"tear de tolueno debe ser S-tol-recic; {names}"
+    assert "S-tol-recic-out" in names, f"tear tras válvula de tolueno; {names}"
     # tears distintos, ninguno lockeado, rompen todos los ciclos.
     assert len(set(t.id for t in tears)) == 2
     assert all(not getattr(t, "mass_flow_locked", False) for t in tears)

@@ -30,7 +30,8 @@ import inspector_evidence as ie
 @pytest.fixture(scope="module")
 def resueltos():
     out = {}
-    for k in ("sugar", "boiler_ft", "rankine", "letdown", "smr_eq"):
+    for k in ("sugar", "salt_crystal", "boiler_ft", "rankine", "letdown", "smr_eq",
+              "chloralkali_hcl", "cw_loop", "cw_natural"):
         fs = load_example(k)
         fsv.solve(fs)
         out[k] = fs
@@ -45,12 +46,15 @@ def _block(fs, needle):
 CASOS = [
     # (ejemplo, bloque, text_fn, metrics_fn, fragmento esperado en el texto)
     ("sugar", "Dryer", "dryer", "Humedad in"),
-    ("sugar", "R-102", "crystallizer", "Corrientes lockeadas"),
-    ("sugar", "EV-101", "evaporator", "efectivo"),
+    ("salt_crystal", "Crystallizer", "crystallizer", "Yield"),
+    ("sugar", "EV-101", "evaporator", "declarado"),
     ("boiler_ft", "Boiler", "boiler", "kJ/kg vapor"),
     ("rankine", "Boiler", "boiler", "Duty"),
     ("letdown", "Valve", "valve", "isoentálpica"),
     ("smr_eq", "Mixer", "mixer", "mezcla"),
+    ("chloralkali_hcl", "V-101-MEM", "component_recovery", "Remanente"),
+    ("cw_loop", "Cooling tower", "cooling_tower", "aire húmedo"),
+    ("cw_natural", "Cooling tower", "cooling_tower", "aire húmedo"),
 ]
 
 
@@ -65,6 +69,9 @@ def test_tipo_mudo_ahora_habla(resueltos, ejemplo, bloque, familia, frag):
     assert frag in txt, f"'{frag}' no aparece en:\n{txt}"
     m = metrics_fn(b, fs)
     assert m is not None and m.get("metrics"), f"{b.name} sin métricas"
+    if familia in ("component_recovery", "cooling_tower"):
+        assert all(str(metric["value"]) in txt for metric in m["metrics"])
+        assert not b.flash_active, "la evidencia no debe fingir un flash de equilibrio"
 
 
 def test_boiler_energia_especifica_fisica(resueltos):

@@ -873,7 +873,7 @@
    "target_purity_fraction": 0.0,
    "target_temperature": -999.0,
    "temperature": 82.3,
-   "temperature_locked": true,
+   "temperature_locked": false,
    "vapor_fraction": 0.0,
    "waypoints": []
   },

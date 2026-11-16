@@ -602,9 +602,9 @@
    "bubble_show_enthalpy": false,
    "bubble_visible": false,
    "composition": {
-    "ethanol": 0.0783,
-    "glucose": 0.0081,
-    "water": 0.9137
+    "ethanol": 0.07829217078292171,
+    "glucose": 0.0080991900809919,
+    "water": 0.9136086391360864
    },
    "composition_locked": true,
    "cp": 0.0,

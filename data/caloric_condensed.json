@@ -1,0 +1,37 @@
+{
+  "carbon": {
+    "equation": "Cp[kJ/kg/K]=sum(coefficient*T[K]^exponent); original cal/g/K coefficients multiplied by4.184",
+    "phase": "solid graphite; coke modeled as graphite for calorics only",
+    "powers": [
+      [
+        0,
+        2.253740888
+      ],
+      [
+        1,
+        3.812163736e-05
+      ],
+      [
+        -1,
+        -377.70014
+      ],
+      [
+        -2,
+        -181791.8712
+      ],
+      [
+        -3,
+        66654885.6
+      ],
+      [
+        -4,
+        -6011905920.0
+      ]
+    ],
+    "range_K": [
+      250,
+      3000
+    ],
+    "source": "Butland and Maddison 1973, as compiled by NIST SRD69, https://webbook.nist.gov/cgi/cbook.cgi?ID=C7782425&Mask=2"
+  }
+}

@@ -270,10 +270,8 @@ _INTERNOS_COLUMNA = {"Tray — sieve", "Tray — valve",
                      "Packing — random", "Packing — structured"}
 
 
-def test_cobertura_catalogo_solo_internos_sin_ejemplo():
-    """Los 3 ejemplos nuevos (solvent_rec, reformer_whb, cw_natural)
-    cierran C.2: todo eq_type del catálogo menos los internos de
-    columna tiene al menos una instancia en el set de ejemplos."""
+def test_cobertura_catalogo_con_excepciones_explicitas():
+    """Detect unexpected gaps without disguising turbines as compressors."""
     import json as _json
     import equipment_costs as ec
     usados = set()
@@ -285,11 +283,14 @@ def test_cobertura_catalogo_solo_internos_sin_ejemplo():
             if b.get("eq_type"):
                 usados.add(b["eq_type"])
     sin_uso = set(ec.EQUIPMENT_DATA) - usados
-    assert sin_uso == _INTERNOS_COLUMNA, (
+    # The former axial-compressor coverage was actually two steam turbines.
+    # Keep the remaining coverage gap explicit instead of mislabelling them.
+    sin_ejemplo_declarados = _INTERNOS_COLUMNA | {"Compressor — axial"}
+    assert sin_uso == sin_ejemplo_declarados, (
         f"eq_types sin ejemplo fuera de la excepción: "
-        f"{sorted(sin_uso - _INTERNOS_COLUMNA)}; "
+        f"{sorted(sin_uso - sin_ejemplo_declarados)}; "
         f"internos que ganaron ejemplo: "
-        f"{sorted(_INTERNOS_COLUMNA - sin_uso)}")
+        f"{sorted(sin_ejemplo_declarados - sin_uso)}")
 
 
 def test_bug16_whb_desbloqueado_se_dimensiona_en_solve():

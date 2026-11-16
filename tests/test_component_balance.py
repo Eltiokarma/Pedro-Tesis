@@ -55,8 +55,14 @@ def test_roundtrip_ejemplo_real_solo_agrega_claves_nuevas():
     sólo AGREGA campos aditivos nuevos; ningún valor original se pierde ni
     cambia."""
     BLOCK_NEW = {"inline_reaction", "pseudo_cut", "duty_origin",
-                 "equipo_comercial"}
-    STREAM_NEW = {"pressure_lock_origin", "split_fraction"}
+                 "equipo_comercial", "component_recovery_active",
+                 "component_recoveries", "component_recovery_default_port",
+                 "lumped_yield_active", "lumped_yields", "lumped_yield_basis",
+                 "electrolysis_voltage_V", "electrolysis_current_efficiency",
+                 "electrolysis_electrons_per_extent",
+                 "cooling_tower_active", "cooling_tower_blowdown_fraction",
+                 "crystallizer_solubility_kg_per_kg_solvent", "crystallizer_solvent_component"}
+    STREAM_NEW = {"pressure_lock_origin", "split_fraction", "component_vapor_fractions"}
     path = os.path.join(aec.DATA_DIR, "gas_sweet.json")
     with open(path, encoding="utf-8") as f:
         d = json.load(f)

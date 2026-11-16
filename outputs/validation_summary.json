@@ -1,0 +1,75 @@
+{
+  "audit_date": "2026-11-15",
+  "tested_code_commit": "0622bc892a4e2c36c7b8b3ffdaaf65d813dda0fe",
+  "base_commit": "349b81729fb00400036bc3a989be5e999b8e27c6",
+  "environment": {
+    "platform": "win32",
+    "python": "3.11.18",
+    "packages": {
+      "numpy": "2.4.6",
+      "scipy": "1.17.1",
+      "pytest": "9.2.0",
+      "pytest-xdist": "3.8.0",
+      "PySide6": "6.12.0",
+      "pandas": "3.1.1",
+      "openpyxl": "3.1.5",
+      "matplotlib": "3.11.2"
+    },
+    "variables": {
+      "PYTHONUTF8": "1",
+      "QT_QPA_PLATFORM": "offscreen"
+    }
+  },
+  "pytest": {
+    "command": "python -X utf8 -m pytest -n 4 --dist=worksteal -v --disable-warnings --durations=10",
+    "passed": 1066,
+    "skipped": 6,
+    "failed": 0,
+    "warnings": 267,
+    "duration_seconds": 837.88,
+    "skipped_test_ids": [
+      "tests/test_montecarlo_headless.py::TestSamplerIdentico::test_correlacionado_bit_identico ",
+      "tests/test_montecarlo_headless.py::TestSamplerIdentico::test_independiente_bit_identico ",
+      "tests/test_estimated_overlay.py::TestEstimadoRecuperableYConsumible::test_b1_recuperable_por_get ",
+      "tests/test_estimated_overlay.py::TestEstimadoRecuperableYConsumible::test_b2_consumible_por_el_seam ",
+      "tests/test_estimated_overlay.py::TestEstimadoRecuperableYConsumible::test_b_sourceado_sigue_ganando_con_overlay_lleno ",
+      "tests/test_inspector_metrics.py::test_utility_aux_metrics_matches_text "
+    ],
+    "skipped_groups": {
+      "optional_predictor_dependencies_unavailable": 3,
+      "legacy_montecarlo_module_not_importable": 2,
+      "utility_aux_inspector_no_applicable_catalog_example": 1
+    }
+  },
+  "physical_examples": {
+    "command": "python -X utf8 gate_physical_examples.py --json outputs/physical_examples_audit.json",
+    "passed": 64,
+    "total": 64,
+    "status_counts": {
+      "ok": 54,
+      "warning": 10
+    },
+    "maximum_unit_mass_relative_error": 2.669689379855502e-07,
+    "maximum_residual_example": "industrial",
+    "detail": "physical_examples_audit.json"
+  },
+  "api_gui_equivalence": {
+    "command": "python -X utf8 gate_simulate.py",
+    "headless_import": "passed",
+    "engine_golden": "64/64",
+    "economics_api_gui": "64/64"
+  },
+  "additional_checks_passed_during_audit": {
+    "gate_eos.py": "passed; broad correlation gate, not industrial accuracy validation",
+    "gate_eos_flash.py": "passed",
+    "gate_component_balance.py": "41/41",
+    "gate_pressure_source.py": "7/7",
+    "gate_examples.py --registry": "64/64 serialization round-trip"
+  },
+  "limitations": [
+    "Ten examples retain explicit warnings; success does not certify plant accuracy.",
+    "DWSIM source was inspected; no executable or numerical DWSIM benchmark was run.",
+    "Specified recoveries/yields, ideal-gas calorics and approximate steam properties remain documented model scopes.",
+    "The final commit adds only validation documentation after the tested code commit."
+  ]
+}
