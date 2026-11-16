@@ -192,10 +192,21 @@ máximo por variable. Comparar no significa calibrar ni certificar el modelo.
    retrasos de sensores, actuadores, depósitos de servicio o reacción únicamente
    cuando lo exijan la decisión y las discrepancias observadas.
 
-La calibración automática, incertidumbre paramétrica, generación de modelos por
-IA y conexión OPC UA quedan para etapas posteriores. La prioridad inmediata es
-obtener una ficha real y registros suficientes para sustituir los parámetros
-sintéticos y comprobar este módulo en un rango definido.
+La [calibración térmica con ensayos reservados](CALIBRACION_TRANSITORIA.md) ya
+permite estimar de uno a tres parámetros con límites, incertidumbres de lectura
+como pesos y diagnóstico local de sensibilidad. Se abre con **Calibrar con
+ensayos.** en este diálogo o mediante `dynamic_calibration_cli.py`. La
+[demostración independiente](../data/calibration_examples/README.md) es
+sintética; no constituye validación de planta. La calibración exige el PI
+deshabilitado y entradas prescritas para cada ensayo. Su objetivo utiliza la
+salida densa del integrador en los tiempos observados; la comparación simple
+de CSV descrita arriba conserva su interpolación propia.
+
+Quedan para etapas posteriores los intervalos de incertidumbre paramétrica,
+la identificabilidad estructural, generación de modelos por IA y conexión
+OPC UA. La prioridad experimental es obtener una ficha real y registros de
+ensayos separados para ajuste y contraste, con criterios fijados antes del
+ajuste, y comprobar este módulo en un rango definido.
 
 ## Referencias de diseño
 

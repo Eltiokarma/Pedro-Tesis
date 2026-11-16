@@ -1,0 +1,11 @@
+{
+  "data_kind": "synthetic",
+  "method": "piecewise affine three-body system via scipy.linalg.expm; not dynamic_tank integration",
+  "true_parameters": {
+    "wall.ua_tank_W_K": 800.0,
+    "wall.ua_jacket_W_K": 1200.0
+  },
+  "noise_standard_deviation_K": 0.05,
+  "random_seed": 20261116,
+  "notes": "The criteria demonstrate the software only. They are not industrial acceptance tolerances."
+}

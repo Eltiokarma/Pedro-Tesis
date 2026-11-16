@@ -1,0 +1,82 @@
+{
+  "schema_version": "dynamic-tank/v1",
+  "case_id": "validation_cooling",
+  "title": "Ensayo sintético: validation_cooling",
+  "provenance": {
+    "data_kind": "synthetic",
+    "source": "Referencia sintética por exponencial matricial; calibration_example.py.",
+    "notes": "Parámetros iniciales deliberadamente distintos de la referencia. Ningún dato de planta."
+  },
+  "tank": {
+    "volume_capacity_m3": 1.0,
+    "initial_mass_kg": 550.0,
+    "min_mass_kg": 5.0,
+    "initial_temperature_K": 328.15,
+    "initial_tracer_mass_fraction": 0.0,
+    "density_kg_m3": 998.0,
+    "cp_J_kg_K": 4180.0
+  },
+  "wall": {
+    "heat_capacity_J_K": 45000.0,
+    "initial_temperature_K": 328.15,
+    "ua_tank_W_K": 450.0,
+    "ua_jacket_W_K": 650.0,
+    "ua_ambient_W_K": 12.0
+  },
+  "jacket": {
+    "mass_kg": 35.0,
+    "cp_J_kg_K": 4180.0,
+    "density_kg_m3": 998.0,
+    "initial_temperature_K": 328.15,
+    "pump_heat_fraction": 0.0
+  },
+  "inputs": {
+    "feed_flow_kg_s": 0.0,
+    "outlet_flow_kg_s": 0.0,
+    "feed_temperature_K": 298.15,
+    "feed_tracer_mass_fraction": 0.0,
+    "utility_supply_temperature_K": 288.15,
+    "ambient_temperature_K": 298.15,
+    "agitator_power_W": 100.0,
+    "valve_opening": 0.5,
+    "temperature_setpoint_K": 323.15
+  },
+  "pump": {
+    "shutoff_head_m": 18.0,
+    "curve_coefficient_s2_m5": 20000000.0,
+    "speed_fraction": 1.0,
+    "efficiency": 0.65,
+    "max_flow_m3_s": 0.001
+  },
+  "circuit": {
+    "static_head_m": 0.0,
+    "resistance_s2_m5": 15000000.0,
+    "valve_kv_m3_h": 3.0
+  },
+  "controller": {
+    "enabled": false,
+    "direction": "heating",
+    "kp_per_K": 0.06,
+    "ki_per_K_s": 0.00015,
+    "bias": 0.2,
+    "sample_s": 5.0
+  },
+  "simulation": {
+    "duration_s": 600.0,
+    "output_interval_s": 10.0,
+    "max_step_s": 5.0,
+    "rtol": 1e-08,
+    "atol": 1e-09,
+    "method": "BDF",
+    "min_temperature_K": 278.15,
+    "max_temperature_K": 363.15
+  },
+  "events": [
+    {
+      "time_s": 200.0,
+      "changes": {
+        "valve_opening": 0.75
+      }
+    }
+  ]
+}
