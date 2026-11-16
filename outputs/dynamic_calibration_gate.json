@@ -1,0 +1,346 @@
+{
+  "success": true,
+  "scope": "synthetic_numerical_verification_no_plant_validation",
+  "python": "3.11.18",
+  "summary": {
+    "status": "ok",
+    "optimization_converged": true,
+    "usable_parameter_estimate": true,
+    "evaluations": 35,
+    "max_evaluations": 100,
+    "simulations_count": 76,
+    "objective_before": 85061.65177479987,
+    "objective_after": 60.647311977719546,
+    "validation_status": "criteria_met",
+    "optimizer_message": "Both `ftol` and `xtol` termination conditions are satisfied."
+  },
+  "acceptance": {
+    "parameter_relative_error_max": 0.03,
+    "objective_ratio_max": 0.01,
+    "relative_balance_residual_max": 1e-09,
+    "heldout_error_criteria": "declared_in_study_not_industrial_tolerances"
+  },
+  "parameter_recovery": [
+    {
+      "path": "wall.ua_tank_W_K",
+      "reference": 800.0,
+      "estimated": 799.9201521212228,
+      "unit": "W/K",
+      "relative_error": 9.980984847146601e-05,
+      "passed": true
+    },
+    {
+      "path": "wall.ua_jacket_W_K",
+      "reference": 1200.0,
+      "estimated": 1200.8921365309516,
+      "unit": "W/K",
+      "relative_error": 0.0007434471091263124,
+      "passed": true
+    }
+  ],
+  "diagnostics": {
+    "rank": 2,
+    "n_parameters": 2,
+    "scaled_jacobian_condition": 2.766489669611333,
+    "singular_values": [
+      2359.7276013059754,
+      852.9681593343871
+    ],
+    "rank_tolerance": 0.0023597276013059753,
+    "column_response_norms": [
+      2204.300052838687,
+      1198.7202802401014
+    ],
+    "minimum_scaled_singular_value": 852.9681593343871,
+    "weak_sensitivity": false,
+    "weak_sensitivity_threshold": 1.0,
+    "finite_difference_step_fraction_of_bounds": 0.0001,
+    "parameter_scaling": "each_parameter_divided_by_its_declared_bound_width",
+    "residual_scaling": "observation_standard_uncertainty_else_declared_scale_K",
+    "scope": "local_numerical_sensitivity_not_structural_identifiability",
+    "interpretation": "Rank, condition and sensitivity depend on declared bounds and residual scales. The sensitivity threshold is a heuristic, not a confidence interval or a proof of parameter identifiability. Correlated errors are not modelled."
+  },
+  "experiments": [
+    {
+      "experiment_id": "cal_hot",
+      "role": "calibration",
+      "baseline_metrics": {
+        "tank_temperature_K": {
+          "n": 13,
+          "rmse": 0.7888626449867877,
+          "mae": 0.502887802534898,
+          "bias": -0.4969706947690305,
+          "max_abs_error": 1.873076887828745,
+          "unit": "K",
+          "normalized_rmse": 15.777252899735753
+        },
+        "wall_temperature_K": {
+          "n": 13,
+          "rmse": 1.5780054444275409,
+          "mae": 1.3217122503059586,
+          "bias": -0.3909967784673409,
+          "max_abs_error": 2.7767340147754567,
+          "unit": "K",
+          "normalized_rmse": 31.56010888855082
+        },
+        "jacket_temperature_K": {
+          "n": 13,
+          "rmse": 2.9287489299646556,
+          "mae": 2.3033972229593824,
+          "bias": 2.3033972229593824,
+          "max_abs_error": 4.914793940066261,
+          "unit": "K",
+          "normalized_rmse": 58.57497859929312
+        }
+      },
+      "fitted_metrics": {
+        "tank_temperature_K": {
+          "n": 13,
+          "rmse": 0.04615292468732533,
+          "mae": 0.03317161354100598,
+          "bias": -0.001896074103959003,
+          "max_abs_error": 0.10291529734860205,
+          "unit": "K",
+          "normalized_rmse": 0.9230584937465065
+        },
+        "wall_temperature_K": {
+          "n": 13,
+          "rmse": 0.0432775155330285,
+          "mae": 0.03497795300617449,
+          "bias": 0.0027917445437992674,
+          "max_abs_error": 0.09666738666703623,
+          "unit": "K",
+          "normalized_rmse": 0.86555031066057
+        },
+        "jacket_temperature_K": {
+          "n": 13,
+          "rmse": 0.04081335147121933,
+          "mae": 0.03127499453047186,
+          "bias": 0.006435595842914993,
+          "max_abs_error": 0.09885802760470597,
+          "unit": "K",
+          "normalized_rmse": 0.8162670294243867
+        }
+      },
+      "balance_audit": {
+        "max_mass_residual_kg": 0.0,
+        "max_tracer_residual_kg": 0.0,
+        "max_energy_residual_J": 4.842877388000488e-08,
+        "max_mass_residual_relative": 0.0,
+        "max_tracer_residual_relative": 0.0,
+        "max_energy_residual_relative": 8.491434511901966e-16,
+        "min_tracer_mass_fraction": 0.0,
+        "max_tracer_mass_fraction": 0.0,
+        "tracer_fraction_absolute_tolerance": 1e-07,
+        "scope": "tank+wall+jacket; integrated external fluxes",
+        "evaluated_at": "reported_samples_and_segment_endpoints"
+      },
+      "balances_pass": true,
+      "provenance": {
+        "case_file": "cal_hot.json",
+        "measurements_file": "cal_hot.csv",
+        "source": "Exponencial matricial independiente con ruido gaussiano sembrado; no son mediciones.",
+        "time_offset_s": 0.0,
+        "measurement_sha256": "75ced312f8d7dde5f0cd7d3f5dea7d0949ca72b81d34ecf552e462474f1cdd11",
+        "measurement_canonical_sha256": "fb521c3c109e9f24437597e4a9e6dc5c4f9c2d5dd00a630f3cf1b35b7d578398",
+        "measurement_aligned_sha256": "fb521c3c109e9f24437597e4a9e6dc5c4f9c2d5dd00a630f3cf1b35b7d578398",
+        "case_sha256": "120150fe5afeae70cf6f96755b440061340d86c5c935851a49af5d0a820e291e",
+        "fitted_case_sha256": "6e80db7cf4fc46ffc1f6b0883a33f8b6684f129ae3be59dfd630eac56cfed6bc"
+      }
+    },
+    {
+      "experiment_id": "cal_warm",
+      "role": "calibration",
+      "baseline_metrics": {
+        "tank_temperature_K": {
+          "n": 13,
+          "rmse": 0.4579014171610281,
+          "mae": 0.2980430802544316,
+          "bias": -0.27903519182022873,
+          "max_abs_error": 1.179564995709427,
+          "unit": "K",
+          "normalized_rmse": 9.158028343220563
+        },
+        "wall_temperature_K": {
+          "n": 13,
+          "rmse": 0.8458609146675827,
+          "mae": 0.6973800458951893,
+          "bias": -0.25713014907775616,
+          "max_abs_error": 1.5565651347683342,
+          "unit": "K",
+          "normalized_rmse": 16.917218293351656
+        },
+        "jacket_temperature_K": {
+          "n": 13,
+          "rmse": 1.9346523749305193,
+          "mae": 1.479519156354653,
+          "bias": 1.4768269951311874,
+          "max_abs_error": 3.5867324455946914,
+          "unit": "K",
+          "normalized_rmse": 38.69304749861039
+        }
+      },
+      "fitted_metrics": {
+        "tank_temperature_K": {
+          "n": 13,
+          "rmse": 0.05431513705260691,
+          "mae": 0.04830472644648755,
+          "bias": -0.014043724784956935,
+          "max_abs_error": 0.1061915888037106,
+          "unit": "K",
+          "normalized_rmse": 1.0863027410521382
+        },
+        "wall_temperature_K": {
+          "n": 13,
+          "rmse": 0.04597209786731511,
+          "mae": 0.036882149286467526,
+          "bias": 0.006857452483363711,
+          "max_abs_error": 0.08989037490135843,
+          "unit": "K",
+          "normalized_rmse": 0.9194419573463023
+        },
+        "jacket_temperature_K": {
+          "n": 13,
+          "rmse": 0.03050592154837673,
+          "mae": 0.02541665312551581,
+          "bias": -0.004114711552408433,
+          "max_abs_error": 0.051017632931632306,
+          "unit": "K",
+          "normalized_rmse": 0.6101184309675346
+        }
+      },
+      "balance_audit": {
+        "max_mass_residual_kg": 0.0,
+        "max_tracer_residual_kg": 0.0,
+        "max_energy_residual_J": 8.940696716308594e-08,
+        "max_mass_residual_relative": 0.0,
+        "max_tracer_residual_relative": 0.0,
+        "max_energy_residual_relative": 9.463508228385765e-16,
+        "min_tracer_mass_fraction": 0.0,
+        "max_tracer_mass_fraction": 0.0,
+        "tracer_fraction_absolute_tolerance": 1e-07,
+        "scope": "tank+wall+jacket; integrated external fluxes",
+        "evaluated_at": "reported_samples_and_segment_endpoints"
+      },
+      "balances_pass": true,
+      "provenance": {
+        "case_file": "cal_warm.json",
+        "measurements_file": "cal_warm.csv",
+        "source": "Exponencial matricial independiente con ruido gaussiano sembrado; no son mediciones.",
+        "time_offset_s": 0.0,
+        "measurement_sha256": "a6d417343a86cdf60740f796449d7a273534bc103ee7e2426375642177abb40d",
+        "measurement_canonical_sha256": "6bef90171362d4c11b5f0e652ef505cf6f8333807c9a1463c0de599ede5e8fdd",
+        "measurement_aligned_sha256": "6bef90171362d4c11b5f0e652ef505cf6f8333807c9a1463c0de599ede5e8fdd",
+        "case_sha256": "f85f7d7faeb2449f3a07e11b56f340f91d34c51d07ef196a0b14b881df467572",
+        "fitted_case_sha256": "2bc3ffadd5719da2aa89c4641698b054073c8846498b8dcd0ea4110a67436112"
+      }
+    },
+    {
+      "experiment_id": "validation_cooling",
+      "role": "validation",
+      "baseline_metrics": {
+        "tank_temperature_K": {
+          "n": 13,
+          "rmse": 0.5438848510082032,
+          "mae": 0.34590239184578525,
+          "bias": 0.32594341340101296,
+          "max_abs_error": 1.392576580539469,
+          "unit": "K",
+          "normalized_rmse": 10.877697020164064
+        },
+        "wall_temperature_K": {
+          "n": 13,
+          "rmse": 0.9192487015697206,
+          "mae": 0.7232448758545484,
+          "bias": 0.34304579507250293,
+          "max_abs_error": 1.7902424182292407,
+          "unit": "K",
+          "normalized_rmse": 18.38497403139441
+        },
+        "jacket_temperature_K": {
+          "n": 13,
+          "rmse": 1.7036992035856287,
+          "mae": 1.3825189821268526,
+          "bias": -1.3784296715114692,
+          "max_abs_error": 2.507100223040254,
+          "unit": "K",
+          "normalized_rmse": 34.07398407171257
+        }
+      },
+      "fitted_metrics": {
+        "tank_temperature_K": {
+          "n": 13,
+          "rmse": 0.03400402015995393,
+          "mae": 0.02752936935299798,
+          "bias": -0.013309694657734256,
+          "max_abs_error": 0.06991982217442683,
+          "unit": "K",
+          "normalized_rmse": 0.6800804031990786
+        },
+        "wall_temperature_K": {
+          "n": 13,
+          "rmse": 0.048608062079033884,
+          "mae": 0.039564846885757385,
+          "bias": -8.937109861597865e-05,
+          "max_abs_error": 0.08334938065252118,
+          "unit": "K",
+          "normalized_rmse": 0.9721612415806777
+        },
+        "jacket_temperature_K": {
+          "n": 13,
+          "rmse": 0.034638146448642576,
+          "mae": 0.028056837382105362,
+          "bias": 0.008571459125501127,
+          "max_abs_error": 0.0878263208293788,
+          "unit": "K",
+          "normalized_rmse": 0.6927629289728515
+        }
+      },
+      "balance_audit": {
+        "max_mass_residual_kg": 0.0,
+        "max_tracer_residual_kg": 0.0,
+        "max_energy_residual_J": 6.332993507385254e-08,
+        "max_mass_residual_relative": 0.0,
+        "max_tracer_residual_relative": 0.0,
+        "max_energy_residual_relative": 4.623753623977581e-16,
+        "min_tracer_mass_fraction": 0.0,
+        "max_tracer_mass_fraction": 0.0,
+        "tracer_fraction_absolute_tolerance": 1e-07,
+        "scope": "tank+wall+jacket; integrated external fluxes",
+        "evaluated_at": "reported_samples_and_segment_endpoints"
+      },
+      "balances_pass": true,
+      "provenance": {
+        "case_file": "validation_cooling.json",
+        "measurements_file": "validation_cooling.csv",
+        "source": "Exponencial matricial independiente con ruido gaussiano sembrado; no son mediciones.",
+        "time_offset_s": 0.0,
+        "measurement_sha256": "09fbf084236ef81c1a46e18f6fad6dab1513d35bb5337dc47a9c70a06d1be61c",
+        "measurement_canonical_sha256": "9f53d4ed64462f58932beff6e0d213eb8446ec6e986b7a297345aff94b09e88c",
+        "measurement_aligned_sha256": "9f53d4ed64462f58932beff6e0d213eb8446ec6e986b7a297345aff94b09e88c",
+        "case_sha256": "9105b7ec3b282fb51c63ed03eca6abeb8746a6c7a7ce0605c52f53d73877b908",
+        "fitted_case_sha256": "de2a4801509c044bde4b5cb802158350e407bd3d06be0f2117ec9310e18fb03a"
+      }
+    }
+  ],
+  "warnings": [],
+  "provenance": {
+    "study_sha256": "b1ed3e8f78d63cfafd1d352d70c66b93701dd03da084b2656ed4bfe848411f64",
+    "authenticity": "user_declared_unverified",
+    "independence": "duplicate_detection_only_not_proof",
+    "measurement_snapshots": "read_once_before_optimisation",
+    "selected_observations": 117,
+    "calibration_observations": 78,
+    "units": "explicit_SI_temperature_K_time_s",
+    "model_version": "1.0.1",
+    "numpy_version": "2.4.6",
+    "scipy_version": "1.17.1",
+    "optimization_method": "scipy_least_squares_trf_with_explicit_bounds",
+    "objective": "sum_of_squared_scaled_calibration_residuals_only",
+    "evaluation_budget": "uncached_residual_evaluations_including_numerical_jacobian",
+    "sampling": "integrator_dense_output_at_aligned_observation_times",
+    "validation_partition": "explicit_experiment_roles_not_random_row_split",
+    "data_authenticity": "declared_by_user_not_independently_verified"
+  },
+  "reference_sha256": "0dda085a4f9e050efd006a5bf6b83cf3d291fea7e15ca20ca0898fbfcf173f1b"
+}

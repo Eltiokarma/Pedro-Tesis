@@ -22,7 +22,7 @@ from scipy.integrate import solve_ivp
 from dynamic_hydraulics import solve_circuit
 
 SCHEMA_VERSION = "dynamic-tank/v1"
-MODEL_VERSION = "1.0.0"
+MODEL_VERSION = "1.0.1"
 REFERENCE_TEMPERATURE_K = 273.15
 MAX_SAMPLES = 50000
 MAX_SEGMENTS = 50000
@@ -256,15 +256,34 @@ class _WorkLimit(Exception):
     pass
 
 
-def simulate_dynamic_tank(config: Mapping[str, Any], cancel: Callable[[], bool] | None = None) -> dict[str, Any]:
+def simulate_dynamic_tank(config: Mapping[str, Any], cancel: Callable[[], bool] | None = None,
+                          *, sample_times_s: list[float] | tuple[float, ...] | None = None) -> dict[str, Any]:
     """Integrate the pilot and return JSON-safe trajectories and balance audits.
 
     Invalid configuration raises ValueError. Physical boundaries, cancellation
     and numerical failure return success=False plus the completed trajectory.
     Controllers are discrete PI with conditional-integration anti-windup.
+    Optional sample times augment the usual output grid using the integrator's
+    dense interpolant. They do not restart integration or change the dynamics.
     """
     c = validate_case(config)
     tcfg, wall, jacket, sim, controller = (c[k] for k in ("tank", "wall", "jacket", "simulation", "controller"))
+    requested_samples = []
+    if sample_times_s is not None:
+        if not isinstance(sample_times_s, (list, tuple)) or len(sample_times_s) > MAX_SAMPLES:
+            raise ValueError(f"sample_times_s: lista ordenada de hasta {MAX_SAMPLES} tiempos requerida.")
+        for value in sample_times_s:
+            sample = _number(value, "sample_times_s", low=0, high=sim["duration_s"])
+            if requested_samples and sample <= requested_samples[-1]:
+                raise ValueError("sample_times_s: tiempos estrictamente crecientes y únicos requeridos.")
+            requested_samples.append(sample)
+    planned_samples = {0., sim["duration_s"], *requested_samples,
+                       *np.arange(0, sim["duration_s"], sim["output_interval_s"]),
+                       *(event["time_s"] for event in c["events"])}
+    if controller["enabled"]:
+        planned_samples.update(np.arange(0, sim["duration_s"], controller["sample_s"]))
+    if len(planned_samples) > MAX_SAMPLES:
+        raise ValueError(f"Las muestras solicitadas y las del caso exceden {MAX_SAMPLES} puntos.")
     inputs = dict(c["inputs"])
     cp, rho = tcfg["cp_J_kg_K"], tcfg["density_kg_m3"]
     cw, cj = wall["heat_capacity_J_K"], jacket["mass_kg"] * jacket["cp_J_kg_K"]
@@ -410,7 +429,8 @@ def simulate_dynamic_tank(config: Mapping[str, Any], cancel: Callable[[], bool] 
         boundary(name + "_temperature_high", lambda time, state, i=idx: sim["max_temperature_K"] - temperatures(state)[i])
 
     duration = sim["duration_s"]
-    output_times = list(np.arange(0, duration, sim["output_interval_s"])) + [duration]
+    output_times = sorted({*np.arange(0, duration, sim["output_interval_s"]),
+                           duration, *requested_samples})
     control_times = list(np.arange(0, duration, controller["sample_s"])) if controller["enabled"] else []
     changes_by_time = {float(e["time_s"]): dict(e["changes"]) for e in c["events"]}
     control_set = set(float(time) for time in control_times)
@@ -524,5 +544,10 @@ def simulate_dynamic_tank(config: Mapping[str, Any], cancel: Callable[[], bool] 
                   "scope": "tank+wall+jacket; integrated external fluxes", "evaluated_at": "reported_samples_and_segment_endpoints"},
         "series": series,
     }
+    if sample_times_s is not None:
+        payload["metadata"].update(
+            requested_sample_times_s=requested_samples,
+            sampling="solver_dense_output_with_exact_input_and_control_boundaries",
+        )
     json.dumps(payload, allow_nan=False)
     return payload

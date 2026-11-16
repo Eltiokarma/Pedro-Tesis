@@ -150,6 +150,9 @@ class DynamicTankDialog(QDialog):
         self.template_button = QPushButton("Plantilla CSV de mediciones…")
         self.template_button.clicked.connect(self._save_measurement_template)
         settings_layout.addWidget(self.template_button)
+        self.calibration_button = QPushButton("Calibrar con ensayos…")
+        self.calibration_button.clicked.connect(self._open_calibration)
+        settings_layout.addWidget(self.calibration_button)
         note = QLabel(
             "El archivo del caso conserva las propiedades, curvas, "
             "parámetros PI y cambios programados. Las temperaturas del "
@@ -483,6 +486,16 @@ class DynamicTankDialog(QDialog):
                     "time_s se cuenta desde el mismo inicio que la simulación.")
             except (OSError, ValueError) as exc:
                 QMessageBox.warning(self, "No se pudo guardar la plantilla", str(exc))
+
+    def _open_calibration(self):
+        """Open the study workbench without changing this pilot's parameters."""
+        if self._worker is not None:
+            return
+        try:
+            from dynamic_calibration_dialog import DynamicCalibrationDialog
+            DynamicCalibrationDialog(self).exec()
+        except Exception as exc:
+            QMessageBox.warning(self, "No se pudo abrir la calibración", str(exc))
 
     def _export_json(self):
         if self._result is None:
