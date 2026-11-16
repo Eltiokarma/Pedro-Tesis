@@ -73,6 +73,23 @@ a otra, que hoy se hace a mano, retipeando.
   entrega de información de instalaciones), ISO 15926. Ya existen intentos
   de "formato de intercambio de equipo". Revisar qué cubren y qué no.
 
+### Matiz posterior: "¿a ti también te mata ANSYS?"
+
+- Con un agente escribiendo código, **escribir** un solver FEA ya no es la
+  barrera. Uno elástico lineal se arma en días, y además se puede envolver
+  software libre: gmsh (malla), CalculiX o Code_Aster (sólidos), OpenFOAM (CFD).
+- La barrera que queda es la **confianza**: validar contra la realidad, los
+  casos borde (contacto, plasticidad, malla mala, turbulencia) y alguien que
+  firme. Eso no lo abarata el código rápido.
+- Evidencia en este mismo repo: la auditoría del motor
+  (`docs/AUDITORIA_MOTOR_2026-11.md`) encontró errores de física en un
+  simulador estacionario escrito con agentes. Por ejemplo, la Antoine del CO2
+  estaba errada en un factor 100 y la K del flash L-L estaba invertida.
+  En FEA, un error así es un recipiente que revienta.
+- Porción verificable: geometrías con solución de referencia (cilindro de
+  Lamé, fórmulas ASME VIII, benchmarks NAFEMS, WRC 107/537 para boquillas).
+  Que el FEA reproduzca esos casos antes de creerle en otros.
+
 ## Preguntas abiertas
 
 - ¿Quién paga: el comprador industrial, el fabricante que quiere que su
