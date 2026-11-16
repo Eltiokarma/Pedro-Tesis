@@ -15,15 +15,15 @@ from __future__ import annotations
 import argparse
 import csv
 import json
+import os
 from pathlib import Path
 import sys
+import tempfile
 
 
 def _write_json(path: str, value: dict) -> None:
-    Path(path).write_text(
-        json.dumps(value, indent=2, ensure_ascii=False, allow_nan=False) + "\n",
-        encoding="utf-8",
-    )
+    from dynamic_calibration_cli import _write_json as write_atomic_json
+    write_atomic_json(path, value, overwrite=True)
 
 
 def export_trajectory(result: dict, path: str) -> None:
@@ -31,10 +31,18 @@ def export_trajectory(result: dict, path: str) -> None:
     series = result.get("series", [])
     if not series:
         raise ValueError("No hay puntos de trayectoria para exportar.")
-    with Path(path).open("w", newline="", encoding="utf-8") as handle:
-        writer = csv.DictWriter(handle, fieldnames=list(series[0]))
-        writer.writeheader()
-        writer.writerows(series)
+    target, temporary = Path(path), None
+    try:
+        with tempfile.NamedTemporaryFile(mode="w", dir=target.parent, prefix=".trajectory-",
+                                         newline="", encoding="utf-8", delete=False) as handle:
+            temporary = Path(handle.name)
+            writer = csv.DictWriter(handle, fieldnames=list(series[0]))
+            writer.writeheader()
+            writer.writerows(series)
+        os.replace(temporary, target)
+    finally:
+        if temporary is not None and temporary.exists():
+            temporary.unlink()
 
 
 def main(argv=None) -> int:
@@ -59,8 +67,8 @@ def main(argv=None) -> int:
         input_paths = {Path(p).resolve() for p in (args.case, args.measurements) if p}
         output_paths = [Path(p).resolve() for p in
                         (args.out, args.csv, args.write_example, args.measurement_template) if p]
-        if len(set(output_paths)) != len(output_paths) or input_paths.intersection(output_paths):
-            raise ValueError("Cada archivo de salida debe ser distinto y no sobrescribir entradas.")
+        from dynamic_calibration_cli import guard_outputs
+        guard_outputs(output_paths, input_paths, overwrite=True)
         from dynamic_tank import default_case, simulate_dynamic_tank
         from dynamic_measurements import compare_measurements, write_measurement_template
 
@@ -81,6 +89,8 @@ def main(argv=None) -> int:
                 result, args.measurements, source_label=args.source_label,
                 time_offset_s=args.time_offset_s,
             )
+        guard_outputs([p for p in (args.csv, args.out) if p],
+                      [*input_paths, *(p for p in (args.case, args.measurements) if p)], overwrite=True)
         if args.csv:
             export_trajectory(result, args.csv)
         if args.out:

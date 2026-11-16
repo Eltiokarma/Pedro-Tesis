@@ -138,3 +138,22 @@ def test_inputs_are_not_mutated():
     original = copy.deepcopy((pump, circuit))
     solve_circuit(pump, circuit, .75)
     assert (pump, circuit) == original
+
+
+def test_tiny_positive_openings_preserve_finite_head_and_decreasing_flow():
+    pump, circuit = configs()
+    openings = (1e-20, 1e-100, 1e-200, 1e-308)
+    results = [solve_circuit(pump, circuit, opening) for opening in openings]
+    for opening, result in zip(openings, results):
+        # At these openings valve resistance dominates the finite pipe/pump
+        # coefficients. Evaluate the limiting Kv equation without 1/opening.
+        reference = opening * circuit["valve_kv_m3_h"] * math.sqrt(
+            (pump["shutoff_head_m"] - circuit["static_head_m"]) * 1000 * 9.80665 / 1e5) / 3600
+        assert result["flow_m3_s"] > 0
+        assert result["flow_m3_s"] == pytest.approx(reference, rel=1e-12, abs=0)
+        assert result["operating_point_valid"]
+        assert result["head_balance_residual_m"] == pytest.approx(0, abs=1e-12)
+        for key in ("pump_head_m", "hydraulic_power_W", "shaft_power_W", "mass_flow_kg_s"):
+            assert math.isfinite(result[key]) and result[key] >= 0
+    flows = [result["flow_m3_s"] for result in results]
+    assert all(after < before for before, after in zip(flows, flows[1:]))

@@ -172,6 +172,7 @@ def calibrate_study(study_path, *, cancel=None, progress=None):
     times = {experiment["experiment_id"]: _measurement_times(experiment, observables)
              for experiment in experiments}
     all_synthetic = all(experiment["data_kind"] == "synthetic" for experiment in experiments)
+    instrumented = experiments[0]["case"]["schema_version"] == "dynamic-tank/v2"
     report = {
         "schema_version": SCHEMA_VERSION,
         "study_id": study["study_id"],
@@ -207,6 +208,16 @@ def calibrate_study(study_path, *, cancel=None, progress=None):
             "applicability require separate assessment. No plant certification is issued."
         ),
     }
+    if instrumented:
+        # A scope limitation is not a failed local estimate. Keep it distinct
+        # from numerical/identification warnings that disable usability.
+        report["scope_notes"] = [
+            "Las constantes de tiempo, sesgos y límites del actuador son entradas declaradas fijas; "
+            "el ajuste térmico no los estima ni valida la instrumentación.",
+            "Las temperaturas físicas y las indicaciones del sensor son canales distintos; "
+            "los residuos usan únicamente los canales seleccionados explícitamente en el estudio.",
+        ]
+        report["provenance"]["instrumentation_parameters"] = "declared_fixed_inputs_not_estimated_or_validated"
     experiment_reports = {}
     for experiment in experiments:
         entry = {
@@ -221,6 +232,8 @@ def calibrate_study(study_path, *, cancel=None, progress=None):
                 "measurement_aligned_sha256", "case_sha256")},
         }
         report["experiments"].append(entry)
+        if instrumented:
+            entry["instrumentation"] = copy.deepcopy(experiment["case"]["instrumentation"])
         experiment_reports[experiment["experiment_id"]] = entry
     evaluations = simulations_count = 0
     cache = OrderedDict()
@@ -370,6 +383,11 @@ def calibrate_study(study_path, *, cancel=None, progress=None):
                 + ("datos sintéticos, sin validación experimental." if all_synthetic else
                    "observaciones declaradas por el usuario, sin verificación de planta.")
             )
+            if instrumented:
+                fitted_case["provenance"]["notes"] += (
+                    " Instrumentación declarada fija: constantes de tiempo, sesgos y límites "
+                    "del actuador no estimados ni validados por este ajuste térmico."
+                )
             entry["fitted_case"] = fitted_case
             entry["provenance"]["fitted_case_sha256"] = _json_hash(fitted_case)
             if experiment["role"] == "validation":

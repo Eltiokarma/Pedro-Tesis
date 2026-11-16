@@ -5,6 +5,7 @@ on:
     branches:
       - codex/industrial-physics-audit
       - codex/dynamic-tank-pilot
+      - codex/dynamic-calibration
       - claude/understand-document-improve-g8xoM
     types: [opened, synchronize, reopened, ready_for_review]
   workflow_dispatch:
@@ -63,6 +64,7 @@ jobs:
           python -m pytest tests/test_dynamic_*.py -v --timeout=90 --timeout-method=thread --junitxml=ci-artifacts/pilot-pytest.xml 2>&1 | tee ci-artifacts/pilot-pytest.log
           python gate_dynamic_pilot.py --out ci-artifacts/dynamic-pilot.json 2>&1 | tee ci-artifacts/dynamic-pilot.log
           python gate_dynamic_calibration.py --out ci-artifacts/dynamic-calibration.json 2>&1 | tee ci-artifacts/dynamic-calibration.log
+          python gate_dynamic_instrumentation.py --out ci-artifacts/dynamic-instrumentation.json 2>&1 | tee ci-artifacts/dynamic-instrumentation.log
 
       - name: Run critical regression checks
         if: ${{ !cancelled() && steps.dependencies.outcome == 'success' }}

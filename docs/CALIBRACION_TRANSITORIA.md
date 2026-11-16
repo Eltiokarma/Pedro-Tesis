@@ -8,8 +8,9 @@ incorporado registros experimentales reales a esta demostración.
 
 El alcance sigue siendo un tanque perfectamente mezclado, pared y camisa de
 líquido, con propiedades constantes e hidráulica cuasiestacionaria. Calibrar
-coeficientes no añade fases, mezcla imperfecta, sensores con retardo ni dinámica
-de actuadores. Un ajuste puede compensar un error de modelo con un parámetro
+coeficientes no añade fases ni mezcla imperfecta. La [versión instrumentada](INSTRUMENTACION_TRANSITORIA.md)
+añade respuesta de sensores y actuador con parámetros declarados; la calibración
+térmica no identifica automáticamente esos parámetros. Un ajuste puede compensar un error de modelo con un parámetro
 incorrecto; por eso se separan ajuste, diagnóstico y contraste reservado.
 
 ## Ejecución

@@ -16,7 +16,7 @@ import math
 from collections.abc import Mapping
 from pathlib import Path, PureWindowsPath
 
-from dynamic_measurements import _read_csv
+from dynamic_measurements import INDICATED_TEMPERATURES, _read_csv
 from dynamic_tank import validate_case
 
 
@@ -29,6 +29,8 @@ PARAMETER_UNITS = {
 }
 OBSERVABLES = (
     "tank_temperature_K", "wall_temperature_K", "jacket_temperature_K",
+    "tank_indicated_temperature_K", "wall_indicated_temperature_K",
+    "jacket_indicated_temperature_K",
 )
 MAX_JSON_BYTES = 2 * 1024 * 1024
 MAX_EXPERIMENTS = 12
@@ -143,6 +145,13 @@ def _measurement_signature(rows, observables, offset=0.0):
 def _physical_identity(case, parameter_paths):
     identity = {section: copy.deepcopy(case[section])
                 for section in ("tank", "wall", "jacket", "pump", "circuit")}
+    identity["schema_version"] = case["schema_version"]
+    if case["schema_version"] == "dynamic-tank/v2":
+        instrumentation = copy.deepcopy(case["instrumentation"])
+        for sensor in instrumentation["temperature_sensors"].values():
+            sensor.pop("initial_temperature_K")
+        instrumentation["valve_actuator"].pop("initial_opening")
+        identity["instrumentation"] = instrumentation
     for section, keys in {
         "tank": ("initial_mass_kg", "initial_temperature_K",
                  "initial_tracer_mass_fraction", "min_mass_kg"),
@@ -156,6 +165,20 @@ def _physical_identity(case, parameter_paths):
         section, key = path.split(".")
         identity[section].pop(key)
     return identity
+
+
+def _observation_temperature_range(case, variable):
+    """Property limits apply to physical temperature, not to a biased reading."""
+    lower, upper = (case["simulation"][key] for key in ("min_temperature_K", "max_temperature_K"))
+    if variable in INDICATED_TEMPERATURES:
+        if case["schema_version"] != "dynamic-tank/v2":
+            raise ValueError("Indicated temperature observations require dynamic-tank/v2 instrumentation")
+        section = variable.split("_", 1)[0]
+        bias = case["instrumentation"]["temperature_sensors"][section]["bias_K"]
+        lower, upper = lower + bias, upper + bias
+        if not math.isfinite(lower) or not math.isfinite(upper):
+            raise ValueError("Indicated temperature domain must remain finite after applying the sensor bias")
+    return lower, upper
 
 
 def load_study(path) -> dict:
@@ -247,7 +270,8 @@ def load_study(path) -> dict:
             case_cache[case_path] = (validate_case(source_case), hashlib.sha256(case_raw).hexdigest())
         case, case_hash = copy.deepcopy(case_cache[case_path])
         if case["controller"]["enabled"]:
-            raise ValueError(f"{label}: disable the ideal PI and prescribe the recorded input history")
+            raise ValueError(f"{label}: disable the PI and prescribe the recorded input history")
+        observable_ranges = {name: _observation_temperature_range(case, name) for name in observables}
         identity = _physical_identity(case, parameter_paths)
         if reference_identity is None:
             reference_identity = identity
@@ -270,13 +294,12 @@ def load_study(path) -> dict:
             raise ValueError(f"{label}: CSV missing selected temperature columns {sorted(missing_variables)}")
         counts = dict.fromkeys(observables, 0)
         duration = case["simulation"]["duration_s"]
-        temperature_min = case["simulation"]["min_temperature_K"]
-        temperature_max = case["simulation"]["max_temperature_K"]
         for row in rows:
             aligned = row["time_s"] + offset
             if not math.isfinite(aligned):
                 raise ValueError(f"{label}: aligned observation time is nonfinite")
             for name in observables:
+                temperature_min, temperature_max = observable_ranges[name]
                 value = row["values"][name]
                 if value is None:
                     continue
@@ -284,7 +307,8 @@ def load_study(path) -> dict:
                     raise ValueError(f"{label}: {name} must be an absolute temperature greater than zero K")
                 if not temperature_min <= value <= temperature_max:
                     raise ValueError(f"{label}: selected {name} lies outside the declared property temperature "
-                                     "domain; review model applicability instead of clipping observations")
+                                     "domain (including declared sensor bias for indicated channels); "
+                                     "review model applicability instead of clipping observations")
                 if not 0 <= aligned <= duration:
                     raise ValueError(f"{label}: selected observation outside the simulated interval; no extrapolation")
                 counts[name] += 1
@@ -321,5 +345,10 @@ def load_study(path) -> dict:
         "selected_observations": selected_total,
         "calibration_observations": calibration_count,
         "units": "explicit_SI_temperature_K_time_s",
+        "case_schema_version": experiments[0]["case"]["schema_version"],
+        "observation_channels": {
+            name: ("sensor_indication_including_declared_bias" if name in INDICATED_TEMPERATURES
+                   else "physical_process_temperature") for name in observables
+        },
     }
     return result

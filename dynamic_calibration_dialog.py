@@ -30,9 +30,12 @@ _PARAMETER_LABELS = {
     "wall.heat_capacity_J_K": "Capacidad térmica de pared",
 }
 _VARIABLE_LABELS = {
-    "tank_temperature_K": "Temperatura del tanque",
-    "jacket_temperature_K": "Temperatura de camisa",
-    "wall_temperature_K": "Temperatura de pared",
+    "tank_temperature_K": "Temperatura física del tanque",
+    "jacket_temperature_K": "Temperatura física de camisa",
+    "wall_temperature_K": "Temperatura física de pared",
+    "tank_indicated_temperature_K": "Temperatura indicada del tanque",
+    "wall_indicated_temperature_K": "Temperatura indicada de pared",
+    "jacket_indicated_temperature_K": "Temperatura indicada de camisa",
 }
 _ROLE_LABELS = {"calibration": "Ajuste", "validation": "Validación reservada"}
 
@@ -475,7 +478,11 @@ class DynamicCalibrationDialog(QDialog):
             "identificabilidad estructural ni proporciona un intervalo de confianza.</p>"
             "<h3>Advertencias</h3><ul>"
             + ("".join(f"<li>{esc(item)}</li>" for item in warnings) or "<li>Sin advertencias adicionales.</li>")
-            + "</ul>" + failure_html + "<h3>Procedencia</h3>"
+            + "</ul>" + failure_html
+            + ("<h3>Alcance de la instrumentación</h3><ul>"
+               + "".join(f"<li>{esc(note)}</li>" for note in result.get("scope_notes", [])) + "</ul>"
+               if result.get("scope_notes") else "")
+            + "<h3>Procedencia</h3>"
             + f"<p>Estado declarado: {esc(result.get('validation_state', 'sin declarar'))}.</p>"
             + "<p>El informe JSON conserva los valores, condiciones y huellas utilizados. "
             "Un estudio sintético verifica el procedimiento, no un equipo real.</p>")
