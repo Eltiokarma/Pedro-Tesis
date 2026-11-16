@@ -28,4 +28,6 @@ matplotlib   >= 3.5
 rdkit        >= 2023.3
 thermo       >= 0.2
 chemicals    >= 1.1
+
+# Integracion BDF/Radau del piloto transitorio (dynamic_tank.py).
 scipy        >= 1.10
