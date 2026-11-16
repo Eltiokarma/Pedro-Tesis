@@ -134,6 +134,41 @@ nombra el fabricante.
   se declare una sensibilidad. Sirve como calculadora de balances, no para
   optimizar el equipo.
 
+### Matiz posterior: cómo "activar el modo calculado"
+
+Pedido de Karma: que el bloque no sea siempre caja negra; un interruptor
+caja negra ↔ calculado.
+
+- El modo calculado **se gana con datos**; no es un interruptor libre. El
+  botón existe, pero solo se habilita cuando hay con qué calcular, y si no,
+  dice qué falta.
+- Mismo bloque, mismos puertos. Lo que cambia es cómo se resuelve cada
+  relación por dentro. Escalera por relación (no global):
+  0. **Declarado**: el número del PDF tal cual (caja negra).
+  1. **Escalado**: una ley de escala anclada en el punto del fabricante
+     (proporcional al caudal, Q/Σ en centrífugas, leyes de afinidad).
+     Basta con un punto.
+  2. **Calculado**: una ley física de la familia (cinética Monod o
+     Luedeking-Piret con T, eficiencia por Σ, UA·ΔTlm), con sus parámetros
+     ajustados a los puntos disponibles. Requiere tantos puntos
+     independientes como parámetros, más al menos uno reservado para validar.
+  La interfaz resume: caja negra / mixto / calculado.
+- Condiciones para habilitar un nivel:
+  1. Existe plantilla física para esa familia de equipo.
+  2. Grados de libertad de la calibración ≥ 0, con reserva de validación.
+  3. Prueba de consistencia: en el punto del fabricante, el modelo calculado
+     reproduce la caja negra dentro de una tolerancia. Si no, no se activa
+     y se informa la diferencia.
+  4. Fuera del rango calibrado se calcula igual, pero queda marcado como
+     "extrapolado" (como `operating_point_valid` en `dynamic_hydraulics`).
+- Semillas en el repo: `dynamic_calibration.py` (mínimos cuadrados acotados
+  con ensayos reservados), `dynamic_measurements.py` (importar
+  observaciones), `dof_audit.py` (grados de libertad antes de resolver).
+- Realidad: un PDF casi siempre trae un solo punto, así que alcanza para el
+  nivel 1. El nivel 2 requiere datos que el fabricante no publica: los
+  lotes del propio cliente. Esa es la puerta de negocio (la planta sube sus
+  datos y su equipo pasa a "calculado").
+
 ## Preguntas abiertas
 
 - ¿Quién paga: el comprador industrial, el fabricante que quiere que su
