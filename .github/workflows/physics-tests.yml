@@ -19,7 +19,7 @@ jobs:
   physics-tests:
     name: Python 3.11 / Ubuntu / Qt offscreen
     runs-on: ubuntu-24.04
-    timeout-minutes: 35
+    timeout-minutes: 25
     defaults:
       run:
         shell: bash
@@ -53,7 +53,7 @@ jobs:
         id: dependencies
         run: |
           python -m pip install --upgrade pip
-          python -m pip install -r requirements.txt pytest pytest-xdist pytest-timeout
+          python -m pip install -r requirements.txt pytest pytest-timeout
           mkdir -p ci-artifacts
           python -m pip freeze > ci-artifacts/installed-packages.txt
 
@@ -65,7 +65,9 @@ jobs:
       - name: Run the complete regression suite
         if: ${{ !cancelled() && steps.dependencies.outcome == 'success' }}
         run: |
-          python -m pytest tests -vv -n 2 --dist loadfile --timeout=180 --timeout-method=thread --durations=15 --junitxml=ci-artifacts/pytest.xml 2>&1 | tee ci-artifacts/pytest.log
+          # Serial execution preserves the GUI tests' shared application state.
+          # An external deadline also catches native Qt calls holding the GIL.
+          timeout --signal=TERM --kill-after=15s 12m python -m pytest tests -vv --timeout=180 --timeout-method=thread --durations=15 --junitxml=ci-artifacts/pytest.xml 2>&1 | tee ci-artifacts/pytest.log
 
       - name: Save numerical test evidence
         if: ${{ !cancelled() }}

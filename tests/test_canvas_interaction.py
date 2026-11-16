@@ -13,16 +13,33 @@ defectos reportados:
 """
 import os
 
+import pytest
+
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 from PySide6.QtWidgets import QApplication
-from PySide6.QtCore import Qt, QPointF, QRectF, QEvent
+from PySide6.QtCore import Qt, QPointF, QRectF, QEvent, QCoreApplication
 from PySide6.QtGui import QMouseEvent
 
 import flowsheet_qt as fq
 from flowsheet_model import Block, Stream
 
 _app = QApplication.instance() or QApplication([])
+
+
+@pytest.fixture(autouse=True)
+def _dispose_test_editors():
+    """Cerrar editores propios y sus timers incluso si falla una aserción."""
+    existing = set(_app.topLevelWidgets())
+    try:
+        yield
+    finally:
+        for widget in _app.topLevelWidgets():
+            if widget not in existing and isinstance(widget, fq.FlowsheetMainWindow):
+                widget.close()
+                widget.deleteLater()
+        QCoreApplication.sendPostedEvents(None, QEvent.DeferredDelete)
+        _app.processEvents()
 
 
 # ── helpers ────────────────────────────────────────────────────────────

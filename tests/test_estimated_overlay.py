@@ -11,12 +11,13 @@ GATE — Overlay de estimados (Capa 4b), DOS DIRECCIONES:
       la devuelve con origin='estimated', y el seam de reactor la incluye en el
       outlet (hoy, sin overlay, urea se pierde).
 
-El test hace backup/restore de data/estimated_compounds.json para no dejar
-estado (el JSON commiteado queda {}).
+Cada test usa un overlay temporal independiente. El JSON del repositorio se
+lee para comprobar su estado, pero nunca se modifica.
 """
 import os
 import json
 import unittest
+import tempfile
 
 import estimated_overlay as ov
 import thermo_db as td
@@ -35,21 +36,25 @@ def _deps_available():
 
 class _OverlayTestBase(unittest.TestCase):
     def setUp(self):
-        # backup del JSON real + dejar overlay vacío
+        self._original_overlay_path = ov.OVERLAY_PATH
+        self._overlay_dir = tempfile.TemporaryDirectory()
+        self.addCleanup(self._restore_overlay)
+        # Leer la línea base sin modificar el archivo del repositorio.
         self._backup = None
-        if os.path.exists(ov.OVERLAY_PATH):
-            with open(ov.OVERLAY_PATH, encoding="utf-8") as f:
+        if os.path.exists(self._original_overlay_path):
+            with open(self._original_overlay_path, encoding="utf-8") as f:
                 self._backup = f.read()
+        ov.OVERLAY_PATH = os.path.join(
+            self._overlay_dir.name, "estimated_compounds.json"
+        )
         ov.clear()
 
-    def tearDown(self):
-        # restaurar el JSON exactamente como estaba
-        if self._backup is not None:
-            with open(ov.OVERLAY_PATH, "w", encoding="utf-8") as f:
-                f.write(self._backup)
-        else:
-            ov.clear()
-        ov.load(force_reload=True)
+    def _restore_overlay(self):
+        try:
+            ov.OVERLAY_PATH = self._original_overlay_path
+            ov.load(force_reload=True)
+        finally:
+            self._overlay_dir.cleanup()
 
 
 class TestOverlayVacioIdentico(_OverlayTestBase):
