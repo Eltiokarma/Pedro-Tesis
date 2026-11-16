@@ -204,6 +204,27 @@ class DynamicTankDialog(QDialog):
         ("jacket_indicated_temperature_K", "Camisa indicada (K)"),
         ("valve_command", "Consigna de válvula (0-1)"),
     )
+    _LOOP_FIELDS = (
+        (("utility_loop", "mass_kg"), "Masa del depósito de servicio (kg)", .000001, 1e12, 6, False),
+        (("utility_loop", "initial_temperature_K"), "Temperatura inicial del servicio (°C)", -273.14, 5000, 4, True),
+        (("utility_loop", "ua_ambient_W_K"), "Pérdidas del depósito: UA (W/K)", 0, 1e12, 6, False),
+        (("utility_loop", "heater_max_power_W"), "Potencia eléctrica máxima (W)", 0, 1e12, 4, False),
+        (("utility_loop", "heater_efficiency"), "Eficiencia térmica del calentador (0-1)", 0, 1, 6, False),
+        (("utility_loop", "pump_loss_to_fluid_fraction"), "Pérdidas mecánicas de bomba al fluido (0-1)", 0, 1, 6, False),
+        (("inputs", "heater_power_request_W"), "Potencia eléctrica solicitada (W)", 0, 1e12, 4, False),
+        (("inputs", "pump_speed_fraction"), "Velocidad de bomba (fracción nominal)", 0, 1e6, 6, False),
+    )
+    _LOOP_COLUMNS = (
+        ("utility_supply_temperature_K", "Servicio: suministro (K)"),
+        ("utility_return_temperature_K", "Servicio: retorno (K)"),
+        ("heater_power_request_W", "Potencia solicitada (W)"),
+        ("heater_applied_power_W", "Potencia eléctrica aplicada (W)"),
+        ("heater_heat_W", "Calor del calentador (W)"),
+        ("heater_saturated", "Potencia limitada (0/1)"),
+        ("pump_speed_fraction", "Velocidad de bomba"),
+        ("pump_heat_to_loop_W", "Calor de bomba al circuito (W)"),
+        ("utility_reservoir_loss_W", "Pérdidas del depósito (W)"),
+    )
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -217,6 +238,7 @@ class DynamicTankDialog(QDialog):
         self._form_loading = False
         self._plot = None
         self._valve_plot = None
+        self._thermal_plot = None
         import pfd_fonts
         pfd_fonts.load_all()
         if pfd_fonts.available():
@@ -265,6 +287,27 @@ class DynamicTankDialog(QDialog):
         self.controller_direction.currentIndexChanged.connect(self._mark_edited)
         self.form.addRow("Acción del control", self.controller_direction)
         settings_layout.addWidget(form_group)
+        self.utility_group = QGroupBox("Servicio térmico recirculado")
+        utility_form = QFormLayout(self.utility_group)
+        utility_form.setRowWrapPolicy(QFormLayout.WrapLongRows)
+        for path, label, lower, upper, decimals, _celsius in self._LOOP_FIELDS:
+            field = QDoubleSpinBox()
+            field.setRange(lower, upper)
+            field.setDecimals(decimals)
+            field.setKeyboardTracking(False)
+            field.setFixedWidth(145)
+            field.setAccessibleName(label)
+            field.valueChanged.connect(self._mark_edited)
+            self.fields[path] = field
+            utility_form.addRow(label, field)
+        utility_note = QLabel(
+            "La temperatura de suministro se calcula en el depósito. El retorno es la "
+            "temperatura de la camisa mezclada. El fluido comparte Cp y densidad con la camisa; "
+            "las tuberías no almacenan calor. La potencia solicitada puede superar la máxima: "
+            "el calentador aplica ese límite explícitamente.")
+        utility_note.setWordWrap(True)
+        utility_form.addRow(utility_note)
+        settings_layout.addWidget(self.utility_group)
         self.case_label = QLabel()
         self.case_label.setWordWrap(True)
         settings_layout.addWidget(self.case_label)
@@ -288,6 +331,9 @@ class DynamicTankDialog(QDialog):
         self.instrumentation_example_button = QPushButton("Ejemplo con instrumentación sintética")
         self.instrumentation_example_button.clicked.connect(self._open_instrumented_example)
         settings_layout.addWidget(self.instrumentation_example_button)
+        self.thermal_loop_example_button = QPushButton("Nuevo ejemplo: circuito térmico cerrado")
+        self.thermal_loop_example_button.clicked.connect(self._open_thermal_loop_example)
+        settings_layout.addWidget(self.thermal_loop_example_button)
         note = QLabel(
             "El archivo del caso conserva las propiedades, curvas, "
             "parámetros PI y cambios programados. Las temperaturas del "
@@ -321,6 +367,10 @@ class DynamicTankDialog(QDialog):
             self._valve_figure = Figure(figsize=(6, 4), tight_layout=True)
             self._valve_plot = FigureCanvasQTAgg(self._valve_figure)
             self.tabs.addTab(self._valve_plot, "Válvula")
+            self._thermal_figure = Figure(figsize=(6, 5), tight_layout=True)
+            self._thermal_plot = FigureCanvasQTAgg(self._thermal_figure)
+            self.tabs.addTab(self._thermal_plot, "Servicio y potencia")
+            self.tabs.setTabVisible(self.tabs.indexOf(self._thermal_plot), False)
         except ImportError:
             pass
         self.tabs.addTab(self.table, "Trayectoria")
@@ -360,13 +410,20 @@ class DynamicTankDialog(QDialog):
         outer.addLayout(footer)
         self.set_case(self._config)
 
+    @classmethod
+    def _active_fields(cls, config):
+        if config.get("schema_version") == "dynamic-tank/v3":
+            return tuple(field for field in cls._FIELDS
+                         if field[0] != ("inputs", "utility_supply_temperature_K")) + cls._LOOP_FIELDS
+        return cls._FIELDS
+
     def set_case(self, config):
         """Load fields atomically; never silently clamp imported values."""
-        if config.get("schema_version") == "dynamic-tank/v2":
+        if config.get("schema_version") in ("dynamic-tank/v2", "dynamic-tank/v3"):
             from dynamic_tank import validate_case
             validate_case(config)
         values = []
-        for path, _label, lower, upper, _decimals, celsius in self._FIELDS:
+        for path, _label, lower, upper, _decimals, celsius in self._active_fields(config):
             value = config[path[0]][path[1]]
             if isinstance(value, bool) or not isinstance(value, (int, float)):
                 raise ValueError(f"El campo {'.'.join(path)} debe ser numérico.")
@@ -385,6 +442,13 @@ class DynamicTankDialog(QDialog):
         self._form_loading = True
         try:
             self._config = copy.deepcopy(config)
+            closed_loop = config.get("schema_version") == "dynamic-tank/v3"
+            self.utility_group.setVisible(closed_loop)
+            self.form.setRowVisible(self.fields[("inputs", "utility_supply_temperature_K")], not closed_loop)
+            self.calibration_button.setEnabled(not closed_loop)
+            self.calibration_button.setToolTip(
+                "El circuito cerrado se verifica con referencias teóricas; su calibración aún no está disponible."
+                if closed_loop else "")
             for path, value in values:
                 self.fields[path].setValue(value)
             self._loaded_display_values = {
@@ -399,7 +463,7 @@ class DynamicTankDialog(QDialog):
 
     def case_from_form(self):
         config = copy.deepcopy(self._config)
-        for path, _label, _lower, _upper, _decimals, celsius in self._FIELDS:
+        for path, _label, _lower, _upper, _decimals, celsius in self._active_fields(config):
             value = self.fields[path].value()
             # Keep imported full precision unless the user changed the field.
             if value != self._loaded_display_values[path]:
@@ -411,15 +475,20 @@ class DynamicTankDialog(QDialog):
     def _update_case_label(self):
         title = self._config.get("title", self._config.get("case_id", "Caso"))
         count = len(self._config.get("events", []))
-        instrumented = self._config.get("schema_version") == "dynamic-tank/v2"
+        instrumented = self._config.get("schema_version") in ("dynamic-tank/v2", "dynamic-tank/v3")
         instrumentation = ("Instrumentación explícita: el PI usa la temperatura indicada."
                            if instrumented else "Sensores y accionamiento ideales (caso v1).")
         self.case_label.setText(f"{title}\nCambios programados en el caso: {count}.\n{instrumentation}")
+        if self._config.get("schema_version") == "dynamic-tank/v3":
+            self.case_label.setText(self.case_label.text() +
+                                   "\nCircuito cerrado con potencia limitada; calibración aún no disponible.")
         kind = self._config.get("provenance", {}).get("data_kind", "sin declarar")
         self.provenance_label.setText(
             "Ejemplo sintético; requiere validación con mediciones."
             if kind == "synthetic" else
             f"Procedencia declarada: {kind}. La carga de un caso no demuestra validación física.")
+        if self._config.get("schema_version") == "dynamic-tank/v3" and kind == "synthetic":
+            self.provenance_label.setText("Caso sintético para verificación numérica; sin contraste experimental.")
 
     def _mark_edited(self, *_args):
         if self._form_loading:
@@ -494,7 +563,8 @@ class DynamicTankDialog(QDialog):
         }
         if reason in labels:
             return labels[reason]
-        for name, label in (("tank", "tanque"), ("wall", "pared"), ("jacket", "camisa")):
+        for name, label in (("tank", "tanque"), ("wall", "pared"), ("jacket", "camisa"),
+                            ("utility_reservoir", "depósito de servicio")):
             if reason == name + "_temperature_low":
                 return f"La temperatura de {label} alcanzó el límite inferior del modelo."
             if reason == name + "_temperature_high":
@@ -526,9 +596,12 @@ class DynamicTankDialog(QDialog):
             if isinstance(diagnostic, dict):
                 diagnostic = diagnostic.get("message", str(diagnostic))
             diagnostics.append(f"<li>{esc(diagnostic)}</li>")
+        closed_loop = result.get("schema_version") == "dynamic-tank/v3"
+        boundary = ("tanque, pared, camisa y depósito de servicio. La recirculación es una transferencia "
+                    "interna que se cancela en el balance total" if closed_loop else "tanque, pared y camisa")
         self.details.setHtml(
             "<h3>Conservación numérica</h3>"
-            "<p>Frontera: tanque, pared y camisa. Se comparan los cambios de inventario "
+            f"<p>Frontera: {boundary}. Se comparan los cambios de inventario "
             "con los flujos externos integrados en el tiempo.</p>"
             "<table cellpadding='6' border='1'><tr><th>Balance</th><th>Residuo máximo</th>"
             "<th>Residuo relativo</th></tr>" + "".join(rows) + "</table>"
@@ -551,7 +624,9 @@ class DynamicTankDialog(QDialog):
         if series and preview[-1] is not series[-1]:
             preview = preview + [series[-1]]
         instrumented = any("valve_command" in sample for sample in series)
-        columns = self._TABLE_COLUMNS + (self._INSTRUMENT_COLUMNS if instrumented else ())
+        closed_loop = any("utility_reservoir_temperature_K" in sample for sample in series)
+        columns = (self._TABLE_COLUMNS + (self._INSTRUMENT_COLUMNS if instrumented else ())
+                   + (self._LOOP_COLUMNS if closed_loop else ()))
         self.table.setColumnCount(len(columns))
         self.table.setHorizontalHeaderLabels([label for _, label in columns])
         self.table.setRowCount(len(preview))
@@ -610,6 +685,30 @@ class DynamicTankDialog(QDialog):
             if preview:
                 ax.legend(loc="best")
             self._valve_plot.draw_idle()
+        if self._thermal_plot is not None:
+            self.tabs.setTabVisible(self.tabs.indexOf(self._thermal_plot), closed_loop)
+            self._thermal_figure.clear()
+            if closed_loop:
+                temperature_ax, power_ax = self._thermal_figure.subplots(2, 1, sharex=True)
+                for key, label in (("utility_supply_temperature_K", "Suministro del depósito"),
+                                   ("utility_return_temperature_K", "Retorno de la camisa")):
+                    values = [sample for sample in preview if key in sample]
+                    temperature_ax.plot([s["time_s"] for s in values],
+                                        [s[key] - 273.15 for s in values], label=label)
+                temperature_ax.set_ylabel("Temperatura (°C)")
+                temperature_ax.legend(loc="best", fontsize=8)
+                temperature_ax.grid(True, alpha=.25)
+                for key, label, style in (("heater_power_request_W", "Electricidad solicitada", "--"),
+                                          ("heater_applied_power_W", "Electricidad aplicada", "-"),
+                                          ("heater_heat_W", "Calor al fluido", ":")):
+                    values = [sample for sample in preview if key in sample]
+                    power_ax.step([s["time_s"] for s in values], [s[key] for s in values],
+                                  where="post", linestyle=style, label=label)
+                power_ax.set_xlabel("Tiempo (s)")
+                power_ax.set_ylabel("Potencia (W)")
+                power_ax.grid(True, alpha=.25)
+                power_ax.legend(loc="best", fontsize=8)
+            self._thermal_plot.draw_idle()
 
     @Slot(str)
     def _task_failed(self, message):
@@ -656,7 +755,8 @@ class DynamicTankDialog(QDialog):
             try:
                 from dynamic_measurements import write_measurement_template
                 write_measurement_template(
-                    path, instrumented=self._config.get("schema_version") == "dynamic-tank/v2")
+                    path, instrumented=self._config.get("schema_version") in ("dynamic-tank/v2", "dynamic-tank/v3"),
+                    thermal_loop=self._config.get("schema_version") == "dynamic-tank/v3")
                 self.status_label.setText(
                     "Plantilla creada con encabezados SI. Añada mediciones reales; "
                     "time_s se cuenta desde el mismo inicio que la simulación.")
@@ -666,6 +766,11 @@ class DynamicTankDialog(QDialog):
     def _open_calibration(self):
         """Open the study workbench without changing this pilot's parameters."""
         if self._worker is not None:
+            return
+        if self._config.get("schema_version") == "dynamic-tank/v3":
+            self.status_label.setText(
+                "La calibración del circuito cerrado aún no está disponible. "
+                "Este hito verifica el solver con referencias teóricas.")
             return
         try:
             from dynamic_calibration_dialog import DynamicCalibrationDialog
@@ -700,6 +805,18 @@ class DynamicTankDialog(QDialog):
                 self.status_label.setText("Ejemplo con instrumentación sintética cargado. Listo para simular.")
         except (OSError, ValueError, TypeError, KeyError) as exc:
             QMessageBox.warning(self, "No se pudo abrir el ejemplo", str(exc))
+
+    def _open_thermal_loop_example(self):
+        """Explicitly open a new case; never migrate an existing case implicitly."""
+        if self._worker is not None:
+            return
+        try:
+            from dynamic_tank import default_thermal_loop_case
+            self.set_case(default_thermal_loop_case())
+            if self._result is None:
+                self.status_label.setText("Ejemplo de circuito térmico cerrado cargado. Listo para simular.")
+        except (ValueError, TypeError, KeyError) as exc:
+            QMessageBox.warning(self, "No se pudo abrir el circuito térmico", str(exc))
 
     def _export_json(self):
         if self._result is None:
@@ -746,7 +863,7 @@ class DynamicTankDialog(QDialog):
         esc = lambda value: html.escape(str(value))
         summary = comparison.get("summary", {})
         rows = []
-        labels = dict(self._TABLE_COLUMNS + self._INSTRUMENT_COLUMNS)
+        labels = dict(self._TABLE_COLUMNS + self._INSTRUMENT_COLUMNS + self._LOOP_COLUMNS)
         for variable, metrics in comparison.get("metrics", {}).items():
             cells = [esc(labels.get(variable, variable)), esc(metrics.get("unit", "")),
                      esc(metrics.get("n", 0))]

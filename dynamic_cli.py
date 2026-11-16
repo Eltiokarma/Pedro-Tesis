@@ -5,6 +5,7 @@ Examples::
     python dynamic_cli.py --write-example case.json --measurement-template measured.csv
     python dynamic_cli.py case.json --out run.json --csv trajectory.csv
     python dynamic_cli.py case.json --measurements measured.csv --out compared.json
+    python dynamic_cli.py --thermal-loop --write-example loop.json
 
 The built-in example is synthetic. A completed simulation or a comparison does
 not confer empirical validation. Exit codes: 0 completed, 1 stopped/failed,
@@ -61,28 +62,33 @@ def main(argv=None) -> int:
                         help="Guarda un caso de ejemplo y termina sin simular.")
     parser.add_argument("--measurement-template", metavar="CSV",
                         help="Guarda una plantilla de medición vacía y termina sin simular.")
+    parser.add_argument("--thermal-loop", action="store_true",
+                        help="Usa el ejemplo de circuito térmico cerrado v3; no combinar con un caso JSON.")
     args = parser.parse_args(argv)
 
     try:
+        if args.thermal_loop and args.case:
+            raise ValueError("--thermal-loop selecciona un ejemplo; no se combina con un caso JSON.")
         input_paths = {Path(p).resolve() for p in (args.case, args.measurements) if p}
         output_paths = [Path(p).resolve() for p in
                         (args.out, args.csv, args.write_example, args.measurement_template) if p]
         from dynamic_calibration_cli import guard_outputs
         guard_outputs(output_paths, input_paths, overwrite=True)
-        from dynamic_tank import default_case, simulate_dynamic_tank
+        from dynamic_tank import default_case, default_thermal_loop_case, simulate_dynamic_tank
         from dynamic_measurements import compare_measurements, write_measurement_template
+        example_factory = default_thermal_loop_case if args.thermal_loop else default_case
 
         preparation = bool(args.write_example or args.measurement_template)
         if preparation:
             if args.case or args.out or args.csv or args.measurements:
                 raise ValueError("Crear plantillas y ejecutar una simulación son operaciones separadas.")
             if args.write_example:
-                _write_json(args.write_example, default_case())
+                _write_json(args.write_example, example_factory())
             if args.measurement_template:
-                write_measurement_template(args.measurement_template)
+                write_measurement_template(args.measurement_template, thermal_loop=args.thermal_loop)
             return 0
 
-        case = json.loads(Path(args.case).read_text(encoding="utf-8-sig")) if args.case else default_case()
+        case = json.loads(Path(args.case).read_text(encoding="utf-8-sig")) if args.case else example_factory()
         result = simulate_dynamic_tank(case)
         if args.measurements:
             result["measurement_comparison"] = compare_measurements(

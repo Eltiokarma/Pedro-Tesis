@@ -1,0 +1,184 @@
+{
+  "success": true,
+  "python": "3.11.18",
+  "scope": "published_component_tests_and_own_coupled_theoretical_verification_no_experimental_validation",
+  "model_version": "1.2.0",
+  "checks": [
+    {
+      "check": "EnergyPlus_published_cold_mixing_component",
+      "passed": true,
+      "scope": "production_reservoir_balance_with_prescribed_return_not_full_closed_loop",
+      "source": "https://github.com/NatLabRockies/EnergyPlus/blob/v24.2.0/tst/EnergyPlus/unit/WaterThermalTanks.unit.cc#L1060",
+      "final_temperature_C": 52.21956227895555,
+      "analytic_final_temperature_C": 52.21956227895561,
+      "max_final_temperature_error_K": 5.684341886080802e-14,
+      "temperature_tolerance_K": 1e-06,
+      "integral_C_s": 14716.592986047955,
+      "analytic_integral_C_s": 14716.592986047977,
+      "published_integral_C_s": 14716.6,
+      "published_tolerance_C_s": 0.1,
+      "analytic_integral_tolerance_C_s": 0.0001
+    },
+    {
+      "check": "EnergyPlus_published_1000W_full_engine",
+      "passed": true,
+      "scope": "full_engine_v3_decoupled_reservoir",
+      "source": "https://github.com/NatLabRockies/EnergyPlus/blob/v24.2.0/tst/EnergyPlus/unit/WaterThermalTanks.unit.cc#L1060",
+      "max_temperature_error_K": 5.684341886080802e-14,
+      "temperature_tolerance_K": 1e-06,
+      "integral_C_s": 15461.876622008404,
+      "analytic_integral_C_s": 15461.87662200841,
+      "published_integral_C_s": 15461.9,
+      "published_tolerance_C_s": 0.1,
+      "analytic_integral_tolerance_C_s": 0.0001,
+      "audit": {
+        "max_mass_residual_kg": 0.0,
+        "max_tracer_residual_kg": 0.0,
+        "max_energy_residual_J": 2.9809598345309496e-08,
+        "max_mass_residual_relative": 0.0,
+        "max_tracer_residual_relative": 0.0,
+        "max_energy_residual_relative": 3.218208740317805e-16,
+        "min_tracer_mass_fraction": 0.0,
+        "max_tracer_mass_fraction": 0.0,
+        "tracer_fraction_absolute_tolerance": 1e-07,
+        "scope": "tank+wall+jacket+utility_reservoir; integrated external fluxes",
+        "evaluated_at": "reported_samples_and_segment_endpoints"
+      },
+      "config_sha256": "d502f050ebfaf2db0b5a3316a4537a156047051992737118ebbdb0603087848a"
+    },
+    {
+      "check": "four_inventory_independent_matrix_exponential",
+      "passed": true,
+      "scope": "own_coupled_theoretical_case_not_Modelica_output_reproduction",
+      "max_temperature_error_K": 2.006990428071731e-06,
+      "temperature_tolerance_K": 0.0002,
+      "per_inventory_max_error_K": {
+        "tank_temperature_K": 2.950605448859278e-08,
+        "wall_temperature_K": 2.006990428071731e-06,
+        "jacket_temperature_K": 1.4288488614511152e-06,
+        "utility_reservoir_temperature_K": 4.853787345382443e-07
+      },
+      "audit": {
+        "max_mass_residual_kg": 0.0,
+        "max_tracer_residual_kg": 0.0,
+        "max_energy_residual_J": 1.2014061212539673e-07,
+        "max_mass_residual_relative": 0.0,
+        "max_tracer_residual_relative": 0.0,
+        "max_energy_residual_relative": 1.4631220840358866e-15,
+        "min_tracer_mass_fraction": 0.0,
+        "max_tracer_mass_fraction": 0.0,
+        "tracer_fraction_absolute_tolerance": 1e-07,
+        "scope": "tank+wall+jacket+utility_reservoir; integrated external fluxes",
+        "evaluated_at": "reported_samples_and_segment_endpoints"
+      },
+      "config_sha256": "db789ce72432a6d1512a7f153a03cdb7019b2146a67e5e519152bbe9db410101"
+    },
+    {
+      "check": "power_outage_pump_stop_and_restart",
+      "passed": true,
+      "power_outage_interval_s": [
+        600,
+        1300
+      ],
+      "pump_stopped_interval_s": [
+        1000,
+        1300
+      ],
+      "zero_heater_heat_during_outage": true,
+      "zero_flow_and_pump_heat_when_stopped": true,
+      "flow_and_heater_restored": true
+    },
+    {
+      "check": "BDF_Radau_and_refinement",
+      "passed": true,
+      "BDF_Radau_max_difference_K": 2.006061322390451e-06,
+      "method_tolerance_K": 0.0002,
+      "baseline_oracle_max_error_K": 2.006990428071731e-06,
+      "refined_oracle_max_error_K": 4.462680180949974e-08,
+      "refined_tolerance_K": 2e-05,
+      "radau_audit": {
+        "max_mass_residual_kg": 0.0,
+        "max_tracer_residual_kg": 0.0,
+        "max_energy_residual_J": 9.639188647270203e-08,
+        "max_mass_residual_relative": 0.0,
+        "max_tracer_residual_relative": 0.0,
+        "max_energy_residual_relative": 1.173900276726467e-15,
+        "min_tracer_mass_fraction": 0.0,
+        "max_tracer_mass_fraction": 0.0,
+        "tracer_fraction_absolute_tolerance": 1e-09,
+        "scope": "tank+wall+jacket+utility_reservoir; integrated external fluxes",
+        "evaluated_at": "reported_samples_and_segment_endpoints"
+      },
+      "refined_audit": {
+        "max_mass_residual_kg": 0.0,
+        "max_tracer_residual_kg": 0.0,
+        "max_energy_residual_J": 6.82193785905838e-08,
+        "max_mass_residual_relative": 0.0,
+        "max_tracer_residual_relative": 0.0,
+        "max_energy_residual_relative": 8.308038190358812e-16,
+        "min_tracer_mass_fraction": 0.0,
+        "max_tracer_mass_fraction": 0.0,
+        "tracer_fraction_absolute_tolerance": 1e-09,
+        "scope": "tank+wall+jacket+utility_reservoir; integrated external fluxes",
+        "evaluated_at": "reported_samples_and_segment_endpoints"
+      }
+    },
+    {
+      "check": "insufficient_power_analytic_equilibrium",
+      "passed": true,
+      "scope": "own_theoretical_case",
+      "max_temperature_error_K": 1.6428884919150732e-09,
+      "tolerance_K": 0.0002,
+      "equilibrium_temperature_K": 303.15,
+      "illustrative_reservoir_target_K": 323.15,
+      "controller_active": false,
+      "requested_electric_power_W": 1000.0,
+      "maximum_electric_power_W": 100.0,
+      "audit": {
+        "max_mass_residual_kg": 0.0,
+        "max_tracer_residual_kg": 0.0,
+        "max_energy_residual_J": 5.529727786779404e-09,
+        "max_mass_residual_relative": 0.0,
+        "max_tracer_residual_relative": 0.0,
+        "max_energy_residual_relative": 9.521291010769065e-17,
+        "min_tracer_mass_fraction": 0.0,
+        "max_tracer_mass_fraction": 0.0,
+        "tracer_fraction_absolute_tolerance": 1e-07,
+        "scope": "tank+wall+jacket+utility_reservoir; integrated external fluxes",
+        "evaluated_at": "reported_samples_and_segment_endpoints"
+      }
+    },
+    {
+      "check": "coupled_PI_saturation_and_unreachable_process_setpoint",
+      "passed": true,
+      "scope": "own_coupled_theoretical_case_with_active_process_PI",
+      "max_trajectory_error_K": 1.3926391261520621e-05,
+      "trajectory_tolerance_K": 0.0002,
+      "final_steady_state_error_K": 5.2537666192620236e-05,
+      "steady_state_tolerance_K": 0.01,
+      "steady_temperatures_K": {
+        "tank_temperature_K": 302.3773240286234,
+        "wall_temperature_K": 303.48171243110124,
+        "jacket_temperature_K": 304.27128849039747,
+        "utility_reservoir_temperature_K": 304.64863474215093
+      },
+      "process_setpoint_K": 323.15,
+      "process_final_temperature_K": 302.37728364189957,
+      "fully_open_valve_and_heater_limit": true,
+      "audit": {
+        "max_mass_residual_kg": 0.0,
+        "max_tracer_residual_kg": 0.0,
+        "max_energy_residual_J": 2.0605511963367462e-08,
+        "max_mass_residual_relative": 0.0,
+        "max_tracer_residual_relative": 0.0,
+        "max_energy_residual_relative": 1.4788871121624231e-15,
+        "min_tracer_mass_fraction": 0.0,
+        "max_tracer_mass_fraction": 0.0,
+        "tracer_fraction_absolute_tolerance": 1e-07,
+        "scope": "tank+wall+jacket+utility_reservoir; integrated external fluxes",
+        "evaluated_at": "reported_samples_and_segment_endpoints"
+      },
+      "config_sha256": "c35420b017e399fd0efdc6afba2d0fddbd7f6bbcff4bacbc0b611373bbecc850"
+    }
+  ]
+}

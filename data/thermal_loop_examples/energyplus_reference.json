@@ -1,0 +1,22 @@
+{
+  "classification": "published_numerical_test_parameters_not_measurements",
+  "source_url": "https://github.com/NatLabRockies/EnergyPlus/blob/v24.2.0/tst/EnergyPlus/unit/WaterThermalTanks.unit.cc#L1060",
+  "source_version": "v24.2.0",
+  "source_blob_sha": "dcc74d48ce4f02eb4d465633336f6d24414d13d3",
+  "test_name": "WaterThermalTank_CalcTempIntegral",
+  "parameters": {
+    "mass_kg": 148.67,
+    "cp_J_kg_K": 4183.9,
+    "initial_temperature_K": 330.37,
+    "ambient_temperature_K": 292.87,
+    "return_temperature_K": 287.59,
+    "mass_flow_kg_s": 0.06761,
+    "ua_ambient_W_K": 5.0,
+    "heater_heat_W": 0.0,
+    "duration_s": 269.2,
+    "published_integral_C_s": 14716.6,
+    "published_tolerance_C_s": 0.1,
+    "published_adiabatic_1000W_integral_C_s": 15461.9
+  },
+  "note": "Temperatures converted from Celsius; integrals published in Celsius-seconds. No EnergyPlus binary was executed."
+}

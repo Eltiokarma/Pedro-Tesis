@@ -20,13 +20,15 @@ import scipy
 from scipy.integrate import solve_ivp
 
 from dynamic_hydraulics import solve_circuit
+from dynamic_thermal_loop import heater_power, pump_heat_to_liquid, thermal_reservoir_rates
 from dynamic_instrumentation import (
     SENSOR_NAMES, advance_actuator, tracking_integral_update, validate_instrumentation,
 )
 
 SCHEMA_VERSION = "dynamic-tank/v1"
 INSTRUMENTED_SCHEMA_VERSION = "dynamic-tank/v2"
-MODEL_VERSION = "1.1.0"
+THERMAL_LOOP_SCHEMA_VERSION = "dynamic-tank/v3"
+MODEL_VERSION = "1.2.0"
 REFERENCE_TEMPERATURE_K = 273.15
 MAX_SAMPLES = 50000
 MAX_SEGMENTS = 50000
@@ -134,6 +136,25 @@ def default_instrumented_case() -> dict[str, Any]:
     return case
 
 
+def default_thermal_loop_case() -> dict[str, Any]:
+    """Return a finite recirculating service loop with a bounded electric heater."""
+    case = default_instrumented_case()
+    case["schema_version"] = THERMAL_LOOP_SCHEMA_VERSION
+    case["case_id"] = "synthetic-finite-thermal-loop"
+    case["title"] = "Circuito térmico cerrado con potencia limitada"
+    case["provenance"]["notes"] = "Caso teórico sintético para verificación numérica; sin datos experimentales."
+    del case["inputs"]["utility_supply_temperature_K"]
+    del case["jacket"]["pump_heat_fraction"]
+    case["inputs"]["pump_speed_fraction"] = case["pump"].pop("speed_fraction")
+    case["inputs"]["heater_power_request_W"] = 6000.0
+    case["utility_loop"] = {
+        "mass_kg": 100.0, "initial_temperature_K": 333.15,
+        "ua_ambient_W_K": 8.0, "heater_max_power_W": 12000.0,
+        "heater_efficiency": 0.98, "pump_loss_to_fluid_fraction": 1.0,
+    }
+    return case
+
+
 def _number(value: Any, name: str, *, low: float | None = None,
             high: float | None = None, positive: bool = False) -> float:
     if isinstance(value, bool) or not isinstance(value, (int, float)):
@@ -166,11 +187,14 @@ def _keys(value: Any, expected: set[str], name: str) -> None:
 def validate_case(config: Mapping[str, Any]) -> dict[str, Any]:
     """Validate the complete versioned schema without silent defaults/typos."""
     version = config.get("schema_version") if isinstance(config, Mapping) else None
-    template = default_instrumented_case() if version == INSTRUMENTED_SCHEMA_VERSION else default_case()
+    closed_loop = version == THERMAL_LOOP_SCHEMA_VERSION
+    instrumented = version in (INSTRUMENTED_SCHEMA_VERSION, THERMAL_LOOP_SCHEMA_VERSION)
+    template = (default_thermal_loop_case() if closed_loop else
+                default_instrumented_case() if instrumented else default_case())
     _keys(config, set(template), "caso")
     c = copy.deepcopy(dict(config))
-    if version not in (SCHEMA_VERSION, INSTRUMENTED_SCHEMA_VERSION):
-        raise ValueError(f"schema_version: se requiere {SCHEMA_VERSION} o {INSTRUMENTED_SCHEMA_VERSION}.")
+    if version not in (SCHEMA_VERSION, INSTRUMENTED_SCHEMA_VERSION, THERMAL_LOOP_SCHEMA_VERSION):
+        raise ValueError(f"schema_version: se requiere {SCHEMA_VERSION}, {INSTRUMENTED_SCHEMA_VERSION} o {THERMAL_LOOP_SCHEMA_VERSION}.")
     for key in ("case_id", "title"):
         if not isinstance(c[key], str) or not c[key].strip():
             raise ValueError(f"{key}: texto no vacío requerido.")
@@ -195,7 +219,18 @@ def validate_case(config: Mapping[str, Any]) -> dict[str, Any]:
     _number(w["heat_capacity_J_K"], "wall.heat_capacity_J_K", positive=True)
     for key in ("mass_kg", "cp_J_kg_K", "density_kg_m3"):
         _number(j[key], f"jacket.{key}", positive=True)
-    _number(j["pump_heat_fraction"], "jacket.pump_heat_fraction", high=1)
+    if closed_loop:
+        _keys(c["utility_loop"], set(template["utility_loop"]), "utility_loop")
+        for key, value in c["utility_loop"].items():
+            c["utility_loop"][key] = _number(value, f"utility_loop.{key}", low=0)
+        for key in ("mass_kg", "heater_efficiency"):
+            _number(c["utility_loop"][key], f"utility_loop.{key}", positive=True)
+        for key in ("heater_efficiency", "pump_loss_to_fluid_fraction"):
+            _number(c["utility_loop"][key], f"utility_loop.{key}", high=1)
+        if c["circuit"]["static_head_m"] != 0:
+            raise ValueError("circuit.static_head_m debe ser cero para retorno al mismo depósito.")
+    else:
+        _number(j["pump_heat_fraction"], "jacket.pump_heat_fraction", high=1)
     if not isinstance(ctrl["enabled"], bool):
         raise ValueError("controller.enabled: booleano requerido.")
     if ctrl["direction"] not in ("heating", "cooling"):
@@ -220,11 +255,11 @@ def validate_case(config: Mapping[str, Any]) -> dict[str, Any]:
     if n_controls > MAX_SEGMENTS - 2:
         raise ValueError("Demasiadas actualizaciones del controlador.")
     lo, hi = s["min_temperature_K"], s["max_temperature_K"]
-    for section in ("tank", "wall", "jacket"):
+    for section in (("tank", "wall", "jacket", "utility_loop") if closed_loop else ("tank", "wall", "jacket")):
         value = c[section]["initial_temperature_K"]
         if not lo < value < hi:
             raise ValueError(f"{section}.initial_temperature_K debe estar dentro del rango abierto de propiedades.")
-    if version == INSTRUMENTED_SCHEMA_VERSION:
+    if instrumented:
         c["instrumentation"] = validate_instrumentation(c["instrumentation"], lo, hi)
 
     def check_inputs(inputs: Mapping[str, Any], name: str) -> None:
@@ -232,7 +267,7 @@ def validate_case(config: Mapping[str, Any]) -> dict[str, Any]:
             _number(value, f"{name}.{key}", low=0)
             if key.endswith("temperature_K") or key == "temperature_setpoint_K":
                 _number(value, f"{name}.{key}", low=lo, high=hi)
-            if key in ("valve_opening", "feed_tracer_mass_fraction"):
+            if key in ("valve_opening", "feed_tracer_mass_fraction", "pump_speed_fraction"):
                 _number(value, f"{name}.{key}", high=1)
 
     check_inputs(c["inputs"], "inputs")
@@ -256,9 +291,12 @@ def validate_case(config: Mapping[str, Any]) -> dict[str, Any]:
     if math.ceil(s["duration_s"] / s["output_interval_s"]) + math.ceil(n_controls) + len(c["events"]) + 2 > MAX_SAMPLES:
         raise ValueError(f"La combinación de muestras, control y eventos excede {MAX_SAMPLES} puntos.")
     # The hydraulics module validates pump/circuit units, ranges and finite values.
-    solve_circuit(c["pump"], c["circuit"], c["inputs"]["valve_opening"], j["density_kg_m3"])
-    if version == INSTRUMENTED_SCHEMA_VERSION and c["instrumentation"]["valve_actuator"]["enabled"]:
-        solve_circuit(c["pump"], c["circuit"], c["instrumentation"]["valve_actuator"]["initial_opening"],
+    pump = dict(c["pump"])
+    if closed_loop:
+        pump["speed_fraction"] = c["inputs"]["pump_speed_fraction"]
+    solve_circuit(pump, c["circuit"], c["inputs"]["valve_opening"], j["density_kg_m3"])
+    if instrumented and c["instrumentation"]["valve_actuator"]["enabled"]:
+        solve_circuit(pump, c["circuit"], c["instrumentation"]["valve_actuator"]["initial_opening"],
                       j["density_kg_m3"])
     # Finite scalar inputs can still overflow derived capacities, energies and
     # external fluxes. Reject these configurations before creating a trajectory.
@@ -269,12 +307,22 @@ def validate_case(config: Mapping[str, Any]) -> dict[str, Any]:
                j["mass_kg"] * j["cp_J_kg_K"] * temperature_scale,
                (w["ua_tank_W_K"] + w["ua_jacket_W_K"] + w["ua_ambient_W_K"]) * (hi - lo),
                ctrl["kp_per_K"] * (hi - lo), ctrl["ki_per_K_s"] * (hi - lo) * ctrl["sample_s"]]
-    if version == INSTRUMENTED_SCHEMA_VERSION:
+    if closed_loop:
+        loop = c["utility_loop"]
+        if loop["mass_kg"] * j["cp_J_kg_K"] == 0:
+            raise ValueError("La capacidad calorífica del depósito subdesborda el rango numérico.")
+        derived.extend((loop["mass_kg"] * j["cp_J_kg_K"] * temperature_scale,
+                        loop["ua_ambient_W_K"] * (hi - lo),
+                        loop["heater_max_power_W"] * s["duration_s"]))
+    if instrumented:
         bias = c["instrumentation"]["temperature_sensors"]["tank"]["bias_K"]
         indicated_error_bound = hi - lo + abs(bias)
         derived.extend((indicated_error_bound, ctrl["kp_per_K"] * indicated_error_bound,
                         ctrl["ki_per_K_s"] * indicated_error_bound * ctrl["sample_s"]))
     for values in [c["inputs"]] + [e["changes"] for e in c["events"]]:
+        if closed_loop and "pump_speed_fraction" in values:
+            event_pump = dict(pump, speed_fraction=values["pump_speed_fraction"])
+            solve_circuit(event_pump, c["circuit"], c["inputs"]["valve_opening"], j["density_kg_m3"])
         for key in ("feed_flow_kg_s", "outlet_flow_kg_s"):
             if key in values:
                 derived.append(values[key] * t["cp_J_kg_K"] * temperature_scale)
@@ -305,6 +353,7 @@ def simulate_dynamic_tank(config: Mapping[str, Any], cancel: Callable[[], bool] 
     dense interpolant. They do not restart integration or change the dynamics.
     """
     c = validate_case(config)
+    loop = c.get("utility_loop")
     tcfg, wall, jacket, sim, controller = (c[k] for k in ("tank", "wall", "jacket", "simulation", "controller"))
     instrumentation = c.get("instrumentation")
     sensors = instrumentation["temperature_sensors"] if instrumentation else None
@@ -334,6 +383,11 @@ def simulate_dynamic_tank(config: Mapping[str, Any], cancel: Callable[[], bool] 
                    m0 * tcfg["initial_tracer_mass_fraction"],
                    cw * (wall["initial_temperature_K"] - tref),
                    cj * (jacket["initial_temperature_K"] - tref), 0., 0., 0., 0., 0., 0.])
+    # Stable legacy indices 0..10; finite-loop states precede sensor states.
+    reservoir_index, heater_integral_index, transfer_integral_index = 11, 12, 13
+    cr = loop["mass_kg"] * jacket["cp_J_kg_K"] if loop else None
+    if loop:
+        y0 = np.append(y0, [cr * (loop["initial_temperature_K"] - tref), 0., 0.])
     # Ideal sensors are algebraic and add no numerical state. This also keeps
     # the all-ideal v2 open-loop model identical to the v1 integration.
     sensor_indices = {}
@@ -373,6 +427,13 @@ def simulate_dynamic_tank(config: Mapping[str, Any], cancel: Callable[[], bool] 
         physical = temperatures(state)
         return tuple(float(state[sensor_indices[name]]) if name in sensor_indices else physical[i]
                      for i, name in enumerate(SENSOR_NAMES))
+
+    def reservoir_temperature(state: np.ndarray) -> float:
+        return tref + float(state[reservoir_index]) / cr
+
+    def total_energy(state: np.ndarray) -> float:
+        energy = float(state[1] + state[3] + state[4])
+        return energy + float(state[reservoir_index]) if loop else energy
 
     def actual_position(time: float) -> float:
         if actuator is None:
@@ -416,7 +477,8 @@ def simulate_dynamic_tank(config: Mapping[str, Any], cancel: Callable[[], bool] 
         last_control = time
 
     def hydraulics(time: float = 0.0) -> dict[str, Any]:
-        return solve_circuit(c["pump"], c["circuit"], actual_position(time), jacket["density_kg_m3"])
+        pump = c["pump"] if not loop else dict(c["pump"], speed_fraction=inputs["pump_speed_fraction"])
+        return solve_circuit(pump, c["circuit"], actual_position(time), jacket["density_kg_m3"])
 
     hydro: dict[str, Any] = {}
 
@@ -430,10 +492,28 @@ def simulate_dynamic_tank(config: Mapping[str, Any], cancel: Callable[[], bool] 
         qamb = wall["ua_ambient_W_K"] * (tw - inputs["ambient_temperature_K"])
         hin = feed * cp * (inputs["feed_temperature_K"] - tref)
         hout = outlet * cp * (temp - tref)
-        utility_heat = current_hydro["mass_flow_kg_s"] * jacket["cp_J_kg_K"] * (inputs["utility_supply_temperature_K"] - tj)
-        pump_heat = jacket["pump_heat_fraction"] * current_hydro["shaft_power_W"]
+        reservoir_loss = heater_heat = pump_loop_heat = reservoir_rate = 0.0
+        if loop:
+            heater_heat = heater_power(inputs["heater_power_request_W"], loop["heater_max_power_W"],
+                                       loop["heater_efficiency"])["heater_heat_W"]
+            pump_loop_heat = pump_heat_to_liquid(current_hydro["hydraulic_power_W"],
+                                                current_hydro["shaft_power_W"],
+                                                loop["pump_loss_to_fluid_fraction"])
+            rates = thermal_reservoir_rates(
+                mass_flow_kg_s=current_hydro["mass_flow_kg_s"], cp_J_kg_K=jacket["cp_J_kg_K"],
+                reservoir_temperature_K=reservoir_temperature(state), return_temperature_K=tj,
+                ua_ambient_W_K=loop["ua_ambient_W_K"], ambient_temperature_K=inputs["ambient_temperature_K"],
+                heater_heat_W=heater_heat, pump_heat_W=pump_loop_heat)
+            utility_heat = rates["return_heat_W"]
+            reservoir_loss = rates["ambient_loss_W"]
+            reservoir_rate = rates["reservoir_energy_rate_W"]
+            pump_heat = 0.0
+        else:
+            utility_heat = current_hydro["mass_flow_kg_s"] * jacket["cp_J_kg_K"] * (inputs["utility_supply_temperature_K"] - tj)
+            pump_heat = jacket["pump_heat_fraction"] * current_hydro["shaft_power_W"]
         agitator = inputs["agitator_power_W"]
-        return feed, outlet, z, qtw, qjw, qamb, hin, hout, utility_heat, pump_heat, agitator
+        return (feed, outlet, z, qtw, qjw, qamb, hin, hout, utility_heat, pump_heat, agitator,
+                reservoir_loss, heater_heat, pump_loop_heat, reservoir_rate)
 
     def rhs(time: float, state: np.ndarray) -> np.ndarray:
         nonlocal rhs_evaluations
@@ -442,14 +522,18 @@ def simulate_dynamic_tank(config: Mapping[str, Any], cancel: Callable[[], bool] 
             raise _Cancelled()
         if rhs_evaluations > MAX_RHS_EVALUATIONS:
             raise _WorkLimit()
-        feed, outlet, z, qtw, qjw, qamb, hin, hout, qu, qp, qa = fluxes(time, state)
+        feed, outlet, z, qtw, qjw, qamb, hin, hout, qu, qp, qa, qr_loss, qh, qp_loop, dr = fluxes(time, state)
         dmass = feed - outlet
         dtracer = feed * inputs["feed_tracer_mass_fraction"] - outlet * z
-        dext = hin - hout + qu + qp + qa - qamb
+        service_external = qh + qp_loop - qr_loss if loop else qu
+        service_absolute = abs(qh) + abs(qp_loop) + abs(qr_loss) if loop else abs(qu)
+        dext = hin - hout + service_external + qp + qa - qamb
         derivative = np.array([dmass, hin - hout + qtw + qa, dtracer, qjw - qtw - qamb,
                          qu - qjw + qp, dmass, dtracer, dext, feed + outlet,
                          feed * inputs["feed_tracer_mass_fraction"] + outlet * abs(z),
-                         abs(hin) + abs(hout) + abs(qu) + abs(qp) + abs(qa) + abs(qamb)])
+                         abs(hin) + abs(hout) + service_absolute + abs(qp) + abs(qa) + abs(qamb)])
+        if loop:
+            derivative = np.append(derivative, [dr, qh, qu])
         if sensor_indices:
             physical = dict(zip(SENSOR_NAMES, temperatures(state)))
             derivative = np.append(derivative, [
@@ -467,11 +551,11 @@ def simulate_dynamic_tank(config: Mapping[str, Any], cancel: Callable[[], bool] 
         temp, tw, tj = temperatures(state)
         mass_error = float(state[0] - y0[0] - state[5])
         tracer_error = float(state[2] - y0[2] - state[6])
-        energy = float(state[1] + state[3] + state[4])
-        energy_error = energy - float(y0[1] + y0[3] + y0[4]) - float(state[7])
+        energy = total_energy(state)
+        energy_error = energy - total_energy(y0) - float(state[7])
         mass_scale = max(1., float(y0[0]), float(state[8]))
         tracer_scale = max(1e-12, float(y0[2]), float(state[9]))
-        energy_scale = max(1., abs(float(y0[1] + y0[3] + y0[4])), float(state[10]))
+        energy_scale = max(1., abs(total_energy(y0)), float(state[10]))
         max_mass_error = max(max_mass_error, abs(mass_error))
         max_tracer_error = max(max_tracer_error, abs(tracer_error))
         max_energy_error = max(max_energy_error, abs(energy_error))
@@ -481,7 +565,7 @@ def simulate_dynamic_tank(config: Mapping[str, Any], cancel: Callable[[], bool] 
         tracer_fraction = float(state[2] / state[0])
         min_tracer_fraction = min(min_tracer_fraction, tracer_fraction)
         max_tracer_fraction = max(max_tracer_fraction, tracer_fraction)
-        *_, qu, qp, qa = fluxes(time, state)
+        _, _, _, _, _, _, _, _, qu, qp, qa, qr_loss, qh, qp_loop, _ = fluxes(time, state)
         current_hydro = hydraulics(time) if instrumentation else hydro
         row = {"time_s": float(time), "tank_temperature_K": float(temp), "wall_temperature_K": float(tw),
                "jacket_temperature_K": float(tj), "mass_kg": float(state[0]), "volume_m3": float(state[0] / rho),
@@ -497,7 +581,16 @@ def simulate_dynamic_tank(config: Mapping[str, Any], cancel: Callable[[], bool] 
                "feed_flow_kg_s": float(inputs["feed_flow_kg_s"]), "outlet_flow_kg_s": float(inputs["outlet_flow_kg_s"]),
                "feed_temperature_K": float(inputs["feed_temperature_K"]),
                "feed_tracer_mass_fraction": float(inputs["feed_tracer_mass_fraction"]),
-               "utility_supply_temperature_K": float(inputs["utility_supply_temperature_K"])}
+               "utility_supply_temperature_K": float(reservoir_temperature(state) if loop else inputs["utility_supply_temperature_K"])}
+        if loop:
+            row.update(utility_reservoir_temperature_K=float(reservoir_temperature(state)),
+                       utility_reservoir_energy_J=float(state[reservoir_index]),
+                       utility_return_temperature_K=float(tj),
+                       pump_speed_fraction=float(inputs["pump_speed_fraction"]),
+                       pump_heat_to_loop_W=float(qp_loop), utility_reservoir_loss_W=float(qr_loss),
+                       cumulative_heater_heat_J=float(state[heater_integral_index]),
+                       cumulative_utility_transfer_J=float(state[transfer_integral_index]))
+            row.update(heater_power(inputs["heater_power_request_W"], loop["heater_max_power_W"], loop["heater_efficiency"]))
         if sensors:
             for name, sensor_temperature in zip(SENSOR_NAMES, sensor_temperatures(state)):
                 row[name + "_sensor_temperature_K"] = float(sensor_temperature)
@@ -522,12 +615,19 @@ def simulate_dynamic_tank(config: Mapping[str, Any], cancel: Callable[[], bool] 
     for idx, name in enumerate(("tank", "wall", "jacket")):
         boundary(name + "_temperature_low", lambda time, state, i=idx: temperatures(state)[i] - sim["min_temperature_K"])
         boundary(name + "_temperature_high", lambda time, state, i=idx: sim["max_temperature_K"] - temperatures(state)[i])
-    if actuator and actuator["enabled"] and c["pump"]["max_flow_m3_s"] * c["pump"]["speed_fraction"] > 0:
+    if loop:
+        boundary("utility_reservoir_temperature_low", lambda time, state: reservoir_temperature(state) - sim["min_temperature_K"])
+        boundary("utility_reservoir_temperature_high", lambda time, state: sim["max_temperature_K"] - reservoir_temperature(state))
+    if actuator and actuator["enabled"] and (loop or c["pump"]["max_flow_m3_s"] * c["pump"]["speed_fraction"] > 0):
         # A moving valve can leave the supplied pump curve between scheduled
         # events. This continuous root stops the accepted trajectory at its edge.
-        boundary("pump_curve_domain", lambda time, state:
-                 c["pump"]["max_flow_m3_s"] * c["pump"]["speed_fraction"] * (1 + 1e-12)
-                 - hydraulics(time)["flow_m3_s"])
+        def pump_curve_margin(time: float, state: np.ndarray) -> float:
+            speed = inputs["pump_speed_fraction"] if loop else c["pump"]["speed_fraction"]
+            # A stopped pump is inside its zero-flow domain, not a root event.
+            if speed == 0:
+                return 1.0
+            return c["pump"]["max_flow_m3_s"] * speed * (1 + 1e-12) - hydraulics(time)["flow_m3_s"]
+        boundary("pump_curve_domain", pump_curve_margin)
 
     duration = sim["duration_s"]
     output_times = sorted({*np.arange(0, duration, sim["output_interval_s"]),
@@ -667,6 +767,27 @@ def simulate_dynamic_tank(config: Mapping[str, Any], cancel: Callable[[], bool] 
             "Lecturas indicadas = estado del sensor + sesgo especificado; los límites físicos usan temperaturas del equipo.",
             "PI discreto: tracking integrado exactamente con error y posición de la muestra anterior retenidos; "
             "no se garantiza estabilidad del lazo ni se modelan banda muerta, histéresis o stiction.",
+        ])
+    if loop:
+        payload["metadata"].update(
+            thermal_service="finite_mixed_reservoir_recirculation",
+            heater="electric_power_command_capped_at_declared_maximum",
+            utility_heat_scope="internal_reservoir_to_jacket_transfer",
+        )
+        payload["audit"]["scope"] = "tank+wall+jacket+utility_reservoir; integrated external fluxes"
+        payload["assumptions"][3] = (
+            "Caudales de proceso impuestos; camisa y depósito de servicio con inventarios fijos, "
+            "mismo Cp/rho y recirculación sin inventario ni retardo térmico en tuberías."
+        )
+        payload["assumptions"][6] = (
+            "La potencia hidráulica se disipa una sola vez en el circuito cerrado; la fracción declarada "
+            "de pérdidas de eje también llega al fluido, concentrada en el depósito. "
+            "No se predicen pérdidas de bomba a caudal cero."
+        )
+        payload["assumptions"].extend([
+            "El retorno al mismo depósito exige altura estática neta cero; no se calculan presiones absolutas.",
+            "Calentador sin inercia propia: potencia eléctrica limitada y eficiencia fija; pérdidas restantes fuera de la frontera.",
+            "Temperatura de servicio calculada por conservación; la transferencia camisa-depósito es interna al balance global.",
         ])
     if sample_times_s is not None:
         payload["metadata"].update(
