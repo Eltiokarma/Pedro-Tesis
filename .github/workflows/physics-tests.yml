@@ -62,12 +62,29 @@ jobs:
           python -m pytest tests/test_dynamic_*.py -v --timeout=90 --timeout-method=thread --junitxml=ci-artifacts/pilot-pytest.xml 2>&1 | tee ci-artifacts/pilot-pytest.log
           python gate_dynamic_pilot.py --out ci-artifacts/dynamic-pilot.json 2>&1 | tee ci-artifacts/dynamic-pilot.log
 
+      - name: Diagnose independent regression cases
+        if: ${{ !cancelled() && steps.dependencies.outcome == 'success' }}
+        run: |
+          set +e
+          failed=0
+          for target in \
+            tests/test_canvas_ui_bugs.py::test_rubber_band_oscilante_no_crashea \
+            tests/test_estimated_overlay.py::TestEstimadoRecuperableYConsumible::test_b2_consumible_por_el_seam \
+            tests/test_pressure_coherence.py::TestCoherence::test_atmospheric_examples_untouched
+          do
+            label="${target##*::}"
+            timeout --signal=TERM --kill-after=5s 75s python -m pytest "$target" -vv --capture=tee-sys -o faulthandler_timeout=45 --timeout=60 --timeout-method=thread 2>&1 | tee "ci-artifacts/diagnostic-$label.log"
+            result=${PIPESTATUS[0]}
+            if (( result != 0 )); then failed=1; fi
+          done
+          exit "$failed"
+
       - name: Run the complete regression suite
         if: ${{ !cancelled() && steps.dependencies.outcome == 'success' }}
         run: |
           # Serial execution preserves the GUI tests' shared application state.
           # An external deadline also catches native Qt calls holding the GIL.
-          timeout --signal=TERM --kill-after=15s 12m python -m pytest tests -vv --timeout=180 --timeout-method=thread --durations=15 --junitxml=ci-artifacts/pytest.xml 2>&1 | tee ci-artifacts/pytest.log
+          timeout --signal=TERM --kill-after=15s 12m python -m pytest tests -vv --capture=tee-sys -o faulthandler_timeout=90 --timeout=180 --timeout-method=thread --durations=15 --junitxml=ci-artifacts/pytest.xml 2>&1 | tee ci-artifacts/pytest.log
 
       - name: Save numerical test evidence
         if: ${{ !cancelled() }}
