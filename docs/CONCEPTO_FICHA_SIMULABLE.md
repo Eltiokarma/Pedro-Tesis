@@ -113,6 +113,27 @@ a otra, que hoy se hace a mano, retipeando.
   descompone en operaciones conocidas, el bloque solo puede repetir lo que
   dice el fabricante, y debe mostrarse así, no como predicción.
 
+**Corrección de Karma (sobre el punto anterior):** no quiere armar el
+equipo con piezas existentes (fermentador + centrífuga + chaqueta). Quiere
+**un bloque que sea el equipo**, con sus propias corrientes (entrada,
+salida, purga/waste, servicios) y sus propios parámetros, tal como los
+nombra el fabricante.
+
+- Lectura: una caja negra que conserva. Por dentro no hay piezas, hay
+  relaciones declaradas: reacciones con conversión, destino de cada
+  componente por cada salida, consumos específicos (kWh/hL, etc.) y
+  envolvente. El duty sale del balance de energía, no se copia del PDF;
+  si el PDF trae uno, sirve para contrastarlo.
+- Semilla existente: `component_recovery.py` ya resuelve un bloque con
+  salidas de nombre libre declaradas por bloque (`get_block_ports`), donde
+  toda especie tiene destino y lo no especificado va a la salida por
+  defecto. Falta: entradas y servicios con nombre libre, reacción dentro
+  del mismo bloque, procedencia por parámetro y símbolo propio.
+- Precio de la caja negra: vale alrededor del punto de operación que
+  publica el fabricante. No extrapola (si cambias T, no responde) salvo que
+  se declare una sensibilidad. Sirve como calculadora de balances, no para
+  optimizar el equipo.
+
 ## Preguntas abiertas
 
 - ¿Quién paga: el comprador industrial, el fabricante que quiere que su
