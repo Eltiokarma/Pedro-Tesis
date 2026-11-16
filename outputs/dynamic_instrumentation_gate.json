@@ -1,0 +1,192 @@
+{
+  "success": true,
+  "python": "3.11.18",
+  "scope": "synthetic_numerical_verification_no_instrument_characterization_or_plant_validation",
+  "model_version": "1.1.0",
+  "checks": [
+    {
+      "check": "valve_piecewise_analytic_response",
+      "passed": true,
+      "max_position_difference": 0.0,
+      "tolerance": 1e-10,
+      "audit": {
+        "max_mass_residual_kg": 0.0,
+        "max_tracer_residual_kg": 0.0,
+        "max_energy_residual_J": 8.381903171539307e-08,
+        "max_mass_residual_relative": 0.0,
+        "max_tracer_residual_relative": 0.0,
+        "max_energy_residual_relative": 1.4696713578291864e-15,
+        "min_tracer_mass_fraction": 0.0,
+        "max_tracer_mass_fraction": 0.0,
+        "tracer_fraction_absolute_tolerance": 1e-06,
+        "scope": "tank+wall+jacket; integrated external fluxes",
+        "evaluated_at": "reported_samples_and_segment_endpoints"
+      },
+      "config_sha256": "a841c28240ccfecc029c043e149b2e05f56ef9d625091deaa945da4a6decfb04"
+    },
+    {
+      "check": "prolonged_closure_without_resistance_overflow",
+      "passed": true,
+      "final_time_s": 2000.0,
+      "final_flow_kg_s": 0.0,
+      "audit": {
+        "max_mass_residual_kg": 0.0,
+        "max_tracer_residual_kg": 0.0,
+        "max_energy_residual_J": 4.831235855817795e-08,
+        "max_mass_residual_relative": 0.0,
+        "max_tracer_residual_relative": 0.0,
+        "max_energy_residual_relative": 8.471022409709894e-16,
+        "min_tracer_mass_fraction": 0.0,
+        "max_tracer_mass_fraction": 0.0,
+        "tracer_fraction_absolute_tolerance": 1e-06,
+        "scope": "tank+wall+jacket; integrated external fluxes",
+        "evaluated_at": "reported_samples_and_segment_endpoints"
+      },
+      "config_sha256": "58999293ac2151f7a48b05e508c3f06f71255ca205e91ee38e4dce661bbca09c"
+    },
+    {
+      "check": "closed_loop_BDF_Radau",
+      "passed": true,
+      "max_temperature_difference_K": 0.0011614754630500101,
+      "temperature_tolerance_K": 0.02,
+      "max_position_difference": 1.582297666685717e-05,
+      "position_tolerance": 0.002,
+      "audit": {
+        "max_mass_residual_kg": 0.0,
+        "max_tracer_residual_kg": 0.0,
+        "max_energy_residual_J": 1.6391277313232422e-07,
+        "max_mass_residual_relative": 0.0,
+        "max_tracer_residual_relative": 0.0,
+        "max_energy_residual_relative": 2.874023988643742e-15,
+        "min_tracer_mass_fraction": 0.0,
+        "max_tracer_mass_fraction": 0.0,
+        "tracer_fraction_absolute_tolerance": 1e-06,
+        "scope": "tank+wall+jacket; integrated external fluxes",
+        "evaluated_at": "reported_samples_and_segment_endpoints"
+      },
+      "config_sha256": "1942d9e2c05d13b5e397bd32057cc9305e79583c4e364930c27c92417587fe1f",
+      "reference_config_sha256": "d211c8067a142eb17fff1e476317a542b54421e393b99b48680cbe8cc47e743c"
+    },
+    {
+      "check": "six_temperature_matrix_exponential",
+      "passed": true,
+      "max_indicated_temperature_difference_K": 1.1184340337422327e-05,
+      "tolerance_K": 0.002
+    },
+    {
+      "check": "ideal_instrumentation_matches_legacy_physics",
+      "passed": true,
+      "max_temperature_difference_K": 0.0,
+      "tolerance_K": 0.0001
+    },
+    {
+      "check": "calibration_of_indicated_channels_with_fixed_instruments",
+      "passed": true,
+      "parameter_relative_error_max": 0.03,
+      "parameter_recovery": [
+        {
+          "path": "wall.ua_tank_W_K",
+          "value": 800.5835011029731,
+          "reference": 800.0,
+          "relative_error": 0.0007293763787163244
+        },
+        {
+          "path": "wall.ua_jacket_W_K",
+          "value": 1202.8492970109846,
+          "reference": 1200.0,
+          "relative_error": 0.0023744141758205235
+        }
+      ],
+      "summary": {
+        "status": "ok",
+        "optimization_converged": true,
+        "usable_parameter_estimate": true,
+        "evaluations": 35,
+        "max_evaluations": 100,
+        "simulations_count": 76,
+        "objective_before": 59522.52766843202,
+        "objective_after": 81.50497219043284,
+        "validation_status": "criteria_met",
+        "optimizer_message": "Both `ftol` and `xtol` termination conditions are satisfied."
+      },
+      "diagnostics": {
+        "rank": 2,
+        "n_parameters": 2,
+        "scaled_jacobian_condition": 2.981772813399943,
+        "singular_values": [
+          2182.6757423070612,
+          732.006051064059
+        ],
+        "rank_tolerance": 0.002182675742307061,
+        "column_response_norms": [
+          2001.8082877498853,
+          1136.9563905207413
+        ],
+        "minimum_scaled_singular_value": 732.006051064059,
+        "weak_sensitivity": false,
+        "weak_sensitivity_threshold": 1.0,
+        "finite_difference_step_fraction_of_bounds": 0.0001,
+        "parameter_scaling": "each_parameter_divided_by_its_declared_bound_width",
+        "residual_scaling": "observation_standard_uncertainty_else_declared_scale_K",
+        "scope": "local_numerical_sensitivity_not_structural_identifiability",
+        "interpretation": "Rank, condition and sensitivity depend on declared bounds and residual scales. The sensitivity threshold is a heuristic, not a confidence interval or a proof of parameter identifiability. Correlated errors are not modelled."
+      },
+      "provenance": {
+        "study_sha256": "07cd3a1cf4a185e2a1f3ded10feb2e5bfe4ac2537fe6e820a1e3c20243db6cfd",
+        "authenticity": "user_declared_unverified",
+        "independence": "duplicate_detection_only_not_proof",
+        "measurement_snapshots": "read_once_before_optimisation",
+        "selected_observations": 117,
+        "calibration_observations": 78,
+        "units": "explicit_SI_temperature_K_time_s",
+        "case_schema_version": "dynamic-tank/v2",
+        "observation_channels": {
+          "tank_indicated_temperature_K": "sensor_indication_including_declared_bias",
+          "wall_indicated_temperature_K": "sensor_indication_including_declared_bias",
+          "jacket_indicated_temperature_K": "sensor_indication_including_declared_bias"
+        },
+        "model_version": "1.1.0",
+        "numpy_version": "2.4.6",
+        "scipy_version": "1.17.1",
+        "optimization_method": "scipy_least_squares_trf_with_explicit_bounds",
+        "objective": "sum_of_squared_scaled_calibration_residuals_only",
+        "evaluation_budget": "uncached_residual_evaluations_including_numerical_jacobian",
+        "sampling": "integrator_dense_output_at_aligned_observation_times",
+        "validation_partition": "explicit_experiment_roles_not_random_row_split",
+        "data_authenticity": "declared_by_user_not_independently_verified",
+        "instrumentation_parameters": "declared_fixed_inputs_not_estimated_or_validated"
+      },
+      "heldout_metrics": {
+        "validation_cooling": {
+          "tank_indicated_temperature_K": {
+            "n": 13,
+            "rmse": 0.05367842061032711,
+            "mae": 0.04280492605717585,
+            "bias": 0.009696321322818537,
+            "max_abs_error": 0.09775754460116559,
+            "unit": "K",
+            "normalized_rmse": 1.0735684122065423
+          },
+          "wall_indicated_temperature_K": {
+            "n": 13,
+            "rmse": 0.053569692388484545,
+            "mae": 0.04724812003646461,
+            "bias": -0.010493437129530145,
+            "max_abs_error": 0.10170526703137739,
+            "unit": "K",
+            "normalized_rmse": 1.071393847769691
+          },
+          "jacket_indicated_temperature_K": {
+            "n": 13,
+            "rmse": 0.05451000362756116,
+            "mae": 0.04491157853572776,
+            "bias": 0.005200686163386937,
+            "max_abs_error": 0.11673884511480992,
+            "unit": "K",
+            "normalized_rmse": 1.090200072551223
+          }
+        }
+      }
+    }
+  ]
+}

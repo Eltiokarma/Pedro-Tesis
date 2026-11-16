@@ -94,6 +94,8 @@ def solve_circuit(
 
     available_head = h0 * speed * speed
     envelope_max_flow = max_flow * speed
+    if speed > 0 and envelope_max_flow == 0:
+        raise ValueError("Positive pump-curve envelope underflows the supported numerical range")
     result = {
         "flow_m3_s": 0.0,
         "mass_flow_kg_s": 0.0,
@@ -118,21 +120,37 @@ def solve_circuit(
         result["warnings"].append("Pump head cannot overcome static head: zero forward flow with ideal check valve.")
         return result
 
-    # Computing the norm of square-root resistances avoids squaring a very
-    # large valve resistance before the actual operating flow is known.
-    valve_root_k = 3600.0 * math.sqrt(1e5 / (REFERENCE_DENSITY_KG_M3 * G_M_S2)) / kv / opening
-    total_root_k = math.hypot(math.sqrt(kp), math.sqrt(pipe_k), valve_root_k)
+    # Multiply every square-root resistance by opening before taking its norm.
+    # This is the same intersection equation, without dividing by an almost
+    # closed valve's position (which a dynamic actuator approaches continuously).
+    # No minimum opening or artificial zero-flow threshold is introduced.
+    pump_root_k = math.sqrt(kp) * opening
+    pipe_root_k = math.sqrt(pipe_k) * opening
+    valve_root_k = 3600.0 * math.sqrt(1e5 / (REFERENCE_DENSITY_KG_M3 * G_M_S2)) / kv
+    total_root_k = math.hypot(pump_root_k, pipe_root_k, valve_root_k)
     if not math.isfinite(total_root_k):
         raise ValueError("Circuit resistance exceeds the supported numerical range")
     net_head = available_head - static_head
-    flow = math.sqrt(net_head) / total_root_k
-    pipe_head = (math.sqrt(pipe_k) / total_root_k) ** 2 * net_head
-    valve_head = (valve_root_k / total_root_k) ** 2 * net_head
+    # Evaluate opening*sqrt(head)/resistance with a single final exponent
+    # scaling. Either naive multiplication/division order can prematurely
+    # underflow even when the final flow is a representable normal number.
+    opening_mantissa, opening_exponent = math.frexp(opening)
+    head_mantissa, head_exponent = math.frexp(math.sqrt(net_head))
+    root_mantissa, root_exponent = math.frexp(total_root_k)
+    try:
+        flow = math.ldexp(opening_mantissa * head_mantissa / root_mantissa,
+                          opening_exponent + head_exponent - root_exponent)
+    except OverflowError as exc:
+        raise ValueError("Hydraulic flow exceeds the supported numerical range") from exc
+    # Square only after multiplying by the resolved flow/head scale. Squaring
+    # a tiny normalised resistance first can lose a representable head loss.
+    pipe_head = (math.sqrt(pipe_k) * flow) ** 2
+    valve_head = ((valve_root_k / total_root_k) * math.sqrt(net_head)) ** 2
     pump_head = static_head + pipe_head + valve_head
     hydraulic_power = rho * G_M_S2 * flow * pump_head
     shaft_power = hydraulic_power / efficiency
     mass_flow = rho * flow
-    curve_head = available_head - (math.sqrt(kp) / total_root_k) ** 2 * net_head
+    curve_head = available_head - (math.sqrt(kp) * flow) ** 2
     if not all(math.isfinite(v) for v in (flow, mass_flow, pump_head, hydraulic_power, shaft_power)):
         raise ValueError("Hydraulic outputs exceed the supported numerical range")
     result.update({

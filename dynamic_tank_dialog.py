@@ -19,11 +19,132 @@ import threading
 from PySide6.QtCore import QThread, QTimer, Signal, Slot, Qt
 from PySide6.QtGui import QFont
 from PySide6.QtWidgets import (
-    QCheckBox, QComboBox, QDialog, QDoubleSpinBox, QFileDialog, QFormLayout,
-    QGroupBox, QHBoxLayout, QLabel, QMessageBox, QPushButton, QScrollArea,
+    QCheckBox, QComboBox, QDialog, QDialogButtonBox, QDoubleSpinBox, QFileDialog, QFormLayout,
+    QGroupBox, QHBoxLayout, QLabel, QLineEdit, QMessageBox, QPushButton, QScrollArea,
     QSplitter, QTabWidget, QTableWidget, QTableWidgetItem, QTextBrowser,
     QVBoxLayout, QWidget,
 )
+
+
+class InstrumentationDialog(QDialog):
+    """Edit a complete instrument configuration without mutating the open case."""
+
+    def __init__(self, case, parent=None):
+        super().__init__(parent)
+        import pfd_fonts
+        pfd_fonts.load_all()
+        if pfd_fonts.available():
+            self.setFont(QFont(pfd_fonts.SANS, 10))
+        from dynamic_tank import default_instrumented_case, validate_case
+        self._original = copy.deepcopy(case)
+        self._candidate = copy.deepcopy(case)
+        if case.get("schema_version") == "dynamic-tank/v1":
+            instrumented = default_instrumented_case()
+            self._candidate["schema_version"] = "dynamic-tank/v2"
+            self._candidate["instrumentation"] = instrumented["instrumentation"]
+            for section in ("tank", "wall", "jacket"):
+                self._candidate["instrumentation"]["temperature_sensors"][section]["initial_temperature_K"] = (
+                    case[section]["initial_temperature_K"])
+            self._candidate["instrumentation"]["valve_actuator"]["initial_opening"] = case["inputs"]["valve_opening"]
+        validate_case(self._candidate)
+        self.result_case = None
+        self.fields = {}
+        self.setWindowTitle("Instrumentación del tanque")
+        self.resize(720, 440)
+        self.setMinimumSize(560, 420)
+        outer = QVBoxLayout(self)
+        hint = QLabel(
+            "La lectura del sensor puede retrasarse y tener sesgo. El control utiliza esa lectura; "
+            "los balances utilizan la temperatura física. La hidráulica utiliza la posición real de la válvula. "
+            "Los valores iniciales propuestos son sintéticos; requieren caracterización del equipo.")
+        hint.setWordWrap(True)
+        outer.addWidget(hint)
+        tabs = QTabWidget()
+        for section, label in (("tank", "Tanque"), ("wall", "Pared"), ("jacket", "Camisa")):
+            page = QWidget()
+            form = QFormLayout(page)
+            sensor = self._candidate["instrumentation"]["temperature_sensors"][section]
+            for key, title in (("time_constant_s", "Constante de tiempo (s; 0 = ideal)"),
+                               ("bias_K", "Sesgo de la indicación (K)"),
+                               ("initial_temperature_K", "Temperatura inicial del sensor (K)")):
+                self._field(form, ("temperature_sensors", section, key), title, sensor[key])
+            note = QLabel("La constante de tiempo representa inercia térmica, no tiempo muerto. "
+                          "El sesgo se suma al estado del sensor y no cambia el balance de energía.")
+            note.setWordWrap(True)
+            form.addRow(note)
+            tabs.addTab(page, label)
+        page = QWidget()
+        form = QFormLayout(page)
+        actuator = self._candidate["instrumentation"]["valve_actuator"]
+        self.actuator_enabled = QCheckBox("Actuador con dinámica de movimiento")
+        self.actuator_enabled.setChecked(actuator["enabled"])
+        form.addRow(self.actuator_enabled)
+        for key, title in (("time_constant_s", "Constante de tiempo (s)"),
+                           ("opening_rate_per_s", "Velocidad máxima de apertura (fracción/s)"),
+                           ("closing_rate_per_s", "Velocidad máxima de cierre (fracción/s)"),
+                           ("initial_opening", "Posición inicial real (0–1)")):
+            self._field(form, ("valve_actuator", key), title, actuator[key])
+        self._field(form, ("tracking_time_s",), "Tiempo de seguimiento anti-windup (s)",
+                    self._candidate["instrumentation"]["tracking_time_s"])
+        note = QLabel("Al desactivar la dinámica, la posición sigue instantáneamente a la consigna. "
+                      "Los límites de velocidad son fracciones de carrera por segundo: 0,05 equivale a 5 %/s. "
+                      "El seguimiento del PI usa posición real; no garantiza la estabilidad del lazo.")
+        note.setWordWrap(True)
+        form.addRow(note)
+        tabs.addTab(page, "Válvula y control")
+        outer.addWidget(tabs, 1)
+        self.error_label = QLabel()
+        self.error_label.setWordWrap(True)
+        self.error_label.setStyleSheet("color:#b42318;")
+        outer.addWidget(self.error_label)
+        buttons = QDialogButtonBox(QDialogButtonBox.Save | QDialogButtonBox.Cancel)
+        buttons.button(QDialogButtonBox.Save).setText("Aplicar al caso")
+        buttons.button(QDialogButtonBox.Cancel).setText("Cancelar")
+        buttons.accepted.connect(self.accept)
+        buttons.rejected.connect(self.reject)
+        outer.addWidget(buttons)
+
+    def _field(self, form, path, title, value):
+        field = QLineEdit(repr(value))
+        field.setAccessibleName(title)
+        field.setMinimumWidth(170)
+        self.fields[path] = field
+        form.addRow(title, field)
+
+    def case_from_form(self):
+        from dynamic_tank import validate_case
+        candidate = copy.deepcopy(self._candidate)
+        for path, field in self.fields.items():
+            try:
+                value = float(field.text().strip())
+            except ValueError as exc:
+                raise ValueError(f"{field.accessibleName()}: introduzca un número; use punto decimal.") from exc
+            if not math.isfinite(value):
+                raise ValueError(f"{field.accessibleName()}: se requiere un número finito.")
+            target = candidate["instrumentation"]
+            for key in path[:-1]:
+                target = target[key]
+            target[path[-1]] = value
+        candidate["instrumentation"]["valve_actuator"]["enabled"] = self.actuator_enabled.isChecked()
+        validate_case(candidate)
+        if candidate != self._original:
+            note = "Instrumentación declarada en el formulario; sin caracterización experimental automática."
+            if note not in candidate["provenance"]["notes"]:
+                candidate["provenance"]["notes"] += " | " + note
+            if self._original.get("schema_version") == "dynamic-tank/v1":
+                candidate["provenance"]["notes"] += " Valores instrumentales iniciales propuestos sintéticos."
+                if candidate["provenance"]["data_kind"] == "measured":
+                    candidate["provenance"]["data_kind"] = "mixed"
+        return candidate
+
+    def accept(self):
+        try:
+            result = self.case_from_form()
+        except (ValueError, TypeError, KeyError) as exc:
+            self.error_label.setText(str(exc))
+            return
+        self.result_case = result
+        super().accept()
 
 
 class _TaskThread(QThread):
@@ -69,12 +190,19 @@ class DynamicTankDialog(QDialog):
     )
     _TABLE_COLUMNS = (
         ("time_s", "Tiempo (s)"),
-        ("tank_temperature_K", "Tanque (K)"),
-        ("jacket_temperature_K", "Camisa (K)"),
+        ("tank_temperature_K", "Tanque físico (K)"),
+        ("jacket_temperature_K", "Camisa física (K)"),
         ("mass_kg", "Masa (kg)"),
         ("volume_m3", "Volumen (m³)"),
-        ("valve_opening", "Válvula (0–1)"),
+        ("valve_opening", "Posición real (0-1)"),
         ("utility_flow_kg_s", "Servicio (kg/s)"),
+    )
+    _INSTRUMENT_COLUMNS = (
+        ("wall_temperature_K", "Pared física (K)"),
+        ("tank_indicated_temperature_K", "Tanque indicado (K)"),
+        ("wall_indicated_temperature_K", "Pared indicada (K)"),
+        ("jacket_indicated_temperature_K", "Camisa indicada (K)"),
+        ("valve_command", "Consigna de válvula (0-1)"),
     )
 
     def __init__(self, parent=None):
@@ -88,6 +216,7 @@ class DynamicTankDialog(QDialog):
         self._close_when_finished = False
         self._form_loading = False
         self._plot = None
+        self._valve_plot = None
         import pfd_fonts
         pfd_fonts.load_all()
         if pfd_fonts.available():
@@ -153,6 +282,12 @@ class DynamicTankDialog(QDialog):
         self.calibration_button = QPushButton("Calibrar con ensayos…")
         self.calibration_button.clicked.connect(self._open_calibration)
         settings_layout.addWidget(self.calibration_button)
+        self.instrumentation_button = QPushButton("Instrumentación…")
+        self.instrumentation_button.clicked.connect(self._open_instrumentation)
+        settings_layout.addWidget(self.instrumentation_button)
+        self.instrumentation_example_button = QPushButton("Ejemplo con instrumentación sintética")
+        self.instrumentation_example_button.clicked.connect(self._open_instrumented_example)
+        settings_layout.addWidget(self.instrumentation_example_button)
         note = QLabel(
             "El archivo del caso conserva las propiedades, curvas, "
             "parámetros PI y cambios programados. Las temperaturas del "
@@ -183,6 +318,9 @@ class DynamicTankDialog(QDialog):
             self._figure = Figure(figsize=(6, 4), tight_layout=True)
             self._plot = FigureCanvasQTAgg(self._figure)
             self.tabs.addTab(self._plot, "Temperaturas")
+            self._valve_figure = Figure(figsize=(6, 4), tight_layout=True)
+            self._valve_plot = FigureCanvasQTAgg(self._valve_figure)
+            self.tabs.addTab(self._valve_plot, "Válvula")
         except ImportError:
             pass
         self.tabs.addTab(self.table, "Trayectoria")
@@ -224,6 +362,9 @@ class DynamicTankDialog(QDialog):
 
     def set_case(self, config):
         """Load fields atomically; never silently clamp imported values."""
+        if config.get("schema_version") == "dynamic-tank/v2":
+            from dynamic_tank import validate_case
+            validate_case(config)
         values = []
         for path, _label, lower, upper, _decimals, celsius in self._FIELDS:
             value = config[path[0]][path[1]]
@@ -270,7 +411,10 @@ class DynamicTankDialog(QDialog):
     def _update_case_label(self):
         title = self._config.get("title", self._config.get("case_id", "Caso"))
         count = len(self._config.get("events", []))
-        self.case_label.setText(f"{title}\nCambios programados en el caso: {count}.")
+        instrumented = self._config.get("schema_version") == "dynamic-tank/v2"
+        instrumentation = ("Instrumentación explícita: el PI usa la temperatura indicada."
+                           if instrumented else "Sensores y accionamiento ideales (caso v1).")
+        self.case_label.setText(f"{title}\nCambios programados en el caso: {count}.\n{instrumentation}")
         kind = self._config.get("provenance", {}).get("data_kind", "sin declarar")
         self.provenance_label.setText(
             "Ejemplo sintético; requiere validación con mediciones."
@@ -406,9 +550,13 @@ class DynamicTankDialog(QDialog):
         preview = series[::stride]
         if series and preview[-1] is not series[-1]:
             preview = preview + [series[-1]]
+        instrumented = any("valve_command" in sample for sample in series)
+        columns = self._TABLE_COLUMNS + (self._INSTRUMENT_COLUMNS if instrumented else ())
+        self.table.setColumnCount(len(columns))
+        self.table.setHorizontalHeaderLabels([label for _, label in columns])
         self.table.setRowCount(len(preview))
         for row, sample in enumerate(preview):
-            for col, (key, _label) in enumerate(self._TABLE_COLUMNS):
+            for col, (key, _label) in enumerate(columns):
                 value = sample.get(key)
                 item = QTableWidgetItem("" if value is None else f"{value:.7g}")
                 self.table.setItem(row, col, item)
@@ -418,12 +566,19 @@ class DynamicTankDialog(QDialog):
         if self._plot is not None:
             self._figure.clear()
             ax = self._figure.add_subplot(111)
-            for key, label in (("tank_temperature_K", "Tanque"),
-                               ("jacket_temperature_K", "Camisa"),
-                               ("wall_temperature_K", "Pared")):
+            for section, label, color in (("tank", "Tanque", "tab:blue"),
+                                          ("jacket", "Camisa", "tab:orange"),
+                                          ("wall", "Pared", "tab:green")):
+                key = section + "_temperature_K"
                 samples = [s for s in preview if key in s]
                 ax.plot([s["time_s"] for s in samples],
-                        [s[key] - 273.15 for s in samples], label=label)
+                        [s[key] - 273.15 for s in samples], color=color, label=label + " físico")
+                indicated = section + "_indicated_temperature_K"
+                samples = [s for s in preview if indicated in s]
+                if samples:
+                    ax.plot([s["time_s"] for s in samples],
+                            [s[indicated] - 273.15 for s in samples],
+                            linestyle="--", color=color, label=label + " indicado")
             if series and self._run_config is not None:
                 initial = self._run_config["inputs"]["temperature_setpoint_K"]
                 setpoints = [sample.get("temperature_setpoint_K", initial) - 273.15
@@ -433,8 +588,28 @@ class DynamicTankDialog(QDialog):
             ax.set_xlabel("Tiempo (s)")
             ax.set_ylabel("Temperatura (°C)")
             ax.grid(True, alpha=.25)
-            ax.legend(loc="best")
+            ax.legend(loc="best", fontsize=8, ncols=2 if instrumented else 1)
             self._plot.draw_idle()
+        if self._valve_plot is not None:
+            self._valve_figure.clear()
+            ax = self._valve_figure.add_subplot(111)
+            values = [sample for sample in preview if "valve_opening" in sample]
+            if values:
+                draw = ax.plot if instrumented else ax.step
+                options = {} if instrumented else {"where": "post"}
+                draw([s["time_s"] for s in values], [s["valve_opening"] for s in values],
+                     label="Posición real", color="tab:blue", **options)
+            values = [sample for sample in preview if "valve_command" in sample]
+            if values:
+                ax.step([s["time_s"] for s in values], [s["valve_command"] for s in values],
+                        where="post", linestyle="--", label="Consigna de válvula", color="tab:orange")
+            ax.set_xlabel("Tiempo (s)")
+            ax.set_ylabel("Fracción de carrera (0–1)")
+            ax.set_ylim(-.05, 1.05)
+            ax.grid(True, alpha=.25)
+            if preview:
+                ax.legend(loc="best")
+            self._valve_plot.draw_idle()
 
     @Slot(str)
     def _task_failed(self, message):
@@ -480,7 +655,8 @@ class DynamicTankDialog(QDialog):
         if path:
             try:
                 from dynamic_measurements import write_measurement_template
-                write_measurement_template(path)
+                write_measurement_template(
+                    path, instrumented=self._config.get("schema_version") == "dynamic-tank/v2")
                 self.status_label.setText(
                     "Plantilla creada con encabezados SI. Añada mediciones reales; "
                     "time_s se cuenta desde el mismo inicio que la simulación.")
@@ -496,6 +672,34 @@ class DynamicTankDialog(QDialog):
             DynamicCalibrationDialog(self).exec()
         except Exception as exc:
             QMessageBox.warning(self, "No se pudo abrir la calibración", str(exc))
+
+    def _open_instrumentation(self):
+        if self._worker is not None:
+            return
+        editor = None
+        try:
+            editor = InstrumentationDialog(self.case_from_form(), self)
+            if editor.exec() == QDialog.Accepted:
+                self.set_case(editor.result_case)
+                if self._result is None:
+                    self.status_label.setText("Instrumentación aplicada al caso. Listo para simular.")
+        except (ValueError, TypeError, KeyError) as exc:
+            QMessageBox.warning(self, "No se pudo configurar la instrumentación", str(exc))
+        finally:
+            if editor is not None:
+                editor.deleteLater()
+
+    def _open_instrumented_example(self):
+        if self._worker is not None:
+            return
+        try:
+            path = (Path(__file__).resolve().parent / "data" / "instrumentation_examples"
+                    / "instrumented_heating.json")
+            self.set_case(json.loads(path.read_text(encoding="utf-8")))
+            if self._result is None:
+                self.status_label.setText("Ejemplo con instrumentación sintética cargado. Listo para simular.")
+        except (OSError, ValueError, TypeError, KeyError) as exc:
+            QMessageBox.warning(self, "No se pudo abrir el ejemplo", str(exc))
 
     def _export_json(self):
         if self._result is None:
@@ -542,7 +746,7 @@ class DynamicTankDialog(QDialog):
         esc = lambda value: html.escape(str(value))
         summary = comparison.get("summary", {})
         rows = []
-        labels = dict(self._TABLE_COLUMNS)
+        labels = dict(self._TABLE_COLUMNS + self._INSTRUMENT_COLUMNS)
         for variable, metrics in comparison.get("metrics", {}).items():
             cells = [esc(labels.get(variable, variable)), esc(metrics.get("unit", "")),
                      esc(metrics.get("n", 0))]

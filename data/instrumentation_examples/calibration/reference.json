@@ -1,0 +1,12 @@
+{
+  "data_kind": "synthetic",
+  "method": "independent_piecewise_six_temperature_affine_matrix_exponential",
+  "true_parameters": {
+    "wall.ua_tank_W_K": 800.0,
+    "wall.ua_jacket_W_K": 1200.0
+  },
+  "noise_standard_deviation_K": 0.05,
+  "random_seed": 20261117,
+  "sensor_parameters": "fixed_and_known_in_input_cases_not_fitted",
+  "scope": "software_demonstration_not_industrial_acceptance_or_plant_validation"
+}

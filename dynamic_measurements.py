@@ -10,10 +10,12 @@ Blank observation cells mean unavailable readings, never zero. Optional
 ``<variable>_uncertainty`` columns contain a strictly positive, one-standard-
 deviation uncertainty in that variable's unit. No unit conversion is inferred.
 Continuous states are interpolated linearly only inside the returned simulation
-interval. Valve position and utility flow retain their previous sample between
-recorded actions and take the new value exactly at the action time. The motor
-must therefore include every action time in its series. A stopped run is compared
-only over its available, explicitly partial trajectory.
+interval. The ideal v1 valve position and utility flow retain their previous
+sample between recorded actions; v2 actuator position and flow are continuous
+and use linear interpolation of the exported trajectory. Valve command remains
+held. The motor must include every action time. This comparison does not replace
+the dense-time predictions used by calibration. A stopped run is compared only
+over its available, explicitly partial trajectory.
 """
 
 from __future__ import annotations
@@ -36,9 +38,18 @@ VARIABLE_UNITS = {
     "tracer_mass_fraction": "kg/kg",
     "valve_opening": "fraction",
     "utility_flow_kg_s": "kg/s",
+    "tank_indicated_temperature_K": "K",
+    "wall_indicated_temperature_K": "K",
+    "jacket_indicated_temperature_K": "K",
+    "valve_command": "fraction",
 }
 
 HELD_VARIABLES = frozenset({"valve_opening", "utility_flow_kg_s"})
+INDICATED_TEMPERATURES = frozenset({
+    "tank_indicated_temperature_K", "wall_indicated_temperature_K",
+    "jacket_indicated_temperature_K",
+})
+INSTRUMENTED_VARIABLES = INDICATED_TEMPERATURES | {"valve_command"}
 
 MAX_CSV_BYTES = 20 * 1024 * 1024
 MAX_OBSERVATIONS = 100_000
@@ -56,10 +67,13 @@ def _finite_number(value, description: str) -> float:
     return number
 
 
-def write_measurement_template(path) -> None:
+def write_measurement_template(path, *, instrumented=False) -> None:
     """Write only SI column names; do not fabricate measurement rows."""
+    if not isinstance(instrumented, bool):
+        raise ValueError("instrumented must be a boolean")
+    variables = [name for name in VARIABLE_UNITS if instrumented or name not in INSTRUMENTED_VARIABLES]
     with Path(path).open("w", encoding="utf-8", newline="") as handle:
-        csv.writer(handle).writerow(["time_s", *VARIABLE_UNITS])
+        csv.writer(handle).writerow(["time_s", *variables])
 
 
 def _read_csv(path):
@@ -154,6 +168,19 @@ def _trajectory(result, variables):
     return times, values
 
 
+def _held_variables(result):
+    """Keep legacy ideal actions held; actual dynamic travel is continuous."""
+    if result.get("schema_version") != "dynamic-tank/v2":
+        return HELD_VARIABLES | {"valve_command"}
+    config = result.get("configuration", {})
+    instrumentation = config.get("instrumentation") if isinstance(config, Mapping) else None
+    actuator = instrumentation.get("valve_actuator") if isinstance(instrumentation, Mapping) else None
+    if not isinstance(actuator, Mapping) or not isinstance(actuator.get("enabled"), bool):
+        raise ValueError("A v2 trajectory requires explicit actuator configuration to interpret position and flow")
+    dynamic_actuator = actuator["enabled"]
+    return frozenset({"valve_command"}) if dynamic_actuator else HELD_VARIABLES | {"valve_command"}
+
+
 def _interpolate(time, times, values, *, hold_previous=False):
     # Caller checks support before interpolation. Endpoints are exact, including
     # the valid one-point trajectory of a run stopped at its initial condition.
@@ -199,6 +226,9 @@ def compare_measurements(result: dict, csv_path, *, source_label: str = "user_su
         raise ValueError("source_label must be a nonempty string")
     observations, variables, raw = _read_csv(csv_path)
     times, simulation = _trajectory(result, variables)
+    if set(variables) & INSTRUMENTED_VARIABLES and result.get("schema_version") != "dynamic-tank/v2":
+        raise ValueError("Instrumented observation channels require a dynamic-tank/v2 trajectory")
+    held_variables = _held_variables(result)
     summary = result.get("summary", {})
     if not isinstance(summary, Mapping):
         raise ValueError("Simulation summary must be a mapping")
@@ -228,7 +258,7 @@ def compare_measurements(result: dict, csv_path, *, source_label: str = "user_su
                 excluded[name] += 1
                 continue
             predicted = _interpolate(aligned, times, simulation[name],
-                                     hold_previous=name in HELD_VARIABLES)
+                                     hold_previous=name in held_variables)
             error = _finite_number(predicted - measured, "Prediction error")
             errors[name].append(error)
             value = {"observed": measured, "predicted": predicted, "error": error}
@@ -281,8 +311,14 @@ def compare_measurements(result: dict, csv_path, *, source_label: str = "user_su
             "time_basis": "elapsed_seconds_no_wall_clock_timezone",
             "simulation_interval_s": [times[0], times[-1]],
             "interpolation": {
-                name: ("previous_value_right_continuous" if name in HELD_VARIABLES
+                name: ("previous_value_right_continuous" if name in held_variables
                        else "linear") for name in variables
+            },
+            "observation_channels": {
+                name: ("sensor_indication_including_declared_bias" if name in INDICATED_TEMPERATURES
+                       else "actuator_command" if name == "valve_command"
+                       else "actual_valve_position" if name == "valve_opening"
+                       else "physical_process_quantity") for name in variables
             },
             "interpolation_domain": "returned_simulation_interval_only_no_extrapolation",
             "error_definition": "predicted_minus_observed",

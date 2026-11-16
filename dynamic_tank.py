@@ -20,9 +20,13 @@ import scipy
 from scipy.integrate import solve_ivp
 
 from dynamic_hydraulics import solve_circuit
+from dynamic_instrumentation import (
+    SENSOR_NAMES, advance_actuator, tracking_integral_update, validate_instrumentation,
+)
 
 SCHEMA_VERSION = "dynamic-tank/v1"
-MODEL_VERSION = "1.0.1"
+INSTRUMENTED_SCHEMA_VERSION = "dynamic-tank/v2"
+MODEL_VERSION = "1.1.0"
 REFERENCE_TEMPERATURE_K = 273.15
 MAX_SAMPLES = 50000
 MAX_SEGMENTS = 50000
@@ -108,6 +112,28 @@ def default_case() -> dict[str, Any]:
     }
 
 
+def default_instrumented_case() -> dict[str, Any]:
+    """Return a synthetic v2 example; instrument parameters need characterisation."""
+    case = default_case()
+    case["schema_version"] = INSTRUMENTED_SCHEMA_VERSION
+    case["case_id"] = "synthetic-instrumented-jacketed-tank"
+    case["title"] = "Tanque instrumentado: ejemplo sintético"
+    case["instrumentation"] = {
+        "temperature_sensors": {
+            name: {"time_constant_s": tau, "bias_K": 0.0,
+                   "initial_temperature_K": case[name]["initial_temperature_K"]}
+            for name, tau in zip(SENSOR_NAMES, (20.0, 10.0, 10.0))
+        },
+        "valve_actuator": {
+            "enabled": True, "time_constant_s": 2.0,
+            "opening_rate_per_s": 0.05, "closing_rate_per_s": 0.1,
+            "initial_opening": case["inputs"]["valve_opening"],
+        },
+        "tracking_time_s": 30.0,
+    }
+    return case
+
+
 def _number(value: Any, name: str, *, low: float | None = None,
             high: float | None = None, positive: bool = False) -> float:
     if isinstance(value, bool) or not isinstance(value, (int, float)):
@@ -139,11 +165,12 @@ def _keys(value: Any, expected: set[str], name: str) -> None:
 
 def validate_case(config: Mapping[str, Any]) -> dict[str, Any]:
     """Validate the complete versioned schema without silent defaults/typos."""
-    template = default_case()
+    version = config.get("schema_version") if isinstance(config, Mapping) else None
+    template = default_instrumented_case() if version == INSTRUMENTED_SCHEMA_VERSION else default_case()
     _keys(config, set(template), "caso")
     c = copy.deepcopy(dict(config))
-    if c["schema_version"] != SCHEMA_VERSION:
-        raise ValueError(f"schema_version: se requiere {SCHEMA_VERSION}.")
+    if version not in (SCHEMA_VERSION, INSTRUMENTED_SCHEMA_VERSION):
+        raise ValueError(f"schema_version: se requiere {SCHEMA_VERSION} o {INSTRUMENTED_SCHEMA_VERSION}.")
     for key in ("case_id", "title"):
         if not isinstance(c[key], str) or not c[key].strip():
             raise ValueError(f"{key}: texto no vacío requerido.")
@@ -197,6 +224,8 @@ def validate_case(config: Mapping[str, Any]) -> dict[str, Any]:
         value = c[section]["initial_temperature_K"]
         if not lo < value < hi:
             raise ValueError(f"{section}.initial_temperature_K debe estar dentro del rango abierto de propiedades.")
+    if version == INSTRUMENTED_SCHEMA_VERSION:
+        c["instrumentation"] = validate_instrumentation(c["instrumentation"], lo, hi)
 
     def check_inputs(inputs: Mapping[str, Any], name: str) -> None:
         for key, value in inputs.items():
@@ -228,6 +257,9 @@ def validate_case(config: Mapping[str, Any]) -> dict[str, Any]:
         raise ValueError(f"La combinación de muestras, control y eventos excede {MAX_SAMPLES} puntos.")
     # The hydraulics module validates pump/circuit units, ranges and finite values.
     solve_circuit(c["pump"], c["circuit"], c["inputs"]["valve_opening"], j["density_kg_m3"])
+    if version == INSTRUMENTED_SCHEMA_VERSION and c["instrumentation"]["valve_actuator"]["enabled"]:
+        solve_circuit(c["pump"], c["circuit"], c["instrumentation"]["valve_actuator"]["initial_opening"],
+                      j["density_kg_m3"])
     # Finite scalar inputs can still overflow derived capacities, energies and
     # external fluxes. Reject these configurations before creating a trajectory.
     temperature_scale = max(abs(lo - REFERENCE_TEMPERATURE_K), abs(hi - REFERENCE_TEMPERATURE_K), 1.)
@@ -237,6 +269,11 @@ def validate_case(config: Mapping[str, Any]) -> dict[str, Any]:
                j["mass_kg"] * j["cp_J_kg_K"] * temperature_scale,
                (w["ua_tank_W_K"] + w["ua_jacket_W_K"] + w["ua_ambient_W_K"]) * (hi - lo),
                ctrl["kp_per_K"] * (hi - lo), ctrl["ki_per_K_s"] * (hi - lo) * ctrl["sample_s"]]
+    if version == INSTRUMENTED_SCHEMA_VERSION:
+        bias = c["instrumentation"]["temperature_sensors"]["tank"]["bias_K"]
+        indicated_error_bound = hi - lo + abs(bias)
+        derived.extend((indicated_error_bound, ctrl["kp_per_K"] * indicated_error_bound,
+                        ctrl["ki_per_K_s"] * indicated_error_bound * ctrl["sample_s"]))
     for values in [c["inputs"]] + [e["changes"] for e in c["events"]]:
         for key in ("feed_flow_kg_s", "outlet_flow_kg_s"):
             if key in values:
@@ -262,12 +299,16 @@ def simulate_dynamic_tank(config: Mapping[str, Any], cancel: Callable[[], bool] 
 
     Invalid configuration raises ValueError. Physical boundaries, cancellation
     and numerical failure return success=False plus the completed trajectory.
-    Controllers are discrete PI with conditional-integration anti-windup.
+    v1 controllers retain conditional-integration anti-windup. v2 uses the
+    indicated tank temperature and sampled external-reset tracking.
     Optional sample times augment the usual output grid using the integrator's
     dense interpolant. They do not restart integration or change the dynamics.
     """
     c = validate_case(config)
     tcfg, wall, jacket, sim, controller = (c[k] for k in ("tank", "wall", "jacket", "simulation", "controller"))
+    instrumentation = c.get("instrumentation")
+    sensors = instrumentation["temperature_sensors"] if instrumentation else None
+    actuator = instrumentation["valve_actuator"] if instrumentation else None
     requested_samples = []
     if sample_times_s is not None:
         if not isinstance(sample_times_s, (list, tuple)) or len(sample_times_s) > MAX_SAMPLES:
@@ -293,14 +334,26 @@ def simulate_dynamic_tank(config: Mapping[str, Any], cancel: Callable[[], bool] 
                    m0 * tcfg["initial_tracer_mass_fraction"],
                    cw * (wall["initial_temperature_K"] - tref),
                    cj * (jacket["initial_temperature_K"] - tref), 0., 0., 0., 0., 0., 0.])
+    # Ideal sensors are algebraic and add no numerical state. This also keeps
+    # the all-ideal v2 open-loop model identical to the v1 integration.
+    sensor_indices = {}
+    if sensors:
+        for name in SENSOR_NAMES:
+            if sensors[name]["time_constant_s"] > 0:
+                sensor_indices[name] = len(y0)
+                y0 = np.append(y0, sensors[name]["initial_temperature_K"])
     y = y0.copy()
     events: list[dict[str, Any]] = []
     diagnostics: list[str] = []
     series: list[dict[str, float]] = []
     status, stop_reason = "ok", "duration_reached"
     valve = inputs["valve_opening"]
+    actuator_start = actuator["initial_opening"] if actuator else valve
+    actuator_start_time = 0.0
     integral = 0.0
     last_control = 0.0
+    previous_error = 0.0
+    previous_position = actuator_start
     rhs_evaluations = 0
     time_now = 0.0
     max_mass_error = max_tracer_error = max_energy_error = 0.0
@@ -316,29 +369,59 @@ def simulate_dynamic_tank(config: Mapping[str, Any], cancel: Callable[[], bool] 
         mass_for_trial = max(float(state[0]), tcfg["min_mass_kg"] * 0.01)
         return (tref + state[1] / (mass_for_trial * cp), tref + state[3] / cw, tref + state[4] / cj)
 
+    def sensor_temperatures(state: np.ndarray) -> tuple[float, float, float]:
+        physical = temperatures(state)
+        return tuple(float(state[sensor_indices[name]]) if name in sensor_indices else physical[i]
+                     for i, name in enumerate(SENSOR_NAMES))
+
+    def actual_position(time: float) -> float:
+        if actuator is None:
+            return valve
+        return advance_actuator(actuator_start, valve, time - actuator_start_time, actuator)
+
     def update_controller(time: float, state: np.ndarray) -> None:
-        nonlocal valve, integral, last_control
+        nonlocal valve, integral, last_control, previous_error, previous_position
         if not controller["enabled"]:
             valve = inputs["valve_opening"]
             return
         sign = 1.0 if controller["direction"] == "heating" else -1.0
-        error = sign * (inputs["temperature_setpoint_K"] - temperatures(state)[0])
-        proposed = integral + controller["ki_per_K_s"] * error * (time - last_control)
-        trial = controller["bias"] + controller["kp_per_K"] * error + proposed
-        if not ((trial > 1 and error > 0) or (trial < 0 and error < 0)):
-            integral = proposed
+        measured = (sensor_temperatures(state)[0] + sensors["tank"]["bias_K"]
+                    if sensors else temperatures(state)[0])
+        error = sign * (inputs["temperature_setpoint_K"] - measured)
+        if instrumentation:
+            integral = tracking_integral_update(
+                integral, previous_error, previous_position, controller["bias"],
+                controller["kp_per_K"], controller["ki_per_K_s"], time - last_control,
+                instrumentation["tracking_time_s"],
+            )
+            previous_error = error
+        else:
+            proposed = integral + controller["ki_per_K_s"] * error * (time - last_control)
+            trial = controller["bias"] + controller["kp_per_K"] * error + proposed
+            if not ((trial > 1 and error > 0) or (trial < 0 and error < 0)):
+                integral = proposed
         raw = controller["bias"] + controller["kp_per_K"] * error + integral
         valve = min(1.0, max(0.0, raw))
+        if instrumentation:
+            # A dynamic actuator is continuous; an ideal actuator jumps to the
+            # new command here. Hold the effective position for the upcoming
+            # sample interval, not an extra one-sample-old ideal position.
+            previous_position = actual_position(time)
         events.append({"time_s": float(time), "kind": "controller_sample", "valve_opening": float(valve),
                        "error_K": float(error), "integral": float(integral), "saturated": bool(raw < 0 or raw > 1)})
+        if instrumentation:
+            events[-1].update(valve_command=float(valve), valve_opening=float(previous_position),
+                              indicated_temperature_K=float(measured),
+                              tracking="previous_sample_error_and_position_zero_order_hold")
         last_control = time
 
-    def hydraulics() -> dict[str, Any]:
-        return solve_circuit(c["pump"], c["circuit"], valve, jacket["density_kg_m3"])
+    def hydraulics(time: float = 0.0) -> dict[str, Any]:
+        return solve_circuit(c["pump"], c["circuit"], actual_position(time), jacket["density_kg_m3"])
 
     hydro: dict[str, Any] = {}
 
-    def fluxes(state: np.ndarray) -> tuple[float, ...]:
+    def fluxes(time: float, state: np.ndarray) -> tuple[float, ...]:
+        current_hydro = hydraulics(time) if instrumentation else hydro
         temp, tw, tj = temperatures(state)
         z = state[2] / max(float(state[0]), tcfg["min_mass_kg"] * 0.01)
         feed, outlet = inputs["feed_flow_kg_s"], inputs["outlet_flow_kg_s"]
@@ -347,8 +430,8 @@ def simulate_dynamic_tank(config: Mapping[str, Any], cancel: Callable[[], bool] 
         qamb = wall["ua_ambient_W_K"] * (tw - inputs["ambient_temperature_K"])
         hin = feed * cp * (inputs["feed_temperature_K"] - tref)
         hout = outlet * cp * (temp - tref)
-        utility_heat = hydro["mass_flow_kg_s"] * jacket["cp_J_kg_K"] * (inputs["utility_supply_temperature_K"] - tj)
-        pump_heat = jacket["pump_heat_fraction"] * hydro["shaft_power_W"]
+        utility_heat = current_hydro["mass_flow_kg_s"] * jacket["cp_J_kg_K"] * (inputs["utility_supply_temperature_K"] - tj)
+        pump_heat = jacket["pump_heat_fraction"] * current_hydro["shaft_power_W"]
         agitator = inputs["agitator_power_W"]
         return feed, outlet, z, qtw, qjw, qamb, hin, hout, utility_heat, pump_heat, agitator
 
@@ -359,7 +442,7 @@ def simulate_dynamic_tank(config: Mapping[str, Any], cancel: Callable[[], bool] 
             raise _Cancelled()
         if rhs_evaluations > MAX_RHS_EVALUATIONS:
             raise _WorkLimit()
-        feed, outlet, z, qtw, qjw, qamb, hin, hout, qu, qp, qa = fluxes(state)
+        feed, outlet, z, qtw, qjw, qamb, hin, hout, qu, qp, qa = fluxes(time, state)
         dmass = feed - outlet
         dtracer = feed * inputs["feed_tracer_mass_fraction"] - outlet * z
         dext = hin - hout + qu + qp + qa - qamb
@@ -367,6 +450,12 @@ def simulate_dynamic_tank(config: Mapping[str, Any], cancel: Callable[[], bool] 
                          qu - qjw + qp, dmass, dtracer, dext, feed + outlet,
                          feed * inputs["feed_tracer_mass_fraction"] + outlet * abs(z),
                          abs(hin) + abs(hout) + abs(qu) + abs(qp) + abs(qa) + abs(qamb)])
+        if sensor_indices:
+            physical = dict(zip(SENSOR_NAMES, temperatures(state)))
+            derivative = np.append(derivative, [
+                (physical[name] - state[index]) / sensors[name]["time_constant_s"]
+                for name, index in sensor_indices.items()
+            ])
         if not np.all(np.isfinite(derivative)):
             raise FloatingPointError("Derivadas no finitas; revise escalas y parámetros.")
         return derivative
@@ -392,12 +481,13 @@ def simulate_dynamic_tank(config: Mapping[str, Any], cancel: Callable[[], bool] 
         tracer_fraction = float(state[2] / state[0])
         min_tracer_fraction = min(min_tracer_fraction, tracer_fraction)
         max_tracer_fraction = max(max_tracer_fraction, tracer_fraction)
-        *_, qu, qp, qa = fluxes(state)
+        *_, qu, qp, qa = fluxes(time, state)
+        current_hydro = hydraulics(time) if instrumentation else hydro
         row = {"time_s": float(time), "tank_temperature_K": float(temp), "wall_temperature_K": float(tw),
                "jacket_temperature_K": float(tj), "mass_kg": float(state[0]), "volume_m3": float(state[0] / rho),
                "tracer_mass_fraction": tracer_fraction, "tracer_mass_kg": float(state[2]),
-               "valve_opening": float(valve), "utility_flow_kg_s": float(hydro["mass_flow_kg_s"]),
-               "pump_head_m": float(hydro["pump_head_m"]), "pump_shaft_power_W": float(hydro["shaft_power_W"]),
+               "valve_opening": float(actual_position(time)), "utility_flow_kg_s": float(current_hydro["mass_flow_kg_s"]),
+               "pump_head_m": float(current_hydro["pump_head_m"]), "pump_shaft_power_W": float(current_hydro["shaft_power_W"]),
                "utility_heat_W": float(qu), "pump_heat_to_jacket_W": float(qp),
                "total_stored_energy_J": energy, "cumulative_net_energy_J": float(state[7]),
                "cumulative_net_mass_kg": float(state[5]), "cumulative_net_tracer_kg": float(state[6]),
@@ -408,6 +498,11 @@ def simulate_dynamic_tank(config: Mapping[str, Any], cancel: Callable[[], bool] 
                "feed_temperature_K": float(inputs["feed_temperature_K"]),
                "feed_tracer_mass_fraction": float(inputs["feed_tracer_mass_fraction"]),
                "utility_supply_temperature_K": float(inputs["utility_supply_temperature_K"])}
+        if sensors:
+            for name, sensor_temperature in zip(SENSOR_NAMES, sensor_temperatures(state)):
+                row[name + "_sensor_temperature_K"] = float(sensor_temperature)
+                row[name + "_indicated_temperature_K"] = float(sensor_temperature + sensors[name]["bias_K"])
+            row["valve_command"] = float(valve)
         if series and series[-1]["time_s"] == float(time):
             series[-1] = row  # right-continuous control/input convention
         else:
@@ -427,6 +522,12 @@ def simulate_dynamic_tank(config: Mapping[str, Any], cancel: Callable[[], bool] 
     for idx, name in enumerate(("tank", "wall", "jacket")):
         boundary(name + "_temperature_low", lambda time, state, i=idx: temperatures(state)[i] - sim["min_temperature_K"])
         boundary(name + "_temperature_high", lambda time, state, i=idx: sim["max_temperature_K"] - temperatures(state)[i])
+    if actuator and actuator["enabled"] and c["pump"]["max_flow_m3_s"] * c["pump"]["speed_fraction"] > 0:
+        # A moving valve can leave the supplied pump curve between scheduled
+        # events. This continuous root stops the accepted trajectory at its edge.
+        boundary("pump_curve_domain", lambda time, state:
+                 c["pump"]["max_flow_m3_s"] * c["pump"]["speed_fraction"] * (1 + 1e-12)
+                 - hydraulics(time)["flow_m3_s"])
 
     duration = sim["duration_s"]
     output_times = sorted({*np.arange(0, duration, sim["output_interval_s"]),
@@ -439,7 +540,7 @@ def simulate_dynamic_tank(config: Mapping[str, Any], cancel: Callable[[], bool] 
     stops = sorted({0., duration, *control_set, *changes_by_time})
     output_index = 1
     update_controller(0., y)
-    hydro = hydraulics()
+    hydro = hydraulics(0.0)
     record(0., y)
     if not hydro["operating_point_valid"]:
         status, stop_reason = "limit", "pump_curve_domain"
@@ -470,6 +571,8 @@ def simulate_dynamic_tank(config: Mapping[str, Any], cancel: Callable[[], bool] 
                 status, stop_reason = "error", "nonfinite_state"
                 time_now, y = start, solution.y[:, 0]
                 break
+            if instrumentation:
+                hydro = hydraulics(time_now)
             while output_index < len(output_times) and output_times[output_index] <= time_now:
                 sample = float(output_times[output_index])
                 record(sample, solution.sol(sample))
@@ -485,6 +588,10 @@ def simulate_dynamic_tank(config: Mapping[str, Any], cancel: Callable[[], bool] 
                 diagnostics.append(str(solution.message))
                 record(time_now, y)
                 break
+            # Close the old constant-command interval before a command change.
+            # This is also done for non-command events, preserving continuity.
+            actuator_start = actual_position(time_now)
+            actuator_start_time = time_now
             if end in changes_by_time:
                 inputs.update(changes_by_time[end])
                 events.append({"time_s": time_now, "kind": "input_change", "changes": changes_by_time[end]})
@@ -492,7 +599,7 @@ def simulate_dynamic_tank(config: Mapping[str, Any], cancel: Callable[[], bool] 
                     update_controller(time_now, y)
             if end in control_set:
                 update_controller(time_now, y)
-            hydro = hydraulics()
+            hydro = hydraulics(time_now)
             # Keep changes and control actions in the trajectory even if they
             # fall between regular output times. Values are right-continuous.
             record(time_now, y)
@@ -514,7 +621,7 @@ def simulate_dynamic_tank(config: Mapping[str, Any], cancel: Callable[[], bool] 
         if status == "ok":
             status, stop_reason = "error", "balance_audit_failed"
     payload = {
-        "schema_version": SCHEMA_VERSION,
+        "schema_version": c["schema_version"],
         "configuration": c,
         "summary": {"success": status == "ok", "status": status, "stop_reason": stop_reason,
                     "final_time_s": time_now, "requested_duration_s": duration, "samples": len(series),
@@ -544,6 +651,23 @@ def simulate_dynamic_tank(config: Mapping[str, Any], cancel: Callable[[], bool] 
                   "scope": "tank+wall+jacket; integrated external fluxes", "evaluated_at": "reported_samples_and_segment_endpoints"},
         "series": series,
     }
+    if instrumentation:
+        payload["metadata"].update(
+            controller="sampled_PI_external_reset_previous_sample_hold",
+            controller_feedback="tank_indicated_temperature_K",
+            actuator="exact_constant_command_first_order_with_asymmetric_rate_limits",
+            sensor_model="noninvasive_first_order_state_plus_constant_bias",
+        )
+        payload["assumptions"][4] = (
+            "Hidráulica cuasiestacionaria con posición real de válvula; actuador de primer orden con "
+            "velocidades de apertura/cierre limitadas. Sin NPSH, cavitación ni flujo inverso."
+        )
+        payload["assumptions"].extend([
+            "Sensores no invasivos: sus estados no añaden inventario energético al equipo; sin ruido ni tiempo muerto puro.",
+            "Lecturas indicadas = estado del sensor + sesgo especificado; los límites físicos usan temperaturas del equipo.",
+            "PI discreto: tracking integrado exactamente con error y posición de la muestra anterior retenidos; "
+            "no se garantiza estabilidad del lazo ni se modelan banda muerta, histéresis o stiction.",
+        ])
     if sample_times_s is not None:
         payload["metadata"].update(
             requested_sample_times_s=requested_samples,

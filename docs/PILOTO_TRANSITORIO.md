@@ -6,6 +6,10 @@ válvula. Incluye control PI de temperatura, cambios programados y comparación
 con series de observaciones. Es un modelo acotado para iniciar la identificación
 y validación de un equipo accesible. Los ejemplos incluidos son **sintéticos**.
 
+La versión instrumentada `dynamic-tank/v2` añade sensores térmicos y movimiento
+del actuador; se documenta en [Instrumentación transitoria](INSTRUMENTACION_TRANSITORIA.md).
+Los casos `v1` conservan el comportamiento del primer piloto descrito aquí.
+
 La simulación vive junto al motor estacionario. Un diagrama existente no se
 convierte automáticamente en una planta dinámica: faltan inventarios, geometría,
 condiciones iniciales e instrumentación que no pueden deducirse de sus caudales.

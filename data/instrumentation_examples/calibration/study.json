@@ -1,0 +1,68 @@
+{
+  "schema_version": "dynamic-calibration-study/v1",
+  "study_id": "synthetic-instrumented-calibration",
+  "equipment_id": "synthetic-instrumented-tank",
+  "parameters": [
+    {
+      "path": "wall.ua_tank_W_K",
+      "initial": 450.0,
+      "lower": 100.0,
+      "upper": 2500.0
+    },
+    {
+      "path": "wall.ua_jacket_W_K",
+      "initial": 650.0,
+      "lower": 100.0,
+      "upper": 2500.0
+    }
+  ],
+  "observables": {
+    "tank_indicated_temperature_K": {
+      "scale_K": 0.05,
+      "max_validation_rmse_K": 0.15,
+      "max_validation_abs_error_K": 0.3
+    },
+    "wall_indicated_temperature_K": {
+      "scale_K": 0.05,
+      "max_validation_rmse_K": 0.15,
+      "max_validation_abs_error_K": 0.3
+    },
+    "jacket_indicated_temperature_K": {
+      "scale_K": 0.05,
+      "max_validation_rmse_K": 0.15,
+      "max_validation_abs_error_K": 0.3
+    }
+  },
+  "experiments": [
+    {
+      "experiment_id": "cal_hot",
+      "role": "calibration",
+      "case_file": "cal_hot.json",
+      "measurements_file": "cal_hot.csv",
+      "data_kind": "synthetic",
+      "time_offset_s": 0.0,
+      "source": "Referencia expm de seis temperaturas con ruido sembrado; no son mediciones."
+    },
+    {
+      "experiment_id": "cal_warm",
+      "role": "calibration",
+      "case_file": "cal_warm.json",
+      "measurements_file": "cal_warm.csv",
+      "data_kind": "synthetic",
+      "time_offset_s": 0.0,
+      "source": "Referencia expm de seis temperaturas con ruido sembrado; no son mediciones."
+    },
+    {
+      "experiment_id": "validation_cooling",
+      "role": "validation",
+      "case_file": "validation_cooling.json",
+      "measurements_file": "validation_cooling.csv",
+      "data_kind": "synthetic",
+      "time_offset_s": 0.0,
+      "source": "Referencia expm de seis temperaturas con ruido sembrado; no son mediciones."
+    }
+  ],
+  "options": {
+    "max_evaluations": 100
+  }
+}
