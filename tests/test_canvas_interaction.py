@@ -211,7 +211,7 @@ def test_group_drag_denso_no_cuelga():
     22 bloques / 24 streams) con ≥5 bloques + ≥8 streams seleccionados.
     Debe completar en <2s (watchdog duro a 10s) y dejar la ortogonalidad
     y los puertos intactos tras el release (un solo re-route completo)."""
-    import time, faulthandler
+    import time, faulthandler, sys
 
     win = fq.FlowsheetMainWindow()
     win.resize(1400, 900)
@@ -239,7 +239,8 @@ def test_group_drag_denso_no_cuelga():
     vp = view.viewport()
 
     # watchdog duro: si algo se cuelga >10s, dump del traceback y abort
-    faulthandler.dump_traceback_later(10, exit=True)
+    # tee-sys no expone fileno(); el watchdog requiere el descriptor real.
+    faulthandler.dump_traceback_later(10, exit=True, file=sys.__stderr__)
     try:
         t0 = time.perf_counter()
         _send(vp, QEvent.MouseButtonPress, view.mapFromScene(c0),
