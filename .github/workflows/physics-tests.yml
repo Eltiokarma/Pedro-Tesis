@@ -62,7 +62,7 @@ jobs:
           python -m pytest tests/test_dynamic_*.py -v --timeout=90 --timeout-method=thread --junitxml=ci-artifacts/pilot-pytest.xml 2>&1 | tee ci-artifacts/pilot-pytest.log
           python gate_dynamic_pilot.py --out ci-artifacts/dynamic-pilot.json 2>&1 | tee ci-artifacts/dynamic-pilot.log
 
-      - name: Diagnose independent regression cases
+      - name: Run critical regression checks
         if: ${{ !cancelled() && steps.dependencies.outcome == 'success' }}
         run: |
           set +e

@@ -275,3 +275,19 @@ def test_group_drag_denso_no_cuelga():
     # los bloques seleccionados se movieron juntos (mismo delta)
     deltas = {(round(it.model.x), round(it.model.y)) for it in sel_blocks}
     assert len(sel_blocks) == 5 and len(deltas) == 5, "selección incompleta"
+
+
+def test_queued_handles_refresh_survives_editor_disposal(monkeypatch):
+    """Un callback pendiente no debe acceder a un StreamItem C++ destruido."""
+    import sys
+
+    win = _mk_editor_3b_2s()
+    errors = []
+    monkeypatch.setattr(sys, "excepthook", lambda *args: errors.append(args))
+    item = win.scene.stream_items[10]
+    item._schedule_handles_refresh()
+    win.close()
+    win.deleteLater()
+    QCoreApplication.sendPostedEvents(None, QEvent.DeferredDelete)
+    _app.processEvents()
+    assert errors == []

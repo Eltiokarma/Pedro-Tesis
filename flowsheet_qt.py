@@ -5437,9 +5437,11 @@ class StreamItem(QGraphicsPathItem):
 
         def _run():
             self._handles_refresh_pending = False
-            if self.scene() is None:
-                return
             try:
+                # El editor puede haberse destruido antes de este callback.
+                # En ese caso scene() lanza RuntimeError desde Shiboken.
+                if self.scene() is None:
+                    return
                 if self.model.id not in self.fs.streams:
                     return          # el stream se borró mientras esperaba
             except Exception:

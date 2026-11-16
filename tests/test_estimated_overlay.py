@@ -9,7 +9,7 @@ GATE — Overlay de estimados (Capa 4b), DOS DIRECCIONES:
   (b) Compuesto ESTIMADO recuperable por get() Y consumible por el seam:
       se estima urea (Joback vía chemfx), se persiste al overlay, thermo_db.get
       la devuelve con origin='estimated', y el seam de reactor la incluye en el
-      outlet (hoy, sin overlay, urea se pierde).
+      outlet; sin overlay, el catálogo legacy también conserva su masa.
 
 Cada test usa un overlay temporal independiente. El JSON del repositorio se
 lee para comprobar su estado, pero nunca se modifica.
@@ -102,21 +102,45 @@ class TestEstimadoRecuperableYConsumible(_OverlayTestBase):
         self.assertEqual(c.smiles, "NC(N)=O")
 
     def test_b2_consumible_por_el_seam(self):
+        import components
+
         feed = {"ammonia": 0.55, "co2": 0.45}
-        # SIN overlay: urea se pierde del outlet
+        mw = {name: td.get(name).mw for name in ("ammonia", "co2", "water")}
+        # R031: 2 NH3 + CO2 -> urea + H2O; CO2 es el limitante.
+        xi = 0.9 * feed["co2"] * 1000.0 / mw["co2"]
+        expected_moles = {
+            "ammonia": feed["ammonia"] * 1000.0 / mw["ammonia"] - 2 * xi,
+            "co2": feed["co2"] * 1000.0 / mw["co2"] - xi,
+            "urea": xi,
+            "water": xi,
+        }
+
+        def check(result, urea_mw):
+            self.assertIsNotNone(result)
+            self.assertEqual(set(result["outlet_composition"]), set(expected_moles))
+            self.assertAlmostEqual(result["xi"]["R031"], xi, delta=1e-10)
+            weights = dict(mw, urea=urea_mw)
+            for name, expected in expected_moles.items():
+                actual = (result["outlet_composition"][name]
+                          * result["outlet_mass_kg_s"] * 1000.0 / weights[name])
+                self.assertAlmostEqual(actual, expected, delta=1e-10)
+            # Tolerancia por los pesos moleculares tabulados redondeados.
+            self.assertAlmostEqual(result["outlet_mass_kg_s"], 1.0, delta=1e-4)
+            self.assertAlmostEqual(
+                sum(result["outlet_composition"].values()), 1.0, delta=1e-12
+            )
+
+        # Sin overlay, el catálogo legacy ya conserva el producto.
+        self.assertIsNone(td.get("urea"))
         r0 = rdb.solve_stoichiometric_reactor(
             ["R031"], feed, 1.0, 450.0, 150.0, conversion=0.9)
-        self.assertIsNotNone(r0)
-        self.assertNotIn("urea", r0["outlet_composition"])
-        # CON overlay: urea aparece en el outlet, mass-balanceada
+        check(r0, components.get("urea").mw)
+
+        # Con overlay, se consume su propiedad sin perder masa ni producto.
         self._add_urea()
         r1 = rdb.solve_stoichiometric_reactor(
             ["R031"], feed, 1.0, 450.0, 150.0, conversion=0.9)
-        self.assertIsNotNone(r1)
-        self.assertIn("urea", r1["outlet_composition"])
-        self.assertGreater(r1["outlet_composition"]["urea"], 0.0)
-        self.assertAlmostEqual(sum(r1["outlet_composition"].values()), 1.0,
-                               delta=1e-6)
+        check(r1, td.get("urea").mw)
 
     def test_b_sourceado_sigue_ganando_con_overlay_lleno(self):
         # Con el overlay poblado, un compuesto del .md sigue siendo sourceado.

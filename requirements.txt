@@ -15,7 +15,9 @@ openpyxl     >= 3.1
 numpy        >= 1.24
 
 # Editor Qt (opcional durante la migración)
-PySide6      >= 6.5
+# 6.12.0 corrompe referencias de None/True en CPython 3.10/3.11.
+# https://qt-project.atlassian.net/browse/PYSIDE-3474 (duplicados 3486/3509).
+PySide6      >= 6.5, != 6.12.0
 
 # Figuras de diagnóstico y panel económico (waterfall, densidad NPV, tornado,
 # McCabe, T-Q, etc.) — OPCIONAL. Sin matplotlib las figuras degradan a
