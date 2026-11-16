@@ -90,6 +90,29 @@ a otra, que hoy se hace a mano, retipeando.
   Lamé, fórmulas ASME VIII, benchmarks NAFEMS, WRC 107/537 para boquillas).
   Que el FEA reproduzca esos casos antes de creerle en otros.
 
+### Matiz posterior: equipo comercial existente → bloque del solver
+
+- La idea refinada no es FEA del equipo existente; es su **modelo de
+  proceso**: leer el PDF del fabricante y que el equipo aparezca en el
+  lienzo con sus corrientes, como una calculadora.
+  Caso disparador: un "fermentador centrífugo" cervecero visto por Karma
+  (producto exacto aún no identificado).
+- Principio: **la física es nuestra, los números son del fabricante**.
+  La conservación (masa, energía, estequiometría) la impone el solver
+  siempre; el PDF solo fija parámetros (capacidad, tiempo, rendimiento,
+  consumo de servicios, envolvente), cada uno con fuente, página y
+  estado de certeza.
+- Arquitectura: no un bloque Python por equipo, sino una **ficha simulable
+  declarativa** (JSON) que compone operaciones que el motor ya tiene
+  (reactor + centrífuga + intercambiador…) y mapea los datos del PDF a sus
+  parámetros. Sumar un equipo = sumar un archivo, no código.
+- Lo que hay hoy en el repo: `data/examples/beer.json` (R-101 fermentador
+  agitado), la reacción R007 de fermentación (marcada "⚠ revisar" por
+  discrepancia de Hess) y las centrífugas en el catálogo de costos.
+- Límite: si la ventaja del equipo nuevo viene de un fenómeno que no se
+  descompone en operaciones conocidas, el bloque solo puede repetir lo que
+  dice el fabricante, y debe mostrarse así, no como predicción.
+
 ## Preguntas abiertas
 
 - ¿Quién paga: el comprador industrial, el fabricante que quiere que su
