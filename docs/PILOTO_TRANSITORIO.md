@@ -1,5 +1,9 @@
 # Primer piloto transitorio: tanque con camisa de líquido
 
+La etapa actual prioriza la [verificación del solver con referencias teóricas](VERIFICACION_SOLVER_TRANSITORIO.md).
+El [circuito térmico cerrado v3](CIRCUITO_TERMICO_TRANSITORIO.md) añade servicio de
+capacidad finita. La validación experimental queda para una etapa posterior.
+
 Este módulo incorpora una simulación temporal reproducible de un tanque agitado,
 su pared, una camisa de líquido y un circuito de servicio con bomba, tubería y
 válvula. Incluye control PI de temperatura, cambios programados y comparación

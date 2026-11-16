@@ -269,6 +269,9 @@ def load_study(path) -> dict:
             source_case, case_raw = _read_json(case_path)
             case_cache[case_path] = (validate_case(source_case), hashlib.sha256(case_raw).hexdigest())
         case, case_hash = copy.deepcopy(case_cache[case_path])
+        if case["schema_version"] == "dynamic-tank/v3":
+            raise ValueError(f"{label}: calibration of dynamic-tank/v3 thermal loops is not supported; "
+                             "use theoretical benchmarks for this solver stage")
         if case["controller"]["enabled"]:
             raise ValueError(f"{label}: disable the PI and prescribe the recorded input history")
         observable_ranges = {name: _observation_temperature_range(case, name) for name in observables}

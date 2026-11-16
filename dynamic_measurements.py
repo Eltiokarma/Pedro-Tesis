@@ -12,8 +12,10 @@ deviation uncertainty in that variable's unit. No unit conversion is inferred.
 Continuous states are interpolated linearly only inside the returned simulation
 interval. The ideal v1 valve position and utility flow retain their previous
 sample between recorded actions; v2 actuator position and flow are continuous
-and use linear interpolation of the exported trajectory. Valve command remains
-held. The motor must include every action time. This comparison does not replace
+and use linear interpolation of the exported trajectory. In v3 the flow is
+reconstructed from the interpolated actual valve position and held pump speed;
+this avoids inventing a flow ramp before a pump stop. Valve command and heater
+power remain held. The motor must include every action time. This comparison does not replace
 the dense-time predictions used by calibration. A stopped run is compared only
 over its available, explicitly partial trajectory.
 """
@@ -42,6 +44,13 @@ VARIABLE_UNITS = {
     "wall_indicated_temperature_K": "K",
     "jacket_indicated_temperature_K": "K",
     "valve_command": "fraction",
+    "utility_reservoir_temperature_K": "K",
+    "utility_supply_temperature_K": "K",
+    "utility_return_temperature_K": "K",
+    "heater_power_request_W": "W",
+    "heater_applied_power_W": "W",
+    "heater_heat_W": "W",
+    "pump_speed_fraction": "fraction",
 }
 
 HELD_VARIABLES = frozenset({"valve_opening", "utility_flow_kg_s"})
@@ -50,6 +59,16 @@ INDICATED_TEMPERATURES = frozenset({
     "jacket_indicated_temperature_K",
 })
 INSTRUMENTED_VARIABLES = INDICATED_TEMPERATURES | {"valve_command"}
+THERMAL_LOOP_VARIABLES = frozenset({
+    "utility_reservoir_temperature_K", "utility_supply_temperature_K",
+    "utility_return_temperature_K", "heater_power_request_W",
+    "heater_applied_power_W", "heater_heat_W", "pump_speed_fraction",
+})
+THERMAL_LOOP_HELD_VARIABLES = frozenset({
+    "heater_power_request_W", "heater_applied_power_W", "heater_heat_W",
+    "pump_speed_fraction",
+})
+INSTRUMENTED_SCHEMAS = frozenset({"dynamic-tank/v2", "dynamic-tank/v3"})
 
 MAX_CSV_BYTES = 20 * 1024 * 1024
 MAX_OBSERVATIONS = 100_000
@@ -67,11 +86,15 @@ def _finite_number(value, description: str) -> float:
     return number
 
 
-def write_measurement_template(path, *, instrumented=False) -> None:
+def write_measurement_template(path, *, instrumented=False, thermal_loop=False) -> None:
     """Write only SI column names; do not fabricate measurement rows."""
     if not isinstance(instrumented, bool):
         raise ValueError("instrumented must be a boolean")
-    variables = [name for name in VARIABLE_UNITS if instrumented or name not in INSTRUMENTED_VARIABLES]
+    if not isinstance(thermal_loop, bool):
+        raise ValueError("thermal_loop must be a boolean")
+    variables = [name for name in VARIABLE_UNITS
+                 if (instrumented or thermal_loop or name not in INSTRUMENTED_VARIABLES)
+                 and (thermal_loop or name not in THERMAL_LOOP_VARIABLES)]
     with Path(path).open("w", encoding="utf-8", newline="") as handle:
         csv.writer(handle).writerow(["time_s", *variables])
 
@@ -170,15 +193,50 @@ def _trajectory(result, variables):
 
 def _held_variables(result):
     """Keep legacy ideal actions held; actual dynamic travel is continuous."""
-    if result.get("schema_version") != "dynamic-tank/v2":
+    if result.get("schema_version") not in INSTRUMENTED_SCHEMAS:
         return HELD_VARIABLES | {"valve_command"}
     config = result.get("configuration", {})
     instrumentation = config.get("instrumentation") if isinstance(config, Mapping) else None
     actuator = instrumentation.get("valve_actuator") if isinstance(instrumentation, Mapping) else None
     if not isinstance(actuator, Mapping) or not isinstance(actuator.get("enabled"), bool):
-        raise ValueError("A v2 trajectory requires explicit actuator configuration to interpret position and flow")
+        raise ValueError("A v2/v3 trajectory requires explicit actuator configuration to interpret position and flow")
     dynamic_actuator = actuator["enabled"]
-    return frozenset({"valve_command"}) if dynamic_actuator else HELD_VARIABLES | {"valve_command"}
+    held = frozenset({"valve_command"}) if dynamic_actuator else HELD_VARIABLES | {"valve_command"}
+    if result.get("schema_version") == "dynamic-tank/v3":
+        held |= THERMAL_LOOP_HELD_VARIABLES
+    return held
+
+
+def _loop_flow_predictor(result, times, held_variables):
+    """Use the v3 algebraic hydraulic closure with causal speed changes.
+
+    The exported position is interpolated (or held for the ideal actuator),
+    not reintegrated. This remains an approximate comparison between samples.
+    """
+    from dynamic_hydraulics import solve_circuit
+    from dynamic_tank import validate_case
+
+    config = validate_case(result.get("configuration"))
+    if config["schema_version"] != "dynamic-tank/v3":
+        raise ValueError("A v3 flow comparison requires a v3 configuration")
+    _, state = _trajectory(result, ("valve_opening", "pump_speed_fraction"))
+    # A truncated run needs only events inside its returned time interval.
+    for event in config["events"]:
+        if times[0] <= event["time_s"] <= times[-1] and event["time_s"] not in times:
+            raise ValueError("A v3 trajectory must record every input event time")
+
+    def predicted(time):
+        position = _interpolate(time, times, state["valve_opening"],
+                                hold_previous="valve_opening" in held_variables)
+        speed = _interpolate(time, times, state["pump_speed_fraction"], hold_previous=True)
+        pump = dict(config["pump"], speed_fraction=speed)
+        hydro = solve_circuit(pump, config["circuit"], position,
+                              config["jacket"]["density_kg_m3"])
+        if not hydro["operating_point_valid"]:
+            raise ValueError("Interpolated v3 flow exceeds the declared pump curve")
+        return hydro["mass_flow_kg_s"]
+
+    return predicted
 
 
 def _interpolate(time, times, values, *, hold_previous=False):
@@ -226,9 +284,14 @@ def compare_measurements(result: dict, csv_path, *, source_label: str = "user_su
         raise ValueError("source_label must be a nonempty string")
     observations, variables, raw = _read_csv(csv_path)
     times, simulation = _trajectory(result, variables)
-    if set(variables) & INSTRUMENTED_VARIABLES and result.get("schema_version") != "dynamic-tank/v2":
-        raise ValueError("Instrumented observation channels require a dynamic-tank/v2 trajectory")
+    if set(variables) & INSTRUMENTED_VARIABLES and result.get("schema_version") not in INSTRUMENTED_SCHEMAS:
+        raise ValueError("Instrumented observation channels require a dynamic-tank/v2 or v3 trajectory")
+    if set(variables) & THERMAL_LOOP_VARIABLES and result.get("schema_version") != "dynamic-tank/v3":
+        raise ValueError("Thermal loop observation channels require a dynamic-tank/v3 trajectory")
     held_variables = _held_variables(result)
+    loop_flow = (_loop_flow_predictor(result, times, held_variables)
+                 if result.get("schema_version") == "dynamic-tank/v3"
+                 and "utility_flow_kg_s" in variables else None)
     summary = result.get("summary", {})
     if not isinstance(summary, Mapping):
         raise ValueError("Simulation summary must be a mapping")
@@ -257,8 +320,9 @@ def compare_measurements(result: dict, csv_path, *, source_label: str = "user_su
             if not inside:
                 excluded[name] += 1
                 continue
-            predicted = _interpolate(aligned, times, simulation[name],
-                                     hold_previous=name in held_variables)
+            predicted = (loop_flow(aligned) if name == "utility_flow_kg_s" and loop_flow
+                         else _interpolate(aligned, times, simulation[name],
+                                           hold_previous=name in held_variables))
             error = _finite_number(predicted - measured, "Prediction error")
             errors[name].append(error)
             value = {"observed": measured, "predicted": predicted, "error": error}
@@ -311,7 +375,9 @@ def compare_measurements(result: dict, csv_path, *, source_label: str = "user_su
             "time_basis": "elapsed_seconds_no_wall_clock_timezone",
             "simulation_interval_s": [times[0], times[-1]],
             "interpolation": {
-                name: ("previous_value_right_continuous" if name in held_variables
+                name: ("hydraulic_closure_from_valve_position_and_held_pump_speed"
+                       if name == "utility_flow_kg_s" and loop_flow
+                       else "previous_value_right_continuous" if name in held_variables
                        else "linear") for name in variables
             },
             "observation_channels": {
