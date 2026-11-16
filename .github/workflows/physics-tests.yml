@@ -53,18 +53,19 @@ jobs:
         id: dependencies
         run: |
           python -m pip install --upgrade pip
-          python -m pip install -r requirements.txt pytest pytest-xdist
+          python -m pip install -r requirements.txt pytest pytest-xdist pytest-timeout
           mkdir -p ci-artifacts
           python -m pip freeze > ci-artifacts/installed-packages.txt
 
-      - name: Run the complete regression suite
+      - name: Run dynamic pilot tests first
         run: |
-          python -m pytest tests -q -n 2 --dist loadfile --durations=15 --junitxml=ci-artifacts/pytest.xml 2>&1 | tee ci-artifacts/pytest.log
+          python -m pytest tests/test_dynamic_*.py -v --timeout=90 --timeout-method=thread --junitxml=ci-artifacts/pilot-pytest.xml 2>&1 | tee ci-artifacts/pilot-pytest.log
+          python gate_dynamic_pilot.py --out ci-artifacts/dynamic-pilot.json 2>&1 | tee ci-artifacts/dynamic-pilot.log
 
-      - name: Check dynamic conservation and solver agreement
+      - name: Run the complete regression suite
         if: ${{ !cancelled() && steps.dependencies.outcome == 'success' }}
         run: |
-          python gate_dynamic_pilot.py --out ci-artifacts/dynamic-pilot.json 2>&1 | tee ci-artifacts/dynamic-pilot.log
+          python -m pytest tests -vv -n 2 --dist loadfile --timeout=180 --timeout-method=thread --durations=15 --junitxml=ci-artifacts/pytest.xml 2>&1 | tee ci-artifacts/pytest.log
 
       - name: Save numerical test evidence
         if: ${{ !cancelled() }}
