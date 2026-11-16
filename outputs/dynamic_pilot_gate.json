@@ -1,0 +1,107 @@
+{
+  "success": true,
+  "scope": "numerical_only_synthetic_cases_no_plant_validation",
+  "python": "3.11.18",
+  "acceptance": {
+    "relative_balance_residual_max": 1e-09,
+    "BDF_Radau_temperature_difference_K_max": 0.02
+  },
+  "cases": [
+    {
+      "case": "cooling_feed_step.json",
+      "passed": true,
+      "summary": {
+        "success": true,
+        "status": "ok",
+        "stop_reason": "duration_reached",
+        "final_time_s": 3600.0,
+        "requested_duration_s": 3600.0,
+        "samples": 361,
+        "rhs_evaluations": 12886
+      },
+      "config_sha256": "92d4c92244948ce8bd7655fc5bb3cfc444ca77c8a47b87fe31c51a22dca6d2f6",
+      "elapsed_s": 1.2398160000011558,
+      "audit": {
+        "max_mass_residual_kg": 0.0,
+        "max_tracer_residual_kg": 0.0,
+        "max_energy_residual_J": 7.003545761108398e-07,
+        "max_mass_residual_relative": 0.0,
+        "max_tracer_residual_relative": 0.0,
+        "max_energy_residual_relative": 3.136478161012012e-15,
+        "min_tracer_mass_fraction": 0.0,
+        "max_tracer_mass_fraction": 0.0,
+        "tracer_fraction_absolute_tolerance": 1e-06,
+        "scope": "tank+wall+jacket; integrated external fluxes",
+        "evaluated_at": "reported_samples_and_segment_endpoints"
+      },
+      "final_tank_temperature_K": 314.62234058368546,
+      "final_mass_kg": 500.0,
+      "final_tracer_mass_fraction": 0.0,
+      "max_BDF_Radau_temperature_difference_K": null
+    },
+    {
+      "case": "fill_drain_tracer.json",
+      "passed": true,
+      "summary": {
+        "success": true,
+        "status": "ok",
+        "stop_reason": "duration_reached",
+        "final_time_s": 1200.0,
+        "requested_duration_s": 1200.0,
+        "samples": 121,
+        "rhs_evaluations": 379
+      },
+      "config_sha256": "6cd29ee41326174ef2c4b2a2f31a10ec36760c3d389c120a4ea6bc3cc21d6147",
+      "elapsed_s": 0.07837730000028387,
+      "audit": {
+        "max_mass_residual_kg": 1.2789769243681803e-13,
+        "max_tracer_residual_kg": 0.0,
+        "max_energy_residual_J": 3.958120942115784e-09,
+        "max_mass_residual_relative": 3.552713678800501e-16,
+        "max_tracer_residual_relative": 0.0,
+        "max_energy_residual_relative": 1.4270132573757833e-16,
+        "min_tracer_mass_fraction": 0.0,
+        "max_tracer_mass_fraction": 0.16597649537499454,
+        "tracer_fraction_absolute_tolerance": 1e-06,
+        "scope": "tank+wall+jacket; integrated external fluxes",
+        "evaluated_at": "reported_samples_and_segment_endpoints"
+      },
+      "final_tank_temperature_K": 300.15,
+      "final_mass_kg": 239.9999999999999,
+      "final_tracer_mass_fraction": 0.16597649537499426,
+      "max_BDF_Radau_temperature_difference_K": null
+    },
+    {
+      "case": "heating_500kg.json",
+      "passed": true,
+      "summary": {
+        "success": true,
+        "status": "ok",
+        "stop_reason": "duration_reached",
+        "final_time_s": 3600.0,
+        "requested_duration_s": 3600.0,
+        "samples": 721,
+        "rhs_evaluations": 23010
+      },
+      "config_sha256": "de6ccd4fad2e1b44007d49cf8b93b1fcfa6a5568ed295515fa924cfe9c7cf004",
+      "elapsed_s": 11.032920099998591,
+      "audit": {
+        "max_mass_residual_kg": 0.0,
+        "max_tracer_residual_kg": 0.0,
+        "max_energy_residual_J": 6.854534149169922e-07,
+        "max_mass_residual_relative": 0.0,
+        "max_tracer_residual_relative": 0.0,
+        "max_energy_residual_relative": 1.0394501373162694e-14,
+        "min_tracer_mass_fraction": 0.0,
+        "max_tracer_mass_fraction": 0.0,
+        "tracer_fraction_absolute_tolerance": 1e-06,
+        "scope": "tank+wall+jacket; integrated external fluxes",
+        "evaluated_at": "reported_samples_and_segment_endpoints"
+      },
+      "final_tank_temperature_K": 324.98493341857437,
+      "final_mass_kg": 500.0,
+      "final_tracer_mass_fraction": 0.0,
+      "max_BDF_Radau_temperature_difference_K": 8.882300181767278e-05
+    }
+  ]
+}

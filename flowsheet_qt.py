@@ -5437,9 +5437,11 @@ class StreamItem(QGraphicsPathItem):
 
         def _run():
             self._handles_refresh_pending = False
-            if self.scene() is None:
-                return
             try:
+                # El editor puede haberse destruido antes de este callback.
+                # En ese caso scene() lanza RuntimeError desde Shiboken.
+                if self.scene() is None:
+                    return
                 if self.model.id not in self.fs.streams:
                     return          # el stream se borró mientras esperaba
             except Exception:
@@ -7527,6 +7529,8 @@ class FlowsheetMainWindow(QMainWindow):
 
         # ── Simulación ──
         m_sim = mb.addMenu("&Simulación")
+        m_sim.addAction(_ac("Tanque transitorio…", self.action_dynamic_tank))
+        m_sim.addSeparator()
         m_sim.addAction(_ac("Validar &DOF", self.action_dof,
                               None, "act-dof"))
         m_sim.addAction(_ac("&Resolver balances", self.action_solve,
@@ -7547,6 +7551,15 @@ class FlowsheetMainWindow(QMainWindow):
                               None, "an-case-study"))
         m_sim.addAction(_ac("Exportar a Excel…", self.action_export_xlsx,
                               None, "wb-spreadsheet"))
+
+    def action_dynamic_tank(self):
+        """Abre un caso transitorio independiente del flowsheet estacionario."""
+        try:
+            from dynamic_tank_dialog import DynamicTankDialog
+            DynamicTankDialog(self).exec()
+        except Exception as exc:
+            QMessageBox.critical(self, "No se pudo abrir el piloto transitorio",
+                                 f"{type(exc).__name__}: {exc}")
 
     def _set_unit_system(self, name):
         """Aplica el sistema de unidades global (Vista > Unidades) y refresca

@@ -13,16 +13,33 @@ defectos reportados:
 """
 import os
 
+import pytest
+
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 from PySide6.QtWidgets import QApplication
-from PySide6.QtCore import Qt, QPointF, QRectF, QEvent
+from PySide6.QtCore import Qt, QPointF, QRectF, QEvent, QCoreApplication
 from PySide6.QtGui import QMouseEvent
 
 import flowsheet_qt as fq
 from flowsheet_model import Block, Stream
 
 _app = QApplication.instance() or QApplication([])
+
+
+@pytest.fixture(autouse=True)
+def _dispose_test_editors():
+    """Cerrar editores propios y sus timers incluso si falla una aserción."""
+    existing = set(_app.topLevelWidgets())
+    try:
+        yield
+    finally:
+        for widget in _app.topLevelWidgets():
+            if widget not in existing and isinstance(widget, fq.FlowsheetMainWindow):
+                widget.close()
+                widget.deleteLater()
+        QCoreApplication.sendPostedEvents(None, QEvent.DeferredDelete)
+        _app.processEvents()
 
 
 # ── helpers ────────────────────────────────────────────────────────────
@@ -194,7 +211,7 @@ def test_group_drag_denso_no_cuelga():
     22 bloques / 24 streams) con ≥5 bloques + ≥8 streams seleccionados.
     Debe completar en <2s (watchdog duro a 10s) y dejar la ortogonalidad
     y los puertos intactos tras el release (un solo re-route completo)."""
-    import time, faulthandler
+    import time, faulthandler, sys
 
     win = fq.FlowsheetMainWindow()
     win.resize(1400, 900)
@@ -222,7 +239,8 @@ def test_group_drag_denso_no_cuelga():
     vp = view.viewport()
 
     # watchdog duro: si algo se cuelga >10s, dump del traceback y abort
-    faulthandler.dump_traceback_later(10, exit=True)
+    # tee-sys no expone fileno(); el watchdog requiere el descriptor real.
+    faulthandler.dump_traceback_later(10, exit=True, file=sys.__stderr__)
     try:
         t0 = time.perf_counter()
         _send(vp, QEvent.MouseButtonPress, view.mapFromScene(c0),
@@ -258,3 +276,19 @@ def test_group_drag_denso_no_cuelga():
     # los bloques seleccionados se movieron juntos (mismo delta)
     deltas = {(round(it.model.x), round(it.model.y)) for it in sel_blocks}
     assert len(sel_blocks) == 5 and len(deltas) == 5, "selección incompleta"
+
+
+def test_queued_handles_refresh_survives_editor_disposal(monkeypatch):
+    """Un callback pendiente no debe acceder a un StreamItem C++ destruido."""
+    import sys
+
+    win = _mk_editor_3b_2s()
+    errors = []
+    monkeypatch.setattr(sys, "excepthook", lambda *args: errors.append(args))
+    item = win.scene.stream_items[10]
+    item._schedule_handles_refresh()
+    win.close()
+    win.deleteLater()
+    QCoreApplication.sendPostedEvents(None, QEvent.DeferredDelete)
+    _app.processEvents()
+    assert errors == []

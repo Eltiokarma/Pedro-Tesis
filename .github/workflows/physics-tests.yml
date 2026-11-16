@@ -1,0 +1,96 @@
+name: Physics and dynamic pilot tests
+
+on:
+  pull_request:
+    branches:
+      - codex/industrial-physics-audit
+      - claude/understand-document-improve-g8xoM
+    types: [opened, synchronize, reopened, ready_for_review]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: physics-tests-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  physics-tests:
+    name: Python 3.11 / Ubuntu / Qt offscreen
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    defaults:
+      run:
+        shell: bash
+    env:
+      QT_QPA_PLATFORM: offscreen
+      MPLBACKEND: Agg
+      PYTHONUTF8: "1"
+      PYTHONUNBUFFERED: "1"
+      OPENBLAS_NUM_THREADS: "1"
+      OMP_NUM_THREADS: "1"
+
+    steps:
+      - name: Check out the proposed merge
+        uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - name: Set up Python
+        uses: actions/setup-python@v7
+        with:
+          python-version: "3.11"
+          cache: pip
+          cache-dependency-path: requirements.txt
+
+      - name: Install Qt runtime libraries
+        run: |
+          sudo apt-get update
+          sudo apt-get install --no-install-recommends -y libegl1 libopengl0 libxkbcommon0 fonts-dejavu-core
+
+      - name: Install project and test dependencies
+        id: dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -r requirements.txt pytest pytest-timeout
+          mkdir -p ci-artifacts
+          python -m pip freeze > ci-artifacts/installed-packages.txt
+
+      - name: Run dynamic pilot tests first
+        run: |
+          python -m pytest tests/test_dynamic_*.py -v --timeout=90 --timeout-method=thread --junitxml=ci-artifacts/pilot-pytest.xml 2>&1 | tee ci-artifacts/pilot-pytest.log
+          python gate_dynamic_pilot.py --out ci-artifacts/dynamic-pilot.json 2>&1 | tee ci-artifacts/dynamic-pilot.log
+
+      - name: Run critical regression checks
+        if: ${{ !cancelled() && steps.dependencies.outcome == 'success' }}
+        run: |
+          set +e
+          failed=0
+          for target in \
+            tests/test_canvas_ui_bugs.py::test_rubber_band_oscilante_no_crashea \
+            tests/test_estimated_overlay.py::TestEstimadoRecuperableYConsumible::test_b2_consumible_por_el_seam \
+            tests/test_pressure_coherence.py::TestCoherence::test_atmospheric_examples_untouched
+          do
+            label="${target##*::}"
+            timeout --signal=TERM --kill-after=5s 75s python -m pytest "$target" -vv --capture=tee-sys -o faulthandler_timeout=45 --timeout=60 --timeout-method=thread 2>&1 | tee "ci-artifacts/diagnostic-$label.log"
+            result=${PIPESTATUS[0]}
+            if (( result != 0 )); then failed=1; fi
+          done
+          exit "$failed"
+
+      - name: Run the complete regression suite
+        if: ${{ !cancelled() && steps.dependencies.outcome == 'success' }}
+        run: |
+          # Serial execution preserves the GUI tests' shared application state.
+          # An external deadline also catches native Qt calls holding the GIL.
+          timeout --signal=TERM --kill-after=15s 12m python -m pytest tests -vv --capture=tee-sys -o faulthandler_timeout=90 --timeout=180 --timeout-method=thread --durations=15 --junitxml=ci-artifacts/pytest.xml 2>&1 | tee ci-artifacts/pytest.log
+
+      - name: Save numerical test evidence
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@v7
+        with:
+          name: physics-tests-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ci-artifacts/
+          if-no-files-found: warn
+          retention-days: 14

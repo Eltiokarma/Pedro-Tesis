@@ -1,0 +1,1 @@
+time_s,tank_temperature_K,jacket_temperature_K,wall_temperature_K,mass_kg,volume_m3,tracer_mass_fraction,valve_opening,utility_flow_kg_s
