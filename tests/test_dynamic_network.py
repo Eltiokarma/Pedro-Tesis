@@ -121,7 +121,7 @@ def test_output_interval_does_not_change_the_dynamics():
 
 
 @pytest.mark.parametrize("mutation,match", [
-    (lambda c: c.update(schema_version="dynamic-network/v2"), "schema_version"),
+    (lambda c: c.update(schema_version="dynamic-network/v999"), "schema_version"),
     (lambda c: c.update(pressure_Pa=101325.), "desconocidas"),
     (lambda c: c["nodes"][0].update(initial_mass_kg=True), "número"),
     (lambda c: c["nodes"][0].update(initial_mass_kg=float("nan")), "dominio"),

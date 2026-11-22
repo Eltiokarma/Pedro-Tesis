@@ -94,7 +94,10 @@ transitorio contra la respuesta Erlang y el límite de flujo pistón.
 
 La geometría y pared del ejemplo MSL 4.1.0 se usan como **adaptación documentada**,
 con propiedades constantes y perturbaciones propias. Se mantienen explícitos
-los pendientes: reproducción de un caso publicado completo y conexión del
-componente al ensamblador de redes. Este avance numérico no cierra todavía el
+el pendiente de reproducción de un caso publicado completo. La conexión del
+componente al ensamblador se incorpora en
+[`dynamic-network/v2`](REDES_CON_INTERCAMBIADOR.md), con integración simultánea,
+editor de conexiones, perfiles y balance que incluye la masa sólida de la pared.
+Este avance numérico no cierra todavía el
 hito de intercambiador de la tabla ni representa una comparación ejecutada
 contra Modelica o validación experimental.

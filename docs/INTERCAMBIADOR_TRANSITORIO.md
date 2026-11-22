@@ -231,8 +231,11 @@ código: esta queda identificada por el commit y la ejecución de CI.
 
 ## Alcance que queda pendiente
 
-El componente todavía es independiente del ensamblador de
-[`dynamic-network/v1`](REDES_TRANSITORIAS.md) y de la interfaz gráfica. No resuelve
+El componente está conectado mediante
+[`dynamic-network/v2`](REDES_CON_INTERCAMBIADOR.md), con editor de conexiones en
+el menú Simulación, API y CLI. La red exige un fluido común y conserva las
+propiedades propias de la pared. El adaptador automático del lienzo PFD
+estacionario sigue pendiente. No resuelve
 presiones, inversión de flujo, propiedades dependientes del estado, cambio de
 fase, sensores ni control. El siguiente cierre del hito requiere seleccionar y
 reproducir un caso publicado completo, con las mismas ecuaciones, propiedades,

@@ -13,10 +13,34 @@ import sys
 from dynamic_calibration_cli import _write_json, guard_outputs
 
 
+def trajectory_rows(result):
+    """Long-format tanks and exchanger cells, preserving synthetic provenance."""
+    case = result["configuration"]
+    rows = []
+    common = {"case_id": case["case_id"], "data_kind": "synthetic",
+              "classification": case["provenance"]["classification"], "source": case["provenance"]["source"],
+              "config_sha256": result["metadata"]["config_sha256"]}
+    for point in result["series"]:
+        for identifier, values in point["nodes"].items():
+            rows.append({**common, "time_s": point["time_s"], "node_id": identifier, "unit_kind": "tank", **values})
+        for identifier, values in point.get("heat_exchangers", {}).items():
+            unit = result["metadata"]["heat_exchangers"][identifier]
+            for i, position in enumerate(unit["cell_centres_m"]):
+                rows.append({**common, "time_s": point["time_s"], "node_id": identifier, "unit_kind": "heat_exchanger_cell",
+                             "cell_index": i, "position_m": position,
+                             **{side+"_temperature_K": values[side+"_temperature_K"][i] for side in ("hot", "cold", "wall")},
+                             **{side+"_tracer_mass_fraction": values[side+"_tracer_mass_fraction"][i] for side in ("hot", "cold")},
+                             "component_classification": unit["provenance"]["classification"],
+                             "component_source": unit["provenance"]["source"], "component_notes": unit["provenance"]["notes"]})
+    columns = list(dict.fromkeys(key for row in rows for key in row))
+    return [{key: row.get(key, "") for key in columns} for row in rows]
+
+
 def main(argv=None):
     parser = argparse.ArgumentParser(description="Red transitoria monofásica con caudales impuestos.")
     parser.add_argument("case", nargs="?", help="Caso JSON; sin caso se ejecuta el ejemplo en serie.")
-    parser.add_argument("--example", choices=("cascade", "split_merge", "recirculation", "energyplus_mixed_tank"))
+    parser.add_argument("--example", choices=("cascade", "split_merge", "recirculation", "energyplus_mixed_tank",
+                                             "coupled_recirculation", "coupled_feed"))
     parser.add_argument("--write-example", metavar="JSON", help="Crea el ejemplo elegido sin simular.")
     parser.add_argument("--check", action="store_true", help="Comprueba topología, estados iniciales y eventos.")
     parser.add_argument("--out", help="Resultado JSON con configuración, puertos, balances y procedencia.")
@@ -35,8 +59,9 @@ def main(argv=None):
         guard_outputs(outputs, inputs, overwrite=args.overwrite)
         from dynamic_network import simulate_dynamic_network, validate_network
         from dynamic_network_examples import example_cases
+        from dynamic_network_component_examples import example_cases as component_cases
         case = (json.loads(Path(args.case).read_text(encoding="utf-8-sig")) if args.case
-                else example_cases()[(args.example or "cascade") + ".json"])
+                else {**example_cases(), **component_cases()}[(args.example or "cascade") + ".json"])
         case = validate_network(case)
         if args.write_example:
             _write_json(args.write_example, case, overwrite=args.overwrite)
@@ -47,14 +72,7 @@ def main(argv=None):
         guard_outputs(outputs, inputs, overwrite=args.overwrite)
         if args.csv:
             from dynamic_cli import export_trajectory
-            rows = []
-            for point in result["series"]:
-                for identifier, values in point["nodes"].items():
-                    rows.append({"case_id": case["case_id"], "data_kind": "synthetic",
-                                 "classification": case["provenance"]["classification"],
-                                 "source": case["provenance"]["source"],
-                                 "time_s": point["time_s"], "node_id": identifier, **values})
-            export_trajectory({"series": rows}, args.csv)
+            export_trajectory({"series": trajectory_rows(result)}, args.csv)
         if args.out:
             _write_json(args.out, result, overwrite=args.overwrite)
         else:

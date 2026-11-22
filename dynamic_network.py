@@ -17,6 +17,7 @@ from collections.abc import Mapping
 import numpy as np
 import scipy
 from scipy.integrate import solve_ivp
+from scipy.sparse import lil_matrix
 
 SCHEMA_VERSION = "dynamic-network/v1"
 MODEL_VERSION = "1.0.0"
@@ -93,6 +94,17 @@ def _check_fixed_inventories(case, when):
 
 
 def validate_network(config):
+    if isinstance(config, Mapping) and config.get("schema_version") == "dynamic-network/v2":
+        from dynamic_network_components import prepare_network
+        return prepare_network(config)[0]
+    return _validate_network_core(config)
+
+
+def _node_property(case, node, key):
+    return case.get("_materials", {}).get(node["id"], case["fluid"])[key]
+
+
+def _validate_network_core(config, *, materials=None, max_nodes=MAX_NODES, max_edges=MAX_EDGES, allow_self_edges=()):
     """Validate initial conditions, graph, every event and fixed-mass constraints.
 
     Unknown fields are rejected, including unimplemented pressure/level specs.
@@ -101,6 +113,8 @@ def validate_network(config):
     _keys(config, {"schema_version", "case_id", "title", "provenance", "fluid", "nodes",
                    "sources", "edges", "heat_links", "ambient_temperature_K", "simulation", "events"}, "caso")
     c = copy.deepcopy(dict(config))
+    if materials:
+        c["_materials"] = copy.deepcopy(materials)
     if c["schema_version"] != SCHEMA_VERSION:
         raise ValueError(f"schema_version: se requiere {SCHEMA_VERSION}.")
     for key in ("case_id", "title"):
@@ -129,10 +143,10 @@ def validate_network(config):
     if not lo < hi:
         raise ValueError("Intervalo de temperatura vacío.")
     c["ambient_temperature_K"] = _number(c["ambient_temperature_K"], "ambiente", low=lo, high=hi)
-    _items(c["nodes"], "nodes", MAX_NODES, nonempty=True)
+    _items(c["nodes"], "nodes", max_nodes, nonempty=True)
     _items(c["sources"], "sources", MAX_EDGES)
-    _items(c["edges"], "edges", MAX_EDGES)
-    _items(c["heat_links"], "heat_links", MAX_EDGES)
+    _items(c["edges"], "edges", max_edges)
+    _items(c["heat_links"], "heat_links", max_edges)
     ids = set()
     for section in ("nodes", "sources"):
         for item in c[section]:
@@ -175,7 +189,7 @@ def validate_network(config):
                     raise ValueError(f"{identifier}: origen inexistente.")
                 if target is not None and (not isinstance(target, str) or target not in nodes):
                     raise ValueError(f"{identifier}: destino debe ser un inventario o null (salida).")
-                if source == target or (source not in nodes and target is None):
+                if (source == target and identifier not in allow_self_edges) or (source not in nodes and target is None):
                     raise ValueError(f"{identifier}: conexión sin inventario o consigo misma.")
                 item["mass_flow_kg_s"] = _number(item["mass_flow_kg_s"], identifier + ".mass_flow_kg_s", low=0)
             else:
@@ -217,8 +231,8 @@ def validate_network(config):
     # Check every prescribed interval, including an event at the final time.
     check = copy.deepcopy(c)
     try:
-        cp, rho = c["fluid"]["cp_J_kg_K"], c["fluid"]["density_kg_m3"]
         for node in c["nodes"]:
+            cp, rho = (_node_property(c, node, key) for key in ("cp_J_kg_K", "density_kg_m3"))
             envelope = (node["min_mass_kg"] * cp, node["max_mass_kg"] * cp,
                         node["max_mass_kg"] / rho,
                         node["max_mass_kg"] * cp * max(abs(lo - REFERENCE_TEMPERATURE_K), abs(hi - REFERENCE_TEMPERATURE_K)))
@@ -239,8 +253,7 @@ def validate_network(config):
 
 
 def _initial_state(case):
-    cp = case["fluid"]["cp_J_kg_K"]
-    return np.array([[n["initial_mass_kg"], n["initial_mass_kg"] * cp *
+    return np.array([[n["initial_mass_kg"], n["initial_mass_kg"] * _node_property(case, n, "cp_J_kg_K") *
                       (n["initial_temperature_K"] - REFERENCE_TEMPERATURE_K),
                       n["initial_mass_kg"] * n["initial_tracer_mass_fraction"]]
                      for n in case["nodes"]], dtype=float).reshape(-1)
@@ -249,7 +262,8 @@ def _initial_state(case):
 def _physical(case, state):
     inventories = np.asarray(state[:3 * len(case["nodes"])]).reshape((-1, 3))
     masses = inventories[:, 0]
-    capacity = masses * case["fluid"]["cp_J_kg_K"]
+    cp = np.array([_node_property(case, node, "cp_J_kg_K") for node in case["nodes"]])
+    capacity = masses * cp
     if np.any(masses <= 0) or np.any(capacity <= 0) or not np.all(np.isfinite(capacity)):
         raise FloatingPointError("Inventario o capacidad calorífica no representable.")
     temperature = REFERENCE_TEMPERATURE_K + inventories[:, 1] / capacity
@@ -325,13 +339,41 @@ class _WorkLimit(Exception):
 
 
 def simulate_dynamic_network(config, *, cancel=None):
+    if isinstance(config, Mapping) and config.get("schema_version") == "dynamic-network/v2":
+        from dynamic_network_components import simulate_component_network
+        return simulate_component_network(config, cancel=cancel)
+    return _simulate_network_core(validate_network(config), cancel=cancel)
+
+
+def _network_sparsity(case):
+    n = len(case["nodes"])
+    index = {node["id"]: i for i, node in enumerate(case["nodes"])}
+    pattern = lil_matrix((3*n+6, 3*n+6), dtype=int)
+    for i in range(n):
+        pattern[3*i:3*i+3, 3*i:3*i+3] = 1
+    for edge in case["edges"]:
+        if edge["source"] in index and edge["target"] in index:
+            i, j = index[edge["target"]], index[edge["source"]]
+            pattern[3*i:3*i+3, 3*j:3*j+3] = 1
+    for link in case["heat_links"]:
+        i, j = index[link["first"]], index[link["second"]]
+        pattern[3*i:3*i+3, 3*j:3*j+3] = 1
+        pattern[3*j:3*j+3, 3*i:3*i+3] = 1
+    # Internal recirculation cancels from the external ledger. Marking every
+    # state here would defeat sparse finite-difference coloring on large meshes.
+    external_nodes = {index[e["source"]] for e in case["edges"] if e["target"] is None and e["source"] in index}
+    external_nodes.update(i for i, node in enumerate(case["nodes"]) if node["ua_ambient_W_K"] != 0)
+    for i in external_nodes: pattern[3*n:, 3*i:3*i+3] = 1
+    return pattern.tocsr()
+
+
+def _simulate_network_core(c, *, cancel=None):
     """Run BDF/Radau with right-continuous events and global inventory audits.
 
     Output sampling never restarts the integration. Mass bounds are located
     analytically per constant-flow interval; temperature bounds use root events.
     Cancellation/errors retain completed intervals and never report success.
     """
-    c = validate_network(config)
     active = copy.deepcopy(c)
     sim = c["simulation"]
     n = len(c["nodes"])
@@ -383,7 +425,7 @@ def simulate_dynamic_network(config, *, cancel=None):
                 "mass_kg": float(inventories[i, 0]), "energy_J": float(inventories[i, 1]),
                 "tracer_mass_kg": float(inventories[i, 2]), "temperature_K": float(temperature[i]),
                 "tracer_mass_fraction": float(tracer[i]),
-                "volume_m3": float(inventories[i, 0] / c["fluid"]["density_kg_m3"]),
+                "volume_m3": float(inventories[i, 0] / _node_property(c, node, "density_kg_m3")),
                 "net_mass_flow_kg_s": float(rates[i, 0]), "net_energy_rate_W": float(rates[i, 1]),
                 "net_tracer_flow_kg_s": float(rates[i, 2]),
             }
@@ -407,6 +449,7 @@ def simulate_dynamic_network(config, *, cancel=None):
     changes = {event["time_s"]: event["changes"] for event in c["events"]}
     stops = sorted({duration, *changes})
     record(0.0, y)
+    solver_options = {"jac_sparsity": _network_sparsity(c)} if c.get("_materials") else {}
     for end in stops:
         if cancel is not None and cancel():
             status, reason = "cancelled", "user_cancelled"
@@ -430,7 +473,7 @@ def simulate_dynamic_network(config, *, cancel=None):
         try:
             solution = solve_ivp(rhs, (time_now, integration_end), y, method=sim["method"],
                                  rtol=sim["rtol"], atol=sim["atol"], max_step=sim["max_step_s"],
-                                 events=boundaries, dense_output=True)
+                                 events=boundaries, dense_output=True, **solver_options)
             accepted_time = float(solution.t[-1])
             accepted_state = solution.y[:, -1]
             if not np.all(np.isfinite(accepted_state)):

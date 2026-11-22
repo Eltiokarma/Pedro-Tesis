@@ -1,0 +1,162 @@
+{
+  "schema_version": "dynamic-network/v2",
+  "case_id": "coupled-feed",
+  "title": "Intercambiador alimentado y dos depositos de descarga",
+  "provenance": {
+    "classification": "analytical_limit",
+    "source": "Intercambiador de fronteras constantes y depositos de descarga; balances propios.",
+    "notes": "Caso sintetico de verificacion de acoplamiento, no una instalacion industrial."
+  },
+  "fluid": {
+    "cp_J_kg_K": 4180.0,
+    "density_kg_m3": 1000.0
+  },
+  "nodes": [
+    {
+      "id": "HotTank",
+      "initial_mass_kg": 5.0,
+      "min_mass_kg": 1.0,
+      "max_mass_kg": 15.0,
+      "initial_temperature_K": 300.0,
+      "initial_tracer_mass_fraction": 0.0,
+      "inventory_mode": "fixed",
+      "heat_power_W": 0.0,
+      "ua_ambient_W_K": 0.0
+    },
+    {
+      "id": "ColdTank",
+      "initial_mass_kg": 7.0,
+      "min_mass_kg": 1.0,
+      "max_mass_kg": 21.0,
+      "initial_temperature_K": 300.0,
+      "initial_tracer_mass_fraction": 0.0,
+      "inventory_mode": "fixed",
+      "heat_power_W": 0.0,
+      "ua_ambient_W_K": 0.0
+    }
+  ],
+  "sources": [
+    {
+      "id": "HotFeed",
+      "temperature_K": 360.0,
+      "tracer_mass_fraction": 1.0
+    },
+    {
+      "id": "ColdFeed",
+      "temperature_K": 300.0,
+      "tracer_mass_fraction": 0.0
+    }
+  ],
+  "edges": [
+    {
+      "id": "hot_supply",
+      "source": "HotFeed",
+      "target": "HX1.hot_in",
+      "mass_flow_kg_s": 0.2
+    },
+    {
+      "id": "hot_return",
+      "source": "HX1.hot_out",
+      "target": "HotTank",
+      "mass_flow_kg_s": 0.2
+    },
+    {
+      "id": "cold_supply",
+      "source": "ColdFeed",
+      "target": "HX1.cold_in",
+      "mass_flow_kg_s": 0.2
+    },
+    {
+      "id": "cold_return",
+      "source": "HX1.cold_out",
+      "target": "ColdTank",
+      "mass_flow_kg_s": 0.2
+    },
+    {
+      "id": "hot_discharge",
+      "source": "HotTank",
+      "target": null,
+      "mass_flow_kg_s": 0.2
+    },
+    {
+      "id": "cold_discharge",
+      "source": "ColdTank",
+      "target": null,
+      "mass_flow_kg_s": 0.2
+    }
+  ],
+  "heat_links": [],
+  "ambient_temperature_K": 300.0,
+  "simulation": {
+    "duration_s": 300.0,
+    "output_interval_s": 5.0,
+    "max_step_s": 5.0,
+    "rtol": 1e-08,
+    "atol": 1e-10,
+    "method": "BDF",
+    "min_temperature_K": 278.15,
+    "max_temperature_K": 370.0
+  },
+  "events": [],
+  "heat_exchangers": [
+    {
+      "id": "HX1",
+      "cells": 4,
+      "flow_arrangement": "counter_current",
+      "geometry": {
+        "length_m": 2.0,
+        "hot_cross_area_m2": 0.005,
+        "cold_cross_area_m2": 0.005,
+        "hot_heat_area_m2": 1.0,
+        "cold_heat_area_m2": 1.0
+      },
+      "hot_fluid": {
+        "density_kg_m3": 1000.0,
+        "cp_J_kg_K": 4180.0
+      },
+      "cold_fluid": {
+        "density_kg_m3": 1000.0,
+        "cp_J_kg_K": 4180.0
+      },
+      "wall": {
+        "thickness_m": 0.002,
+        "conductivity_W_m_K": 15.0,
+        "density_kg_m3": 7800.0,
+        "cp_J_kg_K": 500.0
+      },
+      "heat_transfer": {
+        "hot_h_W_m2_K": 1000.0,
+        "cold_h_W_m2_K": 1000.0
+      },
+      "initial": {
+        "hot_temperature_K": [
+          300.0,
+          300.0,
+          300.0,
+          300.0
+        ],
+        "cold_temperature_K": [
+          300.0,
+          300.0,
+          300.0,
+          300.0
+        ],
+        "wall_temperature_K": [
+          300.0,
+          300.0,
+          300.0,
+          300.0
+        ]
+      },
+      "provenance": {
+        "classification": "analytical_limit",
+        "source": "Balances propios de volúmenes finitos y referencias analíticas.",
+        "notes": "Parámetros sintéticos; no son datos de planta ni de fabricante."
+      },
+      "initial_tracer_mass_fraction": {
+        "hot": 0.0,
+        "cold": 0.0
+      }
+    }
+  ]
+}

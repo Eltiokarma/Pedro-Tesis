@@ -1,5 +1,9 @@
 # Redes transitorias de inventarios líquidos
 
+La extensión [`dynamic-network/v2`](REDES_CON_INTERCAMBIADOR.md) conecta los
+intercambiadores distribuidos a estas redes y añade un editor de conexiones en
+el menú Simulación. Esta página conserva el contrato y los ejemplos de v1.
+
 ## Qué incorpora este hito
 
 El circuito térmico v3 tenía una topología fija. `dynamic-network/v1` permite

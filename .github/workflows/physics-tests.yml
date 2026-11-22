@@ -68,6 +68,7 @@ jobs:
           python gate_dynamic_thermal_loop.py --out ci-artifacts/dynamic-thermal-loop.json 2>&1 | tee ci-artifacts/dynamic-thermal-loop.log
           python gate_dynamic_network.py --out ci-artifacts/dynamic-network.json 2>&1 | tee ci-artifacts/dynamic-network.log
           python gate_dynamic_heat_exchanger.py --out ci-artifacts/dynamic-heat-exchanger.json 2>&1 | tee ci-artifacts/dynamic-heat-exchanger.log
+          python gate_dynamic_network_components.py --out ci-artifacts/dynamic-network-components.json 2>&1 | tee ci-artifacts/dynamic-network-components.log
 
       - name: Run critical regression checks
         if: ${{ !cancelled() && steps.dependencies.outcome == 'success' }}

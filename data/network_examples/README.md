@@ -22,3 +22,9 @@ Si se modifican parámetros del caso publicado, debe cambiarse su clasificación
 `documented_adaptation` y explicar las diferencias en las notas de procedencia.
 
 [Modelo, límites, ecuaciones y criterios](../../docs/REDES_TRANSITORIAS.md).
+
+Los casos `coupled_recirculation.json` y `coupled_feed.json` usan v2: conectan
+dos tanques y un intercambiador con cuatro puertos. La recirculación incluye
+parada a 40 s y reinicio a 70 s. Son casos sintéticos propios; no contienen
+datos de planta. Se ejecutan desde el editor o con `--example` usando esos nombres
+sin la extensión. [Conexiones y verificación](../../docs/REDES_CON_INTERCAMBIADOR.md).
