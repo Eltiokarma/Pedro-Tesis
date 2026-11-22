@@ -1,0 +1,80 @@
+{
+  "schema_version": "dynamic-heat-exchanger/v1",
+  "case_id": "msl-4.1-geometry-adaptation",
+  "title": "Adaptacion de geometria y pared de MSL 4.1.0 BasicHX",
+  "provenance": {
+    "classification": "documented_adaptation",
+    "source": "https://github.com/modelica/ModelicaStandardLibrary/blob/v4.1.0/Modelica/Fluid/Examples/HeatExchanger.mo",
+    "notes": "Geometria y pared de MSL 4.1.0, blob 3b9eba772017e52a407d0da383a3de6574abe9ac. Hot corresponde al lado 2; cold al lado 1. Propiedades constantes propias: rho=1000 kg/m3 y Cp=4180 J/(kg K). Peliculas constantes 2000/1000 W/(m2 K); MSL usa transferencia local dependiente del flujo en el lado 1. Inicializacion propia a 300 K, caudales impuestos no negativos, escalones y parada propios. Se omiten presion, momento, propiedades variables, inicializacion estacionaria y rampa con inversion de MSL. No se ha ejecutado Modelica ni reproducido su ejemplo completo."
+  },
+  "cells": 20,
+  "flow_arrangement": "counter_current",
+  "geometry": {
+    "length_m": 20.0,
+    "hot_cross_area_m2": 0.00045,
+    "cold_cross_area_m2": 0.00045,
+    "hot_heat_area_m2": 1.5,
+    "cold_heat_area_m2": 1.5
+  },
+  "hot_fluid": {
+    "density_kg_m3": 1000.0,
+    "cp_J_kg_K": 4180.0
+  },
+  "cold_fluid": {
+    "density_kg_m3": 1000.0,
+    "cp_J_kg_K": 4180.0
+  },
+  "wall": {
+    "thickness_m": 0.005,
+    "conductivity_W_m_K": 100.0,
+    "density_kg_m3": 900.0,
+    "cp_J_kg_K": 500.0
+  },
+  "heat_transfer": {
+    "hot_h_W_m2_K": 2000.0,
+    "cold_h_W_m2_K": 1000.0
+  },
+  "initial": {
+    "hot_temperature_K": 300.0,
+    "cold_temperature_K": 300.0,
+    "wall_temperature_K": 300.0
+  },
+  "inputs": {
+    "hot_flow_kg_s": 0.2,
+    "cold_flow_kg_s": 0.2,
+    "hot_inlet_temperature_K": 360.0,
+    "cold_inlet_temperature_K": 300.0
+  },
+  "simulation": {
+    "duration_s": 180.0,
+    "output_interval_s": 2.0,
+    "max_step_s": 2.0,
+    "rtol": 1e-08,
+    "atol": 1e-09,
+    "method": "BDF",
+    "min_temperature_K": 275.0,
+    "max_temperature_K": 370.0
+  },
+  "events": [
+    {
+      "time_s": 20.0,
+      "changes": {
+        "hot_inlet_temperature_K": 340.0
+      }
+    },
+    {
+      "time_s": 60.0,
+      "changes": {
+        "hot_flow_kg_s": 0.0,
+        "cold_flow_kg_s": 0.0
+      }
+    },
+    {
+      "time_s": 90.0,
+      "changes": {
+        "hot_flow_kg_s": 0.2,
+        "cold_flow_kg_s": 0.2
+      }
+    }
+  ]
+}

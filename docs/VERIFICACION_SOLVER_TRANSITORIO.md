@@ -82,3 +82,19 @@ simulador ni validación experimental.
 Este avance cubre la conexión dirigida de inventarios finitos. Aún no implementa
 un ensamblador gráfico de equipos existentes, la inicialización de redes DAE,
 presiones/caudales desconocidos, uniones sin inventario ni transporte distribuido.
+
+### Avance del intercambiador distribuido
+
+[`dynamic-heat-exchanger/v1`](INTERCAMBIADOR_TRANSITORIO.md) incorpora inventarios
+de ambos fluidos y pared por volúmenes finitos, cocorriente/contracorriente,
+eventos, parada/reinicio, API/CLI y perfiles exportables. Se verifican por
+separado la integración temporal contra una exponencial matricial independiente,
+la convergencia espacial estacionaria contra efectividad–NTU y el retardo
+transitorio contra la respuesta Erlang y el límite de flujo pistón.
+
+La geometría y pared del ejemplo MSL 4.1.0 se usan como **adaptación documentada**,
+con propiedades constantes y perturbaciones propias. Se mantienen explícitos
+los pendientes: reproducción de un caso publicado completo y conexión del
+componente al ensamblador de redes. Este avance numérico no cierra todavía el
+hito de intercambiador de la tabla ni representa una comparación ejecutada
+contra Modelica o validación experimental.
