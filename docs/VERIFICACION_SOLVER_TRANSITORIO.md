@@ -64,3 +64,21 @@ verificación independiente.
 Los resultados teóricos y sintéticos deben conservar su etiqueta al exportar o
 generar conjuntos de datos para futuros modelos de IA. Los dominios no modelados
 no se convierten en datos fiables por producir muchas simulaciones.
+
+## Continuación del 22 de noviembre de 2026
+
+Tras la integración del circuito térmico en `0746172`, la primera implementación
+de conexiones reutilizables es [`dynamic-network/v1`](REDES_TRANSITORIAS.md):
+inventarios de mezcla conectados por puertos de masa, energía y trazador, con
+caudales impuestos. Incluye serie, bifurcación/unión y recirculación, comprobación
+de condiciones iniciales y de inventarios fijos en todos los eventos, límites
+terminales, API/CLI, exportaciones y cuatro casos verificables independientemente.
+
+El caso de EnergyPlus reproduce parámetros publicados; los otros tres son límites
+analíticos propios. El gate contrasta BDF/Radau, refinamiento, conservación y las
+trayectorias de temperatura/trazador. No es una comparación ejecutada contra otro
+simulador ni validación experimental.
+
+Este avance cubre la conexión dirigida de inventarios finitos. Aún no implementa
+un ensamblador gráfico de equipos existentes, la inicialización de redes DAE,
+presiones/caudales desconocidos, uniones sin inventario ni transporte distribuido.
