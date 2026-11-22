@@ -1,0 +1,752 @@
+{
+  "schema_version": "dynamic-heat-exchanger-verification/v1",
+  "success": true,
+  "data_kind": "synthetic_theoretical_verification",
+  "comparison_with_external_simulator_executed": false,
+  "complete_published_exchanger_case_reproduced": false,
+  "numpy_version": "2.4.6",
+  "scipy_version": "1.17.1",
+  "checks": [
+    {
+      "name": "time_refinement_co_current",
+      "passed": true,
+      "reference": "independent affine matrix exponential; fixed mesh",
+      "provenance": {
+        "classification": "documented_adaptation",
+        "source": "https://github.com/modelica/ModelicaStandardLibrary/blob/v4.1.0/Modelica/Fluid/Examples/HeatExchanger.mo",
+        "notes": "Geometria y pared de MSL 4.1.0, blob 3b9eba772017e52a407d0da383a3de6574abe9ac. Hot corresponde al lado 2; cold al lado 1. Propiedades constantes propias: rho=1000 kg/m3 y Cp=4180 J/(kg K). Peliculas constantes 2000/1000 W/(m2 K); MSL usa transferencia local dependiente del flujo en el lado 1. Inicializacion propia a 300 K, caudales impuestos no negativos, escalones y parada propios. Se omiten presion, momento, propiedades variables, inicializacion estacionaria y rampa con inversion de MSL. No se ha ejecutado Modelica ni reproducido su ejemplo completo."
+      },
+      "max_profile_error_K": {
+        "BDF": 0.0009079584681330743,
+        "Radau": 8.742473647771476e-05,
+        "refined": 3.110411626039422e-07
+      },
+      "BDF_Radau_difference_K": 0.0009397373669912668,
+      "stop_restart_signals_consistent": true,
+      "tolerances": {
+        "profile_K": 0.005,
+        "refined_profile_K": 5e-06,
+        "energy_relative": 1e-09,
+        "minimum_error_reduction": 5.0
+      },
+      "runs": {
+        "BDF": {
+          "configuration_sha256": "6fb01b5186e46919c330860da674046dc015712653c0c27cf22b76e32b5bb315",
+          "summary": {
+            "success": true,
+            "status": "ok",
+            "stop_reason": "completed",
+            "final_time_s": 180.0,
+            "requested_duration_s": 180.0,
+            "samples": 91,
+            "rhs_evaluations": 400
+          },
+          "audit": {
+            "max_energy_residual_J": 6.752088665962219e-09,
+            "max_energy_residual_relative": 1.8200125142738718e-15,
+            "max_energy_rate_residual_relative": 5.798105929460295e-17,
+            "mass_balance": "fixed inventories; equal inlet/outlet prescribed flow separately on each side",
+            "scope": "both fluids and wall; only boundary enthalpy crosses the model boundary",
+            "evaluated_at": "reported_samples_and_segment_endpoints"
+          },
+          "solver_settings": {
+            "duration_s": 180.0,
+            "output_interval_s": 2.0,
+            "max_step_s": 8.0,
+            "rtol": 1e-06,
+            "atol": 1e-08,
+            "method": "BDF",
+            "min_temperature_K": 275.0,
+            "max_temperature_K": 370.0
+          },
+          "cells": 6
+        },
+        "Radau": {
+          "configuration_sha256": "095a183b76936f681a7da708ec0d29c6b81c96b01b02c88e3fd25459ef59b469",
+          "summary": {
+            "success": true,
+            "status": "ok",
+            "stop_reason": "completed",
+            "final_time_s": 180.0,
+            "requested_duration_s": 180.0,
+            "samples": 91,
+            "rhs_evaluations": 607
+          },
+          "audit": {
+            "max_energy_residual_J": 3.259629011154175e-09,
+            "max_energy_residual_relative": 1.106955852814754e-15,
+            "max_energy_rate_residual_relative": 1.5541434704895436e-16,
+            "mass_balance": "fixed inventories; equal inlet/outlet prescribed flow separately on each side",
+            "scope": "both fluids and wall; only boundary enthalpy crosses the model boundary",
+            "evaluated_at": "reported_samples_and_segment_endpoints"
+          },
+          "solver_settings": {
+            "duration_s": 180.0,
+            "output_interval_s": 2.0,
+            "max_step_s": 8.0,
+            "rtol": 1e-06,
+            "atol": 1e-08,
+            "method": "Radau",
+            "min_temperature_K": 275.0,
+            "max_temperature_K": 370.0
+          },
+          "cells": 6
+        },
+        "refined": {
+          "configuration_sha256": "0637f258949c6572df86dcefc7577007fae02579090b3dbb2f8a5e4f842aabe0",
+          "summary": {
+            "success": true,
+            "status": "ok",
+            "stop_reason": "completed",
+            "final_time_s": 180.0,
+            "requested_duration_s": 180.0,
+            "samples": 91,
+            "rhs_evaluations": 1980
+          },
+          "audit": {
+            "max_energy_residual_J": 9.778887033462524e-09,
+            "max_energy_residual_relative": 1.4691940674914012e-15,
+            "max_energy_rate_residual_relative": 5.199070494503292e-17,
+            "mass_balance": "fixed inventories; equal inlet/outlet prescribed flow separately on each side",
+            "scope": "both fluids and wall; only boundary enthalpy crosses the model boundary",
+            "evaluated_at": "reported_samples_and_segment_endpoints"
+          },
+          "solver_settings": {
+            "duration_s": 180.0,
+            "output_interval_s": 2.0,
+            "max_step_s": 0.25,
+            "rtol": 1e-10,
+            "atol": 1e-12,
+            "method": "BDF",
+            "min_temperature_K": 275.0,
+            "max_temperature_K": 370.0
+          },
+          "cells": 6
+        }
+      }
+    },
+    {
+      "name": "time_refinement_counter_current",
+      "passed": true,
+      "reference": "independent affine matrix exponential; fixed mesh",
+      "provenance": {
+        "classification": "documented_adaptation",
+        "source": "https://github.com/modelica/ModelicaStandardLibrary/blob/v4.1.0/Modelica/Fluid/Examples/HeatExchanger.mo",
+        "notes": "Geometria y pared de MSL 4.1.0, blob 3b9eba772017e52a407d0da383a3de6574abe9ac. Hot corresponde al lado 2; cold al lado 1. Propiedades constantes propias: rho=1000 kg/m3 y Cp=4180 J/(kg K). Peliculas constantes 2000/1000 W/(m2 K); MSL usa transferencia local dependiente del flujo en el lado 1. Inicializacion propia a 300 K, caudales impuestos no negativos, escalones y parada propios. Se omiten presion, momento, propiedades variables, inicializacion estacionaria y rampa con inversion de MSL. No se ha ejecutado Modelica ni reproducido su ejemplo completo."
+      },
+      "max_profile_error_K": {
+        "BDF": 0.001357921131045714,
+        "Radau": 7.387339593378783e-05,
+        "refined": 3.0369562864507316e-07
+      },
+      "BDF_Radau_difference_K": 0.001308851671467437,
+      "stop_restart_signals_consistent": true,
+      "tolerances": {
+        "profile_K": 0.005,
+        "refined_profile_K": 5e-06,
+        "energy_relative": 1e-09,
+        "minimum_error_reduction": 5.0
+      },
+      "runs": {
+        "BDF": {
+          "configuration_sha256": "62fdd4a08d4646e2cc720d86cbcfdffc9b5f8abc68d41cf051585e6bfb13fac9",
+          "summary": {
+            "success": true,
+            "status": "ok",
+            "stop_reason": "completed",
+            "final_time_s": 180.0,
+            "requested_duration_s": 180.0,
+            "samples": 91,
+            "rhs_evaluations": 407
+          },
+          "audit": {
+            "max_energy_residual_J": 1.30385160446167e-08,
+            "max_energy_residual_relative": 1.1984420566678456e-15,
+            "max_energy_rate_residual_relative": 5.175028475206096e-17,
+            "mass_balance": "fixed inventories; equal inlet/outlet prescribed flow separately on each side",
+            "scope": "both fluids and wall; only boundary enthalpy crosses the model boundary",
+            "evaluated_at": "reported_samples_and_segment_endpoints"
+          },
+          "solver_settings": {
+            "duration_s": 180.0,
+            "output_interval_s": 2.0,
+            "max_step_s": 8.0,
+            "rtol": 1e-06,
+            "atol": 1e-08,
+            "method": "BDF",
+            "min_temperature_K": 275.0,
+            "max_temperature_K": 370.0
+          },
+          "cells": 6
+        },
+        "Radau": {
+          "configuration_sha256": "b6a68a68f54cda529a7e8a465218c624ac4dbdf3be4abafbb52fcc91cd5629cc",
+          "summary": {
+            "success": true,
+            "status": "ok",
+            "stop_reason": "completed",
+            "final_time_s": 180.0,
+            "requested_duration_s": 180.0,
+            "samples": 91,
+            "rhs_evaluations": 577
+          },
+          "audit": {
+            "max_energy_residual_J": 3.958120942115784e-09,
+            "max_energy_residual_relative": 7.307626004281455e-16,
+            "max_energy_rate_residual_relative": 5.175028349792774e-17,
+            "mass_balance": "fixed inventories; equal inlet/outlet prescribed flow separately on each side",
+            "scope": "both fluids and wall; only boundary enthalpy crosses the model boundary",
+            "evaluated_at": "reported_samples_and_segment_endpoints"
+          },
+          "solver_settings": {
+            "duration_s": 180.0,
+            "output_interval_s": 2.0,
+            "max_step_s": 8.0,
+            "rtol": 1e-06,
+            "atol": 1e-08,
+            "method": "Radau",
+            "min_temperature_K": 275.0,
+            "max_temperature_K": 370.0
+          },
+          "cells": 6
+        },
+        "refined": {
+          "configuration_sha256": "ba46d65dcf31591bd0b064c12be291aab53da982e222f142b3323d30bb06b6ea",
+          "summary": {
+            "success": true,
+            "status": "ok",
+            "stop_reason": "completed",
+            "final_time_s": 180.0,
+            "requested_duration_s": 180.0,
+            "samples": 91,
+            "rhs_evaluations": 1984
+          },
+          "audit": {
+            "max_energy_residual_J": 2.537854015827179e-08,
+            "max_energy_residual_relative": 1.996516491426443e-15,
+            "max_energy_rate_residual_relative": 9.934974811342531e-17,
+            "mass_balance": "fixed inventories; equal inlet/outlet prescribed flow separately on each side",
+            "scope": "both fluids and wall; only boundary enthalpy crosses the model boundary",
+            "evaluated_at": "reported_samples_and_segment_endpoints"
+          },
+          "solver_settings": {
+            "duration_s": 180.0,
+            "output_interval_s": 2.0,
+            "max_step_s": 0.25,
+            "rtol": 1e-10,
+            "atol": 1e-12,
+            "method": "BDF",
+            "min_temperature_K": 275.0,
+            "max_temperature_K": 370.0
+          },
+          "cells": 6
+        }
+      }
+    },
+    {
+      "name": "space_refinement_co_current",
+      "passed": true,
+      "reference": "continuum effectiveness-NTU including full wall resistance",
+      "continuum_solution": {
+        "hot_outlet_temperature_K": 339.7745874307573,
+        "cold_outlet_temperature_K": 320.2254125692427,
+        "heat_W": 16908.444907886875,
+        "effectiveness": 0.33709020948737783,
+        "NTU": 0.5607057416267942,
+        "UA_W_K": 468.75
+      },
+      "observed_orders": [
+        0.9630098879118665,
+        0.9810035189804123,
+        0.9903702669769874,
+        0.9951514441488909
+      ],
+      "runs": [
+        {
+          "configuration_sha256": "553330cb326961ded8fdfd6ed9b2dbee6a9214b6cf7dfa3eb282eab8588488b0",
+          "summary": {
+            "success": true,
+            "status": "ok",
+            "stop_reason": "completed",
+            "final_time_s": 1500.0,
+            "requested_duration_s": 1500.0,
+            "samples": 16,
+            "rhs_evaluations": 749
+          },
+          "audit": {
+            "max_energy_residual_J": 1.3504177331924438e-08,
+            "max_energy_residual_relative": 5.146766813325376e-16,
+            "max_energy_rate_residual_relative": 1.0842847421066377e-17,
+            "mass_balance": "fixed inventories; equal inlet/outlet prescribed flow separately on each side",
+            "scope": "both fluids and wall; only boundary enthalpy crosses the model boundary",
+            "evaluated_at": "reported_samples_and_segment_endpoints"
+          },
+          "solver_settings": {
+            "duration_s": 1500.0,
+            "output_interval_s": 100.0,
+            "max_step_s": 10.0,
+            "rtol": 1e-09,
+            "atol": 1e-10,
+            "method": "BDF",
+            "min_temperature_K": 275.0,
+            "max_temperature_K": 370.0
+          },
+          "cells": 8,
+          "outlet_error_K": 0.7291720094739276,
+          "final_100s_drift_K": 0.0
+        },
+        {
+          "configuration_sha256": "8340d71829502dfd3fcef64a1f435b62e061f7a3b0600cdf9243cf9a517c1d60",
+          "summary": {
+            "success": true,
+            "status": "ok",
+            "stop_reason": "completed",
+            "final_time_s": 1500.0,
+            "requested_duration_s": 1500.0,
+            "samples": 16,
+            "rhs_evaluations": 825
+          },
+          "audit": {
+            "max_energy_residual_J": 2.7939677238464355e-09,
+            "max_energy_residual_relative": 1.7171092992290486e-16,
+            "max_energy_rate_residual_relative": 1.0764304006253532e-17,
+            "mass_balance": "fixed inventories; equal inlet/outlet prescribed flow separately on each side",
+            "scope": "both fluids and wall; only boundary enthalpy crosses the model boundary",
+            "evaluated_at": "reported_samples_and_segment_endpoints"
+          },
+          "solver_settings": {
+            "duration_s": 1500.0,
+            "output_interval_s": 100.0,
+            "max_step_s": 10.0,
+            "rtol": 1e-09,
+            "atol": 1e-10,
+            "method": "BDF",
+            "min_temperature_K": 275.0,
+            "max_temperature_K": 370.0
+          },
+          "cells": 16,
+          "outlet_error_K": 0.37405470925909867,
+          "final_100s_drift_K": 5.684341886080802e-14
+        },
+        {
+          "configuration_sha256": "faed23d1e77ef8f86fda931a487a5dde395b40286722f34fa019c3ea6c3c8506",
+          "summary": {
+            "success": true,
+            "status": "ok",
+            "stop_reason": "completed",
+            "final_time_s": 1500.0,
+            "requested_duration_s": 1500.0,
+            "samples": 16,
+            "rhs_evaluations": 953
+          },
+          "audit": {
+            "max_energy_residual_J": 4.190951585769653e-09,
+            "max_energy_residual_relative": 2.5760195242545504e-16,
+            "max_energy_rate_residual_relative": 1.1960337771837992e-17,
+            "mass_balance": "fixed inventories; equal inlet/outlet prescribed flow separately on each side",
+            "scope": "both fluids and wall; only boundary enthalpy crosses the model boundary",
+            "evaluated_at": "reported_samples_and_segment_endpoints"
+          },
+          "solver_settings": {
+            "duration_s": 1500.0,
+            "output_interval_s": 100.0,
+            "max_step_s": 10.0,
+            "rtol": 1e-09,
+            "atol": 1e-10,
+            "method": "BDF",
+            "min_temperature_K": 275.0,
+            "max_temperature_K": 370.0
+          },
+          "cells": 32,
+          "outlet_error_K": 0.1895062953580009,
+          "final_100s_drift_K": 5.684341886080802e-14
+        },
+        {
+          "configuration_sha256": "82e7423d823bc9092d6fa67701b824366e5a00eb737a8c45f99ec14d4d00088c",
+          "summary": {
+            "success": true,
+            "status": "ok",
+            "stop_reason": "completed",
+            "final_time_s": 1500.0,
+            "requested_duration_s": 1500.0,
+            "samples": 16,
+            "rhs_evaluations": 1119
+          },
+          "audit": {
+            "max_energy_residual_J": 9.313225746154785e-10,
+            "max_energy_residual_relative": 5.724597114539114e-17,
+            "max_energy_rate_residual_relative": 1.4352405312606058e-17,
+            "mass_balance": "fixed inventories; equal inlet/outlet prescribed flow separately on each side",
+            "scope": "both fluids and wall; only boundary enthalpy crosses the model boundary",
+            "evaluated_at": "reported_samples_and_segment_endpoints"
+          },
+          "solver_settings": {
+            "duration_s": 1500.0,
+            "output_interval_s": 100.0,
+            "max_step_s": 10.0,
+            "rtol": 1e-09,
+            "atol": 1e-10,
+            "method": "BDF",
+            "min_temperature_K": 275.0,
+            "max_temperature_K": 370.0
+          },
+          "cells": 64,
+          "outlet_error_K": 0.09538772358627057,
+          "final_100s_drift_K": 5.684341886080802e-14
+        },
+        {
+          "configuration_sha256": "02b3609be3dafc48318f1f1d88a5f795b334ee971b2982735eb6476891260c74",
+          "summary": {
+            "success": true,
+            "status": "ok",
+            "stop_reason": "completed",
+            "final_time_s": 1500.0,
+            "requested_duration_s": 1500.0,
+            "samples": 16,
+            "rhs_evaluations": 1343
+          },
+          "audit": {
+            "max_energy_residual_J": 2.7939677238464355e-09,
+            "max_energy_residual_relative": 1.7173860889696526e-16,
+            "max_energy_rate_residual_relative": 1.1960337760517218e-17,
+            "mass_balance": "fixed inventories; equal inlet/outlet prescribed flow separately on each side",
+            "scope": "both fluids and wall; only boundary enthalpy crosses the model boundary",
+            "evaluated_at": "reported_samples_and_segment_endpoints"
+          },
+          "solver_settings": {
+            "duration_s": 1500.0,
+            "output_interval_s": 100.0,
+            "max_step_s": 10.0,
+            "rtol": 1e-09,
+            "atol": 1e-10,
+            "method": "BDF",
+            "min_temperature_K": 275.0,
+            "max_temperature_K": 370.0
+          },
+          "cells": 128,
+          "outlet_error_K": 0.04785441919705136,
+          "final_100s_drift_K": 5.684341886080802e-14
+        }
+      ],
+      "tolerances": {
+        "finest_outlet_K": 0.2,
+        "final_100s_drift_K": 1e-05,
+        "last_order_min": 0.8,
+        "last_order_max": 1.2,
+        "energy_relative": 1e-09
+      }
+    },
+    {
+      "name": "space_refinement_counter_current",
+      "passed": true,
+      "reference": "continuum effectiveness-NTU including full wall resistance",
+      "continuum_solution": {
+        "hot_outlet_temperature_K": 338.444146388197,
+        "cold_outlet_temperature_K": 321.555853611803,
+        "heat_W": 18020.69361946733,
+        "effectiveness": 0.3592642268633838,
+        "NTU": 0.5607057416267942,
+        "UA_W_K": 468.75
+      },
+      "observed_orders": [
+        0.9686599945916743,
+        0.9840709414816117,
+        0.9919690281940491,
+        0.9959676870529371
+      ],
+      "runs": [
+        {
+          "configuration_sha256": "60a16a47a1d465b540496037b03f7955251d4fb7eb0017c604d37134d3d9e60b",
+          "summary": {
+            "success": true,
+            "status": "ok",
+            "stop_reason": "completed",
+            "final_time_s": 1500.0,
+            "requested_duration_s": 1500.0,
+            "samples": 16,
+            "rhs_evaluations": 758
+          },
+          "audit": {
+            "max_energy_residual_J": 8.847564458847046e-09,
+            "max_energy_residual_relative": 2.558704644663557e-16,
+            "max_energy_rate_residual_relative": 1.6744472864697084e-17,
+            "mass_balance": "fixed inventories; equal inlet/outlet prescribed flow separately on each side",
+            "scope": "both fluids and wall; only boundary enthalpy crosses the model boundary",
+            "evaluated_at": "reported_samples_and_segment_endpoints"
+          },
+          "solver_settings": {
+            "duration_s": 1500.0,
+            "output_interval_s": 100.0,
+            "max_step_s": 10.0,
+            "rtol": 1e-09,
+            "atol": 1e-10,
+            "method": "BDF",
+            "min_temperature_K": 275.0,
+            "max_temperature_K": 370.0
+          },
+          "cells": 8,
+          "outlet_error_K": 0.92642688065024,
+          "final_100s_drift_K": 0.0
+        },
+        {
+          "configuration_sha256": "653ec73da91ef896c7f485b55394c73659370f02503b8bf5c6dffbe8bf3e63a4",
+          "summary": {
+            "success": true,
+            "status": "ok",
+            "stop_reason": "completed",
+            "final_time_s": 1500.0,
+            "requested_duration_s": 1500.0,
+            "samples": 16,
+            "rhs_evaluations": 847
+          },
+          "audit": {
+            "max_energy_residual_J": 2.0489096641540527e-08,
+            "max_energy_residual_relative": 1.70849877207881e-16,
+            "max_energy_rate_residual_relative": 1.435240531259831e-17,
+            "mass_balance": "fixed inventories; equal inlet/outlet prescribed flow separately on each side",
+            "scope": "both fluids and wall; only boundary enthalpy crosses the model boundary",
+            "evaluated_at": "reported_samples_and_segment_endpoints"
+          },
+          "solver_settings": {
+            "duration_s": 1500.0,
+            "output_interval_s": 100.0,
+            "max_step_s": 10.0,
+            "rtol": 1e-09,
+            "atol": 1e-10,
+            "method": "BDF",
+            "min_temperature_K": 275.0,
+            "max_temperature_K": 370.0
+          },
+          "cells": 16,
+          "outlet_error_K": 0.47338602609693226,
+          "final_100s_drift_K": 0.0
+        },
+        {
+          "configuration_sha256": "e1d2ef3152b947bdcdfdb9ef32ff119fd5b33666028d0ed7566b1d667daaa51a",
+          "summary": {
+            "success": true,
+            "status": "ok",
+            "stop_reason": "completed",
+            "final_time_s": 1500.0,
+            "requested_duration_s": 1500.0,
+            "samples": 16,
+            "rhs_evaluations": 992
+          },
+          "audit": {
+            "max_energy_residual_J": 8.381903171539307e-09,
+            "max_energy_residual_relative": 8.548990652579634e-17,
+            "max_energy_rate_residual_relative": 1.31563715368397e-17,
+            "mass_balance": "fixed inventories; equal inlet/outlet prescribed flow separately on each side",
+            "scope": "both fluids and wall; only boundary enthalpy crosses the model boundary",
+            "evaluated_at": "reported_samples_and_segment_endpoints"
+          },
+          "solver_settings": {
+            "duration_s": 1500.0,
+            "output_interval_s": 100.0,
+            "max_step_s": 10.0,
+            "rtol": 1e-09,
+            "atol": 1e-10,
+            "method": "BDF",
+            "min_temperature_K": 275.0,
+            "max_temperature_K": 370.0
+          },
+          "cells": 32,
+          "outlet_error_K": 0.23932086427953436,
+          "final_100s_drift_K": 0.0
+        },
+        {
+          "configuration_sha256": "6479b70fb32ac60222d211d8d7d52a724be70464ba4299f76e930b35999ca8ac",
+          "summary": {
+            "success": true,
+            "status": "ok",
+            "stop_reason": "completed",
+            "final_time_s": 1500.0,
+            "requested_duration_s": 1500.0,
+            "samples": 16,
+            "rhs_evaluations": 1179
+          },
+          "audit": {
+            "max_energy_residual_J": 6.51925802230835e-09,
+            "max_energy_residual_relative": 3.1358406391385205e-16,
+            "max_energy_rate_residual_relative": 1.674452888403322e-17,
+            "mass_balance": "fixed inventories; equal inlet/outlet prescribed flow separately on each side",
+            "scope": "both fluids and wall; only boundary enthalpy crosses the model boundary",
+            "evaluated_at": "reported_samples_and_segment_endpoints"
+          },
+          "solver_settings": {
+            "duration_s": 1500.0,
+            "output_interval_s": 100.0,
+            "max_step_s": 10.0,
+            "rtol": 1e-09,
+            "atol": 1e-10,
+            "method": "BDF",
+            "min_temperature_K": 275.0,
+            "max_temperature_K": 370.0
+          },
+          "cells": 64,
+          "outlet_error_K": 0.12032839677789298,
+          "final_100s_drift_K": 0.0
+        },
+        {
+          "configuration_sha256": "1b70997a752e936b3e4a4ba494e0d5e53afae79ab029a94716b5eb76ba4645f8",
+          "summary": {
+            "success": true,
+            "status": "ok",
+            "stop_reason": "completed",
+            "final_time_s": 1500.0,
+            "requested_duration_s": 1500.0,
+            "samples": 16,
+            "rhs_evaluations": 1429
+          },
+          "audit": {
+            "max_energy_residual_J": 5.122274160385132e-09,
+            "max_energy_residual_relative": 2.566197758117175e-16,
+            "max_energy_rate_residual_relative": 1.794050664074687e-17,
+            "mass_balance": "fixed inventories; equal inlet/outlet prescribed flow separately on each side",
+            "scope": "both fluids and wall; only boundary enthalpy crosses the model boundary",
+            "evaluated_at": "reported_samples_and_segment_endpoints"
+          },
+          "solver_settings": {
+            "duration_s": 1500.0,
+            "output_interval_s": 100.0,
+            "max_step_s": 10.0,
+            "rtol": 1e-09,
+            "atol": 1e-10,
+            "method": "BDF",
+            "min_temperature_K": 275.0,
+            "max_temperature_K": 370.0
+          },
+          "cells": 128,
+          "outlet_error_K": 0.06033259172113503,
+          "final_100s_drift_K": 5.684341886080802e-14
+        }
+      ],
+      "tolerances": {
+        "finest_outlet_K": 0.2,
+        "final_100s_drift_K": 1e-05,
+        "last_order_min": 0.8,
+        "last_order_max": 1.2,
+        "energy_relative": 1e-09
+      }
+    },
+    {
+      "name": "transient_residence_space_refinement",
+      "passed": true,
+      "reference": "Erlang finite-cell response and continuum plug-flow delay",
+      "interpretation": "Upwind numerical spreading shrinks with mesh; a step front has L1 order about 1/2.",
+      "tolerances": {
+        "erlang_outlet_K": 0.0002,
+        "finest_normalized_L1": 0.11,
+        "L1_quadrature": 0.001,
+        "energy_relative": 1e-09
+      },
+      "runs": [
+        {
+          "configuration_sha256": "2b69ae15884c7fd0e3288123cea2be3b1ec86bc3f4adc0659ca5182627f0db0c",
+          "summary": {
+            "success": true,
+            "status": "ok",
+            "stop_reason": "completed",
+            "final_time_s": 150.0,
+            "requested_duration_s": 150.0,
+            "samples": 301,
+            "rhs_evaluations": 275
+          },
+          "audit": {
+            "max_energy_residual_J": 6.05359673500061e-09,
+            "max_energy_residual_relative": 1.2333689341060446e-15,
+            "max_energy_rate_residual_relative": 5.199100067126478e-17,
+            "mass_balance": "fixed inventories; equal inlet/outlet prescribed flow separately on each side",
+            "scope": "both fluids and wall; only boundary enthalpy crosses the model boundary",
+            "evaluated_at": "reported_samples_and_segment_endpoints"
+          },
+          "solver_settings": {
+            "duration_s": 150.0,
+            "output_interval_s": 0.5,
+            "max_step_s": 2.0,
+            "rtol": 1e-08,
+            "atol": 1e-09,
+            "method": "BDF",
+            "min_temperature_K": 275.0,
+            "max_temperature_K": 370.0
+          },
+          "cells": 4,
+          "normalized_L1_delay_error": 0.3900213696704441,
+          "analytical_finite_horizon_L1": 0.39000861256863667,
+          "L1_quadrature_error": 1.275710180742573e-05,
+          "erlang_outlet_error_K": 1.4509288064346038e-05
+        },
+        {
+          "configuration_sha256": "b53222eaa688bd1254c16f74c45800350cf571788036d4347782dcdcd2d29dbd",
+          "summary": {
+            "success": true,
+            "status": "ok",
+            "stop_reason": "completed",
+            "final_time_s": 150.0,
+            "requested_duration_s": 150.0,
+            "samples": 301,
+            "rhs_evaluations": 403
+          },
+          "audit": {
+            "max_energy_residual_J": 5.122274160385132e-09,
+            "max_energy_residual_relative": 1.138494400713272e-15,
+            "max_energy_rate_residual_relative": 5.1991030953160794e-17,
+            "mass_balance": "fixed inventories; equal inlet/outlet prescribed flow separately on each side",
+            "scope": "both fluids and wall; only boundary enthalpy crosses the model boundary",
+            "evaluated_at": "reported_samples_and_segment_endpoints"
+          },
+          "solver_settings": {
+            "duration_s": 150.0,
+            "output_interval_s": 0.5,
+            "max_step_s": 2.0,
+            "rtol": 1e-08,
+            "atol": 1e-09,
+            "method": "BDF",
+            "min_temperature_K": 275.0,
+            "max_temperature_K": 370.0
+          },
+          "cells": 16,
+          "normalized_L1_delay_error": 0.19846164974780278,
+          "analytical_finite_horizon_L1": 0.19843506094653682,
+          "L1_quadrature_error": 2.65888012659643e-05,
+          "erlang_outlet_error_K": 4.710575672106643e-05
+        },
+        {
+          "configuration_sha256": "7e26683bb2c566159a1febef181555b286de3cc9e09a1daa2b25325b227c69c6",
+          "summary": {
+            "success": true,
+            "status": "ok",
+            "stop_reason": "completed",
+            "final_time_s": 150.0,
+            "requested_duration_s": 150.0,
+            "samples": 301,
+            "rhs_evaluations": 636
+          },
+          "audit": {
+            "max_energy_residual_J": 2.3283064365386963e-09,
+            "max_energy_residual_relative": 5.218099336602496e-16,
+            "max_energy_rate_residual_relative": 5.1991030953160794e-17,
+            "mass_balance": "fixed inventories; equal inlet/outlet prescribed flow separately on each side",
+            "scope": "both fluids and wall; only boundary enthalpy crosses the model boundary",
+            "evaluated_at": "reported_samples_and_segment_endpoints"
+          },
+          "solver_settings": {
+            "duration_s": 150.0,
+            "output_interval_s": 0.5,
+            "max_step_s": 2.0,
+            "rtol": 1e-08,
+            "atol": 1e-09,
+            "method": "BDF",
+            "min_temperature_K": 275.0,
+            "max_temperature_K": 370.0
+          },
+          "cells": 64,
+          "normalized_L1_delay_error": 0.09965921853173804,
+          "analytical_finite_horizon_L1": 0.09960579164237869,
+          "L1_quadrature_error": 5.3426889359345364e-05,
+          "erlang_outlet_error_K": 0.00013117954802055465
+        }
+      ]
+    }
+  ]
+}

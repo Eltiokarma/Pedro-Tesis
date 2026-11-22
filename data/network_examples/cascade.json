@@ -1,0 +1,95 @@
+{
+  "schema_version": "dynamic-network/v1",
+  "case_id": "analytical-cascade",
+  "title": "Tres tanques en serie: residencia y trazador",
+  "provenance": {
+    "classification": "analytical_limit",
+    "source": "Balances de mezcla perfecta; solución analítica propia documentada en docs/REDES_TRANSITORIAS.md.",
+    "notes": "Parámetros propios para verificación; no son registros de planta ni resultados de otro simulador."
+  },
+  "fluid": {
+    "cp_J_kg_K": 4180.0,
+    "density_kg_m3": 998.0
+  },
+  "nodes": [
+    {
+      "id": "A",
+      "initial_mass_kg": 100.0,
+      "min_mass_kg": 1.0,
+      "max_mass_kg": 300.0,
+      "initial_temperature_K": 298.15,
+      "initial_tracer_mass_fraction": 0.0,
+      "inventory_mode": "fixed",
+      "heat_power_W": 0.0,
+      "ua_ambient_W_K": 0.0
+    },
+    {
+      "id": "B",
+      "initial_mass_kg": 100.0,
+      "min_mass_kg": 1.0,
+      "max_mass_kg": 300.0,
+      "initial_temperature_K": 298.15,
+      "initial_tracer_mass_fraction": 0.0,
+      "inventory_mode": "fixed",
+      "heat_power_W": 0.0,
+      "ua_ambient_W_K": 0.0
+    },
+    {
+      "id": "C",
+      "initial_mass_kg": 100.0,
+      "min_mass_kg": 1.0,
+      "max_mass_kg": 300.0,
+      "initial_temperature_K": 298.15,
+      "initial_tracer_mass_fraction": 0.0,
+      "inventory_mode": "fixed",
+      "heat_power_W": 0.0,
+      "ua_ambient_W_K": 0.0
+    }
+  ],
+  "sources": [
+    {
+      "id": "feed",
+      "temperature_K": 338.15,
+      "tracer_mass_fraction": 1.0
+    }
+  ],
+  "edges": [
+    {
+      "id": "feed_A",
+      "source": "feed",
+      "target": "A",
+      "mass_flow_kg_s": 1.0
+    },
+    {
+      "id": "A_B",
+      "source": "A",
+      "target": "B",
+      "mass_flow_kg_s": 1.0
+    },
+    {
+      "id": "B_C",
+      "source": "B",
+      "target": "C",
+      "mass_flow_kg_s": 1.0
+    },
+    {
+      "id": "C_out",
+      "source": "C",
+      "target": null,
+      "mass_flow_kg_s": 1.0
+    }
+  ],
+  "heat_links": [],
+  "ambient_temperature_K": 298.15,
+  "simulation": {
+    "duration_s": 600.0,
+    "output_interval_s": 10.0,
+    "max_step_s": 10.0,
+    "rtol": 1e-08,
+    "atol": 1e-10,
+    "method": "BDF",
+    "min_temperature_K": 278.15,
+    "max_temperature_K": 363.15
+  },
+  "events": []
+}

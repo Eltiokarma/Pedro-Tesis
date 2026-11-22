@@ -64,3 +64,40 @@ verificación independiente.
 Los resultados teóricos y sintéticos deben conservar su etiqueta al exportar o
 generar conjuntos de datos para futuros modelos de IA. Los dominios no modelados
 no se convierten en datos fiables por producir muchas simulaciones.
+
+## Continuación del 22 de noviembre de 2026
+
+Tras la integración del circuito térmico en `0746172`, la primera implementación
+de conexiones reutilizables es [`dynamic-network/v1`](REDES_TRANSITORIAS.md):
+inventarios de mezcla conectados por puertos de masa, energía y trazador, con
+caudales impuestos. Incluye serie, bifurcación/unión y recirculación, comprobación
+de condiciones iniciales y de inventarios fijos en todos los eventos, límites
+terminales, API/CLI, exportaciones y cuatro casos verificables independientemente.
+
+El caso de EnergyPlus reproduce parámetros publicados; los otros tres son límites
+analíticos propios. El gate contrasta BDF/Radau, refinamiento, conservación y las
+trayectorias de temperatura/trazador. No es una comparación ejecutada contra otro
+simulador ni validación experimental.
+
+Este avance cubre la conexión dirigida de inventarios finitos. Aún no implementa
+un ensamblador gráfico de equipos existentes, la inicialización de redes DAE,
+presiones/caudales desconocidos, uniones sin inventario ni transporte distribuido.
+
+### Avance del intercambiador distribuido
+
+[`dynamic-heat-exchanger/v1`](INTERCAMBIADOR_TRANSITORIO.md) incorpora inventarios
+de ambos fluidos y pared por volúmenes finitos, cocorriente/contracorriente,
+eventos, parada/reinicio, API/CLI y perfiles exportables. Se verifican por
+separado la integración temporal contra una exponencial matricial independiente,
+la convergencia espacial estacionaria contra efectividad–NTU y el retardo
+transitorio contra la respuesta Erlang y el límite de flujo pistón.
+
+La geometría y pared del ejemplo MSL 4.1.0 se usan como **adaptación documentada**,
+con propiedades constantes y perturbaciones propias. Se mantienen explícitos
+el pendiente de reproducción de un caso publicado completo. La conexión del
+componente al ensamblador se incorpora en
+[`dynamic-network/v2`](REDES_CON_INTERCAMBIADOR.md), con integración simultánea,
+editor de conexiones, perfiles y balance que incluye la masa sólida de la pared.
+Este avance numérico no cierra todavía el
+hito de intercambiador de la tabla ni representa una comparación ejecutada
+contra Modelica o validación experimental.

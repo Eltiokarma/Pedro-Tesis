@@ -1,0 +1,336 @@
+{
+  "schema_version": "dynamic-network-components-verification/v1",
+  "success": true,
+  "data_kind": "synthetic_theoretical_verification",
+  "comparison_with_external_simulator_executed": false,
+  "checks": [
+    {
+      "name": "closed_coupling_co_current",
+      "passed": true,
+      "reference": "independent matrix exponential of both tanks, both fluids and solid wall",
+      "tolerances": {
+        "profile_K": 0.0002,
+        "conservation_relative": 1e-09,
+        "refinement_reduction": 5.0
+      },
+      "runs": [
+        {
+          "method": "BDF",
+          "profile_error_K": 3.277740972862375e-06,
+          "summary": {
+            "success": true,
+            "status": "ok",
+            "stop_reason": "completed",
+            "final_time_s": 300.0,
+            "requested_duration_s": 300.0,
+            "samples": 61,
+            "rhs_evaluations": 561
+          },
+          "audit": {
+            "max_residual": {
+              "mass_kg": 0.0,
+              "energy_J": 5.587935447692871e-09,
+              "tracer_kg": 0.0
+            },
+            "max_relative_residual": {
+              "mass": 0.0,
+              "energy": 4.3588524008231575e-16,
+              "tracer": 0.0
+            },
+            "max_relative_rate_residual": {
+              "mass": 0.0,
+              "energy": 2.8437177522566823e-17,
+              "tracer": 0.0
+            },
+            "min_tracer_mass_fraction": 0.0,
+            "max_tracer_mass_fraction": 1.0,
+            "scope": "all tanks, exchanger fluid cells and real solid wall masses; external boundary ledgers only",
+            "evaluated_at": "reported_samples_and_segment_endpoints"
+          },
+          "configuration_sha256": "ee2015228ed91960b33ea3501e882a80e911d924df739eebd51e99dd3558d94d",
+          "solver_settings": {
+            "duration_s": 300.0,
+            "output_interval_s": 5.0,
+            "max_step_s": 5.0,
+            "rtol": 1e-08,
+            "atol": 1e-10,
+            "method": "BDF",
+            "min_temperature_K": 278.15,
+            "max_temperature_K": 370.0
+          }
+        },
+        {
+          "method": "Radau",
+          "profile_error_K": 1.6709782357793301e-07,
+          "summary": {
+            "success": true,
+            "status": "ok",
+            "stop_reason": "completed",
+            "final_time_s": 300.0,
+            "requested_duration_s": 300.0,
+            "samples": 61,
+            "rhs_evaluations": 1429
+          },
+          "audit": {
+            "max_residual": {
+              "mass_kg": 0.0,
+              "energy_J": 1.1175870895385742e-08,
+              "tracer_kg": 0.0
+            },
+            "max_relative_residual": {
+              "mass": 0.0,
+              "energy": 8.717704801646315e-16,
+              "tracer": 0.0
+            },
+            "max_relative_rate_residual": {
+              "mass": 0.0,
+              "energy": 3.994636406092817e-17,
+              "tracer": 0.0
+            },
+            "min_tracer_mass_fraction": 0.0,
+            "max_tracer_mass_fraction": 1.0,
+            "scope": "all tanks, exchanger fluid cells and real solid wall masses; external boundary ledgers only",
+            "evaluated_at": "reported_samples_and_segment_endpoints"
+          },
+          "configuration_sha256": "35793d8d6c17818098e33bd2d33b0902175e35ecc76c028672468cb517acd9d3",
+          "solver_settings": {
+            "duration_s": 300.0,
+            "output_interval_s": 5.0,
+            "max_step_s": 5.0,
+            "rtol": 1e-08,
+            "atol": 1e-10,
+            "method": "Radau",
+            "min_temperature_K": 278.15,
+            "max_temperature_K": 370.0
+          }
+        },
+        {
+          "method": "refined",
+          "profile_error_K": 7.859409834054532e-08,
+          "summary": {
+            "success": true,
+            "status": "ok",
+            "stop_reason": "completed",
+            "final_time_s": 300.0,
+            "requested_duration_s": 300.0,
+            "samples": 61,
+            "rhs_evaluations": 1169
+          },
+          "audit": {
+            "max_residual": {
+              "mass_kg": 0.0,
+              "energy_J": 1.1175870895385742e-08,
+              "tracer_kg": 0.0
+            },
+            "max_relative_residual": {
+              "mass": 0.0,
+              "energy": 8.717704801646315e-16,
+              "tracer": 0.0
+            },
+            "max_relative_rate_residual": {
+              "mass": 0.0,
+              "energy": 3.246212760872154e-17,
+              "tracer": 0.0
+            },
+            "min_tracer_mass_fraction": 0.0,
+            "max_tracer_mass_fraction": 1.0,
+            "scope": "all tanks, exchanger fluid cells and real solid wall masses; external boundary ledgers only",
+            "evaluated_at": "reported_samples_and_segment_endpoints"
+          },
+          "configuration_sha256": "640dfce1a28ac2d851f6a454849e6c89fb8818cbccb8ead8ec7e288acc55c56b",
+          "solver_settings": {
+            "duration_s": 300.0,
+            "output_interval_s": 5.0,
+            "max_step_s": 1.0,
+            "rtol": 1e-10,
+            "atol": 1e-12,
+            "method": "BDF",
+            "min_temperature_K": 278.15,
+            "max_temperature_K": 370.0
+          }
+        }
+      ]
+    },
+    {
+      "name": "closed_coupling_counter_current",
+      "passed": true,
+      "reference": "independent matrix exponential of both tanks, both fluids and solid wall",
+      "tolerances": {
+        "profile_K": 0.0002,
+        "conservation_relative": 1e-09,
+        "refinement_reduction": 5.0
+      },
+      "runs": [
+        {
+          "method": "BDF",
+          "profile_error_K": 3.434548943914706e-06,
+          "summary": {
+            "success": true,
+            "status": "ok",
+            "stop_reason": "completed",
+            "final_time_s": 300.0,
+            "requested_duration_s": 300.0,
+            "samples": 61,
+            "rhs_evaluations": 594
+          },
+          "audit": {
+            "max_residual": {
+              "mass_kg": 0.0,
+              "energy_J": 9.313225746154785e-09,
+              "tracer_kg": 0.0
+            },
+            "max_relative_residual": {
+              "mass": 0.0,
+              "energy": 7.264754001371928e-16,
+              "tracer": 0.0
+            },
+            "max_relative_rate_residual": {
+              "mass": 0.0,
+              "energy": 2.6967064273133454e-17,
+              "tracer": 0.0
+            },
+            "min_tracer_mass_fraction": 0.0,
+            "max_tracer_mass_fraction": 1.0,
+            "scope": "all tanks, exchanger fluid cells and real solid wall masses; external boundary ledgers only",
+            "evaluated_at": "reported_samples_and_segment_endpoints"
+          },
+          "configuration_sha256": "2f14c6bc85e16f6b32e4c3d50de3bc5a38a5273b00a8c0273d4d9c0570a96b05",
+          "solver_settings": {
+            "duration_s": 300.0,
+            "output_interval_s": 5.0,
+            "max_step_s": 5.0,
+            "rtol": 1e-08,
+            "atol": 1e-10,
+            "method": "BDF",
+            "min_temperature_K": 278.15,
+            "max_temperature_K": 370.0
+          }
+        },
+        {
+          "method": "Radau",
+          "profile_error_K": 1.3143500154910726e-07,
+          "summary": {
+            "success": true,
+            "status": "ok",
+            "stop_reason": "completed",
+            "final_time_s": 300.0,
+            "requested_duration_s": 300.0,
+            "samples": 61,
+            "rhs_evaluations": 1522
+          },
+          "audit": {
+            "max_residual": {
+              "mass_kg": 0.0,
+              "energy_J": 1.1175870895385742e-08,
+              "tracer_kg": 0.0
+            },
+            "max_relative_residual": {
+              "mass": 0.0,
+              "energy": 8.717704801646315e-16,
+              "tracer": 0.0
+            },
+            "max_relative_rate_residual": {
+              "mass": 0.0,
+              "energy": 2.294889129614399e-17,
+              "tracer": 0.0
+            },
+            "min_tracer_mass_fraction": 0.0,
+            "max_tracer_mass_fraction": 1.0,
+            "scope": "all tanks, exchanger fluid cells and real solid wall masses; external boundary ledgers only",
+            "evaluated_at": "reported_samples_and_segment_endpoints"
+          },
+          "configuration_sha256": "5073763b13279a385c81b8d9191b2ee5b3d1cbad4d640865e0d14f9292e9cd6f",
+          "solver_settings": {
+            "duration_s": 300.0,
+            "output_interval_s": 5.0,
+            "max_step_s": 5.0,
+            "rtol": 1e-08,
+            "atol": 1e-10,
+            "method": "Radau",
+            "min_temperature_K": 278.15,
+            "max_temperature_K": 370.0
+          }
+        },
+        {
+          "method": "refined",
+          "profile_error_K": 8.154228225976112e-08,
+          "summary": {
+            "success": true,
+            "status": "ok",
+            "stop_reason": "completed",
+            "final_time_s": 300.0,
+            "requested_duration_s": 300.0,
+            "samples": 61,
+            "rhs_evaluations": 1214
+          },
+          "audit": {
+            "max_residual": {
+              "mass_kg": 0.0,
+              "energy_J": 1.6763806343078613e-08,
+              "tracer_kg": 0.0
+            },
+            "max_relative_residual": {
+              "mass": 0.0,
+              "energy": 1.3076557202469472e-15,
+              "tracer": 0.0
+            },
+            "max_relative_rate_residual": {
+              "mass": 0.0,
+              "energy": 3.21008203719566e-17,
+              "tracer": 0.0
+            },
+            "min_tracer_mass_fraction": 0.0,
+            "max_tracer_mass_fraction": 1.0,
+            "scope": "all tanks, exchanger fluid cells and real solid wall masses; external boundary ledgers only",
+            "evaluated_at": "reported_samples_and_segment_endpoints"
+          },
+          "configuration_sha256": "a718cb6c9dbb73491c4cd785174ef19589872251b88a8444acb3ba58f5589108",
+          "solver_settings": {
+            "duration_s": 300.0,
+            "output_interval_s": 5.0,
+            "max_step_s": 1.0,
+            "rtol": 1e-10,
+            "atol": 1e-12,
+            "method": "BDF",
+            "min_temperature_K": 278.15,
+            "max_temperature_K": 370.0
+          }
+        }
+      ]
+    },
+    {
+      "name": "residence_through_exchanger_and_tank",
+      "passed": true,
+      "reference": "Erlang step response, five equal liquid inventories in series",
+      "temperature_error_K": 5.695159131846594e-06,
+      "tracer_error": 9.51363923196169e-08,
+      "audit": {
+        "max_residual": {
+          "mass_kg": 0.0,
+          "energy_J": 1.862645149230957e-09,
+          "tracer_kg": 5.249754408964691e-09
+        },
+        "max_relative_residual": {
+          "mass": 0.0,
+          "energy": 1.5102618913940394e-16,
+          "tracer": 1.7324056770529473e-10
+        },
+        "max_relative_rate_residual": {
+          "mass": 0.0,
+          "energy": 1.8668751566029798e-17,
+          "tracer": 2.891284733894239e-17
+        },
+        "min_tracer_mass_fraction": 0.0,
+        "max_tracer_mass_fraction": 0.9999999999615827,
+        "scope": "all tanks, exchanger fluid cells and real solid wall masses; external boundary ledgers only",
+        "evaluated_at": "reported_samples_and_segment_endpoints"
+      },
+      "configuration_sha256": "cc5bf4e59e40f58e23ae7571d5a642f655aebab7c32f05539de81380db0006f8",
+      "tolerances": {
+        "temperature_K": 0.0002,
+        "tracer_fraction": 3e-06,
+        "conservation_relative": 1e-09
+      }
+    }
+  ]
+}

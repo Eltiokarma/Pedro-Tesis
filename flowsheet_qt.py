@@ -7530,6 +7530,7 @@ class FlowsheetMainWindow(QMainWindow):
         # ── Simulación ──
         m_sim = mb.addMenu("&Simulación")
         m_sim.addAction(_ac("Tanque transitorio…", self.action_dynamic_tank))
+        m_sim.addAction(_ac("Red transitoria e intercambiadores…", self.action_dynamic_network))
         m_sim.addSeparator()
         m_sim.addAction(_ac("Validar &DOF", self.action_dof,
                               None, "act-dof"))
@@ -7551,6 +7552,14 @@ class FlowsheetMainWindow(QMainWindow):
                               None, "an-case-study"))
         m_sim.addAction(_ac("Exportar a Excel…", self.action_export_xlsx,
                               None, "wb-spreadsheet"))
+
+    def action_dynamic_network(self):
+        """Edit and simulate a connected transient circuit with explicit inputs."""
+        try:
+            from dynamic_network_dialog import DynamicNetworkDialog
+            DynamicNetworkDialog(self).exec()
+        except Exception as exc:
+            QMessageBox.critical(self, "No se pudo abrir la red transitoria", f"{type(exc).__name__}: {exc}")
 
     def action_dynamic_tank(self):
         """Abre un caso transitorio independiente del flowsheet estacionario."""

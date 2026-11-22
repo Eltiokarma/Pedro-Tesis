@@ -1,0 +1,61 @@
+{
+  "schema_version": "dynamic-network/v1",
+  "case_id": "energyplus-mixed-tank",
+  "title": "Depósito mezclado: parámetros publicados de EnergyPlus v24.2.0",
+  "provenance": {
+    "classification": "published_reproduction",
+    "source": "https://github.com/NatLabRockies/EnergyPlus/blob/v24.2.0/tst/EnergyPlus/unit/WaterThermalTanks.unit.cc#L1060",
+    "notes": "Prueba numérica WaterThermalTank_CalcTempIntegral, blob dcc74d48ce4f02eb4d465633336f6d24414d13d3. Mismos parámetros del depósito; temperaturas convertidas de °C a K. Integral publicada 14716.6 ± 0.1 °C·s. No se ejecutó EnergyPlus ni se usaron mediciones experimentales."
+  },
+  "fluid": {
+    "cp_J_kg_K": 4183.9,
+    "density_kg_m3": 998.0
+  },
+  "nodes": [
+    {
+      "id": "tank",
+      "initial_mass_kg": 148.67,
+      "min_mass_kg": 1.0,
+      "max_mass_kg": 446.01,
+      "initial_temperature_K": 330.37,
+      "initial_tracer_mass_fraction": 0.0,
+      "inventory_mode": "fixed",
+      "heat_power_W": 0.0,
+      "ua_ambient_W_K": 5.0
+    }
+  ],
+  "sources": [
+    {
+      "id": "feed",
+      "temperature_K": 287.59,
+      "tracer_mass_fraction": 0.0
+    }
+  ],
+  "edges": [
+    {
+      "id": "feed_tank",
+      "source": "feed",
+      "target": "tank",
+      "mass_flow_kg_s": 0.06761
+    },
+    {
+      "id": "tank_out",
+      "source": "tank",
+      "target": null,
+      "mass_flow_kg_s": 0.06761
+    }
+  ],
+  "heat_links": [],
+  "ambient_temperature_K": 292.87,
+  "simulation": {
+    "duration_s": 269.2,
+    "output_interval_s": 1.0,
+    "max_step_s": 2.0,
+    "rtol": 1e-08,
+    "atol": 1e-10,
+    "method": "BDF",
+    "min_temperature_K": 278.15,
+    "max_temperature_K": 363.15
+  },
+  "events": []
+}

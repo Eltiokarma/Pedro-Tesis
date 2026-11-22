@@ -1,0 +1,265 @@
+{
+  "schema_version": "dynamic-network-verification/v1",
+  "success": true,
+  "data_kind": "synthetic_theoretical_verification",
+  "comparison_with_external_simulator_executed": false,
+  "checks": [
+    {
+      "name": "cascade.json",
+      "passed": true,
+      "errors": {
+        "BDF": {
+          "temperature_K": 1.6477347344334703e-06,
+          "tracer_mass_fraction": 4.125028174595258e-08
+        },
+        "Radau": {
+          "temperature_K": 7.315827588172397e-08,
+          "tracer_mass_fraction": 1.776055968960577e-09
+        },
+        "refined": {
+          "temperature_K": 9.633822628529742e-10,
+          "tracer_mass_fraction": 2.4084220728859407e-11
+        }
+      },
+      "max_conservation_relative": 9.227087957654012e-11,
+      "BDF_Radau_max_temperature_difference_K": 1.654286961638718e-06,
+      "time_grids_match": true,
+      "configuration_sha256": "560711069579eaa2da06396ebea9af664f232e09a9ac976e632f13a9ac5fc89a",
+      "provenance": {
+        "classification": "analytical_limit",
+        "source": "Balances de mezcla perfecta; solución analítica propia documentada en docs/REDES_TRANSITORIAS.md.",
+        "notes": "Parámetros propios para verificación; no son registros de planta ni resultados de otro simulador."
+      },
+      "summary": {
+        "success": true,
+        "status": "ok",
+        "stop_reason": "completed",
+        "final_time_s": 600.0,
+        "requested_duration_s": 600.0,
+        "samples": 61,
+        "rhs_evaluations": 378
+      },
+      "audit": {
+        "max_residual": {
+          "mass_kg": 0.0,
+          "energy_J": 1.4901161193847656e-08,
+          "tracer_kg": 2.4489651195835904e-08
+        },
+        "max_relative_residual": {
+          "mass": 0.0,
+          "energy": 4.0104799863824434e-16,
+          "tracer": 6.134886289541835e-11
+        },
+        "max_relative_rate_residual": {
+          "mass": 0.0,
+          "energy": 1.8522415858804422e-17,
+          "tracer": 2.643587779846539e-17
+        },
+        "min_tracer_mass_fraction": 0.0,
+        "max_tracer_mass_fraction": 0.9975212370613775,
+        "scope": "all finite inventories; boundary mass/enthalpy/tracer and external heat",
+        "evaluated_at": "reported_samples_and_segment_endpoints"
+      },
+      "tolerances": {
+        "temperature_K": 0.0002,
+        "tracer_fraction": 5e-06,
+        "conservation_relative": 1e-09
+      }
+    },
+    {
+      "name": "split_merge.json",
+      "passed": true,
+      "errors": {
+        "BDF": {
+          "temperature_K": 1.8963398247251462e-06,
+          "tracer_mass_fraction": 4.749680604376749e-08
+        },
+        "Radau": {
+          "temperature_K": 8.327913292305311e-08,
+          "tracer_mass_fraction": 2.1243790060410106e-09
+        },
+        "refined": {
+          "temperature_K": 9.737277650856413e-10,
+          "tracer_mass_fraction": 2.4343541071836228e-11
+        }
+      },
+      "max_conservation_relative": 9.095217218350246e-11,
+      "BDF_Radau_max_temperature_difference_K": 1.8940330051009369e-06,
+      "time_grids_match": true,
+      "configuration_sha256": "3c2983e164c8c67758ab3f53258037b350f6e974deb48a71c2714d1b43d7678e",
+      "provenance": {
+        "classification": "analytical_limit",
+        "source": "Balances de mezcla perfecta; solución analítica propia documentada en docs/REDES_TRANSITORIAS.md.",
+        "notes": "Parámetros propios para verificación; no son registros de planta ni resultados de otro simulador."
+      },
+      "summary": {
+        "success": true,
+        "status": "ok",
+        "stop_reason": "completed",
+        "final_time_s": 600.0,
+        "requested_duration_s": 600.0,
+        "samples": 61,
+        "rhs_evaluations": 361
+      },
+      "audit": {
+        "max_residual": {
+          "mass_kg": 0.0,
+          "energy_J": 2.2351741790771484e-08,
+          "tracer_kg": 3.6160656691208715e-08
+        },
+        "max_relative_residual": {
+          "mass": 0.0,
+          "energy": 3.267798507422732e-16,
+          "tracer": 8.37000751454726e-11
+        },
+        "max_relative_rate_residual": {
+          "mass": 0.0,
+          "energy": 1.6128086106282164e-17,
+          "tracer": 2.64358777984546e-17
+        },
+        "min_tracer_mass_fraction": 0.0,
+        "max_tracer_mass_fraction": 0.9975212361005917,
+        "scope": "all finite inventories; boundary mass/enthalpy/tracer and external heat",
+        "evaluated_at": "reported_samples_and_segment_endpoints"
+      },
+      "tolerances": {
+        "temperature_K": 0.0002,
+        "tracer_fraction": 5e-06,
+        "conservation_relative": 1e-09
+      }
+    },
+    {
+      "name": "recirculation.json",
+      "passed": true,
+      "errors": {
+        "BDF": {
+          "temperature_K": 1.3820528579344682e-06,
+          "tracer_mass_fraction": 3.3569723223436654e-08
+        },
+        "Radau": {
+          "temperature_K": 5.075582976132864e-08,
+          "tracer_mass_fraction": 1.2369795188149624e-09
+        },
+        "refined": {
+          "temperature_K": 2.320064140803879e-08,
+          "tracer_mass_fraction": 4.762298333460535e-10
+        }
+      },
+      "max_conservation_relative": 1.1499584190343924e-15,
+      "BDF_Radau_max_temperature_difference_K": 1.381603738082049e-06,
+      "time_grids_match": true,
+      "configuration_sha256": "5f0aa36f2a8e2d9392cbf5a8264015596c31d53a823af2ef048d9334c69c948f",
+      "provenance": {
+        "classification": "analytical_limit",
+        "source": "Balances de mezcla perfecta; solución analítica propia documentada en docs/REDES_TRANSITORIAS.md.",
+        "notes": "Parámetros propios para verificación; no son registros de planta ni resultados de otro simulador."
+      },
+      "summary": {
+        "success": true,
+        "status": "ok",
+        "stop_reason": "completed",
+        "final_time_s": 600.0,
+        "requested_duration_s": 600.0,
+        "samples": 61,
+        "rhs_evaluations": 444
+      },
+      "audit": {
+        "max_residual": {
+          "mass_kg": 0.0,
+          "energy_J": 2.9802322387695312e-08,
+          "tracer_kg": 5.684341886080802e-14
+        },
+        "max_relative_residual": {
+          "mass": 0.0,
+          "energy": 9.199667352275138e-16,
+          "tracer": 5.684341886080802e-16
+        },
+        "max_relative_rate_residual": {
+          "mass": 0.0,
+          "energy": 0.0,
+          "tracer": 0.0
+        },
+        "min_tracer_mass_fraction": 0.0,
+        "max_tracer_mass_fraction": 1.0,
+        "scope": "all finite inventories; boundary mass/enthalpy/tracer and external heat",
+        "evaluated_at": "reported_samples_and_segment_endpoints"
+      },
+      "tolerances": {
+        "temperature_K": 0.0002,
+        "tracer_fraction": 5e-06,
+        "conservation_relative": 1e-09
+      },
+      "stop_restart_signals_consistent": true
+    },
+    {
+      "name": "energyplus_mixed_tank.json",
+      "passed": true,
+      "errors": {
+        "BDF": {
+          "temperature_K": 3.1377567211166024e-11,
+          "tracer_mass_fraction": 0.0
+        },
+        "Radau": {
+          "temperature_K": 1.1368683772161603e-13,
+          "tracer_mass_fraction": 0.0
+        },
+        "refined": {
+          "temperature_K": 1.2505552149377763e-12,
+          "tracer_mass_fraction": 0.0
+        }
+      },
+      "max_conservation_relative": 9.943315871278957e-16,
+      "BDF_Radau_max_temperature_difference_K": 3.1320723792305216e-11,
+      "time_grids_match": true,
+      "configuration_sha256": "a29c4efad5f65a8bf4f0271c351d858115318118ad9498d40c566b78bad344b1",
+      "provenance": {
+        "classification": "published_reproduction",
+        "source": "https://github.com/NatLabRockies/EnergyPlus/blob/v24.2.0/tst/EnergyPlus/unit/WaterThermalTanks.unit.cc#L1060",
+        "notes": "Prueba numérica WaterThermalTank_CalcTempIntegral, blob dcc74d48ce4f02eb4d465633336f6d24414d13d3. Mismos parámetros del depósito; temperaturas convertidas de °C a K. Integral publicada 14716.6 ± 0.1 °C·s. No se ejecutó EnergyPlus ni se usaron mediciones experimentales."
+      },
+      "summary": {
+        "success": true,
+        "status": "ok",
+        "stop_reason": "completed",
+        "final_time_s": 269.2,
+        "requested_duration_s": 269.2,
+        "samples": 271,
+        "rhs_evaluations": 328
+      },
+      "audit": {
+        "max_residual": {
+          "mass_kg": 0.0,
+          "energy_J": 3.073364496231079e-08,
+          "tracer_kg": 0.0
+        },
+        "max_relative_residual": {
+          "mass": 0.0,
+          "energy": 8.634984835584358e-16,
+          "tracer": 0.0
+        },
+        "max_relative_rate_residual": {
+          "mass": 0.0,
+          "energy": 0.0,
+          "tracer": 0.0
+        },
+        "min_tracer_mass_fraction": 0.0,
+        "max_tracer_mass_fraction": 0.0,
+        "scope": "all finite inventories; boundary mass/enthalpy/tracer and external heat",
+        "evaluated_at": "reported_samples_and_segment_endpoints"
+      },
+      "tolerances": {
+        "temperature_K": 0.0002,
+        "tracer_fraction": 5e-06,
+        "conservation_relative": 1e-09
+      },
+      "published_reference": {
+        "source": "https://github.com/NatLabRockies/EnergyPlus/blob/v24.2.0/tst/EnergyPlus/unit/WaterThermalTanks.unit.cc#L1060",
+        "published_integral_C_s": 14716.6,
+        "published_tolerance_C_s": 0.1,
+        "numerical_integral_C_s": 14716.592986048345,
+        "analytical_integral_C_s": 14716.592986047968,
+        "independent_integral_tolerance_C_s": 0.0001
+      }
+    }
+  ]
+}
